@@ -1,7 +1,7 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Menu, X, Search, Globe } from "lucide-react";
+import { Search, Globe } from "lucide-react";
 
 import { NotificationBell } from "@/components/NotificationBell";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -11,16 +11,13 @@ export default function Header() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [language, setLanguage] = useState<"ar" | "en">("ar");
 
-  // ✅ useAuth حسب النسخة اللي عدلناها: يرجع user + loading + error ...
   const { user } = useAuth();
-
   const isAuthenticated = !!user;
 
   useEffect(() => {
-    const handleScroll = () => {
-      setIsScrolled(window.scrollY > 50);
-    };
-    window.addEventListener("scroll", handleScroll);
+    const handleScroll = () => setIsScrolled(window.scrollY > 30);
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    handleScroll();
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
@@ -45,129 +42,163 @@ export default function Header() {
 
   // ✅ route حسب الدور
   const dashboardHref =
-    user && (user as any).role && ["owner", "accountant", "staff"].includes((user as any).role)
+    user &&
+    (user as any).role &&
+    ["owner", "accountant", "staff"].includes((user as any).role)
       ? "/dashboard"
       : "/client/dashboard";
 
+  const closeMobile = () => setIsMobileMenuOpen(false);
+
   return (
     <header
-      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-        isScrolled
-          ? "bg-background/95 backdrop-blur-md shadow-lg border-b border-border"
-          : "bg-transparent"
-      }`}
+      className={`rsg-nav ${isScrolled ? "is-scrolled" : ""}`}
+      dir="rtl"
+      lang="ar"
     >
       <div className="container">
-        <div className="flex items-center justify-between h-20">
-          {/* Logo */}
-          <Link href="/">
-            <div className="flex items-center gap-3 cursor-pointer">
-              <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
-                <span className="text-2xl font-bold text-primary-foreground">M</span>
-              </div>
-              <span className="text-2xl font-bold text-foreground">MAEDIN</span>
-            </div>
-          </Link>
+        <div className="rsg-nav__inner">
+          {/* Left (Actions) */}
+          <div className="rsg-nav__slot rsg-nav__slot--left">
+            {/* Burger (mobile) */}
+            <button
+              type="button"
+              className="rsg-burger lg:hidden"
+              aria-label="Open menu"
+              aria-expanded={isMobileMenuOpen}
+              onClick={() => setIsMobileMenuOpen((v) => !v)}
+            >
+              <span />
+              <span />
+              <span />
+            </button>
 
-          {/* Desktop Navigation */}
-          <nav className="hidden lg:flex items-center gap-8">
-            {navLinks.map((link) => (
-              <Link key={link.href} href={link.href}>
-                <span className="text-foreground hover:text-primary transition-colors cursor-pointer font-medium">
-                  {link.label}
-                </span>
-              </Link>
-            ))}
-          </nav>
-
-          {/* Right Side Actions */}
-          <div className="flex items-center gap-4">
-            {/* Search Icon */}
-            <Button variant="ghost" size="icon" className="hidden md:flex">
+            {/* Search */}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="hidden md:inline-flex"
+              aria-label="Search"
+            >
               <Search className="w-5 h-5" />
             </Button>
 
-            {/* Language Toggle */}
+            {/* Language */}
             <Button
               variant="ghost"
               size="icon"
               onClick={toggleLanguage}
-              className="hidden md:flex"
+              className="hidden md:inline-flex"
+              aria-label="Toggle language"
             >
               <Globe className="w-5 h-5" />
             </Button>
 
-            {/* Notification Bell - Shows when user is logged in */}
+            {/* Notification */}
             {isAuthenticated && <NotificationBell />}
+          </div>
 
-            {/* ✅ Login Button - Shows when user is NOT logged in */}
-            {!isAuthenticated && (
+          {/* Center (Links) */}
+          <nav className="rsg-nav__links rsg-nav__slot rsg-nav__slot--center">
+            {navLinks.map((link) => (
+              <Link key={link.href} href={link.href}>
+                <span className="rsg-nav__link">{link.label}</span>
+              </Link>
+            ))}
+          </nav>
+
+          {/* Right (Logo + CTA) */}
+          <div className="rsg-nav__slot rsg-nav__slot--right">
+            <Link href="/">
+              <div className="flex items-center gap-2 cursor-pointer select-none">
+                <span className="text-[18px] font-bold tracking-wide">
+                  MAEDIN
+                </span>
+                <span
+                  className="inline-flex items-center justify-center rounded-full"
+                  style={{
+                    width: 34,
+                    height: 34,
+                    background:
+                      "color-mix(in oklab, var(--gold) 92%, white 8%)",
+                    color: "rgba(11,15,25,0.95)",
+                    fontWeight: 800,
+                  }}
+                >
+                  M
+                </span>
+              </div>
+            </Link>
+
+            {!isAuthenticated ? (
               <Link href="/login">
-                <Button className="hidden md:flex bg-[#F2B705] hover:bg-[#d9a304] text-black font-semibold">
+                <Button className="hidden md:inline-flex rsg-cta">
                   {language === "ar" ? "تسجيل الدخول" : "Login"}
                 </Button>
               </Link>
-            )}
-
-            {/* Dashboard Button - Shows when user is logged in */}
-            {isAuthenticated && (
+            ) : (
               <Link href={dashboardHref}>
-                <Button className="hidden md:flex bg-[#F2B705] hover:bg-[#d9a304] text-black font-semibold">
+                <Button className="hidden md:inline-flex rsg-cta rsg-cta--gold">
                   {language === "ar" ? "لوحة التحكم" : "Dashboard"}
                 </Button>
               </Link>
             )}
-
-            {/* Mobile Menu Toggle */}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="lg:hidden"
-              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            >
-              {isMobileMenuOpen ? (
-                <X className="w-6 h-6" />
-              ) : (
-                <Menu className="w-6 h-6" />
-              )}
-            </Button>
           </div>
         </div>
 
-        {/* Mobile Menu */}
+        {/* Mobile dropdown */}
         {isMobileMenuOpen && (
-          <div className="lg:hidden py-6 border-t border-border animate-slide-up">
-            <nav className="flex flex-col gap-4">
+          <div className="mt-3 rsg-card rsg-card--tight p-4 lg:hidden animate-slide-up">
+            <nav className="flex flex-col gap-2">
               {navLinks.map((link) => (
                 <Link key={link.href} href={link.href}>
                   <span
-                    className="block py-2 text-foreground hover:text-primary transition-colors cursor-pointer font-medium"
-                    onClick={() => setIsMobileMenuOpen(false)}
+                    className="rsg-nav__link block"
+                    onClick={closeMobile}
+                    role="button"
                   >
                     {link.label}
                   </span>
                 </Link>
               ))}
 
-              <div className="pt-4 border-t border-border flex flex-col gap-3">
-                {/* ✅ Mobile Login */}
-                {!isAuthenticated && (
+              <div className="mt-3 pt-3 border-t border-border flex flex-col gap-3">
+                <div className="flex items-center justify-between gap-2">
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => {
+                      toggleLanguage();
+                      closeMobile();
+                    }}
+                  >
+                    {language === "ar" ? "English" : "العربية"}
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={closeMobile}
+                    aria-label="Close"
+                  >
+                    ✕
+                  </Button>
+                </div>
+
+                {!isAuthenticated ? (
                   <Link href="/login">
                     <Button
-                      className="w-full bg-[#F2B705] hover:bg-[#d9a304] text-black font-semibold"
-                      onClick={() => setIsMobileMenuOpen(false)}
+                      className="w-full rsg-cta rsg-cta--gold"
+                      onClick={closeMobile}
                     >
                       {language === "ar" ? "تسجيل الدخول" : "Login"}
                     </Button>
                   </Link>
-                )}
-
-                {/* ✅ Mobile Dashboard */}
-                {isAuthenticated && (
+                ) : (
                   <Link href={dashboardHref}>
                     <Button
-                      className="w-full bg-[#F2B705] hover:bg-[#d9a304] text-black font-semibold"
-                      onClick={() => setIsMobileMenuOpen(false)}
+                      className="w-full rsg-cta rsg-cta--gold"
+                      onClick={closeMobile}
                     >
                       {language === "ar" ? "لوحة التحكم" : "Dashboard"}
                     </Button>

@@ -1,46 +1,78 @@
+// client/src/pages/Projects.tsx
 import { useEffect, useMemo, useState } from "react";
-import { useRoute, Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import {
-  MapPin,
-  TrendingUp,
-  ArrowRight,
-  CheckCircle2,
-  AlertCircle,
-  Shield,
-} from "lucide-react";
-import { toast } from "sonner";
-import { useAuth } from "@/_core/hooks/useAuth";
 
 import {
-  addDoc,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+import {
+  AlertTriangle,
+  Search,
+  MapPin,
+  TrendingUp,
+  Shield,
+  Sparkles,
+} from "lucide-react";
+
+import { toast } from "sonner";
+
+import {
   collection,
   doc,
   getDoc,
-  serverTimestamp,
+  onSnapshot,
+  orderBy,
+  query,
+  where,
+  Timestamp,
 } from "firebase/firestore";
 import { db } from "@/_core/firebase";
 
+type LabelsDoc = {
+  projectTypes?: Record<string, string>;
+  projectStatuses?: Record<string, string>;
+};
+
+type FlagsDoc = {
+  hideVipProjects?: boolean;
+  vipOnlyMode?: boolean;
+  maintenanceMode?: boolean;
+};
+
+const DEFAULT_LABELS: Required<LabelsDoc> = {
+  projectTypes: {
+    sukuk: "Ø§Ø³ØªØ«Ù…Ø§Ø± Ø¨Ø§Ù„ØµÙƒÙˆÙƒ",
+    land_development: "ØªØ·ÙˆÙŠØ± Ø£Ø±Ø§Ø¶ÙŠ",
+    vip_exclusive: "VIP Ø­ØµØ±ÙŠ",
+  },
+  projectStatuses: {
+    draft: "Ù…Ø³ÙˆØ¯Ø©",
+    published: "Ù…Ù†Ø´ÙˆØ±",
+    closed: "Ù…ØºÙ„Ù‚",
+    completed: "Ù…ÙƒØªÙ…Ù„",
+  },
+};
+
 type ProjectDoc = {
-  id?: string;
+  id: string;
 
   titleAr?: string;
+  titleEn?: string;
+
   locationAr?: string;
+  locationEn?: string;
 
   projectType?: string;
   status?: string;
@@ -49,405 +81,441 @@ type ProjectDoc = {
 
   overviewAr?: string;
   descriptionAr?: string;
+  descriptionEn?: string;
 
-  targetAmount?: number | string;
-  currentAmount?: number | string;
+  targetAmount?: number;
+  currentAmount?: number;
 
-  investorsCount?: number;
-
-  minInvestment?: number | string;
-  annualReturn?: number | string;
-  duration?: number | string;
+  minInvestment?: number;
+  annualReturn?: number;
+  duration?: number;
 
   risksAr?: string;
 
   videoUrl?: string;
+
+  createdAt?: Timestamp | any;
 };
 
-export default function ProjectDetails() {
-  const [, params] = useRoute("/projects/:id");
-  const projectId = params?.id ? String(params.id) : "";
+function safeNumber(n: any) {
+  const x = Number(n);
+  return Number.isFinite(x) ? x : 0;
+}
 
-  const [isInterestFormOpen, setIsInterestFormOpen] = useState(false);
+function fmtSAR(n: any) {
+  return safeNumber(n).toLocaleString("ar-SA") + " Ø±.Ø³";
+}
 
-  const { user } = useAuth();
+export default function ProjectsPage() {
+  const [, setLocation] = useLocation();
 
-  const [project, setProject] = useState<ProjectDoc | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-
-  const [sending, setSending] = useState(false);
-
-  const [formData, setFormData] = useState({
-    name: user?.name || "",
-    email: user?.email || "",
-    phone: "",
-    estimatedAmount: "",
-    message: "",
+  const [labels, setLabels] = useState<Required<LabelsDoc>>(DEFAULT_LABELS);
+  const [flags, setFlags] = useState<FlagsDoc>({
+    hideVipProjects: false,
+    vipOnlyMode: false,
+    maintenanceMode: false,
   });
 
+  const [loading, setLoading] = useState(true);
+  const [projects, setProjects] = useState<ProjectDoc[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  // filters
+  const [qText, setQText] = useState("");
+  const [typeFilter, setTypeFilter] = useState<string>("all");
+  const [sortBy, setSortBy] = useState<string>("newest"); // newest | progress | return
+
+  /* =========================
+     Load settings (labels + flags)
+  ========================= */
   useEffect(() => {
-    setFormData((prev) => ({
-      ...prev,
-      name: prev.name || user?.name || "",
-      email: prev.email || user?.email || "",
-    }));
-  }, [user?.name, user?.email]);
+    (async () => {
+      try {
+        const [labelsSnap, flagsSnap] = await Promise.all([
+          getDoc(doc(db, "settings", "labels")),
+          getDoc(doc(db, "settings", "flags")),
+        ]);
 
-  const loadProject = async () => {
-    try {
-      setIsLoading(true);
-      setLoadError(null);
+        if (labelsSnap.exists()) {
+          const data = labelsSnap.data() as LabelsDoc;
+          setLabels({
+            projectTypes: {
+              ...DEFAULT_LABELS.projectTypes,
+              ...(data.projectTypes || {}),
+            },
+            projectStatuses: {
+              ...DEFAULT_LABELS.projectStatuses,
+              ...(data.projectStatuses || {}),
+            },
+          });
+        } else {
+          setLabels(DEFAULT_LABELS);
+        }
 
-      if (!projectId) {
-        setProject(null);
-        return;
+        if (flagsSnap.exists()) setFlags(flagsSnap.data() as FlagsDoc);
+      } catch {
+        // keep defaults
       }
+    })();
+  }, []);
 
-      const snap = await getDoc(doc(db, "projects", projectId));
-      if (!snap.exists()) {
-        setProject(null);
-        return;
+  /* =========================
+     Load published projects (Realtime)
+  ========================= */
+  useEffect(() => {
+    setLoading(true);
+    setLoadError(null);
+
+    const qy = query(
+      collection(db, "projects"),
+      where("status", "==", "published"),
+      orderBy("createdAt", "desc")
+    );
+
+    const unsub = onSnapshot(
+      qy,
+      (snap) => {
+        const list: ProjectDoc[] = snap.docs.map((d) => ({
+          id: d.id,
+          ...(d.data() as any),
+        }));
+        setProjects(list);
+        setLoading(false);
+      },
+      (err) => {
+        console.error(err);
+        setLoadError("ØªØ¹Ø°Ø± ØªØ­Ù…ÙŠÙ„ Ø§Ù„Ù…Ø´Ø§Ø±ÙŠØ¹");
+        setLoading(false);
       }
+    );
 
-      setProject({ id: snap.id, ...(snap.data() as ProjectDoc) });
-    } catch (e) {
-      console.error(e);
-      setLoadError("ÍÏË ÎØÃ ÃËäÇÁ ÊÍãíá ÇáãÔÑæÚ");
-      setProject(null);
-    } finally {
-      setIsLoading(false);
-    }
+    return () => unsub();
+  }, []);
+
+  /* =========================
+     Helpers
+  ========================= */
+  const typeLabel = (type?: string) => {
+    if (!type) return "â€”";
+    return labels.projectTypes[type] || type;
   };
 
-  useEffect(() => {
-    loadProject();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId]);
+  const isVip = (p: ProjectDoc) => p.projectType === "vip_exclusive";
 
-  const progress = useMemo(() => {
-    if (!project?.targetAmount) return 0;
-    const target = Number(project.targetAmount || 0);
-    const current = Number(project.currentAmount || 0);
-    if (!target) return 0;
-    return (current / target) * 100;
-  }, [project?.targetAmount, project?.currentAmount]);
-
-  const heroVideo =
-    project?.videoUrl ||
-    "https://cdn.coverr.co/videos/coverr-modern-architecture-1604/1080p.mp4";
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    try {
-      if (!project) return;
-
-      setSending(true);
-
-      await addDoc(collection(db, "messages"), {
-        type: "investment_request",
-        name: formData.name,
-        email: formData.email,
-        phone: formData.phone,
-        subject: `ØáÈ ÇÓÊËãÇÑ İí ãÔÑæÚ ${project.titleAr || ""}`,
-        message: formData.message,
-        projectId: project.id,
-        projectTitleAr: project.titleAr || "",
-        estimatedAmount: formData.estimatedAmount || "",
-        createdAt: serverTimestamp(),
-        createdByUid: user?.uid || null,
-        createdByEmail: user?.email || null,
-      });
-
-      toast.success("Êã ÅÑÓÇá ØáÈß ÈäÌÇÍ! ÓäÊæÇÕá ãÚß ŞÑíÈğÇ.");
-      setIsInterestFormOpen(false);
-
-      setFormData((prev) => ({
-        ...prev,
-        phone: "",
-        estimatedAmount: "",
-        message: "",
-      }));
-    } catch (e) {
-      console.error(e);
-      toast.error("ÍÏË ÎØÃ¡ íÑÌì ÇáãÍÇæáÉ ãÑÉ ÃÎÑì");
-    } finally {
-      setSending(false);
-    }
+  const progressPercent = (p: ProjectDoc) => {
+    const t = safeNumber(p.targetAmount);
+    const c = safeNumber(p.currentAmount);
+    if (!t) return 0;
+    return Math.min(100, (c / t) * 100);
   };
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex flex-col">
-        <Header />
-        <div className="flex-1 flex items-center justify-center">
-          <div className="animate-spin rounded-full h-24 w-24 border-b-2 border-primary" />
-        </div>
-        <Footer />
-      </div>
-    );
-  }
+  /* =========================
+     Guard by flags
+  ========================= */
+  const blockedReason = useMemo(() => {
+    if (flags.maintenanceMode) return "maintenance";
+    if (flags.vipOnlyMode) return "vip_only_mode";
+    return null;
+  }, [flags.maintenanceMode, flags.vipOnlyMode]);
 
-  if (loadError) {
-    return (
-      <div className="min-h-screen flex flex-col">
-        <Header />
-        <div className="flex-1 flex items-center justify-center">
-          <Card className="p-10 text-center space-y-4">
-            <AlertCircle className="w-14 h-14 mx-auto text-muted-foreground" />
-            <div className="text-xl font-bold">{loadError}</div>
-            <div className="flex justify-center gap-3">
-              <Button onClick={loadProject}>ÅÚÇÏÉ ÇáãÍÇæáÉ</Button>
-              <Link href="/projects">
-                <Button variant="outline">ÇáÚæÏÉ ááãÔÇÑíÚ</Button>
-              </Link>
-            </div>
-          </Card>
-        </div>
-        <Footer />
-      </div>
-    );
-  }
+  /* =========================
+     Filter + sort
+  ========================= */
+  const filtered = useMemo(() => {
+    const text = qText.trim().toLowerCase();
 
-  if (!project) {
-    return (
-      <div className="min-h-screen flex flex-col">
-        <Header />
-        <div className="flex-1 flex items-center justify-center">
-          <Card className="p-12 text-center">
-            <AlertCircle className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
-            <h2 className="text-2xl font-bold mb-2">ÇáãÔÑæÚ ÛíÑ ãæÌæÏ</h2>
-            <Link href="/projects">
-              <Button>ÇáÚæÏÉ ááãÔÇÑíÚ</Button>
-            </Link>
-          </Card>
-        </div>
-        <Footer />
-      </div>
-    );
-  }
+    let list = projects.filter((p) => {
+      if (flags.hideVipProjects && isVip(p)) return false;
+      if (flags.vipOnlyMode && !isVip(p)) return false;
+      if (typeFilter !== "all" && (p.projectType || "") !== typeFilter)
+        return false;
 
+      if (!text) return true;
+
+      const hay = [
+        p.titleAr,
+        p.titleEn,
+        p.locationAr,
+        p.locationEn,
+        p.issueNumber,
+        p.projectType,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return hay.includes(text);
+    });
+
+    list = [...list].sort((a, b) => {
+      if (sortBy === "progress") return progressPercent(b) - progressPercent(a);
+      if (sortBy === "return")
+        return safeNumber(b.annualReturn) - safeNumber(a.annualReturn);
+
+      const ad = (a.createdAt?.seconds ?? 0) as number;
+      const bd = (b.createdAt?.seconds ?? 0) as number;
+      return bd - ad;
+    });
+
+    return list;
+  }, [
+    projects,
+    qText,
+    typeFilter,
+    sortBy,
+    flags.hideVipProjects,
+    flags.vipOnlyMode,
+  ]);
+
+  /* =========================
+     UI
+  ========================= */
   return (
-    <div className="min-h-screen flex flex-col">
+    // âœ… Ø£Ù‡Ù… ØªØ¹Ø¯ÙŠÙ„: Ù†Ø®Ù„ÙŠ Ø§Ù„ØµÙØ­Ø© "Ø¬Ù„Ø¯" Ø´ÙØ§Ù Ø¹Ø´Ø§Ù† Ø§Ù„Ù†Ù‚ÙˆØ´ ØªØ¨Ø§Ù†
+    <div className="rsg-page min-h-screen flex flex-col bg-transparent text-foreground" dir="rtl" lang="ar">
       <Header />
 
-      <section className="relative h-[65vh] min-h-[520px] overflow-hidden mt-20">
-        <video
-          autoPlay
-          muted
-          loop
-          playsInline
-          className="absolute inset-0 w-full h-full object-cover"
-          src={heroVideo}
-        />
-
-        <div className="absolute inset-0 bg-black/65" />
-
-        <div className="relative z-10 h-full flex items-center">
-          <div className="container text-white max-w-4xl">
-            <div className="flex gap-3 mb-4">
-              <Badge className="bg-primary text-primary-foreground px-4 py-2">
-                {project.projectType}
-              </Badge>
-              <Badge className="bg-black/50 backdrop-blur-sm px-4 py-2">
-                #{project.issueNumber}
-              </Badge>
-            </div>
-
-            <h1 className="text-5xl md:text-6xl font-bold mb-4">
-              {project.titleAr}
+      {/* HERO */}
+      <section className="mt-20">
+        <div className="container py-10 space-y-4">
+          <div className="space-y-2">
+            <h1 className="text-4xl md:text-5xl font-bold flex items-center gap-2">
+              <Sparkles className="w-7 h-7" />
+              Ù…Ø´Ø§Ø±ÙŠØ¹Ù†Ø§ Ø§Ù„Ø§Ø³ØªØ«Ù…Ø§Ø±ÙŠØ©
             </h1>
-
-            {project.locationAr && (
-              <div className="flex items-center gap-2 text-xl">
-                <MapPin className="w-6 h-6" />
-                <span>{project.locationAr}</span>
-              </div>
-            )}
+            <p className="text-muted-foreground text-lg">
+              Ø§Ø³ØªØ¹Ø±Ø¶ Ø§Ù„ÙØ±Øµ Ø§Ù„Ù…ØªØ§Ø­Ø©ØŒ ØªÙØ§ØµÙŠÙ„ Ø§Ù„Ø¹ÙˆØ§Ø¦Ø¯ØŒ ÙˆÙ‚Ø¯Ù… Ø§Ù‡ØªÙ…Ø§Ù…Ùƒ Ø¨Ø³Ù‡ÙˆÙ„Ø©.
+            </p>
           </div>
-        </div>
-      </section>
 
-      <section className="py-12 bg-background">
-        <div className="container grid lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2 space-y-8">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-3xl">äÙÑÉ ÚÇãÉ</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-lg text-muted-foreground leading-relaxed">
-                  {project.overviewAr || project.descriptionAr}
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-3xl flex items-center gap-2">
-                  <TrendingUp className="w-7 h-7 text-primary" />
-                  ÇáÊİÇÕíá ÇáãÇáíÉ
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="grid md:grid-cols-2 gap-6">
-                <div>
+          {blockedReason === "maintenance" && (
+            <Card className="border-yellow-500/30">
+              <CardContent className="py-6 flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 mt-0.5" />
+                <div className="space-y-1">
+                  <div className="font-semibold">Ø§Ù„Ù…ÙˆÙ‚Ø¹ ØªØ­Øª Ø§Ù„ØµÙŠØ§Ù†Ø©</div>
                   <div className="text-sm text-muted-foreground">
-                    ÇáãÈáÛ ÇáãÓÊåÏİ
+                    Ù†Ø¹ØªØ°Ø±ØŒ Ø³ÙŠØªÙ… Ø¥Ø¹Ø§Ø¯Ø© ØªÙØ¹ÙŠÙ„ Ø§Ù„Ù…Ø´Ø§Ø±ÙŠØ¹ Ù‚Ø±ÙŠØ¨Ù‹Ø§.
                   </div>
-                  <div className="text-3xl font-bold text-primary">
-                    {Number(project.targetAmount || 0).toLocaleString()} Ñ.Ó
-                  </div>
-                </div>
-                <div>
-                  <div className="text-sm text-muted-foreground">ÇáÍÏ ÇáÃÏäì</div>
-                  <div className="text-3xl font-bold">
-                    {Number(project.minInvestment || 0).toLocaleString()} Ñ.Ó
-                  </div>
-                </div>
-                <div>
-                  <div className="text-sm text-muted-foreground">ÇáÚÇÆÏ ÇáÓäæí</div>
-                  <div className="text-3xl font-bold text-green-600">
-                    {project.annualReturn}%
-                  </div>
-                </div>
-                <div>
-                  <div className="text-sm text-muted-foreground">ÇáãÏÉ</div>
-                  <div className="text-3xl font-bold">{project.duration} ÔåÑ</div>
                 </div>
               </CardContent>
             </Card>
+          )}
 
-            {project.risksAr && (
-              <Card className="border-destructive/20">
-                <CardHeader>
-                  <CardTitle className="text-3xl flex items-center gap-2">
-                    <Shield className="w-7 h-7 text-destructive" />
-                    ÇáãÎÇØÑ
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-lg text-muted-foreground whitespace-pre-line">
-                    {project.risksAr}
-                  </p>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-
-          <div>
-            <Card className="sticky top-24 border-2 border-primary/20">
-              <CardHeader className="bg-primary/5">
-                <CardTitle className="text-2xl">ãáÎÕ ÇáÇÓÊËãÇÑ</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6 pt-6">
-                <div>
-                  <div className="flex justify-between text-sm mb-2">
-                    <span className="text-muted-foreground">ÇáÊŞÏã</span>
-                    <span className="font-bold text-primary">
-                      {progress.toFixed(1)}%
-                    </span>
+          {blockedReason === "vip_only_mode" && (
+            <Card className="border-primary/20">
+              <CardContent className="py-6 flex items-start gap-3">
+                <Shield className="w-5 h-5 mt-0.5" />
+                <div className="space-y-1">
+                  <div className="font-semibold">ÙˆØ¶Ø¹ VIP ÙÙ‚Ø·</div>
+                  <div className="text-sm text-muted-foreground">
+                    Ø§Ù„Ù…Ø¹Ø±ÙˆØ¶ Ø§Ù„Ø¢Ù† Ù…Ø´Ø§Ø±ÙŠØ¹ VIP ÙÙ‚Ø·.
                   </div>
-                  <Progress value={progress} className="h-3" />
-                </div>
-
-                <Dialog open={isInterestFormOpen} onOpenChange={setIsInterestFormOpen}>
-                  <DialogTrigger asChild>
-                    <Button size="lg" className="w-full py-6 gold-gradient text-lg">
-                      ÃÈÏö ÇåÊãÇãß
-                      <ArrowRight className="mr-2 w-5 h-5" />
-                    </Button>
-                  </DialogTrigger>
-
-                  <DialogContent className="max-w-md">
-                    <DialogHeader>
-                      <DialogTitle>äãæĞÌ ÇáÇåÊãÇã</DialogTitle>
-                    </DialogHeader>
-
-                    <form onSubmit={handleSubmit} className="space-y-4">
-                      <div>
-                        <Label>ÇáÇÓã</Label>
-                        <Input
-                          value={formData.name}
-                          onChange={(e) =>
-                            setFormData({ ...formData, name: e.target.value })
-                          }
-                          required
-                        />
-                      </div>
-
-                      <div>
-                        <Label>ÇáÈÑíÏ ÇáÅáßÊÑæäí</Label>
-                        <Input
-                          type="email"
-                          value={formData.email}
-                          onChange={(e) =>
-                            setFormData({ ...formData, email: e.target.value })
-                          }
-                          required
-                        />
-                      </div>
-
-                      <div>
-                        <Label>ÑŞã ÇáÌæÇá</Label>
-                        <Input
-                          value={formData.phone}
-                          onChange={(e) =>
-                            setFormData({ ...formData, phone: e.target.value })
-                          }
-                        />
-                      </div>
-
-                      <div>
-                        <Label>ÇáãÈáÛ ÇáÊŞÏíÑí</Label>
-                        <Input
-                          type="number"
-                          value={formData.estimatedAmount}
-                          onChange={(e) =>
-                            setFormData({
-                              ...formData,
-                              estimatedAmount: e.target.value,
-                            })
-                          }
-                        />
-                      </div>
-
-                      <div>
-                        <Label>ãáÇÍÙÇÊ</Label>
-                        <Textarea
-                          rows={4}
-                          value={formData.message}
-                          onChange={(e) =>
-                            setFormData({ ...formData, message: e.target.value })
-                          }
-                        />
-                      </div>
-
-                      <Button type="submit" className="w-full" disabled={sending}>
-                        {sending ? "ÌÇÑí ÇáÅÑÓÇá..." : "ÅÑÓÇá ÇáØáÈ"}
-                      </Button>
-                    </form>
-                  </DialogContent>
-                </Dialog>
-
-                <div className="space-y-3 pt-4">
-                  {[
-                    "ÚæÇÆÏ ãÓÊŞÑÉ",
-                    "ÅÏÇÑÉ ÇÍÊÑÇİíÉ",
-                    "ÊŞÇÑíÑ ÏæÑíÉ",
-                    "ãÊæÇİŞ ãÚ ÇáÔÑíÚÉ",
-                  ].map((t) => (
-                    <div key={t} className="flex items-center gap-3">
-                      <CheckCircle2 className="w-5 h-5 text-green-600" />
-                      <span className="text-sm">{t}</span>
-                    </div>
-                  ))}
                 </div>
               </CardContent>
             </Card>
-          </div>
+          )}
+
+          {/* Filters */}
+          <Card>
+            <CardContent className="py-6 grid lg:grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <div className="text-sm font-medium">Ø¨Ø­Ø«</div>
+                <div className="relative">
+                  <Search className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={qText}
+                    onChange={(e) => setQText(e.target.value)}
+                    placeholder="Ø§Ø¨Ø­Ø« Ø¨Ø§Ù„Ø¹Ù†ÙˆØ§Ù† / Ø§Ù„Ù…ÙˆÙ‚Ø¹ / Ø±Ù‚Ù… Ø§Ù„Ø¥ØµØ¯Ø§Ø±..."
+                    className="pr-9"
+                    disabled={flags.maintenanceMode}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="text-sm font-medium">Ù†ÙˆØ¹ Ø§Ù„Ù…Ø´Ø±ÙˆØ¹</div>
+                <Select
+                  value={typeFilter}
+                  onValueChange={setTypeFilter}
+                  disabled={flags.maintenanceMode}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Ø§Ø®ØªØ± Ø§Ù„Ù†ÙˆØ¹" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Ø§Ù„ÙƒÙ„</SelectItem>
+                    {Object.keys(labels.projectTypes).map((k) => (
+                      <SelectItem key={k} value={k}>
+                        {labels.projectTypes[k] || k}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <div className="text-sm font-medium">Ø§Ù„ØªØ±ØªÙŠØ¨</div>
+                <Select
+                  value={sortBy}
+                  onValueChange={setSortBy}
+                  disabled={flags.maintenanceMode}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Ø§Ø®ØªØ± Ø§Ù„ØªØ±ØªÙŠØ¨" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="newest">Ø§Ù„Ø£Ø­Ø¯Ø«</SelectItem>
+                    <SelectItem value="progress">Ø§Ù„Ø£Ø¹Ù„Ù‰ ØªÙ‚Ø¯Ù…Ù‹Ø§</SelectItem>
+                    <SelectItem value="return">Ø§Ù„Ø£Ø¹Ù„Ù‰ Ø¹Ø§Ø¦Ø¯Ù‹Ø§</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </section>
+
+      {/* CONTENT */}
+      <main className="flex-1">
+        <div className="container pb-12">
+          {flags.maintenanceMode ? (
+            <div className="py-16 text-center text-muted-foreground">
+              Ø§Ù„Ù…Ø´Ø§Ø±ÙŠØ¹ ØºÙŠØ± Ù…ØªØ§Ø­Ø© Ø­Ø§Ù„ÙŠØ§Ù‹ Ø¨Ø³Ø¨Ø¨ Ø§Ù„ØµÙŠØ§Ù†Ø©.
+            </div>
+          ) : (
+            <>
+              {loading && (
+                <div className="py-16 text-center text-muted-foreground">
+                  Ø¬Ø§Ø±ÙŠ ØªØ­Ù…ÙŠÙ„ Ø§Ù„Ù…Ø´Ø§Ø±ÙŠØ¹...
+                </div>
+              )}
+
+              {loadError && !loading && (
+                <Card className="border-destructive/30">
+                  <CardContent className="py-10 text-center space-y-3">
+                    <div className="font-semibold">{loadError}</div>
+                    <Button
+                      variant="outline"
+                      onClick={() => window.location.reload()}
+                    >
+                      Ø¥Ø¹Ø§Ø¯Ø© Ø§Ù„Ù…Ø­Ø§ÙˆÙ„Ø©
+                    </Button>
+                  </CardContent>
+                </Card>
+              )}
+
+              {!loading && !loadError && filtered.length === 0 && (
+                <Card>
+                  <CardContent className="py-12 text-center text-muted-foreground">
+                    Ù„Ø§ ØªÙˆØ¬Ø¯ Ù…Ø´Ø§Ø±ÙŠØ¹ Ù…Ø·Ø§Ø¨Ù‚Ø© Ù„Ù„Ø¨Ø­Ø«/Ø§Ù„ÙÙ„ØªØ±Ø©.
+                  </CardContent>
+                </Card>
+              )}
+
+              {!loading && !loadError && filtered.length > 0 && (
+                <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-5">
+                  {filtered.map((p) => {
+                    const target = safeNumber(p.targetAmount);
+                    const current = safeNumber(p.currentAmount);
+                    const prog = progressPercent(p);
+
+                    return (
+                      <Card key={p.id} className="overflow-hidden">
+                        <CardHeader className="space-y-2">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="space-y-1">
+                              <CardTitle className="text-lg leading-tight">
+                                {p.titleAr || p.titleEn || "Ø¨Ø¯ÙˆÙ† Ø¹Ù†ÙˆØ§Ù†"}
+                              </CardTitle>
+
+                              <div className="text-sm text-muted-foreground flex items-center gap-2">
+                                <MapPin className="w-4 h-4" />
+                                <span>{p.locationAr || p.locationEn || "â€”"}</span>
+                              </div>
+                            </div>
+
+                            <div className="flex flex-col items-end gap-2">
+                              <Badge variant="outline">
+                                {typeLabel(p.projectType)}
+                              </Badge>
+                              {p.issueNumber && (
+                                <Badge variant="secondary">#{p.issueNumber}</Badge>
+                              )}
+                            </div>
+                          </div>
+                        </CardHeader>
+
+                        <CardContent className="space-y-4">
+                          <div className="space-y-1">
+                            <div className="flex justify-between text-sm">
+                              <span className="text-muted-foreground">Ø§Ù„ØªÙ‚Ø¯Ù…</span>
+                              <span className="font-semibold">{prog.toFixed(1)}%</span>
+                            </div>
+
+                            <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                              <div
+                                className="h-full bg-primary"
+                                style={{ width: `${prog}%` }}
+                              />
+                            </div>
+
+                            <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                              <span>{fmtSAR(current)}</span>
+                              <span>{fmtSAR(target)}</span>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="rounded-lg border p-3">
+                              <div className="text-xs text-muted-foreground">
+                                Ø§Ù„Ø­Ø¯ Ø§Ù„Ø£Ø¯Ù†Ù‰
+                              </div>
+                              <div className="font-semibold">
+                                {fmtSAR(p.minInvestment)}
+                              </div>
+                            </div>
+
+                            <div className="rounded-lg border p-3">
+                              <div className="text-xs text-muted-foreground">
+                                Ø§Ù„Ø¹Ø§Ø¦Ø¯ Ø§Ù„Ø³Ù†ÙˆÙŠ
+                              </div>
+                              <div className="font-semibold flex items-center gap-2">
+                                <TrendingUp className="w-4 h-4" />
+                                {safeNumber(p.annualReturn)}%
+                              </div>
+                            </div>
+
+                            <div className="rounded-lg border p-3 col-span-2">
+                              <div className="text-xs text-muted-foreground">Ø§Ù„Ù…Ø¯Ø©</div>
+                              <div className="font-semibold">
+                                {safeNumber(p.duration)} Ø´Ù‡Ø±
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="text-sm text-muted-foreground leading-relaxed line-clamp-3">
+                            {p.overviewAr ||
+                              p.descriptionAr ||
+                              p.descriptionEn ||
+                              "â€”"}
+                          </div>
+
+                          <div className="flex gap-2">
+                            <Link href={`/projects/${p.id}`}>
+                              <Button className="w-full">Ø¹Ø±Ø¶ Ø§Ù„ØªÙØ§ØµÙŠÙ„</Button>
+                            </Link>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </main>
 
       <Footer />
     </div>

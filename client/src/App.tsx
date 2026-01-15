@@ -12,7 +12,6 @@ import Contact from "./pages/Contact";
 import ProjectDetails from "./pages/ProjectDetails";
 
 import LoginPage from "./pages/Login";
-
 import RequireRole from "./components/RequireRole";
 
 // Admin pages
@@ -35,18 +34,20 @@ import MyInvestments from "./pages/client/MyInvestments";
 function Router() {
   return (
     <Switch>
-      {/* ============== Public ============== */}
+      {/* Public */}
       <Route path={"/"} component={Home} />
       <Route path={"/projects"} component={ProjectsPage} />
       <Route path={"/about"} component={About} />
       <Route path={"/contact"} component={Contact} />
       <Route path={"/projects/:id"} component={ProjectDetails} />
 
-      {/* ============== Auth ============== */}
+      {/* Preview routes */}
+
+      {/* Auth */}
       <Route path={"/login"} component={LoginPage} />
       <Route path={"/404"} component={NotFound} />
 
-      {/* ============== Admin (Protected) ============== */}
+      {/* Admin (Protected) */}
       <Route path={"/dashboard"}>
         <RequireRole allow={["owner", "accountant", "staff"]}>
           <AdminDashboard />
@@ -70,8 +71,6 @@ function Router() {
           <EditProject />
         </RequireRole>
       </Route>
-
-      {/* ❌ removed Route: /admin/vip */}
 
       <Route path={"/admin/reports"}>
         <RequireRole allow={["owner", "accountant", "staff"]}>
@@ -111,7 +110,7 @@ function Router() {
 
       <Route path={"/admin/debug-auth"} component={DebugAuthPage} />
 
-      {/* ============== Client (Protected) ============== */}
+      {/* Client (Protected) */}
       <Route path={"/client/dashboard"}>
         <RequireRole allow={["user"]}>
           <ClientDashboard />
@@ -124,7 +123,6 @@ function Router() {
         </RequireRole>
       </Route>
 
-      {/* Final fallback route */}
       <Route component={NotFound} />
     </Switch>
   );
@@ -134,6 +132,9 @@ function App() {
   return (
     <ErrorBoundary>
       <ThemeProvider defaultTheme="light">
+        {/* ✅ خلفية الـ SVG العامة */}
+        <div className="rsg-bg" aria-hidden="true" />
+
         <TooltipProvider>
           <Toaster />
           <Router />

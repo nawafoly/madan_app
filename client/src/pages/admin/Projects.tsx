@@ -1,477 +1,605 @@
-// client/src/pages/Projects.tsx
+// client/src/pages/admin/Projects.tsx
 import { useEffect, useMemo, useState } from "react";
-import { useRoute, Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import {
-  MapPin,
-  TrendingUp,
-  ArrowRight,
-  CheckCircle2,
-  AlertCircle,
-  Shield,
-} from "lucide-react";
-import { toast } from "sonner";
-import { useAuth } from "@/_core/hooks/useAuth";
 
-// ✅ Firestore
 import {
-  addDoc,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+import {
+  AlertTriangle,
+  RefreshCw,
+  Search,
+  Plus,
+  Pencil,
+  Eye,
+  EyeOff,
+  Trash2,
+  Layers,
+  CheckCircle2,
+  Clock,
+} from "lucide-react";
+
+import { toast } from "sonner";
+
+import {
   collection,
+  deleteDoc,
   doc,
   getDoc,
-  serverTimestamp,
+  onSnapshot,
+  orderBy,
+  query,
+  updateDoc,
+  where,
+  Timestamp,
 } from "firebase/firestore";
 import { db } from "@/_core/firebase";
 
+type LabelsDoc = {
+  projectTypes?: Record<string, string>;
+  projectStatuses?: Record<string, string>;
+};
+
+type FlagsDoc = {
+  hideVipProjects?: boolean;
+  vipOnlyMode?: boolean;
+  maintenanceMode?: boolean;
+};
+
+const DEFAULT_LABELS: Required<LabelsDoc> = {
+  projectTypes: {
+    sukuk: "استثمار بالصكوك",
+    land_development: "تطوير أراضي",
+    vip_exclusive: "VIP حصري",
+  },
+  projectStatuses: {
+    draft: "مسودة",
+    published: "منشور",
+    closed: "مغلق",
+    completed: "مكتمل",
+  },
+};
+
 type ProjectDoc = {
-  id?: string;
+  id: string;
 
+  // titles
   titleAr?: string;
-  locationAr?: string;
+  titleEn?: string;
 
+  // meta
   projectType?: string;
-  status?: string;
-
+  status?: string; // draft/published/closed/completed...
   issueNumber?: string;
 
-  overviewAr?: string;
-  descriptionAr?: string;
+  locationAr?: string;
+  locationEn?: string;
 
-  targetAmount?: number | string;
-  currentAmount?: number | string;
+  // finance
+  targetAmount?: number;
+  currentAmount?: number;
+  minInvestment?: number;
+  annualReturn?: number;
+  duration?: number;
 
   investorsCount?: number;
 
-  minInvestment?: number | string;
-  annualReturn?: number | string;
-  duration?: number | string;
-
-  risksAr?: string;
-
-  videoUrl?: string;
+  createdAt?: Timestamp | any;
+  updatedAt?: Timestamp | any;
 };
 
-export default function ProjectDetails() {
-  const [, params] = useRoute("/projects/:id");
+function safeNumber(n: any) {
+  const x = Number(n);
+  return Number.isFinite(x) ? x : 0;
+}
 
-  // ✅ Firestore doc id is string
-  const projectId = params?.id ? String(params.id) : "";
+function fmtSAR(n: any) {
+  return safeNumber(n).toLocaleString("ar-SA") + " ر.س";
+}
 
-  const [isInterestFormOpen, setIsInterestFormOpen] = useState(false);
+export default function ProjectsManagement() {
+  const [, setLocation] = useLocation();
 
-  const { user } = useAuth();
-
-  const [project, setProject] = useState<ProjectDoc | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-
-  const [sending, setSending] = useState(false);
-
-  const [formData, setFormData] = useState({
-    name: user?.name || "",
-    email: user?.email || "",
-    phone: "",
-    estimatedAmount: "",
-    message: "",
+  const [labels, setLabels] = useState<Required<LabelsDoc>>(DEFAULT_LABELS);
+  const [flags, setFlags] = useState<FlagsDoc>({
+    hideVipProjects: false,
+    vipOnlyMode: false,
+    maintenanceMode: false,
   });
 
-  // ✅ keep form in sync after auth loads
-  useEffect(() => {
-    setFormData((prev) => ({
-      ...prev,
-      name: prev.name || user?.name || "",
-      email: prev.email || user?.email || "",
-    }));
-  }, [user?.name, user?.email]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const [projects, setProjects] = useState<ProjectDoc[]>([]);
+
+  // filters
+  const [qText, setQText] = useState("");
+  const [typeFilter, setTypeFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+
+  // ui
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   /* =========================
-     Load project from Firestore
+     Load settings (labels + flags)
   ========================= */
-  const loadProject = async () => {
-    try {
-      setIsLoading(true);
-      setLoadError(null);
+  useEffect(() => {
+    (async () => {
+      try {
+        const [labelsSnap, flagsSnap] = await Promise.all([
+          getDoc(doc(db, "settings", "labels")),
+          getDoc(doc(db, "settings", "flags")),
+        ]);
 
-      if (!projectId) {
-        setProject(null);
-        return;
+        if (labelsSnap.exists()) {
+          const data = labelsSnap.data() as LabelsDoc;
+          setLabels({
+            projectTypes: {
+              ...DEFAULT_LABELS.projectTypes,
+              ...(data.projectTypes || {}),
+            },
+            projectStatuses: {
+              ...DEFAULT_LABELS.projectStatuses,
+              ...(data.projectStatuses || {}),
+            },
+          });
+        } else {
+          setLabels(DEFAULT_LABELS);
+        }
+
+        if (flagsSnap.exists()) setFlags(flagsSnap.data() as FlagsDoc);
+      } catch {
+        // keep defaults
       }
+    })();
+  }, []);
 
-      const snap = await getDoc(doc(db, "projects", projectId));
-      if (!snap.exists()) {
-        setProject(null);
-        return;
+  /* =========================
+     Load projects (Realtime)
+  ========================= */
+  useEffect(() => {
+    setLoading(true);
+    setLoadError(null);
+
+    // ✅ Admin view: show all (draft + published + closed ...)
+    // If you want only non-deleted, add field filters here.
+    const qy = query(collection(db, "projects"), orderBy("createdAt", "desc"));
+
+    const unsub = onSnapshot(
+      qy,
+      (snap) => {
+        const list: ProjectDoc[] = snap.docs.map((d) => ({
+          id: d.id,
+          ...(d.data() as any),
+        }));
+        setProjects(list);
+        setLoading(false);
+      },
+      (err) => {
+        console.error(err);
+        setLoadError("تعذر تحميل المشاريع");
+        setLoading(false);
       }
+    );
 
-      setProject({ id: snap.id, ...(snap.data() as ProjectDoc) });
-    } catch (e) {
-      console.error(e);
-      setLoadError("حدث خطأ أثناء تحميل المشروع");
-      setProject(null);
-    } finally {
-      setIsLoading(false);
-    }
+    return () => unsub();
+  }, [refreshKey]);
+
+  /* =========================
+     Derived labels
+  ========================= */
+  const typeLabel = (type?: string) => {
+    if (!type) return "—";
+    return labels.projectTypes[type] || type;
   };
 
-  useEffect(() => {
-    loadProject();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId]);
+  const statusLabel = (st?: string) => {
+    if (!st) return "—";
+    return labels.projectStatuses[st] || st;
+  };
+
+  const statusBadgeVariant = (st?: string) => {
+    // keep it simple (shadcn variants depend on your Badge implementation)
+    if (st === "published") return "default";
+    if (st === "draft") return "secondary";
+    if (st === "closed" || st === "completed") return "outline";
+    return "secondary";
+  };
 
   /* =========================
-     Helpers
+     Filtering
   ========================= */
-  const progress = useMemo(() => {
-    if (!project?.targetAmount) return 0;
-    const target = Number(project.targetAmount || 0);
-    const current = Number(project.currentAmount || 0);
-    if (!target) return 0;
-    return (current / target) * 100;
-  }, [project?.targetAmount, project?.currentAmount]);
+  const filtered = useMemo(() => {
+    const t = qText.trim().toLowerCase();
 
-  const heroVideo =
-    project?.videoUrl ||
-    "https://cdn.coverr.co/videos/coverr-modern-architecture-1604/1080p.mp4";
+    return projects.filter((p) => {
+      if (typeFilter !== "all" && (p.projectType || "") !== typeFilter) return false;
+      if (statusFilter !== "all" && (p.status || "") !== statusFilter) return false;
+
+      if (!t) return true;
+
+      const hay = [
+        p.titleAr,
+        p.titleEn,
+        p.locationAr,
+        p.locationEn,
+        p.issueNumber,
+        p.projectType,
+        p.status,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return hay.includes(t);
+    });
+  }, [projects, qText, typeFilter, statusFilter]);
 
   /* =========================
-     Submit interest -> Firestore messages
+     Quick stats
   ========================= */
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const stats = useMemo(() => {
+    const total = filtered.length;
+    const published = filtered.filter((p) => p.status === "published").length;
+    const draft = filtered.filter((p) => p.status === "draft").length;
 
+    const totalTarget = filtered.reduce((acc, p) => acc + safeNumber(p.targetAmount), 0);
+    const totalCurrent = filtered.reduce((acc, p) => acc + safeNumber(p.currentAmount), 0);
+
+    return { total, published, draft, totalTarget, totalCurrent };
+  }, [filtered]);
+
+  /* =========================
+     Actions
+  ========================= */
+  const togglePublish = async (p: ProjectDoc) => {
     try {
-      if (!project) return;
+      setBusyId(p.id);
 
-      setSending(true);
-
-      await addDoc(collection(db, "messages"), {
-        type: "investment_request",
-        name: formData.name,
-        email: formData.email,
-        phone: formData.phone,
-        subject: `طلب استثمار في مشروع ${project.titleAr || ""}`,
-        message: formData.message,
-        projectId: project.id,
-        projectTitleAr: project.titleAr || "",
-        estimatedAmount: formData.estimatedAmount || "",
-        createdAt: serverTimestamp(),
-
-        // optional meta (safe to keep)
-        createdByUid: user?.uid || null,
-        createdByEmail: user?.email || null,
+      const nextStatus = p.status === "published" ? "draft" : "published";
+      await updateDoc(doc(db, "projects", p.id), {
+        status: nextStatus,
+        updatedAt: Timestamp.now(),
       });
 
-      toast.success("تم إرسال طلبك بنجاح! سنتواصل معك قريبًا.");
-      setIsInterestFormOpen(false);
-
-      // optional clear phone/amount/message
-      setFormData((prev) => ({
-        ...prev,
-        phone: "",
-        estimatedAmount: "",
-        message: "",
-      }));
+      toast.success(nextStatus === "published" ? "تم نشر المشروع" : "تم إخفاء المشروع");
     } catch (e) {
       console.error(e);
-      toast.error("حدث خطأ، يرجى المحاولة مرة أخرى");
+      toast.error("فشل تحديث الحالة");
     } finally {
-      setSending(false);
+      setBusyId(null);
+    }
+  };
+
+  const handleDelete = async (p: ProjectDoc) => {
+    // ✅ تأكيد بسيط بدون مودال عشان ما نعقدها
+    const ok = window.confirm(
+      `تأكيد حذف المشروع؟\n\n${p.titleAr || p.titleEn || p.id}\n\n⚠️ لا يمكن التراجع`
+    );
+    if (!ok) return;
+
+    try {
+      setBusyId(p.id);
+      await deleteDoc(doc(db, "projects", p.id));
+      toast.success("تم حذف المشروع");
+    } catch (e) {
+      console.error(e);
+      toast.error("فشل حذف المشروع");
+    } finally {
+      setBusyId(null);
     }
   };
 
   /* =========================
-     UI states
+     UI
   ========================= */
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex flex-col">
-        <Header />
-        <div className="flex-1 flex items-center justify-center">
-          <div className="animate-spin rounded-full h-24 w-24 border-b-2 border-primary" />
-        </div>
-        <Footer />
-      </div>
-    );
-  }
-
-  if (loadError) {
-    return (
-      <div className="min-h-screen flex flex-col">
-        <Header />
-        <div className="flex-1 flex items-center justify-center">
-          <Card className="p-10 text-center space-y-4">
-            <AlertCircle className="w-14 h-14 mx-auto text-muted-foreground" />
-            <div className="text-xl font-bold">{loadError}</div>
-            <div className="flex justify-center gap-3">
-              <Button onClick={loadProject}>إعادة المحاولة</Button>
-              <Link href="/projects">
-                <Button variant="outline">العودة للمشاريع</Button>
-              </Link>
-            </div>
-          </Card>
-        </div>
-        <Footer />
-      </div>
-    );
-  }
-
-  if (!project) {
-    return (
-      <div className="min-h-screen flex flex-col">
-        <Header />
-        <div className="flex-1 flex items-center justify-center">
-          <Card className="p-12 text-center">
-            <AlertCircle className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
-            <h2 className="text-2xl font-bold mb-2">المشروع غير موجود</h2>
-            <Link href="/projects">
-              <Button>العودة للمشاريع</Button>
-            </Link>
-          </Card>
-        </div>
-        <Footer />
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
 
-      {/* HERO WITH VIDEO */}
-      <section className="relative h-[65vh] min-h-[520px] overflow-hidden mt-20">
-        <video
-          autoPlay
-          muted
-          loop
-          playsInline
-          className="absolute inset-0 w-full h-full object-cover"
-          src={heroVideo}
-        />
-
-        <div className="absolute inset-0 bg-black/65" />
-
-        <div className="relative z-10 h-full flex items-center">
-          <div className="container text-white max-w-4xl">
-            <div className="flex gap-3 mb-4">
-              <Badge className="bg-primary text-primary-foreground px-4 py-2">
-                {project.projectType}
-              </Badge>
-              <Badge className="bg-black/50 backdrop-blur-sm px-4 py-2">
-                #{project.issueNumber}
-              </Badge>
+      <main className="flex-1 mt-20">
+        <div className="container py-10 space-y-6">
+          {/* Top row */}
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+            <div className="space-y-1">
+              <h1 className="text-3xl font-bold flex items-center gap-2">
+                <Layers className="w-7 h-7" />
+                إدارة المشاريع
+              </h1>
+              <p className="text-muted-foreground">
+                عرض/بحث/تعديل/نشر المشاريع مباشرة من Firestore
+              </p>
             </div>
 
-            <h1 className="text-5xl md:text-6xl font-bold mb-4">
-              {project.titleAr}
-            </h1>
+            <div className="flex gap-2 flex-wrap">
+              <Button
+                variant="outline"
+                onClick={() => setRefreshKey((x) => x + 1)}
+                disabled={loading}
+              >
+                <RefreshCw className="w-4 h-4 ml-2" />
+                تحديث
+              </Button>
 
-            {project.locationAr && (
-              <div className="flex items-center gap-2 text-xl">
-                <MapPin className="w-6 h-6" />
-                <span>{project.locationAr}</span>
-              </div>
-            )}
+              <Button onClick={() => setLocation("/admin/projects/create")}>
+                <Plus className="w-4 h-4 ml-2" />
+                مشروع جديد
+              </Button>
+            </div>
           </div>
-        </div>
-      </section>
 
-      {/* CONTENT */}
-      <section className="py-12 bg-background">
-        <div className="container grid lg:grid-cols-3 gap-8">
-          {/* LEFT */}
-          <div className="lg:col-span-2 space-y-8">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-3xl">نظرة عامة</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-lg text-muted-foreground leading-relaxed">
-                  {project.overviewAr || project.descriptionAr}
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-3xl flex items-center gap-2">
-                  <TrendingUp className="w-7 h-7 text-primary" />
-                  التفاصيل المالية
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="grid md:grid-cols-2 gap-6">
-                <div>
+          {/* Maintenance notice */}
+          {flags.maintenanceMode && (
+            <Card className="border-yellow-500/30">
+              <CardContent className="py-4 flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 mt-0.5" />
+                <div className="space-y-1">
+                  <div className="font-semibold">وضع الصيانة مفعّل</div>
                   <div className="text-sm text-muted-foreground">
-                    المبلغ المستهدف
-                  </div>
-                  <div className="text-3xl font-bold text-primary">
-                    {Number(project.targetAmount || 0).toLocaleString()} ر.س
+                    الموقع العام قد يمنع عرض المشاريع، لكن لوحة الإدارة تظل تعمل.
                   </div>
                 </div>
-                <div>
-                  <div className="text-sm text-muted-foreground">الحد الأدنى</div>
-                  <div className="text-3xl font-bold">
-                    {Number(project.minInvestment || 0).toLocaleString()} ر.س
-                  </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Filters */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-xl">فلترة وبحث</CardTitle>
+            </CardHeader>
+            <CardContent className="grid lg:grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <div className="text-sm font-medium">بحث</div>
+                <div className="relative">
+                  <Search className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={qText}
+                    onChange={(e) => setQText(e.target.value)}
+                    placeholder="ابحث بالعنوان / الموقع / رقم الإصدار..."
+                    className="pr-9"
+                  />
                 </div>
-                <div>
-                  <div className="text-sm text-muted-foreground">العائد السنوي</div>
-                  <div className="text-3xl font-bold text-green-600">
-                    {project.annualReturn}%
-                  </div>
-                </div>
-                <div>
-                  <div className="text-sm text-muted-foreground">المدة</div>
-                  <div className="text-3xl font-bold">{project.duration} شهر</div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="text-sm font-medium">نوع المشروع</div>
+                <Select value={typeFilter} onValueChange={setTypeFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="اختر النوع" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">الكل</SelectItem>
+                    {Object.keys(labels.projectTypes).map((k) => (
+                      <SelectItem key={k} value={k}>
+                        {labels.projectTypes[k] || k}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <div className="text-sm font-medium">الحالة</div>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="اختر الحالة" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">الكل</SelectItem>
+                    {Object.keys(labels.projectStatuses).map((k) => (
+                      <SelectItem key={k} value={k}>
+                        {labels.projectStatuses[k] || k}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Stats */}
+          <div className="grid md:grid-cols-4 gap-3">
+            <Card>
+              <CardContent className="py-5 space-y-1">
+                <div className="text-sm text-muted-foreground">الإجمالي</div>
+                <div className="text-2xl font-bold">{stats.total}</div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="py-5 space-y-1">
+                <div className="text-sm text-muted-foreground">المنشور</div>
+                <div className="text-2xl font-bold flex items-center gap-2">
+                  <CheckCircle2 className="w-5 h-5" />
+                  {stats.published}
                 </div>
               </CardContent>
             </Card>
 
-            {project.risksAr && (
-              <Card className="border-destructive/20">
-                <CardHeader>
-                  <CardTitle className="text-3xl flex items-center gap-2">
-                    <Shield className="w-7 h-7 text-destructive" />
-                    المخاطر
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-lg text-muted-foreground whitespace-pre-line">
-                    {project.risksAr}
-                  </p>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-
-          {/* RIGHT */}
-          <div>
-            <Card className="sticky top-24 border-2 border-primary/20">
-              <CardHeader className="bg-primary/5">
-                <CardTitle className="text-2xl">ملخص الاستثمار</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6 pt-6">
-                <div>
-                  <div className="flex justify-between text-sm mb-2">
-                    <span className="text-muted-foreground">التقدم</span>
-                    <span className="font-bold text-primary">
-                      {progress.toFixed(1)}%
-                    </span>
-                  </div>
-                  <Progress value={progress} className="h-3" />
+            <Card>
+              <CardContent className="py-5 space-y-1">
+                <div className="text-sm text-muted-foreground">المسودات</div>
+                <div className="text-2xl font-bold flex items-center gap-2">
+                  <Clock className="w-5 h-5" />
+                  {stats.draft}
                 </div>
+              </CardContent>
+            </Card>
 
-                <Dialog open={isInterestFormOpen} onOpenChange={setIsInterestFormOpen}>
-                  <DialogTrigger asChild>
-                    <Button size="lg" className="w-full py-6 gold-gradient text-lg">
-                      أبدِ اهتمامك
-                      <ArrowRight className="mr-2 w-5 h-5" />
-                    </Button>
-                  </DialogTrigger>
-
-                  <DialogContent className="max-w-md">
-                    <DialogHeader>
-                      <DialogTitle>نموذج الاهتمام</DialogTitle>
-                    </DialogHeader>
-
-                    <form onSubmit={handleSubmit} className="space-y-4">
-                      <div>
-                        <Label>الاسم</Label>
-                        <Input
-                          value={formData.name}
-                          onChange={(e) =>
-                            setFormData({ ...formData, name: e.target.value })
-                          }
-                          required
-                        />
-                      </div>
-
-                      <div>
-                        <Label>البريد الإلكتروني</Label>
-                        <Input
-                          type="email"
-                          value={formData.email}
-                          onChange={(e) =>
-                            setFormData({ ...formData, email: e.target.value })
-                          }
-                          required
-                        />
-                      </div>
-
-                      <div>
-                        <Label>رقم الجوال</Label>
-                        <Input
-                          value={formData.phone}
-                          onChange={(e) =>
-                            setFormData({ ...formData, phone: e.target.value })
-                          }
-                        />
-                      </div>
-
-                      <div>
-                        <Label>المبلغ التقديري</Label>
-                        <Input
-                          type="number"
-                          value={formData.estimatedAmount}
-                          onChange={(e) =>
-                            setFormData({
-                              ...formData,
-                              estimatedAmount: e.target.value,
-                            })
-                          }
-                        />
-                      </div>
-
-                      <div>
-                        <Label>ملاحظات</Label>
-                        <Textarea
-                          rows={4}
-                          value={formData.message}
-                          onChange={(e) =>
-                            setFormData({ ...formData, message: e.target.value })
-                          }
-                        />
-                      </div>
-
-                      <Button type="submit" className="w-full" disabled={sending}>
-                        {sending ? "جاري الإرسال..." : "إرسال الطلب"}
-                      </Button>
-                    </form>
-                  </DialogContent>
-                </Dialog>
-
-                <div className="space-y-3 pt-4">
-                  {[
-                    "عوائد مستقرة",
-                    "إدارة احترافية",
-                    "تقارير دورية",
-                    "متوافق مع الشريعة",
-                  ].map((t) => (
-                    <div key={t} className="flex items-center gap-3">
-                      <CheckCircle2 className="w-5 h-5 text-green-600" />
-                      <span className="text-sm">{t}</span>
-                    </div>
-                  ))}
+            <Card>
+              <CardContent className="py-5 space-y-1">
+                <div className="text-sm text-muted-foreground">إجمالي التقدم</div>
+                <div className="text-lg font-semibold">
+                  {fmtSAR(stats.totalCurrent)} / {fmtSAR(stats.totalTarget)}
                 </div>
               </CardContent>
             </Card>
           </div>
+
+          {/* Content states */}
+          {loading && (
+            <div className="py-14 text-center text-muted-foreground">
+              جاري تحميل المشاريع...
+            </div>
+          )}
+
+          {loadError && !loading && (
+            <Card className="border-destructive/30">
+              <CardContent className="py-8 text-center space-y-3">
+                <div className="font-semibold">{loadError}</div>
+                <Button variant="outline" onClick={() => setRefreshKey((x) => x + 1)}>
+                  إعادة المحاولة
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
+          {!loading && !loadError && filtered.length === 0 && (
+            <Card>
+              <CardContent className="py-10 text-center text-muted-foreground">
+                ما فيه مشاريع مطابقة للبحث/الفلترة.
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Projects grid */}
+          {!loading && !loadError && filtered.length > 0 && (
+            <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {filtered.map((p) => {
+                const target = safeNumber(p.targetAmount);
+                const current = safeNumber(p.currentAmount);
+                const progress = target ? Math.min(100, (current / target) * 100) : 0;
+
+                return (
+                  <Card key={p.id} className="overflow-hidden">
+                    <CardHeader className="space-y-2">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="space-y-1">
+                          <CardTitle className="text-lg leading-tight">
+                            {p.titleAr || p.titleEn || "بدون عنوان"}
+                          </CardTitle>
+                          <div className="text-sm text-muted-foreground">
+                            {p.locationAr || p.locationEn || "—"}
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col gap-2 items-end">
+                          <Badge variant={statusBadgeVariant(p.status)}>
+                            {statusLabel(p.status)}
+                          </Badge>
+                          <Badge variant="outline">{typeLabel(p.projectType)}</Badge>
+                        </div>
+                      </div>
+
+                      {p.issueNumber && (
+                        <div className="text-xs text-muted-foreground">
+                          رقم الإصدار: #{p.issueNumber}
+                        </div>
+                      )}
+                    </CardHeader>
+
+                    <CardContent className="space-y-4">
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-muted-foreground">التقدم</span>
+                          <span className="font-semibold">{progress.toFixed(1)}%</span>
+                        </div>
+                        <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                          <div
+                            className="h-full bg-primary"
+                            style={{ width: `${progress}%` }}
+                          />
+                        </div>
+
+                        <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                          <span>{fmtSAR(current)}</span>
+                          <span>{fmtSAR(target)}</span>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 text-sm">
+                        <div className="rounded-lg border p-3">
+                          <div className="text-xs text-muted-foreground">الحد الأدنى</div>
+                          <div className="font-semibold">{fmtSAR(p.minInvestment)}</div>
+                        </div>
+                        <div className="rounded-lg border p-3">
+                          <div className="text-xs text-muted-foreground">العائد السنوي</div>
+                          <div className="font-semibold">
+                            {safeNumber(p.annualReturn)}%
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap gap-2">
+                        {/* View public details */}
+                        <Link href={`/projects/${p.id}`}>
+                          <Button variant="outline" size="sm">
+                            عرض
+                          </Button>
+                        </Link>
+
+                        {/* Edit */}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setLocation(`/admin/projects/${p.id}/edit`)}
+                        >
+                          <Pencil className="w-4 h-4 ml-2" />
+                          تعديل
+                        </Button>
+
+                        {/* Publish / Draft */}
+                        <Button
+                          size="sm"
+                          onClick={() => togglePublish(p)}
+                          disabled={busyId === p.id}
+                        >
+                          {p.status === "published" ? (
+                            <>
+                              <EyeOff className="w-4 h-4 ml-2" />
+                              إخفاء
+                            </>
+                          ) : (
+                            <>
+                              <Eye className="w-4 h-4 ml-2" />
+                              نشر
+                            </>
+                          )}
+                        </Button>
+
+                        {/* Delete (optional) */}
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => handleDelete(p)}
+                          disabled={busyId === p.id}
+                        >
+                          <Trash2 className="w-4 h-4 ml-2" />
+                          حذف
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
         </div>
-      </section>
+      </main>
 
       <Footer />
     </div>

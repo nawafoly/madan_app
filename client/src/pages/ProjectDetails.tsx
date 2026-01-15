@@ -1,4 +1,4 @@
-// client/src/pages/client/ProjectDetails.tsx
+// client/src/pages/ProjectDetails.tsx
 import { useEffect, useMemo, useState } from "react";
 import { useRoute, Link } from "wouter";
 import Header from "@/components/Header";
@@ -30,7 +30,6 @@ import { toast } from "sonner";
 
 import { doc, getDoc, addDoc, collection, serverTimestamp } from "firebase/firestore";
 import { db } from "@/_core/firebase";
-
 import { useAuth } from "@/_core/hooks/useAuth";
 
 type LabelsDoc = {
@@ -60,9 +59,7 @@ const DEFAULT_LABELS: Required<LabelsDoc> = {
 
 export default function ProjectDetails() {
   const [, params] = useRoute("/projects/:id");
-  const projectId = params?.id || "";
-
-  const [isInterestFormOpen, setIsInterestFormOpen] = useState(false);
+  const projectId = params?.id ? String(params.id) : "";
 
   const { user } = useAuth();
 
@@ -73,9 +70,11 @@ export default function ProjectDetails() {
     maintenanceMode: false,
   });
 
+  const [isInterestFormOpen, setIsInterestFormOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [project, setProject] = useState<any | null>(null);
 
+  const [sending, setSending] = useState(false);
   const [formData, setFormData] = useState({
     name: user?.name || "",
     email: user?.email || "",
@@ -83,6 +82,15 @@ export default function ProjectDetails() {
     estimatedAmount: "",
     message: "",
   });
+
+  // keep form in sync after auth loads
+  useEffect(() => {
+    setFormData((prev) => ({
+      ...prev,
+      name: prev.name || user?.name || "",
+      email: prev.email || user?.email || "",
+    }));
+  }, [user?.name, user?.email]);
 
   /* =========================
      Load settings (labels + flags)
@@ -119,6 +127,7 @@ export default function ProjectDetails() {
     (async () => {
       try {
         setLoading(true);
+
         if (!projectId) {
           setProject(null);
           return;
@@ -130,8 +139,7 @@ export default function ProjectDetails() {
           return;
         }
 
-        const p = { id: snap.id, ...(snap.data() as any) };
-        setProject(p);
+        setProject({ id: snap.id, ...(snap.data() as any) });
       } catch (e) {
         console.error(e);
         toast.error("فشل تحميل المشروع");
@@ -157,8 +165,11 @@ export default function ProjectDetails() {
 
   const progress = useMemo(() => {
     if (!project?.targetAmount) return 0;
-    return (Number(project.currentAmount || 0) / Number(project.targetAmount)) * 100;
-  }, [project]);
+    const target = Number(project.targetAmount || 0);
+    const current = Number(project.currentAmount || 0);
+    if (!target) return 0;
+    return (current / target) * 100;
+  }, [project?.targetAmount, project?.currentAmount]);
 
   const heroVideo =
     project?.videoUrl ||
@@ -170,8 +181,11 @@ export default function ProjectDetails() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!project) return;
 
     try {
+      setSending(true);
+
       await addDoc(collection(db, "messages"), {
         type: "investment_request",
         status: "new",
@@ -183,16 +197,24 @@ export default function ProjectDetails() {
         estimatedAmount: formData.estimatedAmount ? Number(formData.estimatedAmount) : null,
         message: formData.message,
         createdAt: serverTimestamp(),
+        createdByUid: user?.uid || null,
+        createdByEmail: user?.email || null,
       });
 
       toast.success("تم إرسال طلبك بنجاح! سنتواصل معك قريباً");
       setIsInterestFormOpen(false);
+      setFormData((p) => ({ ...p, phone: "", estimatedAmount: "", message: "" }));
     } catch (err) {
       console.error(err);
       toast.error("حدث خطأ، يرجى المحاولة مرة أخرى");
+    } finally {
+      setSending(false);
     }
   };
 
+  /* =========================
+     UI states
+  ========================= */
   if (loading) {
     return (
       <div className="min-h-screen flex flex-col">
@@ -205,7 +227,6 @@ export default function ProjectDetails() {
     );
   }
 
-  // maintenance / blocked
   if (blockedReason) {
     return (
       <div className="min-h-screen flex flex-col">
@@ -214,9 +235,7 @@ export default function ProjectDetails() {
           <Card className="p-10 text-center max-w-xl">
             <AlertTriangle className="w-14 h-14 mx-auto mb-4 text-muted-foreground" />
             <h2 className="text-2xl font-bold mb-2">
-              {blockedReason === "maintenance"
-                ? "الموقع تحت الصيانة"
-                : "غير متاح"}
+              {blockedReason === "maintenance" ? "الموقع تحت الصيانة" : "غير متاح"}
             </h2>
             <p className="text-muted-foreground mb-6">
               {blockedReason === "maintenance"
@@ -267,7 +286,6 @@ export default function ProjectDetails() {
           className="absolute inset-0 w-full h-full object-cover"
           src={heroVideo}
         />
-
         <div className="absolute inset-0 bg-black/65" />
 
         <div className="relative z-10 h-full flex items-center">
@@ -276,13 +294,16 @@ export default function ProjectDetails() {
               <Badge className="bg-primary text-primary-foreground px-4 py-2">
                 {typeLabel}
               </Badge>
-              <Badge className="bg-black/50 backdrop-blur-sm px-4 py-2">
-                #{project.issueNumber}
-              </Badge>
+
+              {project.issueNumber && (
+                <Badge className="bg-black/50 backdrop-blur-sm px-4 py-2">
+                  #{project.issueNumber}
+                </Badge>
+              )}
             </div>
 
             <h1 className="text-5xl md:text-6xl font-bold mb-4">
-              {project.titleAr || project.title}
+              {project.titleAr || project.title || "—"}
             </h1>
 
             {project.locationAr && (
@@ -306,7 +327,7 @@ export default function ProjectDetails() {
               </CardHeader>
               <CardContent>
                 <p className="text-lg text-muted-foreground leading-relaxed">
-                  {project.overviewAr || project.descriptionAr || project.description}
+                  {project.overviewAr || project.descriptionAr || project.description || "—"}
                 </p>
               </CardContent>
             </Card>
@@ -320,9 +341,7 @@ export default function ProjectDetails() {
               </CardHeader>
               <CardContent className="grid md:grid-cols-2 gap-6">
                 <div>
-                  <div className="text-sm text-muted-foreground">
-                    المبلغ المستهدف
-                  </div>
+                  <div className="text-sm text-muted-foreground">المبلغ المستهدف</div>
                   <div className="text-3xl font-bold text-primary">
                     {Number(project.targetAmount || 0).toLocaleString()} ر.س
                   </div>
@@ -375,9 +394,7 @@ export default function ProjectDetails() {
                 <div>
                   <div className="flex justify-between text-sm mb-2">
                     <span className="text-muted-foreground">التقدم</span>
-                    <span className="font-bold text-primary">
-                      {progress.toFixed(1)}%
-                    </span>
+                    <span className="font-bold text-primary">{progress.toFixed(1)}%</span>
                   </div>
                   <Progress value={progress} className="h-3" />
                 </div>
@@ -443,8 +460,8 @@ export default function ProjectDetails() {
                         />
                       </div>
 
-                      <Button type="submit" className="w-full">
-                        إرسال الطلب
+                      <Button type="submit" className="w-full" disabled={sending}>
+                        {sending ? "جاري الإرسال..." : "إرسال الطلب"}
                       </Button>
                     </form>
                   </DialogContent>
