@@ -4,22 +4,106 @@ import { onAuthStateChanged, signOut, type User as FbUser } from "firebase/auth"
 import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 import { auth, db } from "@/_core/firebase";
 
-export type AppRole = "user" | "owner" | "accountant" | "staff";
+/**
+ * ✅ ruols (FINAL)
+ * owner / admin / accountant / staff / client / guest
+ */
+export type AppRole =
+  | "owner"
+  | "admin"
+  | "accountant"
+  | "staff"
+  | "client"
+  | "guest";
+
+/**
+ * ✅ Permission Keys (مرنة)
+ * - تقدر توسعها لاحقًا بدون كسر النظام (بس أضف مفاتيح جديدة)
+ */
+export type Permission =
+  | "project.view"
+  | "project.create"
+  | "project.edit"
+  | "project.publish"
+  | "project.delete"
+  | "financial.view"
+  | "financial.edit"
+  | "users.manage"
+  | "settings.manage";
+
+/**
+ * ✅ Role -> default permissions (Baseline)
+ * ملاحظة: هذا الأساس، لكن:
+ * - permissionsDeny يفوز دائمًا
+ * - permissionsAllow يضيف صلاحيات حتى لو الدور ما يسمح
+ */
+const ROLE_DEFAULT_PERMS: Record<AppRole, Permission[]> = {
+  owner: [
+    "project.view",
+    "project.create",
+    "project.edit",
+    "project.publish",
+    "project.delete",
+    "financial.view",
+    "financial.edit",
+    "users.manage",
+    "settings.manage",
+  ],
+  admin: [
+    "project.view",
+    "project.create",
+    "project.edit",
+    "project.publish",
+    // بدون حذف نهائي ولا إعدادات حساسة ولا ماليات تعديل
+    "financial.view",
+  ],
+  accountant: [
+    "project.view",
+    // مالي فقط
+    "financial.view",
+    "financial.edit",
+    // ملاحظة: ما نعطي publish افتراضيًا، تقدر تضيفها لاحقًا عبر allow
+  ],
+  staff: [
+    "project.view",
+    // تشغيلية بسيطة
+  ],
+  client: ["project.view"],
+  guest: ["project.view"],
+};
 
 export type AppUser = {
   uid: string;
   email?: string | null;
   displayName?: string | null;
   role: AppRole;
+
+  /** ✅ Flexible permissions overrides (per-user) */
+  permissionsAllow?: Permission[];
+  permissionsDeny?: Permission[];
+
   firebaseUser?: FbUser;
 };
 
 function normalizeRole(role: any): AppRole {
-  if (role === "owner" || role === "accountant" || role === "staff") return role;
-  return "user";
+  if (
+    role === "owner" ||
+    role === "admin" ||
+    role === "accountant" ||
+    role === "staff" ||
+    role === "client"
+  ) {
+    return role;
+  }
+  return "guest";
 }
 
-/** ✅ Bootstrap Owner emails (عدلها براحتك) */
+function normalizePerms(list: any): Permission[] {
+  if (!Array.isArray(list)) return [];
+  return list.filter((x) => typeof x === "string") as Permission[];
+}
+
+/** ✅ Bootstrap Owner emails (عدّلها براحتك) */
 const BOOTSTRAP_OWNER_EMAILS = new Set<string>(["nawafaaa0@gmail.com"]);
 
 function isBootstrapOwnerEmail(email?: string | null) {
@@ -27,36 +111,51 @@ function isBootstrapOwnerEmail(email?: string | null) {
   return Boolean(e) && BOOTSTRAP_OWNER_EMAILS.has(e);
 }
 
-async function ensureUserDocAndGetRole(fb: FbUser): Promise<AppRole> {
+type UserRuntimeData = {
+  role: AppRole;
+  permissionsAllow: Permission[];
+  permissionsDeny: Permission[];
+};
+
+async function ensureUserDocAndGetRuntime(fb: FbUser): Promise<UserRuntimeData> {
   const ref = doc(db, "users", fb.uid);
 
-  // Default role derived from bootstrap (لو احتجناه)
-  const bootstrapRole: AppRole = isBootstrapOwnerEmail(fb.email) ? "owner" : "user";
+  // ✅ أي حساب مسجّل دخول = client افتراضيًا
+  // ✅ bootstrap owner = owner
+  const bootstrapRole: AppRole = isBootstrapOwnerEmail(fb.email) ? "owner" : "client";
 
   try {
     const snap = await getDoc(ref);
 
-    // ✅ موجود: رجّع role صحيح + إذا ناقص طبّق bootstrap + حدث updatedAt
+    // ✅ موجود: رجّع role + perms + حدّث updatedAt
     if (snap.exists()) {
       const data = snap.data() as any;
-      const existingRole = normalizeRole(data?.role);
 
-      const finalRole: AppRole = existingRole !== "user" ? existingRole : bootstrapRole;
+      let role = normalizeRole(data?.role);
 
-      // ✅ نضمن تحديث بسيط (بدون ما نخرب بياناته)
+      // ✅ تصحيح تلقائي: لا يوجد guest لمستخدم مسجّل دخول
+      if (role === "guest" && !isBootstrapOwnerEmail(fb.email)) {
+        role = "client";
+      }
+
+      const permissionsAllow = normalizePerms(data?.permissionsAllow);
+      const permissionsDeny = normalizePerms(data?.permissionsDeny);
+
       await setDoc(
         ref,
         {
           uid: fb.uid,
           email: fb.email ?? null,
           displayName: fb.displayName ?? null,
-          role: finalRole,
+          role,
+          permissionsAllow,
+          permissionsDeny,
           updatedAt: serverTimestamp(),
         },
         { merge: true }
       );
 
-      return finalRole;
+      return { role, permissionsAllow, permissionsDeny };
     }
 
     // ✅ غير موجود: أنشئ doc من الصفر
@@ -67,17 +166,43 @@ async function ensureUserDocAndGetRole(fb: FbUser): Promise<AppRole> {
         email: fb.email ?? null,
         displayName: fb.displayName ?? null,
         role: bootstrapRole,
+        permissionsAllow: [],
+        permissionsDeny: [],
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       },
       { merge: true }
     );
 
-    return bootstrapRole;
+    return { role: bootstrapRole, permissionsAllow: [], permissionsDeny: [] };
   } catch {
     // ✅ لا نعلّق النظام بسبب Firestore
-    return "user";
+    // (لو صار خطأ قراءة/كتابة، نخلي الدور guest مؤقتًا)
+    return { role: "guest", permissionsAllow: [], permissionsDeny: [] };
   }
+}
+
+/**
+ * ✅ Core permission check
+ * القاعدة:
+ * 1) Deny يفوز دائمًا
+ * 2) Allow يضيف صلاحية
+ * 3) Role baseline fallback
+ */
+export function hasPermission(
+  user: AppUser | null | undefined,
+  perm: Permission
+): boolean {
+  if (!user) return false;
+
+  const deny = new Set<Permission>(user.permissionsDeny ?? []);
+  if (deny.has(perm)) return false;
+
+  const allow = new Set<Permission>(user.permissionsAllow ?? []);
+  if (allow.has(perm)) return true;
+
+  const baseline = ROLE_DEFAULT_PERMS[user.role] ?? [];
+  return baseline.includes(perm);
 }
 
 export function useAuth() {
@@ -99,14 +224,16 @@ export function useAuth() {
 
     setLoading(true);
     try {
-      const role = await ensureUserDocAndGetRole(fb);
+      const runtime = await ensureUserDocAndGetRuntime(fb);
       if (!aliveRef.current) return;
 
       setUser({
         uid: fb.uid,
         email: fb.email,
         displayName: fb.displayName,
-        role,
+        role: runtime.role,
+        permissionsAllow: runtime.permissionsAllow,
+        permissionsDeny: runtime.permissionsDeny,
         firebaseUser: fb,
       });
       setError(null);
@@ -135,7 +262,6 @@ export function useAuth() {
     const unsub = onAuthStateChanged(auth, async (fb) => {
       if (!aliveRef.current) return;
 
-      // ✅ أهم سطرين يمنعون Loading للأبد
       if (!fb) {
         setUser(null);
         setError(null);
@@ -145,14 +271,16 @@ export function useAuth() {
 
       setLoading(true);
       try {
-        const role = await ensureUserDocAndGetRole(fb);
+        const runtime = await ensureUserDocAndGetRuntime(fb);
         if (!aliveRef.current) return;
 
         setUser({
           uid: fb.uid,
           email: fb.email,
           displayName: fb.displayName,
-          role,
+          role: runtime.role,
+          permissionsAllow: runtime.permissionsAllow,
+          permissionsDeny: runtime.permissionsDeny,
           firebaseUser: fb,
         });
         setError(null);
@@ -172,11 +300,15 @@ export function useAuth() {
     };
   }, []);
 
-  return useMemo(() => ({ user, loading, error, refresh, logout }), [
-    user,
-    loading,
-    error,
-    refresh,
-    logout,
-  ]);
+  return useMemo(
+    () => ({
+      user,
+      loading,
+      error,
+      refresh,
+      logout,
+      hasPermission: (perm: Permission) => hasPermission(user, perm),
+    }),
+    [user, loading, error, refresh, logout]
+  );
 }

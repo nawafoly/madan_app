@@ -4,9 +4,23 @@ import { useLocation } from "wouter";
 import { useAuth, type AppRole } from "@/_core/hooks/useAuth";
 
 function homeForRole(role: AppRole) {
-  if (role === "owner" || role === "accountant" || role === "staff") return "/dashboard";
+  // ✅ Admin dashboard roles
+  if (
+    role === "owner" ||
+    role === "admin" ||
+    role === "accountant" ||
+    role === "staff"
+  ) {
+    return "/dashboard";
+  }
+
+  // ✅ Client area
+  if (role === "client") return "/client/dashboard";
+
+  // ✅ Guest (نفس صفحة العميل لكن بواجهة Guest داخلها)
   return "/client/dashboard";
 }
+
 
 type Props = {
   allow: AppRole[];
@@ -22,15 +36,15 @@ export default function RequireRole({ allow, children }: Props) {
   useEffect(() => {
     if (loading) return;
 
-    // ✅ not logged in → login
+    // ✅ not logged in -> login
     if (!user) {
       if (location !== "/login") setLocation("/login");
       return;
     }
 
-    const role = (user.role ?? "user") as AppRole;
+    const role = (user.role ?? "guest") as AppRole;
 
-    // ✅ not allowed → role home
+    // ✅ role not allowed -> go to its home
     if (!allow.includes(role)) {
       const target = homeForRole(role);
       if (location !== target) setLocation(target);
@@ -40,7 +54,7 @@ export default function RequireRole({ allow, children }: Props) {
   if (loading) return null;
   if (!user) return null;
 
-  const role = (user.role ?? "user") as AppRole;
+  const role = (user.role ?? "guest") as AppRole;
   if (!allow.includes(role)) return null;
 
   return <>{children}</>;

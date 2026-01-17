@@ -1,11 +1,11 @@
 // client/src/pages/Projects.tsx
 import { useEffect, useMemo, useState } from "react";
-import { Link, useLocation } from "wouter";
+import { Link } from "wouter";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 
@@ -24,9 +24,8 @@ import {
   TrendingUp,
   Shield,
   Sparkles,
+  RefreshCw,
 } from "lucide-react";
-
-import { toast } from "sonner";
 
 import {
   collection,
@@ -38,6 +37,7 @@ import {
   where,
   Timestamp,
 } from "firebase/firestore";
+import type { FirestoreError } from "firebase/firestore";
 import { db } from "@/_core/firebase";
 
 type LabelsDoc = {
@@ -65,6 +65,8 @@ const DEFAULT_LABELS: Required<LabelsDoc> = {
   },
 };
 
+const FALLBACK_COVER = "/HOOM-HERO.png";
+
 type ProjectDoc = {
   id: string;
 
@@ -78,6 +80,10 @@ type ProjectDoc = {
   status?: string;
 
   issueNumber?: string;
+
+  // ✅ image fields
+  coverImage?: string;
+  image?: string;
 
   overviewAr?: string;
   descriptionAr?: string;
@@ -106,9 +112,23 @@ function fmtSAR(n: any) {
   return safeNumber(n).toLocaleString("ar-SA") + " ر.س";
 }
 
-export default function ProjectsPage() {
-  const [, setLocation] = useLocation();
+function humanizeFirestoreError(err: unknown): string {
+  const e = err as Partial<FirestoreError> | undefined;
 
+  if (e?.code === "permission-denied") {
+    return "صلاحيات Firestore تمنع تحميل المشاريع (permission-denied). راجع Rules الخاصة بـ projects.";
+  }
+  if (e?.code === "failed-precondition") {
+    return "الاستعلام يحتاج Index في Firestore (failed-precondition). افتح Console وستجد رابط إنشاء الـ Index.";
+  }
+  if (e?.code === "unauthenticated") {
+    return "غير مسجّل دخول (unauthenticated).";
+  }
+
+  return "تعذر تحميل المشاريع";
+}
+
+export default function ProjectsPage() {
   const [labels, setLabels] = useState<Required<LabelsDoc>>(DEFAULT_LABELS);
   const [flags, setFlags] = useState<FlagsDoc>({
     hideVipProjects: false,
@@ -124,6 +144,9 @@ export default function ProjectsPage() {
   const [qText, setQText] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [sortBy, setSortBy] = useState<string>("newest"); // newest | progress | return
+
+  // refresh
+  const [refreshKey, setRefreshKey] = useState(0);
 
   /* =========================
      Load settings (labels + flags)
@@ -183,14 +206,14 @@ export default function ProjectsPage() {
         setLoading(false);
       },
       (err) => {
-        console.error(err);
-        setLoadError("تعذر تحميل المشاريع");
+        console.error("Projects load error:", err);
+        setLoadError(humanizeFirestoreError(err));
         setLoading(false);
       }
     );
 
     return () => unsub();
-  }, []);
+  }, [refreshKey]);
 
   /* =========================
      Helpers
@@ -271,21 +294,35 @@ export default function ProjectsPage() {
      UI
   ========================= */
   return (
-    // ✅ أهم تعديل: نخلي الصفحة "جلد" شفاف عشان النقوش تبان
-    <div className="rsg-page min-h-screen flex flex-col bg-transparent text-foreground" dir="rtl" lang="ar">
+    <div
+      className="rsg-page min-h-screen flex flex-col bg-transparent text-foreground"
+      dir="rtl"
+      lang="ar"
+    >
       <Header />
 
       {/* HERO */}
       <section className="mt-20">
         <div className="container py-10 space-y-4">
-          <div className="space-y-2">
-            <h1 className="text-4xl md:text-5xl font-bold flex items-center gap-2">
-              <Sparkles className="w-7 h-7" />
-              مشاريعنا الاستثمارية
-            </h1>
-            <p className="text-muted-foreground text-lg">
-              استعرض الفرص المتاحة، تفاصيل العوائد، وقدم اهتمامك بسهولة.
-            </p>
+          <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+            <div className="space-y-2">
+              <h1 className="text-4xl md:text-5xl font-bold flex items-center gap-2">
+                <Sparkles className="w-7 h-7" />
+                مشاريعنا الاستثمارية
+              </h1>
+              <p className="text-muted-foreground text-lg">
+                استعرض الفرص المتاحة، تفاصيل العوائد، وقدم اهتمامك بسهولة.
+              </p>
+            </div>
+
+            <Button
+              variant="outline"
+              onClick={() => setRefreshKey((x) => x + 1)}
+              disabled={loading}
+            >
+              <RefreshCw className="w-4 h-4 ml-2" />
+              تحديث
+            </Button>
           </div>
 
           {blockedReason === "maintenance" && (
@@ -395,9 +432,16 @@ export default function ProjectsPage() {
                 <Card className="border-destructive/30">
                   <CardContent className="py-10 text-center space-y-3">
                     <div className="font-semibold">{loadError}</div>
+
+                    <div className="text-sm text-muted-foreground">
+                      ملاحظة: هذه الصفحة تعرض فقط المشاريع التي حالتها{" "}
+                      <span className="font-semibold">published</span> وبها{" "}
+                      <span className="font-semibold">createdAt</span> (Timestamp).
+                    </div>
+
                     <Button
                       variant="outline"
-                      onClick={() => window.location.reload()}
+                      onClick={() => setRefreshKey((x) => x + 1)}
                     >
                       إعادة المحاولة
                     </Button>
@@ -420,37 +464,60 @@ export default function ProjectsPage() {
                     const current = safeNumber(p.currentAmount);
                     const prog = progressPercent(p);
 
+                    const cover =
+                      (p.coverImage && String(p.coverImage).trim()) ||
+                      (p.image && String(p.image).trim()) ||
+                      FALLBACK_COVER;
+
                     return (
                       <Card key={p.id} className="overflow-hidden">
-                        <CardHeader className="space-y-2">
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="space-y-1">
-                              <CardTitle className="text-lg leading-tight">
-                                {p.titleAr || p.titleEn || "بدون عنوان"}
-                              </CardTitle>
+                        {/* ✅ Cover Image */}
+                        <div className="relative h-44 w-full bg-muted">
+                          <img
+                            src={cover}
+                            alt={p.titleAr || p.titleEn || "Project"}
+                            className="h-full w-full object-cover"
+                            loading="lazy"
+                            onError={(e) => {
+                              const img = e.currentTarget;
+                              if (img.src.includes(FALLBACK_COVER)) return;
+                              img.src = FALLBACK_COVER;
+                            }}
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-transparent" />
 
-                              <div className="text-sm text-muted-foreground flex items-center gap-2">
-                                <MapPin className="w-4 h-4" />
-                                <span>{p.locationAr || p.locationEn || "—"}</span>
-                              </div>
-                            </div>
-
-                            <div className="flex flex-col items-end gap-2">
-                              <Badge variant="outline">
-                                {typeLabel(p.projectType)}
+                          <div className="absolute top-3 right-3 flex flex-col items-end gap-2">
+                            <Badge variant="outline" className="bg-white/80">
+                              {typeLabel(p.projectType)}
+                            </Badge>
+                            {p.issueNumber && (
+                              <Badge variant="secondary" className="bg-white/80">
+                                #{p.issueNumber}
                               </Badge>
-                              {p.issueNumber && (
-                                <Badge variant="secondary">#{p.issueNumber}</Badge>
-                              )}
+                            )}
+                          </div>
+
+                          <div className="absolute bottom-3 right-3 left-3">
+                            <div className="text-white text-lg font-semibold leading-tight line-clamp-1">
+                              {p.titleAr || p.titleEn || "بدون عنوان"}
+                            </div>
+                            <div className="text-white/85 text-sm flex items-center gap-2 mt-1">
+                              <MapPin className="w-4 h-4" />
+                              <span className="line-clamp-1">
+                                {p.locationAr || p.locationEn || "—"}
+                              </span>
                             </div>
                           </div>
-                        </CardHeader>
+                        </div>
 
-                        <CardContent className="space-y-4">
+                        {/* ✅ Content */}
+                        <div className="p-6 space-y-4">
                           <div className="space-y-1">
                             <div className="flex justify-between text-sm">
                               <span className="text-muted-foreground">التقدم</span>
-                              <span className="font-semibold">{prog.toFixed(1)}%</span>
+                              <span className="font-semibold">
+                                {prog.toFixed(1)}%
+                              </span>
                             </div>
 
                             <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
@@ -487,7 +554,9 @@ export default function ProjectsPage() {
                             </div>
 
                             <div className="rounded-lg border p-3 col-span-2">
-                              <div className="text-xs text-muted-foreground">المدة</div>
+                              <div className="text-xs text-muted-foreground">
+                                المدة
+                              </div>
                               <div className="font-semibold">
                                 {safeNumber(p.duration)} شهر
                               </div>
@@ -501,12 +570,10 @@ export default function ProjectsPage() {
                               "—"}
                           </div>
 
-                          <div className="flex gap-2">
-                            <Link href={`/projects/${p.id}`}>
-                              <Button className="w-full">عرض التفاصيل</Button>
-                            </Link>
-                          </div>
-                        </CardContent>
+                          <Link href={`/projects/${p.id}`}>
+                            <Button className="w-full">عرض التفاصيل</Button>
+                          </Link>
+                        </div>
                       </Card>
                     );
                   })}

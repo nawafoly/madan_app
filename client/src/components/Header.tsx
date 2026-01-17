@@ -1,7 +1,8 @@
+// client/src/components/Header.tsx
 import { useEffect, useState } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Search, Globe } from "lucide-react";
+import { Search, Globe, LogOut } from "lucide-react";
 
 import { NotificationBell } from "@/components/NotificationBell";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -11,7 +12,9 @@ export default function Header() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [language, setLanguage] = useState<"ar" | "en">("ar");
 
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
+  const [, setLocation] = useLocation();
+
   const isAuthenticated = !!user;
 
   useEffect(() => {
@@ -41,14 +44,23 @@ export default function Header() {
         ];
 
   // ✅ route حسب الدور
+  // ✅ أي مستخدم مو من أدوار الداشبورد الإدارية => يروح /client/dashboard
+  const role = (user as any)?.role;
   const dashboardHref =
-    user &&
-    (user as any).role &&
-    ["owner", "accountant", "staff"].includes((user as any).role)
+    role && ["owner", "admin", "accountant", "staff"].includes(role)
       ? "/dashboard"
       : "/client/dashboard";
 
   const closeMobile = () => setIsMobileMenuOpen(false);
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+    } finally {
+      closeMobile();
+      setLocation("/");
+    }
+  };
 
   return (
     <header
@@ -137,11 +149,24 @@ export default function Header() {
                 </Button>
               </Link>
             ) : (
-              <Link href={dashboardHref}>
-                <Button className="hidden md:inline-flex rsg-cta rsg-cta--gold">
-                  {language === "ar" ? "لوحة التحكم" : "Dashboard"}
+              <div className="hidden md:flex items-center gap-2">
+                <Link href={dashboardHref}>
+                  <Button className="rsg-cta rsg-cta--gold">
+                    {language === "ar" ? "لوحة التحكم" : "Dashboard"}
+                  </Button>
+                </Link>
+
+                {/* ✅ Logout (Desktop) */}
+                <Button
+                  variant="outline"
+                  onClick={handleLogout}
+                  aria-label="Logout"
+                  title={language === "ar" ? "تسجيل الخروج" : "Logout"}
+                >
+                  <LogOut className="w-4 h-4 ml-2" />
+                  {language === "ar" ? "خروج" : "Logout"}
                 </Button>
-              </Link>
+              </div>
             )}
           </div>
         </div>
@@ -195,14 +220,26 @@ export default function Header() {
                     </Button>
                   </Link>
                 ) : (
-                  <Link href={dashboardHref}>
+                  <>
+                    <Link href={dashboardHref}>
+                      <Button
+                        className="w-full rsg-cta rsg-cta--gold"
+                        onClick={closeMobile}
+                      >
+                        {language === "ar" ? "لوحة التحكم" : "Dashboard"}
+                      </Button>
+                    </Link>
+
+                    {/* ✅ Logout (Mobile) */}
                     <Button
-                      className="w-full rsg-cta rsg-cta--gold"
-                      onClick={closeMobile}
+                      variant="destructive"
+                      className="w-full"
+                      onClick={handleLogout}
                     >
-                      {language === "ar" ? "لوحة التحكم" : "Dashboard"}
+                      <LogOut className="w-4 h-4 ml-2" />
+                      {language === "ar" ? "تسجيل الخروج" : "Logout"}
                     </Button>
-                  </Link>
+                  </>
                 )}
               </div>
             </nav>

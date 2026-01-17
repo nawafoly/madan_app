@@ -1,85 +1,79 @@
-// client/src/pages/client/ClientDashboard.tsx
 import { useEffect, useMemo, useState } from "react";
-import DashboardLayout from "@/components/DashboardLayout";
+import { Link } from "wouter";
+
+import ClientLayout from "@/components/ClientLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+
 import { useAuth } from "@/_core/hooks/useAuth";
+import { db } from "@/_core/firebase";
+
 import {
   TrendingUp,
   DollarSign,
   Clock,
   CheckCircle,
-  Crown,
   Building2,
-  ArrowRight,
+  FileText,
 } from "lucide-react";
-import { Link } from "wouter";
-import { db } from "@/_core/firebase";
-import {
-  collection,
-  getDocs,
-  query,
-  where,
-  orderBy,
-} from "firebase/firestore";
+
+import { collection, getDocs, query, where, orderBy } from "firebase/firestore";
 
 /* =========================
    Types
 ========================= */
 type Investment = any;
 type Project = any;
-type VipOffer = any;
 
-export default function ClientDashboard() {
-  const { user } = useAuth();
+export default function MyDashboard() {
+  const { user, logout } = useAuth();
 
   const [investments, setInvestments] = useState<Investment[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
-  const [vipOffers, setVipOffers] = useState<VipOffer[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const isClient = user?.role === "client";
+
   /* =========================
-     Load data
+     Load client data
   ========================= */
   useEffect(() => {
-    if (!user?.uid) return;
+    let mounted = true;
 
     const load = async () => {
+      if (!user?.uid || !isClient) {
+        if (mounted) setLoading(false);
+        return;
+      }
+
+      // ✅ الاستثمارات مربوطة بالـ UID فقط عبر investorUid
       const invSnap = await getDocs(
         query(
           collection(db, "investments"),
-          where("userId", "==", user.uid),
+          where("investorUid", "==", user.uid),
           orderBy("createdAt", "desc")
         )
       );
 
       const projSnap = await getDocs(
-        query(
-          collection(db, "projects"),
-          where("status", "==", "published")
-        )
+        query(collection(db, "projects"), where("status", "==", "published"))
       );
 
-      const vipSnap =
-        user.vipTier && user.vipTier !== "none"
-          ? await getDocs(
-              query(
-                collection(db, "vipOffers"),
-                where("isActive", "==", true)
-              )
-            )
-          : null;
+      if (!mounted) return;
 
-      setInvestments(invSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setProjects(projSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setVipOffers(vipSnap ? vipSnap.docs.map(d => ({ id: d.id, ...d.data() })) : []);
+      setInvestments(invSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      setProjects(projSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
       setLoading(false);
     };
 
     load();
-  }, [user]);
+
+    return () => {
+      mounted = false;
+    };
+  }, [user?.uid, isClient]);
 
   /* =========================
      Calculations
@@ -94,13 +88,25 @@ export default function ClientDashboard() {
     [investments]
   );
 
-  const activeInvestments = investments.filter(
-    i => i.status === "active" || i.status === "approved"
-  ).length;
+  // ✅ Active-ish: signed/signing/active + approved (لو عندك قديم)
+  const activeInvestments = useMemo(
+    () =>
+      investments.filter((i) =>
+        ["active", "approved", "signing", "signed"].includes(
+          String(i.status || "")
+        )
+      ).length,
+    [investments]
+  );
 
-  const pendingInvestments = investments.filter(
-    i => i.status === "pending"
-  ).length;
+  // ✅ Pending-ish: pending_contract + pending (لو عندك قديم)
+  const pendingInvestments = useMemo(
+    () =>
+      investments.filter((i) =>
+        ["pending", "pending_contract"].includes(String(i.status || ""))
+      ).length,
+    [investments]
+  );
 
   const statusBadge = (status: string) => {
     const map: any = {
@@ -109,72 +115,119 @@ export default function ClientDashboard() {
       active: ["نشط", "bg-blue-500"],
       rejected: ["مرفوض", "bg-red-500"],
       completed: ["مكتمل", "bg-gray-500"],
+
+      // ✅ حالات الخطة الجديدة
+      pending_contract: ["بانتظار العقد", "bg-purple-600"],
+      signing: ["قيد التوقيع", "bg-indigo-600"],
+      signed: ["تم التوقيع", "bg-green-700"],
     };
     const [label, cls] = map[status] || map.pending;
     return <Badge className={cls}>{label}</Badge>;
   };
 
-  if (loading) {
+  // ✅ View: not logged in
+  if (!user) {
     return (
-      <DashboardLayout>
-        <div className="py-20 text-center">جاري التحميل...</div>
-      </DashboardLayout>
+      <ClientLayout className="py-12">
+        <Card className="max-w-xl mx-auto">
+          <CardHeader>
+            <CardTitle>لوحة العميل</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-muted-foreground">الرجاء تسجيل الدخول أولاً.</p>
+            <Link href="/login">
+              <Button className="w-full">تسجيل الدخول</Button>
+            </Link>
+          </CardContent>
+        </Card>
+      </ClientLayout>
     );
   }
 
+  // ✅ View: role is not client
+  if (!isClient) {
+    return (
+      <ClientLayout className="py-12">
+        <Card className="max-w-2xl mx-auto">
+          <CardHeader>
+            <CardTitle>حسابك ليس عميل حالياً</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            <div className="flex gap-2 flex-wrap">
+              <Badge variant="outline">{user.role}</Badge>
+              <Badge variant="secondary">{user.email}</Badge>
+            </div>
+
+            <p className="text-muted-foreground leading-relaxed">
+              حسابك مسجّل دخول، لكن الدور الحالي ليس <b>client</b>. إذا أنت متأكد
+              هذا حساب عميل، افتح Firestore وعدّل{" "}
+              <b> users/{user.uid}.role = "client"</b>.
+            </p>
+
+            <div className="grid gap-3">
+              <Link href="/projects">
+                <Button className="w-full">تصفّح المشاريع</Button>
+              </Link>
+
+              <Button
+                variant="destructive"
+                className="w-full"
+                onClick={async () => {
+                  await logout();
+                }}
+              >
+                تسجيل الخروج
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </ClientLayout>
+    );
+  }
+
+  // ✅ Client loading
+  if (loading) {
+    return (
+      <ClientLayout className="py-12">
+        <div className="py-20 text-center">جاري التحميل...</div>
+      </ClientLayout>
+    );
+  }
+
+  /* =========================
+     Client Dashboard
+  ========================= */
   return (
-    <DashboardLayout>
+    <ClientLayout className="py-12">
       <div className="space-y-8">
         {/* Welcome */}
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-4xl font-bold mb-2">
-              مرحباً، {user?.name || "عزيزي المستثمر"}
-            </h1>
-            <p className="text-muted-foreground text-lg">
-              نظرة عامة على استثماراتك
-            </p>
-          </div>
-
-          {user?.vipTier && user.vipTier !== "none" && (
-            <Badge className="bg-accent text-lg px-4 py-2">
-              <Crown className="w-5 h-5 ml-2" />
-              VIP – {user.vipTier.toUpperCase()}
-            </Badge>
-          )}
+        <div>
+          <h1 className="text-4xl font-bold mb-2">
+            مرحباً، {user?.displayName || user?.email || "عزيزي المستثمر"}
+          </h1>
+          <p className="text-muted-foreground text-lg">نظرة عامة على استثماراتك</p>
         </div>
 
         {/* Stats */}
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-          <Stat title="إجمالي الاستثمارات" icon={DollarSign} value={`${totalInvested.toLocaleString()} ر.س`} />
-          <Stat title="العائد المتوقع" icon={TrendingUp} value={`${totalExpectedReturn.toLocaleString()} ر.س`} green />
-          <Stat title="استثمارات نشطة" icon={CheckCircle} value={activeInvestments} />
+          <Stat
+            title="إجمالي الاستثمارات"
+            icon={DollarSign}
+            value={`${totalInvested.toLocaleString()} ر.س`}
+          />
+          <Stat
+            title="العائد المتوقع"
+            icon={TrendingUp}
+            value={`${totalExpectedReturn.toLocaleString()} ر.س`}
+            green
+          />
+          <Stat
+            title="استثمارات نشطة"
+            icon={CheckCircle}
+            value={activeInvestments}
+          />
           <Stat title="قيد المراجعة" icon={Clock} value={pendingInvestments} />
         </div>
-
-        {/* VIP Offers */}
-        {vipOffers.length > 0 && (
-          <Card className="border-2 border-accent">
-            <CardHeader>
-              <CardTitle className="flex gap-2">
-                <Crown /> عروض VIP
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="grid md:grid-cols-2 gap-4">
-              {vipOffers.map(o => (
-                <Card key={o.id}>
-                  <CardContent className="pt-6">
-                    <h3 className="font-bold mb-2">{o.titleAr}</h3>
-                    <p className="text-sm text-muted-foreground mb-4">{o.descriptionAr}</p>
-                    <Button size="sm" className="w-full">
-                      استفد من العرض
-                    </Button>
-                  </CardContent>
-                </Card>
-              ))}
-            </CardContent>
-          </Card>
-        )}
 
         {/* My Investments */}
         <Card>
@@ -189,17 +242,36 @@ export default function ClientDashboard() {
             {investments.length === 0 ? (
               <Empty />
             ) : (
-              investments.slice(0, 5).map(inv => {
-                const project = projects.find(p => p.id === inv.projectId);
+              investments.slice(0, 5).map((inv) => {
+                const project = projects.find((p) => p.id === inv.projectId);
+                const contractId = inv?.contractId || null;
+
                 return (
                   <Card key={inv.id} className="mb-4">
                     <CardContent className="pt-6">
-                      <div className="flex justify-between mb-3">
+                      <div className="flex items-start justify-between gap-3 mb-3">
                         <div>
-                          <h3 className="font-bold">{project?.titleAr}</h3>
-                          <p className="text-sm text-muted-foreground">#{project?.issueNumber}</p>
+                          <h3 className="font-bold">
+                            {project?.titleAr || "مشروع غير معروف"}
+                          </h3>
+                          <p className="text-sm text-muted-foreground">
+                            #{project?.issueNumber || "—"}
+                          </p>
                         </div>
-                        {statusBadge(inv.status)}
+
+                        <div className="flex flex-col items-end gap-2">
+                          {statusBadge(String(inv.status || "pending"))}
+
+                          {/* ✅ زر عرض العقد */}
+                          {contractId && (
+                            <Link href={`/client/contracts/${contractId}`}>
+                              <Button size="sm">
+                                <FileText className="w-4 h-4 ml-2" />
+                                عرض العقد
+                              </Button>
+                            </Link>
+                          )}
+                        </div>
                       </div>
                     </CardContent>
                   </Card>
@@ -219,7 +291,7 @@ export default function ClientDashboard() {
           </CardHeader>
 
           <CardContent className="grid md:grid-cols-2 gap-4">
-            {projects.slice(0, 4).map(p => {
+            {projects.slice(0, 4).map((p) => {
               const progress = p.targetAmount
                 ? (Number(p.currentAmount) / Number(p.targetAmount)) * 100
                 : 0;
@@ -241,7 +313,7 @@ export default function ClientDashboard() {
           </CardContent>
         </Card>
       </div>
-    </DashboardLayout>
+    </ClientLayout>
   );
 }
 
