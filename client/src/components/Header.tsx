@@ -1,5 +1,5 @@
 // client/src/components/Header.tsx
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Search, Globe, LogOut } from "lucide-react";
@@ -13,9 +13,18 @@ export default function Header() {
   const [language, setLanguage] = useState<"ar" | "en">("ar");
 
   const { user, logout } = useAuth();
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
 
   const isAuthenticated = !!user;
+
+  // ✅ صفحات Hero (النافبار يكون Overlay وما نحتاج Spacer)
+  const isHeroRoute = useMemo(() => {
+    const path = (location || "/").split("?")[0];
+    return path === "/" || path === "/about";
+  }, [location]);
+
+  // ✅ Spacer only for non-hero pages
+  const shouldReserveSpace = !isHeroRoute;
 
   useEffect(() => {
     const handleScroll = () => setIsScrolled(window.scrollY > 30);
@@ -43,8 +52,11 @@ export default function Header() {
           { label: "Contact", href: "/contact" },
         ];
 
-  // ✅ route حسب الدور
-  // ✅ أي مستخدم مو من أدوار الداشبورد الإدارية => يروح /client/dashboard
+  const [linksLeft, linksRight] = useMemo(() => {
+    const mid = Math.ceil(navLinks.length / 2);
+    return [navLinks.slice(0, mid), navLinks.slice(mid)];
+  }, [navLinks]);
+
   const role = (user as any)?.role;
   const dashboardHref =
     role && ["owner", "admin", "accountant", "staff"].includes(role)
@@ -62,136 +74,128 @@ export default function Header() {
     }
   };
 
+  const navBtnClass = "h-10 px-4 rounded-full text-[14px] font-semibold";
+
   return (
-    <header
-      className={`rsg-nav ${isScrolled ? "is-scrolled" : ""}`}
-      dir="rtl"
-      lang="ar"
-    >
-      <div className="container">
-        <div className="rsg-nav__inner">
-          {/* Left (Actions) */}
-          <div className="rsg-nav__slot rsg-nav__slot--left">
-            {/* Burger (mobile) */}
-            <button
-              type="button"
-              className="rsg-burger lg:hidden"
-              aria-label="Open menu"
-              aria-expanded={isMobileMenuOpen}
-              onClick={() => setIsMobileMenuOpen((v) => !v)}
-            >
-              <span />
-              <span />
-              <span />
-            </button>
+    <>
+      {/* ✅ Floating Navbar (always fixed via .rsg-nav CSS) */}
+      <header
+        className={`rsg-nav ${isScrolled ? "is-scrolled" : ""}`}
+        dir={language === "ar" ? "rtl" : "ltr"}
+        lang={language}
+      >
+        <div className="container">
+          <div className="rsg-nav__inner">
+            {/* Left (Icons) */}
+            <div className="rsg-nav__slot rsg-nav__slot--left flex items-center gap-1">
+              <button
+                type="button"
+                className="rsg-burger lg:hidden"
+                aria-label="Open menu"
+                aria-expanded={isMobileMenuOpen}
+                onClick={() => setIsMobileMenuOpen((v) => !v)}
+              >
+                <span />
+                <span />
+                <span />
+              </button>
 
-            {/* Search */}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="hidden md:inline-flex"
-              aria-label="Search"
-            >
-              <Search className="w-5 h-5" />
-            </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="hidden md:inline-flex"
+                aria-label="Search"
+              >
+                <Search className="w-5 h-5" />
+              </Button>
 
-            {/* Language */}
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={toggleLanguage}
-              className="hidden md:inline-flex"
-              aria-label="Toggle language"
-            >
-              <Globe className="w-5 h-5" />
-            </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={toggleLanguage}
+                className="hidden md:inline-flex"
+                aria-label="Toggle language"
+                title={language === "ar" ? "English" : "العربية"}
+              >
+                <Globe className="w-5 h-5" />
+              </Button>
 
-            {/* Notification */}
-            {isAuthenticated && <NotificationBell />}
-          </div>
+              {isAuthenticated && <NotificationBell />}
+            </div>
 
-          {/* Center (Links) */}
-          <nav className="rsg-nav__links rsg-nav__slot rsg-nav__slot--center">
-            {navLinks.map((link) => (
-              <Link key={link.href} href={link.href}>
-                <span className="rsg-nav__link">{link.label}</span>
-              </Link>
-            ))}
-          </nav>
+            {/* Center (Links + Logo) */}
+            <nav className="rsg-nav__links rsg-nav__slot rsg-nav__slot--center">
+              <div className="flex items-center justify-center gap-5">
+                {linksLeft.map((link) => (
+                  <Link key={link.href} href={link.href}>
+                    <span className="rsg-nav__link">{link.label}</span>
+                  </Link>
+                ))}
 
-          {/* Right (Logo + CTA) */}
-          <div className="rsg-nav__slot rsg-nav__slot--right">
-            <Link href="/">
-              <div className="flex items-center gap-2 cursor-pointer select-none">
-                <span className="text-[18px] font-bold tracking-wide">
-                  MAEDIN
-                </span>
-                <span
-                  className="inline-flex items-center justify-center rounded-full"
-                  style={{
-                    width: 34,
-                    height: 34,
-                    background:
-                      "color-mix(in oklab, var(--gold) 92%, white 8%)",
-                    color: "rgba(11,15,25,0.95)",
-                    fontWeight: 800,
-                  }}
-                >
-                  M
-                </span>
+                <Link href="/">
+                  <img
+                    src="/logo.png"
+                    alt="MAEDIN logo"
+                    className="h-[60px] w-auto"
+                  />
+                </Link>
+
+                {linksRight.map((link) => (
+                  <Link key={link.href} href={link.href}>
+                    <span className="rsg-nav__link">{link.label}</span>
+                  </Link>
+                ))}
               </div>
-            </Link>
+            </nav>
 
-            {!isAuthenticated ? (
-              <Link href="/login">
-                <Button className="hidden md:inline-flex rsg-cta">
-                  {language === "ar" ? "تسجيل الدخول" : "Login"}
-                </Button>
-              </Link>
-            ) : (
-              <div className="hidden md:flex items-center gap-2">
-                <Link href={dashboardHref}>
-                  <Button className="rsg-cta rsg-cta--gold">
-                    {language === "ar" ? "لوحة التحكم" : "Dashboard"}
+            {/* Right (CTA) */}
+            <div className="rsg-nav__slot rsg-nav__slot--right flex items-center gap-2">
+              {!isAuthenticated ? (
+                <Link href="/login">
+                  <Button className={`hidden md:inline-flex rsg-cta ${navBtnClass}`}>
+                    {language === "ar" ? "تسجيل الدخول" : "Login"}
                   </Button>
                 </Link>
+              ) : (
+                <div className="hidden md:flex items-center gap-2">
+                  <Link href={dashboardHref}>
+                    <Button className={`rsg-cta ${navBtnClass}`}>
+                      {language === "ar" ? "لوحة التحكم" : "Dashboard"}
+                    </Button>
+                  </Link>
 
-                {/* ✅ Logout (Desktop) */}
-                <Button
-                  variant="outline"
-                  onClick={handleLogout}
-                  aria-label="Logout"
-                  title={language === "ar" ? "تسجيل الخروج" : "Logout"}
-                >
-                  <LogOut className="w-4 h-4 ml-2" />
-                  {language === "ar" ? "خروج" : "Logout"}
-                </Button>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Mobile dropdown */}
-        {isMobileMenuOpen && (
-          <div className="mt-3 rsg-card rsg-card--tight p-4 lg:hidden animate-slide-up">
-            <nav className="flex flex-col gap-2">
-              {navLinks.map((link) => (
-                <Link key={link.href} href={link.href}>
-                  <span
-                    className="rsg-nav__link block"
-                    onClick={closeMobile}
-                    role="button"
-                  >
-                    {link.label}
-                  </span>
-                </Link>
-              ))}
-
-              <div className="mt-3 pt-3 border-t border-border flex flex-col gap-3">
-                <div className="flex items-center justify-between gap-2">
                   <Button
                     variant="outline"
-                    className="flex-1"
+                    onClick={handleLogout}
+                    className={navBtnClass}
+                  >
+                    <LogOut className="w-4 h-4 ml-2" />
+                    {language === "ar" ? "خروج" : "Logout"}
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Mobile dropdown */}
+          {isMobileMenuOpen && (
+            <div className="mt-3 rsg-card rsg-card--tight p-4 lg:hidden animate-slide-up">
+              <nav className="flex flex-col gap-2">
+                {navLinks.map((link) => (
+                  <Link key={link.href} href={link.href}>
+                    <span
+                      className="rsg-nav__link block"
+                      onClick={closeMobile}
+                      role="button"
+                    >
+                      {link.label}
+                    </span>
+                  </Link>
+                ))}
+
+                <div className="mt-3 pt-3 border-t border-border flex flex-col gap-3">
+                  <Button
+                    variant="outline"
                     onClick={() => {
                       toggleLanguage();
                       closeMobile();
@@ -200,52 +204,46 @@ export default function Header() {
                     {language === "ar" ? "English" : "العربية"}
                   </Button>
 
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={closeMobile}
-                    aria-label="Close"
-                  >
-                    ✕
-                  </Button>
-                </div>
-
-                {!isAuthenticated ? (
-                  <Link href="/login">
-                    <Button
-                      className="w-full rsg-cta rsg-cta--gold"
-                      onClick={closeMobile}
-                    >
-                      {language === "ar" ? "تسجيل الدخول" : "Login"}
-                    </Button>
-                  </Link>
-                ) : (
-                  <>
-                    <Link href={dashboardHref}>
+                  {!isAuthenticated ? (
+                    <Link href="/login">
                       <Button
-                        className="w-full rsg-cta rsg-cta--gold"
+                        className={`w-full rsg-cta ${navBtnClass}`}
                         onClick={closeMobile}
                       >
-                        {language === "ar" ? "لوحة التحكم" : "Dashboard"}
+                        {language === "ar" ? "تسجيل الدخول" : "Login"}
                       </Button>
                     </Link>
+                  ) : (
+                    <>
+                      <Link href={dashboardHref}>
+                        <Button
+                          className={`w-full rsg-cta ${navBtnClass}`}
+                          onClick={closeMobile}
+                        >
+                          {language === "ar" ? "لوحة التحكم" : "Dashboard"}
+                        </Button>
+                      </Link>
 
-                    {/* ✅ Logout (Mobile) */}
-                    <Button
-                      variant="destructive"
-                      className="w-full"
-                      onClick={handleLogout}
-                    >
-                      <LogOut className="w-4 h-4 ml-2" />
-                      {language === "ar" ? "تسجيل الخروج" : "Logout"}
-                    </Button>
-                  </>
-                )}
-              </div>
-            </nav>
-          </div>
-        )}
-      </div>
-    </header>
+                      <Button
+                        variant="destructive"
+                        className={`w-full ${navBtnClass}`}
+                        onClick={handleLogout}
+                      >
+                        <LogOut className="w-4 h-4 ml-2" />
+                        {language === "ar" ? "تسجيل الخروج" : "Logout"}
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </nav>
+            </div>
+          )}
+        </div>
+      </header>
+
+      {/* ✅ Spacer: يخلي الصفحات الداخلية ما تدخل تحت النافبار
+          ✅ لكن في صفحات الـ Hero ( / و /about ) ما نضيفه */}
+      {shouldReserveSpace && <div aria-hidden className="h-[92px]" />}
+    </>
   );
 }

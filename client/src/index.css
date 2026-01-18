@@ -50,42 +50,68 @@
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
+/* =========================
+   ✅ MAEDIN Final Tokens (LOCKED)
+========================= */
 :root {
-  --background: oklch(0.98 0.02 95);
-  --foreground: oklch(0.15 0.02 260);
+  /* Page / Base */
+  --background: #ffffff; /* Page BG */
+  --foreground: #0d0d0d; /* Main text */
+  --surface-muted: #BFBFBF;
 
-  --card: oklch(0.99 0.01 95);
-  --card-foreground: oklch(0.15 0.02 260);
+  --card: #ffffff; /* Cards */
+  --card-foreground: #0d0d0d;
 
-  --popover: oklch(0.99 0.01 95);
-  --popover-foreground: oklch(0.15 0.02 260);
+  --popover: #ffffff;
+  --popover-foreground: #0d0d0d;
 
-  --muted: oklch(0.95 0.02 95);
-  --muted-foreground: oklch(0.45 0.02 260);
+  /* Muted surfaces + secondary text */
+  --muted: rgba(255, 255, 255, 0.55);
+  --muted-foreground: #6c6c73;
 
-  --border: oklch(0.9 0.01 95);
-  --input: oklch(0.9 0.01 95);
+  /* Borders / Inputs */
+  --border: #e5e5e5;
+  --input: #e5e5e5;
 
-  /* ✅ المرجع: primary = navy */
-  --primary: oklch(0.25 0.05 260);
-  --primary-foreground: oklch(0.98 0 0);
+  /* ✅ Primary (Core Navy) */
+  --primary: #0a1426;
+  --primary-foreground: #ffffff;
 
-  /* ✅ المرجع: accent = gold */
-  --accent: oklch(0.75 0.14 85);
-  --accent-foreground: oklch(0.15 0.02 260);
+  /* Secondary (soft surface) */
+  --secondary: rgba(255, 255, 255, 0.65);
+  --secondary-foreground: #0d0d0d;
 
-  --ring: oklch(0.75 0.14 85);
+  /* ✅ Accent (NOT gold) — subtle hovers / bg */
+  --accent: rgba(0, 0, 0, 0.04);
+  --accent-foreground: #0d0d0d;
 
-  --gold: oklch(0.75 0.14 85);
-  --gold-deep: oklch(0.65 0.16 75);
+  /* ✅ Ring (focus) */
+  --ring: #1b2b40;
 
-  --secondary: oklch(0.92 0.02 95);
-  --secondary-foreground: oklch(0.15 0.02 260);
+  /* ✅ Gold (numbers only) */
+  --gold: #f2ae30;
+  --gold-deep: #d9961f;
 
-  --navy: oklch(0.25 0.05 260);
-  --navy-dark: oklch(0.15 0.05 260);
+  /* ✅ UI Navy helper */
+  --ui-navy: #1b2b40;
 
+  /* ✅ Danger (Soft Red) — semantic only */
+  --destructive: #b94a48;
+  --destructive-foreground: #ffffff;
+
+  /* Radius */
   --radius: 1rem;
+
+  /* Charts placeholders */
+  --chart-1: var(--gold);
+  --chart-2: var(--ui-navy);
+  --chart-3: #87878c;
+  --chart-4: #6c6c73;
+  --chart-5: #0d0d0d;
+
+  /* legacy helpers (keep for older code if referenced) */
+  --navy: var(--primary);
+  --navy-dark: #0d0d0d;
 }
 
 /* =========================
@@ -106,8 +132,8 @@
     font-family: "Inter", "Cairo", -apple-system, BlinkMacSystemFont, "Segoe UI",
       sans-serif;
 
-    /* ✅ أخف من الأبيض (قريب جدًا من RSG) */
-    background: #fbfaf7;
+    /* ✅ unified bg from tokens */
+    background: var(--background);
     position: relative;
   }
 
@@ -199,6 +225,8 @@
     background: linear-gradient(135deg, var(--gold) 0%, var(--gold-deep) 100%);
   }
 
+  
+  
   /* =========================
      ✅ Global RSG Background Layer (LIGHT + PATTERNS)
      (SVGs are in /public)
@@ -209,8 +237,8 @@
     z-index: -1;
     pointer-events: none;
 
-    /* ✅ خلفية أفتح */
-    background-color: #fbfaf7;
+    /* ✅ unified bg from tokens */
+    background-color: var(--background);
 
     /* ✅ النقوش الأربع */
     background-image: url("/bg-01-r.png"), url("/bg-01-l.png"),
@@ -236,7 +264,7 @@
     content: "";
     position: absolute;
     inset: 0;
-    background: rgba(251, 250, 247, 0.78);
+    background: color-mix(in oklab, var(--background) 78%, transparent);
     pointer-events: none;
   }
 
@@ -250,9 +278,10 @@
     }
 
     .rsg-bg::after {
-      background: rgba(251, 250, 247, 0.86);
+      background: color-mix(in oklab, var(--background) 86%, transparent);
     }
   }
+
 }
 
 /* =========================
@@ -293,20 +322,7 @@
   /* =========================
      ✅ Navy Pulse Outline Button (Static line + hover ring pulse)
      Class: .rsg-btn.rsg-btn--navyPulse
-     - الزر ثابت (بدون translate/scale)
-     - خط واحد ثابت
-     - عند hover: حلقة ثانية دائرية + تموّج/نبض
   ========================= */
-
-  :root {
-    --navy: #0b1a38;
-    --navy2: #0a244a;
-    --navyText: rgba(255, 255, 255, 0.98); /* ✅ أبيض أوضح */
-
-    --ringWhite: rgba(255, 255, 255, 0.3);
-    --ringWave: #0a244a;
-    --ringWaveSoft: rgba(255, 255, 255, 0.22);
-  }
 
   .rsg-btn {
     position: relative;
@@ -331,10 +347,14 @@
 
   /* ✅ الزر نفسه (ثابت) */
   .rsg-btn--navyPulse {
-    color: var(--navyText);
+    color: rgba(255, 255, 255, 0.98);
 
-    /* ✅ شكل أحدث: gradient أعمق + لمعة داخلية */
-    background: linear-gradient(135deg, rgba(11, 26, 56, 0.98), rgba(10, 36, 74, 0.98));
+    background: linear-gradient(
+      135deg,
+      color-mix(in oklab, var(--primary) 96%, white 4%),
+      color-mix(in oklab, var(--ui-navy) 96%, white 4%)
+    );
+
     box-shadow: 0 16px 44px rgba(3, 6, 64, 0.18), 0 1px 0 rgba(255, 255, 255, 0.18) inset;
   }
 
@@ -344,7 +364,7 @@
     position: absolute;
     inset: 0;
     border-radius: 999px;
-    border: 1px solid var(--ringWhite);
+    border: 1px solid rgba(255, 255, 255, 0.3);
     pointer-events: none;
   }
 
@@ -356,10 +376,10 @@
     pointer-events: none;
 
     opacity: 0;
-    border: 1px solid var(--ringWave);
+    border: 1px solid var(--ui-navy);
     border-radius: 999px;
 
-    box-shadow: 0 0 0 6px var(--ringWaveSoft), 0 0 24px rgba(255, 255, 255, 0.12);
+    box-shadow: 0 0 0 6px rgba(255, 255, 255, 0.22), 0 0 24px rgba(255, 255, 255, 0.12);
 
     filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.18));
   }
@@ -417,6 +437,7 @@
       animation: none;
     }
   }
+  
 
   /* =========================
      Hero (RSG)
@@ -480,7 +501,7 @@
   .rsg-hero__titleAccent {
     display: block;
     margin-top: 10px;
-    color: rgba(242, 183, 5, 0.95);
+    color: color-mix(in oklab, var(--gold) 92%, white 8%);
   }
 
   .rsg-hero__subtitle {
@@ -517,9 +538,9 @@
     height: 110px;
     background: linear-gradient(
       to bottom,
-      rgba(251, 250, 247, 0) 0%,
-      rgba(251, 250, 247, 0.75) 60%,
-      rgba(251, 250, 247, 1) 100%
+      color-mix(in oklab, var(--background) 0%, transparent) 0%,
+      color-mix(in oklab, var(--background) 75%, transparent) 60%,
+      var(--background) 100%
     );
     pointer-events: none;
   }
@@ -580,6 +601,7 @@
     }
   }
 
+  
   .rsg-stat {
     border-radius: 18px;
     border: 1px solid rgba(255, 255, 255, 0.16);
@@ -592,7 +614,7 @@
   .rsg-stat__value {
     font-size: 1.9rem;
     font-weight: 800;
-    color: rgba(242, 183, 5, 0.98);
+    color: color-mix(in oklab, var(--gold) 94%, white 6%);
     letter-spacing: 0.2px;
   }
 
@@ -695,7 +717,7 @@
     width: 38px;
     height: 38px;
     margin: 0 auto 14px;
-    color: rgba(242, 183, 5, 0.95);
+    color: color-mix(in oklab, var(--gold) 92%, white 8%);
   }
 
   .rsg-featureCard__title {
@@ -864,7 +886,7 @@
 }
 
 .rsg-cta--navy {
-  background: rgba(11, 26, 56, 0.98) !important; /* navy */
+  background: color-mix(in oklab, var(--primary) 96%, white 4%) !important;
   color: #fff !important;
   border: 1px solid rgba(255, 255, 255, 0.14) !important;
   box-shadow: 0 18px 46px rgba(3, 6, 64, 0.12);
@@ -878,4 +900,56 @@
 
 .rsg-cta--navy:active {
   transform: translateY(1px) scale(0.985);
+}
+
+/* ✅ Mobile: show logo in the center of the pill */
+@media (max-width: 1024px) {
+  .rsg-nav__inner {
+    position: relative;
+  }
+
+  .rsg-nav__inner::after {
+    content: "";
+    position: absolute;
+
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+
+    width: 80px;
+    height: 70px;
+
+    background-image: url("/logo.png");
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: contain;
+
+    pointer-events: none;
+    z-index: 65;
+  }
+}
+
+/* Light section */
+.section-light {
+  background: var(--background);
+  position: relative;
+}
+
+.section-light::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(0,0,0,0.02),
+    rgba(0,0,0,0)
+  );
+  pointer-events: none;
+}
+
+
+/* Dark section */
+.section-dark {
+  background: var(--primary);
+  color: white;
 }

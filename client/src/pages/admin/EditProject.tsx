@@ -483,7 +483,7 @@ export default function EditProject() {
               </div>
 
               <div>
-                <Label>رقم الإصدار (Issue)</Label>
+                <Label>رقم الإصدار </Label>
                 <Input
                   value={formData.issueNumber}
                   onChange={(e) => setFormData({ ...formData, issueNumber: e.target.value })}
@@ -519,7 +519,7 @@ export default function EditProject() {
             <CardContent className="space-y-5">
               <div className="grid md:grid-cols-2 gap-4 items-start">
                 <div className="space-y-2">
-                  <Label>صورة الغلاف (coverImage)</Label>
+                  <Label>صورة الغلاف</Label>
                   <Input
                     value={formData.coverImage}
                     onChange={(e) => setFormData({ ...formData, coverImage: e.target.value })}
@@ -581,7 +581,7 @@ export default function EditProject() {
           {/* Highlights */}
           <Card>
             <CardHeader>
-              <CardTitle>مميزات المشروع (highlights)</CardTitle>
+              <CardTitle>مميزات المشروع</CardTitle>
               <CardDescription>كل ميزة في سطر</CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
@@ -600,7 +600,7 @@ export default function EditProject() {
           {/* Attachments */}
           <Card>
             <CardHeader>
-              <CardTitle>مرفقات (attachments)</CardTitle>
+              <CardTitle>مرفقات</CardTitle>
               <CardDescription>اكتب JSON Array (نسخ/لصق)</CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
@@ -622,7 +622,7 @@ export default function EditProject() {
           {/* Milestones */}
           <Card>
             <CardHeader>
-              <CardTitle>المراحل (milestones)</CardTitle>
+              <CardTitle>المراحل</CardTitle>
               <CardDescription>JSON Array</CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
@@ -666,7 +666,7 @@ export default function EditProject() {
 
             <CardContent className="grid md:grid-cols-3 gap-4">
               <div>
-                <Label>المبلغ المستهدف (targetAmount)</Label>
+                <Label>المبلغ المستهدف </Label>
                 <Input
                   inputMode="numeric"
                   value={formData.targetAmount}
@@ -675,7 +675,7 @@ export default function EditProject() {
               </div>
 
               <div>
-                <Label>المبلغ الحالي (currentAmount)</Label>
+                <Label>المبلغ الحالي</Label>
                 <Input
                   inputMode="numeric"
                   value={formData.currentAmount}
@@ -684,7 +684,7 @@ export default function EditProject() {
               </div>
 
               <div>
-                <Label>الحد الأدنى (minInvestment)</Label>
+                <Label>الحد الأدنى</Label>
                 <Input
                   inputMode="numeric"
                   value={formData.minInvestment}
@@ -693,7 +693,7 @@ export default function EditProject() {
               </div>
 
               <div>
-                <Label>العائد السنوي % (annualReturn)</Label>
+                <Label>العائد السنوي % </Label>
                 <Input
                   inputMode="numeric"
                   value={formData.annualReturn}
@@ -702,7 +702,7 @@ export default function EditProject() {
               </div>
 
               <div>
-                <Label>المدة بالشهور (duration)</Label>
+                <Label>المدة بالشهور </Label>
                 <Input
                   inputMode="numeric"
                   value={formData.duration}
@@ -711,7 +711,7 @@ export default function EditProject() {
               </div>
 
               <div>
-                <Label>عدد المستثمرين (investorsCount)</Label>
+                <Label>عدد المستثمرين </Label>
                 <Input
                   inputMode="numeric"
                   value={formData.investorsCount}
@@ -763,7 +763,7 @@ export default function EditProject() {
               {formData.progressMode === "hybrid" && (
                 <>
                   <div>
-                    <Label>وزن التمويل (%)</Label>
+                    <Label>معدل التمويل (%)</Label>
                     <Input
                       inputMode="numeric"
                       value={formData.progressFundingWeight}
@@ -775,7 +775,7 @@ export default function EditProject() {
                   </div>
 
                   <div>
-                    <Label>وزن المراحل (%)</Label>
+                    <Label>معدل المراحل (%)</Label>
                     <Input
                       inputMode="numeric"
                       value={formData.progressMilestonesWeight}

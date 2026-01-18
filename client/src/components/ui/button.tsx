@@ -9,15 +9,25 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary/90",
+        // ✅ Primary (Login/Save/CTA)
+        default: "bg-primary text-primary-foreground hover:bg-[color:var(--ui-navy)]",
+
+        // ✅ Danger (Delete/Error) — uses --destructive tokens
         destructive:
-          "bg-destructive text-white hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60",
+          "bg-destructive text-destructive-foreground hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40",
+
+        // ✅ Outline: hover neutral (NOT gold)
         outline:
-          "border bg-transparent shadow-xs hover:bg-accent dark:bg-transparent dark:border-input dark:hover:bg-input/50",
+          "border border-input bg-transparent shadow-xs hover:bg-muted hover:text-foreground",
+
+        // ✅ Secondary: subtle surface
         secondary:
           "bg-secondary text-secondary-foreground hover:bg-secondary/80",
-        ghost:
-          "hover:bg-accent dark:hover:bg-accent/50",
+
+        // ✅ Ghost: hover neutral (NOT gold)
+        ghost: "hover:bg-muted hover:text-foreground",
+
+        // Link
         link: "text-primary underline-offset-4 hover:underline",
       },
       size: {

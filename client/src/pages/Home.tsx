@@ -6,8 +6,24 @@ import VideoModal from "@/components/VideoModal";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Play } from "lucide-react";
 
+// ✅ Sections
+import {
+  Section,
+  SectionHeader,
+  SectionTitle,
+  SectionDescription,
+  SectionContent,
+} from "@/components/Section";
+
 // 🔥 Firestore
-import { collection, getDocs, orderBy, query, where } from "firebase/firestore";
+import {
+  collection,
+  getDocs,
+  orderBy,
+  query,
+  where,
+  limit,
+} from "firebase/firestore";
 import { db } from "@/_core/firebase";
 
 type HomeProject = {
@@ -42,35 +58,36 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(true);
 
   /* =========================
-     Load published projects
+     Load published projects (HOME: only 4)
   ========================= */
   useEffect(() => {
     const loadProjects = async () => {
       try {
         setIsLoading(true);
 
-        const q = query(
+        const qy = query(
           collection(db, "projects"),
           where("status", "==", "published"),
-          orderBy("createdAt", "desc")
+          orderBy("createdAt", "desc"),
+          limit(4) // ✅ مهم: الهوم يعرض مختارات فقط
         );
 
-        const snap = await getDocs(q);
+        const snap = await getDocs(qy);
 
         const list: HomeProject[] = snap.docs.map((d) => {
           const data = d.data() as any;
 
-          // ✅ مهم: أحيانًا الحقل يكون projectType أو category
           const typeKey = String(data.projectType || data.category || "").trim();
           const category = TYPE_LABELS[typeKey] || typeKey || "مشروع";
 
-          // ✅ مهم: أحيانًا الغلاف يكون coverImage أو image أو مجرد اسم ملف
           const rawImg = String(data.coverImage || data.image || "").trim();
           const image = rawImg ? normalizePublicImage(rawImg) : FALLBACK_IMG;
 
           return {
             id: d.id,
-            title: String(data.titleAr || data.titleEn || data.title || "مشروع بدون عنوان"),
+            title: String(
+              data.titleAr || data.titleEn || data.title || "مشروع بدون عنوان"
+            ),
             location: String(
               data.locationAr ||
                 data.locationEn ||
@@ -82,7 +99,6 @@ export default function Home() {
           };
         });
 
-        console.log("HOME projects loaded:", list.length, list);
         setProjects(list);
       } catch (err) {
         console.error("Failed to load home projects:", err);
@@ -123,10 +139,11 @@ export default function Home() {
           }}
         />
 
-        <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-transparent opacity-80 group-hover:opacity-90 transition-opacity" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/15 to-transparent opacity-85 group-hover:opacity-95 transition-opacity" />
 
         <div className="absolute bottom-0 right-0 p-6 md:p-7 w-full text-white">
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-accent/90 text-accent-foreground backdrop-blur-sm">
+          {/* ✅ بدل bg-accent: glass ثابت على الصور */}
+          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-white/12 text-white border border-white/20 backdrop-blur-md">
             {p.category}
           </span>
 
@@ -191,14 +208,16 @@ export default function Home() {
                 مع معدن، نحو مستقبل مشرق للاستثمار العقاري.
               </p>
 
-              <button
+              {/* ✅ زر موحّد */}
+              <Button
                 type="button"
+                variant="outline"
                 onClick={() => setIsVideoOpen(true)}
-                className="group inline-flex items-center gap-3 px-8 py-4 rounded-full border border-white/40 bg-white/10 backdrop-blur-md text-white text-lg hover:bg-white hover:text-black transition"
+                className="h-12 px-7 rounded-full border-white/35 bg-white/10 text-white hover:bg-white hover:text-black"
               >
                 <span>شاهد الفيديو</span>
                 <Play className="w-5 h-5" />
-              </button>
+              </Button>
             </div>
           </div>
         </section>
@@ -206,39 +225,53 @@ export default function Home() {
         {/* =========================
             PROJECTS
         ========================== */}
-        <section className="py-24">
+        <Section className="py-0">
           <div className="container">
-            <h2 className="text-4xl font-bold text-primary mb-12">مشاريعنا</h2>
+            <SectionHeader className="text-center max-w-2xl mx-auto">
+              <SectionTitle className="text-4xl md:text-5xl font-semibold text-foreground">
+                مشاريعنا
+              </SectionTitle>
 
-            {isLoading ? (
-              <div className="text-center text-muted-foreground py-20">
-                جاري تحميل المشاريع...
-              </div>
-            ) : projects.length ? (
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {card(p0, "big")}
-                {card(p1, "big")}
-                <div className="grid gap-8">
-                  {card(p2, "small")}
-                  {card(p3, "small")}
+              <div className="mx-auto mt-3 h-[2px] w-16 rounded-full bg-primary/60" />
+
+              <SectionDescription className="mt-4 text-base md:text-lg text-muted-foreground">
+                أحدث المشاريع المنشورة لدينا
+              </SectionDescription>
+            </SectionHeader>
+
+            <SectionContent>
+              <div className="rsg-card p-6 md:p-8">
+                {isLoading ? (
+                  <div className="text-center text-muted-foreground py-20">
+                    جاري تحميل المشاريع...
+                  </div>
+                ) : projects.length ? (
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    {card(p0, "big")}
+                    {card(p1, "big")}
+                    <div className="grid gap-8">
+                      {card(p2, "small")}
+                      {card(p3, "small")}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center text-muted-foreground py-20">
+                    لا توجد مشاريع منشورة حالياً.
+                  </div>
+                )}
+
+                <div className="mt-16 flex justify-center">
+                  <Link href="/projects">
+                    <Button className="rsg-cta">
+                      عرض جميع المشاريع
+                      <ArrowRight className="mr-2 w-5 h-5" />
+                    </Button>
+                  </Link>
                 </div>
               </div>
-            ) : (
-              <div className="text-center text-muted-foreground py-20">
-                لا توجد مشاريع منشورة حالياً.
-              </div>
-            )}
-
-            <div className="mt-16 flex justify-center">
-              <Link href="/projects">
-                <Button className="rsg-cta rsg-cta--navy">
-                  عرض جميع المشاريع
-                  <ArrowRight className="mr-2 w-5 h-5" />
-                </Button>
-              </Link>
-            </div>
+            </SectionContent>
           </div>
-        </section>
+        </Section>
       </main>
 
       <Footer />

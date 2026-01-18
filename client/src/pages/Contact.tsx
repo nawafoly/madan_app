@@ -91,7 +91,7 @@ export default function Contact() {
     <div className="min-h-screen flex flex-col bg-background">
       <Header />
 
-      <main className="flex-1 pt-20">
+      <main className="flex-1 ">
         {/* Hero */}
         <section className="bg-gradient-to-b from-[#030640] to-background py-20">
           <div className="container text-center max-w-3xl mx-auto">
