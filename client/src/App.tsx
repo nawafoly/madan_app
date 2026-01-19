@@ -2,7 +2,7 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
-import { Route, Switch } from "wouter";
+import { Redirect, Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 
@@ -29,12 +29,9 @@ import AuditLogPage from "./pages/admin/AuditLog";
 import DebugAuthPage from "./pages/admin/DebugAuth";
 import Vip from "./pages/admin/Vip";
 
-// Client pages
-import ClientDashboard from "./pages/client/MyDashboard";
-import MyInvestments from "./pages/client/MyInvestments";
-
-// ✅ NEW: Contract page
-import ClientContractDetails from "./pages/client/ContractDetails";
+// ✅ Client pages (الموجود فعليًا في الهيكل)
+import ClientDashboard from "@/pages/client/MyInvestments";
+import ClientContractDetails from "@/pages/client/ContractDetails";
 
 function Router() {
   return (
@@ -133,23 +130,32 @@ function Router() {
       </Route>
 
       {/* ================= Client Area ================= */}
+
+      {/* ✅ deep link لازم يسبق أي redirects عامة */}
+      <Route path="/client/contracts/:id">
+        <RequireRole allow={["client"]}>
+          <ClientContractDetails />
+        </RequireRole>
+      </Route>
+
+      {/* ✅ صفحة العميل (مؤقتًا: MyInvestments) */}
       <Route path="/client/dashboard">
         <RequireRole allow={["client", "guest"]}>
           <ClientDashboard />
         </RequireRole>
       </Route>
 
+      {/* ✅ Redirects */}
       <Route path="/client/investments">
-        <RequireRole allow={["client"]}>
-          <MyInvestments />
-        </RequireRole>
+        <Redirect to="/client/dashboard" />
       </Route>
 
-      {/* ✅ Client Contract Details */}
-      <Route path="/client/contracts/:id">
-        <RequireRole allow={["client"]}>
-          <ClientContractDetails />
-        </RequireRole>
+      <Route path="/client/contracts">
+        <Redirect to="/client/dashboard" />
+      </Route>
+
+      <Route path="/client">
+        <Redirect to="/client/dashboard" />
       </Route>
 
       {/* ================= Fallback ================= */}
@@ -162,10 +168,7 @@ export default function App() {
   return (
     <ErrorBoundary>
       <ThemeProvider defaultTheme="light">
-        {/* ✅ Global background layer (patterns) */}
         <div className="rsg-bg" aria-hidden="true" />
-
-        {/* ✅ App shell فوق الخلفية */}
         <div className="relative z-10 min-h-screen">
           <TooltipProvider>
             <Toaster />

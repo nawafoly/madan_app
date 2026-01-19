@@ -1,20 +1,33 @@
-export type AppRole = "user" | "owner" | "accountant" | "staff";
+// client/src/_core/context.ts
 
-function normalizeRole(dbRole: string, email?: string | null): AppRole {
+export type AppRole = "guest" | "client" | "owner" | "admin" | "accountant" | "staff";
+
+/**
+ * يحول الدور القادم من قاعدة البيانات/كود قديم لدور معتمد عندنا
+ * + Bootstrap Owner
+ */
+export function normalizeRole(dbRole: string, email?: string | null): AppRole {
+  const e = (email ?? "").toLowerCase().trim();
+  const r = String(dbRole ?? "").trim();
+
   // ✅ Bootstrap Owner (طوق أمان)
-  if (email && email.toLowerCase() === "nawafaaa0@gmail.com") return "owner";
+  if (e === "nawafaaa0@gmail.com") return "owner";
 
-  // ✅ DB legacy mapping
-  if (dbRole === "admin") return "owner";
-  if (dbRole === "accountant") return "accountant";
-  if (dbRole === "staff") return "staff";
+  // ✅ Legacy mapping
+  if (r === "user") return "client";
+  if (r === "admin") return "admin";
 
-  return "user";
+  // ✅ Approved roles
+  if (
+    r === "owner" ||
+    r === "admin" ||
+    r === "accountant" ||
+    r === "staff" ||
+    r === "client" ||
+    r === "guest"
+  ) {
+    return r as AppRole;
+  }
+
+  return "guest";
 }
-
-// بعد ما تجيب user من sdk.authenticateRequest(...)
-const normalizedUser = user
-  ? { ...user, role: normalizeRole(user.role, (user as any).email ?? null) }
-  : null;
-
-// ثم رجّع ctx.user = normalizedUser

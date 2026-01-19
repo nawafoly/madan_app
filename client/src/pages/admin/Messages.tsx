@@ -10,6 +10,7 @@ import {
   serverTimestamp,
   runTransaction,
   getDoc,
+  addDoc,
 } from "firebase/firestore";
 import { db } from "@/_core/firebase";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -113,11 +114,23 @@ export default function MessagesManagement() {
   /* =========================
      Role permissions (حسب كلامك)
   ========================= */
-  const myRole = String(user?.role || "");
-  // ✅ staff فقط يسوي "تسجيل استثمار مبدئي"
-  const canStaffActions = myRole === "staff";
-  // ✅ الأونر/المحاسب فقط: عقد + إرسال توقيع + ترحيل نهائي
-  const canOwnerAccountantActions = myRole === "owner" || myRole === "accountant";
+  const OWNER_EMAIL = "nawafaaa0@gmail.com";
+
+  const myRole = useMemo(() => {
+    const email = String(user?.email || "").toLowerCase();
+    const role = String((user as any)?.role || "").toLowerCase();
+
+    // إذا هو إيميل الأونر خلّه Owner حتى لو role فاضي
+    if (email === OWNER_EMAIL) return "owner";
+
+    // غير كذا استخدم role لو موجود
+    return role;
+  }, [user?.email, (user as any)?.role]);
+
+  const canStaffActions = myRole === "staff" || myRole === "owner" || myRole === "admin";
+  const canOwnerAccountantActions =
+    myRole === "owner" || myRole === "accountant" || myRole === "admin";
+
 
   const actionMeta = () => ({
     lastActionByRole: myRole || null,
@@ -125,6 +138,53 @@ export default function MessagesManagement() {
     lastActionByEmail: user?.email || null,
     lastActionAt: serverTimestamp(),
   });
+
+  /* =========================
+     ✅ Notifications helper (سبب "ما يوصل شي")
+     - NotificationBell يقرأ من collection(db,"notifications") by uid
+     - لازم ننشئ وثيقة هنا عشان العميل يشوفها
+  ========================= */
+  const pushNotification = async (opts: {
+    uid?: string | null;
+    title: string;
+    body: string;
+    type?: string;
+    meta?: Record<string, any>;
+  }) => {
+    const uid = String(opts.uid || "").trim();
+    if (!uid) return;
+
+    await addDoc(collection(db, "notifications"), {
+      uid,
+      title: opts.title,
+      body: opts.body,
+      type: opts.type || "system",
+      read: false,
+      createdAt: serverTimestamp(),
+      meta: opts.meta || {},
+    });
+  };
+
+  const notifyClient = async (
+    msg: any,
+    payload: { title: string; body: string; type?: string; meta?: Record<string, any> }
+  ) => {
+    // نستخدم createdByUid (هذا UID حساب العميل)
+    const uid = msg?.createdByUid || msg?.investorUid || null;
+    if (!uid) return;
+    try {
+      await pushNotification({
+        uid,
+        title: payload.title,
+        body: payload.body,
+        type: payload.type,
+        meta: payload.meta,
+      });
+    } catch (e) {
+      console.error("notifyClient_failed", e);
+      // ما نوقف العملية الأساسية لو الإشعار فشل
+    }
+  };
 
   /* =========================
      Load messages
@@ -216,6 +276,14 @@ export default function MessagesManagement() {
         updatedByEmail: user?.email || null,
 
         ...actionMeta(),
+      });
+
+      // ✅ إشعار للعميل إذا عنده حساب
+      await notifyClient(selectedMessage, {
+        title: "تحديث على طلبك",
+        body: `تم تحديث حالة طلبك إلى: ${String(status)}`,
+        type: "message_status",
+        meta: { messageId: selectedMessage.id, status },
       });
 
       toast.success("تم تحديث حالة الرسالة");
@@ -332,6 +400,14 @@ export default function MessagesManagement() {
         return { investmentId: invRef.id };
       });
 
+      // ✅ إشعار للعميل
+      await notifyClient(selectedMessage, {
+        title: "تم تسجيل طلبك الاستثماري",
+        body: "تم تسجيل استثمار مبدئي لطلبك وسيتم تجهيز العقد قريباً.",
+        type: "pre_investment_created",
+        meta: { messageId: selectedMessage.id, investmentId },
+      });
+
       toast.success(`تم تسجيل استثمار مبدئي ✅ Investment: ${investmentId}`);
       setIsDetailDialogOpen(false);
       loadMessages();
@@ -366,8 +442,10 @@ export default function MessagesManagement() {
     const investmentId = selectedMessage?.investmentId || null;
 
     if (!investorUid) return toast.warning("لا يمكن إنشاء عقد لأن الطلب بدون حساب");
-    if (!investmentId) return toast.warning("سجل استثمار مبدئي أولاً (عشان يطلع InvestmentId)");
-    if (selectedMessage?.contractId) return toast.warning("تم إنشاء عقد مسبقاً لهذه الرسالة");
+    if (!investmentId)
+      return toast.warning("سجل استثمار مبدئي أولاً (عشان يطلع InvestmentId)");
+    if (selectedMessage?.contractId)
+      return toast.warning("تم إنشاء عقد مسبقاً لهذه الرسالة");
 
     try {
       setContractBusy(true);
@@ -387,7 +465,8 @@ export default function MessagesManagement() {
         if (!invSnap.exists()) throw new Error("investment_not_found");
         const inv = invSnap.data() as any;
 
-        if (inv?.investorUid !== investorUid) throw new Error("investment_uid_mismatch");
+        if (inv?.investorUid !== investorUid)
+          throw new Error("investment_uid_mismatch");
 
         const cRef = doc(collection(db, "contracts"));
 
@@ -438,6 +517,14 @@ export default function MessagesManagement() {
         return cRef.id;
       });
 
+      // ✅ إشعار للعميل
+      await notifyClient(selectedMessage, {
+        title: "تم تجهيز العقد",
+        body: "تم إنشاء عقد طلبك. سيتم إرساله للتوقيع قريباً.",
+        type: "contract_created",
+        meta: { messageId: selectedMessage.id, investmentId, contractId },
+      });
+
       toast.success(`تم إنشاء العقد ✅ ContractId: ${contractId}`);
 
       setSelectedMessage((prev: any) =>
@@ -448,10 +535,13 @@ export default function MessagesManagement() {
     } catch (e: any) {
       console.error(e);
       const m = String(e?.message || "");
-      if (m.includes("contract_already_created")) return toast.warning("العقد موجود مسبقاً");
-      if (m.includes("missing_investment_id")) return toast.error("لا يوجد investmentId على الرسالة");
+      if (m.includes("contract_already_created"))
+        return toast.warning("العقد موجود مسبقاً");
+      if (m.includes("missing_investment_id"))
+        return toast.error("لا يوجد investmentId على الرسالة");
       if (m.includes("investment_not_found")) return toast.error("الاستثمار غير موجود");
-      if (m.includes("investment_uid_mismatch")) return toast.error("عدم تطابق investorUid مع الاستثمار");
+      if (m.includes("investment_uid_mismatch"))
+        return toast.error("عدم تطابق investorUid مع الاستثمار");
       toast.error("فشل إنشاء العقد");
     } finally {
       setContractBusy(false);
@@ -513,6 +603,14 @@ export default function MessagesManagement() {
 
           ...actionMeta(),
         });
+      });
+
+      // ✅ إشعار للعميل
+      await notifyClient(selectedMessage, {
+        title: "العقد جاهز للتوقيع",
+        body: "تم إرسال العقد لك للتوقيع. ادخل لوحة العميل لإكمال التوقيع.",
+        type: "contract_ready",
+        meta: { messageId: selectedMessage.id, investmentId, contractId },
       });
 
       toast.success("تم إرسال العقد للعميل للتوقيع ✍️");
@@ -612,13 +710,22 @@ export default function MessagesManagement() {
         });
       });
 
+      // ✅ إشعار للعميل
+      await notifyClient(selectedMessage, {
+        title: "تم تفعيل استثمارك",
+        body: "تم اعتماد الاستثمار وترحيله للمشروع بنجاح.",
+        type: "investment_finalized",
+        meta: { messageId: selectedMessage.id, investmentId, contractId },
+      });
+
       toast.success("تم ترحيل الاستثمار للمشروع ✅ (بعد توقيع العقد)");
       setIsDetailDialogOpen(false);
       loadMessages();
     } catch (e: any) {
       console.error(e);
       const m = String(e?.message || "");
-      if (m.includes("contract_not_signed")) return toast.warning("ما نقدر نرحّل قبل توقيع العقد");
+      if (m.includes("contract_not_signed"))
+        return toast.warning("ما نقدر نرحّل قبل توقيع العقد");
       if (m.includes("already_finalized")) return toast.warning("تم الترحيل مسبقًا");
       if (m.includes("project_not_found")) return toast.error("المشروع غير موجود");
       toast.error("فشل الترحيل النهائي");
@@ -643,6 +750,14 @@ export default function MessagesManagement() {
         ...actionMeta(),
       });
 
+      // ✅ إشعار للعميل
+      await notifyClient(selectedMessage, {
+        title: "تم رفض الطلب",
+        body: "نعتذر، تم رفض طلبك. يمكنك إرسال طلب جديد أو التواصل معنا للاستفسار.",
+        type: "message_rejected",
+        meta: { messageId: selectedMessage.id },
+      });
+
       toast.success("تم رفض الطلب");
       setIsDetailDialogOpen(false);
       loadMessages();
@@ -664,7 +779,9 @@ export default function MessagesManagement() {
     !selectedMessage?.contractId;
 
   const canSendForSigning =
-    isInvestment && !!selectedMessage?.investmentId && !!selectedMessage?.contractId;
+    isInvestment &&
+    !!selectedMessage?.investmentId &&
+    !!selectedMessage?.contractId;
 
   // ✅ (1) أهم تعديل: الترحيل النهائي يظهر/يتفعل فقط إذا Signed
   const canFinalize =
@@ -695,13 +812,19 @@ export default function MessagesManagement() {
         {/* Header */}
         <div>
           <h1 className="text-4xl font-bold mb-2">صندوق الرسائل</h1>
-          <p className="text-muted-foreground text-lg">إدارة الرسائل والاستفسارات الواردة</p>
+          <p className="text-muted-foreground text-lg">
+            إدارة الرسائل والاستفسارات الواردة
+          </p>
         </div>
 
         {/* Stats */}
         <div className="grid gap-4 md:grid-cols-4">
           <StatCard title="رسائل جديدة" value={stats.new} color="text-orange-600" />
-          <StatCard title="قيد المعالجة" value={stats.in_progress} color="text-blue-600" />
+          <StatCard
+            title="قيد المعالجة"
+            value={stats.in_progress}
+            color="text-blue-600"
+          />
           <StatCard title="تم الحل" value={stats.resolved} color="text-green-600" />
           <StatCard title="الإجمالي" value={stats.total} />
         </div>
@@ -826,7 +949,9 @@ export default function MessagesManagement() {
           <DialogHeader className="px-6 pt-6 pb-4 border-b bg-white/60 backdrop-blur">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <DialogTitle className="text-xl md:text-2xl">تفاصيل الرسالة</DialogTitle>
+                <DialogTitle className="text-xl md:text-2xl">
+                  تفاصيل الرسالة
+                </DialogTitle>
 
                 {selectedMessage && (
                   <div className="mt-2 flex flex-wrap gap-2">
@@ -957,18 +1082,19 @@ export default function MessagesManagement() {
                         <div className="grid gap-2 sm:grid-cols-2 pt-1">
                           <Button
                             variant="outline"
-                            disabled={
-                              contractBusy ||
-                              finalizeBusy ||
-                              !!selectedMessage?.investmentId ||
-                              !canStaffActions
-                            }
-                            onClick={createPreInvestment}
+                            disabled={contractBusy || finalizeBusy || !!selectedMessage?.investmentId}
+                            onClick={() => {
+                              if (!canStaffActions) {
+                                toast.error("هذا الإجراء للمراجع أو الأونر فقط");
+                                return;
+                              }
+                              createPreInvestment();
+                            }}
                             className="h-11"
-                            title={!canStaffActions ? "للمراجع (Staff) فقط" : ""}
                           >
                             تسجيل استثمار مبدئي
                           </Button>
+
 
                           <Button
                             variant="outline"
@@ -988,19 +1114,25 @@ export default function MessagesManagement() {
                           >
                             إرسال للعميل للتوقيع
                           </Button>
-
                           <Button
-                            disabled={!canOwnerAccountantActions || !canFinalize || finalizeBusy}
+                            disabled={
+                              !canOwnerAccountantActions ||
+                              !canFinalize ||
+                              finalizeBusy
+                            }
                             onClick={finalizeInvestment}
                             className="h-11 sm:col-span-2"
                             title={!isSigned ? "لازم العقد يكون (signed) أولاً" : ""}
                           >
-                            {finalizeBusy ? "جاري الترحيل..." : "ترحيل الاستثمار للمشروع (إقفال نهائي)"}
+                            {finalizeBusy
+                              ? "جاري الترحيل..."
+                              : "ترحيل الاستثمار للمشروع (إقفال نهائي)"}
                           </Button>
                         </div>
 
                         <div className="text-xs text-muted-foreground">
-                          * زر <b>الترحيل النهائي</b> ما يشتغل إلا بعد ما العقد يصير <b>signed</b>.
+                          * زر <b>الترحيل النهائي</b> ما يشتغل إلا بعد ما العقد يصير{" "}
+                          <b>signed</b>.
                         </div>
                       </CardContent>
                     </Card>
@@ -1013,18 +1145,25 @@ export default function MessagesManagement() {
                     <CardContent className="space-y-4">
                       <div className="space-y-2">
                         <Label>الحالة</Label>
-                        <Select value={status} onValueChange={(v) => setStatus(v as MessageStatus)}>
+                        <Select
+                          value={status}
+                          onValueChange={(v) => setStatus(v as MessageStatus)}
+                        >
                           <SelectTrigger className="h-11">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="new">جديد</SelectItem>
-                            <SelectItem value="in_progress">قيد المعالجة</SelectItem>
+                            <SelectItem value="in_progress">
+                              قيد المعالجة
+                            </SelectItem>
                             <SelectItem value="resolved">تم الحل</SelectItem>
                             <SelectItem value="closed">مغلق</SelectItem>
                             <SelectItem value="approved">مقبول</SelectItem>
                             <SelectItem value="rejected">مرفوض</SelectItem>
-                            <SelectItem value="needs_account">يتطلب حساب</SelectItem>
+                            <SelectItem value="needs_account">
+                              يتطلب حساب
+                            </SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
@@ -1047,7 +1186,11 @@ export default function MessagesManagement() {
 
           <DialogFooter className="px-6 py-4 border-t bg-white/70 backdrop-blur flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setIsDetailDialogOpen(false)} className="h-11">
+              <Button
+                variant="outline"
+                onClick={() => setIsDetailDialogOpen(false)}
+                className="h-11"
+              >
                 إغلاق
               </Button>
               <Button onClick={handleUpdateStatus} className="h-11">
@@ -1057,7 +1200,11 @@ export default function MessagesManagement() {
 
             {isInvestment && selectedMessage && (
               <div className="flex gap-2">
-                <Button variant="destructive" onClick={rejectInvestmentRequest} className="h-11">
+                <Button
+                  variant="destructive"
+                  onClick={rejectInvestmentRequest}
+                  className="h-11"
+                >
                   رفض الطلب
                 </Button>
               </div>
@@ -1084,7 +1231,9 @@ function StatCard({
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm text-muted-foreground">{title}</CardTitle>
+        <CardTitle className="text-sm text-muted-foreground">
+          {title}
+        </CardTitle>
       </CardHeader>
       <CardContent>
         <div className={`text-3xl font-bold ${color || ""}`}>{value}</div>
@@ -1097,7 +1246,9 @@ function InfoRow({ label, value }: { label: string; value: any }) {
   return (
     <div className="flex items-start justify-between gap-3">
       <div className="text-xs text-muted-foreground">{label}</div>
-      <div className="text-sm font-medium text-right break-words">{value}</div>
+      <div className="text-sm font-medium text-right break-words">
+        {value}
+      </div>
     </div>
   );
 }

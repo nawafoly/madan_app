@@ -8,13 +8,17 @@ const firebaseConfig = {
   authDomain: (import.meta.env.VITE_FB_AUTH_DOMAIN ?? "").trim(),
   projectId: (import.meta.env.VITE_FB_PROJECT_ID ?? "").trim(),
   storageBucket:
-    (import.meta.env.VITE_FB_STORAGE_BUCKET ??
-      `${import.meta.env.VITE_FB_PROJECT_ID}.firebasestorage.app`).trim(),
+    (
+      import.meta.env.VITE_FB_STORAGE_BUCKET ??
+      `${import.meta.env.VITE_FB_PROJECT_ID}.firebasestorage.app`
+    ).trim(),
   messagingSenderId: (import.meta.env.VITE_FB_MESSAGING_SENDER_ID ?? "").trim(),
   appId: (import.meta.env.VITE_FB_APP_ID ?? "").trim(),
 };
 
-// تحقق من المتغيرات المهمة فقط
+// =========================
+// ✅ تحقق من المتغيرات المهمة
+// =========================
 const required = [
   ["VITE_FB_API_KEY", firebaseConfig.apiKey],
   ["VITE_FB_AUTH_DOMAIN", firebaseConfig.authDomain],
@@ -31,16 +35,24 @@ if (missing.length > 0) {
   );
 }
 
+// =========================
 // ✅ منع إعادة التهيئة مع HMR
+// =========================
 const app = getApps().length > 0 ? getApps()[0] : initializeApp(firebaseConfig);
 
+// =========================
 // Auth
+// =========================
 export const auth = getAuth(app);
 
+// =========================
 // Firestore (بسيط + مستقر)
+// =========================
 export const db = getFirestore(app);
 
+// =========================
 // ✅ تشخيص وقت التطوير فقط
+// =========================
 if (import.meta.env.DEV) {
   // @ts-ignore
   window.__fb = {
