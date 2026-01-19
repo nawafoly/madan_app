@@ -128,6 +128,14 @@ function pickLabel(v: unknown, lang: "ar" | "en" = "ar", fallback = "") {
   return fallback;
 }
 
+function normalizePublicImage(src?: string) {
+  const s = (src ?? "").trim();
+  if (!s) return "";
+  if (s.startsWith("http://") || s.startsWith("https://")) return s;
+  if (s.startsWith("/")) return s;
+  return `/${s}`;
+}
+
 function humanizeFirestoreError(err: unknown): string {
   const e = err as Partial<FirestoreError> | undefined;
 
@@ -307,8 +315,9 @@ function CurvedProjectsHero({
         <div className="absolute inset-0 opacity-[0.08] bg-[radial-gradient(circle_at_1px_1px,#ffffff_1px,transparent_1px)] [background-size:18px_18px]" />
 
         {/* محتوى */}
-        <div className="container relative z-10 h-full flex items-center pt-[calc(300px+env(safe-area-inset-top))] md:pt-[110px]">
-          <div className="w-full">
+        {/*  270 px + env ( safe - area - inset - top)  كود ثابت ما يتغير  */}
+        <div className="container relative z-10 h-full flex items-center pt-[calc(270px+env(safe-area-inset-top))] md:pt-[140px]">
+        <div className="w-full">
             <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
               {/* ✅ توسيط الكلام فقط */}
               <div className="space-y-2 text-center md:text-right md:space-y-2">
@@ -353,6 +362,9 @@ function CurvedProjectsHero({
 }
 
 export default function ProjectsPage() {
+  const publishedSlider = useDragScroll<HTMLDivElement>();
+  const upcomingSlider = useDragScroll<HTMLDivElement>();
+
   const [labels, setLabels] = useState<Required<LabelsDoc>>(DEFAULT_LABELS);
   const [flags, setFlags] = useState<FlagsDoc>({
     hideVipProjects: false,
@@ -367,9 +379,6 @@ export default function ProjectsPage() {
 
   // refresh
   const [refreshKey, setRefreshKey] = useState(0);
-
-  // ✅ Drag scroll for upcoming slider
-  const upcomingSlider = useDragScroll<HTMLDivElement>();
 
   /* =========================
      Load settings (labels + flags)
@@ -456,10 +465,13 @@ export default function ProjectsPage() {
     const text = qText.trim().toLowerCase();
 
     let list = published.items.filter((p) => {
+      const typeKey = String(
+        p.projectType || (p as any).category || ""
+      ).trim();
+
       if (flags.hideVipProjects && isVip(p)) return false;
       if (flags.vipOnlyMode && !isVip(p)) return false;
-      if (typeFilter !== "all" && (p.projectType || "") !== typeFilter)
-        return false;
+      if (typeFilter !== "all" && typeKey !== typeFilter) return false;
 
       if (!text) return true;
 
@@ -469,7 +481,7 @@ export default function ProjectsPage() {
         p.locationAr,
         p.locationEn,
         p.issueNumber,
-        p.projectType,
+        typeKey,
       ]
         .filter(Boolean)
         .join(" ")
@@ -479,12 +491,21 @@ export default function ProjectsPage() {
     });
 
     list = [...list].sort((a, b) => {
-      if (sortBy === "progress") return progressPercent(b) - progressPercent(a);
+      if (sortBy === "progress")
+        return progressPercent(b) - progressPercent(a);
       if (sortBy === "return")
         return safeNumber(b.annualReturn) - safeNumber(a.annualReturn);
 
-      const ad = (a.createdAt?.seconds ?? 0) as number;
-      const bd = (b.createdAt?.seconds ?? 0) as number;
+      const ad = Number(
+        (a.createdAt as any)?.seconds ??
+          (a.createdAt as any)?.toMillis?.() ??
+          0
+      );
+      const bd = Number(
+        (b.createdAt as any)?.seconds ??
+          (b.createdAt as any)?.toMillis?.() ??
+          0
+      );
       return bd - ad;
     });
 
@@ -526,10 +547,11 @@ export default function ProjectsPage() {
     const current = safeNumber(p.currentAmount);
     const prog = mode === "done" ? 100 : progressPercent(p);
 
-    const cover =
+    const rawCover =
       (p.coverImage && String(p.coverImage).trim()) ||
       (p.image && String(p.image).trim()) ||
-      FALLBACK_COVER;
+      "";
+    const cover = rawCover ? normalizePublicImage(rawCover) : FALLBACK_COVER;
 
     const title = p.titleAr || p.titleEn || "بدون عنوان";
     const location = p.locationAr || p.locationEn || "—";
@@ -538,18 +560,14 @@ export default function ProjectsPage() {
     const isDraft = mode === "draft";
 
     return (
-      <Card
-        key={p.id}
-        className={`overflow-hidden ${isDone ? "opacity-90" : ""}`}
-      >
+      <Card key={p.id} className={`overflow-hidden ${isDone ? "opacity-90" : ""}`}>
         <div className="relative h-44 w-full bg-muted">
           <img
             src={cover}
             alt={title}
-            className={`h-full w-full object-cover ${
-              isDone ? "grayscale-[0.15]" : ""
-            }`}
+            className={`h-full w-full object-cover ${isDone ? "grayscale-[0.15]" : ""}`}
             loading="lazy"
+            draggable={false}
             onError={(e) => {
               const img = e.currentTarget;
               if (img.src.includes(FALLBACK_COVER)) return;
@@ -611,7 +629,6 @@ export default function ProjectsPage() {
               </span>
             </div>
 
-            {/* Track */}
             <div
               className="relative h-3 w-full overflow-hidden rounded-full"
               style={{
@@ -626,7 +643,6 @@ export default function ProjectsPage() {
               aria-valuemin={0}
               aria-valuemax={100}
             >
-              {/* Shine */}
               <div
                 className="absolute inset-0"
                 style={{
@@ -636,7 +652,6 @@ export default function ProjectsPage() {
                 }}
               />
 
-              {/* Fill */}
               <div
                 className="absolute inset-y-0 right-0 rounded-full"
                 style={{
@@ -648,7 +663,6 @@ export default function ProjectsPage() {
                 }}
               />
 
-              {/* Edge highlight */}
               <div
                 className="absolute inset-y-0 right-0"
                 style={{
@@ -692,9 +706,11 @@ export default function ProjectsPage() {
           </div>
 
           <Link href={`/projects/${p.id}`}>
-            <Button className="w-full" variant={isDraft ? "outline" : "default"}>
-              عرض التفاصيل
-            </Button>
+            <a className="block">
+              <Button className="w-full" variant={isDraft ? "outline" : "default"}>
+                عرض التفاصيل
+              </Button>
+            </a>
           </Link>
         </div>
       </Card>
@@ -719,7 +735,6 @@ export default function ProjectsPage() {
     >
       <Header />
 
-      {/* HERO (Curved) */}
       <div className="pt-0">
         <CurvedProjectsHero
           title={
@@ -780,7 +795,6 @@ export default function ProjectsPage() {
               </Card>
             )}
 
-            {/* Filters (للمنشور فقط) */}
             <Card className="bg-white/95 backdrop-blur border border-white/15 shadow-xl">
               <CardContent className="py-6 grid lg:grid-cols-3 gap-4">
                 <div className="space-y-2">
@@ -797,26 +811,7 @@ export default function ProjectsPage() {
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <div className="text-sm font-medium">نوع المشروع</div>
-                  <Select
-                    value={typeFilter}
-                    onValueChange={setTypeFilter}
-                    disabled={flags.maintenanceMode}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="اختر النوع" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">الكل</SelectItem>
-                      {Object.keys(labels.projectTypes).map((k) => (
-                        <SelectItem key={k} value={k}>
-                          {pickLabel(labels.projectTypes[k], "ar", k)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                
 
                 <div className="space-y-2">
                   <div className="text-sm font-medium">الترتيب</div>
@@ -835,7 +830,6 @@ export default function ProjectsPage() {
                     </SelectContent>
                   </Select>
                 </div>
-
                 <div className="lg:hidden flex justify-center pt-2">
                   <Button
                     variant="outline"
@@ -858,9 +852,8 @@ export default function ProjectsPage() {
         </CurvedProjectsHero>
       </div>
 
-      {/* CONTENT */}
       <main className="flex-1">
-        {/* 1) المشاريع الحالية (منشور) */}
+        {/* 1) المشاريع الحالية */}
         <SectionShell className="py-16 sm:py-20 -mt-10">
           <div className="flex justify-center">
             <p className="inline-block px-3 py-1 text-[20px] sm:text-[16px] md:text-[30px] font-semibold text-center text-black/90 border border-black/50 rounded-[10px]">
@@ -932,7 +925,36 @@ export default function ProjectsPage() {
                   !published.loadError &&
                   filteredPublished.length > 0 && (
                     <>
-                      <div className="mt-10 grid md:grid-cols-2 xl:grid-cols-3 gap-5">
+                      {/* ✅ Mobile: صف أفقي (سحب يمين/يسار) */}
+                      <div
+                        ref={publishedSlider.ref}
+                        {...publishedSlider.bind}
+                        dir="ltr"
+                        className="
+                          md:hidden
+                          flex gap-5 overflow-x-auto overflow-y-hidden pb-4
+                          snap-x snap-mandatory
+                          scroll-smooth
+                          [-ms-overflow-style:none] [scrollbar-width:none]
+                          [&::-webkit-scrollbar]:hidden
+                          select-none
+                          cursor-grab active:cursor-grabbing
+                        "
+                        style={{ WebkitOverflowScrolling: "touch" }}
+                      >
+                        {filteredPublished.map((p) => (
+                          <div
+                            key={p.id}
+                            dir="rtl"
+                            className="snap-start shrink-0 w-[86%] sm:w-[420px]"
+                          >
+                            {ProjectCard(p, "published")}
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* ✅ Desktop: Grid */}
+                      <div className="hidden md:grid mt-10 md:grid-cols-2 xl:grid-cols-3 gap-5">
                         {filteredPublished.map((p) =>
                           ProjectCard(p, "published")
                         )}
@@ -950,7 +972,7 @@ export default function ProjectsPage() {
                               : "تحميل المزيد"}
                           </Button>
                         ) : (
-                          <div className="text-sm text-muted-foreground"></div>
+                          <div className="text-sm text-muted-foreground" />
                         )}
                       </div>
                     </>
@@ -960,7 +982,7 @@ export default function ProjectsPage() {
           </div>
         </SectionShell>
 
-        {/* 2) المشاريع المستقبلية (قريبا) */}
+        {/* 2) المشاريع المستقبلية */}
         <section className="relative overflow-hidden bg-zinc-950 text-white py-16 sm:py-20">
           <div className="container relative z-10">
             <div className="text-center max-w-3xl mx-auto">
@@ -1016,10 +1038,7 @@ export default function ProjectsPage() {
                         select-none
                         cursor-grab active:cursor-grabbing
                       "
-                      style={{
-                        WebkitOverflowScrolling: "touch",
-                        touchAction: "pan-x",
-                      }}
+                      style={{ WebkitOverflowScrolling: "touch" }}
                     >
                       {upcoming.items.map((p) => (
                         <div
@@ -1045,7 +1064,7 @@ export default function ProjectsPage() {
                           : "تحميل المزيد"}
                       </Button>
                     ) : (
-                      <div className="text-sm text-white/65"></div>
+                      <div className="text-sm text-white/65" />
                     )}
                   </div>
                 </>
@@ -1053,7 +1072,6 @@ export default function ProjectsPage() {
             </div>
           </div>
 
-          {/* موجة */}
           <div className="absolute bottom-[-1px] left-0 w-full overflow-hidden leading-none">
             <svg
               viewBox="0 0 1440 120"
@@ -1069,7 +1087,7 @@ export default function ProjectsPage() {
           </div>
         </section>
 
-        {/* 3) المشاريع المكتملة/المغلقة */}
+        {/* 3) المشاريع المكتملة */}
         <SectionShell className="py-16 sm:py-20">
           <div className="flex justify-center">
             <p className="inline-block px-3 py-1 text-[20px] sm:text-[16px] md:text-[30px] font-semibold text-center text-black/90 border border-black/50 rounded-[10px]">
@@ -1119,7 +1137,7 @@ export default function ProjectsPage() {
                       {done.loadingMore ? "جاري التحميل..." : "تحميل المزيد"}
                     </Button>
                   ) : (
-                    <div className="text-sm text-muted-foreground"></div>
+                    <div className="text-sm text-muted-foreground" />
                   )}
                 </div>
               </>

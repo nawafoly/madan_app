@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+// client/src/pages/Home.tsx
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -19,6 +20,8 @@ import {
 // 🔥 Firestore
 import {
   collection,
+  doc,
+  getDoc,
   getDocs,
   orderBy,
   query,
@@ -31,17 +34,42 @@ type HomeProject = {
   id: string;
   title: string;
   location: string;
-  category: string; // عربي
+  categoryKey: string;
   image: string;
+};
+
+type BiLabel = { ar?: string; en?: string };
+type LabelValue = string | BiLabel;
+
+type LabelsDoc = {
+  projectTypes?: Record<string, LabelValue>;
+  projectStatuses?: Record<string, LabelValue>;
+};
+
+const DEFAULT_LABELS: Required<LabelsDoc> = {
+  projectTypes: {
+    sukuk: "استثمار بالصكوك",
+    land_development: "تطوير أراضي",
+    vip_exclusive: "VIP حصري",
+  },
+  projectStatuses: {
+    draft: "قريباً",
+    published: "منشور",
+    closed: "مغلق",
+    completed: "مكتمل",
+  },
 };
 
 const FALLBACK_IMG = "/HOOM-HERO.png";
 
-const TYPE_LABELS: Record<string, string> = {
-  sukuk: "استثمار بالصكوك",
-  land_development: "تطوير أراضي",
-  vip_exclusive: "VIP حصري",
-};
+function pickLabel(v: unknown, lang: "ar" | "en" = "ar", fallback = "") {
+  if (typeof v === "string") return v;
+  if (v && typeof v === "object") {
+    const o = v as BiLabel;
+    return (lang === "ar" ? o.ar : o.en) || o.ar || o.en || fallback;
+  }
+  return fallback;
+}
 
 function normalizePublicImage(src?: string) {
   const s = (src ?? "").trim();
@@ -56,14 +84,33 @@ export default function Home() {
   const [projects, setProjects] = useState<HomeProject[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // ✅ Drag scroll for home slider (مطابق لهوكك 1:1)
+  const [labels, setLabels] = useState<Required<LabelsDoc>>(DEFAULT_LABELS);
+
+  // ✅ Drag scroll for home slider
   const { ref: homeSliderRef, bind: homeSliderBind } =
     useDragScroll<HTMLDivElement>();
 
   useEffect(() => {
-    const loadProjects = async () => {
+    const load = async () => {
       try {
         setIsLoading(true);
+
+        const labelsSnap = await getDoc(doc(db, "settings", "labels"));
+        if (labelsSnap.exists()) {
+          const data = labelsSnap.data() as LabelsDoc;
+          setLabels({
+            projectTypes: {
+              ...DEFAULT_LABELS.projectTypes,
+              ...(data.projectTypes || {}),
+            },
+            projectStatuses: {
+              ...DEFAULT_LABELS.projectStatuses,
+              ...(data.projectStatuses || {}),
+            },
+          });
+        } else {
+          setLabels(DEFAULT_LABELS);
+        }
 
         const qy = query(
           collection(db, "projects"),
@@ -78,8 +125,6 @@ export default function Home() {
           const data = d.data() as any;
 
           const typeKey = String(data.projectType || data.category || "").trim();
-          const category = TYPE_LABELS[typeKey] || typeKey || "مشروع";
-
           const rawImg = String(data.coverImage || data.image || "").trim();
           const image = rawImg ? normalizePublicImage(rawImg) : FALLBACK_IMG;
 
@@ -94,7 +139,7 @@ export default function Home() {
                 data.location ||
                 "المملكة العربية السعودية"
             ),
-            category,
+            categoryKey: typeKey || "unknown",
             image,
           };
         });
@@ -103,13 +148,17 @@ export default function Home() {
       } catch (err) {
         console.error("Failed to load home projects:", err);
         setProjects([]);
+        setLabels(DEFAULT_LABELS);
       } finally {
         setIsLoading(false);
       }
     };
 
-    loadProjects();
+    load();
   }, []);
+
+  const categoryLabel = (key: string) =>
+    pickLabel(labels.projectTypes[key], "ar", key || "مشروع");
 
   const p0 = projects[0];
   const p1 = projects[1];
@@ -124,50 +173,56 @@ export default function Home() {
         ? "aspect-[4/5] md:aspect-[16/13]"
         : "aspect-[16/9] md:aspect-[16/10]";
 
+    // ✅ الضغط يودّي لتفاصيل المشروع مباشرة
+    const href = `/projects/${p.id}`;
+
     return (
-      <div className={`group relative overflow-hidden rounded-[28px] ${aspect}`}>
-        <img
-          src={p.image}
-          alt={p.title}
-          className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
-          loading="lazy"
-          onError={(e) => {
-            const img = e.currentTarget;
-            if (img.src.includes(FALLBACK_IMG)) return;
-            img.src = FALLBACK_IMG;
-          }}
-        />
+      <Link href={href}>
+        <a className={`group block relative overflow-hidden rounded-[28px] ${aspect}`}>
+          <img
+            src={p.image}
+            alt={p.title}
+            className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+            loading="lazy"
+            draggable={false}
+            onError={(e) => {
+              const img = e.currentTarget;
+              if (img.src.includes(FALLBACK_IMG)) return;
+              img.src = FALLBACK_IMG;
+            }}
+          />
 
-        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/15 to-transparent opacity-85 group-hover:opacity-95 transition-opacity" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/15 to-transparent opacity-85 group-hover:opacity-95 transition-opacity" />
 
-        <div className="absolute bottom-0 right-0 p-6 md:p-7 w-full text-white">
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-white/12 text-white border border-white/20 backdrop-blur-md">
-            {p.category}
-          </span>
+          <div className="absolute bottom-0 right-0 p-6 md:p-7 w-full text-white">
+            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-white/12 text-white border border-white/20 backdrop-blur-md">
+              {categoryLabel(p.categoryKey)}
+            </span>
 
-          <h3 className="mt-3 text-2xl md:text-3xl font-bold leading-snug">
-            {p.title}
-          </h3>
+            <h3 className="mt-3 text-2xl md:text-3xl font-bold leading-snug">
+              {p.title}
+            </h3>
 
-          <p className="mt-2 text-white/85 text-sm flex items-center gap-2">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-              <circle cx="12" cy="10" r="3" />
-            </svg>
-            {p.location}
-          </p>
-        </div>
-      </div>
+            <p className="mt-2 text-white/85 text-sm flex items-center gap-2">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                <circle cx="12" cy="10" r="3" />
+              </svg>
+              {p.location}
+            </p>
+          </div>
+        </a>
+      </Link>
     );
   };
 
@@ -243,7 +298,7 @@ export default function Home() {
                     </div>
                   ) : projects.length ? (
                     <>
-                      {/* ✅ Mobile: slider (يسحب باليد + سحب بالإصبع) */}
+                      {/* ✅ Mobile: slider */}
                       <div
                         ref={homeSliderRef}
                         {...homeSliderBind}
@@ -253,13 +308,13 @@ export default function Home() {
                           flex gap-5 overflow-x-auto overflow-y-hidden pb-4
                           snap-x snap-mandatory
                           scroll-smooth
+                          select-none
                           [-ms-overflow-style:none] [scrollbar-width:none]
                           [&::-webkit-scrollbar]:hidden
                           cursor-grab active:cursor-grabbing
                         "
                         style={{
-                          WebkitOverflowScrolling: "touch",
-                          touchAction: "pan-x",
+                          WebkitOverflowScrolling: "touch"
                         }}
                       >
                         {projects.map((p) => (

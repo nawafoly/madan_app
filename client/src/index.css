@@ -903,8 +903,8 @@
   transform: translateY(1px) scale(0.985);
 }
 
-/* ✅ Mobile: show logo in the center of the pill */
-@media (max-width: 1024px) {
+/* ✅ Mobile only (iPhone / small tablets) */
+@media (max-width: 767px) {
   .rsg-nav__inner {
     position: relative;
   }
@@ -926,9 +926,17 @@
     background-size: contain;
 
     pointer-events: none;
-    z-index: 65;
+    z-index: 1; /* ✅ تحت الأزرار */
+    opacity: 0.95;
+  }
+
+  /* ✅ فوق اللوقو الوهمي */
+  .rsg-nav__slot {
+    position: relative;
+    z-index: 2;
   }
 }
+
 
 /* Light section */
 .section-light {
@@ -1106,3 +1114,4 @@
   );
   color: #fff;
 }
+
