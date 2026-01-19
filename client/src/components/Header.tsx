@@ -20,7 +20,7 @@ export default function Header() {
   // ✅ صفحات Hero (النافبار يكون Overlay وما نحتاج Spacer)
   const isHeroRoute = useMemo(() => {
     const path = (location || "/").split("?")[0];
-    return path === "/" || path === "/about";
+    return path === "/" || path === "/about" || path === "/projects";
   }, [location]);
 
   // ✅ Spacer only for non-hero pages

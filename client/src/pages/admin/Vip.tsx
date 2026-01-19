@@ -54,7 +54,7 @@ const FALLBACK_LABELS: Labels = {
     land_development: "تطوير أراضي",
   },
   projectStatus: {
-    draft: "مسودة",
+    draft: "قريبا",
     published: "منشور",
     archived: "مؤرشف",
   },
@@ -298,7 +298,7 @@ export default function Vip() {
                   variant={statusFilter === "draft" ? "default" : "outline"}
                   onClick={() => setStatusFilter("draft")}
                 >
-                  مسودة
+                 قريبا
                 </Button>
                 <Button
                   variant={statusFilter === "published" ? "default" : "outline"}

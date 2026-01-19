@@ -37,9 +37,12 @@ import { doc, getDoc, addDoc, collection, serverTimestamp } from "firebase/fires
 import { db } from "@/_core/firebase";
 import { useAuth } from "@/_core/hooks/useAuth";
 
+type BiLabel = { ar?: string; en?: string };
+type LabelValue = string | BiLabel;
+
 type LabelsDoc = {
-  projectTypes?: Record<string, string>;
-  projectStatuses?: Record<string, string>;
+  projectTypes?: Record<string, LabelValue>;
+  projectStatuses?: Record<string, LabelValue>;
 };
 
 type FlagsDoc = {
@@ -55,14 +58,16 @@ const DEFAULT_LABELS: Required<LabelsDoc> = {
     vip_exclusive: "VIP حصري",
   },
   projectStatuses: {
-    draft: "مسودة",
+    draft: "قريبا",
     published: "منشور",
     closed: "مغلق",
     completed: "مكتمل",
   },
 };
 
-// ✅ helpers
+/* =========================
+   Helpers
+========================= */
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
@@ -74,6 +79,16 @@ function safeNumber(n: any) {
 
 function fmtSAR(n: any) {
   return safeNumber(n).toLocaleString("ar-SA") + " ر.س";
+}
+
+// ✅ يمنع كراش React لما تكون القيمة {ar,en}
+function pickLabel(v: unknown, lang: "ar" | "en" = "ar", fallback = "") {
+  if (typeof v === "string") return v;
+  if (v && typeof v === "object") {
+    const o = v as BiLabel;
+    return (lang === "ar" ? o.ar : o.en) || o.ar || o.en || fallback;
+  }
+  return fallback;
 }
 
 // ✅ helper: يجعل صور public تشتغل لو كتبت اسم الملف فقط
@@ -276,7 +291,7 @@ export default function ProjectDetails() {
     return clamp((done / total) * 100, 0, 100);
   }, [milestones]);
 
-  const progressMode: ProgressMode = (String(project?.progressMode || "hybrid") as ProgressMode);
+  const progressMode: ProgressMode = String(project?.progressMode || "hybrid") as ProgressMode;
 
   const fundingW = clamp(safeNumber(project?.progressFundingWeight ?? 60), 0, 100);
   const milestonesW = clamp(safeNumber(project?.progressMilestonesWeight ?? 40), 0, 100);
@@ -299,13 +314,15 @@ export default function ProjectDetails() {
     project?.videoUrl ||
     "https://cdn.coverr.co/videos/coverr-modern-architecture-1604/1080p.mp4";
 
+  // ✅ FIX: labels ممكن تكون {ar,en} فلازم نحولها لنص
   const typeLabel = project?.projectType
-    ? labels.projectTypes[project.projectType] || project.projectType
+    ? pickLabel(labels.projectTypes[project.projectType], "ar", project.projectType)
     : "";
 
   const statusLabel = project?.status
-    ? labels.projectStatuses[project.status] || project.status
+    ? pickLabel(labels.projectStatuses[project.status], "ar", project.status)
     : "";
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -369,8 +386,8 @@ export default function ProjectDetails() {
               {blockedReason === "maintenance"
                 ? "نعتذر، سيتم إعادة تفعيل المشاريع قريبًا."
                 : blockedReason === "vip_hidden"
-                ? "هذا المشروع غير متاح حاليًا."
-                : "هذا المشروع غير متاح في الوضع الحالي."}
+                  ? "هذا المشروع غير متاح حاليًا."
+                  : "هذا المشروع غير متاح في الوضع الحالي."}
             </p>
             <Link href="/projects">
               <Button>العودة للمشاريع</Button>
@@ -405,7 +422,7 @@ export default function ProjectDetails() {
       <Header />
 
       {/* HERO (IMAGE OR VIDEO) */}
-      <section className="relative h-[65vh] min-h-[520px] overflow-hidden mt-20">
+      <section className="relative h-[65vh] min-h-[520px] overflow-hidden pt-20">
         {coverImage ? (
           <img
             src={coverImage}
@@ -560,7 +577,9 @@ export default function ProjectDetails() {
               <CardContent className="grid md:grid-cols-2 gap-6">
                 <div>
                   <div className="text-sm text-muted-foreground">المبلغ المستهدف</div>
-                  <div className="text-3xl font-bold text-primary">{fmtSAR(project.targetAmount)}</div>
+                  <div className="text-3xl font-bold text-primary">
+                    {fmtSAR(project.targetAmount)}
+                  </div>
                 </div>
                 <div>
                   <div className="text-sm text-muted-foreground">المبلغ الحالي</div>
@@ -668,7 +687,7 @@ export default function ProjectDetails() {
                 <CardHeader>
                   <CardTitle className="text-3xl flex items-center gap-2">
                     <Images className="w-7 h-7 text-primary" />
-                    معرض الصور
+                    صور من المشروع
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -744,13 +763,12 @@ export default function ProjectDetails() {
                     <span>{fmtSAR(targetAmount)}</span>
                   </div>
 
-                  {/* ✅ optional tiny hint (يعطيك وضوح) */}
                   <div className="mt-2 text-[11px] text-muted-foreground">
                     {progressMode === "funding"
                       ? "يُحسب حسب التمويل فقط"
                       : progressMode === "milestones"
-                      ? "يُحسب حسب المراحل فقط"
-                      : `هجين: التمويل ${fundingW}% + المراحل ${milestonesW}%`}
+                        ? "يُحسب حسب المراحل فقط"
+                        : `هجين: التمويل ${fundingW}% + المراحل ${milestonesW}%`}
                   </div>
                 </div>
 

@@ -74,7 +74,8 @@
   --input: #e5e5e5;
 
   /* ✅ Primary (Core Navy) */
-  --primary: #0a1426;
+/* ✅ Primary (Core Navy) */
+--primary: #0B1726;
   --primary-foreground: #ffffff;
 
   /* Secondary (soft surface) */
@@ -93,7 +94,7 @@
   --gold-deep: #d9961f;
 
   /* ✅ UI Navy helper */
-  --ui-navy: #1b2b40;
+  --ui-navy: #14233a;
 
   /* ✅ Danger (Soft Red) — semantic only */
   --destructive: #b94a48;
@@ -952,4 +953,156 @@
 .section-dark {
   background: var(--primary);
   color: white;
+}
+
+
+
+/* ============ Dark Sections Variants ============ */
+
+/* 1) عادي: أسود نظيف */
+.section-dark-solid {
+  background: #0b0b0d;
+  color: #fff;
+}
+
+/* 2) كرييتف: أسود + لمعة + نقط (مثل الهيدر/الهيرو) */
+.section-dark-creative {
+  position: relative;
+  background: #0a0a0c;
+  color: #fff;
+  overflow: hidden;
+}
+
+.section-dark-creative::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: 0.45;
+  background: radial-gradient(
+    60% 60% at 50% 20%,
+    rgba(255, 255, 255, 0.18),
+    transparent 60%
+  );
+  pointer-events: none;
+}
+
+.section-dark-creative::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: 0.08;
+  background: radial-gradient(circle at 1px 1px, #ffffff 1px, transparent 1px);
+  background-size: 18px 18px;
+  pointer-events: none;
+}
+
+/* 3) ستايل جديد: تدرج أسود ناعم بدون نقاط */
+.section-dark-gradient {
+  background: linear-gradient(180deg, #09090b 0%, #0d1320 55%, #09090b 100%);
+  color: #fff;
+}
+
+
+/* 4) داكن متموّج (Wave) */
+.section-dark-wave {
+  position: relative;
+  background: #0a0a0c;
+  color: #fff;
+  overflow: hidden;
+}
+
+.section-dark-wave::after {
+  content: "";
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  width: 100%;
+  height: 120px;
+  background: white;
+  clip-path: path(
+    "M0,80 C240,140 480,140 720,100 C960,60 1200,20 1440,60 L1440,120 L0,120 Z"
+  );
+}
+
+/* 5 ) داكن مقوّس (Curve) */
+
+.section-dark-curve {
+  position: relative;
+  background: #0b0f19;
+  color: #fff;
+  overflow: hidden;
+}
+
+.section-dark-curve::after {
+  content: "";
+  position: absolute;
+  bottom: -60px;
+  left: -5%;
+  width: 110%;
+  height: 160px;
+  background: white;
+  border-radius: 0 0 100% 100%;
+}
+
+
+/* 6 ) داكن طبقات (Layered / Hero-like) */
+
+.section-dark-layered {
+  position: relative;
+  background: #09090b;
+  color: #fff;
+  overflow: hidden;
+}
+
+.section-dark-layered::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    60% 60% at 50% 20%,
+    rgba(255,255,255,0.15),
+    transparent 60%
+  );
+}
+
+.section-dark-layered::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: 0.07;
+  background: radial-gradient(circle at 1px 1px, #fff 1px, transparent 1px);
+  background-size: 18px 18px;
+}
+
+
+/* 7 ) داكن قطري (Dynamic) */
+
+.section-dark-diagonal {
+  position: relative;
+  background: #0a0e18;
+  color: #fff;
+  overflow: hidden;
+}
+
+.section-dark-diagonal::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    -6deg,
+    transparent 55%,
+    white 56%
+  );
+}
+
+
+/* 8 ) داكن ناعم (Minimal) */
+
+.section-dark-soft {
+  background: linear-gradient(
+    180deg,
+    #0b0b0d 0%,
+    #0f172a 100%
+  );
+  color: #fff;
 }

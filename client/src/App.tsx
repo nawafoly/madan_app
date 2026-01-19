@@ -1,3 +1,4 @@
+// client/src/App.tsx
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
@@ -39,113 +40,113 @@ function Router() {
   return (
     <Switch>
       {/* ================= Public ================= */}
-      <Route path={"/"} component={Home} />
-      <Route path={"/projects"} component={ProjectsPage} />
-      <Route path={"/projects/:id"} component={ProjectDetails} />
-      <Route path={"/about"} component={About} />
-      <Route path={"/contact"} component={Contact} />
+      <Route path="/" component={Home} />
+      <Route path="/projects" component={ProjectsPage} />
+      <Route path="/projects/:id" component={ProjectDetails} />
+      <Route path="/about" component={About} />
+      <Route path="/contact" component={Contact} />
 
       {/* ================= Auth ================= */}
-      <Route path={"/login"} component={LoginPage} />
-      <Route path={"/404"} component={NotFound} />
+      <Route path="/login" component={LoginPage} />
+      <Route path="/404" component={NotFound} />
 
       {/* ================= Admin Dashboard ================= */}
-      <Route path={"/dashboard"}>
+      <Route path="/dashboard">
         <RequireRole allow={["owner", "admin", "accountant", "staff"]}>
           <AdminDashboard />
         </RequireRole>
       </Route>
 
       {/* ===== Admin: Projects ===== */}
-      <Route path={"/admin/projects"}>
+      <Route path="/admin/projects">
         <RequireRole allow={["owner", "admin"]}>
           <ProjectsManagement />
         </RequireRole>
       </Route>
 
-      <Route path={"/admin/projects/create"}>
+      <Route path="/admin/projects/create">
         <RequireRole allow={["owner", "admin"]}>
           <CreateProject />
         </RequireRole>
       </Route>
 
-      <Route path={"/admin/projects/:id/edit"}>
+      <Route path="/admin/projects/:id/edit">
         <RequireRole allow={["owner", "admin"]}>
           <EditProject />
         </RequireRole>
       </Route>
 
       {/* ===== Admin: Reports ===== */}
-      <Route path={"/admin/reports"}>
+      <Route path="/admin/reports">
         <RequireRole allow={["owner", "admin", "accountant"]}>
           <Reports />
         </RequireRole>
       </Route>
 
       {/* ===== Admin: Financial ===== */}
-      <Route path={"/admin/financial"}>
+      <Route path="/admin/financial">
         <RequireRole allow={["owner", "accountant"]}>
           <FinancialManagement />
         </RequireRole>
       </Route>
 
       {/* ===== Admin: Clients ===== */}
-      <Route path={"/admin/clients"}>
+      <Route path="/admin/clients">
         <RequireRole allow={["owner", "admin"]}>
           <ClientsManagement />
         </RequireRole>
       </Route>
 
       {/* ===== Admin: VIP ===== */}
-      <Route path={"/admin/vip"}>
+      <Route path="/admin/vip">
         <RequireRole allow={["owner", "admin"]}>
           <Vip />
         </RequireRole>
       </Route>
 
       {/* ===== Admin: Messages ===== */}
-      <Route path={"/admin/messages"}>
+      <Route path="/admin/messages">
         <RequireRole allow={["owner", "admin", "staff"]}>
           <MessagesManagement />
         </RequireRole>
       </Route>
 
       {/* ===== Admin: Settings ===== */}
-      <Route path={"/admin/settings"}>
+      <Route path="/admin/settings">
         <RequireRole allow={["owner"]}>
           <Settings />
         </RequireRole>
       </Route>
 
       {/* ===== Admin: Audit Log ===== */}
-      <Route path={"/admin/audit-log"}>
+      <Route path="/admin/audit-log">
         <RequireRole allow={["owner"]}>
           <AuditLogPage />
         </RequireRole>
       </Route>
 
       {/* ===== Debug (اختياري) ===== */}
-      <Route path={"/admin/debug-auth"}>
+      <Route path="/admin/debug-auth">
         <RequireRole allow={["owner"]}>
           <DebugAuthPage />
         </RequireRole>
       </Route>
 
       {/* ================= Client Area ================= */}
-      <Route path={"/client/dashboard"}>
+      <Route path="/client/dashboard">
         <RequireRole allow={["client", "guest"]}>
           <ClientDashboard />
         </RequireRole>
       </Route>
 
-      <Route path={"/client/investments"}>
+      <Route path="/client/investments">
         <RequireRole allow={["client"]}>
           <MyInvestments />
         </RequireRole>
       </Route>
 
       {/* ✅ Client Contract Details */}
-      <Route path={"/client/contracts/:id"}>
+      <Route path="/client/contracts/:id">
         <RequireRole allow={["client"]}>
           <ClientContractDetails />
         </RequireRole>
@@ -153,26 +154,25 @@ function Router() {
 
       {/* ================= Fallback ================= */}
       <Route component={NotFound} />
-
-
     </Switch>
   );
 }
 
-function App() {
+export default function App() {
   return (
     <ErrorBoundary>
       <ThemeProvider defaultTheme="light">
-        {/* خلفية عامة */}
+        {/* ✅ Global background layer (patterns) */}
         <div className="rsg-bg" aria-hidden="true" />
 
-        <TooltipProvider>
-          <Toaster />
-          <Router />
-        </TooltipProvider>
+        {/* ✅ App shell فوق الخلفية */}
+        <div className="relative z-10 min-h-screen">
+          <TooltipProvider>
+            <Toaster />
+            <Router />
+          </TooltipProvider>
+        </div>
       </ThemeProvider>
     </ErrorBoundary>
   );
 }
-
-export default App;

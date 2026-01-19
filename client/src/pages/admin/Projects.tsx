@@ -45,9 +45,15 @@ import {
 } from "firebase/firestore";
 import { db } from "@/_core/firebase";
 
+/* =========================
+   Labels (support string OR {ar,en})
+========================= */
+type BiLabel = { ar?: string; en?: string };
+type LabelValue = string | BiLabel;
+
 type LabelsDoc = {
-  projectTypes?: Record<string, string>;
-  projectStatuses?: Record<string, string>;
+  projectTypes?: Record<string, LabelValue>;
+  projectStatuses?: Record<string, LabelValue>;
 };
 
 type FlagsDoc = {
@@ -63,7 +69,7 @@ const DEFAULT_LABELS: Required<LabelsDoc> = {
     vip_exclusive: "VIP حصري",
   },
   projectStatuses: {
-    draft: "مسودة",
+    draft: "قريبا",
     published: "منشور",
     closed: "مغلق",
     completed: "مكتمل",
@@ -105,6 +111,16 @@ function safeNumber(n: any) {
 
 function fmtSAR(n: any) {
   return safeNumber(n).toLocaleString("ar-SA") + " ر.س";
+}
+
+// ✅ يمنع كراش React لما تكون القيمة {ar,en}
+function pickLabel(v: unknown, lang: "ar" | "en" = "ar", fallback = "") {
+  if (typeof v === "string") return v;
+  if (v && typeof v === "object") {
+    const o = v as BiLabel;
+    return (lang === "ar" ? o.ar : o.en) || o.ar || o.en || fallback;
+  }
+  return fallback;
 }
 
 export default function ProjectsManagement() {
@@ -199,12 +215,12 @@ export default function ProjectsManagement() {
   ========================= */
   const typeLabel = (type?: string) => {
     if (!type) return "—";
-    return labels.projectTypes[type] || type;
+    return pickLabel(labels.projectTypes[type], "ar", type);
   };
 
   const statusLabel = (st?: string) => {
     if (!st) return "—";
-    return labels.projectStatuses[st] || st;
+    return pickLabel(labels.projectStatuses[st], "ar", st);
   };
 
   const statusBadgeVariant = (st?: string) => {
@@ -376,7 +392,7 @@ export default function ProjectsManagement() {
                   <SelectItem value="all">الكل</SelectItem>
                   {Object.keys(labels.projectTypes).map((k) => (
                     <SelectItem key={k} value={k}>
-                      {labels.projectTypes[k] || k}
+                      {pickLabel(labels.projectTypes[k], "ar", k)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -393,7 +409,7 @@ export default function ProjectsManagement() {
                   <SelectItem value="all">الكل</SelectItem>
                   {Object.keys(labels.projectStatuses).map((k) => (
                     <SelectItem key={k} value={k}>
-                      {labels.projectStatuses[k] || k}
+                      {pickLabel(labels.projectStatuses[k], "ar", k)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -423,7 +439,7 @@ export default function ProjectsManagement() {
 
           <Card>
             <CardContent className="py-5 space-y-1">
-              <div className="text-sm text-muted-foreground">المسودات</div>
+              <div className="text-sm text-muted-foreground">قريبا</div>
               <div className="text-2xl font-bold flex items-center gap-2">
                 <Clock className="w-5 h-5" />
                 {stats.draft}

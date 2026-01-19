@@ -1,8 +1,16 @@
-// client/src/pages/About.tsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import { Building2, Users, TrendingUp, Shield } from "lucide-react";
+import {
+  Building2,
+  Users,
+  TrendingUp,
+  Shield,
+  ScanSearch,
+  ShieldCheck,
+  Award,
+  Banknote,
+} from "lucide-react";
 import { db } from "@/_core/firebase";
 import { doc, getDoc } from "firebase/firestore";
 
@@ -17,15 +25,15 @@ import {
    Types
 ========================= */
 type AboutStats = {
-  projects: string; // e.g. "50+"
-  investors: string; // e.g. "500+"
-  annualReturn: string; // e.g. "15%"
-  totalInvestment: string; // e.g. "2B+"
+  projects: string;
+  investors: string;
+  annualReturn: string;
+  totalInvestment: string;
 };
 
 type ParsedStat = {
   value: number;
-  suffix: string; // "+", "%", "B+"
+  suffix: string;
 };
 
 function parseStat(input: string): ParsedStat {
@@ -53,35 +61,27 @@ function useCountUp(
   const [current, setCurrent] = useState(0);
   const rafRef = useRef<number | null>(null);
   const startRef = useRef<number | null>(null);
-  const fromRef = useRef(0);
 
   useEffect(() => {
     if (!start) return;
 
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
     startRef.current = null;
-    fromRef.current = 0;
     setCurrent(0);
 
-    const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
+    const easeOut = (t: number) => 1 - Math.pow(1 - t, 3);
 
     const tick = (ts: number) => {
       if (startRef.current == null) startRef.current = ts;
       const elapsed = ts - startRef.current;
       const t = Math.min(1, elapsed / durationMs);
-      const eased = easeOutCubic(t);
-
-      const val = fromRef.current + (target - fromRef.current) * eased;
-      setCurrent(val);
-
+      setCurrent(target * easeOut(t));
       if (t < 1) rafRef.current = requestAnimationFrame(tick);
     };
 
     rafRef.current = requestAnimationFrame(tick);
-
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
-      rafRef.current = null;
     };
   }, [start, target, durationMs]);
 
@@ -96,220 +96,131 @@ export default function About() {
     totalInvestment: "2B+",
   });
 
-  /* =========================
-     Load Firestore (optional)
-  ========================= */
+  /* Load Firestore */
   useEffect(() => {
-    const load = async () => {
+    (async () => {
       try {
         const snap = await getDoc(doc(db, "settings", "app", "about", "main"));
-        if (snap.exists()) {
-          const data = snap.data() as any;
-          if (data?.stats) setStatsData((prev) => ({ ...prev, ...data.stats }));
+        if (snap.exists() && snap.data()?.stats) {
+          setStatsData((p) => ({ ...p, ...snap.data()!.stats }));
         }
-      } catch {
-        // fallback silently
-      }
-    };
-    load();
+      } catch {}
+    })();
   }, []);
 
-  // ---------- Stats parsing ----------
   const parsed = useMemo(() => {
-    const p = parseStat(statsData.projects);
-    const i = parseStat(statsData.investors);
-    const a = parseStat(statsData.annualReturn);
-    const t = parseStat(statsData.totalInvestment);
-    return { p, i, a, t };
+    return {
+      p: parseStat(statsData.projects),
+      i: parseStat(statsData.investors),
+      a: parseStat(statsData.annualReturn),
+      t: parseStat(statsData.totalInvestment),
+    };
   }, [statsData]);
 
-  // ---------- Start animation when stats section is visible ----------
   const statsRef = useRef<HTMLElement | null>(null);
   const [statsInView, setStatsInView] = useState(false);
 
   useEffect(() => {
-    const el = statsRef.current;
-    if (!el) return;
-
+    if (!statsRef.current) return;
     const io = new IntersectionObserver(
-      (entries) => {
-        const e = entries[0];
-        if (e?.isIntersecting) {
+      ([e]) => {
+        if (e.isIntersecting) {
           setStatsInView(true);
-          io.disconnect(); // run once
+          io.disconnect();
         }
       },
       { threshold: 0.35 }
     );
-
-    io.observe(el);
+    io.observe(statsRef.current);
     return () => io.disconnect();
   }, []);
 
-  // Count ups (B option: animate all including 2B+)
-  const projectsCount = useCountUp(parsed.p.value, statsInView, {
-    durationMs: 1100,
-    decimals: parsed.p.value % 1 === 0 ? 0 : 1,
-  });
+  const projectsCount = useCountUp(parsed.p.value, statsInView);
+  const investorsCount = useCountUp(parsed.i.value, statsInView);
+  const annualReturnCount = useCountUp(parsed.a.value, statsInView);
+  const totalInvestmentCount = useCountUp(parsed.t.value, statsInView);
 
-  const investorsCount = useCountUp(parsed.i.value, statsInView, {
-    durationMs: 1200,
-    decimals: parsed.i.value % 1 === 0 ? 0 : 1,
-  });
+  const stats = [
+    {
+      icon: Building2,
+      label: "مشروع",
+      animated: projectsCount,
+      suffix: parsed.p.suffix,
+    },
+    {
+      icon: Users,
+      label: "مستثمر",
+      animated: investorsCount,
+      suffix: parsed.i.suffix,
+    },
+    {
+      icon: TrendingUp,
+      label: "عائد سنوي",
+      animated: annualReturnCount,
+      suffix: parsed.a.suffix,
+    },
+    {
+      icon: Shield,
+      label: "ريال استثمارات",
+      animated: totalInvestmentCount,
+      suffix: parsed.t.suffix,
+    },
+  ];
 
-  const annualReturnCount = useCountUp(parsed.a.value, statsInView, {
-    durationMs: 1000,
-    decimals: parsed.a.value % 1 === 0 ? 0 : 1,
-  });
+  const values = [
+    {
+      title: "الشفافية",
+      description: "نوفر معلومات واضحة ودقيقة عن جميع المشاريع والعوائد المتوقعة.",
+      icon: ScanSearch,
+    },
+    {
+      title: "الأمان",
+      description: "استثمارات متوافقة مع الشريعة ومدروسة بعناية فائقة.",
+      icon: ShieldCheck,
+    },
+    {
+      title: "الاحترافية",
+      description: "فريق متخصص بخبرات في الاستثمار والتطوير العقاري.",
+      icon: Award,
+    },
+    {
+      title: "العوائد المجزية",
+      description: "نركز على فرص تحقق عوائد مستدامة.",
+      icon: Banknote,
+    },
+  ];
 
-  const totalInvestmentCount = useCountUp(parsed.t.value, statsInView, {
-    durationMs: 1300,
-    decimals: parsed.t.value % 1 === 0 ? 0 : 1,
-  });
-
-  const stats = useMemo(
-    () => [
-      {
-        icon: Building2,
-        label: "مشروع",
-        animated: projectsCount,
-        suffix: parsed.p.suffix,
-      },
-      {
-        icon: Users,
-        label: "مستثمر",
-        animated: investorsCount,
-        suffix: parsed.i.suffix,
-      },
-      {
-        icon: TrendingUp,
-        label: "عائد سنوي",
-        animated: annualReturnCount,
-        suffix: parsed.a.suffix,
-      },
-      {
-        icon: Shield,
-        label: "ريال استثمارات",
-        animated: totalInvestmentCount,
-        suffix: parsed.t.suffix,
-      },
-    ],
-    [
-      projectsCount,
-      investorsCount,
-      annualReturnCount,
-      totalInvestmentCount,
-      parsed.p.suffix,
-      parsed.i.suffix,
-      parsed.a.suffix,
-      parsed.t.suffix,
-    ]
-  );
-
-  const values = useMemo(
-    () => [
-      {
-        title: "الشفافية",
-        description: "نوفر معلومات واضحة ودقيقة عن جميع المشاريع والعوائد المتوقعة.",
-        icon: "🔍",
-      },
-      {
-        title: "الأمان",
-        description: "استثمارات متوافقة مع الشريعة ومدروسة بعناية فائقة.",
-        icon: "🛡️",
-      },
-      {
-        title: "الاحترافية",
-        description: "فريق متخصص بخبرات في الاستثمار والتطوير العقاري.",
-        icon: "⭐",
-      },
-      {
-        title: "العوائد المجزية",
-        description: "نركز على فرص تحقق عوائد مستدامة على المدى المتوسط والطويل.",
-        icon: "💰",
-      },
-    ],
-    []
-  );
-
-  const faqs = useMemo(
-    () => [
-      {
-        q: "وش هي منصة معدن (MAEDIN)؟",
-        a: "منصة للاستثمار العقاري المتوافق مع الشريعة، نعرض فرصًا مدروسة بمعلومات واضحة، ونمكّن المستثمر من متابعة فرصه واستثماراته بشكل منظم.",
-      },
-      {
-        q: "كيف تختارون المشاريع؟",
-        a: "نقيم المشروع من عدة جوانب: الموقع، المخاطر، الجدوى، خطة التنفيذ، والسيناريوهات المتوقعة للعائد، ثم نعتمد ما يحقق توازنًا بين الأمان والعائد.",
-      },
-      {
-        q: "هل المنصة تدعم RTL واللغة العربية بالكامل؟",
-        a: "نعم. التصميم مبني ليكون Mobile-first وRTL-friendly، مع اهتمام بالخطوط والمسافات ومحاذاة النصوص والتفاعل.",
-      },
-      {
-        q: "كيف يكون التفاعل (Hover/Focus)؟",
-        a: "تفاعل هادئ وفخم: انتقالات قصيرة، بدون مبالغة، مع إبراز واضح في حالة التركيز (Focus) لأغراض الوصولية.",
-      },
-    ],
-    []
-  );
+  const faqs = [
+    { q: "وش هي منصة معدن؟", a: "منصة استثمار عقاري متوافق مع الشريعة." },
+    { q: "كيف تختارون المشاريع؟", a: "نقيمها من حيث المخاطر والعائد والتنفيذ." },
+    { q: "هل تدعم العربية و RTL؟", a: "نعم، التصميم عربي Mobile-first." },
+    { q: "كيف التفاعل؟", a: "تفاعل هادئ وفخم بدون إزعاج." },
+  ];
 
   return (
-    <div
-      className="rsg-page min-h-screen flex flex-col bg-background text-foreground"
-      dir="rtl"
-      lang="ar"
-    >
+    <div className="min-h-screen flex flex-col" dir="rtl">
       <Header />
 
-      <main className="flex-1 ">
-        {/* =========================
-            HERO (Dark)
-        ========================== */}
-        <section className="relative overflow-hidden bg-primary">
-          <div className="relative min-h-screen w-full">
-            <img
-              src="/about-poto1.jpg"
-              alt="عن معدن"
-              className="h-full w-full object-cover object-center opacity-95"
-              loading="lazy"
-            />
-            <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/35 to-black/70" />
-            <div className="absolute inset-0">
-              <div className="container h-full flex items-center justify-center">
-                <div className="w-full max-w-3xl text-center text-white pt-10">
-
-                  <h1 className="mt-4 text-4xl sm:text-5xl md:text-6xl font-bold leading-[1.1]">
-                    عن <span style={{ color: "var(--gold)" }}>معدن</span>
-                  </h1>
-
-                  <div className="mx-auto mt-4 h-[2px] w-16 rounded-full bg-white/60" />
-
-                  <p className="mt-5 sm:mt-6 text-base sm:text-lg text-white/85 leading-relaxed">
-                    منصة رائدة في الاستثمار العقاري المتوافق مع الشريعة الإسلامية، بتجربة
-                    هادئة وفخمة.
-                  </p>
-
-                  <div className="mt-8 flex items-center justify-center gap-3 sm:gap-4">
-                    <a
-                      href="#faq"
-                      className="inline-flex items-center justify-center rounded-full border border-white/30 px-6 py-3 text-sm font-medium text-white hover:bg-white/10 transition"
-                    >
-                      اقرأ المزيد
-                    </a>
-                    <a
-                      href="/projects"
-                      className="inline-flex items-center justify-center rounded-full bg-white px-6 py-3 text-sm font-medium text-[#0a1426] hover:opacity-95 transition"
-                    >
-                      تصفح المشاريع
-                    </a>
-                  </div>
-                </div>
-              </div>
+      <main className="flex-1">
+        {/* HERO */}
+        <section className="relative h-[100svh] pt-[96px] overflow-hidden bg-black">
+          <img
+            src="/about-poto1.jpg"
+            alt="عن معدن"
+            className="absolute inset-0 w-full h-full object-cover opacity-95"
+          />
+          <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/45 to-black/80" />
+          <div className="relative z-10 h-full flex items-center justify-center text-center text-white px-4">
+            <div className="max-w-3xl">
+              <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold">
+                عن <span style={{ color: "var(--gold)" }}>معدن</span>
+              </h1>
+              <div className="mx-auto mt-4 h-[2px] w-16 bg-white/60" />
+              <p className="mt-6 text-base sm:text-lg text-white/85">
+                منصة رائدة في الاستثمار العقاري المتوافق مع الشريعة الإسلامية.
+              </p>
             </div>
           </div>
-
-          <div className="h-px w-full bg-gradient-to-r from-transparent via-white/10 to-transparent" />
         </section>
 
         {/* =========================
@@ -323,8 +234,7 @@ export default function About() {
                   قصتنا
                 </p>
 
-
-                <h2 className="mt-3 text-3xl sm:text-4xl md:text-5xl font-bold leading-tight text-foreground">
+                <h2 className="mt-3 text-3xl sm:text-4xl md:text-5xl font-bold leading-tight text-foreground text-center lg:text-right">
                   استثمارٌ عقاريٌ
                   <span className="text-primary"> برؤية واضحة</span>
                 </h2>
@@ -332,7 +242,7 @@ export default function About() {
 
               <div className="lg:col-span-7">
                 <div className="rsg-card p-6 sm:p-8">
-                  <div className="text-muted-foreground leading-relaxed space-y-5 text-[15px] sm:text-base">
+                  <div className="text-muted-foreground leading-relaxed space-y-5 text-[15px] sm:text-base text-center lg:text-right">
                     <p>
                       تأسست <b className="text-foreground">معدن</b> بهدف توفير فرص
                       استثمارية عقارية متميزة للمستثمرين في المملكة العربية السعودية
@@ -343,7 +253,7 @@ export default function About() {
                       عوائد مجزية ومستدامة، مع تجربة استخدام هادئة ومريحة للمستثمر.
                     </p>
 
-                    <div className="pt-2">
+                    <div className="pt-2 flex justify-center lg:justify-start">
                       <a
                         href="/contact"
                         className="inline-flex items-center justify-center rounded-full border border-primary/35 px-6 py-3 text-sm font-medium text-foreground hover:bg-primary/10 transition"
@@ -363,7 +273,7 @@ export default function About() {
         {/* =========================
             STATS (Dark + CountUp)
         ========================== */}
-        <section ref={statsRef as any} className="section-dark py-20">
+        <section ref={statsRef as any} className="section-dark-soft py-20">
           <div className="container">
             <h2 className="mb-4 text-3xl sm:text-4xl md:text-5xl font-bold text-center">
               إنجازاتنا
@@ -372,9 +282,7 @@ export default function About() {
             <div className="mx-auto mb-10 h-[2px] w-20 rounded-full bg-white/25" />
 
             <div className="rounded-[28px] border border-white/10 bg-white/5 backdrop-blur p-6 sm:p-10">
-
               <div className="text-center max-w-2xl mx-auto">
-
                 <p className="mt-4 text-sm sm:text-base text-white/75 leading-relaxed">
                   مؤشرات مختصرة تعكس نمو المنصة، مع الحفاظ على المعايير والحوكمة.
                 </p>
@@ -400,9 +308,7 @@ export default function About() {
                         {stat.suffix}
                       </div>
 
-                      <div className="mt-1 text-sm text-white/70">
-                        {stat.label}
-                      </div>
+                      <div className="mt-1 text-sm text-white/70">{stat.label}</div>
                     </div>
                   );
                 })}
@@ -417,7 +323,6 @@ export default function About() {
         <section className="section-light py-20">
           <div className="container">
             <div className="flex flex-col items-center text-center">
-
               <h2 className="mt-3 text-2xl sm:text-3xl md:text-4xl font-bold text-foreground">
                 قيمنا الأساسية
               </h2>
@@ -427,25 +332,32 @@ export default function About() {
             </div>
 
             <div className="mt-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 sm:gap-6">
-              {values.map((v, i) => (
-                <div
-                  key={i}
-                  className="group rounded-3xl border bg-card/80 backdrop-blur px-5 sm:px-6 py-7 hover:bg-card transition"
-                >
-                  <div className="text-4xl mb-4">{v.icon}</div>
-                  <h3 className="text-lg sm:text-xl font-bold text-foreground mb-2">
-                    {v.title}
-                  </h3>
-                  <p className="text-sm sm:text-[15px] text-muted-foreground leading-relaxed">
-                    {v.description}
-                  </p>
+              {values.map((v, i) => {
+                const VIcon = v.icon;
+                return (
+                  <div
+                    key={i}
+                    className="group rounded-3xl border bg-card/80 backdrop-blur px-5 sm:px-6 py-7 hover:bg-card transition text-center"
+                  >
+                    <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full border border-border bg-background/60">
+                      <VIcon className="h-6 w-6 text-primary" />
+                    </div>
 
-                  <div className="mt-6 h-px w-full bg-gradient-to-r from-transparent via-border to-transparent" />
-                  <div className="mt-4 text-xs text-muted-foreground">
-                    اكتشف المزيد داخل الأسئلة الشائعة
+                    <h3 className="text-lg sm:text-xl font-bold text-foreground mb-2">
+                      {v.title}
+                    </h3>
+
+                    <p className="text-sm sm:text-[15px] text-muted-foreground leading-relaxed">
+                      {v.description}
+                    </p>
+
+                    <div className="mt-6 h-px w-full bg-gradient-to-r from-transparent via-border to-transparent" />
+                    <div className="mt-4 text-xs text-muted-foreground">
+                      اكتشف المزيد داخل الأسئلة الشائعة
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </section>
@@ -456,7 +368,7 @@ export default function About() {
         <section id="faq" className="section-dark py-20">
           <div className="container">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-12 items-center">
-              <div className="lg:col-span-5">
+              <div className="lg:col-span-5 text-center lg:text-right">
                 <p className="text-xs sm:text-sm text-white/70 tracking-wide">
                   الأسئلة الشائعة
                 </p>
@@ -473,11 +385,16 @@ export default function About() {
                 <div className="rounded-[28px] border border-white/10 bg-white/5 backdrop-blur p-4 sm:p-6">
                   <Accordion type="single" collapsible className="w-full">
                     {faqs.map((f, idx) => (
-                      <AccordionItem key={idx} value={`faq-${idx}`} className="border-white/10">
-                        <AccordionTrigger className="text-white">
+                      <AccordionItem
+                        key={idx}
+                        value={`faq-${idx}`}
+                        // @ts-ignore
+                        className="border-white/10"
+                      >
+                        <AccordionTrigger className="text-white text-right">
                           {f.q}
                         </AccordionTrigger>
-                        <AccordionContent className="text-white/75 leading-relaxed">
+                        <AccordionContent className="text-white/75 leading-relaxed text-right">
                           {f.a}
                         </AccordionContent>
                       </AccordionItem>
@@ -485,7 +402,7 @@ export default function About() {
                   </Accordion>
                 </div>
 
-                <div className="mt-8 flex items-center gap-3">
+                <div className="mt-8 flex items-center justify-center lg:justify-start gap-3">
                   <a
                     href="/contact"
                     className="inline-flex items-center justify-center rounded-full bg-white px-6 py-3 text-sm font-medium text-[#0a1426] hover:opacity-95 transition"
@@ -505,8 +422,8 @@ export default function About() {
         </section>
 
         {/* =========================
-    VISION (Light)
-========================== */}
+            VISION (Light)
+        ========================== */}
         <section className="section-light py-20">
           <div className="container">
             <div className="mx-auto max-w-4xl text-center">
@@ -548,7 +465,6 @@ export default function About() {
             </div>
           </div>
         </section>
-
       </main>
 
       <Footer />

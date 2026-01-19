@@ -283,7 +283,7 @@ export default function CreateProject() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="draft">مسودة</SelectItem>
+                      <SelectItem value="draft">قريبا</SelectItem>
                       <SelectItem value="published">منشور</SelectItem>
                       <SelectItem value="closed">مغلق</SelectItem>
                       <SelectItem value="completed">مكتمل</SelectItem>

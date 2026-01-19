@@ -21,22 +21,23 @@ import {
 } from "@/components/ui/sidebar";
 import { getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
-import { 
-  LayoutDashboard, 
-  LogOut, 
-  PanelLeft, 
-  Users, 
+import {
+  LayoutDashboard,
+  LogOut,
+  PanelLeft,
+  Users,
   Building2,
   DollarSign,
   MessageSquare,
   FileText,
   Settings,
   Crown,
-  BarChart3
+  BarChart3,
+  Home,
 } from "lucide-react";
-import { CSSProperties, useEffect, useRef, useState } from "react";
+import { CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
-import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
+import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
 import { Button } from "./ui/button";
 
 const menuItems = [
@@ -56,6 +57,150 @@ const DEFAULT_WIDTH = 280;
 const MIN_WIDTH = 200;
 const MAX_WIDTH = 480;
 
+/* =========================
+   Name + Role helpers
+========================= */
+
+function hasArabic(text: string) {
+  return /[\u0600-\u06FF]/.test(text);
+}
+
+function splitLocalPart(local: string) {
+  // naf_aliyan.123 -> ["naf","aliyan"]
+  const cleaned = local
+    .replace(/\+/g, " ")
+    .replace(/[._-]+/g, " ")
+    .replace(/\d+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  // دعم camelCase
+  const camel = cleaned.replace(/([a-z])([A-Z])/g, "$1 $2");
+
+  return camel
+    .split(" ")
+    .map((w) => w.trim())
+    .filter(Boolean)
+    .slice(0, 4); // لا نطوّل
+}
+
+function titleCaseLatin(w: string) {
+  if (!w) return w;
+  return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+}
+
+// تحويل تقريبي (Transliteration) من اللاتيني للعربي — مو 100% لكن يعطي اسم “مقروء”
+function latinToArabicApprox(word: string) {
+  const w = word.toLowerCase();
+
+  // بعض التركيبات الشائعة أولاً
+  const digraphs: Array<[RegExp, string]> = [
+    [/sh/g, "ش"],
+    [/ch/g, "تش"],
+    [/kh/g, "خ"],
+    [/th/g, "ث"],
+    [/dh/g, "ذ"],
+    [/gh/g, "غ"],
+    [/ph/g, "ف"],
+    [/aa/g, "ا"],
+    [/ee/g, "ي"],
+    [/oo/g, "و"],
+    [/ou/g, "و"],
+    [/ai/g, "اي"],
+    [/ei/g, "اي"],
+  ];
+
+  let s = w;
+  for (const [re, ar] of digraphs) s = s.replace(re, ar);
+
+  // تحويل حرف بحرف
+  const map: Record<string, string> = {
+    a: "ا",
+    b: "ب",
+    c: "ك",
+    d: "د",
+    e: "ي",
+    f: "ف",
+    g: "ج",
+    h: "ه",
+    i: "ي",
+    j: "ج",
+    k: "ك",
+    l: "ل",
+    m: "م",
+    n: "ن",
+    o: "و",
+    p: "ب",
+    q: "ق",
+    r: "ر",
+    s: "س",
+    t: "ت",
+    u: "و",
+    v: "ف",
+    w: "و",
+    x: "كس",
+    y: "ي",
+    z: "ز",
+  };
+
+  let out = "";
+  for (const ch of s) {
+    if (map[ch]) out += map[ch];
+    else if (ch === " ") out += " ";
+    // تجاهل أي رموز أخرى
+  }
+
+  // تنظيف المسافات
+  out = out.replace(/\s+/g, " ").trim();
+  return out || word;
+}
+
+function nameFromEmail(email?: string) {
+  if (!email) return "مستخدم";
+  const local = email.split("@")[0] ?? "";
+  if (!local) return "مستخدم";
+
+  // لو أصلاً عربي
+  if (hasArabic(local)) {
+    const parts = splitLocalPart(local);
+    return parts.length ? parts.join(" ") : local;
+  }
+
+  const parts = splitLocalPart(local);
+  if (!parts.length) return "مستخدم";
+
+  // “تعريب” الاسم (تقريبي)
+  const arParts = parts.map((p) => latinToArabicApprox(p));
+  const arName = arParts.join(" ").trim();
+
+  // إذا التعريب طلع غريب جدًا، نعرض نسخة مرتبة إنجليزي كخطة بديلة
+  if (!arName || arName.length < 2) {
+    return parts.map(titleCaseLatin).join(" ");
+  }
+
+  return arName;
+}
+
+function normalizeRole(raw: any): "owner" | "admin" | "accountant" | "staff" | "" {
+  if (!raw) return "";
+  const r = String(raw).toLowerCase();
+
+  if (r.includes("owner")) return "owner";
+  if (r.includes("admin")) return "admin";
+  if (r.includes("account")) return "accountant";
+  if (r.includes("staff") || r.includes("reception")) return "staff";
+
+  return "";
+}
+
+function roleLabelAr(rawRole: any) {
+  const role = normalizeRole(rawRole);
+  if (role === "owner" || role === "admin") return "اونر";
+  if (role === "accountant") return "محاسب";
+  if (role === "staff") return "استاف";
+  return "";
+}
+
 export default function DashboardLayout({
   children,
 }: {
@@ -65,15 +210,14 @@ export default function DashboardLayout({
     const saved = localStorage.getItem(SIDEBAR_WIDTH_KEY);
     return saved ? parseInt(saved, 10) : DEFAULT_WIDTH;
   });
+
   const { loading, user } = useAuth();
 
   useEffect(() => {
     localStorage.setItem(SIDEBAR_WIDTH_KEY, sidebarWidth.toString());
   }, [sidebarWidth]);
 
-  if (loading) {
-    return <DashboardLayoutSkeleton />
-  }
+  if (loading) return <DashboardLayoutSkeleton />;
 
   if (!user) {
     return (
@@ -84,7 +228,8 @@ export default function DashboardLayout({
               Sign in to continue
             </h1>
             <p className="text-sm text-muted-foreground text-center max-w-sm">
-              Access to this dashboard requires authentication. Continue to launch the login flow.
+              Access to this dashboard requires authentication. Continue to launch
+              the login flow.
             </p>
           </div>
           <Button
@@ -131,13 +276,32 @@ function DashboardLayoutContent({
   const isCollapsed = state === "collapsed";
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
-  const activeMenuItem = menuItems.find(item => item.path === location);
+  const activeMenuItem = menuItems.find((item) => item.path === location);
   const isMobile = useIsMobile();
 
+  // ✅ اسم العرض: يفضّل user.name، وإلا من الإيميل (بالعربي)
+  const displayName = useMemo(() => {
+    const n = String((user as any)?.name ?? "").trim();
+    if (n && n !== "-" && n.length >= 2) return n;
+    return nameFromEmail((user as any)?.email);
+  }, [user]);
+
+  // ✅ الدور: يدعم role أو roles[0] أو userRole
+  const roleRaw =
+    (user as any)?.role ??
+    (Array.isArray((user as any)?.roles) ? (user as any)?.roles?.[0] : undefined) ??
+    (user as any)?.userRole ??
+    (user as any)?.accountRole;
+
+  const roleText = useMemo(() => roleLabelAr(roleRaw), [roleRaw]);
+
+  const displayNameWithRole = useMemo(() => {
+    if (!roleText) return displayName;
+    return `${displayName} (${roleText})`;
+  }, [displayName, roleText]);
+
   useEffect(() => {
-    if (isCollapsed) {
-      setIsResizing(false);
-    }
+    if (isCollapsed) setIsResizing(false);
   }, [isCollapsed]);
 
   useEffect(() => {
@@ -151,9 +315,7 @@ function DashboardLayoutContent({
       }
     };
 
-    const handleMouseUp = () => {
-      setIsResizing(false);
-    };
+    const handleMouseUp = () => setIsResizing(false);
 
     if (isResizing) {
       document.addEventListener("mousemove", handleMouseMove);
@@ -179,7 +341,7 @@ function DashboardLayoutContent({
           disableTransition={isResizing}
         >
           <SidebarHeader className="h-16 justify-center">
-            <div className="flex items-center gap-3 px-2 transition-all w-full">
+            <div className="flex items-center gap-2 px-2 transition-all w-full">
               <button
                 onClick={toggleSidebar}
                 className="h-8 w-8 flex items-center justify-center hover:bg-accent rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring shrink-0"
@@ -187,19 +349,35 @@ function DashboardLayoutContent({
               >
                 <PanelLeft className="h-4 w-4 text-muted-foreground" />
               </button>
+
               {!isCollapsed ? (
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="font-semibold tracking-tight truncate text-[#F2B705]">
-                    معدن
-                  </span>
-                </div>
+                <>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="font-semibold tracking-tight truncate text-[#F2B705]">
+                      معدن
+                    </span>
+                  </div>
+
+                  {/* ✅ زر الرئيسية */}
+                  <div className="ml-auto">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-2"
+                      onClick={() => setLocation("/")}
+                    >
+                      <Home className="h-4 w-4" />
+                      الرئيسية
+                    </Button>
+                  </div>
+                </>
               ) : null}
             </div>
           </SidebarHeader>
 
           <SidebarContent className="gap-0">
             <SidebarMenu className="px-2 py-1">
-              {menuItems.map(item => {
+              {menuItems.map((item) => {
                 const isActive = location === item.path;
                 return (
                   <SidebarMenuItem key={item.path}>
@@ -207,7 +385,7 @@ function DashboardLayoutContent({
                       isActive={isActive}
                       onClick={() => setLocation(item.path)}
                       tooltip={item.label}
-                      className={`h-10 transition-all font-normal`}
+                      className="h-10 transition-all font-normal"
                     >
                       <item.icon
                         className={`h-4 w-4 ${isActive ? "text-primary" : ""}`}
@@ -226,19 +404,20 @@ function DashboardLayoutContent({
                 <button className="flex items-center gap-3 rounded-lg px-1 py-1 hover:bg-accent/50 transition-colors w-full text-left group-data-[collapsible=icon]:justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                   <Avatar className="h-9 w-9 border shrink-0">
                     <AvatarFallback className="text-xs font-medium">
-                      {user?.name?.charAt(0).toUpperCase()}
+                      {String(displayName ?? "م").charAt(0)}
                     </AvatarFallback>
                   </Avatar>
                   <div className="flex-1 min-w-0 group-data-[collapsible=icon]:hidden">
                     <p className="text-sm font-medium truncate leading-none">
-                      {user?.name || "-"}
+                      {displayNameWithRole}
                     </p>
                     <p className="text-xs text-muted-foreground truncate mt-1.5">
-                      {user?.email || "-"}
+                      {(user as any)?.email || "-"}
                     </p>
                   </div>
                 </button>
               </DropdownMenuTrigger>
+
               <DropdownMenuContent align="end" className="w-48">
                 <DropdownMenuItem
                   onClick={logout}
@@ -251,8 +430,11 @@ function DashboardLayoutContent({
             </DropdownMenu>
           </SidebarFooter>
         </Sidebar>
+
         <div
-          className={`absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/20 transition-colors ${isCollapsed ? "hidden" : ""}`}
+          className={`absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/20 transition-colors ${
+            isCollapsed ? "hidden" : ""
+          }`}
           onMouseDown={() => {
             if (isCollapsed) return;
             setIsResizing(true);
@@ -274,8 +456,20 @@ function DashboardLayoutContent({
                 </div>
               </div>
             </div>
+
+            {/* ✅ زر الرئيسية في الموبايل */}
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={() => setLocation("/")}
+            >
+              <Home className="h-4 w-4" />
+              الرئيسية
+            </Button>
           </div>
         )}
+
         <main className="flex-1 p-4">{children}</main>
       </SidebarInset>
     </>

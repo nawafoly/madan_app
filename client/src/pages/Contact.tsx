@@ -1,20 +1,32 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+
 import { toast } from "sonner";
 import { Mail, Phone, MapPin, Clock } from "lucide-react";
-import type { FormEvent } from "react";
 
-// ًں”¥ Firestore
+// Firestore
 import { addDoc, collection, serverTimestamp } from "firebase/firestore";
 import { db } from "@/_core/firebase";
 
+type ContactForm = {
+  name: string;
+  email: string;
+  phone: string;
+  subject: string;
+  message: string;
+};
+
 export default function Contact() {
   const [loading, setLoading] = useState(false);
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<ContactForm>({
     name: "",
     email: "",
     phone: "",
@@ -22,11 +34,41 @@ export default function Contact() {
     message: "",
   });
 
+  const contactInfo = useMemo(
+    () => [
+      {
+        icon: Mail,
+        title: "البريد الإلكتروني",
+        value: "info@maedin.sa",
+        link: "mailto:info@maedin.sa",
+      },
+      {
+        icon: Phone,
+        title: "الهاتف",
+        value: "+966 11 234 5678",
+        link: "tel:+966112345678",
+      },
+      {
+        icon: MapPin,
+        title: "العنوان",
+        value: "الرياض، المملكة العربية السعودية",
+        link: null as string | null,
+      },
+      {
+        icon: Clock,
+        title: "ساعات العمل",
+        value: "الأحد - الخميس: 9 صباحاً - 5 مساءً",
+        link: null as string | null,
+      },
+    ],
+    []
+  );
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.name || !formData.email || !formData.message) {
-      toast.error("ط§ظ„ط±ط¬ط§ط، ظ…ظ„ط، ط¬ظ…ظٹط¹ ط§ظ„ط­ظ‚ظˆظ„ ط§ظ„ظ…ط·ظ„ظˆط¨ط©");
+    if (!formData.name.trim() || !formData.email.trim() || !formData.message.trim()) {
+      toast.error("الرجاء تعبئة الحقول المطلوبة");
       return;
     }
 
@@ -34,16 +76,16 @@ export default function Contact() {
       setLoading(true);
 
       await addDoc(collection(db, "contact_messages"), {
-        name: formData.name,
-        email: formData.email,
-        phone: formData.phone || null,
-        subject: formData.subject || null,
-        message: formData.message,
+        name: formData.name.trim(),
+        email: formData.email.trim(),
+        phone: formData.phone.trim() || null,
+        subject: formData.subject.trim() || null,
+        message: formData.message.trim(),
         status: "new",
         createdAt: serverTimestamp(),
       });
 
-      toast.success("طھظ… ط¥ط±ط³ط§ظ„ ط±ط³ط§ظ„طھظƒ ط¨ظ†ط¬ط§ط­! ط³ظ†طھظˆط§طµظ„ ظ…ط¹ظƒ ظ‚ط±ظٹط¨ط§ظ‹");
+      toast.success("تم إرسال رسالتك بنجاح! سنتواصل معك قريباً.");
 
       setFormData({
         name: "",
@@ -54,145 +96,163 @@ export default function Contact() {
       });
     } catch (err) {
       console.error(err);
-      toast.error("ظپط´ظ„ ط¥ط±ط³ط§ظ„ ط§ظ„ط±ط³ط§ظ„ط©طŒ ط­ط§ظˆظ„ ظ…ط±ط© ط£ط®ط±ظ‰");
+      toast.error("فشل إرسال الرسالة، حاول مرة أخرى");
     } finally {
       setLoading(false);
     }
   };
 
-  const contactInfo = [
-    {
-      icon: Mail,
-      title: "ط§ظ„ط¨ط±ظٹط¯ ط§ظ„ط¥ظ„ظƒطھط±ظˆظ†ظٹ",
-      value: "info@maedin.sa",
-      link: "mailto:info@maedin.sa",
-    },
-    {
-      icon: Phone,
-      title: "ط§ظ„ظ‡ط§طھظپ",
-      value: "+966 11 234 5678",
-      link: "tel:+966112345678",
-    },
-    {
-      icon: MapPin,
-      title: "ط§ظ„ط¹ظ†ظˆط§ظ†",
-      value: "ط§ظ„ط±ظٹط§ط¶طŒ ط§ظ„ظ…ظ…ظ„ظƒط© ط§ظ„ط¹ط±ط¨ظٹط© ط§ظ„ط³ط¹ظˆط¯ظٹط©",
-      link: null,
-    },
-    {
-      icon: Clock,
-      title: "ط³ط§ط¹ط§طھ ط§ظ„ط¹ظ…ظ„",
-      value: "ط§ظ„ط£ط­ط¯ - ط§ظ„ط®ظ…ظٹط³: 9 طµط¨ط§ط­ط§ظ‹ - 5 ظ…ط³ط§ط،ظ‹",
-      link: null,
-    },
-  ];
-
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <Header />
 
-      <main className="flex-1 ">
-        {/* Hero */}
-        <section className="bg-gradient-to-b from-[#030640] to-background py-20">
-          <div className="container text-center max-w-3xl mx-auto">
-            <h1 className="text-4xl md:text-5xl font-bold text-white mb-6">
-              طھظˆط§طµظ„ ظ…ط¹ظ†ط§
-            </h1>
-            <p className="text-xl text-gray-300">
-              ظ†ط­ظ† ظ‡ظ†ط§ ظ„ظ„ط¥ط¬ط§ط¨ط© ط¹ظ„ظ‰ ط¬ظ…ظٹط¹ ط§ط³طھظپط³ط§ط±ط§طھظƒ
-            </p>
+      <main className="flex-1">
+        {/* Hero (موحّد + عنوان واضح) */}
+        <section className="border-b border-border/60 bg-background">
+          <div className="container py-12 md:py-16">
+            <div className="mx-auto max-w-3xl text-center">
+              <h1 className="text-4xl md:text-5xl font-bold tracking-tight">
+                تواصل معنا
+              </h1>
+
+              <p className="mt-4 text-base md:text-lg text-muted-foreground">
+                نحن هنا للإجابة على جميع استفساراتك. اكتب رسالتك وسنعود لك في أقرب وقت ممكن.
+              </p>
+
+              {/* خط بسيط للفخامة والتنظيم */}
+              <div className="mx-auto mt-8 h-px w-24 bg-border" />
+            </div>
           </div>
         </section>
 
-        {/* Info */}
-        <section className="py-16">
+
+        <section className="py-10 md:py-14">
           <div className="container">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-16">
+            {/* Info cards (كروت موحّدة) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
               {contactInfo.map((info, index) => {
                 const Icon = info.icon;
-                const card = (
-                  <div className="bg-card border border-border rounded-xl p-6 text-center hover:shadow-lg transition-shadow h-full">
-                    <Icon className="w-10 h-10 mx-auto mb-4 text-[#F2B705]" />
-                    <h3 className="font-semibold mb-2">{info.title}</h3>
-                    <p className="text-sm text-muted-foreground">{info.value}</p>
-                  </div>
+
+                const CardInner = (
+                  <Card className="h-full rounded-2xl border-border/70 bg-card/60 backdrop-blur supports-[backdrop-filter]:bg-card/50 transition hover:shadow-md">
+                    <CardContent className="p-6 text-center">
+                      <div className="mx-auto mb-4 grid h-12 w-12 place-items-center rounded-2xl border border-border/70 bg-background">
+                        <Icon className="h-6 w-6 text-primary" />
+                      </div>
+                      <h3 className="font-semibold">{info.title}</h3>
+                      <p className="mt-2 text-sm text-muted-foreground">{info.value}</p>
+                    </CardContent>
+                  </Card>
                 );
+
                 return info.link ? (
-                  <a key={index} href={info.link}>
-                    {card}
+                  <a
+                    key={index}
+                    href={info.link}
+                    className="block rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                  >
+                    {CardInner}
                   </a>
                 ) : (
-                  <div key={index}>{card}</div>
+                  <div key={index}>{CardInner}</div>
                 );
               })}
             </div>
 
-            {/* Form */}
-            <div className="max-w-3xl mx-auto">
-              <div className="bg-card border border-border rounded-2xl p-8 md:p-12">
-                <h2 className="text-3xl font-bold mb-6 text-center">
-                  ط£ط±ط³ظ„ ظ„ظ†ط§ ط±ط³ط§ظ„ط©
-                </h2>
+            {/* Form (Card موحد) */}
+            <div className="mt-10 md:mt-14">
+              <Card className="max-w-3xl mx-auto rounded-3xl border-border/70 bg-card/70 backdrop-blur supports-[backdrop-filter]:bg-card/60">
+                <CardHeader className="pb-0">
+                  <CardTitle className="text-center text-2xl md:text-3xl">
+                    أرسل لنا رسالة
+                  </CardTitle>
+                </CardHeader>
 
-                <form onSubmit={handleSubmit} className="space-y-6">
-                  <div className="grid md:grid-cols-2 gap-6">
-                    <Input
-                      placeholder="ط§ظ„ط§ط³ظ… ط§ظ„ظƒط§ظ…ظ„ *"
-                      value={formData.name}
-                      onChange={(e) =>
-                        setFormData({ ...formData, name: e.target.value })
-                      }
-                      required
-                    />
-                    <Input
-                      type="email"
-                      placeholder="ط§ظ„ط¨ط±ظٹط¯ ط§ظ„ط¥ظ„ظƒطھط±ظˆظ†ظٹ *"
-                      value={formData.email}
-                      onChange={(e) =>
-                        setFormData({ ...formData, email: e.target.value })
-                      }
-                      required
-                    />
-                  </div>
+                <CardContent className="p-6 md:p-10">
+                  <Separator className="mb-8" />
 
-                  <div className="grid md:grid-cols-2 gap-6">
-                    <Input
-                      placeholder="ط±ظ‚ظ… ط§ظ„ظ‡ط§طھظپ"
-                      dir="ltr"
-                      value={formData.phone}
-                      onChange={(e) =>
-                        setFormData({ ...formData, phone: e.target.value })
-                      }
-                    />
-                    <Input
-                      placeholder="ط§ظ„ظ…ظˆط¶ظˆط¹"
-                      value={formData.subject}
-                      onChange={(e) =>
-                        setFormData({ ...formData, subject: e.target.value })
-                      }
-                    />
-                  </div>
+                  <form onSubmit={handleSubmit} className="space-y-6">
+                    <div className="grid md:grid-cols-2 gap-4 md:gap-6">
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">الاسم الكامل</label>
+                        <Input
+                          placeholder="مثال: أحمد محمد"
+                          value={formData.name}
+                          onChange={(e) =>
+                            setFormData({ ...formData, name: e.target.value })
+                          }
+                          required
+                        />
+                      </div>
 
-                  <Textarea
-                    rows={6}
-                    placeholder="ط§ظƒطھط¨ ط±ط³ط§ظ„طھظƒ ظ‡ظ†ط§... *"
-                    value={formData.message}
-                    onChange={(e) =>
-                      setFormData({ ...formData, message: e.target.value })
-                    }
-                    required
-                  />
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">البريد الإلكتروني</label>
+                        <Input
+                          type="email"
+                          placeholder="name@example.com"
+                          value={formData.email}
+                          onChange={(e) =>
+                            setFormData({ ...formData, email: e.target.value })
+                          }
+                          required
+                          dir="ltr"
+                        />
+                      </div>
+                    </div>
 
-                  <Button
-                    type="submit"
-                    size="lg"
-                    disabled={loading}
-                    className="w-full bg-[#F2B705] hover:bg-[#d9a304] text-black text-lg"
-                  >
-                    {loading ? "ط¬ط§ط±ظٹ ط§ظ„ط¥ط±ط³ط§ظ„..." : "ط¥ط±ط³ط§ظ„ ط§ظ„ط±ط³ط§ظ„ط©"}
-                  </Button>
-                </form>
-              </div>
+                    <div className="grid md:grid-cols-2 gap-4 md:gap-6">
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">رقم الهاتف</label>
+                        <Input
+                          placeholder="+966 5X XXX XXXX"
+                          value={formData.phone}
+                          onChange={(e) =>
+                            setFormData({ ...formData, phone: e.target.value })
+                          }
+                          dir="ltr"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">الموضوع</label>
+                        <Input
+                          placeholder="مثال: استفسار عن الاستثمار"
+                          value={formData.subject}
+                          onChange={(e) =>
+                            setFormData({ ...formData, subject: e.target.value })
+                          }
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">الرسالة</label>
+                      <Textarea
+                        rows={7}
+                        placeholder="اكتب رسالتك هنا..."
+                        value={formData.message}
+                        onChange={(e) =>
+                          setFormData({ ...formData, message: e.target.value })
+                        }
+                        required
+                      />
+                    </div>
+
+                    <Button
+                      type="submit"
+                      size="lg"
+                      disabled={loading}
+                      className="w-full rounded-2xl"
+                    >
+                      {loading ? "جاري الإرسال..." : "إرسال الرسالة"}
+                    </Button>
+
+                    <p className="text-center text-xs text-muted-foreground">
+                      بالإرسال أنت توافق على استخدام بياناتك للتواصل معك فقط.
+                    </p>
+                  </form>
+                </CardContent>
+              </Card>
             </div>
           </div>
         </section>

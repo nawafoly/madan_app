@@ -252,7 +252,7 @@ export default function Settings() {
       vip_exclusive: { ar: "VIP حصري", en: "VIP Exclusive" },
     },
     projectStatuses: {
-      draft: { ar: "مسودة", en: "Draft" },
+      draft: { ar: "قريبا", en: "Draft" },
       published: { ar: "منشور", en: "Published" },
       closed: { ar: "مغلق", en: "Closed" },
       completed: { ar: "مكتمل", en: "Completed" },
