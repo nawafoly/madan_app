@@ -10,7 +10,7 @@ const firebaseConfig = {
   storageBucket:
     (
       import.meta.env.VITE_FB_STORAGE_BUCKET ??
-      `${import.meta.env.VITE_FB_PROJECT_ID}.firebasestorage.app`
+      `${import.meta.env.VITE_FB_PROJECT_ID}.appspot.com`
     ).trim(),
   messagingSenderId: (import.meta.env.VITE_FB_MESSAGING_SENDER_ID ?? "").trim(),
   appId: (import.meta.env.VITE_FB_APP_ID ?? "").trim(),

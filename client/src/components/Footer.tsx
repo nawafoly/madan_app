@@ -1,3 +1,4 @@
+// client/src/components/Footer.tsx
 import { Link } from "wouter";
 import {
   Facebook,
@@ -13,146 +14,142 @@ export default function Footer() {
   const currentYear = new Date().getFullYear();
 
   return (
-    <footer className="border-t border-border bg-background">
-      <div className="container py-12">
+    <footer className="section-dark-creative border-t border-white/10" dir="rtl">
+      <div className="container py-12 relative z-10">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
           {/* Company Info */}
           <div>
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-xl border border-border bg-muted flex items-center justify-center">
-                <span className="text-2xl font-bold">M</span>
+              <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-md">
+                <img
+                  src="/logo.png"
+                  alt="MAEDIN"
+                  className="w-7 h-7 object-contain"
+                />
               </div>
-              <span className="text-2xl font-bold">MAEDIN</span>
+
+
+              <div className="flex flex-col leading-tight">
+                <span className="text-2xl font-bold text-white">MAEDIN</span>
+                <span className="text-xs text-white/60">
+                  منصة الاستثمار العقاري
+                </span>
+              </div>
             </div>
 
-            <p className="text-muted-foreground mb-4 leading-relaxed">
+            <p className="text-white/70 mb-4 leading-relaxed">
               منصة الاستثمار العقاري الرائدة التي تربط المستثمرين بفرص التطوير
               العقاري المتميزة
             </p>
 
             <div className="flex gap-3">
-              {[
-                { Icon: Facebook, href: "#" },
-                { Icon: Twitter, href: "#" },
-                { Icon: Instagram, href: "#" },
-                { Icon: Linkedin, href: "#" },
-              ].map(({ Icon, href }, i) => (
-                <a
+              {[Facebook, Twitter, Instagram, Linkedin].map((Icon, i) => (
+                <span
                   key={i}
-                  href={href}
-                  className="w-9 h-9 rounded-full border border-border bg-muted/40 hover:bg-muted transition-colors flex items-center justify-center"
-                  aria-label="social"
+                  className="w-9 h-9 rounded-full border border-white/10 bg-white/5 hover:bg-white/10 transition-colors flex items-center justify-center cursor-not-allowed opacity-70"
                 >
-                  <Icon className="w-4 h-4 text-foreground/80" />
-                </a>
+                  <Icon className="w-4 h-4 text-white/80" />
+                </span>
               ))}
             </div>
           </div>
 
           {/* Quick Links */}
           <div>
-            <h3 className="text-lg font-bold mb-4">روابط سريعة</h3>
+            <h3 className="text-lg font-bold mb-4 text-white">روابط سريعة</h3>
             <ul className="space-y-2">
-              <li>
-                <Link href="/">
-                  <span className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
-                    الرئيسية
-                  </span>
-                </Link>
-              </li>
-              <li>
-                <Link href="/projects">
-                  <span className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
-                    المشاريع
-                  </span>
-                </Link>
-              </li>
-              <li>
-                <Link href="/about">
-                  <span className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
-                    عن معدن
-                  </span>
-                </Link>
-              </li>
-              <li>
-                <Link href="/contact">
-                  <span className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
-                    تواصل معنا
-                  </span>
-                </Link>
-              </li>
+              {[
+                { href: "/", label: "الرئيسية" },
+                { href: "/projects", label: "المشاريع" },
+                { href: "/about", label: "عن معدن" },
+                { href: "/contact", label: "تواصل معنا" },
+              ].map((item) => (
+                <li key={item.href}>
+                  <Link href={item.href}>
+                    <span className="text-white/70 hover:text-white transition-colors cursor-pointer">
+                      {item.label}
+                    </span>
+                  </Link>
+                </li>
+              ))}
             </ul>
           </div>
 
           {/* Investment Types */}
           <div>
-            <h3 className="text-lg font-bold mb-4">أنواع الاستثمار</h3>
+            <h3 className="text-lg font-bold mb-4 text-white">
+              أنواع الاستثمار
+            </h3>
             <ul className="space-y-2">
-              <li>
-                <Link href="/projects?type=sukuk">
-                  <span className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
-                    استثمار بالصكوك
-                  </span>
-                </Link>
-              </li>
-              <li>
-                <Link href="/projects?type=land_development">
-                  <span className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
-                    تطوير الأراضي
-                  </span>
-                </Link>
-              </li>
-              <li>
-                <Link href="/vip">
-                  <span className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
-                    برنامج VIP
-                  </span>
-                </Link>
-              </li>
+              {[
+                { href: "/projects?type=sukuk", label: "استثمار بالصكوك" },
+                {
+                  href: "/projects?type=land_development",
+                  label: "تطوير الأراضي",
+                },
+                { href: "/vip", label: "برنامج VIP" },
+              ].map((item) => (
+                <li key={item.href}>
+                  <Link href={item.href}>
+                    <span className="text-white/70 hover:text-white transition-colors cursor-pointer">
+                      {item.label}
+                    </span>
+                  </Link>
+                </li>
+              ))}
             </ul>
           </div>
 
           {/* Contact Info */}
           <div>
-            <h3 className="text-lg font-bold mb-4">تواصل معنا</h3>
+            <h3 className="text-lg font-bold mb-4 text-white">تواصل معنا</h3>
             <ul className="space-y-3">
               <li className="flex items-start gap-3">
-                <MapPin className="w-5 h-5 text-foreground/80 mt-1 flex-shrink-0" />
-                <span className="text-muted-foreground">
+                <MapPin className="w-5 h-5 text-white/80 mt-1 flex-shrink-0" />
+                <span className="text-white/70">
                   الرياض، المملكة العربية السعودية
                 </span>
               </li>
 
               <li className="flex items-center gap-3">
-                <Phone className="w-5 h-5 text-foreground/80 flex-shrink-0" />
-                <span className="text-muted-foreground" dir="ltr">
+                <Phone className="w-5 h-5 text-white/80 flex-shrink-0" />
+                <a
+                  href="tel:+966501234567"
+                  className="text-white/70 hover:text-white transition-colors"
+                  dir="ltr"
+                >
                   +966 50 123 4567
-                </span>
+                </a>
               </li>
 
               <li className="flex items-center gap-3">
-                <Mail className="w-5 h-5 text-foreground/80 flex-shrink-0" />
-                <span className="text-muted-foreground">info@maedin.sa</span>
+                <Mail className="w-5 h-5 text-white/80 flex-shrink-0" />
+                <a
+                  href="mailto:info@maedin.sa"
+                  className="text-white/70 hover:text-white transition-colors"
+                >
+                  info@maedin.sa
+                </a>
               </li>
             </ul>
           </div>
         </div>
 
         {/* Bottom Bar */}
-        <div className="border-t border-border mt-10 pt-8 flex flex-col md:flex-row justify-between items-center gap-4">
-          <p className="text-muted-foreground text-sm">
+        <div className="border-t border-white/10 mt-10 pt-8 flex flex-col md:flex-row justify-between items-center gap-4">
+          <p className="text-white/60 text-sm">
             © {currentYear} MAEDIN. جميع الحقوق محفوظة.
           </p>
 
           <div className="flex gap-6 text-sm">
             <Link href="/privacy">
-              <span className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
+              <span className="text-white/60 hover:text-white transition-colors cursor-pointer">
                 سياسة الخصوصية
               </span>
             </Link>
 
             <Link href="/terms">
-              <span className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
+              <span className="text-white/60 hover:text-white transition-colors cursor-pointer">
                 الشروط والأحكام
               </span>
             </Link>

@@ -1,11 +1,11 @@
 // client/src/pages/Home.tsx
-import { useEffect, useMemo, useState } from "react";
-import { Link } from "wouter";
+import { useEffect, useRef, useState } from "react";
+import { Link, useLocation } from "wouter";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import VideoModal from "@/components/VideoModal";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, Play } from "lucide-react";
+import { ArrowRight, Play, CheckCircle2, Shield, TrendingUp, Sparkles } from "lucide-react";
 import { useDragScroll } from "@/hooks/useDragScroll";
 
 // ✅ Sections
@@ -22,19 +22,21 @@ import {
   collection,
   doc,
   getDoc,
-  getDocs,
+  onSnapshot,
   orderBy,
   query,
-  where,
   limit,
 } from "firebase/firestore";
 import { db } from "@/_core/firebase";
 
+/* =========================
+   Types
+========================= */
 type HomeProject = {
   id: string;
   title: string;
   location: string;
-  categoryKey: string;
+  categoryKey: string; // projectType
   image: string;
 };
 
@@ -44,6 +46,12 @@ type LabelValue = string | BiLabel;
 type LabelsDoc = {
   projectTypes?: Record<string, LabelValue>;
   projectStatuses?: Record<string, LabelValue>;
+};
+
+type FlagsDoc = {
+  hideVipProjects?: boolean;
+  vipOnlyMode?: boolean;
+  maintenanceMode?: boolean;
 };
 
 const DEFAULT_LABELS: Required<LabelsDoc> = {
@@ -60,7 +68,16 @@ const DEFAULT_LABELS: Required<LabelsDoc> = {
   },
 };
 
+const DEFAULT_FLAGS: FlagsDoc = {
+  hideVipProjects: false,
+  vipOnlyMode: false,
+  maintenanceMode: false,
+};
+
 const FALLBACK_IMG = "/HOOM-HERO.png";
+
+// ✅ صورة قسم "قصتنا"
+const STORY_IMG = "/about-story.jpg";
 
 function pickLabel(v: unknown, lang: "ar" | "en" = "ar", fallback = "") {
   if (typeof v === "string") return v;
@@ -80,63 +97,103 @@ function normalizePublicImage(src?: string) {
 }
 
 export default function Home() {
+  const [location] = useLocation();
+
   const [isVideoOpen, setIsVideoOpen] = useState(false);
   const [projects, setProjects] = useState<HomeProject[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const [labels, setLabels] = useState<Required<LabelsDoc>>(DEFAULT_LABELS);
+  const [flags, setFlags] = useState<FlagsDoc>(DEFAULT_FLAGS);
 
   // ✅ Drag scroll for home slider
   const { ref: homeSliderRef, bind: homeSliderBind } =
     useDragScroll<HTMLDivElement>();
 
+  // ✅ نخلي flags دايمًا محدثة داخل onSnapshot بدون stale closure
+  const flagsRef = useRef<FlagsDoc>(DEFAULT_FLAGS);
   useEffect(() => {
-    const load = async () => {
-      try {
-        setIsLoading(true);
+    flagsRef.current = flags;
+  }, [flags]);
 
-        const labelsSnap = await getDoc(doc(db, "settings", "labels"));
-        if (labelsSnap.exists()) {
-          const data = labelsSnap.data() as LabelsDoc;
-          setLabels({
-            projectTypes: {
-              ...DEFAULT_LABELS.projectTypes,
-              ...(data.projectTypes || {}),
-            },
-            projectStatuses: {
-              ...DEFAULT_LABELS.projectStatuses,
-              ...(data.projectStatuses || {}),
-            },
-          });
-        } else {
-          setLabels(DEFAULT_LABELS);
-        }
+  // ✅ أي انتقال صفحة => رجّع للأعلى
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, [location]);
 
-        const qy = query(
-          collection(db, "projects"),
-          where("status", "==", "published"),
-          orderBy("createdAt", "desc"),
-          limit(4)
-        );
+  // ✅ Live load: labels + flags + projects
+  useEffect(() => {
+    setIsLoading(true);
 
-        const snap = await getDocs(qy);
+    // ✅ Realtime labels
+    const unsubLabels = onSnapshot(doc(db, "settings", "labels"), (snap) => {
+      if (snap.exists()) {
+        const data = snap.data() as LabelsDoc;
+        setLabels({
+          projectTypes: {
+            ...DEFAULT_LABELS.projectTypes,
+            ...(data.projectTypes || {}),
+          },
+          projectStatuses: {
+            ...DEFAULT_LABELS.projectStatuses,
+            ...(data.projectStatuses || {}),
+          },
+        });
+      } else {
+        setLabels(DEFAULT_LABELS);
+      }
+    });
 
-        const list: HomeProject[] = snap.docs.map((d) => {
-          const data = d.data() as any;
+    // ✅ Realtime flags
+    const unsubFlags = onSnapshot(doc(db, "settings", "flags"), (snap) => {
+      if (snap.exists()) {
+        setFlags({ ...DEFAULT_FLAGS, ...(snap.data() as FlagsDoc) });
+      } else {
+        setFlags(DEFAULT_FLAGS);
+      }
+    });
 
-          const typeKey = String(data.projectType || data.category || "").trim();
-          const rawImg = String(data.coverImage || data.image || "").trim();
+    // ✅ Realtime projects
+    const qy = query(
+      collection(db, "projects"),
+      orderBy("createdAt", "desc"),
+      limit(20)
+    );
+
+    const unsubProjects = onSnapshot(
+      qy,
+      (snap) => {
+        const f = flagsRef.current || DEFAULT_FLAGS;
+
+        const filteredDocs = snap.docs
+          .map((d) => ({ id: d.id, ...(d.data() as any) }))
+          .filter((p: any) => {
+            const status = String(p.status || "").trim();
+            const type = String(p.projectType || p.category || "").trim();
+
+            // لازم منشور
+            if (status !== "published") return false;
+
+            // vipOnlyMode => فقط vip_exclusive
+            if (f.vipOnlyMode) return type === "vip_exclusive";
+            if (f.hideVipProjects && type === "vip_exclusive") return false;
+
+            return true;
+          })
+          .slice(0, 4);
+
+        const list: HomeProject[] = filteredDocs.map((p: any) => {
+          const typeKey = String(p.projectType || p.category || "").trim();
+          const rawImg = String(p.coverImage || p.image || "").trim();
           const image = rawImg ? normalizePublicImage(rawImg) : FALLBACK_IMG;
 
           return {
-            id: d.id,
-            title: String(
-              data.titleAr || data.titleEn || data.title || "مشروع بدون عنوان"
-            ),
+            id: p.id,
+            title: String(p.titleAr || p.titleEn || p.title || "مشروع بدون عنوان"),
             location: String(
-              data.locationAr ||
-                data.locationEn ||
-                data.location ||
+              p.locationAr ||
+                p.locationEn ||
+                p.location ||
                 "المملكة العربية السعودية"
             ),
             categoryKey: typeKey || "unknown",
@@ -145,35 +202,30 @@ export default function Home() {
         });
 
         setProjects(list);
-      } catch (err) {
-        console.error("Failed to load home projects:", err);
+        setIsLoading(false);
+      },
+      (err) => {
+        console.error("Failed to live load home projects:", err);
         setProjects([]);
-        setLabels(DEFAULT_LABELS);
-      } finally {
         setIsLoading(false);
       }
-    };
+    );
 
-    load();
+    return () => {
+      unsubLabels();
+      unsubFlags();
+      unsubProjects();
+    };
   }, []);
 
   const categoryLabel = (key: string) =>
     pickLabel(labels.projectTypes[key], "ar", key || "مشروع");
 
-  const p0 = projects[0];
-  const p1 = projects[1];
-  const p2 = projects[2];
-  const p3 = projects[3];
-
-  const card = (p: HomeProject | undefined, size: "big" | "small") => {
+  // ✅ Card (نفس الحجم للجميع)
+  const card = (p: HomeProject | undefined) => {
     if (!p) return null;
 
-    const aspect =
-      size === "big"
-        ? "aspect-[4/5] md:aspect-[16/13]"
-        : "aspect-[16/9] md:aspect-[16/10]";
-
-    // ✅ الضغط يودّي لتفاصيل المشروع مباشرة
+    const aspect = "aspect-[4/5] md:aspect-[16/13]";
     const href = `/projects/${p.id}`;
 
     return (
@@ -275,6 +327,78 @@ export default function Home() {
             </div>
           </section>
 
+          {/* ✅ قصتنا */}
+          <section className="py-16 md:py-20">
+            <div className="container">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
+                <div className="text-center lg:text-right">
+                  <div className="inline-flex items-center gap-2 text-sm font-semibold text-amber-700/90">
+                    <span>من نحن</span>
+                  </div>
+
+                  <h2 className="mt-2 text-4xl md:text-5xl font-bold tracking-tight text-foreground">
+                    قصتنا
+                  </h2>
+
+                  <p className="mt-6 text-base md:text-lg text-muted-foreground leading-relaxed">
+                    بجذور راسخة وطموح لا يحده أفق، انطلقت معدن لتكون منارة في عالم الاستثمار العقاري.
+                  </p>
+
+                  <p className="mt-4 text-base md:text-lg text-muted-foreground leading-relaxed">
+                    نحن نؤمن بأن العقار ليس مجرد بناء، بل هو مساحة للحياة والنمو، ورؤيتنا تتجاوز المألوف لخلق بيئات سكنية وتجارية تلهم قاطنيها وتوفر عوائد استثمارية مستدامة لشركائنا.
+                  </p>
+
+                  <p className="mt-4 text-base md:text-lg text-muted-foreground leading-relaxed">
+                    من خلال دمج التصميم العصري مع الأصالة والابتكار مع الخبرة، نسعى لبناء إرث يدوم للأجيال القادمة.
+                  </p>
+
+                  <div className="mt-8">
+                    <Link href="/about">
+                      <Button className="rounded-full h-11 px-7">
+                        المزيد عنا
+                        <ArrowRight className="mr-2 w-5 h-5" />
+                      </Button>
+                    </Link>
+                  </div>
+                </div>
+
+                <div className="relative">
+                  <div className="relative overflow-hidden rounded-[28px] shadow-[0_24px_80px_rgba(0,0,0,0.12)]">
+                    <img
+                      src={STORY_IMG}
+                      alt="قصتنا"
+                      className="w-full h-[420px] md:h-[520px] object-cover"
+                      onError={(e) => {
+                        e.currentTarget.src = "/HOOM-HERO1.jpg";
+                      }}
+                    />
+                  </div>
+
+                  <div className="absolute -bottom-8 md:-bottom-10 left-1/2 -translate-x-1/2 w-[92%] sm:w-[360px]">
+                    <div className="bg-white/95 backdrop-blur-xl border border-border rounded-2xl shadow-lg p-5">
+                      <div className="flex items-start gap-4">
+                        <div className="flex-1 text-center">
+                          <div className="text-2xl font-bold text-foreground">15+</div>
+                          <div className="text-xs text-muted-foreground mt-1">عاماً من الخبرة</div>
+                        </div>
+
+                        <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
+                          <CheckCircle2 className="w-5 h-5 text-amber-700" />
+                        </div>
+                      </div>
+
+                      <p className="mt-3 text-sm text-muted-foreground text-center leading-relaxed">
+                        سجل حافل بالإنجازات في تطوير وإدارة المشاريع العقارية الفاخرة.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="h-10 md:h-12" />
+            </div>
+          </section>
+
           {/* PROJECTS */}
           <Section className="py-0">
             <div className="container">
@@ -313,9 +437,7 @@ export default function Home() {
                           [&::-webkit-scrollbar]:hidden
                           cursor-grab active:cursor-grabbing
                         "
-                        style={{
-                          WebkitOverflowScrolling: "touch"
-                        }}
+                        style={{ WebkitOverflowScrolling: "touch" }}
                       >
                         {projects.map((p) => (
                           <div
@@ -323,19 +445,16 @@ export default function Home() {
                             dir="rtl"
                             className="snap-start shrink-0 w-[86%] sm:w-[420px]"
                           >
-                            {card(p, "big")}
+                            {card(p)}
                           </div>
                         ))}
                       </div>
 
-                      {/* ✅ Desktop: mosaic */}
-                      <div className="hidden lg:grid grid-cols-3 gap-8">
-                        {card(p0, "big")}
-                        {card(p1, "big")}
-                        <div className="grid gap-8">
-                          {card(p2, "small")}
-                          {card(p3, "small")}
-                        </div>
+                      {/* ✅ Desktop: equal cards */}
+                      <div className="hidden lg:grid grid-cols-2 xl:grid-cols-4 gap-8">
+                        {projects.slice(0, 4).map((p) => (
+                          <div key={p.id}>{card(p)}</div>
+                        ))}
                       </div>
                     </>
                   ) : (
@@ -356,6 +475,75 @@ export default function Home() {
               </SectionContent>
             </div>
           </Section>
+
+          {/* ✅ سكشن جديد: لماذا الاستثمار مع معدن؟ */}
+          <section className="py-16 md:py-20">
+            <div className="container">
+              <div className="rsg-card p-8 md:p-10">
+                <div className="text-center max-w-2xl mx-auto">
+                  <h2 className="text-4xl md:text-5xl font-semibold text-foreground">
+                    لماذا الاستثمار مع معدن؟
+                  </h2>
+                  <p className="mt-4 text-base md:text-lg text-muted-foreground">
+                    رحلة واضحة من اختيار المشروع إلى متابعة الأداء… بكل شفافية.
+                  </p>
+                </div>
+
+                <div className="mt-10 grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="rounded-2xl border border-border bg-white/70 backdrop-blur p-6 text-center">
+                    <div className="mx-auto w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center">
+                      <Sparkles className="w-6 h-6 text-amber-700" />
+                    </div>
+                    <h3 className="mt-4 text-lg font-bold text-foreground">
+                      اختيار ذكي للمشاريع
+                    </h3>
+                    <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
+                      مشاريع مدروسة بعناية مع عرض واضح للموقع والنوع والصور.
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl border border-border bg-white/70 backdrop-blur p-6 text-center">
+                    <div className="mx-auto w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center">
+                      <Shield className="w-6 h-6 text-amber-700" />
+                    </div>
+                    <h3 className="mt-4 text-lg font-bold text-foreground">
+                      شفافية وموثوقية
+                    </h3>
+                    <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
+                      معلومات موحدة، وإظهار المشاريع المنشورة فقط حسب إعدادات الإدارة.
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl border border-border bg-white/70 backdrop-blur p-6 text-center">
+                    <div className="mx-auto w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center">
+                      <TrendingUp className="w-6 h-6 text-amber-700" />
+                    </div>
+                    <h3 className="mt-4 text-lg font-bold text-foreground">
+                      خطوات استثمار واضحة
+                    </h3>
+                    <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
+                      ابدأ بمشاهدة المشاريع، ثم تفاصيل كل مشروع، ثم اتخاذ قرار الاستثمار.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-3">
+                  <Link href="/projects">
+                    <Button className="rounded-full h-11 px-7">
+                      استعرض المشاريع الآن
+                      <ArrowRight className="mr-2 w-5 h-5" />
+                    </Button>
+                  </Link>
+
+                  <Link href="/about">
+                    <Button variant="outline" className="rounded-full h-11 px-7">
+                      تعرّف على معدن
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </section>
         </div>
       </main>
 
@@ -364,7 +552,7 @@ export default function Home() {
       <VideoModal
         isOpen={isVideoOpen}
         onClose={() => setIsVideoOpen(false)}
-        videoUrl="https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+        videoUrl="https://www.youtube.com/watch?v=PxzIjQY0qa4"
         title="فيديو تعريفي عن مايدن"
       />
     </div>

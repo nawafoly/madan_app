@@ -16,33 +16,39 @@ import { db } from "@/_core/firebase";
 import {
   doc,
   getDoc,
-  updateDoc,
-  serverTimestamp,
+  onSnapshot,
   collection,
-  getDocs,
-  query,
-  where,
+  addDoc,
+  serverTimestamp,
   Timestamp,
 } from "firebase/firestore";
 
 import {
-  FileText,
-  ShieldCheck,
   ArrowLeft,
   Loader2,
-  Ban,
+  ShieldCheck,
   CheckCircle2,
   Clock3,
-  PenLine,
-  Building2,
+  MessageSquare,
+  Phone,
+  Mail,
+  MessageCircle,
+  AlertTriangle,
+  FileText,
 } from "lucide-react";
 import { toast } from "sonner";
 
 /* =========================
-   Types (خفيفة لأنك تستخدم any كثير الآن)
+  إعدادات التواصل (عدّلها مرة وحدة)
+  CTRL+F: CONTACT_
 ========================= */
-type ContractDoc = any;
+const CONTACT_PHONE = "+966500000000"; // رقم خدمة العملاء
+const CONTACT_EMAIL = "support@maedin.sa"; // البريد
+const CONTACT_WHATSAPP = "966500000000"; // بدون +
 
+/* =========================
+  helpers
+========================= */
 const toDateSafe = (v: any) => {
   try {
     if (!v) return null;
@@ -55,598 +61,736 @@ const toDateSafe = (v: any) => {
   }
 };
 
-const formatDateTimeAR = (v: any) => {
+function formatDateTimeAR(v: any) {
   const d = toDateSafe(v);
   return d ? d.toLocaleString("ar-SA") : "—";
-};
+}
 
-function statusBadge(status?: string) {
-  const map: Record<string, [string, string]> = {
-    pending: ["قيد إعداد العقد", "bg-amber-700"],
-    signing: ["مطلوب توقيعك", "bg-indigo-600"],
-    signed: ["تم توقيعك", "bg-green-700"],
-    cancelled: ["ملغي", "bg-gray-500"],
-  };
-  const [label, cls] = map[status || "pending"] || map.pending;
-  return <Badge className={cls}>{label}</Badge>;
+function formatDateAR(v: any) {
+  const d = toDateSafe(v);
+  return d ? d.toLocaleDateString("ar-SA") : "—";
+}
+
+function safeStr(v: any) {
+  return String(v ?? "").trim();
 }
 
 /* =========================
-   Timeline for client view
+  Types
 ========================= */
-type StepKey = "draft" | "sent" | "signed" | "final";
-const STEPS: { key: StepKey; label: string; icon: any }[] = [
-  { key: "draft", label: "إعداد العقد", icon: Clock3 },
-  { key: "sent", label: "مطلوب توقيعك", icon: PenLine },
-  { key: "signed", label: "تم التوقيع", icon: CheckCircle2 },
-  { key: "final", label: "اعتماد نهائي", icon: Building2 },
-];
+type TimelineEvent = {
+  id?: string;
+  type?: string;
+  title?: string;
+  note?: string | null;
+  byRole?: string | null;
+  byUid?: string | null;
+  byEmail?: string | null;
+  at?: any;
+  meta?: Record<string, any>;
+};
 
-function getClientStep(contract: any): StepKey {
-  const st = String(contract?.status || "pending");
+type AnyDoc = Record<string, any> & { id: string };
 
-  // ملاحظة: الاعتماد النهائي يتم عند الأونر/المحاسب ويصير في investments status=active
-  // هنا في صفحة العقد ما نقدر نعرف "active" بدون جلب الاستثمار.
-  // لذلك بنحسبها كالتالي:
-  if (st === "signed") return "signed";
-  if (st === "signing") return "sent";
-  if (st === "cancelled") return "draft";
-  return "draft";
+/* =========================
+  UI helpers
+========================= */
+function statusBadge(status: string) {
+  const s = safeStr(status);
+  const map: Record<string, { label: string; cls: string }> = {
+    new: { label: "جديد", cls: "bg-orange-600" },
+    in_progress: { label: "قيد المعالجة", cls: "bg-blue-600" },
+    needs_account: { label: "يتطلب حساب", cls: "bg-yellow-600" },
+    pending_review: { label: "قيد المراجعة", cls: "bg-blue-600" },
+    pending_contract: { label: "بانتظار العقد", cls: "bg-indigo-600" },
+    signing: { label: "بانتظار التوقيع", cls: "bg-indigo-700" },
+    signed: { label: "تم التوقيع", cls: "bg-emerald-700" },
+    active: { label: "نشط", cls: "bg-emerald-700" },
+    resolved: { label: "مكتمل", cls: "bg-gray-700" },
+    rejected: { label: "مرفوض", cls: "bg-red-700" },
+    closed: { label: "مغلق", cls: "bg-gray-600" },
+  };
+
+  const v = map[s] || { label: s || "—", cls: "bg-slate-600" };
+  return <Badge className={v.cls}>{v.label}</Badge>;
 }
 
-function Timeline({ activeKey }: { activeKey: StepKey }) {
-  const activeIndex = STEPS.findIndex((s) => s.key === activeKey);
+function stageBadge(stage: string) {
+  const s = safeStr(stage);
+  const map: Record<string, { label: string; cls: string }> = {
+    staff: { label: "عند المراجع", cls: "bg-slate-600" },
+    owner: { label: "عند الأونر", cls: "bg-amber-700" },
+    accountant: { label: "عند المحاسب", cls: "bg-emerald-700" },
+    client: { label: "عندك", cls: "bg-indigo-700" },
+    completed: { label: "مكتمل", cls: "bg-gray-700" },
+    system: { label: "مقفل", cls: "bg-gray-600" },
+  };
+
+  const v = map[s] || { label: s || "—", cls: "bg-slate-600" };
+  return <Badge className={v.cls}>{v.label}</Badge>;
+}
+
+function TimelineView({ events }: { events: TimelineEvent[] }) {
+  if (!events?.length) {
+    return (
+      <div className="text-sm text-muted-foreground">
+        لا يوجد خط سير للطلب بعد.
+      </div>
+    );
+  }
 
   return (
-    <div className="rounded-xl border bg-muted/30 p-4 space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="text-sm font-semibold">وين وصلت؟</div>
-        <div className="text-xs text-muted-foreground">{STEPS[activeIndex]?.label}</div>
-      </div>
+    <div className="relative space-y-3">
+      <div className="absolute right-[10px] top-2 bottom-2 w-px bg-border" />
 
-      <div className="grid grid-cols-4 gap-2">
-        {STEPS.map((s, i) => {
-          const done = i < activeIndex;
-          const active = i === activeIndex;
-          const Icon = s.icon;
+      {events.map((ev, idx) => {
+        const date = formatDateTimeAR(ev?.at);
+        const title = safeStr(ev?.title) || "تحديث";
+        const note = safeStr(ev?.note);
 
-          return (
-            <div key={s.key} className="space-y-2">
-              <div
-                className={[
-                  "h-2 rounded-full border",
-                  done ? "bg-primary border-primary" : "",
-                  active ? "bg-primary/40 border-primary" : "",
-                  !done && !active ? "bg-muted border-border" : "",
-                ].join(" ")}
-              />
-              <div
-                className={[
-                  "flex items-center justify-center gap-1 text-[11px] leading-tight",
-                  done || active ? "text-foreground" : "text-muted-foreground",
-                ].join(" ")}
-              >
-                <Icon className="w-3.5 h-3.5" />
-                <span className="text-center">{s.label}</span>
+        return (
+          <div key={ev?.id || `${idx}`} className="relative pr-7">
+            <div className="absolute right-[6px] top-[7px] w-2.5 h-2.5 rounded-full bg-primary" />
+            <div className="rounded-xl border bg-white p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="font-semibold text-sm">{title}</div>
+                  {note ? (
+                    <div className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap">
+                      {note}
+                    </div>
+                  ) : null}
+                </div>
+                <div className="text-[11px] text-muted-foreground shrink-0">
+                  {date}
+                </div>
+              </div>
+
+              <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+                {ev?.type ? (
+                  <span className="px-2 py-0.5 rounded-full bg-muted">
+                    {String(ev.type)}
+                  </span>
+                ) : null}
+                {ev?.byRole ? (
+                  <span className="px-2 py-0.5 rounded-full bg-muted">
+                    {String(ev.byRole)}
+                  </span>
+                ) : null}
+                {ev?.byEmail ? (
+                  <span className="px-2 py-0.5 rounded-full bg-muted break-all">
+                    {String(ev.byEmail)}
+                  </span>
+                ) : null}
               </div>
             </div>
-          );
-        })}
-      </div>
-
-      <div className="text-xs text-muted-foreground leading-relaxed">
-        {activeKey === "draft" ? "الإدارة تجهّز العقد. إذا جاهز بيرسلوه لك للتوقيع." : null}
-        {activeKey === "sent" ? "العقد عندك الآن. تقدر توقّع أو تلغي قبل التوقيع." : null}
-        {activeKey === "signed" ? "تم توقيعك. الآن يرجع للأونر/المحاسب للاعتماد النهائي." : null}
-      </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
 
-export default function ContractDetails() {
+/* =========================
+  Page
+========================= */
+export default function ClientContractDetails() {
   const { user } = useAuth();
   const [match, params] = useRoute("/client/contracts/:id");
-  const contractId = params?.id;
+  const id = params?.id;
 
   const [loading, setLoading] = useState(true);
-  const [contract, setContract] = useState<ContractDoc | null>(null);
 
-  const [busySign, setBusySign] = useState(false);
-  const [busyCancel, setBusyCancel] = useState(false);
-  const [cancelReason, setCancelReason] = useState("");
+  // ممكن يكون id عقد أو استثمار أو رسالة
+  const [messageDoc, setMessageDoc] = useState<AnyDoc | null>(null);
+  const [investmentDoc, setInvestmentDoc] = useState<AnyDoc | null>(null);
+  const [contractDoc, setContractDoc] = useState<AnyDoc | null>(null);
 
-  const isClient = user?.role === "client";
+  const [followupText, setFollowupText] = useState("");
+  const [sendingFollowup, setSendingFollowup] = useState(false);
 
-  const canView = useMemo(() => {
-    if (!user?.uid) return false;
-    if (!contract) return false;
-    return contract?.investorUid === user.uid;
-  }, [user?.uid, contract]);
-
-  const load = async () => {
-    if (!contractId) {
-      setLoading(false);
-      return;
-    }
-
-    try {
-      setLoading(true);
-      const ref = doc(db, "contracts", contractId);
-      const snap = await getDoc(ref);
-
-      if (!snap.exists()) {
-        setContract(null);
-        return;
-      }
-
-      setContract({ id: snap.id, ...snap.data() });
-    } catch (e) {
-      console.error(e);
-      toast.error("فشل تحميل العقد");
-    } finally {
-      setLoading(false);
-    }
+  // ✅ helper: حمل وثيقة وتأكد موجودة
+  const tryGet = async (colName: string, docId: string) => {
+    const ref = doc(db, colName, docId);
+    const snap = await getDoc(ref);
+    if (!snap.exists()) return null;
+    return { id: snap.id, ...(snap.data() as any) } as AnyDoc;
   };
 
+  // ✅ Realtime subscriptions
   useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [contractId]);
+    if (!match || !id) return;
 
-  // ✅ helper: update message by investmentId (fallback)
-  const updateMessageByInvestmentId = async (investmentId: string, data: any) => {
-    try {
-      const snap = await getDocs(
-        query(collection(db, "messages"), where("investmentId", "==", investmentId))
-      );
-      if (snap.empty) return;
-      const m = snap.docs[0];
-      await updateDoc(doc(db, "messages", m.id), data);
-    } catch (e) {
-      console.warn("updateMessageByInvestmentId failed", e);
-    }
-  };
+    let unsubMsg: (() => void) | null = null;
+    let unsubInv: (() => void) | null = null;
+    let unsubCon: (() => void) | null = null;
 
-  /* =========================
-     ✅ SIGN (client)
-     - allowed ONLY when contract.status === "signing"
-     - after sign: contract.status = signed
-     - investment.contractStatus = signed
-     - message.stageRole يعود للإدارة (owner/accountant) للاعتماد النهائي
-  ========================= */
-  const handleSign = async () => {
-    if (!user?.uid || !contractId || !contract) return;
+    const run = async () => {
+      setLoading(true);
+      setMessageDoc(null);
+      setInvestmentDoc(null);
+      setContractDoc(null);
 
-    if (contract?.investorUid !== user.uid) {
-      toast.error("ليس لديك صلاحية لتوقيع هذا العقد");
-      return;
-    }
+      try {
+        // 1) جرّب: contracts/{id}
+        const c = await tryGet("contracts", id);
+        if (c) {
+          setContractDoc(c);
 
-    const st = String(contract?.status || "pending");
-    if (st !== "signing") {
-      toast.warning("التوقيع غير متاح الآن — انتظر إرسال الإدارة للتوقيع");
-      return;
-    }
+          // ممكن العقد فيه messageId / investmentId
+          const msgId = safeStr(c.messageId);
+          const invId = safeStr(c.investmentId);
 
-    try {
-      setBusySign(true);
+          if (msgId) {
+            const ref = doc(db, "messages", msgId);
+            unsubMsg = onSnapshot(
+              ref,
+              (s) => {
+                if (s.exists()) setMessageDoc({ id: s.id, ...(s.data() as any) });
+              },
+              (e) => console.error("message_snapshot_error", e)
+            );
+          }
 
-      // 1) contract => signed
-      await updateDoc(doc(db, "contracts", contractId), {
-        status: "signed",
-        signedAt: serverTimestamp(),
-        signedByUid: user.uid,
-        signedByEmail: user.email || null,
-        updatedAt: serverTimestamp(),
+          if (invId) {
+            const ref = doc(db, "investments", invId);
+            unsubInv = onSnapshot(
+              ref,
+              (s) => {
+                if (s.exists()) setInvestmentDoc({ id: s.id, ...(s.data() as any) });
+              },
+              (e) => console.error("investment_snapshot_error", e)
+            );
+          }
 
-        lastActionByRole: "client",
-        lastActionByUid: user.uid,
-        lastActionByEmail: user.email || null,
-        lastActionAt: serverTimestamp(),
-      });
+          const cref = doc(db, "contracts", id);
+          unsubCon = onSnapshot(
+            cref,
+            (s) => {
+              if (s.exists()) setContractDoc({ id: s.id, ...(s.data() as any) });
+            },
+            (e) => console.error("contract_snapshot_error", e)
+          );
 
-      // 2) investment + message
-      const invId = contract?.investmentId || null;
-      if (invId) {
-        await updateDoc(doc(db, "investments", invId), {
-          contractStatus: "signed",
-          signedAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
+          setLoading(false);
+          return;
+        }
 
-          // نخليها "signing" (مرحلة ما قبل الاعتماد النهائي)
-          status: "signing",
+        // 2) جرّب: investments/{id}
+        const inv = await tryGet("investments", id);
+        if (inv) {
+          setInvestmentDoc(inv);
 
-          lastActionByRole: "client",
-          lastActionByUid: user.uid,
-          lastActionByEmail: user.email || null,
-          lastActionAt: serverTimestamp(),
+          const msgId = safeStr(inv.sourceMessageId);
+          const conId = safeStr(inv.contractId);
+
+          if (msgId) {
+            const ref = doc(db, "messages", msgId);
+            unsubMsg = onSnapshot(
+              ref,
+              (s) => {
+                if (s.exists()) setMessageDoc({ id: s.id, ...(s.data() as any) });
+              },
+              (e) => console.error("message_snapshot_error", e)
+            );
+          }
+
+          if (conId) {
+            const ref = doc(db, "contracts", conId);
+            unsubCon = onSnapshot(
+              ref,
+              (s) => {
+                if (s.exists()) setContractDoc({ id: s.id, ...(s.data() as any) });
+              },
+              (e) => console.error("contract_snapshot_error", e)
+            );
+          }
+
+          const iref = doc(db, "investments", id);
+          unsubInv = onSnapshot(
+            iref,
+            (s) => {
+              if (s.exists()) setInvestmentDoc({ id: s.id, ...(s.data() as any) });
+            },
+            (e) => console.error("investment_snapshot_error", e)
+          );
+
+          setLoading(false);
+          return;
+        }
+
+        // 3) جرّب: messages/{id}
+        const msg = await tryGet("messages", id);
+        if (msg) {
+          setMessageDoc(msg);
+
+          const invId = safeStr(msg.investmentId);
+          const conId = safeStr(msg.contractId);
+
+          if (invId) {
+            const ref = doc(db, "investments", invId);
+            unsubInv = onSnapshot(
+              ref,
+              (s) => {
+                if (s.exists()) setInvestmentDoc({ id: s.id, ...(s.data() as any) });
+              },
+              (e) => console.error("investment_snapshot_error", e)
+            );
+          }
+
+          if (conId) {
+            const ref = doc(db, "contracts", conId);
+            unsubCon = onSnapshot(
+              ref,
+              (s) => {
+                if (s.exists()) setContractDoc({ id: s.id, ...(s.data() as any) });
+              },
+              (e) => console.error("contract_snapshot_error", e)
+            );
+          }
+
+          const mref = doc(db, "messages", id);
+          unsubMsg = onSnapshot(
+            mref,
+            (s) => {
+              if (s.exists()) setMessageDoc({ id: s.id, ...(s.data() as any) });
+            },
+            (e) => console.error("message_snapshot_error", e)
+          );
+
+          setLoading(false);
+          return;
+        }
+
+        setLoading(false);
+      } catch (e) {
+        console.error(e);
+        setLoading(false);
+      }
+    };
+
+    run();
+
+    return () => {
+      try {
+        unsubMsg?.();
+        unsubInv?.();
+        unsubCon?.();
+      } catch {}
+    };
+  }, [match, id]);
+
+  // ✅ لقط الحالة والمرحلة “بأفضل مصدر”
+  const current = useMemo(() => {
+    // أولوية: investment.status > message.status > contract.status
+    const invStatus = safeStr(investmentDoc?.status);
+    const msgStatus = safeStr(messageDoc?.status);
+    const conStatus = safeStr(contractDoc?.status);
+
+    const status = invStatus || msgStatus || conStatus || "—";
+    const stageRole = safeStr(messageDoc?.stageRole) || "—";
+
+    const projectTitle =
+      safeStr(investmentDoc?.projectTitle) ||
+      safeStr(messageDoc?.projectTitle) ||
+      "—";
+
+    const amount =
+      investmentDoc?.amount ??
+      messageDoc?.approvedAmount ??
+      messageDoc?.estimatedAmount ??
+      null;
+
+    return {
+      status,
+      stageRole,
+      projectTitle,
+      amount,
+      createdAt: investmentDoc?.createdAt || messageDoc?.createdAt || contractDoc?.createdAt,
+    };
+  }, [messageDoc, investmentDoc, contractDoc]);
+
+  // ✅ Timeline: دمج events من message + investment + contract
+  const timeline = useMemo(() => {
+    const list: TimelineEvent[] = [];
+
+    const push = (src: any, scope: string) => {
+      const evs: TimelineEvent[] = Array.isArray(src?.events) ? src.events : [];
+      evs.forEach((e) => {
+        list.push({
+          ...e,
+          title: e?.title ? `${e.title}` : "تحديث",
+          meta: { ...(e?.meta || {}), scope },
         });
+      });
+    };
 
-        // يرجع عند الأونر (أو المحاسب إذا تبغى تغيّرها)
-        await updateMessageByInvestmentId(invId, {
-          contractStatus: "signed",
-          stageRole: "owner",
+    push(messageDoc, "message");
+    push(investmentDoc, "investment");
+    push(contractDoc, "contract");
 
-          updatedAt: serverTimestamp(),
-          updatedByUid: user.uid,
-          updatedByEmail: user.email || null,
-
-          lastActionByRole: "client",
-          lastActionByUid: user.uid,
-          lastActionByEmail: user.email || null,
-          lastActionAt: serverTimestamp(),
+    // لو ما فيه أحداث: نسوي حدث تأسيسي بسيط
+    if (!list.length) {
+      const baseCreatedAt = current.createdAt;
+      if (baseCreatedAt) {
+        list.push({
+          id: "base-created",
+          type: "created",
+          title: "تم إنشاء الطلب",
+          note: "تم استقبال طلبك وسيتم العمل عليه.",
+          at: baseCreatedAt,
         });
       }
-
-      toast.success("تم توقيع العقد ✅ الآن رجع للإدارة للاعتماد النهائي");
-      await load();
-    } catch (e) {
-      console.error(e);
-      toast.error("فشل توقيع العقد");
-    } finally {
-      setBusySign(false);
     }
-  };
 
-  /* =========================
-     ✅ CANCEL (client)
-     - allowed when status === "signing" ONLY (لأنه فعلياً وصل للعميل)
-     - contract => cancelled
-     - investment => contractStatus cancelled + back to pending_contract
-     - message => يرجع للمراجع staff
-  ========================= */
-  const handleCancel = async () => {
-    if (!user?.uid || !contractId || !contract) return;
+    const sorted = [...list].sort((a, b) => {
+      const da = toDateSafe(a?.at)?.getTime() ?? 0;
+      const dbb = toDateSafe(b?.at)?.getTime() ?? 0;
+      return da - dbb;
+    });
 
-    if (contract?.investorUid !== user.uid) {
-      toast.error("ليس لديك صلاحية لإلغاء هذا العقد");
+    return sorted;
+  }, [messageDoc, investmentDoc, contractDoc, current.createdAt]);
+
+  // ✅ “مساعد المرحلة”: نص إرشادي + زر تواصل مناسب
+  const stageHelp = useMemo(() => {
+    const s = safeStr(current.status);
+    const stage = safeStr(current.stageRole);
+
+    // حالات رفض / إغلاق
+    if (s === "rejected") {
+      return {
+        title: "تم رفض الطلب",
+        desc: "إذا تبي تفاصيل أكثر أو عندك تعديل في البيانات، تواصل معنا.",
+        cta: "تواصل معنا",
+      };
+    }
+
+    if (s === "resolved" || stage === "completed" || s === "active") {
+      return {
+        title: "تم اعتماد الطلب",
+        desc: "طلبك مكتمل. إذا عندك استفسار عن التفاصيل أو التقارير، تواصل معنا.",
+        cta: "استفسار",
+      };
+    }
+
+    if (s === "needs_account") {
+      return {
+        title: "يلزم تسجيل الدخول",
+        desc: "لا نقدر نكمل الطلب بدون حساب. سجّل دخولك ثم أعد إرسال الطلب.",
+        cta: "تسجيل الدخول",
+      };
+    }
+
+    if (s === "new") {
+      return {
+        title: "تم استلام الطلب",
+        desc: "طلبك جديد وسيتم مراجعته قريبًا. لو عندك تفاصيل إضافية أرسلها لنا.",
+        cta: "إرسال متابعة",
+      };
+    }
+
+    if (s === "in_progress" || s === "pending_review" || s === "pending_contract") {
+      return {
+        title: "طلبك قيد المعالجة",
+        desc: "نعمل الآن على طلبك. يمكنك إرسال أي معلومات إضافية لتسريع الإجراء.",
+        cta: "إرسال متابعة",
+      };
+    }
+
+    if (s === "signing") {
+      return {
+        title: "بانتظار إجراء منك",
+        desc: "الطلب في مرحلة تتطلب إجراء. إذا احتجت مساعدة، تواصل معنا فوراً.",
+        cta: "مساعدة فورية",
+      };
+    }
+
+    if (stage === "client") {
+      return {
+        title: "مطلوب منك إجراء بسيط",
+        desc: "الطلب عندك الآن. لو تحتاج توضيح أو دعم، تواصل معنا.",
+        cta: "تواصل معنا",
+      };
+    }
+
+    return {
+      title: "متابعة الطلب",
+      desc: "تابع خط السير بالأسفل، ولو تحتاج مساعدة تواصل معنا.",
+      cta: "تواصل معنا",
+    };
+  }, [current.status, current.stageRole]);
+
+  // ✅ إرسال متابعة داخل المنصة (رسالة جديدة مرتبطة بالطلب)
+  const sendFollowup = async () => {
+    if (!user?.uid) {
+      toast.error("سجّل دخولك أولاً لإرسال متابعة");
       return;
     }
 
-    const st = String(contract?.status || "pending");
-    if (st !== "signing") {
-      toast.warning("الإلغاء غير متاح الآن — ما وصل لك العقد للتوقيع أصلاً");
+    const text = safeStr(followupText);
+    if (!text) return toast.error("اكتب رسالتك أولاً");
+
+    const parentMessageId =
+      messageDoc?.id ||
+      safeStr(investmentDoc?.sourceMessageId) ||
+      safeStr(contractDoc?.messageId) ||
+      null;
+
+    if (!parentMessageId) {
+      toast.error("لا يمكن ربط المتابعة بالطلب حالياً");
       return;
     }
 
     try {
-      setBusyCancel(true);
+      setSendingFollowup(true);
 
-      const reason = String(cancelReason || "").trim() || "تم الإلغاء من العميل";
+      await addDoc(collection(db, "messages"), {
+        type: "client_followup",
+        parentMessageId,
+        message: text,
 
-      // 1) contract => cancelled
-      await updateDoc(doc(db, "contracts", contractId), {
-        status: "cancelled",
-        cancelledAt: serverTimestamp(),
-        cancelledByUid: user.uid,
-        cancelledByEmail: user.email || null,
-        cancelReason: reason,
-        updatedAt: serverTimestamp(),
+        createdByUid: user.uid,
+        email: user.email || null,
+        name: (user as any)?.displayName || null,
 
-        lastActionByRole: "client",
-        lastActionByUid: user.uid,
-        lastActionByEmail: user.email || null,
-        lastActionAt: serverTimestamp(),
+        createdAt: serverTimestamp(),
+        status: "new",
+        stageRole: "staff",
+
+        meta: {
+          from: "client_contract_details",
+          refId: id,
+          investmentId: investmentDoc?.id || null,
+          contractId: contractDoc?.id || null,
+        },
       });
 
-      // 2) investment + message
-      const invId = contract?.investmentId || null;
-      if (invId) {
-        await updateDoc(doc(db, "investments", invId), {
-          contractStatus: "cancelled",
-          status: "pending_contract",
-          cancelReason: reason,
-          cancelledAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-
-          lastActionByRole: "client",
-          lastActionByUid: user.uid,
-          lastActionByEmail: user.email || null,
-          lastActionAt: serverTimestamp(),
-        });
-
-        await updateMessageByInvestmentId(invId, {
-          contractStatus: "cancelled",
-          status: "in_progress",
-          stageRole: "staff",
-          internalNotes: reason,
-
-          updatedAt: serverTimestamp(),
-          updatedByUid: user.uid,
-          updatedByEmail: user.email || null,
-
-          lastActionByRole: "client",
-          lastActionByUid: user.uid,
-          lastActionByEmail: user.email || null,
-          lastActionAt: serverTimestamp(),
-        });
-      }
-
-      toast.success("تم إلغاء العقد — رجع للإدارة للمراجعة");
-      setCancelReason("");
-      await load();
+      toast.success("تم إرسال المتابعة ✅");
+      setFollowupText("");
     } catch (e) {
       console.error(e);
-      toast.error("فشل إلغاء العقد");
+      toast.error("فشل إرسال المتابعة");
     } finally {
-      setBusyCancel(false);
+      setSendingFollowup(false);
     }
   };
 
-  /* =========================
-     Views
-  ========================= */
-  if (!user) {
-    return (
-      <ClientLayout className="py-12">
-        <Card className="max-w-xl mx-auto">
-          <CardHeader>
-            <CardTitle>العقد</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-muted-foreground">الرجاء تسجيل الدخول أولاً.</p>
-            <Link href="/login">
-              <Button className="w-full">تسجيل الدخول</Button>
-            </Link>
-          </CardContent>
-        </Card>
-      </ClientLayout>
-    );
-  }
-
-  if (!isClient) {
-    return (
-      <ClientLayout className="py-12">
-        <Card className="max-w-2xl mx-auto">
-          <CardHeader>
-            <CardTitle>هذه الصفحة خاصة بالعميل</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-muted-foreground">
-              دور حسابك الحالي هو <b>{user.role}</b> وليس <b>client</b>.
-            </p>
-            <Link href="/projects">
-              <Button className="w-full">تصفّح المشاريع</Button>
-            </Link>
-          </CardContent>
-        </Card>
-      </ClientLayout>
-    );
-  }
-
-  if (!match || !contractId) {
-    return (
-      <ClientLayout className="py-12">
-        <Card className="max-w-xl mx-auto">
-          <CardHeader>
-            <CardTitle>العقد</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-muted-foreground">رابط العقد غير صحيح.</p>
-            <Link href="/client/investments">
-              <Button className="w-full" variant="outline">
-                العودة إلى استثماراتي
-              </Button>
-            </Link>
-          </CardContent>
-        </Card>
-      </ClientLayout>
-    );
-  }
-
-  if (loading) {
-    return (
-      <ClientLayout className="py-12">
-        <div className="py-20 text-center">
-          <Loader2 className="w-6 h-6 animate-spin inline-block ml-2" />
-          جاري تحميل العقد...
-        </div>
-      </ClientLayout>
-    );
-  }
-
-  if (!contract) {
-    return (
-      <ClientLayout className="py-12">
-        <Card className="max-w-xl mx-auto">
-          <CardHeader>
-            <CardTitle>العقد غير موجود</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-muted-foreground">لم يتم العثور على هذا العقد.</p>
-            <Link href="/client/investments">
-              <Button className="w-full" variant="outline">
-                العودة إلى استثماراتي
-              </Button>
-            </Link>
-          </CardContent>
-        </Card>
-      </ClientLayout>
-    );
-  }
-
-  if (!canView) {
-    return (
-      <ClientLayout className="py-12">
-        <Card className="max-w-xl mx-auto">
-          <CardHeader>
-            <CardTitle>لا تملك صلاحية</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-muted-foreground">هذا العقد غير مرتبط بحسابك.</p>
-            <Link href="/client/investments">
-              <Button className="w-full" variant="outline">
-                العودة إلى استثماراتي
-              </Button>
-            </Link>
-          </CardContent>
-        </Card>
-      </ClientLayout>
-    );
-  }
-
-  const st = String(contract?.status || "pending");
-  const step = getClientStep(contract);
-
-  // ✅ هنا أهم تغيير: التوقيع/الإلغاء فقط في signing
-  const canSign = st === "signing";
-  const canCancel = st === "signing";
+  if (!match) return null;
 
   return (
-    <ClientLayout className="py-12">
-      <div className="space-y-6 max-w-5xl mx-auto">
-        {/* Top bar */}
+    <ClientLayout>
+      <div className="max-w-5xl mx-auto px-4 py-6 space-y-5">
+        {/* Header */}
         <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center">
-              <FileText className="w-5 h-5" />
-            </div>
-            <div className="min-w-0">
-              <h1 className="text-3xl font-bold">العقد</h1>
-              <div className="text-sm text-muted-foreground truncate">
-                رقم العقد: <span className="font-mono">{contractId}</span>
-              </div>
-            </div>
+          <div>
+            <div className="text-sm text-muted-foreground">تفاصيل الطلب</div>
+            <h1 className="text-2xl md:text-3xl font-bold mt-1">متابعة حالة الطلب</h1>
           </div>
 
-          <Link href="/client/investments">
-            <Button variant="outline">
-              <ArrowLeft className="w-4 h-4 ml-2" />
+          <Link href="/client/dashboard">
+            <Button variant="outline" className="gap-2">
+              <ArrowLeft className="w-4 h-4" />
               رجوع
             </Button>
           </Link>
         </div>
 
-        {/* Timeline */}
-        <Timeline activeKey={step} />
+        {/* Auth hint */}
+        {!user?.uid ? (
+          <Card className="rsg-card">
+            <CardContent className="py-5 flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 mt-0.5" />
+              <div className="min-w-0">
+                <div className="font-semibold">أنت غير مسجل دخول</div>
+                <div className="text-sm text-muted-foreground mt-1">
+                  تقدر تشوف جزء من الحالة، لكن إرسال المتابعة يحتاج تسجيل دخول.
+                </div>
+                <div className="mt-3">
+                  <Link href="/login">
+                    <Button className="gap-2">
+                      <ShieldCheck className="w-4 h-4" />
+                      تسجيل الدخول
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ) : null}
 
-        {/* Summary */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-lg">ملخص</CardTitle>
-            {statusBadge(contract?.status)}
+        {/* Main summary */}
+        <Card className="rsg-card">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2">
+              <FileText className="w-5 h-5" />
+              ملخص الطلب
+            </CardTitle>
           </CardHeader>
-
-          <CardContent className="space-y-5">
-            <div className="grid md:grid-cols-2 gap-4 text-sm">
-              <div className="rounded-xl border p-4">
-                <div className="text-xs text-muted-foreground mb-1">المستثمر</div>
-                <div className="font-semibold">
-                  {contract?.investorName || user.displayName || "—"}
+          <CardContent className="space-y-3">
+            {loading ? (
+              <div className="py-8 text-center text-muted-foreground">
+                <Loader2 className="w-5 h-5 animate-spin inline-block ml-2" />
+                جاري التحميل...
+              </div>
+            ) : (
+              <>
+                <div className="flex flex-wrap gap-2">
+                  {statusBadge(current.status)}
+                  {stageBadge(current.stageRole)}
+                  <Badge variant="outline" className="border-primary/20">
+                    تاريخ الطلب: {formatDateAR(current.createdAt)}
+                  </Badge>
                 </div>
-                <div className="text-xs text-muted-foreground mt-1">
-                  {contract?.investorEmail || user.email || "—"}
+
+                <Separator />
+
+                <div className="grid gap-3 md:grid-cols-2 text-sm">
+                  <div className="rounded-xl border bg-muted/20 p-3">
+                    <div className="text-xs text-muted-foreground">المشروع</div>
+                    <div className="font-semibold mt-1">{current.projectTitle}</div>
+                  </div>
+
+                  <div className="rounded-xl border bg-muted/20 p-3">
+                    <div className="text-xs text-muted-foreground">المبلغ</div>
+                    <div className="font-semibold mt-1">
+                      {current.amount != null
+                        ? `${Number(current.amount).toLocaleString()} SAR`
+                        : "—"}
+                    </div>
+                  </div>
                 </div>
-              </div>
 
-              <div className="rounded-xl border p-4">
-                <div className="text-xs text-muted-foreground mb-1">الاستثمار</div>
-                <div className="font-semibold">
-                  {contract?.investmentId ? `#${contract.investmentId}` : "—"}
+                {/* Stage help */}
+                <div className="rounded-2xl border bg-white p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                      <Clock3 className="w-5 h-5" />
+                    </div>
+
+                    <div className="min-w-0">
+                      <div className="font-bold">{stageHelp.title}</div>
+                      <div className="text-sm text-muted-foreground mt-1">
+                        {stageHelp.desc}
+                      </div>
+
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {/* CTA حسب المرحلة */}
+                        {stageHelp.cta === "تسجيل الدخول" ? (
+                          <Link href="/login">
+                            <Button className="gap-2">
+                              <ShieldCheck className="w-4 h-4" />
+                              تسجيل الدخول
+                            </Button>
+                          </Link>
+                        ) : (
+                          <Button
+                            className="gap-2"
+                            onClick={() => {
+                              // سكرول على منطقة المتابعة
+                              const el = document.getElementById("followup-box");
+                              el?.scrollIntoView({ behavior: "smooth", block: "start" });
+                            }}
+                          >
+                            <MessageSquare className="w-4 h-4" />
+                            {stageHelp.cta}
+                          </Button>
+                        )}
+
+                        {/* تواصل مباشر */}
+                        <a href={`https://wa.me/${CONTACT_WHATSAPP}`} target="_blank" rel="noreferrer">
+                          <Button variant="outline" className="gap-2">
+                          <MessageCircle className="w-4 h-4" />
+                          واتساب
+                          </Button>
+                        </a>
+
+                        <a href={`tel:${CONTACT_PHONE}`}>
+                          <Button variant="outline" className="gap-2">
+                            <Phone className="w-4 h-4" />
+                            اتصال
+                          </Button>
+                        </a>
+
+                        <a href={`mailto:${CONTACT_EMAIL}`}>
+                          <Button variant="outline" className="gap-2">
+                            <Mail className="w-4 h-4" />
+                            إيميل
+                          </Button>
+                        </a>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <div className="text-xs text-muted-foreground mt-1">
-                  المشروع: {contract?.projectTitle || "—"}
-                </div>
-              </div>
-            </div>
-
-            <div className="grid md:grid-cols-3 gap-4 text-sm">
-              <div className="rounded-xl border p-4">
-                <div className="text-xs text-muted-foreground mb-1">المبلغ</div>
-                <div className="font-semibold">
-                  {contract?.amount != null ? `${Number(contract.amount).toLocaleString()} ${contract?.currency || "SAR"}` : "—"}
-                </div>
-              </div>
-
-              <div className="rounded-xl border p-4">
-                <div className="text-xs text-muted-foreground mb-1">آخر تحديث</div>
-                <div className="font-semibold">
-                  {formatDateTimeAR(contract?.updatedAt || contract?.createdAt)}
-                </div>
-              </div>
-
-              <div className="rounded-xl border p-4">
-                <div className="text-xs text-muted-foreground mb-1">حالة التوقيع</div>
-                <div className="font-semibold">{statusBadge(contract?.status)}</div>
-              </div>
-            </div>
-
-            <Separator />
-
-            {/* Contract body */}
-            <div className="rounded-2xl border p-5 bg-muted/30">
-              <div className="flex items-center gap-2 mb-3">
-                <ShieldCheck className="w-4 h-4" />
-                <div className="font-semibold">نص العقد</div>
-              </div>
-
-              <div className="text-sm leading-relaxed whitespace-pre-wrap">
-                {contract?.body ||
-                  contract?.content ||
-                  "نص العقد غير متوفر حالياً. سيتم إضافته من الإدارة."}
-              </div>
-            </div>
-
-            {/* Cancel reason */}
-            {canCancel && (
-              <div className="space-y-2 rounded-2xl border p-5">
-                <Label>سبب الإلغاء (اختياري)</Label>
-                <Textarea
-                  value={cancelReason}
-                  onChange={(e) => setCancelReason(e.target.value)}
-                  placeholder="اكتب سبب الإلغاء…"
-                  className="min-h-[90px]"
-                />
-                <div className="text-xs text-muted-foreground">
-                  الإلغاء يرجّع الطلب للإدارة للمراجعة.
-                </div>
-              </div>
+              </>
             )}
+          </CardContent>
+        </Card>
 
-            {/* Actions */}
-            <div className="flex flex-col sm:flex-row gap-2 sm:justify-end">
-              {!canSign ? (
-                <Button disabled variant="outline">
-                  التوقيع غير متاح الآن
-                </Button>
-              ) : (
-                <Button onClick={handleSign} disabled={busySign || busyCancel}>
-                  {busySign ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin ml-2" />
-                      جاري التوقيع...
-                    </>
-                  ) : (
-                    "توقيع العقد"
-                  )}
-                </Button>
-              )}
-
-              {canCancel && (
-                <Button
-                  variant="destructive"
-                  onClick={handleCancel}
-                  disabled={busySign || busyCancel}
-                >
-                  {busyCancel ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin ml-2" />
-                      جاري الإلغاء...
-                    </>
-                  ) : (
-                    <>
-                      <Ban className="w-4 h-4 ml-2" />
-                      إلغاء
-                    </>
-                  )}
-                </Button>
-              )}
+        {/* Follow-up box */}
+        <Card className="rsg-card" id="followup-box">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2">
+              <MessageSquare className="w-5 h-5" />
+              إرسال متابعة
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="text-sm text-muted-foreground">
+              اكتب أي تفاصيل إضافية تساعدنا (مثل: وقت مناسب للاتصال، رقم بديل، ملاحظات…)
             </div>
 
-            {/* Hint */}
-            <div className="text-xs text-muted-foreground">
-              ملاحظة: التوقيع هنا تجريبي حالياً. لاحقاً نضيف OTP/هوية/توقيع إلكتروني رسمي.
+            <div className="space-y-2">
+              <Label>رسالتك</Label>
+              <Textarea
+                value={followupText}
+                onChange={(e) => setFollowupText(e.target.value)}
+                placeholder="اكتب هنا..."
+                className="min-h-[120px]"
+              />
             </div>
+
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={sendFollowup} disabled={sendingFollowup}>
+                {sendingFollowup ? (
+                  <Loader2 className="w-4 h-4 ml-2 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="w-4 h-4 ml-2" />
+                )}
+                إرسال المتابعة
+              </Button>
+
+              <a href={`https://wa.me/${CONTACT_WHATSAPP}`} target="_blank" rel="noreferrer">
+                <Button variant="outline" className="gap-2">
+                <MessageCircle className="w-4 h-4" />
+                تواصل واتساب مباشرة
+                </Button>
+              </a>
+            </div>
+
+            <div className="text-[11px] text-muted-foreground">
+              ملاحظة: إذا كان عندك “Rules” تمنع كتابة messages للعميل، قلّي وأعطيك rules جاهزة.
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Timeline */}
+        <Card className="rsg-card">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2">
+              <Clock3 className="w-5 h-5" />
+              خط سير الطلب
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <div className="py-8 text-center text-muted-foreground">
+                <Loader2 className="w-5 h-5 animate-spin inline-block ml-2" />
+                جاري التحميل...
+              </div>
+            ) : (
+              <TimelineView events={timeline} />
+            )}
           </CardContent>
         </Card>
       </div>
