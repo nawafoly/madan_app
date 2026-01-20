@@ -173,14 +173,16 @@
     height: 10px;
   }
   ::-webkit-scrollbar-track {
-    @apply bg-muted;
+    background: rgba(0,0,0,0.04);
   }
   ::-webkit-scrollbar-thumb {
-    @apply bg-primary/30 rounded-lg;
+    background: rgba(11, 23, 38, 0.25);
+    border-radius: 10px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    @apply bg-primary/50;
+    background: rgba(11, 23, 38, 0.4);
   }
+  
 
   /* Custom animations */
   @keyframes slideUp {
@@ -300,10 +302,8 @@
     padding-right: 1rem;
   }
 
-  .flex {
-    min-height: 0;
-    min-width: 0;
-  }
+
+
 
   @media (min-width: 640px) {
     .container {
@@ -1115,3 +1115,8 @@
   color: #fff;
 }
 
+/* ✅ Dashboard: خلي الكروت أوضح */
+.dashboard-surface .rsg-card {
+  background: rgba(255,255,255,0.9);
+  backdrop-filter: blur(6px);
+}
