@@ -2,7 +2,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "wouter";
 import Header from "@/components/Header";
-import Footer from "@/components/Footer";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -317,7 +316,7 @@ function CurvedProjectsHero({
         {/* محتوى */}
         {/*  270 px + env ( safe - area - inset - top)  كود ثابت ما يتغير  */}
         <div className="container relative z-10 h-full flex items-center pt-[calc(270px+env(safe-area-inset-top))] md:pt-[140px]">
-        <div className="w-full">
+          <div className="w-full">
             <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
               {/* ✅ توسيط الكلام فقط */}
               <div className="space-y-2 text-center md:text-right md:space-y-2">
@@ -465,9 +464,7 @@ export default function ProjectsPage() {
     const text = qText.trim().toLowerCase();
 
     let list = published.items.filter((p) => {
-      const typeKey = String(
-        p.projectType || (p as any).category || ""
-      ).trim();
+      const typeKey = String(p.projectType || (p as any).category || "").trim();
 
       if (flags.hideVipProjects && isVip(p)) return false;
       if (flags.vipOnlyMode && !isVip(p)) return false;
@@ -491,20 +488,15 @@ export default function ProjectsPage() {
     });
 
     list = [...list].sort((a, b) => {
-      if (sortBy === "progress")
-        return progressPercent(b) - progressPercent(a);
+      if (sortBy === "progress") return progressPercent(b) - progressPercent(a);
       if (sortBy === "return")
         return safeNumber(b.annualReturn) - safeNumber(a.annualReturn);
 
       const ad = Number(
-        (a.createdAt as any)?.seconds ??
-          (a.createdAt as any)?.toMillis?.() ??
-          0
+        (a.createdAt as any)?.seconds ?? (a.createdAt as any)?.toMillis?.() ?? 0
       );
       const bd = Number(
-        (b.createdAt as any)?.seconds ??
-          (b.createdAt as any)?.toMillis?.() ??
-          0
+        (b.createdAt as any)?.seconds ?? (b.createdAt as any)?.toMillis?.() ?? 0
       );
       return bd - ad;
     });
@@ -565,7 +557,8 @@ export default function ProjectsPage() {
           <img
             src={cover}
             alt={title}
-            className={`h-full w-full object-cover ${isDone ? "grayscale-[0.15]" : ""}`}
+            className={`h-full w-full object-cover ${isDone ? "grayscale-[0.15]" : ""
+              }`}
             loading="lazy"
             draggable={false}
             onError={(e) => {
@@ -707,7 +700,10 @@ export default function ProjectsPage() {
 
           <Link href={`/projects/${p.id}`}>
             <a className="block">
-              <Button className="w-full" variant={isDraft ? "outline" : "default"}>
+              <Button
+                className="w-full"
+                variant={isDraft ? "outline" : "default"}
+              >
                 عرض التفاصيل
               </Button>
             </a>
@@ -717,13 +713,25 @@ export default function ProjectsPage() {
     );
   };
 
+  // ✅ سكشن موحد: يملا الشاشة + سناب + light/dark
   const SectionShell = (props: {
     id?: string;
     className?: string;
     children: ReactNode;
+    variant?: "light" | "dark";
   }) => (
-    <section id={props.id} className={props.className ?? "py-16 sm:py-20"}>
-      <div className="container">{props.children}</div>
+    <section
+      id={props.id}
+      className={[
+        "min-h-[100vh] snap-start relative overflow-hidden",
+        "py-16 sm:py-20",
+        props.variant === "dark"
+          ? "bg-zinc-950 text-white"
+          : "bg-transparent text-foreground",
+        props.className ?? "",
+      ].join(" ")}
+    >
+      <div className="container w-full">{props.children}</div>
     </section>
   );
 
@@ -811,8 +819,6 @@ export default function ProjectsPage() {
                   </div>
                 </div>
 
-                
-
                 <div className="space-y-2">
                   <div className="text-sm font-medium">الترتيب</div>
                   <Select
@@ -830,6 +836,7 @@ export default function ProjectsPage() {
                     </SelectContent>
                   </Select>
                 </div>
+
                 <div className="lg:hidden flex justify-center pt-2">
                   <Button
                     variant="outline"
@@ -852,9 +859,10 @@ export default function ProjectsPage() {
         </CurvedProjectsHero>
       </div>
 
-      <main className="flex-1">
+      {/* ✅ سناب سكشن سكشن */}
+      <main className="flex-1 snap-y snap-mandatory overflow-y-auto">
         {/* 1) المشاريع الحالية */}
-        <SectionShell className="py-16 sm:py-20 -mt-10">
+        <SectionShell className="-mt-10" variant="light">
           <div className="flex justify-center">
             <p className="inline-block px-3 py-1 text-[20px] sm:text-[16px] md:text-[30px] font-semibold text-center text-black/90 border border-black/50 rounded-[10px]">
               الحالية
@@ -983,8 +991,9 @@ export default function ProjectsPage() {
         </SectionShell>
 
         {/* 2) المشاريع المستقبلية */}
-        <section className="relative overflow-hidden bg-zinc-950 text-white py-16 sm:py-20">
-          <div className="container relative z-10">
+        <SectionShell variant="dark" className="pb-24">
+          {/* محتوى السكشن */}
+          <div className="w-full">
             <div className="text-center max-w-3xl mx-auto">
               <p className="inline-block px-3 py-1 text-[20px] sm:text-[16px] md:text-[30px] font-semibold text-white/90 border border-white/50 rounded-[10px]">
                 قريباً
@@ -1010,10 +1019,7 @@ export default function ProjectsPage() {
                 <Card className="border-white/10 bg-white/5 backdrop-blur mt-6">
                   <CardContent className="py-10 text-center space-y-3 text-white">
                     <div className="font-semibold">{upcoming.loadError}</div>
-                    <Button
-                      variant="outline"
-                      onClick={() => setRefreshKey((x) => x + 1)}
-                    >
+                    <Button variant="outline" onClick={() => setRefreshKey((x) => x + 1)}>
                       إعادة المحاولة
                     </Button>
                   </CardContent>
@@ -1030,14 +1036,14 @@ export default function ProjectsPage() {
                       {...upcomingSlider.bind}
                       dir="ltr"
                       className="
-                        flex gap-5 overflow-x-auto overflow-y-hidden pb-4
-                        snap-x snap-mandatory
-                        scroll-smooth
-                        [-ms-overflow-style:none] [scrollbar-width:none]
-                        [&::-webkit-scrollbar]:hidden
-                        select-none
-                        cursor-grab active:cursor-grabbing
-                      "
+                flex gap-5 overflow-x-auto overflow-y-hidden pb-4
+                snap-x snap-mandatory
+                scroll-smooth
+                [-ms-overflow-style:none] [scrollbar-width:none]
+                [&::-webkit-scrollbar]:hidden
+                select-none
+                cursor-grab active:cursor-grabbing
+              "
                       style={{ WebkitOverflowScrolling: "touch" }}
                     >
                       {upcoming.items.map((p) => (
@@ -1059,9 +1065,7 @@ export default function ProjectsPage() {
                         onClick={upcoming.loadMore}
                         disabled={upcoming.loadingMore}
                       >
-                        {upcoming.loadingMore
-                          ? "جاري التحميل..."
-                          : "تحميل المزيد"}
+                        {upcoming.loadingMore ? "جاري التحميل..." : "تحميل المزيد"}
                       </Button>
                     ) : (
                       <div className="text-sm text-white/65" />
@@ -1072,81 +1076,80 @@ export default function ProjectsPage() {
             </div>
           </div>
 
-          <div className="absolute bottom-[-1px] left-0 w-full overflow-hidden leading-none">
-            <svg
-              viewBox="0 0 1440 120"
-              preserveAspectRatio="none"
-              className="w-full h-24 md:h-28 text-white"
-              aria-hidden="true"
-            >
-              <path
-                fill="currentColor"
-                d="M0,64 C240,120 480,120 720,88 C960,56 1200,8 1440,40 L1440,120 L0,120 Z"
-              />
-            </svg>
-          </div>
-        </section>
+          {/* ✅ التقوس مثبت بأسفل السكشن نفسه */}
+          <svg
+            className="absolute bottom-[-1px] left-0 w-full h-24 md:h-28 text-white pointer-events-none"
+            viewBox="0 0 1440 120"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+          >
+            <path
+              fill="currentColor"
+              d="M0,64 C240,120 480,120 720,88 C960,56 1200,8 1440,40 L1440,120 L0,120 Z"
+            />
+          </svg>
+        </SectionShell>
 
         {/* 3) المشاريع المكتملة */}
-        <SectionShell className="py-16 sm:py-20">
-          <div className="flex justify-center">
-            <p className="inline-block px-3 py-1 text-[20px] sm:text-[16px] md:text-[30px] font-semibold text-center text-black/90 border border-black/50 rounded-[10px]">
-              منجزة
-            </p>
-          </div>
+        <SectionShell variant="light">
+          <div className="w-full">
+            <div className="flex justify-center">
+              <p className="inline-block px-3 py-1 text-[20px] sm:text-[16px] md:text-[30px] font-semibold text-center text-black/90 border border-black/50 rounded-[10px]">
+                منجزة
+              </p>
+            </div>
 
-          <SectionHeaderBlock
-            title="المشاريع المكتملة"
-            desc="مشاريع تم الانتهاء منها أو إغلاقها."
-          />
+            <SectionHeaderBlock
+              title="المشاريع المكتملة"
+              desc="مشاريع تم الانتهاء منها أو إغلاقها."
+            />
 
-          <div className="mt-10">
-            {done.loading ? (
-              <div className="py-16 text-center text-muted-foreground">
-                جاري تحميل المشاريع...
-              </div>
-            ) : done.loadError ? (
-              <Card className="border-destructive/30 mt-6">
-                <CardContent className="py-10 text-center space-y-3">
-                  <div className="font-semibold">{done.loadError}</div>
-                  <Button
-                    variant="outline"
-                    onClick={() => setRefreshKey((x) => x + 1)}
-                  >
-                    إعادة المحاولة
-                  </Button>
-                </CardContent>
-              </Card>
-            ) : done.items.length === 0 ? (
-              <div className="py-16 text-center text-muted-foreground">
-                لا توجد مشاريع مكتملة حالياً.
-              </div>
-            ) : (
-              <>
-                <div className="mt-10 grid md:grid-cols-2 xl:grid-cols-3 gap-5">
-                  {done.items.map((p) => ProjectCard(p, "done"))}
+            <div className="mt-10">
+              {done.loading ? (
+                <div className="py-16 text-center text-muted-foreground">
+                  جاري تحميل المشاريع...
                 </div>
-
-                <div className="mt-10 flex justify-center">
-                  {done.hasMore ? (
+              ) : done.loadError ? (
+                <Card className="border-destructive/30 mt-6">
+                  <CardContent className="py-10 text-center space-y-3">
+                    <div className="font-semibold">{done.loadError}</div>
                     <Button
                       variant="outline"
-                      onClick={done.loadMore}
-                      disabled={done.loadingMore}
+                      onClick={() => setRefreshKey((x) => x + 1)}
                     >
-                      {done.loadingMore ? "جاري التحميل..." : "تحميل المزيد"}
+                      إعادة المحاولة
                     </Button>
-                  ) : (
-                    <div className="text-sm text-muted-foreground" />
-                  )}
+                  </CardContent>
+                </Card>
+              ) : done.items.length === 0 ? (
+                <div className="py-16 text-center text-muted-foreground">
+                  لا توجد مشاريع مكتملة حالياً.
                 </div>
-              </>
-            )}
+              ) : (
+                <>
+                  <div className="mt-10 grid md:grid-cols-2 xl:grid-cols-3 gap-5">
+                    {done.items.map((p) => ProjectCard(p, "done"))}
+                  </div>
+
+                  <div className="mt-10 flex justify-center">
+                    {done.hasMore ? (
+                      <Button
+                        variant="outline"
+                        onClick={done.loadMore}
+                        disabled={done.loadingMore}
+                      >
+                        {done.loadingMore ? "جاري التحميل..." : "تحميل المزيد"}
+                      </Button>
+                    ) : (
+                      <div className="text-sm text-muted-foreground" />
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </SectionShell>
       </main>
-
-      <Footer />
     </div>
   );
 }

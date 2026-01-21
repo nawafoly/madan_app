@@ -60,7 +60,7 @@ function formatDateTimeAR(v: any) {
 
 const CONTACT = {
   whatsapp: "https://wa.me/966500000000",
-  phone: "tel:+966500000000",
+  phone: "tel:0549010366",
   email: "mailto:info@maedin.sa",
 };
 

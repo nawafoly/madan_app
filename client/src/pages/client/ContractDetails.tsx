@@ -44,7 +44,7 @@ import { toast } from "sonner";
 ========================= */
 const CONTACT_PHONE = "+966500000000"; // رقم خدمة العملاء
 const CONTACT_EMAIL = "support@maedin.sa"; // البريد
-const CONTACT_WHATSAPP = "966500000000"; // بدون +
+const CONTACT_WHATSAPP = "966500000000"; // الواتس +
 
 /* =========================
   helpers

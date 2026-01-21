@@ -1,6 +1,6 @@
+// client/src/pages/About.tsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import Header from "@/components/Header";
-import Footer from "@/components/Footer";
 import {
   Building2,
   Users,
@@ -197,13 +197,17 @@ export default function About() {
     { q: "كيف التفاعل؟", a: "تفاعل هادئ وفخم بدون إزعاج." },
   ];
 
+  // ✅ سكشن موحد: يملا الشاشة + سناب + يعوض ارتفاع الهيدر
+  const FULL_SECTION = "min-h-[100svh] snap-start pt-[96px] flex items-center";
+
   return (
     <div className="min-h-screen flex flex-col" dir="rtl">
       <Header />
 
-      <main className="flex-1">
+      {/* ✅ سناب سكشن سكشن */}
+      <main className="flex-1 snap-y snap-mandatory overflow-y-auto">
         {/* HERO */}
-        <section className="relative h-[100svh] pt-[96px] overflow-hidden bg-black">
+        <section className="relative h-[100svh] pt-[96px] overflow-hidden bg-black snap-start">
           <img
             src="/about-poto1.jpg"
             alt="عن معدن"
@@ -226,7 +230,7 @@ export default function About() {
         {/* =========================
             STORY (Light)
         ========================== */}
-        <section className="section-light py-20">
+        <section className={`section-light ${FULL_SECTION}`}>
           <div className="container">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-12 items-center">
               <div className="lg:col-span-5">
@@ -246,7 +250,8 @@ export default function About() {
                     <p>
                       تأسست <b className="text-foreground">معدن</b> بهدف توفير فرص
                       استثمارية عقارية متميزة للمستثمرين في المملكة العربية السعودية
-                      ودول الخليج، مع التركيز على الاستثمارات المتوافقة مع الشريعة الإسلامية.
+                      ودول الخليج، مع التركيز على الاستثمارات المتوافقة مع الشريعة
+                      الإسلامية.
                     </p>
                     <p>
                       يعمل فريقنا على دراسة المشاريع بعناية فائقة لضمان الشفافية وتحقيق
@@ -273,7 +278,10 @@ export default function About() {
         {/* =========================
             STATS (Dark + CountUp)
         ========================== */}
-        <section ref={statsRef as any} className="section-dark-soft py-20">
+        <section
+          ref={statsRef as any}
+          className={`section-dark-soft ${FULL_SECTION}`}
+        >
           <div className="container">
             <h2 className="mb-4 text-3xl sm:text-4xl md:text-5xl font-bold text-center">
               إنجازاتنا
@@ -320,7 +328,7 @@ export default function About() {
         {/* =========================
             VALUES (Light)
         ========================== */}
-        <section className="section-light py-20">
+        <section className={`section-light ${FULL_SECTION}`}>
           <div className="container">
             <div className="flex flex-col items-center text-center">
               <h2 className="mt-3 text-2xl sm:text-3xl md:text-4xl font-bold text-foreground">
@@ -363,9 +371,9 @@ export default function About() {
         </section>
 
         {/* =========================
-            FAQ (Dark) + (paired with Vision -> same color family)
+            FAQ (Dark)
         ========================== */}
-        <section id="faq" className="section-dark py-20">
+        <section id="faq" className={`section-dark ${FULL_SECTION}`}>
           <div className="container">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-12 items-center">
               <div className="lg:col-span-5 text-center lg:text-right">
@@ -424,30 +432,25 @@ export default function About() {
         {/* =========================
             VISION (Light)
         ========================== */}
-        <section className="section-light py-20">
+        <section className={`section-light ${FULL_SECTION}`}>
           <div className="container">
             <div className="mx-auto max-w-4xl text-center">
-              {/* عنوان السكشن */}
               <p className="mb-6 text-3xl sm:text-4xl md:text-5xl font-bold text-foreground">
                 رؤيتنا
               </p>
 
-              {/* خط فاصل بسيط */}
               <div className="mx-auto mb-8 h-[2px] w-20 rounded-full bg-border" />
 
-              {/* العنوان الرئيسي */}
               <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold leading-tight text-foreground">
                 نعيد تعريف تجربة الاستثمار
                 <span style={{ color: "var(--gold)" }}> بثقة</span>
               </h2>
 
-              {/* الوصف */}
               <p className="mt-6 text-base sm:text-lg text-muted-foreground leading-relaxed">
                 أن نكون المنصة الأولى للاستثمار العقاري في المنطقة، ونساهم في تحقيق
                 رؤية المملكة 2030 عبر فرص استثمارية مبتكرة ومستدامة وتجربة رقمية فاخرة.
               </p>
 
-              {/* الأزرار */}
               <div className="mt-9 flex items-center justify-center gap-3 sm:gap-4">
                 <a
                   href="/projects"
@@ -466,8 +469,6 @@ export default function About() {
           </div>
         </section>
       </main>
-
-      <Footer />
     </div>
   );
 }

@@ -7,6 +7,7 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 
 import ScrollToTop from "@/components/ScrollToTop";
+import SiteLayout from "@/components/SiteLayout";
 
 import Home from "./pages/Home";
 import ProjectsPage from "./pages/Projects";
@@ -19,7 +20,7 @@ import RequireRole from "./components/RequireRole";
 
 // Admin pages
 import AdminDashboard from "./pages/admin/Dashboard";
-import ProjectsManagement from "./pages/admin/Projects";
+import ProjectsManagement from "./pages/admin/ProjectsAdmin";
 import CreateProject from "@/pages/admin/CreateProject";
 import EditProject from "@/pages/admin/EditProject";
 import Reports from "@/pages/admin/Reports";
@@ -43,15 +44,44 @@ function Router() {
       <ScrollToTop />
 
       <Switch>
-        {/* ================= Public ================= */}
-        <Route path="/" component={Home} />
-        <Route path="/projects" component={ProjectsPage} />
-        <Route path="/projects/:id" component={ProjectDetails} />
-        <Route path="/about" component={About} />
-        <Route path="/contact" component={Contact} />
+        {/* ================= Public (ثابت في كل صفحة) ================= */}
+        <Route path="/">
+          <SiteLayout>
+            <Home />
+          </SiteLayout>
+        </Route>
 
-        {/* ================= Auth ================= */}
-        <Route path="/login" component={LoginPage} />
+        <Route path="/projects">
+          <SiteLayout>
+            <ProjectsPage />
+          </SiteLayout>
+        </Route>
+
+        <Route path="/projects/:id">
+          <SiteLayout>
+            <ProjectDetails />
+          </SiteLayout>
+        </Route>
+
+        <Route path="/about">
+          <SiteLayout>
+            <About />
+          </SiteLayout>
+        </Route>
+
+        <Route path="/contact">
+          <SiteLayout>
+            <Contact />
+          </SiteLayout>
+        </Route>
+
+        {/* ================= Auth (برضو نبي الثابت) ================= */}
+        <Route path="/login">
+          <SiteLayout>
+            <LoginPage />
+          </SiteLayout>
+        </Route>
+
         <Route path="/404" component={NotFound} />
 
         {/* ================= Admin Dashboard ================= */}
@@ -173,7 +203,11 @@ function Router() {
         </Route>
 
         {/* ================= Fallback ================= */}
-        <Route component={NotFound} />
+        <Route>
+          <SiteLayout>
+            <NotFound />
+          </SiteLayout>
+        </Route>
       </Switch>
     </>
   );

@@ -1,5 +1,5 @@
 // client/src/components/Header.tsx
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Search, Globe, LogOut } from "lucide-react";
@@ -27,8 +27,6 @@ export default function Header() {
       path.startsWith("/projects/")
     );
   }, [location]);
-  
-  
 
   // ✅ Spacer only for non-hero pages
   const shouldReserveSpace = !isHeroRoute;
@@ -83,6 +81,55 @@ export default function Header() {
 
   const navBtnClass = "h-10 px-4 rounded-full text-[14px] font-semibold";
 
+  // ✅ Active detector
+  const activeHref = useMemo(() => {
+    const path = (location || "/").split("?")[0];
+
+    const isActive = (href: string) => {
+      if (href === "/") return path === "/";
+      return path === href || path.startsWith(href + "/");
+    };
+
+    const found = navLinks.find((l) => isActive(l.href));
+    return found?.href ?? "";
+  }, [location, navLinks]);
+
+  // ✅ refs for "bulge position"
+  const innerRef = useRef<HTMLDivElement | null>(null);
+  const linkRefs = useRef<Record<string, HTMLSpanElement | null>>({});
+
+// ✅ move the bulge above the active link + mark hasActive
+useEffect(() => {
+  const inner = innerRef.current;
+  if (!inner) return;
+
+  const update = () => {
+    const el = activeHref ? linkRefs.current[activeHref] : null;
+
+    if (!el) {
+      inner.dataset.hasActive = "false";
+      inner.style.setProperty("--active-x", `50%`);
+      return;
+    }
+
+    const innerRect = inner.getBoundingClientRect();
+    const elRect = el.getBoundingClientRect();
+    const centerX = elRect.left + elRect.width / 2 - innerRect.left;
+
+    inner.style.setProperty("--active-x", `${centerX}px`);
+    inner.dataset.hasActive = "true";
+  };
+
+  const raf = requestAnimationFrame(update);
+  window.addEventListener("resize", update);
+
+  return () => {
+    cancelAnimationFrame(raf);
+    window.removeEventListener("resize", update);
+  };
+}, [activeHref, language]);
+
+
   return (
     <>
       {/* ✅ Floating Navbar (always fixed via .rsg-nav CSS) */}
@@ -92,7 +139,7 @@ export default function Header() {
         lang={language}
       >
         <div className="container">
-          <div className="rsg-nav__inner">
+          <div ref={innerRef} className="rsg-nav__inner rsg-nav__inner--bulge">
             {/* Left (Icons) */}
             <div className="rsg-nav__slot rsg-nav__slot--left flex items-center gap-1">
               <button
@@ -133,11 +180,21 @@ export default function Header() {
             {/* Center (Links + Logo) */}
             <nav className="rsg-nav__links rsg-nav__slot rsg-nav__slot--center">
               <div className="flex items-center justify-center gap-5">
-                {linksLeft.map((link) => (
-                  <Link key={link.href} href={link.href}>
-                    <span className="rsg-nav__link">{link.label}</span>
-                  </Link>
-                ))}
+                {linksLeft.map((link) => {
+                  const isActive = activeHref === link.href;
+                  return (
+                    <Link key={link.href} href={link.href}>
+                      <span
+                        ref={(el) => {
+                          linkRefs.current[link.href] = el;
+                        }}
+                        className={`rsg-nav__link ${isActive ? "is-active" : ""}`}
+                      >
+                        {link.label}
+                      </span>
+                    </Link>
+                  );
+                })}
 
                 <Link href="/">
                   <img
@@ -147,11 +204,21 @@ export default function Header() {
                   />
                 </Link>
 
-                {linksRight.map((link) => (
-                  <Link key={link.href} href={link.href}>
-                    <span className="rsg-nav__link">{link.label}</span>
-                  </Link>
-                ))}
+                {linksRight.map((link) => {
+                  const isActive = activeHref === link.href;
+                  return (
+                    <Link key={link.href} href={link.href}>
+                      <span
+                        ref={(el) => {
+                          linkRefs.current[link.href] = el;
+                        }}
+                        className={`rsg-nav__link ${isActive ? "is-active" : ""}`}
+                      >
+                        {link.label}
+                      </span>
+                    </Link>
+                  );
+                })}
               </div>
             </nav>
 
@@ -188,17 +255,20 @@ export default function Header() {
           {isMobileMenuOpen && (
             <div className="mt-3 rsg-card rsg-card--tight p-4 lg:hidden animate-slide-up">
               <nav className="flex flex-col gap-2">
-                {navLinks.map((link) => (
-                  <Link key={link.href} href={link.href}>
-                    <span
-                      className="rsg-nav__link block"
-                      onClick={closeMobile}
-                      role="button"
-                    >
-                      {link.label}
-                    </span>
-                  </Link>
-                ))}
+                {navLinks.map((link) => {
+                  const isActive = activeHref === link.href;
+                  return (
+                    <Link key={link.href} href={link.href}>
+                      <span
+                        className={`rsg-nav__link block ${isActive ? "is-active" : ""}`}
+                        onClick={closeMobile}
+                        role="button"
+                      >
+                        {link.label}
+                      </span>
+                    </Link>
+                  );
+                })}
 
                 <div className="mt-3 pt-3 border-t border-border flex flex-col gap-3">
                   <Button
@@ -248,8 +318,7 @@ export default function Header() {
         </div>
       </header>
 
-      {/* ✅ Spacer: يخلي الصفحات الداخلية ما تدخل تحت النافبار
-          ✅ لكن في صفحات الـ Hero ( / و /about ) ما نضيفه */}
+      {/* ✅ Spacer */}
       {shouldReserveSpace && <div aria-hidden className="h-[92px]" />}
     </>
   );

@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 
 import { toast } from "sonner";
@@ -45,7 +44,7 @@ export default function Contact() {
       {
         icon: Phone,
         title: "الهاتف",
-        value: "+966 11 234 5678",
+        value: "0549010366",
         link: "tel:+966112345678",
       },
       {
@@ -67,7 +66,11 @@ export default function Contact() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.name.trim() || !formData.email.trim() || !formData.message.trim()) {
+    if (
+      !formData.name.trim() ||
+      !formData.email.trim() ||
+      !formData.message.trim()
+    ) {
       toast.error("الرجاء تعبئة الحقول المطلوبة");
       return;
     }
@@ -107,7 +110,7 @@ export default function Contact() {
       <Header />
 
       <main className="flex-1">
-        {/* Hero (موحّد + عنوان واضح) */}
+        {/* Hero */}
         <section className="border-b border-border/60 bg-background">
           <div className="container py-12 md:py-16">
             <div className="mx-auto max-w-3xl text-center">
@@ -116,19 +119,18 @@ export default function Contact() {
               </h1>
 
               <p className="mt-4 text-base md:text-lg text-muted-foreground">
-                نحن هنا للإجابة على جميع استفساراتك. اكتب رسالتك وسنعود لك في أقرب وقت ممكن.
+                نحن هنا للإجابة على جميع استفساراتك. اكتب رسالتك وسنعود لك في أقرب
+                وقت ممكن.
               </p>
 
-              {/* خط بسيط للفخامة والتنظيم */}
               <div className="mx-auto mt-8 h-px w-24 bg-border" />
             </div>
           </div>
         </section>
 
-
         <section className="py-10 md:py-14">
           <div className="container">
-            {/* Info cards (كروت موحّدة) */}
+            {/* Info Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
               {contactInfo.map((info, index) => {
                 const Icon = info.icon;
@@ -140,7 +142,9 @@ export default function Contact() {
                         <Icon className="h-6 w-6 text-primary" />
                       </div>
                       <h3 className="font-semibold">{info.title}</h3>
-                      <p className="mt-2 text-sm text-muted-foreground">{info.value}</p>
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        {info.value}
+                      </p>
                     </CardContent>
                   </Card>
                 );
@@ -159,7 +163,7 @@ export default function Contact() {
               })}
             </div>
 
-            {/* Form (Card موحد) */}
+            {/* Contact Form */}
             <div className="mt-10 md:mt-14">
               <Card className="max-w-3xl mx-auto rounded-3xl border-border/70 bg-card/70 backdrop-blur supports-[backdrop-filter]:bg-card/60">
                 <CardHeader className="pb-0">
@@ -174,25 +178,35 @@ export default function Contact() {
                   <form onSubmit={handleSubmit} className="space-y-6">
                     <div className="grid md:grid-cols-2 gap-4 md:gap-6">
                       <div className="space-y-2">
-                        <label className="text-sm font-medium">الاسم الكامل</label>
+                        <label className="text-sm font-medium">
+                          الاسم الكامل
+                        </label>
                         <Input
                           placeholder="مثال: أحمد محمد"
                           value={formData.name}
                           onChange={(e) =>
-                            setFormData({ ...formData, name: e.target.value })
+                            setFormData({
+                              ...formData,
+                              name: e.target.value,
+                            })
                           }
                           required
                         />
                       </div>
 
                       <div className="space-y-2">
-                        <label className="text-sm font-medium">البريد الإلكتروني</label>
+                        <label className="text-sm font-medium">
+                          البريد الإلكتروني
+                        </label>
                         <Input
                           type="email"
                           placeholder="name@example.com"
                           value={formData.email}
                           onChange={(e) =>
-                            setFormData({ ...formData, email: e.target.value })
+                            setFormData({
+                              ...formData,
+                              email: e.target.value,
+                            })
                           }
                           required
                           dir="ltr"
@@ -202,12 +216,17 @@ export default function Contact() {
 
                     <div className="grid md:grid-cols-2 gap-4 md:gap-6">
                       <div className="space-y-2">
-                        <label className="text-sm font-medium">رقم الهاتف</label>
+                        <label className="text-sm font-medium">
+                          رقم الهاتف
+                        </label>
                         <Input
-                          placeholder="+966 5X XXX XXXX"
+                          placeholder="0549010366"
                           value={formData.phone}
                           onChange={(e) =>
-                            setFormData({ ...formData, phone: e.target.value })
+                            setFormData({
+                              ...formData,
+                              phone: e.target.value,
+                            })
                           }
                           dir="ltr"
                         />
@@ -219,7 +238,10 @@ export default function Contact() {
                           placeholder="مثال: استفسار عن الاستثمار"
                           value={formData.subject}
                           onChange={(e) =>
-                            setFormData({ ...formData, subject: e.target.value })
+                            setFormData({
+                              ...formData,
+                              subject: e.target.value,
+                            })
                           }
                         />
                       </div>
@@ -232,7 +254,10 @@ export default function Contact() {
                         placeholder="اكتب رسالتك هنا..."
                         value={formData.message}
                         onChange={(e) =>
-                          setFormData({ ...formData, message: e.target.value })
+                          setFormData({
+                            ...formData,
+                            message: e.target.value,
+                          })
                         }
                         required
                       />

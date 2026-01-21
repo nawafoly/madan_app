@@ -57,7 +57,7 @@ export default function AccountSwitcher() {
         <DialogHeader>
           <DialogTitle>الحساب</DialogTitle>
           <DialogDescription>
-            تسجيل الدخول في MAEDIN الآن عبر Firebase Auth (إيميل + كلمة مرور) فقط.
+            تسجيل الدخول في معدن الآن عبر Firebase Auth (إيميل + كلمة مرور) فقط.
           </DialogDescription>
         </DialogHeader>
 
