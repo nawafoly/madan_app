@@ -872,7 +872,7 @@
   }
 }
 
-/
+
 
 /* ✅ يشتغل لما Header.tsx يحط data-has-active */
 .rsg-nav__inner--bulge[data-has-active="true"]::after {
