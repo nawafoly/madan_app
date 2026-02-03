@@ -1,0 +1,51 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper: Check if user is admin
+    function isAdmin() {
+      return request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // Projects:
+    // Read: Anyone can read published projects
+    // Write: Only Admin
+    match /projects/{projectId} {
+      allow read: if resource.data.status == 'published' || isAdmin();
+      allow write: if isAdmin();
+    }
+
+    // Investments:
+    // Read: Investor can read their own investments, Admin can read all
+    // Write: Only Admin (or Cloud Functions which bypass rules)
+    match /investments/{investmentId} {
+      allow read: if (request.auth != null && request.auth.uid == resource.data.investorUid) || isAdmin();
+      allow write: if isAdmin();
+    }
+
+    // Users:
+    // Read: User can read their own profile, Admin can read all
+    // Write: Only Admin
+    match /users/{userId} {
+      allow read: if (request.auth != null && request.auth.uid == userId) || isAdmin();
+      allow write: if isAdmin();
+    }
+    
+    // Settings:
+    // Read: Anyone
+    // Write: Only Admin
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Messages:
+    // Read: Admin only
+    // Write: Authenticated users
+    match /messages/{messageId} {
+      allow read: if isAdmin();
+      allow create: if request.auth != null;
+      allow update, delete: if isAdmin();
+    }
+  }
+}

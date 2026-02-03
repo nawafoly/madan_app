@@ -371,133 +371,92 @@ export default function ProjectsPage() {
     maintenanceMode: false,
   });
 
-  // filters (نخليها على المنشور فقط)
-  const [qText, setQText] = useState("");
-  const [typeFilter, setTypeFilter] = useState<string>("all");
-  const [sortBy, setSortBy] = useState<string>("newest"); // newest | progress | return
-
-  // refresh
   const [refreshKey, setRefreshKey] = useState(0);
 
-  /* =========================
-     Load settings (labels + flags)
-  ========================= */
+  const published = usePagedProjects({ statusEq: "published", refreshKey });
+  const upcoming = usePagedProjects({ statusEq: "draft", refreshKey });
+  const done = usePagedProjects({
+    statusIn: ["closed", "completed"],
+    refreshKey,
+  });
+
+  const [qText, setQText] = useState("");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [sortBy, setSortBy] = useState("newest");
+
   useEffect(() => {
     (async () => {
       try {
-        const [labelsSnap, flagsSnap] = await Promise.all([
+        const [lSnap, fSnap] = await Promise.all([
           getDoc(doc(db, "settings", "labels")),
           getDoc(doc(db, "settings", "flags")),
         ]);
-
-        if (labelsSnap.exists()) {
-          const data = labelsSnap.data() as LabelsDoc;
+        if (lSnap.exists()) {
+          const d = lSnap.data() as LabelsDoc;
           setLabels({
             projectTypes: {
               ...DEFAULT_LABELS.projectTypes,
-              ...(data.projectTypes || {}),
+              ...(d.projectTypes || {}),
             },
             projectStatuses: {
               ...DEFAULT_LABELS.projectStatuses,
-              ...(data.projectStatuses || {}),
+              ...(d.projectStatuses || {}),
             },
           });
-        } else {
-          setLabels(DEFAULT_LABELS);
         }
-
-        if (flagsSnap.exists()) setFlags(flagsSnap.data() as FlagsDoc);
-      } catch {
-        // keep defaults
+        if (fSnap.exists()) setFlags(fSnap.data() as FlagsDoc);
+      } catch (e) {
+        console.error("Settings load error:", e);
       }
     })();
   }, []);
 
-  /* =========================
-     3 Lists
-  ========================= */
-  const published = usePagedProjects({
-    statusEq: "published",
-    refreshKey,
-  });
-
-  const upcoming = usePagedProjects({
-    statusEq: "draft", // ✅ المستقبلية = قريبا
-    refreshKey,
-  });
-
-  const done = usePagedProjects({
-    statusIn: ["completed", "closed"], // ✅ المكتملة + المغلقة
-    refreshKey,
-  });
-
-  /* =========================
-     Helpers
-  ========================= */
-  const typeLabel = (type?: string) => {
-    if (!type) return "—";
-    return pickLabel(labels.projectTypes[type], "ar", type);
-  };
-
-  const isVip = (p: ProjectDoc) => p.projectType === "vip_exclusive";
+  const typeLabel = (key: any) =>
+    pickLabel(labels.projectTypes[String(key)], "ar", String(key || ""));
 
   const progressPercent = (p: ProjectDoc) => {
     const t = safeNumber(p.targetAmount);
-    const c = safeNumber(p.currentAmount);
     if (!t) return 0;
-    return Math.min(100, (c / t) * 100);
+    return Math.min(100, (safeNumber(p.currentAmount) / t) * 100);
   };
 
-  /* =========================
-     Guard by flags
-  ========================= */
   const blockedReason = useMemo(() => {
     if (flags.maintenanceMode) return "maintenance";
     if (flags.vipOnlyMode) return "vip_only_mode";
     return null;
   }, [flags.maintenanceMode, flags.vipOnlyMode]);
 
-  /* =========================
-     Filter + sort (only for published list)
-  ========================= */
   const filteredPublished = useMemo(() => {
-    const text = qText.trim().toLowerCase();
+    let list = [...published.items];
 
-    let list = published.items.filter((p) => {
-      const typeKey = String(p.projectType || (p as any).category || "").trim();
+    if (flags.hideVipProjects) {
+      list = list.filter((p) => p.projectType !== "vip_exclusive");
+    }
+    if (flags.vipOnlyMode) {
+      list = list.filter((p) => p.projectType === "vip_exclusive");
+    }
 
-      if (flags.hideVipProjects && isVip(p)) return false;
-      if (flags.vipOnlyMode && !isVip(p)) return false;
-      if (typeFilter !== "all" && typeKey !== typeFilter) return false;
+    if (typeFilter !== "all") {
+      list = list.filter((p) => p.projectType === typeFilter);
+    }
 
-      if (!text) return true;
+    const q = qText.trim().toLowerCase();
+    if (q) {
+      list = list.filter((p) => {
+        const t = (p.titleAr || p.titleEn || "").toLowerCase();
+        const l = (p.locationAr || p.locationEn || "").toLowerCase();
+        const i = (p.issueNumber || "").toLowerCase();
+        return t.includes(q) || l.includes(q) || i.includes(q);
+      });
+    }
 
-      const hay = [
-        p.titleAr,
-        p.titleEn,
-        p.locationAr,
-        p.locationEn,
-        p.issueNumber,
-        typeKey,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-
-      return hay.includes(text);
-    });
-
-    list = [...list].sort((a, b) => {
+    list.sort((a, b) => {
       if (sortBy === "progress") return progressPercent(b) - progressPercent(a);
       if (sortBy === "return")
         return safeNumber(b.annualReturn) - safeNumber(a.annualReturn);
 
-      const ad = Number(
-        (a.createdAt as any)?.seconds ?? (a.createdAt as any)?.toMillis?.() ?? 0
-      );
-      const bd = Number(
-        (b.createdAt as any)?.seconds ?? (b.createdAt as any)?.toMillis?.() ?? 0
-      );
+      const ad = a.createdAt?.toMillis?.() || 0;
+      const bd = b.createdAt?.toMillis?.() || 0;
       return bd - ad;
     });
 
@@ -534,6 +493,10 @@ export default function ProjectsPage() {
     </div>
   );
 
+  /**
+   * FIX: Removed nested <a> inside <Link> to fix Hydration error.
+   * The Card itself is now wrapped in Link, or the button is the link.
+   */
   const ProjectCard = (p: ProjectDoc, mode: "published" | "draft" | "done") => {
     const target = safeNumber(p.targetAmount);
     const current = safeNumber(p.currentAmount);
@@ -699,14 +662,12 @@ export default function ProjectsPage() {
           </div>
 
           <Link href={`/projects/${p.id}`}>
-            <a className="block">
-              <Button
-                className="w-full"
-                variant={isDraft ? "outline" : "default"}
-              >
-                عرض التفاصيل
-              </Button>
-            </a>
+            <Button
+              className="w-full"
+              variant={isDraft ? "outline" : "default"}
+            >
+              عرض التفاصيل
+            </Button>
           </Link>
         </div>
       </Card>

@@ -150,6 +150,7 @@ export default function Home() {
    * - Clickable
    * - Flip on laptop only (CSS media query)
    * - Mobile: no flip
+   * - FIX: Removed nested <a> inside <Link> to fix Hydration error.
    */
   const projectCard = (p: HomeProject | undefined, isFeatured = false) => {
     if (!p) return null;
@@ -161,8 +162,8 @@ export default function Home() {
 
     return (
       <Link href={href}>
-        <a
-          className={`rsg-flip group block relative overflow-hidden rounded-[28px] ${aspect}`}
+        <div
+          className={`rsg-flip group block relative overflow-hidden rounded-[28px] cursor-pointer ${aspect}`}
           aria-label={p.title}
         >
           <div className="rsg-flip__inner">
@@ -238,7 +239,7 @@ export default function Home() {
               </div>
             </div>
           </div>
-        </a>
+        </div>
       </Link>
     );
   };
@@ -321,7 +322,7 @@ export default function Home() {
           const image = rawImg ? normalizePublicImage(rawImg) : FALLBACK_IMG;
 
           return {
-            id: p.id,
+            id: String(p.id),
             title: String(p.titleAr || p.titleEn || p.title || "مشروع بدون عنوان"),
             location: String(
               p.locationAr ||
