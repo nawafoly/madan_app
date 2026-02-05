@@ -6,11 +6,12 @@ import { Search, Globe, LogOut } from "lucide-react";
 
 import { NotificationBell } from "@/components/NotificationBell";
 import { useAuth } from "@/_core/hooks/useAuth";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 export default function Header() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [language, setLanguage] = useState<"ar" | "en">("ar");
+  const { language, toggleLanguage } = useLanguage();
 
   const { user, logout } = useAuth();
   const [location, setLocation] = useLocation();
@@ -37,10 +38,6 @@ export default function Header() {
     handleScroll();
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
-
-  const toggleLanguage = () => {
-    setLanguage((prev) => (prev === "ar" ? "en" : "ar"));
-  };
 
   const navLinks =
     language === "ar"
@@ -135,8 +132,6 @@ useEffect(() => {
       {/* ✅ Floating Navbar (always fixed via .rsg-nav CSS) */}
       <header
         className={`rsg-nav ${isScrolled ? "is-scrolled" : ""}`}
-        dir={language === "ar" ? "rtl" : "ltr"}
-        lang={language}
       >
         <div className="container">
           <div ref={innerRef} className="rsg-nav__inner rsg-nav__inner--bulge">

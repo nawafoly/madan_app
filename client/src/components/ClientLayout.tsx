@@ -9,7 +9,7 @@ type Props = {
 
 export default function ClientLayout({ children, className }: Props) {
   return (
-    <div className="min-h-screen flex flex-col" dir="rtl" lang="ar">
+    <div className="min-h-screen flex flex-col">
       <Header />
 
       <main className={`flex-1 mt-20 ${className ?? ""}`}>

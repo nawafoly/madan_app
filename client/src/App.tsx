@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
 import { Redirect, Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
+import { LanguageProvider } from "./contexts/LanguageContext";
 import { ThemeProvider } from "./contexts/ThemeContext";
 
 import ScrollToTop from "@/components/ScrollToTop";
@@ -216,15 +217,17 @@ function Router() {
 export default function App() {
   return (
     <ErrorBoundary>
-      <ThemeProvider defaultTheme="light">
-        <div className="rsg-bg" aria-hidden="true" />
-        <div className="relative z-10 min-h-screen">
-          <TooltipProvider>
-            <Toaster />
-            <Router />
-          </TooltipProvider>
-        </div>
-      </ThemeProvider>
+      <LanguageProvider defaultLanguage="ar">
+        <ThemeProvider defaultTheme="light">
+          <div className="rsg-bg" aria-hidden="true" />
+          <div className="relative z-10 min-h-screen">
+            <TooltipProvider>
+              <Toaster />
+              <Router />
+            </TooltipProvider>
+          </div>
+        </ThemeProvider>
+      </LanguageProvider>
     </ErrorBoundary>
   );
 }

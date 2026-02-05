@@ -266,15 +266,15 @@ export default function Reports() {
     <DashboardLayout>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">التقارير المالية</h1>
             <p className="text-muted-foreground">تقارير شاملة عن أداء المنصة</p>
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Select value={reportType} onValueChange={(v: any) => setReportType(v)}>
-              <SelectTrigger className="w-[160px]">
+              <SelectTrigger className="w-[140px] sm:w-[160px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -285,7 +285,7 @@ export default function Reports() {
             </Select>
 
             <Select value={selectedYear} onValueChange={setSelectedYear}>
-              <SelectTrigger className="w-[120px]">
+              <SelectTrigger className="w-[110px] sm:w-[120px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

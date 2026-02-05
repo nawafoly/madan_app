@@ -857,7 +857,7 @@
 
   .rsg-nav__logo {
     display: block;
-    height: 44px;
+    height: 55px;
     width: auto;
     object-fit: contain;
   }
@@ -954,9 +954,11 @@
 @media (max-width: 767px) {
   .rsg-nav__inner {
     position: relative;
+    overflow: hidden;
+    min-height: 64px;
   }
 
-  .rsg-nav__inner::after {
+  .rsg-nav__inner::before {
     content: "";
     position: absolute;
 
@@ -964,8 +966,8 @@
     top: 50%;
     transform: translate(-50%, -50%);
 
-    width: 56px;
-    height: 48px;
+    width: 64px;
+    height: 52px;
 
     background-image: url("/logo.png");
     background-repeat: no-repeat;
@@ -981,6 +983,20 @@
   .rsg-nav__slot {
     position: relative;
     z-index: 2;
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .rsg-nav__slot--left {
+    justify-content: flex-start;
+  }
+
+  .rsg-nav__slot--right {
+    justify-content: flex-end;
+  }
+
+  .rsg-nav__slot--center {
+    display: none;
   }
 }
 

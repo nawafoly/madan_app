@@ -90,8 +90,9 @@ const recomputeProjectAggregates = async (projectId) => {
     legacyUpdates.forEach((u) => {
       batch.update(u.ref, {
         status: u.status,
+        __skipAggregates: true,
         updatedAt: FieldValue.serverTimestamp(),
-      });
+      });      
     });
     await batch.commit();
   }
@@ -152,8 +153,11 @@ exports.recomputeAllProjectAggregates = onCall({ region: REGION }, async (reques
 exports.onInvestmentWrite = onDocumentWritten(
   { region: REGION, document: "investments/{investmentId}" },
   async (event) => {
-    const before = event.data?.before?.data();
-    const after = event.data?.after?.data();
+    const before = event.data?.before?.data() || null;
+    const after = event.data?.after?.data() || null;
+
+    // ✅ ignore internal normalization writes
+    if (after?.__skipAggregates === true) return;
 
     if (!before && !after) return;
 

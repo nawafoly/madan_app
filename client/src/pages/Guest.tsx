@@ -11,7 +11,7 @@ export default function GuestPage() {
   const { user, loading, logout } = useAuth();
 
   return (
-    <div className="min-h-screen flex flex-col" dir="rtl" lang="ar">
+    <div className="min-h-screen flex flex-col">
       <Header />
 
       <main className="flex-1 mt-24">

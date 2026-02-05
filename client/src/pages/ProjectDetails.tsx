@@ -360,7 +360,7 @@ export default function ProjectDetails() {
   ========================= */
   if (loading) {
     return (
-      <div className="w-full" dir="rtl" lang="ar">
+      <div className="w-full">
         <div className="flex-1 flex items-center justify-center">
           <div className="animate-spin rounded-full h-24 w-24 border-b-2 border-primary" />
         </div>
@@ -370,7 +370,7 @@ export default function ProjectDetails() {
 
   if (blockedReason) {
     return (
-      <div className="w-full" dir="rtl" lang="ar">
+      <div className="w-full">
         <div className="flex-1 flex items-center justify-center">
           <Card className="p-10 text-center max-w-xl">
             <AlertTriangle className="w-14 h-14 mx-auto mb-4 text-muted-foreground" />
@@ -395,7 +395,7 @@ export default function ProjectDetails() {
 
   if (!project) {
     return (
-      <div className="w-full" dir="rtl" lang="ar">
+      <div className="w-full">
         <div className="flex-1 flex items-center justify-center">
           <Card className="p-12 text-center">
             <AlertCircle className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
@@ -410,7 +410,7 @@ export default function ProjectDetails() {
   }
 
   return (
-    <div className="w-full" dir="rtl" lang="ar">
+    <div className="w-full">
       {/* HERO (IMAGE OR VIDEO) */}
       <section className="relative h-[65vh] min-h-[520px] overflow-hidden pt-20">
         {coverImage ? (

@@ -53,7 +53,7 @@ export default function AccountSwitcher() {
         </Button>
       </DialogTrigger>
 
-      <DialogContent className="sm:max-w-md" dir="rtl">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>الحساب</DialogTitle>
           <DialogDescription>

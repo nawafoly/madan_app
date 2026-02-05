@@ -14,7 +14,7 @@ export default function Footer() {
   const currentYear = new Date().getFullYear();
 
   return (
-    <footer className="rsg-footer" dir="rtl">
+    <footer className="rsg-footer">
       <div className="container pt-32 md:pt-40 pb-12 relative z-10">
         {/* ✅ خلي الحد هنا عشان ما ينكسر ولا يتغطى */}
         <div className="border-t border-white/10 pt-12">

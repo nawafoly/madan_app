@@ -353,11 +353,7 @@ export default function Home() {
   }, []);
 
   return (
-    <div
-      className="rsg-page min-h-screen flex flex-col text-foreground"
-      dir="rtl"
-      lang="ar"
-    >
+    <div className="rsg-page min-h-screen flex flex-col text-foreground">
 
       {/* ✅ scroll-snap container */}
       <main className="flex-grow relative z-0">

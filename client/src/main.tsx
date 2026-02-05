@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import App from "./App";
+import { initializeDocumentLanguage } from "./contexts/LanguageContext";
 import "./index.css";
 
 const queryClient = new QueryClient();
@@ -22,6 +23,8 @@ queryClient.getMutationCache().subscribe((event) => {
     console.error("[Mutation Error]", event.mutation.state.error);
   }
 });
+
+initializeDocumentLanguage("ar");
 
 createRoot(document.getElementById("root")!).render(
   <QueryClientProvider client={queryClient}>

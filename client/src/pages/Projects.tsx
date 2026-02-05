@@ -696,11 +696,7 @@ export default function ProjectsPage() {
   );
 
   return (
-    <div
-      className="rsg-page w-full bg-transparent text-foreground"
-      dir="rtl"
-      lang="ar"
-    >
+    <div className="rsg-page w-full bg-transparent text-foreground">
 
       <div className="pt-0">
         <CurvedProjectsHero

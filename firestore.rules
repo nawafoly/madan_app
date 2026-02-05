@@ -1,45 +1,19 @@
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    
-    // دالة للتحقق من تسجيل الدخول
-    function signedIn() {
-      return request.auth != null;
-    }
+match /projects/{projectId} {
+  allow read: if true;
 
-    // دالة للتحقق مما إذا كان المستخدم "أدمن" (يفترض وجود حقل role في مجموعة users)
-    function isAdmin() {
-      return signedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
-    }
+  allow create: if isAdmin();
 
-    // ✅ settings: قراءة عامة للجميع، كتابة للأدمن فقط
-    match /settings/{docId} {
-      allow read: if true;
-      allow write: if isAdmin();
-    }
+  allow update: if isAdmin() && !touchingProjectAggregates();
 
-    // ✅ projects: القراءة متاحة للجميع (زوار/غير مسجلين/عملاء)، الكتابة للأدمن فقط
-    match /projects/{projectId} {
-      allow read: if true;
-      allow write: if isAdmin();
-    }
+  allow delete: if isAdmin();
 
-    // ✅ investments: المستثمر يقرأ استثماره فقط، والأدمن يقرأ الكل
-    // الكتابة للأدمن فقط (أو عبر Cloud Functions التي تتخطى القواعد)
-    match /investments/{investmentId} {
-      allow read: if (signedIn() && request.auth.uid == resource.data.investorUid) || isAdmin();
-      allow write: if isAdmin();
-    }
-
-    // ✅ users: كل مستخدم يقرأ ملفه فقط، والأدمن يقرأ الكل
-    match /users/{userId} {
-      allow read: if (signedIn() && request.auth.uid == userId) || isAdmin();
-      allow write: if isAdmin();
-    }
-
-    // أي شيء آخر يتطلب تسجيل دخول كحد أدنى (أو يمكنك قفله تماماً)
-    match /{document=**} {
-      allow read, write: if isAdmin();
-    }
+  function touchingProjectAggregates() {
+    // ✅ يمنع تعديل aggregates فقط إذا كانت ضمن الحقول المتغيرة فعلاً
+    return request.resource.data.diff(resource.data).changedKeys().hasAny([
+      "currentAmount",
+      "investorsCount",
+      "pendingAmount",
+      "updatedAt"
+    ]);
   }
 }

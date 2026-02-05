@@ -34,11 +34,13 @@ import {
   Crown,
   BarChart3,
   Home,
+  Globe,
 } from "lucide-react";
 import { CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
 import { Button } from "./ui/button";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 const menuItems = [
   { icon: LayoutDashboard, label: "لوحة التحكم", path: "/dashboard" },
@@ -173,7 +175,7 @@ function nameFromEmail(email?: string) {
   const arParts = parts.map((p) => latinToArabicApprox(p));
   const arName = arParts.join(" ").trim();
 
-  // إذا التعريب طلع غريب جدًا، نعرض نسخة مرتبة إنجليزي كخطة بديلة
+  // إذا التعريب طلع غريب جداً، نعرض نسخة مرتبة إنجليزي كخطة بديلة
   if (!arName || arName.length < 2) {
     return parts.map(titleCaseLatin).join(" ");
   }
@@ -212,40 +214,13 @@ export default function DashboardLayout({
   });
 
   const { loading, user } = useAuth();
-  const [layoutDir, setLayoutDir] = useState<"rtl" | "ltr">("rtl");
-
-  useEffect(() => {
-    const updateDir = () => {
-      if (typeof document === "undefined") return;
-      const root = document.documentElement;
-      const body = document.body;
-      const dirAttr =
-        root.getAttribute("dir") || body?.getAttribute("dir") || "";
-      const langAttr =
-        root.getAttribute("lang") || body?.getAttribute("lang") || "";
-      const browserLang =
-        typeof navigator !== "undefined" ? navigator.language || "" : "";
-      const isRtl =
-        dirAttr.toLowerCase() === "rtl" ||
-        langAttr.toLowerCase() === "ar" ||
-        browserLang.toLowerCase().startsWith("ar");
-      setLayoutDir(isRtl ? "rtl" : "ltr");
-    };
-
-    updateDir();
-    const observer = new MutationObserver(updateDir);
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["dir", "lang"],
-    });
-    if (document.body) {
-      observer.observe(document.body, {
-        attributes: true,
-        attributeFilter: ["dir", "lang"],
-      });
-    }
-    return () => observer.disconnect();
-  }, []);
+  const { language } = useLanguage();
+  const layoutDir: "rtl" | "ltr" =
+    typeof document !== "undefined" && document.documentElement.dir === "rtl"
+      ? "rtl"
+      : language === "ar"
+      ? "rtl"
+      : "ltr";
 
   const sidebarSide = layoutDir === "rtl" ? "right" : "left";
 
@@ -285,6 +260,7 @@ export default function DashboardLayout({
   return (
     <SidebarProvider
       dir={layoutDir}
+      className="flex-row"
       style={
         {
           "--sidebar-width": `${sidebarWidth}px`,
@@ -313,11 +289,13 @@ function DashboardLayoutContent({
   sidebarSide,
 }: DashboardLayoutContentProps) {
   const { user, logout } = useAuth();
+  const { language } = useLanguage();
   const [location, setLocation] = useLocation();
   const { state, toggleSidebar } = useSidebar();
   const isCollapsed = state === "collapsed";
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
+  const mainRef = useRef<HTMLElement>(null);
   const activeMenuItem = menuItems.find((item) => item.path === location);
   const isMobile = useIsMobile();
   const isRight = sidebarSide === "right";
@@ -377,9 +355,14 @@ function DashboardLayoutContent({
     };
   }, [isResizing, isRight, setSidebarWidth]);
 
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    mainRef.current?.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, [location]);
+
   return (
     <>
-      <div className={`relative shrink-0 ${isRight ? "order-2" : ""}`} ref={sidebarRef}>
+      <div className="relative shrink-0" ref={sidebarRef}>
         <Sidebar
           side={sidebarSide}
           collapsible="icon"
@@ -405,7 +388,9 @@ function DashboardLayoutContent({
                   </div>
 
                   {/* ✅ زر الرئيسية */}
-                  <div className={isRight ? "mr-auto" : "ml-auto"}>
+                  <div
+                    className={`${isRight ? "mr-auto" : "ml-auto"} flex items-center gap-2`}
+                  >
                     <Button
                       variant="outline"
                       size="sm"
@@ -489,7 +474,7 @@ function DashboardLayoutContent({
         />
       </div>
 
-      <SidebarInset className={isRight ? "order-1" : ""}>
+      <SidebarInset>
         {isMobile && (
           <div className="flex border-b h-14 items-center justify-between bg-transparent px-2 backdrop-blur supports-[backdrop-filter]:backdrop-blur sticky top-0 z-40">
             <div className="flex items-center gap-2">
@@ -516,7 +501,10 @@ function DashboardLayoutContent({
           </div>
         )}
 
-        <main className="flex-1 w-full px-4 md:px-6 lg:px-8 py-4 md:py-6">
+        <main
+          ref={mainRef}
+          className="flex-1 w-full px-4 md:px-6 lg:px-8 py-4 md:py-6"
+        >
           {children}
         </main>
       </SidebarInset>
