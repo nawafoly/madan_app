@@ -1,19 +1,174 @@
-match /projects/{projectId} {
-  allow read: if true;
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
 
-  allow create: if isAdmin();
+    function signedIn() {
+      return request.auth != null;
+    }
 
-  allow update: if isAdmin() && !touchingProjectAggregates();
+    function isAdmin() {
+      return signedIn() &&
+        (
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'owner'
+        );
+    }
 
-  allow delete: if isAdmin();
+    // ✅ settings: قراءة عامة للجميع، كتابة للأدمن فقط
+    match /settings/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
 
-  function touchingProjectAggregates() {
-    // ✅ يمنع تعديل aggregates فقط إذا كانت ضمن الحقول المتغيرة فعلاً
-    return request.resource.data.diff(resource.data).changedKeys().hasAny([
-      "currentAmount",
-      "investorsCount",
-      "pendingAmount",
-      "updatedAt"
-    ]);
+    // ✅ projects: قراءة عامة، كتابة للأدمن لكن ممنوع تعديل aggregates من أي Client
+    match /projects/{projectId} {
+      allow read: if true;
+
+      allow create: if isAdmin();
+      allow delete: if isAdmin();
+
+      allow update: if isAdmin() && !touchingProjectAggregates();
+
+      function touchingProjectAggregates() {
+        return request.resource.data.diff(resource.data).changedKeys().hasAny([
+          "currentAmount",
+          "investorsCount",
+          "pendingAmount",
+          "updatedAt"
+        ]);
+      }
+    }
+
+    // ✅ investments: المستثمر يقرأ استثماره فقط، والأدمن يقرأ الكل
+    match /investments/{investmentId} {
+      allow read: if (signedIn() && request.auth.uid == resource.data.investorUid) || isAdmin();
+
+      // ✅ client can create pending investment with strict constraints
+      allow create: if isAdmin() || (
+        signedIn() &&
+        request.resource.data.investorUid == request.auth.uid &&
+        request.resource.data.status == "pending" &&
+        request.resource.data.amount is number &&
+        request.resource.data.amount > 0 &&
+        request.resource.data.projectId is string &&
+        request.resource.data.projectId.size() > 0 &&
+        exists(/databases/$(database)/documents/projects/$(request.resource.data.projectId))
+      );
+
+      // ✅ any update/delete بعد الإنشاء للأدمن فقط
+      allow update, delete: if isAdmin();
+    }
+
+    // ✅ users: كل مستخدم يقرأ ملفه فقط، والأدمن يقرأ الكل
+    match /users/{userId} {
+      allow read: if (signedIn() && request.auth.uid == userId) || isAdmin();
+
+      allow create: if signedIn() && request.auth.uid == userId && isValidUserCreate();
+
+      allow update: if isAdmin() || (
+        signedIn() &&
+        request.auth.uid == userId &&
+        isValidUserUpdate()
+      );
+
+      allow delete: if isAdmin();
+
+      function isBootstrapOwnerEmail() {
+        return request.auth.token.email == "nawafaaa0@gmail.com";
+      }
+
+      function canSetRole() {
+        return request.resource.data.role == "client" ||
+          (request.resource.data.role == "owner" && isBootstrapOwnerEmail());
+      }
+
+      function isValidUserCreate() {
+        return request.resource.data.keys().hasOnly([
+          "role",
+          "email",
+          "displayName",
+          "phone",
+          "isInvestor",
+          "nationalId",
+          "city",
+          "marketingOptIn",
+          "kycStatus",
+          "permissionsAllow",
+          "permissionsDeny",
+          "createdAt",
+          "updatedAt",
+          "source",
+          "uid"
+        ]) &&
+        canSetRole() &&
+        request.resource.data.email == request.auth.token.email &&
+        request.resource.data.displayName is string &&
+        request.resource.data.phone is string &&
+        request.resource.data.isInvestor is bool &&
+        (!request.resource.data.keys().hasAny(["uid"]) || request.resource.data.uid == request.auth.uid) &&
+        (!request.resource.data.keys().hasAny(["nationalId"]) || request.resource.data.nationalId is string) &&
+        (!request.resource.data.keys().hasAny(["city"]) || request.resource.data.city is string) &&
+        (!request.resource.data.keys().hasAny(["marketingOptIn"]) || request.resource.data.marketingOptIn is bool) &&
+        (!request.resource.data.keys().hasAny(["kycStatus"]) || request.resource.data.kycStatus is string) &&
+        (!request.resource.data.keys().hasAny(["permissionsAllow"]) ||
+          (request.resource.data.permissionsAllow is list &&
+           request.resource.data.permissionsAllow.size() == 0)) &&
+        (!request.resource.data.keys().hasAny(["permissionsDeny"]) ||
+          (request.resource.data.permissionsDeny is list &&
+           request.resource.data.permissionsDeny.size() == 0));
+      }
+
+      function isValidUserUpdate() {
+        let keys = request.resource.data.diff(resource.data).changedKeys();
+        return keys.hasOnly([
+          "displayName",
+          "phone",
+          "isInvestor",
+          "nationalId",
+          "city",
+          "marketingOptIn",
+          "kycStatus",
+          "updatedAt",
+          "email",
+          "uid",
+          "permissionsAllow",
+          "permissionsDeny",
+          "role"
+        ]) &&
+        (!keys.hasAny(["role"]) || canSetRole()) &&
+        (!keys.hasAny(["email"]) || request.resource.data.email == request.auth.token.email) &&
+        (!keys.hasAny(["uid"]) || request.resource.data.uid == request.auth.uid) &&
+        (!keys.hasAny(["displayName"]) || request.resource.data.displayName is string) &&
+        (!keys.hasAny(["phone"]) || request.resource.data.phone is string) &&
+        (!keys.hasAny(["isInvestor"]) || request.resource.data.isInvestor is bool) &&
+        (!keys.hasAny(["nationalId"]) || request.resource.data.nationalId is string) &&
+        (!keys.hasAny(["city"]) || request.resource.data.city is string) &&
+        (!keys.hasAny(["marketingOptIn"]) || request.resource.data.marketingOptIn is bool) &&
+        (!keys.hasAny(["kycStatus"]) || request.resource.data.kycStatus is string) &&
+        (!keys.hasAny(["permissionsAllow"]) ||
+          (request.resource.data.permissionsAllow is list &&
+           request.resource.data.permissionsAllow.size() == 0 &&
+           (!resource.data.keys().hasAny(["permissionsAllow"]) ||
+            resource.data.permissionsAllow.size() == 0))) &&
+        (!keys.hasAny(["permissionsDeny"]) ||
+          (request.resource.data.permissionsDeny is list &&
+           request.resource.data.permissionsDeny.size() == 0 &&
+           (!resource.data.keys().hasAny(["permissionsDeny"]) ||
+            resource.data.permissionsDeny.size() == 0)));
+      }
+    }
+
+    match /admin_users/{docId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /role_invites/{docId} {
+      allow read, write: if isAdmin();
+    }
+
+    // أي شيء آخر مقفول إلا للأدمن
+    match /{document=**} {
+      allow read, write: if isAdmin();
+    }
   }
 }

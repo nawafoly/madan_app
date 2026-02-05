@@ -141,22 +141,59 @@ export default function ProjectDetails() {
   const [project, setProject] = useState<any | null>(null);
 
   const [sending, setSending] = useState(false);
+
+  // ✅ NEW: user profile from Firestore
+  const [userProfile, setUserProfile] = useState<any | null>(null);
+
   const [formData, setFormData] = useState({
-    name: (user as any)?.name || "",
-    email: user?.email || "",
+    name: "",
+    email: "",
     phone: "",
     estimatedAmount: "",
     message: "",
   });
 
-  // keep form in sync after auth loads
+  // ✅ NEW: load users/{uid} to fill name/phone/isInvestor
   useEffect(() => {
-    setFormData((prev) => ({
-      ...prev,
-      name: prev.name || (user as any)?.name || "",
-      email: prev.email || user?.email || "",
-    }));
-  }, [user, user?.email]);
+    (async () => {
+      try {
+        if (!user?.uid) {
+          setUserProfile(null);
+          setFormData((p) => ({
+            ...p,
+            name: "",
+            email: "",
+            phone: "",
+          }));
+          return;
+        }
+
+        const snap = await getDoc(doc(db, "users", user.uid));
+        if (!snap.exists()) {
+          setUserProfile(null);
+          setFormData((p) => ({
+            ...p,
+            name: p.name || (user.displayName || ""),
+            email: p.email || (user.email || ""),
+            phone: p.phone || "",
+          }));
+          return;
+        }
+
+        const p = snap.data() as any;
+        setUserProfile(p);
+
+        setFormData((prev) => ({
+          ...prev,
+          name: prev.name || p.displayName || user.displayName || "",
+          email: prev.email || p.email || user.email || "",
+          phone: prev.phone || p.phone || "",
+        }));
+      } catch (e) {
+        console.error(e);
+      }
+    })();
+  }, [user?.uid]);
 
   /* =========================
      Load settings (labels + flags)
@@ -321,7 +358,6 @@ export default function ProjectDetails() {
     ? pickLabel(labels.projectStatuses[project.status], "ar", project.status)
     : "";
 
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!project) return;
@@ -329,22 +365,59 @@ export default function ProjectDetails() {
     try {
       setSending(true);
 
-      await addDoc(collection(db, "messages"), {
-        type: "investment_request",
-        status: "new",
+      if (!user?.uid) {
+        toast.error("الرجاء تسجيل الدخول أولاً");
+        return;
+      }
+
+      const phone = formData.phone.trim();
+      if (!phone) {
+        toast.error("رقم الجوال مطلوب");
+        return;
+      }
+
+      const amount = Number(formData.estimatedAmount);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        toast.error("المبلغ مطلوب ويجب أن يكون أكبر من صفر");
+        return;
+      }
+
+      await addDoc(collection(db, "investments"), {
         projectId: project?.id || projectId,
         projectTitle: project?.titleAr || project?.title || "",
-        name: formData.name,
-        email: formData.email,
-        phone: formData.phone,
-        estimatedAmount: formData.estimatedAmount ? Number(formData.estimatedAmount) : null,
-        message: formData.message,
+
+        // ✅ user links
+        investorUid: user.uid,
+        userId: user.uid,
+        investorEmail: user.email || null,
+        investorName: formData.name || null,
+        investorPhone: phone || null,
+
+        // ✅ amount/status
+        amount,
+        status: "pending",
+        note: formData.message || null,
+
+        // ✅ snapshots (ثابتة)
+        projectSnapshot: {
+          titleAr: project?.titleAr || null,
+          title: project?.title || null,
+          minInvestment: project?.minInvestment ?? null,
+          annualReturn: project?.annualReturn ?? null,
+          duration: project?.duration ?? null,
+        },
+        userSnapshot: {
+          displayName: formData.name || null,
+          email: formData.email || null,
+          phone: phone || null,
+          isInvestor: userProfile?.isInvestor ?? false,
+        },
+
         createdAt: serverTimestamp(),
-        createdByUid: user?.uid || null,
-        createdByEmail: user?.email || null,
+        updatedAt: serverTimestamp(),
       });
 
-      toast.success("تم إرسال طلبك بنجاح! سنتواصل معك قريباً");
+      toast.success("تم إنشاء الاستثمار (قيد المراجعة) بنجاح");
       setIsInterestFormOpen(false);
       setFormData((p) => ({ ...p, phone: "", estimatedAmount: "", message: "" }));
     } catch (err) {
@@ -813,6 +886,8 @@ export default function ProjectDetails() {
                         <Input
                           value={formData.phone}
                           onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                          required
+                          placeholder="05xxxxxxxx"
                         />
                       </div>
 

@@ -1,6 +1,7 @@
 const admin = require("firebase-admin");
 const { onDocumentWritten } = require("firebase-functions/v2/firestore");
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const { onUserCreated } = require("firebase-functions/v2/auth");
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -21,6 +22,9 @@ const OFFICIAL_STATUSES = new Set([
   "cancelled",
 ]);
 
+// ✅ roles whitelist (no weird roles get saved)
+const ALLOWED_ROLES = new Set(["client", "owner", "admin", "accountant", "staff"]);
+
 const toNumberSafe = (v) => {
   const n = Number(v ?? 0);
   return Number.isFinite(n) ? n : 0;
@@ -31,6 +35,7 @@ const normalizeStatus = (inv) => {
 
   if (OFFICIAL_STATUSES.has(raw)) return { status: raw, update: false };
 
+  // legacy mapping
   if (raw === "approved") {
     const next = inv?.finalizedAt ? "active" : "signed";
     return { status: next, update: true };
@@ -85,6 +90,7 @@ const recomputeProjectAggregates = async (projectId) => {
     }
   });
 
+  // normalize legacy statuses once, and skip recursive aggregate trigger
   if (legacyUpdates.length) {
     const batch = db.batch();
     legacyUpdates.forEach((u) => {
@@ -92,7 +98,7 @@ const recomputeProjectAggregates = async (projectId) => {
         status: u.status,
         __skipAggregates: true,
         updatedAt: FieldValue.serverTimestamp(),
-      });      
+      });
     });
     await batch.commit();
   }
@@ -107,7 +113,12 @@ const recomputeProjectAggregates = async (projectId) => {
     { merge: true }
   );
 
-  return { projectId: pid, currentAmount, pendingAmount, investorsCount: investors.size };
+  return {
+    projectId: pid,
+    currentAmount,
+    pendingAmount,
+    investorsCount: investors.size,
+  };
 };
 
 exports.recomputeProjectAggregates = onCall({ region: REGION }, async (request) => {
@@ -148,6 +159,72 @@ exports.recomputeAllProjectAggregates = onCall({ region: REGION }, async (reques
   }
 
   return { ok: true, count: results.length };
+});
+
+/**
+ * ✅ Auth trigger:
+ * Create users/{uid} automatically
+ * + Apply role_invites/{emailLower} if exists and active
+ * + Consume invite after use (isActive=false)
+ */
+exports.onAuthCreateUserProfile = onUserCreated({ region: "us-central1" }, async (event) => {
+  const user = event.data;
+  if (!user?.uid) return;
+
+  const userRef = db.doc(`users/${user.uid}`);
+  const snap = await userRef.get();
+  if (snap.exists) return;
+
+  // defaults
+  let role = "client";
+  let isInvestor = false;
+
+  const emailLower = String(user.email || "").trim().toLowerCase();
+  let inviteApplied = false;
+
+  // ✅ apply invite by email (if created from Admin Settings)
+  if (emailLower) {
+    const invRef = db.doc(`role_invites/${emailLower}`);
+    const invSnap = await invRef.get();
+    const inv = invSnap.exists ? invSnap.data() : null;
+
+    if (inv?.isActive && inv?.roleKey) {
+      role = String(inv.roleKey).trim().toLowerCase();
+      if (!ALLOWED_ROLES.has(role)) role = "client";
+
+      if (typeof inv?.isInvestor === "boolean") isInvestor = inv.isInvestor;
+
+      inviteApplied = true;
+    }
+  }
+
+  await userRef.set(
+    {
+      role,
+      email: user.email || "",
+      displayName: user.displayName || "",
+      phone: user.phoneNumber || "",
+      isInvestor,
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+      source: inviteApplied ? "auth_trigger_invite_check" : "auth_trigger",
+      roleKeySource: inviteApplied ? "role_invites" : "default",
+    },
+    { merge: true }
+  );
+
+  // ✅ consume invite after using it (optional but recommended)
+  if (inviteApplied && emailLower) {
+    const invRef = db.doc(`role_invites/${emailLower}`);
+    await invRef.set(
+      {
+        isActive: false,
+        usedAt: FieldValue.serverTimestamp(),
+        usedByUid: user.uid,
+      },
+      { merge: true }
+    );
+  }
 });
 
 exports.onInvestmentWrite = onDocumentWritten(

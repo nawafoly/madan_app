@@ -283,7 +283,6 @@ export default function ProjectsManagement() {
       const nextStatus = p.status === "published" ? "draft" : "published";
       await updateDoc(doc(db, "projects", p.id), {
         status: nextStatus,
-        updatedAt: Timestamp.now(),
       });
 
       toast.success(nextStatus === "published" ? "تم نشر المشروع" : "تم إخفاء المشروع");

@@ -1348,14 +1348,6 @@ export default function MessagesManagement() {
         const amount = toNumOrNull(inv?.amount);
         if (!amount || amount <= 0) throw new Error("invalid_amount");
 
-        const prevAmount =
-          toNumOrNull((projectSnap.data() as any)?.currentAmount) ?? 0;
-
-        tx.update(projectRef, {
-          currentAmount: prevAmount + amount,
-          updatedAt: serverTimestamp(),
-        });
-
         tx.update(invRef, {
           status: "active",
           finalizedAt: serverTimestamp(),
@@ -2286,4 +2278,3 @@ function TimelineView({ events }: { events: TimelineEvent[] }) {
     </div>
   );
 }
-

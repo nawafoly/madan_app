@@ -1,55 +1,65 @@
-// client/src/pages/Login.tsx
+﻿// client/src/pages/Login.tsx
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   sendPasswordResetEmail,
+  updateProfile,
 } from "firebase/auth";
-import { auth } from "@/_core/firebase";
+import { doc, serverTimestamp, setDoc } from "firebase/firestore";
+import { auth, db } from "@/_core/firebase";
 import { useAuth } from "@/_core/hooks/useAuth";
 
-type AppRole = "user" | "owner" | "accountant" | "staff";
+type AppRole = "client" | "owner" | "admin" | "accountant" | "staff";
 
 function homeForRole(role: AppRole) {
-  if (role === "owner" || role === "accountant" || role === "staff")
+  if (role === "owner" || role === "admin" || role === "accountant" || role === "staff") {
     return "/dashboard";
+  }
   return "/client/dashboard";
 }
 
 export default function LoginPage() {
   const { user, loading, error } = useAuth();
 
-  // ✅ خذ المسار الحالي + setLocation
+  // خذ المسار الحالي + setLocation
   const [location, setLocation] = useLocation();
 
   const [busy, setBusy] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const [localInfo, setLocalInfo] = useState<string | null>(null);
 
-  // ✅ Login/Register mode
+  // Login/Register mode
   const [mode, setMode] = useState<"login" | "register">("login");
 
-  // ✅ Form
+  // Form
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
 
-  // ✅ تحقق مبسط من ENV
+  // Register extra fields
+  const [fullName, setFullName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [isInvestor, setIsInvestor] = useState(false);
+  const [nationalId, setNationalId] = useState("");
+
+  // تحقق مبسط من ENV
   const firebaseConfigured = useMemo(() => {
     const projectId = (import.meta.env.VITE_FB_PROJECT_ID ?? "").trim();
     const apiKey = (import.meta.env.VITE_FB_API_KEY ?? "").trim();
     return Boolean(projectId && apiKey);
   }, []);
 
-  // ✅ Redirect ثابت: إذا المستخدم موجود و loading خلص → ودّه حسب role
+  // Redirect ثابت: إذا المستخدم موجود و loading خلص → وده حسب role
   useEffect(() => {
     if (loading) return;
     if (!user) return;
 
-    const role = (user.role ?? "user") as AppRole;
+    const role = ((user as any).role ?? "client") as AppRole;
     const target = homeForRole(role);
 
-    // ✅ امنع إعادة التوجيه لنفس الصفحة
+    // امنع إعادة التوجيه لنفس الصفحة
     if (location === target) return;
 
     setLocation(target);
@@ -74,7 +84,7 @@ export default function LoginPage() {
       case "auth/email-already-in-use":
         return "هذا البريد مستخدم بالفعل.";
       case "auth/too-many-requests":
-        return "محاولات كثيرة. انتظر قليلًا ثم أعد المحاولة.";
+        return "محاولات كثيرة. انتظر قليلاً ثم أعد المحاولة.";
       case "auth/network-request-failed":
         return "مشكلة اتصال بالإنترنت. حاول مرة أخرى.";
       default:
@@ -106,12 +116,54 @@ export default function LoginPage() {
     try {
       if (mode === "login") {
         await signInWithEmailAndPassword(auth, e, p);
-        // ✅ redirect يتم من useEffect
-      } else {
-        await createUserWithEmailAndPassword(auth, e, p);
-        // ✅ useAuth سيقوم بإنشاء user doc (users/{uid}) تلقائياً
-        // ✅ redirect يتم من useEffect
+        // redirect يتم من useEffect
+        return;
       }
+
+      // register
+      const name = fullName.trim();
+      const phoneStr = phone.trim();
+      const natId = nationalId.trim();
+
+      if (!name) {
+        setBusy(false);
+        setLocalError("فضلاً اكتب الاسم الكامل.");
+        return;
+      }
+      if (!phoneStr) {
+        setBusy(false);
+        setLocalError("فضلاً اكتب رقم الجوال.");
+        return;
+      }
+
+      const cred = await createUserWithEmailAndPassword(auth, e, p);
+
+      // ✅ حدّث Auth profile (مفيد للواجهة + للـ CF إذا احتاج)
+      try {
+        await updateProfile(cred.user, { displayName: name });
+      } catch {
+        // ignore
+      }
+
+      const ref = doc(db, "users", cred.user.uid);
+
+      // ✅ اكتب/ادمج مباشرة — بدون updateDoc ولا race
+      const payload: Record<string, any> = {
+        role: "client",
+        email: e,
+        displayName: name,
+        phone: phoneStr, // نخليه string دائمًا
+        isInvestor: Boolean(isInvestor),
+        updatedAt: serverTimestamp(),
+        createdAt: serverTimestamp(),
+        source: "ui_signup",
+      };
+
+      if (natId) payload.nationalId = natId;
+
+      await setDoc(ref, payload, { merge: true });
+
+      // redirect يتم من useEffect
     } catch (err: any) {
       setLocalError(friendlyAuthError(err?.code));
     } finally {
@@ -143,14 +195,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        display: "grid",
-        placeItems: "center",
-        padding: 16,
-      }}
-    >
+    <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: 16 }}>
       <div
         style={{
           width: "min(460px, 100%)",
@@ -165,14 +210,7 @@ export default function LoginPage() {
           {mode === "login" ? "تسجيل الدخول" : "إنشاء حساب"}
         </h1>
 
-        <p
-          style={{
-            marginTop: 8,
-            marginBottom: 14,
-            opacity: 0.75,
-            fontSize: 13,
-          }}
-        >
+        <p style={{ marginTop: 8, marginBottom: 14, opacity: 0.75, fontSize: 13 }}>
           تسجيل الدخول يتم عبر البريد وكلمة المرور باستخدام Firebase Auth.
         </p>
 
@@ -224,9 +262,7 @@ export default function LoginPage() {
         {/* Fields */}
         <div style={{ display: "grid", gap: 10 }}>
           <div>
-            <label style={{ display: "block", fontSize: 12, opacity: 0.8 }}>
-              البريد الإلكتروني
-            </label>
+            <label style={{ display: "block", fontSize: 12, opacity: 0.8 }}>البريد الإلكتروني</label>
             <input
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -246,10 +282,89 @@ export default function LoginPage() {
             />
           </div>
 
-          <div>
-            <label style={{ display: "block", fontSize: 12, opacity: 0.8 }}>
-              كلمة المرور
+          {mode === "register" && (
+            <div>
+              <label style={{ display: "block", fontSize: 12, opacity: 0.8 }}>الاسم الكامل</label>
+              <input
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                placeholder="مثال: محمد أحمد"
+                autoComplete="name"
+                disabled={busy}
+                style={{
+                  width: "100%",
+                  height: 44,
+                  borderRadius: 14,
+                  border: "1px solid rgba(0,0,0,0.12)",
+                  padding: "0 12px",
+                  outline: "none",
+                  background: "rgba(255,255,255,0.98)",
+                }}
+              />
+            </div>
+          )}
+
+          {mode === "register" && (
+            <div>
+              <label style={{ display: "block", fontSize: 12, opacity: 0.8 }}>رقم الجوال</label>
+              <input
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="05xxxxxxxx"
+                autoComplete="tel"
+                inputMode="tel"
+                disabled={busy}
+                style={{
+                  width: "100%",
+                  height: 44,
+                  borderRadius: 14,
+                  border: "1px solid rgba(0,0,0,0.12)",
+                  padding: "0 12px",
+                  outline: "none",
+                  background: "rgba(255,255,255,0.98)",
+                }}
+              />
+            </div>
+          )}
+
+          {mode === "register" && (
+            <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <input
+                type="checkbox"
+                checked={isInvestor}
+                onChange={(e) => setIsInvestor(e.target.checked)}
+                disabled={busy}
+              />
+              مستثمر؟
             </label>
+          )}
+
+          {mode === "register" && (
+            <div>
+              <label style={{ display: "block", fontSize: 12, opacity: 0.8 }}>
+                رقم الهوية/الإقامة (اختياري)
+              </label>
+              <input
+                value={nationalId}
+                onChange={(e) => setNationalId(e.target.value)}
+                placeholder="مثال: 10xxxxxxxx"
+                inputMode="numeric"
+                disabled={busy}
+                style={{
+                  width: "100%",
+                  height: 44,
+                  borderRadius: 14,
+                  border: "1px solid rgba(0,0,0,0.12)",
+                  padding: "0 12px",
+                  outline: "none",
+                  background: "rgba(255,255,255,0.98)",
+                }}
+              />
+            </div>
+          )}
+
+          <div>
+            <label style={{ display: "block", fontSize: 12, opacity: 0.8 }}>كلمة المرور</label>
             <input
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -267,6 +382,31 @@ export default function LoginPage() {
                 background: "rgba(255,255,255,0.98)",
               }}
             />
+
+            {mode === "register" && (
+              <div>
+                <label style={{ display: "block", fontSize: 12, opacity: 0.8 }}>
+                  تأكيد كلمة المرور
+                </label>
+                <input
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  type="password"
+                  autoComplete="new-password"
+                  disabled={busy}
+                  style={{
+                    width: "100%",
+                    height: 44,
+                    borderRadius: 14,
+                    border: "1px solid rgba(0,0,0,0.12)",
+                    padding: "0 12px",
+                    outline: "none",
+                    background: "rgba(255,255,255,0.98)",
+                  }}
+                />
+              </div>
+            )}
+
           </div>
 
           <button
@@ -277,8 +417,7 @@ export default function LoginPage() {
               height: 44,
               borderRadius: 14,
               border: "none",
-              background:
-                !firebaseConfigured || busy ? "rgba(0,0,0,0.25)" : "#111",
+              background: !firebaseConfigured || busy ? "rgba(0,0,0,0.25)" : "#111",
               color: "#fff",
               fontWeight: 800,
               cursor: !firebaseConfigured || busy ? "not-allowed" : "pointer",
@@ -322,6 +461,10 @@ export default function LoginPage() {
                 setLocalError(null);
                 setLocalInfo(null);
                 setPassword("");
+                setFullName("");
+                setPhone("");
+                setIsInvestor(false);
+                setNationalId("");
                 setMode((m) => (m === "login" ? "register" : "login"));
               }}
               disabled={busy}
@@ -340,8 +483,8 @@ export default function LoginPage() {
           </div>
 
           <div style={{ fontSize: 12, opacity: 0.6, marginTop: 6 }}>
-            ملاحظة: بعد تسجيل الدخول سيتم توجيهك تلقائيًا حسب دورك (Dashboard للإدارة /
-            Client Dashboard للعميل).
+            ملاحظة: بعد تسجيل الدخول سيتم توجيهك تلقائيًا حسب دورك (Dashboard للإدارة / Client
+            Dashboard للعميل).
           </div>
         </div>
       </div>

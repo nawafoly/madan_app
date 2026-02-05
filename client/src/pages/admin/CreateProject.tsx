@@ -99,7 +99,6 @@ export default function CreateProject() {
         status: formData.status,
 
         targetAmount: toNumberSafe(formData.targetAmount),
-        currentAmount: toNumberSafe(formData.currentAmount),
         minInvestment: toNumberSafe(formData.minInvestment),
 
         annualReturn: toNumberSafe(formData.returnRate),
@@ -113,7 +112,6 @@ export default function CreateProject() {
         vipOnly: formData.type === "vip",
 
         createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
       });
 
       toast.success("تم إنشاء المشروع بنجاح");

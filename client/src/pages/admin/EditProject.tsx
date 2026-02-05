@@ -309,11 +309,9 @@ export default function EditProject() {
 
         // finance (numbers)
         targetAmount: toNumOrZero(formData.targetAmount),
-        currentAmount: toNumOrZero(formData.currentAmount),
         minInvestment: toNumOrZero(formData.minInvestment),
         annualReturn: toNumOrZero(formData.annualReturn),
         duration: toNumOrZero(formData.duration),
-        investorsCount: toNumOrZero(formData.investorsCount),
 
         // flags
         featured: formData.featured === "true",
@@ -331,7 +329,6 @@ export default function EditProject() {
         progressFundingWeight: toNumOrZero(formData.progressFundingWeight),
         progressMilestonesWeight: toNumOrZero(formData.progressMilestonesWeight),
 
-        updatedAt: serverTimestamp(),
       };
 
       await updateDoc(doc(db, "projects", projectId), payload);
