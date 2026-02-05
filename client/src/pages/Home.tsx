@@ -1,9 +1,6 @@
 // client/src/pages/Home.tsx
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
-import Header from "@/components/Header";
-import Footer from "@/components/Footer";
-import ContactCTA from "@/components/ContactCTA";
 import VideoModal from "@/components/VideoModal";
 import { Button } from "@/components/ui/button";
 import {
@@ -361,16 +358,9 @@ export default function Home() {
       dir="rtl"
       lang="ar"
     >
-      <Header />
 
       {/* ✅ scroll-snap container */}
-      <main className="flex-grow relative overflow-y-auto snap-y snap-mandatory h-screen">
-        <div className="pointer-events-none absolute inset-0 z-0">
-          <div className="absolute -left-40 top-0 h-full w-[520px] opacity-[0.50] bg-[url('/bg-01-l.png')] bg-no-repeat bg-contain" />
-          <div className="absolute -right-40 top-0 h-full w-[520px] opacity-[0.50] bg-[url('/bg-01-r.png')] bg-no-repeat bg-contain" />
-          <div className="absolute inset-0 bg-white/60" />
-        </div>
-
+      <main className="flex-grow relative z-0">
         <div className="relative z-10">
           {/* HERO */}
           <section className={`${SECTION} relative w-full overflow-hidden`}>
@@ -492,36 +482,49 @@ export default function Home() {
           </section>
 
           {/* ✅ Stats */}
-          <section className={`${SECTION} rsg-dark-patterned py-16 md:py-20`}>
-            <div className="container text-center w-full">
-              <h2 className="text-4xl md:text-5xl font-bold">أرقام تعكس ثقتنا</h2>
-              <p className="mt-3 text-white/80">
-                مؤشرات مختصرة تساعدك على اتخاذ القرار بسرعة.
-              </p>
+          <section className={`${SECTION} section-dark-wave py-16 md:py-20`}>
+  <div className="container text-center w-full">
+    <h2 className="text-4xl md:text-5xl font-bold">أرقام تعكس ثقتنا</h2>
+    <p className="mt-3 text-white/80">
+      مؤشرات مختصرة تساعدك على اتخاذ القرار بسرعة.
+    </p>
 
-              <div className="rsg-stats mt-12">
-                <div className="rsg-stat">
-                  <div className="rsg-stat__value">{stats.totalInvestment}</div>
-                  <div className="rsg-stat__label">إجمالي الاستثمارات</div>
-                </div>
+    <div className="rsg-stats mt-12">
+      <div className="rsg-stat">
+        <div className="rsg-stat__value">{stats.totalInvestment}</div>
+        <div className="rsg-stat__label">إجمالي الاستثمارات</div>
+      </div>
 
-                <div className="rsg-stat">
-                  <div className="rsg-stat__value">{stats.projectsCount}</div>
-                  <div className="rsg-stat__label">عدد المشاريع</div>
-                </div>
+      <div className="rsg-stat">
+        <div className="rsg-stat__value">{stats.projectsCount}</div>
+        <div className="rsg-stat__label">عدد المشاريع</div>
+      </div>
 
-                <div className="rsg-stat">
-                  <div className="rsg-stat__value">{stats.avgReturn}</div>
-                  <div className="rsg-stat__label">متوسط العائد</div>
-                </div>
+      <div className="rsg-stat">
+        <div className="rsg-stat__value">{stats.avgReturn}</div>
+        <div className="rsg-stat__label">متوسط العائد</div>
+      </div>
 
-                <div className="rsg-stat">
-                  <div className="rsg-stat__value">{stats.avgDuration}</div>
-                  <div className="rsg-stat__label">متوسط مدة المشروع</div>
-                </div>
-              </div>
-            </div>
-          </section>
+      <div className="rsg-stat">
+        <div className="rsg-stat__value">{stats.avgDuration}</div>
+        <div className="rsg-stat__label">متوسط مدة المشروع</div>
+      </div>
+    </div>
+  </div>
+
+  {/* ✅ أضف هذا بالأسفل مباشرة */}
+  <svg
+    className="absolute bottom-[-1px] left-0 w-full h-24 md:h-28 text-white pointer-events-none"
+    viewBox="0 0 1440 120"
+    preserveAspectRatio="none"
+  >
+    <path
+      fill="currentColor"
+      d="M0,64 C240,120 480,120 720,88 C960,56 1200,8 1440,40 L1440,120 L0,120 Z"
+    />
+  </svg>
+</section>
+
 
           {/* ✅ Featured */}
           <section className={`${SECTION} section-light py-16 md:py-20`}>
@@ -686,11 +689,6 @@ export default function Home() {
             </div>
           </section>
 
-          {/* ✅ ContactCTA + Footer كآخر سكشن (عشان العوم يشتغل صح) */}
-          <section className="snap-start">
-            <ContactCTA />
-            <Footer />
-          </section>
         </div>
       </main>
 

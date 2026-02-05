@@ -196,11 +196,11 @@ useEffect(() => {
                   );
                 })}
 
-                <Link href="/">
+                <Link href="/" className="flex items-center justify-center">
                   <img
                     src="/logo.png"
                     alt="MAEDIN logo"
-                    className="h-[60px] w-auto"
+                    className="rsg-nav__logo"
                   />
                 </Link>
 

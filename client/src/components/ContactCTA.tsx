@@ -34,7 +34,7 @@ export default function ContactCTA() {
   );
 
   return (
-    <section dir="rtl" className="bg-white">
+    <section dir="rtl" className="bg-transparent">
       {/* الشريط الأبيض */}
       <div className="container pt-16 md:pt-20 pb-24 md:pb-28 text-center">
         <h2 className="text-5xl md:text-6xl font-bold text-primary">

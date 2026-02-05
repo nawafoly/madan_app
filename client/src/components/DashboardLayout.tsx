@@ -212,6 +212,42 @@ export default function DashboardLayout({
   });
 
   const { loading, user } = useAuth();
+  const [layoutDir, setLayoutDir] = useState<"rtl" | "ltr">("rtl");
+
+  useEffect(() => {
+    const updateDir = () => {
+      if (typeof document === "undefined") return;
+      const root = document.documentElement;
+      const body = document.body;
+      const dirAttr =
+        root.getAttribute("dir") || body?.getAttribute("dir") || "";
+      const langAttr =
+        root.getAttribute("lang") || body?.getAttribute("lang") || "";
+      const browserLang =
+        typeof navigator !== "undefined" ? navigator.language || "" : "";
+      const isRtl =
+        dirAttr.toLowerCase() === "rtl" ||
+        langAttr.toLowerCase() === "ar" ||
+        browserLang.toLowerCase().startsWith("ar");
+      setLayoutDir(isRtl ? "rtl" : "ltr");
+    };
+
+    updateDir();
+    const observer = new MutationObserver(updateDir);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["dir", "lang"],
+    });
+    if (document.body) {
+      observer.observe(document.body, {
+        attributes: true,
+        attributeFilter: ["dir", "lang"],
+      });
+    }
+    return () => observer.disconnect();
+  }, []);
+
+  const sidebarSide = layoutDir === "rtl" ? "right" : "left";
 
   useEffect(() => {
     localStorage.setItem(SIDEBAR_WIDTH_KEY, sidebarWidth.toString());
@@ -248,13 +284,17 @@ export default function DashboardLayout({
 
   return (
     <SidebarProvider
+      dir={layoutDir}
       style={
         {
           "--sidebar-width": `${sidebarWidth}px`,
         } as CSSProperties
       }
     >
-      <DashboardLayoutContent setSidebarWidth={setSidebarWidth}>
+      <DashboardLayoutContent
+        setSidebarWidth={setSidebarWidth}
+        sidebarSide={sidebarSide}
+      >
         {children}
       </DashboardLayoutContent>
     </SidebarProvider>
@@ -264,11 +304,13 @@ export default function DashboardLayout({
 type DashboardLayoutContentProps = {
   children: React.ReactNode;
   setSidebarWidth: (width: number) => void;
+  sidebarSide: "left" | "right";
 };
 
 function DashboardLayoutContent({
   children,
   setSidebarWidth,
+  sidebarSide,
 }: DashboardLayoutContentProps) {
   const { user, logout } = useAuth();
   const [location, setLocation] = useLocation();
@@ -278,6 +320,7 @@ function DashboardLayoutContent({
   const sidebarRef = useRef<HTMLDivElement>(null);
   const activeMenuItem = menuItems.find((item) => item.path === location);
   const isMobile = useIsMobile();
+  const isRight = sidebarSide === "right";
 
   // ✅ اسم العرض: يفضّل user.name، وإلا من الإيميل (بالعربي)
   const displayName = useMemo(() => {
@@ -308,8 +351,10 @@ function DashboardLayoutContent({
     const handleMouseMove = (e: MouseEvent) => {
       if (!isResizing) return;
 
-      const sidebarLeft = sidebarRef.current?.getBoundingClientRect().left ?? 0;
-      const newWidth = e.clientX - sidebarLeft;
+      const rect = sidebarRef.current?.getBoundingClientRect();
+      if (!rect) return;
+
+      const newWidth = isRight ? rect.right - e.clientX : e.clientX - rect.left;
       if (newWidth >= MIN_WIDTH && newWidth <= MAX_WIDTH) {
         setSidebarWidth(newWidth);
       }
@@ -330,14 +375,15 @@ function DashboardLayoutContent({
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
     };
-  }, [isResizing, setSidebarWidth]);
+  }, [isResizing, isRight, setSidebarWidth]);
 
   return (
     <>
-      <div className="relative" ref={sidebarRef}>
+      <div className={`relative shrink-0 ${isRight ? "order-2" : ""}`} ref={sidebarRef}>
         <Sidebar
+          side={sidebarSide}
           collapsible="icon"
-          className="border-r-0"
+          className={`${isRight ? "border-l border-border/60" : "border-r border-border/60"}${isMobile ? " bg-white" : ""}`}
           disableTransition={isResizing}
         >
           <SidebarHeader className="h-16 justify-center">
@@ -347,7 +393,7 @@ function DashboardLayoutContent({
                 className="h-8 w-8 flex items-center justify-center hover:bg-accent rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring shrink-0"
                 aria-label="Toggle navigation"
               >
-                <PanelLeft className="h-4 w-4 text-muted-foreground" />
+                <PanelLeft className="h-4 w-4 text-muted-foreground rtl:rotate-180" />
               </button>
 
               {!isCollapsed ? (
@@ -359,7 +405,7 @@ function DashboardLayoutContent({
                   </div>
 
                   {/* ✅ زر الرئيسية */}
-                  <div className="ml-auto">
+                  <div className={isRight ? "mr-auto" : "ml-auto"}>
                     <Button
                       variant="outline"
                       size="sm"
@@ -432,7 +478,7 @@ function DashboardLayoutContent({
         </Sidebar>
 
         <div
-          className={`absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/20 transition-colors ${
+          className={`absolute top-0 ${isRight ? "left-0" : "right-0"} w-1 h-full cursor-col-resize hover:bg-primary/20 transition-colors ${
             isCollapsed ? "hidden" : ""
           }`}
           onMouseDown={() => {
@@ -443,11 +489,11 @@ function DashboardLayoutContent({
         />
       </div>
 
-      <SidebarInset>
+      <SidebarInset className={isRight ? "order-1" : ""}>
         {isMobile && (
-          <div className="flex border-b h-14 items-center justify-between bg-background/95 px-2 backdrop-blur supports-[backdrop-filter]:backdrop-blur sticky top-0 z-40">
+          <div className="flex border-b h-14 items-center justify-between bg-transparent px-2 backdrop-blur supports-[backdrop-filter]:backdrop-blur sticky top-0 z-40">
             <div className="flex items-center gap-2">
-              <SidebarTrigger className="h-9 w-9 rounded-lg bg-background" />
+              <SidebarTrigger className="h-9 w-9 rounded-lg bg-transparent" />
               <div className="flex items-center gap-3">
                 <div className="flex flex-col gap-1">
                   <span className="tracking-tight text-foreground">
@@ -470,7 +516,9 @@ function DashboardLayoutContent({
           </div>
         )}
 
-        <main className="flex-1 p-4">{children}</main>
+        <main className="flex-1 w-full px-4 md:px-6 lg:px-8 py-4 md:py-6">
+          {children}
+        </main>
       </SidebarInset>
     </>
   );

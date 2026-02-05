@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+/* stylelint-disable at-rule-no-unknown -- Tailwind CSS v4 custom at-rules */
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
@@ -49,6 +50,7 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 }
+/* stylelint-enable at-rule-no-unknown */
 
 /* =========================
    ✅ MAEDIN Final Tokens (LOCKED)
@@ -113,6 +115,16 @@
   /* legacy helpers (keep for older code if referenced) */
   --navy: var(--primary);
   --navy-dark: #0d0d0d;
+
+  /* Sidebar */
+  --sidebar: rgba(255, 255, 255, 0.88);
+  --sidebar-foreground: #0d0d0d;
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: rgba(0, 0, 0, 0.04);
+  --sidebar-accent-foreground: #0d0d0d;
+  --sidebar-border: rgba(0, 0, 0, 0.08);
+  --sidebar-ring: var(--ring);
 }
 
 /* =========================
@@ -120,7 +132,9 @@
 ========================= */
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    /* Tailwind @apply border-border outline-ring/50 */
+    border-color: var(--border);
+    outline-color: var(--ring);
   }
 
   html {
@@ -128,14 +142,21 @@
   }
 
   body {
-    @apply bg-background text-foreground;
+    /* Tailwind @apply text-foreground */
+    color: var(--foreground);
     font-feature-settings: "rlig" 1, "calt" 1;
     font-family: "Inter", "Cairo", -apple-system, BlinkMacSystemFont, "Segoe UI",
       sans-serif;
 
-    /* ✅ unified bg from tokens */
-    background: var(--background);
+    /* ✅ transparent page background */
+    background: transparent;
     position: relative;
+    overflow-x: hidden;
+  }
+
+  html,
+  body {
+    background: transparent;
   }
 
   /* Arabic text styling */
@@ -153,7 +174,8 @@
   select:not(:disabled),
   input[type="checkbox"]:not(:disabled),
   input[type="radio"]:not(:disabled) {
-    @apply cursor-pointer;
+    /* Tailwind @apply cursor-pointer */
+    cursor: pointer;
   }
 
   /* Typography */
@@ -215,11 +237,20 @@
 
   /* Hero overlay */
   .hero-overlay {
-    @apply relative;
+    /* Tailwind @apply relative */
+    position: relative;
   }
   .hero-overlay::after {
     content: "";
-    @apply absolute inset-0 bg-gradient-to-b from-black/60 via-black/40 to-black/70;
+    /* Tailwind @apply absolute inset-0 bg-gradient-to-b from-black/60 via-black/40 to-black/70 */
+    position: absolute;
+    inset: 0;
+    background-image: linear-gradient(
+      to bottom,
+      rgba(0, 0, 0, 0.6),
+      rgba(0, 0, 0, 0.4),
+      rgba(0, 0, 0, 0.7)
+    );
     pointer-events: none;
   }
 
@@ -239,51 +270,42 @@
     inset: 0;
     z-index: -1;
     pointer-events: none;
-
-    /* ✅ unified bg from tokens */
-    background-color: var(--background);
-
-    /* ✅ النقوش الأربع */
+  
+    background-color: transparent;
+  
     background-image: url("/bg-01-r.png"), url("/bg-01-l.png"),
       url("/bg-02-r.png"), url("/bg-02-l.png");
-
     background-repeat: no-repeat, no-repeat, no-repeat, no-repeat;
-
-    /* ✅ توزيع موزون */
+  
     background-position: right -160px top 80px, left -180px top 220px,
       right -260px bottom -220px, left -260px bottom -260px;
-
-    /* ✅ أحجام أهدأ */
+  
     background-size: 720px auto, 700px auto, 820px auto, 820px auto;
-
+  
+    /* ✅ أقوى وضوح */
     opacity: 1;
-    filter: saturate(0.95);
+    filter: saturate(1.35) contrast(1.25) brightness(0.96);
+  
     background-attachment: fixed;
     transform: translateZ(0);
   }
+  
 
-  /* ✅ طبقة تفتيح تخلي النقوش “ملمس” فقط */
-  .rsg-bg::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background: color-mix(in oklab, var(--background) 78%, transparent);
-    pointer-events: none;
-  }
+
+
 
   /* ✅ موبايل: نقلّل الزحمة */
   @media (max-width: 768px) {
     .rsg-bg {
       background-position: right -220px top 40px, left -240px top 260px,
         right -320px bottom -260px, left -340px bottom -320px;
-
+  
       background-size: 560px auto, 540px auto, 660px auto, 660px auto;
-    }
-
-    .rsg-bg::after {
-      background: color-mix(in oklab, var(--background) 86%, transparent);
+  
+      filter: saturate(1.15) contrast(1.12) brightness(0.98);
     }
   }
+  
 
 }
 
@@ -298,26 +320,9 @@
     width: 100%;
     margin-left: auto;
     margin-right: auto;
-    padding-left: 1rem; /* 16px - mobile padding */
-    padding-right: 1rem;
-  }
-
-
-
-
-  @media (min-width: 640px) {
-    .container {
-      padding-left: 1.5rem; /* 24px - tablet padding */
-      padding-right: 1.5rem;
-    }
-  }
-
-  @media (min-width: 1024px) {
-    .container {
-      padding-left: 2rem; /* 32px - desktop padding */
-      padding-right: 2rem;
-      max-width: 1280px; /* Standard content width */
-    }
+    padding-left: clamp(16px, 3vw, 32px);
+    padding-right: clamp(16px, 3vw, 32px);
+    max-width: 1280px;
   }
 
   /* =========================
@@ -804,6 +809,7 @@
     -webkit-backdrop-filter: blur(22px) saturate(1.25);
 
     box-shadow: 0 18px 46px rgba(3, 6, 64, 0.1), 0 1px 0 rgba(255, 255, 255, 0.75) inset;
+    min-height: 60px;
   }
 
   .rsg-nav__slot {
@@ -847,6 +853,13 @@
     background: rgba(0, 0, 0, 0.04);
     color: rgba(11, 15, 25, 0.82);
     transform: none;
+  }
+
+  .rsg-nav__logo {
+    display: block;
+    height: 44px;
+    width: auto;
+    object-fit: contain;
   }
 
   .rsg-burger {
@@ -951,8 +964,8 @@
     top: 50%;
     transform: translate(-50%, -50%);
 
-    width: 80px;
-    height: 70px;
+    width: 56px;
+    height: 48px;
 
     background-image: url("/logo.png");
     background-repeat: no-repeat;
@@ -974,7 +987,6 @@
 
 /* Light section */
 .section-light {
-  background: var(--background);
   position: relative;
 }
 
@@ -1049,7 +1061,7 @@
 .section-dark-wave {
   position: relative;
   background: #0a0a0c;
-  color: #fff;
+  color: #FBFBFB;
   overflow: hidden;
 }
 
@@ -1057,20 +1069,27 @@
   content: "";
   position: absolute;
   bottom: -1px;
-  left: 0;
-  width: 100%;
+
+  /* ✅ خلّه أعرض من الشاشة عشان ما يقطع */
+  left: -6%;
+  width: 112%;
+
   height: 120px;
   background: white;
+
+  /* ✅ مدّ نهاية المسار لأكثر من 1440 */
   clip-path: path(
-    "M0,80 C240,140 480,140 720,100 C960,60 1200,20 1440,60 L1440,120 L0,120 Z"
+    "M0,80 C240,140 480,140 720,100 C960,60 1200,20 1600,60 L1600,120 L0,120 Z"
   );
+  pointer-events: none;
 }
 
-/* 5 ) داكن مقوّس (Curve) */
+
+/* 5 ) داكن عادي (Curve) */
 
 .section-dark-curve {
   position: relative;
-  background: #0b0f19;
+  background: #000000;
   color: #fff;
   overflow: hidden;
 }
@@ -1087,7 +1106,7 @@
 }
 
 
-/* 6 ) داكن طبقات (Layered / Hero-like) */
+/* 6 ) داكن منقط (Layered / Hero-like) */
 
 .section-dark-layered {
   position: relative;
@@ -1117,25 +1136,6 @@
 }
 
 
-/* 7 ) داكن قطري (Dynamic) */
-
-.section-dark-diagonal {
-  position: relative;
-  background: #0a0e18;
-  color: #fff;
-  overflow: hidden;
-}
-
-.section-dark-diagonal::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    -6deg,
-    transparent 55%,
-    white 56%
-  );
-}
 
 
 /* 8 ) داكن ناعم (Minimal) */

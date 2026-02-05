@@ -5,13 +5,13 @@ import Footer from "@/components/Footer";
 
 export default function SiteLayout({ children }: { children: ReactNode }) {
   return (
-    <>
+    <div className="min-h-screen flex flex-col">
       <Header />
 
-      <main>{children}</main>
+      <div className="flex-1">{children}</div>
 
       <ContactCTA />
       <Footer />
-    </>
+    </div>
   );
 }

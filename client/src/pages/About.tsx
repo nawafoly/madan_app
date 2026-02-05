@@ -1,6 +1,5 @@
 // client/src/pages/About.tsx
 import { useEffect, useMemo, useRef, useState } from "react";
-import Header from "@/components/Header";
 import {
   Building2,
   Users,
@@ -201,11 +200,10 @@ export default function About() {
   const FULL_SECTION = "min-h-[100svh] snap-start pt-[96px] flex items-center";
 
   return (
-    <div className="min-h-screen flex flex-col" dir="rtl">
-      <Header />
+    <div className="w-full" dir="rtl">
 
       {/* ✅ سناب سكشن سكشن */}
-      <main className="flex-1 snap-y snap-mandatory overflow-y-auto">
+      <main className="flex-1">
         {/* HERO */}
         <section className="relative h-[100svh] pt-[96px] overflow-hidden bg-black snap-start">
           <img
@@ -230,7 +228,7 @@ export default function About() {
         {/* =========================
             STORY (Light)
         ========================== */}
-        <section className={`section-light ${FULL_SECTION}`}>
+        <section className={`${FULL_SECTION}`}>
           <div className="container">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-12 items-center">
               <div className="lg:col-span-5">
@@ -278,57 +276,71 @@ export default function About() {
         {/* =========================
             STATS (Dark + CountUp)
         ========================== */}
-        <section
-          ref={statsRef as any}
-          className={`section-dark-soft ${FULL_SECTION}`}
-        >
-          <div className="container">
-            <h2 className="mb-4 text-3xl sm:text-4xl md:text-5xl font-bold text-center">
-              إنجازاتنا
-            </h2>
+<section
+  ref={statsRef as any}
+  className={`section-dark-wave ${FULL_SECTION}`}
+>
+  <div className="container">
+    <h2 className="mb-4 text-3xl sm:text-4xl md:text-5xl font-bold text-center">
+      إنجازاتنا
+    </h2>
 
-            <div className="mx-auto mb-10 h-[2px] w-20 rounded-full bg-white/25" />
+    <div className="mx-auto mb-10 h-[2px] w-20 rounded-full bg-white/25" />
 
-            <div className="rounded-[28px] border border-white/10 bg-white/5 backdrop-blur p-6 sm:p-10">
-              <div className="text-center max-w-2xl mx-auto">
-                <p className="mt-4 text-sm sm:text-base text-white/75 leading-relaxed">
-                  مؤشرات مختصرة تعكس نمو المنصة، مع الحفاظ على المعايير والحوكمة.
-                </p>
+    <div className="rounded-[28px] border border-white/10 bg-white/5 backdrop-blur p-6 sm:p-10">
+      <div className="text-center max-w-2xl mx-auto">
+        <p className="mt-4 text-sm sm:text-base text-white/75 leading-relaxed">
+          مؤشرات مختصرة تعكس نمو المنصة، مع الحفاظ على المعايير والحوكمة.
+        </p>
+      </div>
+
+      <div className="mt-10 grid grid-cols-2 md:grid-cols-4 gap-5 sm:gap-6">
+        {stats.map((stat, i) => {
+          const Icon = stat.icon;
+          return (
+            <div
+              key={i}
+              className="rounded-2xl border border-white/10 bg-white/5 px-4 sm:px-5 py-6 text-center hover:bg-white/10 transition"
+            >
+              <div className="mx-auto mb-4 flex h-11 w-11 items-center justify-center rounded-full bg-white/10">
+                <Icon className="h-6 w-6 text-white" />
               </div>
 
-              <div className="mt-10 grid grid-cols-2 md:grid-cols-4 gap-5 sm:gap-6">
-                {stats.map((stat, i) => {
-                  const Icon = stat.icon;
-                  return (
-                    <div
-                      key={i}
-                      className="rounded-2xl border border-white/10 bg-white/5 px-4 sm:px-5 py-6 text-center hover:bg-white/10 transition"
-                    >
-                      <div className="mx-auto mb-4 flex h-11 w-11 items-center justify-center rounded-full bg-white/10">
-                        <Icon className="h-6 w-6 text-white" />
-                      </div>
-
-                      <div
-                        className="text-2xl sm:text-3xl font-extrabold tabular-nums"
-                        style={{ color: "var(--gold)" }}
-                      >
-                        {stat.animated}
-                        {stat.suffix}
-                      </div>
-
-                      <div className="mt-1 text-sm text-white/70">{stat.label}</div>
-                    </div>
-                  );
-                })}
+              <div
+                className="text-2xl sm:text-3xl font-extrabold tabular-nums"
+                style={{ color: "var(--gold)" }}
+              >
+                {stat.animated}
+                {stat.suffix}
               </div>
+
+              <div className="mt-1 text-sm text-white/70">{stat.label}</div>
             </div>
-          </div>
-        </section>
+          );
+        })}
+      </div>
+    </div>
+  </div>
+
+  {/* ✅ Wave SVG (بديل clip-path) */}
+  <svg
+    className="absolute bottom-[-1px] left-0 w-full h-24 md:h-28 text-white pointer-events-none"
+    viewBox="0 0 1440 120"
+    preserveAspectRatio="none"
+    aria-hidden="true"
+  >
+    <path
+      fill="currentColor"
+      d="M0,64 C240,120 480,120 720,88 C960,56 1200,8 1440,40 L1440,120 L0,120 Z"
+    />
+  </svg>
+</section>
+
 
         {/* =========================
             VALUES (Light)
         ========================== */}
-        <section className={`section-light ${FULL_SECTION}`}>
+        <section className={`${FULL_SECTION}`}>
           <div className="container">
             <div className="flex flex-col items-center text-center">
               <h2 className="mt-3 text-2xl sm:text-3xl md:text-4xl font-bold text-foreground">
@@ -373,7 +385,7 @@ export default function About() {
         {/* =========================
             FAQ (Dark)
         ========================== */}
-        <section id="faq" className={`section-dark ${FULL_SECTION}`}>
+        <section id="faq" className={`section-dark-curve ${FULL_SECTION}`}>
           <div className="container">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-12 items-center">
               <div className="lg:col-span-5 text-center lg:text-right">
@@ -432,7 +444,7 @@ export default function About() {
         {/* =========================
             VISION (Light)
         ========================== */}
-        <section className={`section-light ${FULL_SECTION}`}>
+        <section className={`${FULL_SECTION}`}>
           <div className="container">
             <div className="mx-auto max-w-4xl text-center">
               <p className="mb-6 text-3xl sm:text-4xl md:text-5xl font-bold text-foreground">

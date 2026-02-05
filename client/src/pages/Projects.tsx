@@ -1,7 +1,6 @@
 // client/src/pages/Projects.tsx
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "wouter";
-import Header from "@/components/Header";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -698,11 +697,10 @@ export default function ProjectsPage() {
 
   return (
     <div
-      className="rsg-page min-h-screen flex flex-col bg-transparent text-foreground"
+      className="rsg-page w-full bg-transparent text-foreground"
       dir="rtl"
       lang="ar"
     >
-      <Header />
 
       <div className="pt-0">
         <CurvedProjectsHero
@@ -821,7 +819,7 @@ export default function ProjectsPage() {
       </div>
 
       {/* ✅ سناب سكشن سكشن */}
-      <main className="flex-1 snap-y snap-mandatory overflow-y-auto">
+      <main className="flex-1">
         {/* 1) المشاريع الحالية */}
         <SectionShell className="-mt-10" variant="light">
           <div className="flex justify-center">

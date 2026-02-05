@@ -155,7 +155,7 @@ export default function CreateProject() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-transparent">
       <div className="container py-8">
         <Button
           variant="ghost"

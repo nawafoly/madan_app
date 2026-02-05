@@ -1,8 +1,6 @@
 // client/src/pages/ProjectDetails.tsx
 import { useEffect, useMemo, useState } from "react";
 import { useRoute, Link } from "wouter";
-import Header from "@/components/Header";
-import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -362,20 +360,17 @@ export default function ProjectDetails() {
   ========================= */
   if (loading) {
     return (
-      <div className="min-h-screen flex flex-col" dir="rtl" lang="ar">
-        <Header />
+      <div className="w-full" dir="rtl" lang="ar">
         <div className="flex-1 flex items-center justify-center">
           <div className="animate-spin rounded-full h-24 w-24 border-b-2 border-primary" />
         </div>
-        <Footer />
       </div>
     );
   }
 
   if (blockedReason) {
     return (
-      <div className="min-h-screen flex flex-col" dir="rtl" lang="ar">
-        <Header />
+      <div className="w-full" dir="rtl" lang="ar">
         <div className="flex-1 flex items-center justify-center">
           <Card className="p-10 text-center max-w-xl">
             <AlertTriangle className="w-14 h-14 mx-auto mb-4 text-muted-foreground" />
@@ -394,15 +389,13 @@ export default function ProjectDetails() {
             </Link>
           </Card>
         </div>
-        <Footer />
       </div>
     );
   }
 
   if (!project) {
     return (
-      <div className="min-h-screen flex flex-col" dir="rtl" lang="ar">
-        <Header />
+      <div className="w-full" dir="rtl" lang="ar">
         <div className="flex-1 flex items-center justify-center">
           <Card className="p-12 text-center">
             <AlertCircle className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
@@ -412,15 +405,12 @@ export default function ProjectDetails() {
             </Link>
           </Card>
         </div>
-        <Footer />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex flex-col" dir="rtl" lang="ar">
-      <Header />
-
+    <div className="w-full" dir="rtl" lang="ar">
       {/* HERO (IMAGE OR VIDEO) */}
       <section className="relative h-[65vh] min-h-[520px] overflow-hidden pt-20">
         {coverImage ? (
@@ -528,7 +518,7 @@ export default function ProjectDetails() {
       </section>
 
       {/* CONTENT */}
-      <section className="py-12 bg-background">
+      <section className="py-12 bg-transparent">
         <div className="container grid lg:grid-cols-3 gap-8">
           {/* LEFT */}
           <div className="lg:col-span-2 space-y-8">
@@ -874,8 +864,6 @@ export default function ProjectDetails() {
           </div>
         </div>
       </section>
-
-      <Footer />
     </div>
   );
 }

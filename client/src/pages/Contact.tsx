@@ -1,6 +1,4 @@
 import { useMemo, useState } from "react";
-import Header from "@/components/Header";
-import Footer from "@/components/Footer";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -106,12 +104,10 @@ export default function Contact() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-background">
-      <Header />
-
+    <div className="w-full bg-transparent">
       <main className="flex-1">
         {/* Hero */}
-        <section className="border-b border-border/60 bg-background">
+        <section className="border-b border-border/60 bg-transparent">
           <div className="container py-12 md:py-16">
             <div className="mx-auto max-w-3xl text-center">
               <h1 className="text-4xl md:text-5xl font-bold tracking-tight">
@@ -282,8 +278,6 @@ export default function Contact() {
           </div>
         </section>
       </main>
-
-      <Footer />
     </div>
   );
 }
