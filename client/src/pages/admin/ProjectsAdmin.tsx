@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { recomputeProjectAggregatesClient } from "../../_core/recomputeAggregates";
 
 import {
   Select,
@@ -132,6 +133,7 @@ export default function ProjectsManagement() {
     vipOnlyMode: false,
     maintenanceMode: false,
   });
+  const [recomputeId, setRecomputeId] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -588,6 +590,37 @@ export default function ProjectsManagement() {
                         <Trash2 className="w-4 h-4 ml-2" />
                         حذف
                       </Button>
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={recomputeId === p.id || busyId === p.id}
+                        onClick={async () => {
+                          try {
+                            setRecomputeId(p.id);
+                            const r = await recomputeProjectAggregatesClient(p.id);
+                            toast.success(`تم التحديث ✅ (المبلغ: ${r.currentAmount} | المستثمرين: ${r.investorsCount})`);
+                          } catch (e: any) {
+                            toast.error(e?.message || "فشل إعادة الحساب");
+                          } finally {
+                            setRecomputeId(null);
+                          }
+                        }}
+                      >
+                        {recomputeId === p.id ? (
+                          <>
+                            <RefreshCw className="w-4 h-4 ml-2 animate-spin" />
+                            جاري إعادة الحساب...
+                          </>
+                        ) : (
+                          <>
+                            <RefreshCw className="w-4 h-4 ml-2" />
+                            إعادة حساب
+                          </>
+                        )}
+                      </Button>
+
+
                     </div>
                   </CardContent>
                 </Card>

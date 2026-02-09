@@ -105,3 +105,11 @@ temp/
 *.db
 *.sqlite
 *.sqlite3
+
+# Firebase service account keys (NEVER COMMIT)
+*-firebase-adminsdk-*.json
+index-599e8-firebase-adminsdk-*.json
+
+# Local env
+.env
+.env.*

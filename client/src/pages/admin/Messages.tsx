@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 // client/src/pages/admin/MessagesManagement.tsx
 import { useEffect, useMemo, useState } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
@@ -12,7 +13,9 @@ import {
   getDoc,
   addDoc,
   arrayUnion,
-  type DocumentData,
+  query,
+  orderBy,
+  where,
 } from "firebase/firestore";
 import { db } from "@/_core/firebase";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -208,10 +211,29 @@ const makeEvent = (opts: {
     byRole: opts.byRole || null,
     byUid: opts.byUid || null,
     byEmail: opts.byEmail || null,
-    at: serverTimestamp(),
+    at: Timestamp.now(),
     meta: opts.meta || {},
   };
 };
+
+/* =========================
+  ✅ Roles (Safe + Backward compatible)
+========================= */
+type AppRole = "owner" | "admin" | "accountant" | "staff" | "client" | "guest";
+
+function normalizeRole(raw: any): AppRole {
+  if (!raw) return "guest";
+  const r = String(raw).toLowerCase();
+
+  if (r.includes("owner")) return "owner";
+  if (r.includes("admin")) return "admin";
+  if (r.includes("account")) return "accountant";
+  if (r.includes("staff") || r.includes("reception")) return "staff";
+  if (r.includes("client") || r.includes("investor")) return "client";
+  if (r.includes("guest")) return "guest";
+
+  return "guest";
+}
 
 /* =========================
   Main
@@ -248,21 +270,77 @@ export default function MessagesManagement() {
   );
 
   /* =========================
-    Role permissions
+    ✅ Role permissions (MAEDIN principle)
+    - role is source of truth in Firestore: users/{uid}.role
+    - BUT: support old accounts (missing doc / missing role)
   ========================= */
   const OWNER_EMAIL = "nawafaaa0@gmail.com";
 
-  const myRole = useMemo(() => {
-    const email = String(user?.email || "").toLowerCase();
-    const role = String((user as any)?.role || "").toLowerCase();
-    if (email === OWNER_EMAIL) return "owner";
-    return role;
-  }, [user?.email, (user as any)?.role]);
+  const [myRoleDb, setMyRoleDb] = useState<string>("");
+  const [roleDocMissing, setRoleDocMissing] = useState(false);
 
+  useEffect(() => {
+    const run = async () => {
+      try {
+        setRoleDocMissing(false);
+
+        if (!user?.uid) {
+          setMyRoleDb("");
+          return;
+        }
+
+        // ✅ owner bootstrap by email (نجاة للحسابات القديمة)
+        const email = String(user?.email || "").toLowerCase();
+        if (email === OWNER_EMAIL) {
+          setMyRoleDb("owner");
+          return;
+        }
+
+        const snap = await getDoc(doc(db, "users", user.uid));
+        if (!snap.exists()) {
+          setMyRoleDb("");
+          setRoleDocMissing(true);
+          return;
+        }
+
+        const r = String((snap.data() as any)?.role || "").toLowerCase();
+        setMyRoleDb(r);
+        if (!r) setRoleDocMissing(true);
+      } catch (e) {
+        console.error("load_role_failed", e);
+        setMyRoleDb("");
+        setRoleDocMissing(true);
+      }
+    };
+    run();
+  }, [user?.uid, user?.email]);
+
+  const myRole = useMemo<AppRole>(() => {
+    const email = String(user?.email || "").toLowerCase();
+    if (email === OWNER_EMAIL) return "owner";
+    return normalizeRole(myRoleDb);
+  }, [user?.email, myRoleDb]);
+
+  // ✅ حسب مذكرتك (الأدوار الرسمية)
+  // Owner/Admin: إدارة كاملة
+  // Accountant: مالي + ترحيل نهائي
+  // Staff: تشغيلي + تسجيل استثمار مبدئي
+  // Client: عرض رسائله فقط
   const canStaffActions =
     myRole === "staff" || myRole === "owner" || myRole === "admin";
+
   const canOwnerAccountantActions =
     myRole === "owner" || myRole === "accountant" || myRole === "admin";
+
+  const canViewContracts = canOwnerAccountantActions || canStaffActions;
+
+  // ✅ من يقدر يشوف صفحة الرسائل
+  const canViewMessages =
+    myRole === "owner" ||
+    myRole === "admin" ||
+    myRole === "accountant" ||
+    myRole === "staff" ||
+    myRole === "client";
 
   const actionMeta = () => ({
     lastActionByRole: myRole || null,
@@ -340,25 +418,105 @@ export default function MessagesManagement() {
     });
   };
 
-  /* =========================
-    Load messages
+/* =========================
+    Load messages (by role)
   ========================= */
   const loadMessages = async () => {
     try {
       setLoading(true);
-      const snap = await getDocs(collection(db, "messages"));
-      setMessages(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-    } catch (e) {
-      console.error(e);
-      toast.error("فشل تحميل الرسائل");
+  
+      // ✅ Debug (يعطيك تأكيد سريع في الكونسول)
+      console.log("[MSG] auth.uid:", user?.uid);
+      console.log("[MSG] myRole:", myRole, "canViewMessages:", canViewMessages);
+  
+      if (!user?.uid || !canViewMessages) {
+        setMessages([]);
+        return;
+      }
+  
+      const base = collection(db, "messages");
+  
+      // ✅ Client: يشوف رسائله فقط
+      // ✅ Backoffice: يشوف الكل
+      const qOrdered =
+        myRole === "client"
+          ? query(
+              base,
+              where("createdByUid", "==", user.uid),
+              orderBy("createdAt", "desc")
+            )
+          : query(base, orderBy("createdAt", "desc"));
+  
+      try {
+        // ✅ المحاولة الأساسية: مع orderBy (هذا الأفضل)
+        const snap = await getDocs(qOrdered);
+        setMessages(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        return;
+      } catch (err: any) {
+        // ✅ لو فشل بسبب Index أو createdAt… نسوي fallback
+        console.error("[MSG] primary query failed:", err?.code, err?.message);
+  
+        // لو فشل permission-denied = ما نكمل fallback (عشان ما نلخبط التشخيص)
+        if (String(err?.code || "").includes("permission-denied")) {
+          throw err;
+        }
+  
+        // ✅ fallback query بدون orderBy (ينقذك لو createdAt ناقص/Index)
+        const qFallback =
+          myRole === "client"
+            ? query(base, where("createdByUid", "==", user.uid))
+            : query(base);
+  
+        const snap2 = await getDocs(qFallback);
+  
+        // ✅ ترتيب محلي على createdAt (best effort)
+        const rows = snap2.docs.map((d) => ({ id: d.id, ...d.data() }));
+        rows.sort((a: any, b: any) => {
+          const aSec = a?.createdAt?.seconds;
+          const bSec = b?.createdAt?.seconds;
+          const aMs =
+            typeof aSec === "number"
+              ? aSec * 1000
+              : a?.createdAt instanceof Date
+              ? a.createdAt.getTime()
+              : typeof a?.createdAt === "number"
+              ? a.createdAt
+              : 0;
+  
+          const bMs =
+            typeof bSec === "number"
+              ? bSec * 1000
+              : b?.createdAt instanceof Date
+              ? b.createdAt.getTime()
+              : typeof b?.createdAt === "number"
+              ? b.createdAt
+              : 0;
+  
+          return bMs - aMs;
+        });
+  
+        console.warn("[MSG] using fallback query (no orderBy). count:", rows.length);
+        setMessages(rows);
+        return;
+      }
+    } catch (e: any) {
+      console.error("[MSG] loadMessages failed:", e?.code, e?.message, e);
+      toast.error(
+        `فشل تحميل الرسائل: ${String(e?.code || e?.message || e || "unknown")}`
+      );
+      setMessages([]);
     } finally {
       setLoading(false);
     }
   };
+  
 
   useEffect(() => {
+    // ✅ ننتظر تحديد الدور قبل التحميل (خصوصاً للحسابات القديمة)
+    if (!user?.uid) return;
     loadMessages();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.uid, myRole]);
 
   /* =========================
     Normalize
@@ -545,6 +703,12 @@ export default function MessagesManagement() {
   const handleUpdateStatus = async () => {
     if (!selectedMessage) return;
 
+    // ✅ Client عرض فقط
+    if (myRole === "client") {
+      toast.error("صلاحيتك عرض فقط.");
+      return;
+    }
+
     if (isLockedFinal) {
       toast.warning("الطلب مقفل ولا يمكن تعديل الحالة.");
       return;
@@ -554,7 +718,9 @@ export default function MessagesManagement() {
       const ev = makeEvent({
         type: "status_changed",
         title: "تحديث حالة الطلب",
-        note: `تم تحديث الحالة إلى: ${status}${internalNotes ? `\nملاحظة: ${internalNotes}` : ""}`,
+        note: `تم تحديث الحالة إلى: ${status}${
+          internalNotes ? `\nملاحظة: ${internalNotes}` : ""
+        }`,
         ...myActor(),
         meta: { status },
       });
@@ -580,11 +746,11 @@ export default function MessagesManagement() {
       setSelectedMessage((prev: any) =>
         prev
           ? {
-            ...prev,
-            status,
-            internalNotes: internalNotes || null,
-            events: Array.isArray(prev.events) ? [...prev.events, ev] : [ev],
-          }
+              ...prev,
+              status,
+              internalNotes: internalNotes || null,
+              events: Array.isArray(prev.events) ? [...prev.events, ev] : [ev],
+            }
           : prev
       );
       setIsDetailDialogOpen(false);
@@ -635,12 +801,12 @@ export default function MessagesManagement() {
         setSelectedMessage((prev: any) =>
           prev
             ? {
-              ...prev,
-              status: "needs_account",
-              stageRole: "client",
-              internalNotes: note,
-              events: Array.isArray(prev.events) ? [...prev.events, ev] : [ev],
-            }
+                ...prev,
+                status: "needs_account",
+                stageRole: "client",
+                internalNotes: note,
+                events: Array.isArray(prev.events) ? [...prev.events, ev] : [ev],
+              }
             : prev
         );
         setIsDetailDialogOpen(false);
@@ -669,6 +835,7 @@ export default function MessagesManagement() {
         if (!msg?.projectId) throw new Error("missing_project_id");
 
         const invRef = doc(collection(db, "investments"));
+
         const ev = makeEvent({
           type: "pre_investment_created",
           title: "تم تسجيل استثمار مبدئي",
@@ -677,6 +844,8 @@ export default function MessagesManagement() {
           meta: { amount, investmentId: invRef.id },
         });
 
+        // ✅ IMPORTANT FIX:
+        // داخل tx.set لمستند جديد = events لازم تكون Array عادي، مو arrayUnion
         tx.set(invRef, {
           projectId: msg.projectId,
           projectTitle: msg.projectTitle || null,
@@ -696,8 +865,8 @@ export default function MessagesManagement() {
           createdByEmail: user?.email || null,
           approvedAmount: amount,
 
-          // ✅ timeline
-          events: arrayUnion(ev),
+          // ✅ timeline (إنشاء جديد)
+          events: [ev],
 
           ...actionMeta(),
         });
@@ -712,7 +881,7 @@ export default function MessagesManagement() {
           updatedByUid: user?.uid || null,
           updatedByEmail: user?.email || null,
 
-          // ✅ timeline
+          // ✅ timeline (update existing doc)
           events: arrayUnion(ev),
 
           ...actionMeta(),
@@ -735,12 +904,12 @@ export default function MessagesManagement() {
       setSelectedMessage((prev: any) =>
         prev
           ? {
-            ...prev,
-            status: "in_progress",
-            stageRole: "owner",
-            investmentId,
-            approvedAmount: amount,
-          }
+              ...prev,
+              status: "in_progress",
+              stageRole: "owner",
+              investmentId,
+              approvedAmount: amount,
+            }
           : prev
       );
 
@@ -810,6 +979,8 @@ export default function MessagesManagement() {
           meta: { contractId: cRef.id, investmentId: msg.investmentId },
         });
 
+        // ✅ IMPORTANT FIX:
+        // داخل tx.set لمستند جديد = events لازم تكون Array عادي
         tx.set(cRef, {
           investmentId: msg.investmentId,
           messageId: msgRef.id,
@@ -833,7 +1004,7 @@ export default function MessagesManagement() {
           createdByUid: user?.uid || null,
           createdByEmail: user?.email || null,
 
-          events: arrayUnion(ev),
+          events: [ev],
 
           ...actionMeta(),
         });
@@ -933,7 +1104,9 @@ export default function MessagesManagement() {
         task.on(
           "state_changed",
           (snap) => {
-            const pct = Math.round((snap.bytesTransferred / snap.totalBytes) * 100);
+            const pct = Math.round(
+              (snap.bytesTransferred / snap.totalBytes) * 100
+            );
             console.log("upload draft %", pct);
           },
           (err) => reject(err),
@@ -1126,11 +1299,11 @@ export default function MessagesManagement() {
       setSelectedMessage((prev: any) =>
         prev
           ? {
-            ...prev,
-            contractStatus: "signing",
-            stageRole: "client",
-            events: Array.isArray(prev.events) ? [...prev.events, ev] : [ev],
-          }
+              ...prev,
+              contractStatus: "signing",
+              stageRole: "client",
+              events: Array.isArray(prev.events) ? [...prev.events, ev] : [ev],
+            }
           : prev
       );
 
@@ -1503,9 +1676,9 @@ export default function MessagesManagement() {
   const canFinalize = CONTRACTS_DISABLED
     ? isInvestment && !!selectedMessage?.investmentId
     : isInvestment &&
-    !!selectedMessage?.investmentId &&
-    !!selectedMessage?.contractId &&
-    isSigned;
+      !!selectedMessage?.investmentId &&
+      !!selectedMessage?.contractId &&
+      isSigned;
 
   /* =========================
     Render
@@ -1518,6 +1691,14 @@ export default function MessagesManagement() {
           <p className="text-muted-foreground text-lg">
             إدارة الرسائل والاستفسارات الواردة
           </p>
+
+          {/* ✅ تنبيه للحسابات القديمة (doc ناقص / role ناقص) */}
+          {roleDocMissing && myRole !== "owner" ? (
+            <div className="mt-3 text-sm rounded-xl border border-yellow-300 bg-yellow-50 p-3 text-yellow-800">
+              تنبيه: حسابك لا يحتوي Role صحيح في users/{String(user?.uid || "")}.
+              سيتم اعتبارك "guest" حتى يتم ترحيل الرول.
+            </div>
+          ) : null}
         </div>
 
         <div className="grid gap-4 md:grid-cols-6">
@@ -1527,7 +1708,11 @@ export default function MessagesManagement() {
             value={stats.completed}
             color="text-gray-700"
           />
-          <StatCard title="المرفوضة" value={stats.rejected} color="text-red-700" />
+          <StatCard
+            title="المرفوضة"
+            value={stats.rejected}
+            color="text-red-700"
+          />
           <StatCard title="جديد" value={stats.new} color="text-orange-600" />
           <StatCard
             title="قيد المعالجة"
@@ -1600,7 +1785,9 @@ export default function MessagesManagement() {
                   {filteredMessages.map((m) => (
                     <TableRow key={m.id}>
                       <TableCell>{getMessageTypeBadge(m.type)}</TableCell>
-                      <TableCell className="font-medium">{m.name || "—"}</TableCell>
+                      <TableCell className="font-medium">
+                        {m.name || "—"}
+                      </TableCell>
 
                       <TableCell>
                         <div className="space-y-1 text-sm">
@@ -1635,7 +1822,9 @@ export default function MessagesManagement() {
                       <TableCell className="text-xs text-muted-foreground">
                         {m.lastActionAt ? (
                           <div className="space-y-1">
-                            <div>بواسطة: {String(m.lastActionByRole || "—")}</div>
+                            <div>
+                              بواسطة: {String(m.lastActionByRole || "—")}
+                            </div>
                             <div>{formatDateTimeAR(m.lastActionAt)}</div>
                           </div>
                         ) : (
@@ -1662,15 +1851,17 @@ export default function MessagesManagement() {
                             };
 
                             setSelectedMessage(normalized);
-                            setStatus((normalized.status || "new") as MessageStatus);
+                            setStatus(
+                              (normalized.status || "new") as MessageStatus
+                            );
                             setInternalNotes(hydrated.internalNotes || "");
 
                             setApprovedAmount(
                               hydrated?.approvedAmount != null
                                 ? String(hydrated.approvedAmount)
                                 : hydrated?.estimatedAmount != null
-                                  ? String(hydrated.estimatedAmount)
-                                  : ""
+                                ? String(hydrated.estimatedAmount)
+                                : ""
                             );
 
                             await loadContractDoc(normalized?.contractId || null);
@@ -1730,7 +1921,8 @@ export default function MessagesManagement() {
 
                     {selectedMessage.lastActionAt ? (
                       <Badge variant="outline" className="border-primary/20">
-                        آخر تحديث: {String(selectedMessage.lastActionByRole || "—")} •{" "}
+                        آخر تحديث:{" "}
+                        {String(selectedMessage.lastActionByRole || "—")} •{" "}
                         {formatDateTimeAR(selectedMessage.lastActionAt)}
                       </Badge>
                     ) : null}
@@ -1779,8 +1971,12 @@ export default function MessagesManagement() {
 
                       {selectedMessage.projectTitle ? (
                         <div className="pt-2 border-t">
-                          <div className="text-xs text-muted-foreground mb-1">المشروع</div>
-                          <div className="font-semibold">{selectedMessage.projectTitle}</div>
+                          <div className="text-xs text-muted-foreground mb-1">
+                            المشروع
+                          </div>
+                          <div className="font-semibold">
+                            {selectedMessage.projectTitle}
+                          </div>
                           {selectedMessage.projectId ? (
                             <div className="text-xs text-muted-foreground mt-1 break-all">
                               ID: {selectedMessage.projectId}
@@ -1802,7 +1998,9 @@ export default function MessagesManagement() {
 
                       {selectedMessage.contractId ? (
                         <div className="pt-2 border-t">
-                          <div className="text-xs text-muted-foreground mb-1">Contract</div>
+                          <div className="text-xs text-muted-foreground mb-1">
+                            Contract
+                          </div>
                           <div className="font-semibold break-all">
                             {selectedMessage.contractId}
                           </div>
@@ -1837,7 +2035,6 @@ export default function MessagesManagement() {
                           لا توجد أحداث محفوظة بعد. (بعد أول تحديث/إجراء بيبدأ يظهر)
                         </div>
                       ) : null}
-
                     </CardContent>
                   </Card>
 
@@ -1858,7 +2055,7 @@ export default function MessagesManagement() {
                           <Select
                             value={status}
                             onValueChange={(v) => setStatus(v as MessageStatus)}
-                            disabled={isLockedFinal}
+                            disabled={isLockedFinal || myRole === "client"}
                           >
                             <SelectTrigger>
                               <SelectValue placeholder="اختر الحالة" />
@@ -1880,7 +2077,7 @@ export default function MessagesManagement() {
                             value={approvedAmount}
                             onChange={(e) => setApprovedAmount(e.target.value)}
                             placeholder="مثال: 50000"
-                            disabled={isLockedFinal}
+                            disabled={isLockedFinal || myRole === "client"}
                           />
                           <div className="text-[11px] text-muted-foreground">
                             يُستخدم عند “تسجيل استثمار مبدئي”.
@@ -1894,7 +2091,7 @@ export default function MessagesManagement() {
                           value={internalNotes}
                           onChange={(e) => setInternalNotes(e.target.value)}
                           placeholder="اكتب ملاحظة تظهر للإدارة (وتُرسل للعميل عند التحديث)"
-                          disabled={isLockedFinal}
+                          disabled={isLockedFinal || myRole === "client"}
                           className="min-h-[96px]"
                         />
                       </div>
@@ -1902,7 +2099,7 @@ export default function MessagesManagement() {
                       <div className="flex flex-wrap gap-2">
                         <Button
                           onClick={handleUpdateStatus}
-                          disabled={isLockedFinal}
+                          disabled={isLockedFinal || myRole === "client"}
                         >
                           <CheckCircle2 className="w-4 h-4 ml-2" />
                           حفظ التغييرات
@@ -1994,86 +2191,62 @@ export default function MessagesManagement() {
                       </div>
 
                       {/* ✅ Contract area (future) - UI hints */}
-                      {!CONTRACTS_DISABLED && selectedMessage?.contractId ? (
+                      {selectedMessage?.contractId && canViewContracts ? (
                         <div className="mt-2 rounded-xl border bg-muted/40 p-4 space-y-3">
-                          <div className="font-semibold text-sm">
-                            إدارة العقد (مستقبل)
+                          <div className="font-semibold text-sm">العقد</div>
+
+                          <div className="text-sm">
+                            الحالة:{" "}
+                            <b>
+                              {String(
+                                selectedMessage.contractStatus ||
+                                  contractDoc?.status ||
+                                  "—"
+                              )}
+                            </b>
                           </div>
 
-                          <div className="grid gap-3 md:grid-cols-2">
-                            <div className="space-y-2">
-                              <Label>رفع نسخة العقد (Draft)</Label>
-                              <Input
-                                type="file"
-                                accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                                onChange={(e) => {
-                                  const f = e.target.files?.[0] || null;
-                                  setDraftFile(f);
-                                }}
-                              />
-                              <Button
-                                variant="outline"
-                                onClick={() => {
-                                  if (draftFile) uploadContractDraft(draftFile, false);
-                                  else toast.warning("اختر ملف أولاً");
-                                }}
-                                disabled={contractBusy}
-                              >
-                                {contractBusy ? (
-                                  <Loader2 className="w-4 h-4 ml-2 animate-spin" />
-                                ) : (
-                                  <Upload className="w-4 h-4 ml-2" />
-                                )}
-                                رفع
-                              </Button>
+                          <div className="text-xs text-muted-foreground">
+                            آخر نسخة: {String(contractDoc?.currentVersion ?? "—")}
+                          </div>
+
+                          <div className="space-y-2 text-sm">
+                            {contractDoc?.files?.length ? (
+                              contractDoc.files
+                                .filter((f) => f.isActive)
+                                .map((f) => (
+                                  <a
+                                    key={f.id}
+                                    href={f.url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="underline text-primary block"
+                                  >
+                                    فتح الملف: {f.name} ({f.kind})
+                                  </a>
+                                ))
+                            ) : (
+                              <div className="text-xs text-muted-foreground">
+                                لا توجد ملفات مرفوعة.
+                              </div>
+                            )}
+                          </div>
+
+                          {/* ✅ أدوات التعديل: للأونر/المحاسب فقط + لما العقود شغالة */}
+                          {!CONTRACTS_DISABLED && canOwnerAccountantActions ? (
+                            <div className="mt-3 border-t pt-3 space-y-3">
+                              <div className="font-semibold text-sm">
+                                إجراءات العقد (للإدارة)
+                              </div>
+
+                              {/* اترك نفس بلوك الرفع/الاستبدال/الإرجاع/الاعتماد اللي كان عندك هنا */}
+                              {/* يعني قص/لصق “البلوك القديم” داخل هذا المكان */}
                             </div>
-
-                            <div className="space-y-2">
-                              <Label>استبدال النسخة الحالية</Label>
-                              <Input
-                                type="file"
-                                accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                                onChange={(e) => {
-                                  const f = e.target.files?.[0] || null;
-                                  setReplaceDraftFile(f);
-                                }}
-                              />
-                              <Button
-                                variant="outline"
-                                onClick={() => {
-                                  if (replaceDraftFile)
-                                    uploadContractDraft(replaceDraftFile, true);
-                                  else toast.warning("اختر ملف أولاً");
-                                }}
-                                disabled={contractBusy}
-                              >
-                                {contractBusy ? (
-                                  <Loader2 className="w-4 h-4 ml-2 animate-spin" />
-                                ) : (
-                                  <Upload className="w-4 h-4 ml-2" />
-                                )}
-                                استبدال
-                              </Button>
+                          ) : (
+                            <div className="text-xs text-muted-foreground">
+                              صلاحيتك: عرض فقط.
                             </div>
-                          </div>
-
-                          <div className="flex flex-wrap gap-2">
-                            <Button
-                              variant="outline"
-                              onClick={() => setReturnDialogOpen(true)}
-                              disabled={contractBusy}
-                            >
-                              إرجاع العقد للتعديل
-                            </Button>
-
-                            <Button
-                              variant="outline"
-                              onClick={verifySignedAndMarkSigned}
-                              disabled={contractBusy}
-                            >
-                              اعتماد التوقيع
-                            </Button>
-                          </div>
+                          )}
                         </div>
                       ) : null}
                     </CardContent>
@@ -2129,7 +2302,10 @@ export default function MessagesManagement() {
                       ) : null}
 
                       {selectedMessage?.phone ? (
-                        <a className="inline-flex" href={`tel:${selectedMessage.phone}`}>
+                        <a
+                          className="inline-flex"
+                          href={`tel:${selectedMessage.phone}`}
+                        >
                           <Button variant="outline">
                             <Phone className="w-4 h-4 ml-2" />
                             اتصال
@@ -2146,9 +2322,7 @@ export default function MessagesManagement() {
           <DialogFooter className="px-6 py-4 border-t bg-white/60 backdrop-blur">
             <div className="flex items-center justify-between w-full gap-3">
               <div className="text-xs text-muted-foreground">
-                {isLockedFinal
-                  ? "هذا الطلب مقفل."
-                  : "تأكد من حفظ التغييرات بعد أي تعديل."}
+                {isLockedFinal ? "هذا الطلب مقفل." : "تأكد من حفظ التغييرات بعد أي تعديل."}
               </div>
 
               <Button variant="outline" onClick={() => setIsDetailDialogOpen(false)}>

@@ -9,8 +9,13 @@ const { FieldValue } = admin.firestore;
 
 const REGION = "me-central2";
 
-const COUNTED_STATUSES = new Set(["signed", "active", "completed"]);
+// ✅ vNext Contract: countedStatuses = [active, completed]
+const COUNTED_STATUSES = new Set(["active", "completed"]);
+
+// (Optional) keep pending tracking if you want it in project doc
 const PENDING_STATUSES = new Set(["pending", "pending_contract", "signing"]);
+
+// official statuses list (as per settings)
 const OFFICIAL_STATUSES = new Set([
   "pending",
   "pending_contract",
@@ -22,12 +27,19 @@ const OFFICIAL_STATUSES = new Set([
   "cancelled",
 ]);
 
-// ✅ roles whitelist (no weird roles get saved)
+// ✅ roles whitelist
 const ALLOWED_ROLES = new Set(["client", "owner", "admin", "accountant", "staff"]);
 
 const toNumberSafe = (v) => {
   const n = Number(v ?? 0);
   return Number.isFinite(n) ? n : 0;
+};
+
+// ✅ Aggregates Policy: amountCounted = approvedAmount ?? amount
+const amountCounted = (inv) => {
+  const approved = inv?.approvedAmount;
+  if (approved !== undefined && approved !== null) return toNumberSafe(approved);
+  return toNumberSafe(inv?.amount);
 };
 
 const normalizeStatus = (inv) => {
@@ -70,27 +82,30 @@ const recomputeProjectAggregates = async (projectId) => {
     .get();
 
   let currentAmount = 0;
-  let pendingAmount = 0;
+  let pendingAmount = 0; // optional
   const investors = new Set();
   const legacyUpdates = [];
 
   invSnap.forEach((docSnap) => {
     const inv = docSnap.data() || {};
     const { status, update } = normalizeStatus(inv);
+
+    // normalize legacy statuses once, and skip recursive aggregate trigger
     if (update && status) legacyUpdates.push({ ref: docSnap.ref, status });
 
     if (!status) return;
 
-    const amount = toNumberSafe(inv.amount);
+    const amt = amountCounted(inv);
+
+    // ✅ vNext: only active/completed are counted
     if (COUNTED_STATUSES.has(status)) {
-      currentAmount += amount;
+      currentAmount += amt;
       if (inv.investorUid) investors.add(String(inv.investorUid));
     } else if (PENDING_STATUSES.has(status)) {
-      pendingAmount += amount;
+      pendingAmount += amt;
     }
   });
 
-  // normalize legacy statuses once, and skip recursive aggregate trigger
   if (legacyUpdates.length) {
     const batch = db.batch();
     legacyUpdates.forEach((u) => {
@@ -107,6 +122,7 @@ const recomputeProjectAggregates = async (projectId) => {
     {
       currentAmount,
       investorsCount: investors.size,
+      // optional field (safe to keep)
       pendingAmount,
       updatedAt: FieldValue.serverTimestamp(),
     },
@@ -121,6 +137,7 @@ const recomputeProjectAggregates = async (projectId) => {
   };
 };
 
+// ✅ Admin-only callable recompute for one project
 exports.recomputeProjectAggregates = onCall({ region: REGION }, async (request) => {
   if (!request.auth?.uid) {
     throw new HttpsError("unauthenticated", "Authentication required.");
@@ -140,7 +157,7 @@ exports.recomputeProjectAggregates = onCall({ region: REGION }, async (request) 
   return { ok: true, result };
 });
 
-// Optional: admin-only full backfill
+// ✅ Admin-only full backfill
 exports.recomputeAllProjectAggregates = onCall({ region: REGION }, async (request) => {
   if (!request.auth?.uid) {
     throw new HttpsError("unauthenticated", "Authentication required.");
@@ -182,7 +199,7 @@ exports.onAuthCreateUserProfile = onUserCreated({ region: "us-central1" }, async
   const emailLower = String(user.email || "").trim().toLowerCase();
   let inviteApplied = false;
 
-  // ✅ apply invite by email (if created from Admin Settings)
+  // ✅ apply invite by email
   if (emailLower) {
     const invRef = db.doc(`role_invites/${emailLower}`);
     const invSnap = await invRef.get();
@@ -213,7 +230,7 @@ exports.onAuthCreateUserProfile = onUserCreated({ region: "us-central1" }, async
     { merge: true }
   );
 
-  // ✅ consume invite after using it (optional but recommended)
+  // ✅ consume invite
   if (inviteApplied && emailLower) {
     const invRef = db.doc(`role_invites/${emailLower}`);
     await invRef.set(
@@ -227,6 +244,7 @@ exports.onAuthCreateUserProfile = onUserCreated({ region: "us-central1" }, async
   }
 });
 
+// ✅ Auto recompute on investment writes (create/update/delete)
 exports.onInvestmentWrite = onDocumentWritten(
   { region: REGION, document: "investments/{investmentId}" },
   async (event) => {
@@ -245,7 +263,7 @@ exports.onInvestmentWrite = onDocumentWritten(
       String(before.status || "") !== String(after.status || "") ||
       String(before.investorUid || "") !== String(after.investorUid || "") ||
       toNumberSafe(before.amount) !== toNumberSafe(after.amount) ||
-      String(before.finalizedAt || "") !== String(after.finalizedAt || "");
+      toNumberSafe(before.approvedAmount) !== toNumberSafe(after.approvedAmount);
 
     if (!hasChanged) return;
 
@@ -255,8 +273,6 @@ exports.onInvestmentWrite = onDocumentWritten(
 
     if (!projectIds.size) return;
 
-    await Promise.all(
-      Array.from(projectIds).map((pid) => recomputeProjectAggregates(pid))
-    );
+    await Promise.all(Array.from(projectIds).map((pid) => recomputeProjectAggregates(pid)));
   }
 );

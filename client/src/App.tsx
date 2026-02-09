@@ -120,8 +120,8 @@ function Router() {
 
         {/* ===== Admin: Financial ===== */}
         <Route path="/admin/financial">
-          <RequireRole allow={["owner", "accountant"]}>
-            <FinancialManagement />
+        <RequireRole allow={["owner", "admin", "accountant"]}>
+        <FinancialManagement />
           </RequireRole>
         </Route>
 
@@ -185,7 +185,7 @@ function Router() {
 
         {/* ✅ صفحة العميل */}
         <Route path="/client/dashboard">
-          <RequireRole allow={["client", "guest"]}>
+          <RequireRole allow={["client", "guest", "owner", "admin"]}>
             <ClientDashboard />
           </RequireRole>
         </Route>
@@ -220,14 +220,24 @@ export default function App() {
       <LanguageProvider defaultLanguage="ar">
         <ThemeProvider defaultTheme="light">
           <div className="rsg-bg" aria-hidden="true" />
-          <div className="relative z-10 min-h-screen">
-            <TooltipProvider>
-              <Toaster />
+
+          <TooltipProvider>
+            {/* ✅ لازم يكون أعلى طبقة */}
+            <Toaster
+              position="top-center"
+              style={{ zIndex: 99999 }}
+              toastOptions={{
+                className: "rsg-toast",
+              }}
+            />
+
+            <div className="relative z-10 min-h-screen">
               <Router />
-            </TooltipProvider>
-          </div>
+            </div>
+          </TooltipProvider>
         </ThemeProvider>
       </LanguageProvider>
     </ErrorBoundary>
   );
 }
+

@@ -34,7 +34,6 @@ import {
   Crown,
   BarChart3,
   Home,
-  Globe,
 } from "lucide-react";
 import { CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
@@ -42,17 +41,35 @@ import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
 import { Button } from "./ui/button";
 import { useLanguage } from "@/contexts/LanguageContext";
 
-const menuItems = [
-  { icon: LayoutDashboard, label: "لوحة التحكم", path: "/dashboard" },
-  { icon: Building2, label: "المشاريع", path: "/admin/projects" },
-  { icon: DollarSign, label: "الشؤون المالية", path: "/admin/financial" },
-  { icon: Users, label: "العملاء", path: "/admin/clients" },
-  { icon: Crown, label: "إدارة VIP", path: "/admin/vip" },
-  { icon: MessageSquare, label: "الرسائل", path: "/admin/messages" },
-  { icon: FileText, label: "سجل التعديلات", path: "/admin/audit-log" },
-  { icon: BarChart3, label: "التقارير", path: "/admin/reports" },
-  { icon: Settings, label: "الإعدادات", path: "/admin/settings" },
+type RoleKey = "owner" | "admin" | "accountant" | "staff";
+
+type MenuItem = {
+  icon: any;
+  label: string;
+  path: string;
+  allow: RoleKey[]; // ✅ أدوار مسموحة
+};
+
+const menuItems: MenuItem[] = [
+  { icon: LayoutDashboard, label: "لوحة التحكم", path: "/dashboard", allow: ["owner", "admin", "accountant", "staff"] },
+
+  { icon: Building2, label: "المشاريع", path: "/admin/projects", allow: ["owner", "admin"] },
+
+  { icon: DollarSign, label: "الشؤون المالية", path: "/admin/financial", allow: ["owner", "accountant"] },
+
+  { icon: Users, label: "العملاء", path: "/admin/clients", allow: ["owner", "admin"] },
+
+  { icon: Crown, label: "إدارة VIP", path: "/admin/vip", allow: ["owner", "admin"] },
+
+  { icon: MessageSquare, label: "الرسائل", path: "/admin/messages", allow: ["owner", "admin", "staff"] },
+
+  { icon: FileText, label: "سجل التعديلات", path: "/admin/audit-log", allow: ["owner"] },
+
+  { icon: BarChart3, label: "التقارير", path: "/admin/reports", allow: ["owner", "admin", "accountant"] },
+
+  { icon: Settings, label: "الإعدادات", path: "/admin/settings", allow: ["owner"] },
 ];
+
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";
 const DEFAULT_WIDTH = 280;
@@ -288,17 +305,35 @@ function DashboardLayoutContent({
   setSidebarWidth,
   sidebarSide,
 }: DashboardLayoutContentProps) {
+
   const { user, logout } = useAuth();
-  const { language } = useLanguage();
   const [location, setLocation] = useLocation();
   const { state, toggleSidebar } = useSidebar();
+  
   const isCollapsed = state === "collapsed";
   const [isResizing, setIsResizing] = useState(false);
+  
   const sidebarRef = useRef<HTMLDivElement>(null);
   const mainRef = useRef<HTMLElement>(null);
-  const activeMenuItem = menuItems.find((item) => item.path === location);
+  
   const isMobile = useIsMobile();
   const isRight = sidebarSide === "right";
+  
+  // ✅ 1) الدور
+  const role = (user as any)?.role as RoleKey | undefined;
+  
+  // ✅ 2) العناصر المسموحة
+  const visibleMenuItems = useMemo(() => {
+    if (!role) return [];
+    return menuItems.filter((it) => it.allow.includes(role));
+  }, [role]);
+  
+  // ✅ 3) العنصر النشط
+  const activeMenuItem = visibleMenuItems.find(
+    (item) => item.path === location
+  );
+  
+
 
   // ✅ اسم العرض: يفضّل user.name، وإلا من الإيميل (بالعربي)
   const displayName = useMemo(() => {
@@ -408,7 +443,7 @@ function DashboardLayoutContent({
 
           <SidebarContent className="gap-0">
             <SidebarMenu className="px-2 py-1">
-              {menuItems.map((item) => {
+            {visibleMenuItems.map((item) => {
                 const isActive = location === item.path;
                 return (
                   <SidebarMenuItem key={item.path}>

@@ -28,10 +28,15 @@ import {
   query,
   where,
   Timestamp,
+  orderBy,
+  Query,
+  QuerySnapshot,
+  DocumentData,
 } from "firebase/firestore";
 
 type Investment = any;
 type Project = any;
+type MessageRequest = any;
 
 function toDateSafe(v: any) {
   try {
@@ -54,6 +59,7 @@ export default function MyInvestments() {
   const { user, logout } = useAuth();
 
   const [investments, setInvestments] = useState<Investment[]>([]);
+  const [requests, setRequests] = useState<MessageRequest[]>([]); // ✅ NEW: من messages
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -61,30 +67,42 @@ export default function MyInvestments() {
   const isClient = role === "client";
   const isGuest = role === "guest";
 
-  // ✅ Live: investments (بدون تحديث)
+  // ✅ Live: investments + messages (طلبات الاستثمار)
   useEffect(() => {
-    let unsub: null | (() => void) = null;
+    let unsubInv: null | (() => void) = null;
+    let unsubMsg: null | (() => void) = null;
+
+    let invLoaded = false;
+    let msgLoaded = false;
+    const done = () => {
+      if (invLoaded && msgLoaded) setLoading(false);
+    };
 
     const run = async () => {
       try {
         setLoading(true);
+        invLoaded = false;
+        msgLoaded = false;
 
         // ✅ مو مسجل دخول
         if (!user?.uid) {
           setInvestments([]);
+          setRequests([]);
           setProjects([]);
           setLoading(false);
           return;
         }
 
-        // ✅ إذا مو عميل: ما نجيب investments (نخليها واضحة)
+        // ✅ إذا مو عميل: ما نجيب investments/requests (نخليها واضحة)
         if (!isClient) {
           setInvestments([]);
-          // بس نجيب مشاريع منشورة عشان يقدر يتصفح
+          setRequests([]);
+
           const projSnap = await getDocs(
             query(collection(db, "projects"), where("status", "==", "published"))
           );
           setProjects(projSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
+
           setLoading(false);
           return;
         }
@@ -95,9 +113,9 @@ export default function MyInvestments() {
           where("investorUid", "==", user.uid)
         );
 
-        unsub = onSnapshot(
+        unsubInv = onSnapshot(
           qInv,
-          async (snap) => {
+          (snap) => {
             const invs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
             // ترتيب محلي (بدون index)
@@ -108,21 +126,76 @@ export default function MyInvestments() {
             });
 
             setInvestments(invs);
-
-            // ✅ مشاريع منشورة (للقسم السفلي + أسماء المشاريع)
-            const projSnap = await getDocs(
-              query(collection(db, "projects"), where("status", "==", "published"))
-            );
-            setProjects(projSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
-
-            setLoading(false);
+            invLoaded = true;
+            done();
           },
           (err) => {
             console.error("investments_permission_or_error", err);
             setInvestments([]);
-            setLoading(false);
+            invLoaded = true;
+            done();
           }
         );
+
+        // ✅ listener لطلبات الاستثمار من messages (رسائلي فقط)
+        // ملاحظة: نجرب orderBy، ولو فشل (index/createdAt) نعمل fallback بدون orderBy
+        const baseMsg = collection(db, "messages");
+        const qMsgOrdered = query(
+          baseMsg,
+          where("createdByUid", "==", user.uid),
+          orderBy("createdAt", "desc")
+        );
+
+        const attachMsgListener = (qToUse: Query<DocumentData>, isFallback = false) => {
+          unsubMsg = onSnapshot(
+            qToUse,
+            (snap: QuerySnapshot<DocumentData>) => {
+              let rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+              // ✅ نعرض فقط طلبات الاستثمار
+              rows = rows.filter((m: any) => String(m?.type || "") === "investment_request");
+
+              // ✅ لو الرسالة صار لها investmentId، غالبًا الاستثمار سيظهر من investments، فنتجنب التكرار
+              const invIds = new Set(
+                (investments || []).map((i: any) => String(i?.sourceMessageId || ""))
+              );
+              rows = rows.filter((m: any) => !invIds.has(String(m?.id || "")));
+
+              // ✅ لو fallback: نرتب محلي
+              if (isFallback) {
+                rows.sort((a: any, b: any) => {
+                  const ta = toDateSafe(a.createdAt)?.getTime() ?? 0;
+                  const tb = toDateSafe(b.createdAt)?.getTime() ?? 0;
+                  return tb - ta;
+                });
+              }
+
+              setRequests(rows);
+              msgLoaded = true;
+              done();
+            },
+            (err) => {
+              console.error("messages_permission_or_error", err);
+              setRequests([]);
+              msgLoaded = true;
+              done();
+            }
+          );
+        };
+
+        try {
+          attachMsgListener(qMsgOrdered, false);
+        } catch (e) {
+          console.warn("messages ordered listener failed, fallback without orderBy", e);
+          const qMsgFallback = query(baseMsg, where("createdByUid", "==", user.uid));
+          attachMsgListener(qMsgFallback, true);
+        }
+
+        // ✅ مشاريع منشورة (أسماء المشاريع + قسم المشاريع)
+        const projSnap = await getDocs(
+          query(collection(db, "projects"), where("status", "==", "published"))
+        );
+        setProjects(projSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
       } catch (e) {
         console.error(e);
         setLoading(false);
@@ -132,10 +205,14 @@ export default function MyInvestments() {
     run();
 
     return () => {
-      if (unsub) unsub();
+      if (unsubInv) unsubInv();
+      if (unsubMsg) unsubMsg();
     };
+    // مهم: investments داخل فلترة requests يعتمد على listener؛ لذلك نخليه يعتمد فقط على uid/isClient
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.uid, isClient]);
 
+  // ✅ إجماليات (نحسبها من investments فقط عشان ما يصير تكرار)
   const totalInvested = useMemo(
     () => investments.reduce((s, i) => s + Number(i.amount || 0), 0),
     [investments]
@@ -176,6 +253,13 @@ export default function MyInvestments() {
       pending_contract: ["بانتظار العقد", "bg-purple-600"],
       signing: ["قيد الإجراء", "bg-indigo-600"],
       signed: ["تم الإجراء", "bg-green-700"],
+
+      // رسائل (messages)
+      new: ["جديد", "bg-orange-500"],
+      in_progress: ["قيد المعالجة", "bg-blue-600"],
+      resolved: ["تمت المعالجة", "bg-green-600"],
+      closed: ["مغلق", "bg-gray-600"],
+      needs_account: ["يتطلب حساب", "bg-yellow-600"],
     };
     const [label, cls] = map[status] || ["قيد المراجعة", "bg-blue-600"];
     return <Badge className={cls}>{label}</Badge>;
@@ -270,7 +354,7 @@ export default function MyInvestments() {
               مرحباً، {user?.displayName || user?.email || "عزيزي المستثمر"}
             </h1>
             <p className="text-muted-foreground text-lg">
-              هنا تتابع استثماراتك وحالتها خطوة بخطوة
+              هنا تتابع طلباتك واستثماراتك وحالتها خطوة بخطوة
             </p>
           </div>
 
@@ -295,13 +379,93 @@ export default function MyInvestments() {
             value={`${totalExpectedReturn.toLocaleString()} ر.س`}
             green
           />
-          <Stat
-            title="استثمارات نشطة"
-            icon={CheckCircle}
-            value={activeInvestments}
-          />
+          <Stat title="استثمارات نشطة" icon={CheckCircle} value={activeInvestments} />
           <Stat title="قيد المراجعة" icon={Clock} value={pendingInvestments} />
         </div>
+
+        {/* ✅ Requests (messages) */}
+        <Card>
+          <CardHeader className="flex items-center justify-between">
+            <CardTitle>طلباتي الاستثمارية</CardTitle>
+            <Link href="/projects">
+              <Button variant="outline">إرسال طلب جديد</Button>
+            </Link>
+          </CardHeader>
+
+          <CardContent>
+            {requests.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                لا توجد طلبات استثمار حالياً
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {requests.map((m: any) => {
+                  const project = projects.find((p) => p.id === m.projectId);
+                  const createdAt = m.createdAt ? formatDateAR(m.createdAt) : "—";
+                  const status = String(m.status || "pending_review");
+
+                  const amount =
+                    m.approvedAmount != null
+                      ? Number(m.approvedAmount)
+                      : m.estimatedAmount != null
+                      ? Number(m.estimatedAmount)
+                      : null;
+
+                  const hasInvestment = !!m.investmentId;
+
+                  return (
+                    <Card key={m.id} className="overflow-hidden">
+                      <CardContent className="pt-6">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <h3 className="font-bold truncate">
+                              {project?.titleAr || m?.projectTitle || "مشروع غير معروف"}
+                            </h3>
+
+                            <div className="mt-1 text-xs text-muted-foreground">
+                              تاريخ الطلب: {createdAt}
+                            </div>
+
+                            {amount != null && (
+                              <p className="mt-2 text-sm">
+                                <span className="text-muted-foreground">المبلغ: </span>
+                                <b>{Number(amount).toLocaleString()} ر.س</b>
+                              </p>
+                            )}
+
+                            <div className="mt-2 text-xs text-muted-foreground break-all">
+                              رقم الطلب: {m.id}
+                            </div>
+                          </div>
+
+                          <div className="flex flex-col items-end gap-2">
+                            {statusBadge(status)}
+
+                            <div className="flex flex-wrap gap-2 justify-end">
+                              {hasInvestment ? (
+                                <Link href={`/client/investments/${m.investmentId}`}>
+                                  <Button size="sm">
+                                    <FileText className="w-4 h-4 ml-2" />
+                                    فتح الاستثمار
+                                  </Button>
+                                </Link>
+                              ) : (
+                                <Button size="sm" variant="outline" disabled>
+                                  <FileText className="w-4 h-4 ml-2" />
+                                  بانتظار إنشاء الاستثمار
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Investments */}
         <Card>
@@ -323,7 +487,6 @@ export default function MyInvestments() {
                   const status = String(inv.status || "pending_review");
                   const createdAt = inv.createdAt ? formatDateAR(inv.createdAt) : "—";
 
-                  // ✅ العقد صار “اختياري” (مو أساس)
                   const contractId = inv?.contractId || null;
                   const contractUrl = inv?.contractUrl || null;
 

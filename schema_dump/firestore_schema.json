@@ -1,0 +1,1800 @@
+{
+  "generatedAt": "2026-02-08T09:58:54.505Z",
+  "collections": {
+    "admin_users": {
+      "path": "admin_users",
+      "sampleDocIds": [
+        "xTymgxbVBV3vmrmEDMRm"
+      ],
+      "fields": {
+        "displayName": {
+          "types": [
+            "string"
+          ]
+        },
+        "email": {
+          "types": [
+            "string"
+          ]
+        },
+        "title": {
+          "types": [
+            "string"
+          ]
+        },
+        "notes": {
+          "types": [
+            "string"
+          ]
+        },
+        "permissionsAllow": {
+          "types": [
+            "array"
+          ]
+        },
+        "permissionsDeny": {
+          "types": [
+            "array"
+          ]
+        },
+        "createdAt": {
+          "types": [
+            "timestamp"
+          ],
+          "children": {
+            "_seconds": {
+              "types": [
+                "number"
+              ]
+            },
+            "_nanoseconds": {
+              "types": [
+                "number"
+              ]
+            }
+          }
+        },
+        "isActive": {
+          "types": [
+            "boolean"
+          ]
+        },
+        "roleKey": {
+          "types": [
+            "string"
+          ]
+        },
+        "updatedAt": {
+          "types": [
+            "timestamp"
+          ],
+          "children": {
+            "_seconds": {
+              "types": [
+                "number"
+              ]
+            },
+            "_nanoseconds": {
+              "types": [
+                "number"
+              ]
+            }
+          }
+        }
+      },
+      "subcollections": {}
+    },
+    "contracts": {
+      "path": "contracts",
+      "sampleDocIds": [
+        "3FxHDgvCZ8nARal6PFEY",
+        "5ruAkytmoh2RZygle7dF",
+        "aQCYGC1nZpDanMky8kmb"
+      ],
+      "fields": {
+        "investmentId": {
+          "types": [
+            "string"
+          ]
+        },
+        "projectId": {
+          "types": [
+            "string"
+          ]
+        },
+        "projectTitle": {
+          "types": [
+            "string"
+          ]
+        },
+        "investorUid": {
+          "types": [
+            "string"
+          ]
+        },
+        "investorName": {
+          "types": [
+            "string"
+          ]
+        },
+        "investorEmail": {
+          "types": [
+            "string"
+          ]
+        },
+        "investorPhone": {
+          "types": [
+            "string"
+          ]
+        },
+        "amount": {
+          "types": [
+            "number"
+          ]
+        },
+        "currency": {
+          "types": [
+            "string"
+          ]
+        },
+        "createdByUid": {
+          "types": [
+            "string"
+          ]
+        },
+        "createdByEmail": {
+          "types": [
+            "string"
+          ]
+        },
+        "body": {
+          "types": [
+            "string"
+          ]
+        },
+        "terms": {
+          "types": [
+            "object"
+          ],
+          "children": {
+            "version": {
+              "types": [
+                "number"
+              ]
+            },
+            "title": {
+              "types": [
+                "string"
+              ]
+            }
+          }
+        },
+        "createdAt": {
+          "types": [
+            "timestamp"
+          ],
+          "children": {
+            "_seconds": {
+              "types": [
+                "number"
+              ]
+            },
+            "_nanoseconds": {
+              "types": [
+                "number"
+              ]
+            }
+          }
+        },
+        "signingAt": {
+          "types": [
+            "timestamp"
+          ],
+          "children": {
+            "_seconds": {
+              "types": [
+                "number"
+              ]
+            },
+            "_nanoseconds": {
+              "types": [
+                "number"
+              ]
+            }
+          }
+        },
+        "signedByUid": {
+          "types": [
+            "string"
+          ]
+        },
+        "signedAt": {
+          "types": [
+            "timestamp"
+          ],
+          "children": {
+            "_seconds": {
+              "types": [
+                "number"
+              ]
+            },
+            "_nanoseconds": {
+              "types": [
+                "number"
+              ]
+            }
+          }
+        },
+        "signedByEmail": {
+          "types": [
+            "string"
+          ]
+        },
+        "lastActionByEmail": {
+          "types": [
+            "string"
+          ]
+        },
+        "lastActionByUid": {
+          "types": [
+            "string"
+          ]
+        },
+        "lastActionByRole": {
+          "types": [
+            "string"
+          ]
+        },
+        "status": {
+          "types": [
+            "string"
+          ]
+        },
+        "returnNote": {
+          "types": [
+            "string"
+          ]
+        },
+        "lastActionAt": {
+          "types": [
+            "timestamp"
+          ],
+          "children": {
+            "_seconds": {
+              "types": [
+                "number"
+              ]
+            },
+            "_nanoseconds": {
+              "types": [
+                "number"
+              ]
+            }
+          }
+        },
+        "returnedAt": {
+          "types": [
+            "timestamp"
+          ],
+          "children": {
+            "_seconds": {
+              "types": [
+                "number"
+              ]
+            },
+            "_nanoseconds": {
+              "types": [
+                "number"
+              ]
+            }
+          }
+        },
+        "updatedAt": {
+          "types": [
+            "timestamp"
+          ],
+          "children": {
+            "_seconds": {
+              "types": [
+                "number"
+              ]
+            },
+            "_nanoseconds": {
+              "types": [
+                "number"
+              ]
+            }
+          }
+        }
+      },
+      "subcollections": {}
+    },
+    "interest_requests": {
+      "path": "interest_requests",
+      "sampleDocIds": [
+        "4istWwDn1LVeup65JGEc",
+        "JYcSJ5Sj8r8UIaxChA1F",
+        "NgJs9kQsrrS9jC0qrAgZ"
+      ],
+      "fields": {
+        "projectId": {
+          "types": [
+            "string"
+          ]
+        },
+        "projectTitle": {
+          "types": [
+            "string"
+          ]
+        },
+        "investorUid": {
+          "types": [
+            "string"
+          ]
+        },
+        "userId": {
+          "types": [
+            "string"
+          ]
+        },
+        "investorEmail": {
+          "types": [
+            "string"
+          ]
+        },
+        "investorName": {
+          "types": [
+            "string"
+          ]
+        },
+        "investorPhone": {
+          "types": [
+            "string"
+          ]
+        },
+        "amount": {
+          "types": [
+            "number"
+          ]
+        },
+        "status": {
+          "types": [
+            "string"
+          ]
+        },
+        "note": {
+          "types": [
+            "string",
+            "null"
+          ]
+        },
+        "projectSnapshot": {
+          "types": [
+            "object"
+          ],
+          "children": {
+            "titleAr": {
+              "types": [
+                "string"
+              ]
+            },
+            "title": {
+              "types": [
+                "string"
+              ]
+            },
+            "minInvestment": {
+              "types": [
+                "number"
+              ]
+            },
+            "annualReturn": {
+              "types": [
+                "number"
+              ]
+            },
+            "duration": {
+              "types": [
+                "number"
+              ]
+            }
+          }
+        },
+        "userSnapshot": {
+          "types": [
+            "object"
+          ],
+          "children": {
+            "displayName": {
+              "types": [
+                "string"
+              ]
+            },
+            "email": {
+              "types": [
+                "string"
+              ]
+            },
+            "phone": {
+              "types": [
+                "string"
+              ]
+            },
+            "isInvestor": {
+              "types": [
+                "boolean"
+              ]
+            }
+          }
+        },
+        "createdAt": {
+          "types": [
+            "timestamp"
+          ],
+          "children": {
+            "_seconds": {
+              "types": [
+                "number"
+              ]
+            },
+            "_nanoseconds": {
+              "types": [
+                "number"
+              ]
+            }
+          }
+        },
+        "updatedAt": {
+          "types": [
+            "timestamp"
+          ],
+          "children": {
+            "_seconds": {
+              "types": [
+                "number"
+              ]
+            },
+            "_nanoseconds": {
+              "types": [
+                "number"
+              ]
+            }
+          }
+        },
+        "uid": {
+          "types": [
+            "string"
+          ]
+        },
+        "email": {
+          "types": [
+            "string"
+          ]
+        },
+        "name": {
+          "types": [
+            "string"
+          ]
+        },
+        "phone": {
+          "types": [
+            "string"
+          ]
+        },
+        "estimatedAmount": {
+          "types": [
+            "number"
+          ]
+        },
+        "message": {
+          "types": [
+            "string"
+          ]
+        }
+      },
+      "subcollections": {}
+    },
+    "investments": {
+      "path": "investments",
+      "sampleDocIds": [
+        "2N6i0tw4eXj38aPAzoSU",
+        "2TAZcmex46jmRnQdmHdm",
+        "CJlpJEs1rQpLf1aqYqaL"
+      ],
+      "fields": {
+        "projectId": {
+          "types": [
+            "string"
+          ]
+        },
+        "projectTitle": {
+          "types": [
+            "string"
+          ]
+        },
+        "sourceMessageId": {
+          "types": [
+            "string"
+          ]
+        },
+        "investorUid": {
+          "types": [
+            "string"
+          ]
+        },
+        "investorEmail": {
+          "types": [
+            "string"
+          ]
+        },
+        "investorName": {
+          "types": [
+            "string"
+          ]
+        },
+        "investorPhone": {
+          "types": [
+            "string"
+          ]
+        },
+        "amount": {
+          "types": [
+            "number"
+          ]
+        },
+        "currency": {
+          "types": [
+            "string"
+          ]
+        },
+        "status": {
+          "types": [
+            "string"
+          ]
+        },
+        "createdByUid": {
+          "types": [
+            "string"
+          ]
+        },
+        "createdByEmail": {
+          "types": [
+            "string"
+          ]
+        },
+        "approvedAmount": {
+          "types": [
+            "number"
+          ]
+        },
+        "lastActionByRole": {
+          "types": [
+            "string"
+          ]
+        },
+        "lastActionByUid": {
+          "types": [
+            "string"
+          ]
+        },
+        "lastActionByEmail": {
+          "types": [
+            "string"
+          ]
+        },
+        "createdAt": {
+          "types": [
+            "timestamp"
+          ],
+          "children": {
+            "_seconds": {
+              "types": [
+                "number"
+              ]
+            },
+            "_nanoseconds": {
+              "types": [
+                "number"
+              ]
+            }
+          }
+        },
+        "contractStatus": {
+          "types": [
+            "string"
+          ]
+        },
+        "lastActionAt": {
+          "types": [
+            "timestamp"
+          ],
+          "children": {
+            "_seconds": {
+              "types": [
+                "number"
+              ]
+            },
+            "_nanoseconds": {
+              "types": [
+                "number"
+              ]
+            }
+          }
+        },
+        "contractId": {
+          "types": [
+            "string"
+          ]
+        },
+        "updatedAt": {
+          "types": [
+            "timestamp"
+          ],
+          "children": {
+            "_seconds": {
+              "types": [
+                "number"
+              ]
+            },
+            "_nanoseconds": {
+              "types": [
+                "number"
+              ]
+            }
+          }
+        },
+        "signingAt": {
+          "types": [
+            "timestamp"
+          ],
+          "children": {
+            "_seconds": {
+              "types": [
+                "number"
+              ]
+            },
+            "_nanoseconds": {
+              "types": [
+                "number"
+              ]
+            }
+          }
+        },
+        "signedAt": {
+          "types": [
+            "timestamp"
+          ],
+          "children": {
+            "_seconds": {
+              "types": [
+                "number"
+              ]
+            },
+            "_nanoseconds": {
+              "types": [
+                "number"
+              ]
+            }
+          }
+        },
+        "finalizedAt": {
+          "types": [
+            "timestamp"
+          ],
+          "children": {
+            "_seconds": {
+              "types": [
+                "number"
+              ]
+            },
+            "_nanoseconds": {
+              "types": [
+                "number"
+              ]
+            }
+          }
+        },
+        "finalizedByEmail": {
+          "types": [
+            "string"
+          ]
+        },
+        "finalizedByUid": {
+          "types": [
+            "string"
+          ]
+        }
+      },
+      "subcollections": {}
+    },
+    "messages": {
+      "path": "messages",
+      "sampleDocIds": [
+        "WOJZTTTlQ5dBP7dcsiMJ",
+        "ZZSWqU1w48U3zzRnsBuf",
+        "k9tJlkbrFQ77UpR4YUCW"
+      ],
+      "fields": {
+        "type": {
+          "types": [
+            "string"
+          ]
+        },
+        "projectId": {
+          "types": [
+            "string"
+          ]
+        },
+        "name": {
+          "types": [
+            "string"
+          ]
+        },
+        "email": {
+          "types": [
+            "string"
+          ]
+        },
+        "phone": {
+          "types": [
+            "string"
+          ]
+        },
+        "estimatedAmount": {
+          "types": [
+            "number"
+          ]
+        },
+        "message": {
+          "types": [
+            "string"
+          ]
+        },
+        "createdByUid": {
+          "types": [
+            "string"
+          ]
+        },
+        "createdByEmail": {
+          "types": [
+            "string"
+          ]
+        },
+        "createdAt": {
+          "types": [
+            "timestamp"
+          ],
+          "children": {
+            "_seconds": {
+              "types": [
+                "number"
+              ]
+            },
+            "_nanoseconds": {
+              "types": [
+                "number"
+              ]
+            }
+          }
+        },
+        "lastActionByEmail": {
+          "types": [
+            "string"
+          ]
+        },
+        "lastActionByUid": {
+          "types": [
+            "string"
+          ]
+        },
+        "investmentId": {
+          "types": [
+            "string"
+          ]
+        },
+        "updatedByEmail": {
+          "types": [
+            "string"
+          ]
+        },
+        "updatedByUid": {
+          "types": [
+            "string"
+          ]
+        },
+        "stageRole": {
+          "types": [
+            "string"
+          ]
+        },
+        "approvedAmount": {
+          "types": [
+            "number"
+          ]
+        },
+        "internalNotes": {
+          "types": [
+            "null"
+          ]
+        },
+        "lastActionByRole": {
+          "types": [
+            "string"
+          ]
+        },
+        "lastActionAt": {
+          "types": [
+            "timestamp"
+          ],
+          "children": {
+            "_seconds": {
+              "types": [
+                "number"
+              ]
+            },
+            "_nanoseconds": {
+              "types": [
+                "number"
+              ]
+            }
+          }
+        },
+        "status": {
+          "types": [
+            "string"
+          ]
+        },
+        "updatedAt": {
+          "types": [
+            "timestamp"
+          ],
+          "children": {
+            "_seconds": {
+              "types": [
+                "number"
+              ]
+            },
+            "_nanoseconds": {
+              "types": [
+                "number"
+              ]
+            }
+          }
+        },
+        "projectTitle": {
+          "types": [
+            "string"
+          ]
+        },
+        "contractStatus": {
+          "types": [
+            "string"
+          ]
+        },
+        "contractId": {
+          "types": [
+            "string"
+          ]
+        },
+        "events": {
+          "types": [
+            "array"
+          ],
+          "children": {
+            "id": {
+              "types": [
+                "string"
+              ]
+            },
+            "type": {
+              "types": [
+                "string"
+              ]
+            },
+            "title": {
+              "types": [
+                "string"
+              ]
+            },
+            "note": {
+              "types": [
+                "string"
+              ]
+            },
+            "byRole": {
+              "types": [
+                "string"
+              ]
+            },
+            "byUid": {
+              "types": [
+                "string"
+              ]
+            },
+            "byEmail": {
+              "types": [
+                "string"
+              ]
+            },
+            "at": {
+              "types": [
+                "timestamp"
+              ],
+              "children": {
+                "_seconds": {
+                  "types": [
+                    "number"
+                  ]
+                },
+                "_nanoseconds": {
+                  "types": [
+                    "number"
+                  ]
+                }
+              }
+            },
+            "meta": {
+              "types": [
+                "object"
+              ],
+              "children": {
+                "status": {
+                  "types": [
+                    "string"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "reopenedByUid": {
+          "types": [
+            "string"
+          ]
+        },
+        "reopenedByEmail": {
+          "types": [
+            "string"
+          ]
+        },
+        "reopenedAt": {
+          "types": [
+            "timestamp"
+          ],
+          "children": {
+            "_seconds": {
+              "types": [
+                "number"
+              ]
+            },
+            "_nanoseconds": {
+              "types": [
+                "number"
+              ]
+            }
+          }
+        },
+        "finalizedAt": {
+          "types": [
+            "timestamp"
+          ],
+          "children": {
+            "_seconds": {
+              "types": [
+                "number"
+              ]
+            },
+            "_nanoseconds": {
+              "types": [
+                "number"
+              ]
+            }
+          }
+        },
+        "finalizedByEmail": {
+          "types": [
+            "string"
+          ]
+        },
+        "finalizedByUid": {
+          "types": [
+            "string"
+          ]
+        }
+      },
+      "subcollections": {}
+    },
+    "notifications": {
+      "path": "notifications",
+      "sampleDocIds": [
+        "2yKDnTlGqxJUtzRzzMe9",
+        "3woGgRNj58crHOt4W2Lg",
+        "6RDYhHwGvqiNgLtqxFGX"
+      ],
+      "fields": {
+        "uid": {
+          "types": [
+            "string"
+          ]
+        },
+        "title": {
+          "types": [
+            "string"
+          ]
+        },
+        "body": {
+          "types": [
+            "string"
+          ]
+        },
+        "type": {
+          "types": [
+            "string"
+          ]
+        },
+        "read": {
+          "types": [
+            "boolean"
+          ]
+        },
+        "meta": {
+          "types": [
+            "object"
+          ],
+          "children": {
+            "messageId": {
+              "types": [
+                "string"
+              ]
+            },
+            "investmentId": {
+              "types": [
+                "string"
+              ]
+            },
+            "contractId": {
+              "types": [
+                "string"
+              ]
+            },
+            "status": {
+              "types": [
+                "string"
+              ]
+            }
+          }
+        },
+        "createdAt": {
+          "types": [
+            "timestamp"
+          ],
+          "children": {
+            "_seconds": {
+              "types": [
+                "number"
+              ]
+            },
+            "_nanoseconds": {
+              "types": [
+                "number"
+              ]
+            }
+          }
+        }
+      },
+      "subcollections": {}
+    },
+    "projects": {
+      "path": "projects",
+      "sampleDocIds": [
+        "AXJKloDKgiDXXsa2DgR3",
+        "BlZOuovHM9g6AaOCLTY7",
+        "OD4hxUQLVFugxjrjItle"
+      ],
+      "fields": {
+        "issueNumber": {
+          "types": [
+            "string"
+          ]
+        },
+        "title": {
+          "types": [
+            "string"
+          ]
+        },
+        "titleAr": {
+          "types": [
+            "string"
+          ]
+        },
+        "description": {
+          "types": [
+            "string"
+          ]
+        },
+        "descriptionAr": {
+          "types": [
+            "string"
+          ]
+        },
+        "projectType": {
+          "types": [
+            "string"
+          ]
+        },
+        "location": {
+          "types": [
+            "string"
+          ]
+        },
+        "locationAr": {
+          "types": [
+            "string"
+          ]
+        },
+        "status": {
+          "types": [
+            "string"
+          ]
+        },
+        "targetAmount": {
+          "types": [
+            "number"
+          ]
+        },
+        "currentAmount": {
+          "types": [
+            "number"
+          ]
+        },
+        "minInvestment": {
+          "types": [
+            "number"
+          ]
+        },
+        "annualReturn": {
+          "types": [
+            "number"
+          ]
+        },
+        "investmentReturn": {
+          "types": [
+            "number"
+          ]
+        },
+        "duration": {
+          "types": [
+            "number"
+          ]
+        },
+        "images": {
+          "types": [
+            "array"
+          ]
+        },
+        "vipOnly": {
+          "types": [
+            "boolean"
+          ]
+        },
+        "createdAt": {
+          "types": [
+            "timestamp"
+          ],
+          "children": {
+            "_seconds": {
+              "types": [
+                "number"
+              ]
+            },
+            "_nanoseconds": {
+              "types": [
+                "number"
+              ]
+            }
+          }
+        },
+        "vipTier": {
+          "types": [
+            "string"
+          ]
+        },
+        "descriptionEn": {
+          "types": [
+            "string"
+          ]
+        },
+        "featured": {
+          "types": [
+            "boolean"
+          ]
+        },
+        "attachments": {
+          "types": [
+            "array"
+          ]
+        },
+        "isVip": {
+          "types": [
+            "boolean"
+          ]
+        },
+        "progressMode": {
+          "types": [
+            "string"
+          ]
+        },
+        "highlights": {
+          "types": [
+            "array"
+          ]
+        },
+        "titleEn": {
+          "types": [
+            "string"
+          ]
+        },
+        "faq": {
+          "types": [
+            "array"
+          ]
+        },
+        "locationEn": {
+          "types": [
+            "string"
+          ]
+        },
+        "milestones": {
+          "types": [
+            "array"
+          ]
+        },
+        "progressMilestonesWeight": {
+          "types": [
+            "number"
+          ]
+        },
+        "gallery": {
+          "types": [
+            "array"
+          ]
+        },
+        "investorsCount": {
+          "types": [
+            "number"
+          ]
+        },
+        "progressFundingWeight": {
+          "types": [
+            "number"
+          ]
+        },
+        "coverImage": {
+          "types": [
+            "string"
+          ]
+        },
+        "updatedAt": {
+          "types": [
+            "timestamp"
+          ],
+          "children": {
+            "_seconds": {
+              "types": [
+                "number"
+              ]
+            },
+            "_nanoseconds": {
+              "types": [
+                "number"
+              ]
+            }
+          }
+        }
+      },
+      "subcollections": {}
+    },
+    "settings": {
+      "path": "settings",
+      "sampleDocIds": [
+        "labels"
+      ],
+      "fields": {
+        "projectTypes": {
+          "types": [
+            "object"
+          ],
+          "children": {
+            "sukuk": {
+              "types": [
+                "object"
+              ],
+              "children": {
+                "ar": {
+                  "types": [
+                    "string"
+                  ]
+                },
+                "en": {
+                  "types": [
+                    "string"
+                  ]
+                }
+              }
+            },
+            "land_development": {
+              "types": [
+                "object"
+              ],
+              "children": {
+                "ar": {
+                  "types": [
+                    "string"
+                  ]
+                },
+                "en": {
+                  "types": [
+                    "string"
+                  ]
+                }
+              }
+            },
+            "vip_exclusive": {
+              "types": [
+                "object"
+              ],
+              "children": {
+                "ar": {
+                  "types": [
+                    "string"
+                  ]
+                },
+                "en": {
+                  "types": [
+                    "string"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "projectStatuses": {
+          "types": [
+            "object"
+          ],
+          "children": {
+            "draft": {
+              "types": [
+                "object"
+              ],
+              "children": {
+                "ar": {
+                  "types": [
+                    "string"
+                  ]
+                },
+                "en": {
+                  "types": [
+                    "string"
+                  ]
+                }
+              }
+            },
+            "published": {
+              "types": [
+                "object"
+              ],
+              "children": {
+                "ar": {
+                  "types": [
+                    "string"
+                  ]
+                },
+                "en": {
+                  "types": [
+                    "string"
+                  ]
+                }
+              }
+            },
+            "closed": {
+              "types": [
+                "object"
+              ],
+              "children": {
+                "ar": {
+                  "types": [
+                    "string"
+                  ]
+                },
+                "en": {
+                  "types": [
+                    "string"
+                  ]
+                }
+              }
+            },
+            "completed": {
+              "types": [
+                "object"
+              ],
+              "children": {
+                "ar": {
+                  "types": [
+                    "string"
+                  ]
+                },
+                "en": {
+                  "types": [
+                    "string"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "investmentStatuses": {
+          "types": [
+            "object"
+          ],
+          "children": {
+            "pending": {
+              "types": [
+                "object"
+              ],
+              "children": {
+                "ar": {
+                  "types": [
+                    "string"
+                  ]
+                },
+                "en": {
+                  "types": [
+                    "string"
+                  ]
+                }
+              }
+            },
+            "pending_contract": {
+              "types": [
+                "object"
+              ],
+              "children": {
+                "ar": {
+                  "types": [
+                    "string"
+                  ]
+                },
+                "en": {
+                  "types": [
+                    "string"
+                  ]
+                }
+              }
+            },
+            "signing": {
+              "types": [
+                "object"
+              ],
+              "children": {
+                "ar": {
+                  "types": [
+                    "string"
+                  ]
+                },
+                "en": {
+                  "types": [
+                    "string"
+                  ]
+                }
+              }
+            },
+            "signed": {
+              "types": [
+                "object"
+              ],
+              "children": {
+                "ar": {
+                  "types": [
+                    "string"
+                  ]
+                },
+                "en": {
+                  "types": [
+                    "string"
+                  ]
+                }
+              }
+            },
+            "active": {
+              "types": [
+                "object"
+              ],
+              "children": {
+                "ar": {
+                  "types": [
+                    "string"
+                  ]
+                },
+                "en": {
+                  "types": [
+                    "string"
+                  ]
+                }
+              }
+            },
+            "completed": {
+              "types": [
+                "object"
+              ],
+              "children": {
+                "ar": {
+                  "types": [
+                    "string"
+                  ]
+                },
+                "en": {
+                  "types": [
+                    "string"
+                  ]
+                }
+              }
+            },
+            "rejected": {
+              "types": [
+                "object"
+              ],
+              "children": {
+                "ar": {
+                  "types": [
+                    "string"
+                  ]
+                },
+                "en": {
+                  "types": [
+                    "string"
+                  ]
+                }
+              }
+            },
+            "cancelled": {
+              "types": [
+                "object"
+              ],
+              "children": {
+                "ar": {
+                  "types": [
+                    "string"
+                  ]
+                },
+                "en": {
+                  "types": [
+                    "string"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "uiRoles": {
+          "types": [
+            "object"
+          ],
+          "children": {
+            "owner": {
+              "types": [
+                "object"
+              ],
+              "children": {
+                "ar": {
+                  "types": [
+                    "string"
+                  ]
+                },
+                "en": {
+                  "types": [
+                    "string"
+                  ]
+                }
+              }
+            },
+            "admin": {
+              "types": [
+                "object"
+              ],
+              "children": {
+                "ar": {
+                  "types": [
+                    "string"
+                  ]
+                },
+                "en": {
+                  "types": [
+                    "string"
+                  ]
+                }
+              }
+            },
+            "accountant": {
+              "types": [
+                "object"
+              ],
+              "children": {
+                "ar": {
+                  "types": [
+                    "string"
+                  ]
+                },
+                "en": {
+                  "types": [
+                    "string"
+                  ]
+                }
+              }
+            },
+            "staff": {
+              "types": [
+                "object"
+              ],
+              "children": {
+                "ar": {
+                  "types": [
+                    "string"
+                  ]
+                },
+                "en": {
+                  "types": [
+                    "string"
+                  ]
+                }
+              }
+            },
+            "client": {
+              "types": [
+                "object"
+              ],
+              "children": {
+                "ar": {
+                  "types": [
+                    "string"
+                  ]
+                },
+                "en": {
+                  "types": [
+                    "string"
+                  ]
+                }
+              }
+            },
+            "guest": {
+              "types": [
+                "object"
+              ],
+              "children": {
+                "ar": {
+                  "types": [
+                    "string"
+                  ]
+                },
+                "en": {
+                  "types": [
+                    "string"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "updatedAt": {
+          "types": [
+            "timestamp"
+          ],
+          "children": {
+            "_seconds": {
+              "types": [
+                "number"
+              ]
+            },
+            "_nanoseconds": {
+              "types": [
+                "number"
+              ]
+            }
+          }
+        }
+      },
+      "subcollections": {}
+    },
+    "users": {
+      "path": "users",
+      "sampleDocIds": [
+        "7DMxQMSqKOgtNYYZYRWHMXUH2Bt2",
+        "GFoJxCsnslZD8y5fo9yX5iIAqGR2",
+        "lL0wcjJaS5QKPvl8RijtsAXGvvi1"
+      ],
+      "fields": {
+        "uid": {
+          "types": [
+            "string"
+          ]
+        },
+        "createdAt": {
+          "types": [
+            "timestamp"
+          ],
+          "children": {
+            "_seconds": {
+              "types": [
+                "number"
+              ]
+            },
+            "_nanoseconds": {
+              "types": [
+                "number"
+              ]
+            }
+          }
+        },
+        "displayName": {
+          "types": [
+            "null",
+            "string"
+          ]
+        },
+        "permissionsDeny": {
+          "types": [
+            "array"
+          ]
+        },
+        "email": {
+          "types": [
+            "string"
+          ]
+        },
+        "permissionsAllow": {
+          "types": [
+            "array"
+          ]
+        },
+        "role": {
+          "types": [
+            "string"
+          ]
+        },
+        "updatedAt": {
+          "types": [
+            "timestamp"
+          ],
+          "children": {
+            "_seconds": {
+              "types": [
+                "number"
+              ]
+            },
+            "_nanoseconds": {
+              "types": [
+                "number"
+              ]
+            }
+          }
+        },
+        "isInvestor": {
+          "types": [
+            "boolean"
+          ]
+        },
+        "phone": {
+          "types": [
+            "string"
+          ]
+        },
+        "source": {
+          "types": [
+            "string"
+          ]
+        }
+      },
+      "subcollections": {}
+    }
+  }
+}

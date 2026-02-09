@@ -1542,3 +1542,23 @@
     opacity: 0.5;
   }
 }
+
+/* ===== MAEDIN Toast Style ===== */
+.rsg-toast {
+  background: #fcf0f0 !important; /* أحمر خفيف */
+  border: 1px solid #fcf0f0 !important;
+  color: #7f1d1d !important;
+  font-weight: 500;
+}
+
+.rsg-toast[data-type="error"] {
+  background: #fcf0f0 !important;
+  border-color: #fcf0f0 !important;
+  color: #991b1b !important;
+}
+
+.rsg-toast[data-type="success"] {
+  background: #ecfdf5 !important;
+  border-color: #ecfdf5 !important;
+  color: #065f46 !important;
+}

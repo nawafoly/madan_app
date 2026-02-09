@@ -1,4 +1,4 @@
-//pages/admin/Dashboard.tsx
+// pages/admin/Dashboard.tsx
 import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import DashboardLayout from "@/components/DashboardLayout";
@@ -12,12 +12,9 @@ import {
   Clock,
   AlertCircle,
 } from "lucide-react";
+import { useAuth } from "@/_core/hooks/useAuth";
 
-import {
-  collection,
-  onSnapshot,
-  Timestamp,
-} from "firebase/firestore";
+import { collection, onSnapshot, Timestamp } from "firebase/firestore";
 import { db } from "@/_core/firebase";
 
 import {
@@ -34,17 +31,58 @@ import {
 } from "recharts";
 
 type AnyDoc = Record<string, any> & { id: string };
+type AppRole = "owner" | "admin" | "accountant" | "staff" | "client" | "guest";
+
+/* =========================
+   Role helpers
+========================= */
+
+function normalizeRole(raw: any): AppRole {
+  if (!raw) return "guest";
+  const r = String(raw).toLowerCase();
+
+  if (r.includes("owner")) return "owner";
+  if (r.includes("admin")) return "admin";
+  if (r.includes("account")) return "accountant";
+  if (r.includes("staff") || r.includes("reception")) return "staff";
+  if (r.includes("client")) return "client";
+  if (r.includes("guest")) return "guest";
+
+  return "guest";
+}
+
+function pickRoleFromUser(u: any): AppRole {
+  const raw =
+    u?.role ??
+    (Array.isArray(u?.roles) ? u?.roles?.[0] : undefined) ??
+    u?.userRole ??
+    u?.accountRole;
+
+  return normalizeRole(raw);
+}
 
 export default function AdminDashboard() {
+  const { user } = useAuth();
+
+  const role = useMemo<AppRole>(() => pickRoleFromUser(user), [user]);
+
+  // ✅ قواعد العرض داخل الداشبورد
+  const canSeeInvestments =
+    role === "owner" || role === "admin" || role === "accountant";
+  const canSeeUsers = role === "owner" || role === "admin";
+  const canSeeMessages = role === "owner" || role === "admin" || role === "staff";
+  const canSeeProjects =
+    role === "owner" || role === "admin" || role === "accountant" || role === "staff";
+
   const [projects, setProjects] = useState<AnyDoc[]>([]);
   const [investments, setInvestments] = useState<AnyDoc[]>([]);
-  const [users, setUsers] = useState<AnyDoc[]>([]);
+  const [usersRows, setUsersRows] = useState<AnyDoc[]>([]);
   const [messages, setMessages] = useState<AnyDoc[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>("");
 
-  // ✅ Realtime subscriptions
+  // ✅ Realtime subscriptions (حسب الدور)
   useEffect(() => {
     setLoading(true);
     setError("");
@@ -59,29 +97,70 @@ export default function AdminDashboard() {
       const unsub = onSnapshot(
         collection(db, colName),
         (snap) => {
-          const rows = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+          const rows = snap.docs.map((d) => ({
+            id: d.id,
+            ...(d.data() as any),
+          }));
           setter(rows);
           if (markLoaded) setLoading(false);
         },
         (err) => {
           console.error(`${colName} snapshot error:`, err);
-          setError("تعذر تحميل بيانات لوحة التحكم (صلاحيات/اتصال).");
+          console.error(
+            `[DASH SNAP FAIL] ${colName}`,
+            (err as any)?.code,
+            (err as any)?.message
+          );
+
+          // ✅ رسالة عامة فقط لو projects فشل (لأنه الأساس غالباً)
+          if (colName === "projects") {
+            setError("تعذر تحميل بيانات لوحة التحكم (صلاحيات/اتصال).");
+          }
+
           if (markLoaded) setLoading(false);
+          setter([]);
         }
       );
+
       unsubs.push(unsub);
     };
 
-    // ✅ نعتبر projects هو اللي “يوقف” loading (وباقي الداتا تلحق)
-    sub("projects", setProjects, true);
-    sub("investments", setInvestments);
-    sub("users", setUsers);
-    sub("messages", setMessages);
+    // ✅ نختار “مصدر تحميل” واحد فقط يوقف loading
+    // ترتيب منطقي: projects -> investments -> users -> messages
+    const loaders: Array<{
+      allowed: boolean;
+      col: string;
+      setter: (rows: AnyDoc[]) => void;
+    }> = [
+      { allowed: canSeeProjects, col: "projects", setter: setProjects },
+      { allowed: canSeeInvestments, col: "investments", setter: setInvestments },
+      { allowed: canSeeUsers, col: "users", setter: setUsersRows },
+      { allowed: canSeeMessages, col: "messages", setter: setMessages },
+    ];
+
+    const firstLoader = loaders.find((x) => x.allowed);
+
+    // ✅ صَفّر أي داتا غير مسموحة (عشان ما تبقى من جلسة سابقة)
+    if (!canSeeProjects) setProjects([]);
+    if (!canSeeInvestments) setInvestments([]);
+    if (!canSeeUsers) setUsersRows([]);
+    if (!canSeeMessages) setMessages([]);
+
+    // ✅ اشتراكات
+    if (canSeeProjects) sub("projects", setProjects, firstLoader?.col === "projects");
+    if (canSeeInvestments)
+      sub("investments", setInvestments, firstLoader?.col === "investments");
+    if (canSeeUsers) sub("users", setUsersRows, firstLoader?.col === "users");
+    if (canSeeMessages)
+      sub("messages", setMessages, firstLoader?.col === "messages");
+
+    // ✅ إذا ما عنده ولا شيء مسموح (نادر) لا نعلق
+    if (!firstLoader) setLoading(false);
 
     return () => {
       unsubs.forEach((u) => u());
     };
-  }, []);
+  }, [canSeeProjects, canSeeInvestments, canSeeUsers, canSeeMessages]);
 
   const toNumberSafe = (v: unknown) => {
     const n = Number(v ?? 0);
@@ -92,26 +171,28 @@ export default function AdminDashboard() {
     return {
       totalProjects: projects.length,
       publishedProjects: projects.filter((p) => p.status === "published").length,
+
       totalInvestments: investments.length,
       pendingInvestments: investments.filter((i) => i.status === "pending").length,
-      totalUsers: users.length,
-      vipUsers: users.filter((u) => u.vipStatus === "vip").length,
+
+      totalUsers: usersRows.length,
+      vipUsers: usersRows.filter((u) => u.vipStatus === "vip").length,
+
       newMessages: messages.filter((m) => m.status === "new").length,
       totalMessages: messages.length,
     };
-  }, [projects, investments, users, messages]);
+  }, [projects, investments, usersRows, messages]);
 
   const totalInvestedAmount = useMemo(() => {
     return investments.reduce((sum, inv) => sum + toNumberSafe(inv.amount), 0);
   }, [investments]);
 
   const approvedInvestments = useMemo(() => {
-    return investments.filter(
-      (i) => i.status === "approved" || i.status === "active"
-    ).length;
+    return investments.filter((i) => i.status === "approved" || i.status === "active")
+      .length;
   }, [investments]);
 
-  // ✅ Dynamic line chart from Firestore: last 6 months totals
+  // ✅ Dynamic line chart: آخر 6 شهور
   const investmentsGrowthData = useMemo(() => {
     const monthNames = [
       "يناير",
@@ -132,12 +213,10 @@ export default function AdminDashboard() {
       if (!createdAt) return null;
       if (createdAt instanceof Timestamp) return createdAt.toDate();
       if (typeof createdAt === "number") return new Date(createdAt);
-      // أحيانًا تكون { seconds, nanoseconds }
       if (createdAt?.seconds) return new Date(createdAt.seconds * 1000);
       return null;
     };
 
-    // key: YYYY-MM
     const map = new Map<string, { y: number; m: number; amount: number }>();
 
     for (const inv of investments) {
@@ -145,7 +224,7 @@ export default function AdminDashboard() {
       if (!dt) continue;
 
       const y = dt.getFullYear();
-      const m = dt.getMonth(); // 0..11
+      const m = dt.getMonth();
       const key = `${y}-${String(m + 1).padStart(2, "0")}`;
 
       const prev = map.get(key);
@@ -154,7 +233,6 @@ export default function AdminDashboard() {
       else map.set(key, { y, m, amount: add });
     }
 
-    // آخر 6 شهور (حتى لو ما فيها بيانات)
     const now = new Date();
     const buckets: Array<{ y: number; m: number }> = [];
     for (let k = 5; k >= 0; k--) {
@@ -162,16 +240,11 @@ export default function AdminDashboard() {
       buckets.push({ y: d.getFullYear(), m: d.getMonth() });
     }
 
-    const rows = buckets.map(({ y, m }) => {
+    return buckets.map(({ y, m }) => {
       const key = `${y}-${String(m + 1).padStart(2, "0")}`;
       const found = map.get(key);
-      return {
-        month: monthNames[m],
-        amount: found ? Math.round(found.amount) : 0,
-      };
+      return { month: monthNames[m], amount: found ? Math.round(found.amount) : 0 };
     });
-
-    return rows;
   }, [investments]);
 
   const projectDistribution = useMemo(() => {
@@ -181,10 +254,7 @@ export default function AdminDashboard() {
         name: "أراضي",
         value: projects.filter((p) => p.projectType === "land_development").length,
       },
-      {
-        name: "VIP",
-        value: projects.filter((p) => p.projectType === "vip_exclusive").length,
-      },
+      { name: "VIP", value: projects.filter((p) => p.projectType === "vip_exclusive").length },
     ];
   }, [projects]);
 
@@ -209,123 +279,140 @@ export default function AdminDashboard() {
 
         {/* Stats */}
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-          <Stat
-            title="إجمالي المشاريع"
-            value={stats.totalProjects}
-            sub={`${stats.publishedProjects} منشور`}
-            icon={<Building2 />}
-          />
-          <Stat
-            title="إجمالي الاستثمارات"
-            value={stats.totalInvestments}
-            sub={`${approvedInvestments} معتمد`}
-            icon={<DollarSign />}
-          />
-          <Stat
-            title="إجمالي المستخدمين"
-            value={stats.totalUsers}
-            sub={`${stats.vipUsers} VIP`}
-            icon={<Users />}
-          />
-          <Stat
-            title="الرسائل"
-            value={stats.totalMessages}
-            sub={`${stats.newMessages} جديد`}
-            icon={<MessageSquare />}
-          />
+          {canSeeProjects && (
+            <Stat
+              title="إجمالي المشاريع"
+              value={stats.totalProjects}
+              sub={`${stats.publishedProjects} منشور`}
+              icon={<Building2 />}
+            />
+          )}
+
+          {canSeeInvestments && (
+            <Stat
+              title="إجمالي الاستثمارات"
+              value={stats.totalInvestments}
+              sub={`${approvedInvestments} معتمد`}
+              icon={<DollarSign />}
+            />
+          )}
+
+          {canSeeUsers && (
+            <Stat
+              title="إجمالي المستخدمين"
+              value={stats.totalUsers}
+              sub={`${stats.vipUsers} VIP`}
+              icon={<Users />}
+            />
+          )}
+
+          {canSeeMessages && (
+            <Stat
+              title="الرسائل"
+              value={stats.totalMessages}
+              sub={`${stats.newMessages} جديد`}
+              icon={<MessageSquare />}
+            />
+          )}
         </div>
 
         {/* Financial */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex gap-2 items-center">
-              <TrendingUp className="w-5 h-5" /> نظرة مالية
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid md:grid-cols-3 gap-6">
-              <Metric
-                label="إجمالي الاستثمارات"
-                value={`${totalInvestedAmount.toLocaleString()} ر.س`}
-              />
-              <Metric
-                label="متوسط الاستثمار"
-                value={
-                  stats.totalInvestments
-                    ? `${(totalInvestedAmount / stats.totalInvestments).toFixed(0)} ر.س`
-                    : "0"
-                }
-              />
-              <Metric
-                label="معدل الموافقة"
-                value={
-                  stats.totalInvestments
-                    ? `${((approvedInvestments / stats.totalInvestments) * 100).toFixed(1)}%`
-                    : "0%"
-                }
-              />
-            </div>
-          </CardContent>
-        </Card>
+        {canSeeInvestments && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex gap-2 items-center">
+                <TrendingUp className="w-5 h-5" /> نظرة مالية
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid md:grid-cols-3 gap-6">
+                <Metric
+                  label="إجمالي الاستثمارات"
+                  value={`${totalInvestedAmount.toLocaleString()} ر.س`}
+                />
+                <Metric
+                  label="متوسط الاستثمار"
+                  value={
+                    stats.totalInvestments
+                      ? `${(totalInvestedAmount / stats.totalInvestments).toFixed(0)} ر.س`
+                      : "0"
+                  }
+                />
+                <Metric
+                  label="معدل الموافقة"
+                  value={
+                    stats.totalInvestments
+                      ? `${((approvedInvestments / stats.totalInvestments) * 100).toFixed(1)}%`
+                      : "0%"
+                  }
+                />
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Charts */}
         <div className="grid md:grid-cols-2 gap-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>نمو الاستثمارات (آخر 6 شهور)</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={250}>
-                <LineChart data={investmentsGrowthData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" />
-                  <YAxis />
-                  <Tooltip />
-                  <Line dataKey="amount" stroke="#F2B705" strokeWidth={3} />
-                </LineChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
+          {canSeeInvestments && (
+            <Card>
+              <CardHeader>
+                <CardTitle>نمو الاستثمارات (آخر 6 شهور)</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={250}>
+                  <LineChart data={investmentsGrowthData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="month" />
+                    <YAxis />
+                    <Tooltip />
+                    <Line dataKey="amount" stroke="#F2B705" strokeWidth={3} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
 
-          <Card>
-            <CardHeader>
-              <CardTitle>توزيع المشاريع</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={250}>
-                <PieChart>
-                  <Pie
-                    data={projectDistribution}
-                    outerRadius={80}
-                    dataKey="value"
-                    label
-                  >
-                    {["#F2B705", "#030640", "#0B0F19"].map((c, i) => (
-                      <Cell key={i} fill={c} />
-                    ))}
-                  </Pie>
-                </PieChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
+          {canSeeProjects && (
+            <Card>
+              <CardHeader>
+                <CardTitle>توزيع المشاريع</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={250}>
+                  <PieChart>
+                    <Pie data={projectDistribution} outerRadius={80} dataKey="value" label>
+                      {["#F2B705", "#030640", "#0B0F19"].map((c, i) => (
+                        <Cell key={i} fill={c} />
+                      ))}
+                    </Pie>
+                  </PieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         {/* Alerts */}
         <div className="grid md:grid-cols-2 gap-6">
-          <AlertCard
-            title="استثمارات معلقة"
-            count={stats.pendingInvestments}
-            okText="لا توجد طلبات معلقة"
-            warnText="طلب بانتظار المراجعة"
-            icon={<Clock />}
-          />
-          <AlertCard
-            title="رسائل جديدة"
-            count={stats.newMessages}
-            okText="لا توجد رسائل جديدة"
-            warnText="رسالة جديدة"
-            icon={<MessageSquare />}
-          />
+          {canSeeInvestments && (
+            <AlertCard
+              title="استثمارات معلقة"
+              count={stats.pendingInvestments}
+              okText="لا توجد طلبات معلقة"
+              warnText="طلب بانتظار المراجعة"
+              icon={<Clock />}
+            />
+          )}
+
+          {canSeeMessages && (
+            <AlertCard
+              title="رسائل جديدة"
+              count={stats.newMessages}
+              okText="لا توجد رسائل جديدة"
+              warnText="رسالة جديدة"
+              icon={<MessageSquare />}
+            />
+          )}
         </div>
       </div>
     </DashboardLayout>

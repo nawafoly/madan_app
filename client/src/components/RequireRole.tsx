@@ -1,5 +1,5 @@
 // client/src/components/RequireRole.tsx
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, type ReactNode } from "react";
 import { useLocation } from "wouter";
 import { useAuth, type AppRole } from "@/_core/hooks/useAuth";
 
@@ -24,8 +24,9 @@ function homeForRole(role: AppRole) {
 
 type Props = {
   allow: AppRole[];
-  children: React.ReactNode;
+  children: ReactNode;
 };
+
 
 export default function RequireRole({ allow, children }: Props) {
   const { user, loading } = useAuth();

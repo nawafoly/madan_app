@@ -137,10 +137,17 @@ export default function ProjectDetails() {
   });
 
   const [isInterestFormOpen, setIsInterestFormOpen] = useState(false);
+  const [isSuccessOpen, setIsSuccessOpen] = useState(false);
+
   const [loading, setLoading] = useState(true);
   const [project, setProject] = useState<any | null>(null);
 
   const [sending, setSending] = useState(false);
+
+  const [formMessage, setFormMessage] = useState<{
+    type: "error" | null;
+    text: string;
+  }>({ type: null, text: "" });
 
   // ✅ NEW: user profile from Firestore
   const [userProfile, setUserProfile] = useState<any | null>(null);
@@ -382,7 +389,7 @@ export default function ProjectDetails() {
         return;
       }
 
-      await addDoc(collection(db, "investments"), {
+      await addDoc(collection(db, "interest_requests"), {
         projectId: project?.id || projectId,
         projectTitle: project?.titleAr || project?.title || "",
 
@@ -417,12 +424,18 @@ export default function ProjectDetails() {
         updatedAt: serverTimestamp(),
       });
 
-      toast.success("تم إنشاء الاستثمار (قيد المراجعة) بنجاح");
-      setIsInterestFormOpen(false);
-      setFormData((p) => ({ ...p, phone: "", estimatedAmount: "", message: "" }));
+      setIsInterestFormOpen(false); // يقفل نموذج الاهتمام
+      setIsSuccessOpen(true);       // يفتح مودال النجاح المستقل
+      setFormData((p) => ({ ...p, estimatedAmount: "", message: "" }));
+
+
+
     } catch (err) {
       console.error(err);
-      toast.error("حدث خطأ، يرجى المحاولة مرة أخرى");
+      setFormMessage({
+        type: "error",
+        text: "حدث خطأ أثناء الإرسال. حاول مرة أخرى.",
+      });
     } finally {
       setSending(false);
     }
@@ -848,7 +861,13 @@ export default function ProjectDetails() {
                   </div>
                 </div>
 
-                <Dialog open={isInterestFormOpen} onOpenChange={setIsInterestFormOpen}>
+                <Dialog
+                  open={isInterestFormOpen}
+                  onOpenChange={(open) => {
+                    setIsInterestFormOpen(open);
+                    if (open) setFormMessage({ type: null, text: "" });
+                  }}
+                >
                   <DialogTrigger asChild>
                     <Button size="lg" className="w-full py-6 gold-gradient text-lg">
                       أبدِ اهتمامك
@@ -861,15 +880,9 @@ export default function ProjectDetails() {
                       <DialogTitle>نموذج الاهتمام</DialogTitle>
                     </DialogHeader>
 
+
                     <form onSubmit={handleSubmit} className="space-y-4">
-                      <div>
-                        <Label>الاسم</Label>
-                        <Input
-                          value={formData.name}
-                          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                          required
-                        />
-                      </div>
+
 
                       <div>
                         <Label>البريد الإلكتروني</Label>
@@ -911,7 +924,12 @@ export default function ProjectDetails() {
                         />
                       </div>
 
-                      <Button type="submit" className="w-full" disabled={sending}>
+
+                      <Button
+                        type="submit"
+                        className="w-full"
+                        disabled={sending || formMessage.type === "success"}
+                      >
                         {sending ? "جاري الإرسال..." : "إرسال الطلب"}
                       </Button>
                     </form>
@@ -939,6 +957,33 @@ export default function ProjectDetails() {
           </div>
         </div>
       </section>
+
+      {/* ✅ SUCCESS MODAL (مستقل) */}
+      <Dialog
+        open={isSuccessOpen}
+        onOpenChange={(open) => {
+          setIsSuccessOpen(open);
+          // ✅ لو قفلناه نرجع الرسائل لحالتها
+          if (!open) setFormMessage({ type: null, text: "" });
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>تم إرسال الطلب بنجاح</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-4 text-emerald-900 text-sm leading-relaxed">
+              تم إرسال طلب الاهتمام بنجاح. سيتم التواصل معك بعد المراجعة.
+            </div>
+
+            <Button className="w-full" onClick={() => setIsSuccessOpen(false)}>
+              تم
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }

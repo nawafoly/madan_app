@@ -10,6 +10,8 @@ import {
 import { doc, serverTimestamp, setDoc } from "firebase/firestore";
 import { auth, db } from "@/_core/firebase";
 import { useAuth } from "@/_core/hooks/useAuth";
+import { faEye, faEyeSlash } from "@fortawesome/free-solid-svg-icons";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 
 type AppRole = "client" | "owner" | "admin" | "accountant" | "staff";
 
@@ -36,13 +38,14 @@ export default function LoginPage() {
   // Form
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
   const [confirmPassword, setConfirmPassword] = useState("");
 
   // Register extra fields
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
-  const [isInvestor, setIsInvestor] = useState(false);
-  const [nationalId, setNationalId] = useState("");
 
   // تحقق مبسط من ENV
   const firebaseConfigured = useMemo(() => {
@@ -123,7 +126,6 @@ export default function LoginPage() {
       // register
       const name = fullName.trim();
       const phoneStr = phone.trim();
-      const natId = nationalId.trim();
 
       if (!name) {
         setBusy(false);
@@ -153,13 +155,11 @@ export default function LoginPage() {
         email: e,
         displayName: name,
         phone: phoneStr, // نخليه string دائمًا
-        isInvestor: Boolean(isInvestor),
         updatedAt: serverTimestamp(),
         createdAt: serverTimestamp(),
         source: "ui_signup",
       };
 
-      if (natId) payload.nationalId = natId;
 
       await setDoc(ref, payload, { merge: true });
 
@@ -327,87 +327,93 @@ export default function LoginPage() {
             </div>
           )}
 
-          {mode === "register" && (
-            <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <input
-                type="checkbox"
-                checked={isInvestor}
-                onChange={(e) => setIsInvestor(e.target.checked)}
-                disabled={busy}
-              />
-              مستثمر؟
-            </label>
-          )}
+<div>
+  <label style={{ display: "block", fontSize: 12, opacity: 0.8 }}>
+    كلمة المرور
+  </label>
 
-          {mode === "register" && (
-            <div>
-              <label style={{ display: "block", fontSize: 12, opacity: 0.8 }}>
-                رقم الهوية/الإقامة (اختياري)
-              </label>
-              <input
-                value={nationalId}
-                onChange={(e) => setNationalId(e.target.value)}
-                placeholder="مثال: 10xxxxxxxx"
-                inputMode="numeric"
-                disabled={busy}
-                style={{
-                  width: "100%",
-                  height: 44,
-                  borderRadius: 14,
-                  border: "1px solid rgba(0,0,0,0.12)",
-                  padding: "0 12px",
-                  outline: "none",
-                  background: "rgba(255,255,255,0.98)",
-                }}
-              />
-            </div>
-          )}
+  <div style={{ position: "relative" }}>
+    <input
+      value={password}
+      onChange={(e) => setPassword(e.target.value)}
+      placeholder="••••••••"
+      type={showPassword ? "text" : "password"}
+      autoComplete={mode === "login" ? "current-password" : "new-password"}
+      disabled={busy}
+      style={{
+        width: "100%",
+        height: 44,
+        borderRadius: 14,
+        border: "1px solid rgba(0,0,0,0.12)",
+        padding: "0 12px 0 40px", // مساحة للأيقونة يسار
+        outline: "none",
+        background: "rgba(255,255,255,0.98)",
+      }}
+    />
 
-          <div>
-            <label style={{ display: "block", fontSize: 12, opacity: 0.8 }}>كلمة المرور</label>
-            <input
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              type="password"
-              autoComplete={mode === "login" ? "current-password" : "new-password"}
-              disabled={busy}
-              style={{
-                width: "100%",
-                height: 44,
-                borderRadius: 14,
-                border: "1px solid rgba(0,0,0,0.12)",
-                padding: "0 12px",
-                outline: "none",
-                background: "rgba(255,255,255,0.98)",
-              }}
-            />
+    <button
+      type="button"
+      onClick={() => setShowPassword((v) => !v)}
+      style={{
+        position: "absolute",
+        left: 8,
+        top: "50%",
+        transform: "translateY(-50%)",
+        border: "none",
+        background: "transparent",
+        cursor: "pointer",
+        opacity: 0.65,
+      }}
+    >
+      <FontAwesomeIcon icon={showPassword ? faEyeSlash : faEye} />
+    </button>
+  </div>
 
-            {mode === "register" && (
-              <div>
-                <label style={{ display: "block", fontSize: 12, opacity: 0.8 }}>
-                  تأكيد كلمة المرور
-                </label>
-                <input
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  type="password"
-                  autoComplete="new-password"
-                  disabled={busy}
-                  style={{
-                    width: "100%",
-                    height: 44,
-                    borderRadius: 14,
-                    border: "1px solid rgba(0,0,0,0.12)",
-                    padding: "0 12px",
-                    outline: "none",
-                    background: "rgba(255,255,255,0.98)",
-                  }}
-                />
-              </div>
-            )}
+  {mode === "register" && (
+    <div style={{ marginTop: 10 }}>
+      <label style={{ display: "block", fontSize: 12, opacity: 0.8 }}>
+        تأكيد كلمة المرور
+      </label>
 
-          </div>
+      <div style={{ position: "relative" }}>
+        <input
+          value={confirmPassword}
+          onChange={(e) => setConfirmPassword(e.target.value)}
+          type={showConfirmPassword ? "text" : "password"}
+          autoComplete="new-password"
+          disabled={busy}
+          style={{
+            width: "100%",
+            height: 44,
+            borderRadius: 14,
+            border: "1px solid rgba(0,0,0,0.12)",
+            padding: "0 12px 0 40px",
+            outline: "none",
+            background: "rgba(255,255,255,0.98)",
+          }}
+        />
+
+        <button
+          type="button"
+          onClick={() => setShowConfirmPassword((v) => !v)}
+          style={{
+            position: "absolute",
+            left: 8,
+            top: "50%",
+            transform: "translateY(-50%)",
+            border: "none",
+            background: "transparent",
+            cursor: "pointer",
+            opacity: 0.65,
+          }}
+        >
+          <FontAwesomeIcon icon={showConfirmPassword ? faEyeSlash : faEye} />
+        </button>
+      </div>
+    </div>
+  )}
+</div>
+
 
           <button
             onClick={handleSubmit}
@@ -463,8 +469,6 @@ export default function LoginPage() {
                 setPassword("");
                 setFullName("");
                 setPhone("");
-                setIsInvestor(false);
-                setNationalId("");
                 setMode((m) => (m === "login" ? "register" : "login"));
               }}
               disabled={busy}
