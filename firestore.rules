@@ -13,13 +13,18 @@ service cloud.firestore {
       return signedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
     }
 
-    function myRole() {
-      return userDocExists()
-        ? lower(get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role)
-        : null;
+    // ✅ FIX: ترجع string دائمًا (بدون null) عشان يختفي تحذير الـ ternary
+    function lower(v) {
+      return (v is string) ? v.lower() : "";
     }
 
-    function lower(v) { return v == null ? null : v.lower(); }
+    // ✅ FIX: ترجع "guest" بدل null + تتحقق أن role string
+    function myRole() {
+      return (userDocExists()
+        && (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role is string))
+        ? lower(get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role)
+        : "guest";
+    }
 
     function isOwner() { return signedIn() && myRole() == "owner"; }
     function isAdmin() { return signedIn() && (myRole() == "admin" || isOwner()); }
