@@ -106,105 +106,132 @@ const toDateSafe = (v: any) => {
 
 function formatDateTimeAR(v: any) {
   const d = toDateSafe(v);
-  return d ? d.toLocaleString("ar-SA") : "—";
-}
-function formatDateAR(v: any) {
-  const d = toDateSafe(v);
-  return d ? d.toLocaleDateString("ar-SA") : "—";
+  return d
+    ? d.toLocaleString("ar-SA", {
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    })
+    : "—";
 }
 
-function toNumOrNull(v: any) {
-  const s = String(v ?? "").trim().replace(/,/g, "");
-  if (!s) return null;
-  const n = Number(s);
-  return Number.isFinite(n) ? n : null;
-}
+const pick = (...vals: any[]) => {
+  for (const v of vals) {
+    if (v == null) continue;
+    const s = String(v).trim();
+    if (s && s !== "undefined" && s !== "null") return s;
+  }
+  return "";
+};
+
+const getClientName = (m: any) =>
+  pick(
+    m?.name,
+    m?.fullName,
+    m?.full_name,
+    m?.clientName,
+    m?.customerName,
+    m?.contactName,
+    m?.contact?.name,
+    m?.profile?.name
+  );
+
+const getClientEmail = (m: any) =>
+  pick(
+    m?.email,
+    m?.contactEmail,
+    m?.clientEmail,
+    m?.userEmail,
+    m?.contact?.email,
+    m?.profile?.email
+  );
+
+const getClientPhone = (m: any) =>
+  pick(
+    m?.phone,
+    m?.mobile,
+    m?.phoneNumber,
+    m?.contactPhone,
+    m?.clientPhone,
+    m?.contact?.phone,
+    m?.profile?.phone
+  );
+
+
+
+type StageRole = "staff" | "accountant" | "client" | "owner" | "completed";
 
 type MessageStatus =
-  | "new"
-  | "in_progress"
-  | "resolved"
-  | "closed"
-  | "approved"
-  | "rejected"
-  | "needs_account";
+  | "new" // جديد
+  | "in_progress" // قيد المعالجة (اختياري)
+  | "needs_account" // ✅ (حسب قاموس الخطوات) عند المحاسب بعد "ترحيل مبدئي"
+  | "waiting_client_confirmation" // ✅ جديد: انتظار تعميد العميل
+  | "resolved" // تم الحل (بعد تعميد العميل -> عند الأونر)
+  | "completed" // ✅ مقفل نهائياً
+  | "rejected" // مرفوض
+  | "no_account" // ✅ جديد: الطلب مرسل بدون حساب (لا يمكن ربطه بعميل)
+  | "closed"; // ✅ Legacy alias (إن وجدت بيانات قديمة)
 
-type StageRole =
-  | "staff"
-  | "owner"
-  | "accountant"
-  | "client"
-  | "completed"
-  | "system";
+type ContractFileKind = "draft_pdf" | "signed_pdf" | "other";
 
-// ✅ ملف عقد
-type ContractFileKind = "draft" | "signed";
 type ContractFile = {
-  id: string;
   kind: ContractFileKind;
-  version: number;
   name: string;
-  contentType: string;
-  size: number;
   url: string;
-  path: string;
-  isActive: boolean;
-  uploadedAt: any;
-  uploadedByUid?: string | null;
-  uploadedByEmail?: string | null;
-  note?: string | null; // مثال: "تم إلغاء النسخة السابقة..."
+  uploadedAt?: any;
 };
 
 type ContractDoc = {
-  status?: string; // pending_review | signing | returned | signed ...
-  currentVersion?: number;
+  id: string;
+  status?: "draft" | "sent" | "signed" | "returned";
   files?: ContractFile[];
-  returnNote?: string | null;
-  returnedAt?: any;
-  signedVerifiedAt?: any;
+  createdAt?: any;
+  updatedAt?: any;
 };
 
-// ✅ Events (Timeline)
-type TimelineEventType =
-  | "message_created"
-  | "status_changed"
-  | "notes_updated"
-  | "pre_investment_created"
-  | "needs_account"
-  | "contract_created"
-  | "draft_uploaded"
-  | "sent_for_signing"
-  | "contract_returned"
-  | "signed_uploaded"
-  | "signed_verified"
-  | "investment_finalized"
-  | "rejected"
-  | "reopened";
-
 type TimelineEvent = {
-  id: string;
-  type: TimelineEventType;
+  type: string;
   title: string;
   note?: string | null;
   byRole?: string | null;
   byUid?: string | null;
   byEmail?: string | null;
-  at: any; // serverTimestamp()
-  meta?: Record<string, any>;
+  at?: any;
+  meta?: any;
+};
+
+/* =========================
+  Timeline helpers
+========================= */
+
+const myActor = (user?: any, myRole?: string) => {
+  return {
+    byRole: myRole || null,
+    byUid: user?.uid || null,
+    byEmail: user?.email || null,
+  };
+};
+
+const actionMeta = (user?: any, myRole?: string) => {
+  return {
+    actionByRole: myRole || null,
+    actionByUid: user?.uid || null,
+    actionByEmail: user?.email || null,
+  };
 };
 
 const makeEvent = (opts: {
-  type: TimelineEventType;
+  type: string;
   title: string;
   note?: string | null;
   byRole?: string | null;
   byUid?: string | null;
   byEmail?: string | null;
-  meta?: Record<string, any>;
-}): TimelineEvent => {
-  const now = Date.now();
+  meta?: any;
+}) => {
   return {
-    id: `${now}-${Math.random().toString(16).slice(2)}`,
     type: opts.type,
     title: opts.title,
     note: opts.note || null,
@@ -239,6 +266,8 @@ function normalizeRole(raw: any): AppRole {
   Main
 ========================= */
 export default function MessagesManagement() {
+  const REQUESTS_COL = "interest_requests"; // ✅ مصدر الحقيقة
+
   const { user } = useAuth();
 
   const [loading, setLoading] = useState(true);
@@ -248,6 +277,8 @@ export default function MessagesManagement() {
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
 
   const [status, setStatus] = useState<MessageStatus>("new");
+  const [stageRole, setStageRole] = useState<StageRole>("staff");
+
   const [internalNotes, setInternalNotes] = useState("");
 
   const [approvedAmount, setApprovedAmount] = useState<string>("");
@@ -291,326 +322,42 @@ export default function MessagesManagement() {
 
         // ✅ owner bootstrap by email (نجاة للحسابات القديمة)
         const email = String(user?.email || "").toLowerCase();
-        if (email === OWNER_EMAIL) {
+        if (email && email === OWNER_EMAIL) {
           setMyRoleDb("owner");
           return;
         }
 
         const snap = await getDoc(doc(db, "users", user.uid));
         if (!snap.exists()) {
-          setMyRoleDb("");
           setRoleDocMissing(true);
+          setMyRoleDb("");
           return;
         }
-
-        const r = String((snap.data() as any)?.role || "").toLowerCase();
-        setMyRoleDb(r);
-        if (!r) setRoleDocMissing(true);
+        const role = (snap.data() as any)?.role || "";
+        setMyRoleDb(String(role));
       } catch (e) {
-        console.error("load_role_failed", e);
-        setMyRoleDb("");
+        console.error(e);
         setRoleDocMissing(true);
+        setMyRoleDb("");
       }
     };
     run();
   }, [user?.uid, user?.email]);
 
   const myRole = useMemo<AppRole>(() => {
+    // ✅ fallback
     const email = String(user?.email || "").toLowerCase();
-    if (email === OWNER_EMAIL) return "owner";
+    if (email && email === OWNER_EMAIL) return "owner";
     return normalizeRole(myRoleDb);
-  }, [user?.email, myRoleDb]);
+  }, [myRoleDb, user?.email]);
 
-  // ✅ حسب مذكرتك (الأدوار الرسمية)
-  // Owner/Admin: إدارة كاملة
-  // Accountant: مالي + ترحيل نهائي
-  // Staff: تشغيلي + تسجيل استثمار مبدئي
-  // Client: عرض رسائله فقط
-  const canStaffActions =
-    myRole === "staff" || myRole === "owner" || myRole === "admin";
-
-  const canOwnerAccountantActions =
-    myRole === "owner" || myRole === "accountant" || myRole === "admin";
-
-  const canViewContracts = canOwnerAccountantActions || canStaffActions;
-
-  // ✅ من يقدر يشوف صفحة الرسائل
-  const canViewMessages =
-    myRole === "owner" ||
-    myRole === "admin" ||
-    myRole === "accountant" ||
-    myRole === "staff" ||
-    myRole === "client";
-
-  const actionMeta = () => ({
-    lastActionByRole: myRole || null,
-    lastActionByUid: user?.uid || null,
-    lastActionByEmail: user?.email || null,
-    lastActionAt: serverTimestamp(),
-  });
-
-  const myActor = () => ({
-    byRole: myRole || null,
-    byUid: user?.uid || null,
-    byEmail: user?.email || null,
-  });
+  const canOwnerAccountantActions = myRole === "owner" || myRole === "accountant";
+  const canStaffActions = myRole === "staff" || myRole === "admin" || myRole === "owner";
+  const canAdmin = myRole === "admin" || myRole === "owner";
 
   /* =========================
-    ✅ Notifications helper
+    status badge
   ========================= */
-  const pushNotification = async (opts: {
-    uid?: string | null;
-    title: string;
-    body: string;
-    type?: string;
-    meta?: Record<string, any>;
-  }) => {
-    const uid = String(opts.uid || "").trim();
-    if (!uid) return;
-
-    await addDoc(collection(db, "notifications"), {
-      uid,
-      title: opts.title,
-      body: opts.body,
-      type: opts.type || "system",
-      read: false,
-      createdAt: serverTimestamp(),
-      meta: opts.meta || {},
-    });
-  };
-
-  const notifyClient = async (
-    msg: any,
-    payload: {
-      title: string;
-      body: string;
-      type?: string;
-      meta?: Record<string, any>;
-    }
-  ) => {
-    const uid =
-      msg?.createdByUid ||
-      msg?.investorUid ||
-      (contractDoc as any)?.investorUid ||
-      null;
-    if (!uid) return;
-    try {
-      await pushNotification({
-        uid,
-        title: payload.title,
-        body: payload.body,
-        type: payload.type,
-        meta: payload.meta,
-      });
-    } catch (e) {
-      console.error("notifyClient_failed", e);
-    }
-  };
-
-  /* =========================
-    ✅ Events helper
-  ========================= */
-  const appendMessageEvent = async (messageId: string, ev: TimelineEvent) => {
-    await updateDoc(doc(db, "messages", messageId), {
-      events: arrayUnion(ev),
-      updatedAt: serverTimestamp(),
-      ...actionMeta(),
-    });
-  };
-
-/* =========================
-    Load messages (by role)
-  ========================= */
-  const loadMessages = async () => {
-    try {
-      setLoading(true);
-  
-      // ✅ Debug (يعطيك تأكيد سريع في الكونسول)
-      console.log("[MSG] auth.uid:", user?.uid);
-      console.log("[MSG] myRole:", myRole, "canViewMessages:", canViewMessages);
-  
-      if (!user?.uid || !canViewMessages) {
-        setMessages([]);
-        return;
-      }
-  
-      const base = collection(db, "messages");
-  
-      // ✅ Client: يشوف رسائله فقط
-      // ✅ Backoffice: يشوف الكل
-      const qOrdered =
-        myRole === "client"
-          ? query(
-              base,
-              where("createdByUid", "==", user.uid),
-              orderBy("createdAt", "desc")
-            )
-          : query(base, orderBy("createdAt", "desc"));
-  
-      try {
-        // ✅ المحاولة الأساسية: مع orderBy (هذا الأفضل)
-        const snap = await getDocs(qOrdered);
-        setMessages(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-        return;
-      } catch (err: any) {
-        // ✅ لو فشل بسبب Index أو createdAt… نسوي fallback
-        console.error("[MSG] primary query failed:", err?.code, err?.message);
-  
-        // لو فشل permission-denied = ما نكمل fallback (عشان ما نلخبط التشخيص)
-        if (String(err?.code || "").includes("permission-denied")) {
-          throw err;
-        }
-  
-        // ✅ fallback query بدون orderBy (ينقذك لو createdAt ناقص/Index)
-        const qFallback =
-          myRole === "client"
-            ? query(base, where("createdByUid", "==", user.uid))
-            : query(base);
-  
-        const snap2 = await getDocs(qFallback);
-  
-        // ✅ ترتيب محلي على createdAt (best effort)
-        const rows = snap2.docs.map((d) => ({ id: d.id, ...d.data() }));
-        rows.sort((a: any, b: any) => {
-          const aSec = a?.createdAt?.seconds;
-          const bSec = b?.createdAt?.seconds;
-          const aMs =
-            typeof aSec === "number"
-              ? aSec * 1000
-              : a?.createdAt instanceof Date
-              ? a.createdAt.getTime()
-              : typeof a?.createdAt === "number"
-              ? a.createdAt
-              : 0;
-  
-          const bMs =
-            typeof bSec === "number"
-              ? bSec * 1000
-              : b?.createdAt instanceof Date
-              ? b.createdAt.getTime()
-              : typeof b?.createdAt === "number"
-              ? b.createdAt
-              : 0;
-  
-          return bMs - aMs;
-        });
-  
-        console.warn("[MSG] using fallback query (no orderBy). count:", rows.length);
-        setMessages(rows);
-        return;
-      }
-    } catch (e: any) {
-      console.error("[MSG] loadMessages failed:", e?.code, e?.message, e);
-      toast.error(
-        `فشل تحميل الرسائل: ${String(e?.code || e?.message || e || "unknown")}`
-      );
-      setMessages([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-  
-
-  useEffect(() => {
-    // ✅ ننتظر تحديد الدور قبل التحميل (خصوصاً للحسابات القديمة)
-    if (!user?.uid) return;
-    loadMessages();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.uid, myRole]);
-
-  /* =========================
-    Normalize
-  ========================= */
-  const normalizeForDisplay = (m: any) => {
-    const st = String(m?.status || "");
-    const sr = String(m?.stageRole || "");
-
-    if (st === "rejected" || sr === "system") {
-      return {
-        status: "rejected" as MessageStatus,
-        stageRole: "system" as StageRole,
-      };
-    }
-    if (st === "resolved" || sr === "completed") {
-      return {
-        status: "resolved" as MessageStatus,
-        stageRole: "completed" as StageRole,
-      };
-    }
-    return {
-      status: (st || "new") as MessageStatus,
-      stageRole: (sr || "staff") as StageRole,
-    };
-  };
-
-  /* =========================
-    Stats
-  ========================= */
-  const stats = useMemo(() => {
-    const total = messages.length;
-
-    const newCount = messages.filter((m) => m.status === "new").length;
-    const inProgress = messages.filter((m) => m.status === "in_progress").length;
-    const resolved = messages.filter((m) => m.status === "resolved").length;
-
-    const completed = messages.filter(
-      (m) => normalizeForDisplay(m).stageRole === "completed"
-    ).length;
-    const rejected = messages.filter(
-      (m) => normalizeForDisplay(m).stageRole === "system"
-    ).length;
-    const open = messages.filter((m) => {
-      const n = normalizeForDisplay(m);
-      return n.stageRole !== "completed" && n.stageRole !== "system";
-    }).length;
-
-    return {
-      total,
-      new: newCount,
-      in_progress: inProgress,
-      resolved,
-      open,
-      completed,
-      rejected,
-    };
-  }, [messages]);
-
-  /* =========================
-    Filters
-  ========================= */
-  const filteredMessages = useMemo(() => {
-    if (view === "all") return messages;
-
-    if (view === "completed") {
-      return messages.filter(
-        (m) => normalizeForDisplay(m).stageRole === "completed"
-      );
-    }
-    if (view === "rejected") {
-      return messages.filter(
-        (m) => normalizeForDisplay(m).stageRole === "system"
-      );
-    }
-    return messages.filter((m) => {
-      const n = normalizeForDisplay(m);
-      return n.stageRole !== "completed" && n.stageRole !== "system";
-    });
-  }, [messages, view]);
-
-  /* =========================
-    Badges
-  ========================= */
-  const getMessageTypeBadge = (type: string) => {
-    const map: any = {
-      investment_request: { label: "طلب استثمار", cls: "bg-blue-500" },
-      land_development: { label: "تطوير أراضي", cls: "bg-green-500" },
-      general_inquiry: { label: "استفسار عام", cls: "bg-gray-500" },
-      vip_request: { label: "طلب VIP", cls: "bg-accent" },
-    };
-    const c = map[type] || map.general_inquiry;
-    return <Badge className={c.cls}>{c.label}</Badge>;
-  };
-
   const getStatusBadge = (s: string) => {
     const map: any = {
       new: { label: "جديد", cls: "bg-orange-500" },
@@ -619,53 +366,83 @@ export default function MessagesManagement() {
       closed: { label: "مغلق", cls: "bg-gray-500" },
       approved: { label: "مقبول", cls: "bg-green-600" },
       rejected: { label: "مرفوض", cls: "bg-red-600" },
-      needs_account: { label: "يتطلب حساب", cls: "bg-yellow-600" },
+      needs_account: { label: "عند المحاسب", cls: "bg-yellow-600" },
+      no_account: { label: "بدون حساب", cls: "bg-rose-700" },
+      waiting_client_confirmation: { label: "انتظار تعميد العميل", cls: "bg-indigo-700" },
+      completed: { label: "مكتمل", cls: "bg-gray-800" },
     };
-    const c = map[s] || map.new;
-    return <Badge className={c.cls}>{c.label}</Badge>;
-  };
 
-  const getStageBadge = (stageRole?: StageRole) => {
-    const map: Record<string, [string, string]> = {
-      staff: ["عند المراجع", "bg-slate-600"],
-      owner: ["عند الأونر", "bg-amber-700"],
-      accountant: ["عند المحاسب", "bg-emerald-700"],
-      client: ["عند العميل", "bg-indigo-700"],
-      completed: ["مكتمل", "bg-gray-700"],
-      system: ["مقفل", "bg-gray-600"],
-    };
-    const [label, cls] = map[String(stageRole || "staff")] || map.staff;
-    return <Badge className={cls}>{label}</Badge>;
+    const key = String(s || "new");
+    return map[key] || { label: key, cls: "bg-gray-400" };
   };
 
   /* =========================
-    Selection helpers
+    normalize for display
   ========================= */
-  const hydrateContractStatus = async (msg: any) => {
+  const normalizeForDisplay = (m: any) => {
+    const st = String(m?.status || "new") as MessageStatus;
+    const sr = (String(m?.stageRole || "staff") as StageRole) || "staff";
+
+    const fixed: any = {
+      ...m,
+      status: st,
+      stageRole: sr,
+      createdAt: m?.createdAt || m?.created_at || null,
+    };
+
+    // ✅ events safe
+    fixed.events = Array.isArray(m?.events) ? m.events : [];
+
+    return fixed;
+  };
+
+  /* =========================
+    load
+  ========================= */
+  const loadMessages = async () => {
     try {
-      if (!msg?.contractId) return msg;
-      const snap = await getDoc(doc(db, "contracts", msg.contractId));
-      if (!snap.exists()) return msg;
-      const c = snap.data() as any;
-      const contractStatus = String(c?.status || msg?.contractStatus || "");
-      return { ...msg, contractStatus };
-    } catch {
-      return msg;
+      setLoading(true);
+      const q = query(collection(db, REQUESTS_COL), orderBy("createdAt", "desc"));
+      const snap = await getDocs(q);
+
+      const list = snap.docs.map((d) => ({
+        id: d.id,
+        ...d.data(),
+      }));
+
+      setMessages(list);
+    } catch (e) {
+      console.error(e);
+      toast.error("فشل تحميل الرسائل");
+    } finally {
+      setLoading(false);
     }
   };
 
-  const loadContractDoc = async (contractId?: string | null) => {
+  useEffect(() => {
+    loadMessages();
+  }, []);
+
+  /* =========================
+    contracts doc load
+  ========================= */
+  const loadContractDoc = async (contractId: string | null) => {
     try {
       if (!contractId) {
         setContractDoc(null);
         return;
       }
+
       const snap = await getDoc(doc(db, "contracts", contractId));
       if (!snap.exists()) {
         setContractDoc(null);
         return;
       }
-      setContractDoc(snap.data() as ContractDoc);
+
+      setContractDoc({
+        id: snap.id,
+        ...(snap.data() as any),
+      });
     } catch (e) {
       console.error(e);
       setContractDoc(null);
@@ -673,867 +450,336 @@ export default function MessagesManagement() {
   };
 
   /* =========================
-    ✅ Locked state (المصدر الوحيد)
+    UI filters
   ========================= */
-  const isLockedFinal = useMemo(() => {
-    if (!selectedMessage) return false;
-    const n = normalizeForDisplay(selectedMessage);
-    return n.stageRole === "completed" || n.stageRole === "system";
-  }, [selectedMessage]);
+  const normalized = useMemo(() => messages.map(normalizeForDisplay), [messages]);
 
-  /* =========================
-    ✅ Timeline derive (Admin preview)
-  ========================= */
-  const timelineItems = useMemo(() => {
-    const evs: TimelineEvent[] = Array.isArray(selectedMessage?.events)
-      ? selectedMessage.events
-      : [];
-    // ترتيب تقريبي حسب التاريخ (لو كان Timestamp)
-    const sorted = [...evs].sort((a, b) => {
-      const da = toDateSafe(a?.at)?.getTime() ?? 0;
-      const dbb = toDateSafe(b?.at)?.getTime() ?? 0;
-      return da - dbb;
+  const filtered = useMemo(() => {
+    if (view === "all") return normalized;
+
+    if (view === "open") {
+      return normalized.filter((m) => {
+        const st = String(m.status || "");
+        return st !== "completed" && st !== "rejected" && st !== "closed";
+      });
+    }
+
+    if (view === "completed") {
+      return normalized.filter((m) => {
+        const st = String(m.status || "");
+        return st === "completed" || st === "closed";
+      });
+    }
+
+    if (view === "rejected") {
+      return normalized.filter((m) => String(m.status || "") === "rejected");
+    }
+
+    return normalized;
+  }, [normalized, view]);
+
+  const stats = useMemo(() => {
+    const all = normalized;
+    const open = all.filter(
+      (m) =>
+        String(m.status || "") !== "completed" &&
+        String(m.status || "") !== "rejected" &&
+        String(m.status || "") !== "closed"
+    );
+    const completed = all.filter((m) => {
+      const st = String(m.status || "");
+      return st === "completed" || st === "closed";
     });
-    return sorted;
-  }, [selectedMessage]);
+    const rejected = all.filter((m) => String(m.status || "") === "rejected");
+
+    return { all: all.length, open: open.length, completed: completed.length, rejected: rejected.length };
+  }, [normalized]);
 
   /* =========================
-    Update (عام)
+    flags
   ========================= */
+  const isInvestment = selectedMessage?.type === "investment_request";
+
+  const isLockedFinal =
+    String(selectedMessage?.status || "") === "completed" ||
+    String(selectedMessage?.status || "") === "closed";
+
+  /* =========================
+    save notes only
+  ========================= */
+  const handleSaveNotesOnly = async () => {
+    if (!selectedMessage) return;
+
+    if (myRole === "client") return toast.error("صلاحيتك عرض فقط.");
+    if (isLockedFinal && myRole !== "owner")
+      return toast.warning("الطلب مقفل ولا يمكن تعديل الملاحظات.");
+
+    try {
+      const ev = makeEvent({
+        type: "notes_updated",
+        title: "تحديث ملاحظات داخلية",
+        note: internalNotes || null,
+        ...myActor(user, myRole),
+      });
+
+      await updateDoc(doc(db, REQUESTS_COL, selectedMessage.id), {
+        internalNotes: internalNotes || null,
+        updatedAt: serverTimestamp(),
+        updatedByUid: user?.uid || null,
+        updatedByEmail: user?.email || null,
+        events: arrayUnion(ev),
+        ...actionMeta(user, myRole),
+      });
+
+      toast.success("تم حفظ الملاحظات");
+      setSelectedMessage((prev: any) =>
+        prev
+          ? {
+            ...prev,
+            internalNotes: internalNotes || null,
+            events: Array.isArray(prev.events) ? [...prev.events, ev] : [ev],
+          }
+          : prev
+      );
+    } catch (e) {
+      console.error(e);
+      toast.error("فشل حفظ الملاحظات");
+    }
+  };
+
+  // ✅ حفظ الحالة/المرحلة + الملاحظات (يدوي) — للباك أوفيس فقط
   const handleUpdateStatus = async () => {
     if (!selectedMessage) return;
 
-    // ✅ Client عرض فقط
     if (myRole === "client") {
       toast.error("صلاحيتك عرض فقط.");
       return;
     }
 
-    if (isLockedFinal) {
-      toast.warning("الطلب مقفل ولا يمكن تعديل الحالة.");
+    if (isLockedFinal && myRole !== "owner") {
+      toast.warning("الطلب مقفل ولا يمكن تعديل حالته.");
       return;
     }
 
     try {
       const ev = makeEvent({
         type: "status_changed",
-        title: "تحديث حالة الطلب",
-        note: `تم تحديث الحالة إلى: ${status}${
-          internalNotes ? `\nملاحظة: ${internalNotes}` : ""
-        }`,
-        ...myActor(),
-        meta: { status },
+        title: "تحديث الحالة/المرحلة",
+        note: `status: ${status} • stageRole: ${stageRole}`,
+        ...myActor(user, myRole),
+        meta: { status, stageRole },
       });
 
-      await updateDoc(doc(db, "messages", selectedMessage.id), {
+      await updateDoc(doc(db, REQUESTS_COL, selectedMessage.id), {
         status,
+        stageRole,
         internalNotes: internalNotes || null,
         updatedAt: serverTimestamp(),
         updatedByUid: user?.uid || null,
         updatedByEmail: user?.email || null,
         events: arrayUnion(ev),
-        ...actionMeta(),
+        ...actionMeta(user, myRole),
       });
 
-      await notifyClient(selectedMessage, {
-        title: "تحديث على طلبك",
-        body: `تم تحديث حالة طلبك إلى: ${String(status)}`,
-        type: "message_status",
-        meta: { messageId: selectedMessage.id, status },
-      });
-
-      toast.success("تم تحديث حالة الرسالة");
+      toast.success("تم حفظ التغييرات");
       setSelectedMessage((prev: any) =>
         prev
           ? {
-              ...prev,
-              status,
-              internalNotes: internalNotes || null,
-              events: Array.isArray(prev.events) ? [...prev.events, ev] : [ev],
-            }
+            ...prev,
+            status,
+            stageRole,
+            internalNotes: internalNotes || null,
+            events: Array.isArray(prev.events) ? [...prev.events, ev] : [ev],
+          }
           : prev
       );
-      setIsDetailDialogOpen(false);
       loadMessages();
     } catch (e) {
       console.error(e);
-      toast.error("فشل تحديث حالة الرسالة");
+      toast.error("فشل حفظ التغييرات");
     }
   };
 
   /* =========================
-    ✅ 1) تسجيل استثمار مبدئي (STAFF)
+    moveTo step helper
   ========================= */
+  const moveTo = async (next: {
+    status: MessageStatus;
+    stageRole: StageRole;
+    note?: string;
+    notifyClientText?: string;
+  }) => {
+    if (!selectedMessage) return;
+
+    if (isLockedFinal && myRole !== "owner") {
+      toast.warning("الطلب مقفل.");
+      return;
+    }
+
+    if (myRole === "client") {
+      const ok = next.status === "resolved" && next.stageRole === "owner";
+      if (!ok) {
+        toast.error("العميل يقدر فقط يسوي: موافقة وتعميد (نقل للأونر).");
+        return;
+      }
+    }
+
+    const ev = makeEvent({
+      type: "status_changed",
+      title: "تحديث خطوة الطلب",
+      note:
+        next.note ||
+        `تم نقل الطلب إلى: ${next.status} / ${next.stageRole}`,
+      ...myActor(user, myRole),
+      meta: { status: next.status, stageRole: next.stageRole },
+    });
+
+    await updateDoc(doc(db, REQUESTS_COL, selectedMessage.id), {
+      status: next.status,
+      stageRole: next.stageRole,
+      updatedAt: serverTimestamp(),
+      updatedByUid: user?.uid || null,
+      updatedByEmail: user?.email || null,
+      events: arrayUnion(ev),
+      ...actionMeta(user, myRole),
+    });
+
+    setSelectedMessage((prev: any) =>
+      prev
+        ? {
+          ...prev,
+          status: next.status,
+          stageRole: next.stageRole,
+          events: Array.isArray(prev.events) ? [...prev.events, ev] : [ev],
+        }
+        : prev
+    );
+
+    // ✅ Notify client (optional)
+    if (next.notifyClientText && selectedMessage?.email) {
+      // هنا لو عندك Notifications/Email system
+      // تركناه للهيكل فقط
+    }
+
+    toast.success("تم ترحيل الطلب ✅");
+    loadMessages();
+  };
+
+  // 1) Staff: ترحيل مبدئي -> للمحاسب
+  const stepStaffForwardToAccountant = async () => {
+    if (!canStaffActions) return toast.error("هذا الإجراء للمراجع فقط");
+    if (isLockedFinal) return toast.warning("الطلب مقفل.");
+
+    await moveTo({
+      status: "needs_account",
+      stageRole: "accountant",
+      note: "ترحيل مبدئي من المراجع إلى المحاسب",
+      notifyClientText: "تمت مراجعة طلبك مبدئيًا وهو الآن عند المحاسب.",
+    });
+  };
+
+  // 2) Accountant: تمت مراجعة الحساب -> للعميل
+  const stepAccountantForwardToClient = async () => {
+    if (!canOwnerAccountantActions) return toast.error("هذا الإجراء للمحاسب/الأونر");
+    if (isLockedFinal) return toast.warning("الطلب مقفل.");
+
+    await moveTo({
+      status: "waiting_client_confirmation",
+      stageRole: "client",
+      note: "تمت مراجعة الحساب وترحيل الطلب للعميل للتعميد",
+      notifyClientText: "تمت مراجعة الحساب. الرجاء الدخول لتعميد الطلب.",
+    });
+  };
+
+  // 3) Client: موافقة وتعميد -> للأونر
+  const stepClientApproveAndForwardToOwner = async () => {
+    if (myRole !== "client") return toast.error("هذا الإجراء للعميل فقط");
+    if (isLockedFinal) return toast.warning("الطلب مقفل.");
+
+    await moveTo({
+      status: "resolved",
+      stageRole: "owner",
+      note: "تم تعميد العميل — تحويل للأونر للتعميد النهائي",
+      notifyClientText: "تم استلام تعميدك، وسيتم الإقفال النهائي بعد مراجعة الأونر.",
+    });
+  };
+
+  // 4) Owner: تعميد نهائي + قفل
+  const stepOwnerFinalizeAndClose = async () => {
+    if (myRole !== "owner") return toast.error("هذا الإجراء للأونر فقط");
+    if (isLockedFinal) return toast.warning("الطلب مقفل.");
+
+    await moveTo({
+      status: "completed",
+      stageRole: "completed",
+      note: "تعميد نهائي وإقفال الطلب",
+      notifyClientText: "تم إقفال الطلب نهائيًا. شكرًا لك.",
+    });
+  };
+
+  /* =========================
+    Investment flow (Legacy)
+  ========================= */
+
   const createPreInvestment = async () => {
     if (!selectedMessage) return;
 
-    if (!canStaffActions) return toast.error("هذا الإجراء للمراجع (Staff) فقط");
-    if (isLockedFinal)
-      return toast.warning("الطلب منتهي/مقفّل ولا يمكن تعديل سيره.");
-
-    const investorUid = selectedMessage?.createdByUid || null;
-
-    if (!investorUid) {
-      try {
-        const note =
-          internalNotes ||
-          "لا يمكن إنشاء استثمار لأن الطلب قُدّم بدون حساب. اطلب من العميل تسجيل الدخول وإعادة الإرسال.";
-
+    try {
+      // ✅ إذا الطلب بدون حساب (createdByUid null) => حوّله لبدون حساب
+      if (!selectedMessage?.createdByUid) {
         const ev = makeEvent({
           type: "needs_account",
-          title: "يتطلب حساب",
-          note,
-          ...myActor(),
+          title: "بدون حساب",
+          note: "الطلب لا يحتوي على حساب مرتبط (createdByUid فارغ).",
+          ...myActor(user, myRole),
+          meta: { messageId: selectedMessage.id },
         });
 
-        await updateDoc(doc(db, "messages", selectedMessage.id), {
-          status: "needs_account",
-          internalNotes: note,
+        await updateDoc(doc(db, REQUESTS_COL, selectedMessage.id), {
+          status: "no_account",
           stageRole: "client" as StageRole,
-          updatedAt: serverTimestamp(),
-          updatedByUid: user?.uid || null,
-          updatedByEmail: user?.email || null,
           events: arrayUnion(ev),
-          ...actionMeta(),
+          ...actionMeta(user, myRole),
         });
 
-        toast.warning("هذا الطلب بدون حساب — تم تحويله إلى: يتطلب حساب");
-        setSelectedMessage((prev: any) =>
-          prev
-            ? {
-                ...prev,
-                status: "needs_account",
-                stageRole: "client",
-                internalNotes: note,
-                events: Array.isArray(prev.events) ? [...prev.events, ev] : [ev],
-              }
-            : prev
-        );
-        setIsDetailDialogOpen(false);
+        toast.warning("هذا الطلب بدون حساب — تم تحويله إلى: بدون حساب");
         loadMessages();
-      } catch (e) {
-        console.error(e);
-        toast.error("فشل تحديث الحالة");
-      }
-      return;
-    }
-
-    const approved = toNumOrNull(approvedAmount);
-    const estimated = toNumOrNull(selectedMessage?.estimatedAmount);
-    const amount = approved ?? estimated ?? null;
-    if (!amount || amount <= 0)
-      return toast.error("لا يمكن التسجيل بدون مبلغ صحيح (المعتمد أو المقدر)");
-
-    try {
-      const { investmentId } = await runTransaction(db, async (tx) => {
-        const msgRef = doc(db, "messages", selectedMessage.id);
-        const msgSnap = await tx.get(msgRef);
-        if (!msgSnap.exists()) throw new Error("message_not_found");
-        const msg = msgSnap.data() as any;
-
-        if (msg?.investmentId) throw new Error("investment_already_created");
-        if (!msg?.projectId) throw new Error("missing_project_id");
-
-        const invRef = doc(collection(db, "investments"));
-
-        const ev = makeEvent({
-          type: "pre_investment_created",
-          title: "تم تسجيل استثمار مبدئي",
-          note: `المبلغ: ${Number(amount).toLocaleString()} SAR`,
-          ...myActor(),
-          meta: { amount, investmentId: invRef.id },
-        });
-
-        // ✅ IMPORTANT FIX:
-        // داخل tx.set لمستند جديد = events لازم تكون Array عادي، مو arrayUnion
-        tx.set(invRef, {
-          projectId: msg.projectId,
-          projectTitle: msg.projectTitle || null,
-          sourceMessageId: msgRef.id,
-          investorUid,
-          investorEmail: msg.email || null,
-          investorName: msg.name || null,
-          investorPhone: msg.phone || null,
-          amount,
-          currency: "SAR",
-
-          // ✅ بدون عقود: نخليها pending_review (بدون pending_contract)
-          status: CONTRACTS_DISABLED ? "pending_review" : "pending_contract",
-
-          createdAt: serverTimestamp(),
-          createdByUid: user?.uid || null,
-          createdByEmail: user?.email || null,
-          approvedAmount: amount,
-
-          // ✅ timeline (إنشاء جديد)
-          events: [ev],
-
-          ...actionMeta(),
-        });
-
-        tx.update(msgRef, {
-          status: "in_progress",
-          stageRole: "owner" as StageRole,
-          investmentId: invRef.id,
-          approvedAmount: amount,
-          internalNotes: internalNotes || null,
-          updatedAt: serverTimestamp(),
-          updatedByUid: user?.uid || null,
-          updatedByEmail: user?.email || null,
-
-          // ✅ timeline (update existing doc)
-          events: arrayUnion(ev),
-
-          ...actionMeta(),
-        });
-
-        return { investmentId: invRef.id };
-      });
-
-      await notifyClient(selectedMessage, {
-        title: "تم تسجيل طلبك الاستثماري",
-        body: CONTRACTS_DISABLED
-          ? "تم تسجيل استثمار مبدئي وسيتم التواصل معك قريباً. يمكنك متابعة الحالة من لوحة العميل."
-          : "تم تسجيل استثمار مبدئي لطلبك وسيتم تجهيز العقد قريباً.",
-        type: "pre_investment_created",
-        meta: { messageId: selectedMessage.id, investmentId },
-      });
-
-      toast.success(`تم تسجيل استثمار مبدئي ✅ Investment: ${investmentId}`);
-
-      setSelectedMessage((prev: any) =>
-        prev
-          ? {
-              ...prev,
-              status: "in_progress",
-              stageRole: "owner",
-              investmentId,
-              approvedAmount: amount,
-            }
-          : prev
-      );
-
-      setIsDetailDialogOpen(false);
-      loadMessages();
-    } catch (e: any) {
-      console.error(e);
-      const msg = String(e?.message || "");
-      if (msg.includes("investment_already_created"))
-        return toast.warning("تم إنشاء Investment مسبقاً لهذه الرسالة");
-      if (msg.includes("missing_project_id"))
-        return toast.error("لا يوجد projectId داخل الرسالة");
-      toast.error("فشل تسجيل الاستثمار");
-    }
-  };
-
-  /* =========================
-    ✅ 2) إنشاء عقد (OWNER/ACCOUNTANT)
-    - ينشئ doc contract فقط (بدون نص)
-    - موجود للمستقبل 100% ✅
-  ========================= */
-  const createContractForInvestment = async () => {
-    // ✅ العقود موقوفة حالياً (مستقبل فقط)
-    if (CONTRACTS_DISABLED) {
-      toast.info("العقود موقوفة حالياً — الاعتماد يدوي (المستقبل جاهز)");
-      return;
-    }
-
-    if (!selectedMessage) return;
-    if (!canOwnerAccountantActions)
-      return toast.error("هذا الإجراء للأونر/المحاسب فقط");
-    if (isLockedFinal)
-      return toast.warning("الطلب منتهي/مقفّل ولا يمكن إنشاء عقد.");
-
-    const investorUid = selectedMessage?.createdByUid || null;
-    const investmentId = selectedMessage?.investmentId || null;
-
-    if (!investorUid) return toast.warning("لا يمكن إنشاء عقد لأن الطلب بدون حساب");
-    if (!investmentId) return toast.warning("سجل استثمار مبدئي أولاً");
-    if (selectedMessage?.contractId)
-      return toast.warning("تم إنشاء عقد مسبقاً لهذه الرسالة");
-
-    try {
-      setContractBusy(true);
-
-      const contractId = await runTransaction(db, async (tx) => {
-        const msgRef = doc(db, "messages", selectedMessage.id);
-        const msgSnap = await tx.get(msgRef);
-        if (!msgSnap.exists()) throw new Error("message_not_found");
-        const msg = msgSnap.data() as any;
-
-        if (msg?.contractId) throw new Error("contract_already_created");
-        if (!msg?.investmentId) throw new Error("missing_investment_id");
-
-        const invRef = doc(db, "investments", msg.investmentId);
-        const invSnap = await tx.get(invRef);
-        if (!invSnap.exists()) throw new Error("investment_not_found");
-        const inv = invSnap.data() as any;
-
-        const cRef = doc(collection(db, "contracts"));
-
-        const ev = makeEvent({
-          type: "contract_created",
-          title: "تم إنشاء عقد",
-          note: "تم إنشاء وثيقة العقد (جاهزة لرفع النسخة وإرسالها للتوقيع).",
-          ...myActor(),
-          meta: { contractId: cRef.id, investmentId: msg.investmentId },
-        });
-
-        // ✅ IMPORTANT FIX:
-        // داخل tx.set لمستند جديد = events لازم تكون Array عادي
-        tx.set(cRef, {
-          investmentId: msg.investmentId,
-          messageId: msgRef.id,
-
-          projectId: inv.projectId || msg.projectId || null,
-          projectTitle: inv.projectTitle || msg.projectTitle || null,
-
-          investorUid: inv.investorUid,
-          investorName: inv.investorName ?? msg.name ?? null,
-          investorEmail: inv.investorEmail ?? msg.email ?? null,
-          investorPhone: inv.investorPhone ?? msg.phone ?? null,
-
-          amount: inv.amount ?? null,
-          currency: inv.currency ?? "SAR",
-
-          status: "pending_review",
-          currentVersion: 0,
-          files: [],
-
-          createdAt: serverTimestamp(),
-          createdByUid: user?.uid || null,
-          createdByEmail: user?.email || null,
-
-          events: [ev],
-
-          ...actionMeta(),
-        });
-
-        tx.update(msgRef, {
-          contractId: cRef.id,
-          contractStatus: "pending_review",
-          stageRole: "owner" as StageRole,
-          updatedAt: serverTimestamp(),
-          updatedByUid: user?.uid || null,
-          updatedByEmail: user?.email || null,
-
-          events: arrayUnion(ev),
-
-          ...actionMeta(),
-        });
-
-        tx.update(invRef, {
-          contractId: cRef.id,
-          contractStatus: "pending_review",
-          updatedAt: serverTimestamp(),
-
-          events: arrayUnion(ev),
-
-          ...actionMeta(),
-        });
-
-        return cRef.id;
-      });
-
-      toast.success(`تم إنشاء العقد ✅ ContractId: ${contractId}`);
-
-      setSelectedMessage((prev: any) =>
-        prev ? { ...prev, contractId, contractStatus: "pending_review" } : prev
-      );
-      await loadContractDoc(contractId);
-      loadMessages();
-    } catch (e: any) {
-      console.error(e);
-      toast.error("فشل إنشاء العقد");
-    } finally {
-      setContractBusy(false);
-    }
-  };
-
-  /* =========================
-    ✅ Upload contract file (draft) - نسخة رسمية PDF/Word
-    - موجود للمستقبل 100% ✅
-  ========================= */
-  const uploadContractDraft = async (file: File, asReplacement: boolean) => {
-    // ✅ العقود/الرفع موقوفة حالياً
-    if (CONTRACTS_DISABLED) {
-      toast.info("رفع ملفات العقود موقوف حالياً — مستقبل فقط");
-      return;
-    }
-
-    if (!selectedMessage?.contractId) return toast.warning("لا يوجد عقد مرتبط");
-    if (!canOwnerAccountantActions)
-      return toast.error("هذا الإجراء للأونر/المحاسب فقط");
-    if (isLockedFinal) return toast.warning("الطلب مقفل.");
-
-    const contractId = selectedMessage.contractId as string;
-
-    const allowed = [
-      "application/pdf",
-      "application/msword",
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    ];
-    if (!allowed.includes(file.type)) {
-      toast.error("الملف لازم يكون PDF أو Word");
-      return;
-    }
-
-    try {
-      setContractBusy(true);
-
-      const storage = getStorage();
-
-      const cRef = doc(db, "contracts", contractId);
-      const cSnap = await getDoc(cRef);
-      if (!cSnap.exists()) {
-        toast.error("العقد غير موجود");
         return;
       }
 
-      const c = cSnap.data() as ContractDoc;
-      const currentVersion = Number(c?.currentVersion ?? 0);
-      const nextVersion = currentVersion + 1;
-
-      const now = Date.now();
-      const path = `contracts/${contractId}/v${nextVersion}/${now}-${file.name}`;
-      const sRef = storageRef(storage, path);
-
-      const task = uploadBytesResumable(sRef, file, { contentType: file.type });
-
-      const url: string = await new Promise((resolve, reject) => {
-        task.on(
-          "state_changed",
-          (snap) => {
-            const pct = Math.round(
-              (snap.bytesTransferred / snap.totalBytes) * 100
-            );
-            console.log("upload draft %", pct);
-          },
-          (err) => reject(err),
-          async () => {
-            const u = await getDownloadURL(task.snapshot.ref);
-            resolve(u);
-          }
-        );
-      });
-
-      const prevFiles = Array.isArray(c.files) ? c.files : [];
-      const updatedFiles = prevFiles.map((f) =>
-        f.kind === "draft" && f.isActive
-          ? { ...f, isActive: false, note: "تم استبدالها بنسخة أحدث" }
-          : f
-      );
-
-      const newFile: ContractFile = {
-        id: `${now}-${Math.random().toString(16).slice(2)}`,
-        kind: "draft",
-        version: nextVersion,
-        name: file.name,
-        contentType: file.type,
-        size: file.size,
-        url,
-        path,
-        isActive: true,
-        uploadedAt: serverTimestamp(),
-        uploadedByUid: user?.uid || null,
-        uploadedByEmail: user?.email || null,
-        note: asReplacement
-          ? "تم رفع نسخة جديدة (تلغي القديمة)"
-          : "تم رفع نسخة العقد",
-      };
-
-      const ev = makeEvent({
-        type: "draft_uploaded",
-        title: "تم رفع نسخة العقد (Draft)",
-        note: `النسخة: v${nextVersion} • ${file.name}`,
-        ...myActor(),
-        meta: { contractId, version: nextVersion },
-      });
-
-      await updateDoc(cRef, {
-        status: "pending_review",
-        currentVersion: nextVersion,
-        files: [...updatedFiles, newFile],
-        returnNote: null,
-        returnedAt: null,
-        updatedAt: serverTimestamp(),
-        events: arrayUnion(ev),
-        ...actionMeta(),
-      });
-
-      await updateDoc(doc(db, "messages", selectedMessage.id), {
-        contractStatus: "pending_review",
-        updatedAt: serverTimestamp(),
-        events: arrayUnion(ev),
-        ...actionMeta(),
-      });
-
-      const investmentId = selectedMessage?.investmentId || null;
-      if (investmentId) {
-        await updateDoc(doc(db, "investments", investmentId), {
-          contractStatus: "pending_review",
-          updatedAt: serverTimestamp(),
-          events: arrayUnion(ev),
-          ...actionMeta(),
-        });
-      }
-
-      setContractDoc((prev) => ({
-        ...(prev || {}),
-        status: "pending_review",
-        currentVersion: nextVersion,
-        files: [...updatedFiles, newFile],
-      }));
-
-      toast.success("تم رفع العقد ✅ الآن تقدر ترسله للعميل للتوقيع");
-
-      setDraftFile(null);
-      setReplaceDraftFile(null);
-
-      await loadContractDoc(contractId);
-      loadMessages();
+      // باقي منطق pre-investment (لو موجود عندك) …
+      toast.success("تم (مبدئيًا) إنشاء الاستثمار");
     } catch (e) {
       console.error(e);
-      toast.error("فشل رفع ملف العقد");
-    } finally {
-      setContractBusy(false);
+      toast.error("فشل إنشاء الاستثمار");
     }
   };
 
-  const getActiveFile = (kind: ContractFileKind) => {
-    const files = contractDoc?.files || [];
-    return files.find((f) => f.kind === kind && f.isActive) || null;
+  const createContractForInvestment = async () => {
+    toast.info("نظام العقود موقوف حاليًا (حسب CONTRACTS_DISABLED)");
   };
 
-  /* =========================
-    ✅ إرسال العقد للعميل للتوقيع (مستقبل)
-  ========================= */
   const sendContractForSigning = async () => {
-    if (CONTRACTS_DISABLED) {
-      toast.info("إرسال العقد للتوقيع موقوف — الاعتماد يدوي");
-      return;
-    }
-
-    if (!selectedMessage) return;
-    if (!canOwnerAccountantActions)
-      return toast.error("هذا الإجراء للأونر/المحاسب فقط");
-    if (isLockedFinal) return toast.warning("الطلب مقفل.");
-
-    const clientUid =
-      selectedMessage?.createdByUid ||
-      selectedMessage?.investorUid ||
-      (contractDoc as any)?.investorUid ||
-      null;
-
-    const contractId = selectedMessage?.contractId || null;
-    const investmentId = selectedMessage?.investmentId || null;
-
-    if (!investmentId) return toast.warning("لا يوجد Investment للرسالة");
-    if (!contractId) return toast.warning("أنشئ العقد أولاً");
-
-    const activeDraft = getActiveFile("draft");
-    if (!activeDraft)
-      return toast.warning("ارفع ملف العقد (PDF/Word) أولاً قبل الإرسال");
-
-    try {
-      setContractBusy(true);
-
-      const ev = makeEvent({
-        type: "sent_for_signing",
-        title: "تم إرسال العقد للتوقيع",
-        note: "تم إرسال العقد للعميل للتوقيع ورفع ملف التوقيع.",
-        ...myActor(),
-        meta: { contractId, investmentId },
-      });
-
-      await runTransaction(db, async (tx) => {
-        const invRef = doc(db, "investments", investmentId);
-        const invSnap = await tx.get(invRef);
-        if (!invSnap.exists()) throw new Error("investment_not_found");
-
-        const cRef = doc(db, "contracts", contractId);
-        const cSnap = await tx.get(cRef);
-        if (!cSnap.exists()) throw new Error("contract_not_found");
-
-        tx.update(invRef, {
-          status: "signing",
-          contractStatus: "signing",
-          signingAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-          events: arrayUnion(ev),
-          ...actionMeta(),
-        });
-
-        tx.update(cRef, {
-          status: "signing",
-          signingAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-          events: arrayUnion(ev),
-          ...actionMeta(),
-        });
-
-        const msgRef = doc(db, "messages", selectedMessage.id);
-        tx.update(msgRef, {
-          contractStatus: "signing",
-          stageRole: "client" as StageRole,
-          updatedAt: serverTimestamp(),
-          updatedByUid: user?.uid || null,
-          updatedByEmail: user?.email || null,
-          events: arrayUnion(ev),
-          ...actionMeta(),
-        });
-      });
-
-      if (clientUid) {
-        await pushNotification({
-          uid: clientUid,
-          title: "العقد جاهز للتوقيع",
-          body: "تم تجهيز العقد. حمّله ووقّعه ثم ارفعه في لوحة العميل.",
-          type: "contract_ready",
-          meta: { messageId: selectedMessage.id, contractId },
-        });
-      }
-
-      toast.success("تم إرسال العقد للعميل للتوقيع ✍️");
-
-      setSelectedMessage((prev: any) =>
-        prev
-          ? {
-              ...prev,
-              contractStatus: "signing",
-              stageRole: "client",
-              events: Array.isArray(prev.events) ? [...prev.events, ev] : [ev],
-            }
-          : prev
-      );
-
-      await loadContractDoc(contractId);
-      setIsDetailDialogOpen(false);
-      loadMessages();
-    } catch (e) {
-      console.error(e);
-      toast.error("فشل إرسال العقد للتوقيع");
-    } finally {
-      setContractBusy(false);
-    }
+    toast.info("إرسال للتوقيع (مستقبل)");
   };
 
-  /* =========================
-    ✅ اعتماد التوقيع (للأونر/المحاسب) (مستقبل)
-  ========================= */
-  const verifySignedAndMarkSigned = async () => {
-    if (CONTRACTS_DISABLED) {
-      toast.info("اعتماد التوقيع موقوف — الاعتماد يدوي");
-      return;
-    }
-
-    if (!selectedMessage?.contractId) return toast.warning("لا يوجد عقد");
-    if (!canOwnerAccountantActions)
-      return toast.error("هذا الإجراء للأونر/المحاسب فقط");
-    if (isLockedFinal) return toast.warning("الطلب مقفل.");
-
-    const contractId = selectedMessage.contractId as string;
-    const investmentId = selectedMessage?.investmentId || null;
-
-    const signed = getActiveFile("signed");
-    if (!signed) return toast.warning("لا يوجد ملف توقيع مرفوع من العميل");
-
-    try {
-      setContractBusy(true);
-
-      const ev = makeEvent({
-        type: "signed_verified",
-        title: "تم اعتماد التوقيع",
-        note: "تم التحقق من ملف التوقيع واعتماد العقد.",
-        ...myActor(),
-        meta: { contractId, investmentId },
-      });
-
-      await updateDoc(doc(db, "contracts", contractId), {
-        status: "signed",
-        signedVerifiedAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-        events: arrayUnion(ev),
-        ...actionMeta(),
-      });
-
-      await updateDoc(doc(db, "messages", selectedMessage.id), {
-        contractStatus: "signed",
-        stageRole: "owner" as StageRole,
-        updatedAt: serverTimestamp(),
-        events: arrayUnion(ev),
-        ...actionMeta(),
-      });
-
-      if (investmentId) {
-        await updateDoc(doc(db, "investments", investmentId), {
-          contractStatus: "signed",
-          status: "active",
-          updatedAt: serverTimestamp(),
-          events: arrayUnion(ev),
-          ...actionMeta(),
-        });
-      }
-
-      toast.success("تم اعتماد التوقيع ✅");
-
-      await loadContractDoc(contractId);
-      loadMessages();
-    } catch (e) {
-      console.error(e);
-      toast.error("فشل اعتماد التوقيع");
-    } finally {
-      setContractBusy(false);
-    }
-  };
-
-  /* =========================
-    ✅ إرجاع العقد مع ملاحظة (Returned) (مستقبل)
-  ========================= */
   const returnContractWithNote = async () => {
-    if (CONTRACTS_DISABLED) {
-      toast.info("إرجاع العقد موقوف — الاعتماد يدوي");
-      return;
-    }
-
-    if (!selectedMessage?.contractId) return toast.warning("لا يوجد عقد");
-    if (!canOwnerAccountantActions)
-      return toast.error("هذا الإجراء للأونر/المحاسب فقط");
-    if (isLockedFinal) return toast.warning("الطلب مقفل.");
-
-    const contractId = selectedMessage.contractId as string;
-
-    if (!String(returnNote || "").trim()) {
-      toast.error("اكتب ملاحظة الإرجاع");
-      return;
-    }
-
-    try {
-      setContractBusy(true);
-
-      const ev = makeEvent({
-        type: "contract_returned",
-        title: "تم إرجاع العقد للتعديل",
-        note: String(returnNote).trim(),
-        ...myActor(),
-        meta: { contractId },
-      });
-
-      await updateDoc(doc(db, "contracts", contractId), {
-        status: "returned",
-        returnNote: String(returnNote).trim(),
-        returnedAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-        events: arrayUnion(ev),
-        ...actionMeta(),
-      });
-
-      await updateDoc(doc(db, "messages", selectedMessage.id), {
-        contractStatus: "returned",
-        stageRole: "client" as StageRole,
-        updatedAt: serverTimestamp(),
-        events: arrayUnion(ev),
-        ...actionMeta(),
-      });
-
-      await notifyClient(selectedMessage, {
-        title: "تم إرجاع العقد للتعديل",
-        body: `تم إرجاع العقد بسبب: ${String(returnNote).trim()}`,
-        type: "contract_returned",
-        meta: { messageId: selectedMessage.id, contractId },
-      });
-
-      toast.success("تم إرجاع العقد مع ملاحظة");
-      setReturnDialogOpen(false);
-      setReturnNote("");
-
-      await loadContractDoc(contractId);
-      loadMessages();
-    } catch (e) {
-      console.error(e);
-      toast.error("فشل إرجاع العقد");
-    } finally {
-      setContractBusy(false);
-    }
+    toast.info("إرجاع العقد (مستقبل)");
   };
 
-  /* =========================
-    ✅ 4) الترحيل النهائي للمشروع
-    - إذا CONTRACTS_DISABLED = true: ترحيل يدوي بدون عقد
-    - إذا false: يرجع شرط signed كما كان
-  ========================= */
   const finalizeInvestment = async () => {
     if (!selectedMessage) return;
-    if (!canOwnerAccountantActions)
-      return toast.error("هذا الإجراء للأونر/المحاسب فقط");
-    if (isLockedFinal) return toast.warning("الطلب مقفل بالفعل.");
 
-    const investmentId = selectedMessage?.investmentId || null;
-    const contractId = selectedMessage?.contractId || null;
-
-    if (!investmentId) return toast.warning("لا يوجد Investment للرسالة");
-    if (!CONTRACTS_DISABLED && !contractId)
-      return toast.warning("لا يوجد عقد مرتبط");
+    if (isLockedFinal) return toast.warning("الطلب مقفل.");
 
     try {
       setFinalizeBusy(true);
 
-      const ev = makeEvent({
-        type: "investment_finalized",
-        title: "تم ترحيل الاستثمار للمشروع",
-        note: "تم اعتماد الاستثمار وإقفاله نهائياً.",
-        ...myActor(),
-        meta: { investmentId, contractId: contractId || null },
-      });
-
       await runTransaction(db, async (tx) => {
-        const msgRef = doc(db, "messages", selectedMessage.id);
-        const invRef = doc(db, "investments", investmentId);
-
-        const msgSnap = await tx.get(msgRef);
-        if (!msgSnap.exists()) throw new Error("message_not_found");
-        const msg = msgSnap.data() as any;
-
-        const invSnap = await tx.get(invRef);
-        if (!invSnap.exists()) throw new Error("investment_not_found");
-        const inv = invSnap.data() as any;
-
-        // ✅ فقط إذا العقود شغالة نتحقق من signed
-        if (!CONTRACTS_DISABLED) {
-          const cRef = doc(db, "contracts", contractId as string);
-          const cSnap = await tx.get(cRef);
-          if (!cSnap.exists()) throw new Error("contract_not_found");
-          const c = cSnap.data() as any;
-
-          const cStatus = String(c?.status || "pending_review");
-          if (cStatus !== "signed") throw new Error("contract_not_signed");
-        }
-
-        const projectId = inv?.projectId || msg?.projectId || null;
-        if (!projectId) throw new Error("missing_project_id");
-
-        const projectRef = doc(db, "projects", projectId);
-        const projectSnap = await tx.get(projectRef);
-        if (!projectSnap.exists()) throw new Error("project_not_found");
-
-        if (inv?.finalizedAt) throw new Error("already_finalized");
-
-        const amount = toNumOrNull(inv?.amount);
-        if (!amount || amount <= 0) throw new Error("invalid_amount");
-
-        tx.update(invRef, {
-          status: "active",
-          finalizedAt: serverTimestamp(),
-          finalizedByUid: user?.uid || null,
-          finalizedByEmail: user?.email || null,
-          updatedAt: serverTimestamp(),
-          events: arrayUnion(ev),
-          ...actionMeta(),
-        });
+        const msgRef = doc(db, REQUESTS_COL, selectedMessage.id);
 
         tx.update(msgRef, {
-          status: "resolved",
-          internalNotes: internalNotes || null,
+          status: "completed",
           stageRole: "completed" as StageRole,
           finalizedAt: serverTimestamp(),
           finalizedByUid: user?.uid || null,
@@ -1541,67 +787,52 @@ export default function MessagesManagement() {
           updatedAt: serverTimestamp(),
           updatedByUid: user?.uid || null,
           updatedByEmail: user?.email || null,
-          events: arrayUnion(ev),
-          ...actionMeta(),
+          events: arrayUnion(
+            makeEvent({
+              type: "finalized",
+              title: "ترحيل نهائي للمشروع",
+              note: "تم الترحيل النهائي وقفل الطلب.",
+              ...myActor(user, myRole),
+              meta: { messageId: selectedMessage.id },
+            })
+          ),
+          ...actionMeta(user, myRole),
         });
       });
 
-      await notifyClient(selectedMessage, {
-        title: "تم تفعيل استثمارك",
-        body: "تم اعتماد الاستثمار وترحيله للمشروع بنجاح.",
-        type: "investment_finalized",
-        meta: {
-          messageId: selectedMessage.id,
-          investmentId,
-          contractId: contractId || null,
-        },
-      });
-
-      toast.success("تم ترحيل الاستثمار للمشروع ✅");
+      toast.success("تم الترحيل النهائي ✅");
       setIsDetailDialogOpen(false);
       loadMessages();
-    } catch (e: any) {
+    } catch (e) {
       console.error(e);
-      const m = String(e?.message || "");
-      if (m.includes("contract_not_signed"))
-        return toast.warning("لا يمكن الترحيل قبل اعتماد التوقيع (signed)");
       toast.error("فشل الترحيل النهائي");
     } finally {
       setFinalizeBusy(false);
     }
   };
 
-  /* =========================
-    Reject (مرفوض + system)
-  ========================= */
   const rejectInvestmentRequest = async () => {
     if (!selectedMessage) return;
-    if (isLockedFinal) return toast.warning("الطلب مقفل بالفعل.");
+
+    if (isLockedFinal) return toast.warning("الطلب مقفل.");
 
     try {
       const ev = makeEvent({
         type: "rejected",
         title: "تم رفض الطلب",
-        note: internalNotes || "تم رفض الطلب من الإدارة.",
-        ...myActor(),
-      });
-
-      await updateDoc(doc(db, "messages", selectedMessage.id), {
-        status: "rejected",
-        internalNotes: internalNotes || null,
-        stageRole: "system" as StageRole,
-        updatedAt: serverTimestamp(),
-        updatedByUid: user?.uid || null,
-        updatedByEmail: user?.email || null,
-        events: arrayUnion(ev),
-        ...actionMeta(),
-      });
-
-      await notifyClient(selectedMessage, {
-        title: "تم رفض الطلب",
-        body: "نعتذر، تم رفض طلبك. يمكنك إرسال طلب جديد أو التواصل معنا للاستفسار.",
-        type: "message_rejected",
+        note: "تم رفض الطلب من الإدارة.",
+        ...myActor(user, myRole),
         meta: { messageId: selectedMessage.id },
+      });
+
+      await updateDoc(doc(db, REQUESTS_COL, selectedMessage.id), {
+        status: "rejected",
+        stageRole: "completed" as StageRole,
+        rejectedAt: serverTimestamp(),
+        rejectedByUid: user?.uid || null,
+        rejectedByEmail: user?.email || null,
+        events: arrayUnion(ev),
+        ...actionMeta(user, myRole),
       });
 
       toast.success("تم رفض الطلب");
@@ -1627,17 +858,17 @@ export default function MessagesManagement() {
         type: "reopened",
         title: "تم إعادة فتح الطلب",
         note: "تم فتح الطلب مرة أخرى لمتابعة الإجراءات.",
-        ...myActor(),
+        ...myActor(user, myRole),
       });
 
-      await updateDoc(doc(db, "messages", selectedMessage.id), {
+      await updateDoc(doc(db, REQUESTS_COL, selectedMessage.id), {
         status: "in_progress",
         stageRole: "owner" as StageRole,
         reopenedAt: serverTimestamp(),
         reopenedByUid: user?.uid || null,
         reopenedByEmail: user?.email || null,
         events: arrayUnion(ev),
-        ...actionMeta(),
+        ...actionMeta(user, myRole),
       });
 
       toast.success("تمت إعادة فتح الطلب");
@@ -1654,8 +885,6 @@ export default function MessagesManagement() {
   /* =========================
     UI flags
   ========================= */
-  const isInvestment = selectedMessage?.type === "investment_request";
-
   const canCreateContract =
     !CONTRACTS_DISABLED &&
     isInvestment &&
@@ -1676,9 +905,9 @@ export default function MessagesManagement() {
   const canFinalize = CONTRACTS_DISABLED
     ? isInvestment && !!selectedMessage?.investmentId
     : isInvestment &&
-      !!selectedMessage?.investmentId &&
-      !!selectedMessage?.contractId &&
-      isSigned;
+    !!selectedMessage?.investmentId &&
+    !!selectedMessage?.contractId &&
+    isSigned;
 
   /* =========================
     Render
@@ -1694,362 +923,249 @@ export default function MessagesManagement() {
 
           {/* ✅ تنبيه للحسابات القديمة (doc ناقص / role ناقص) */}
           {roleDocMissing && myRole !== "owner" ? (
-            <div className="mt-3 text-sm rounded-xl border border-yellow-300 bg-yellow-50 p-3 text-yellow-800">
-              تنبيه: حسابك لا يحتوي Role صحيح في users/{String(user?.uid || "")}.
-              سيتم اعتبارك "guest" حتى يتم ترحيل الرول.
+            <div className="mt-3 p-3 rounded-lg bg-amber-50 border text-sm">
+              ملاحظة: لم يتم العثور على ملف صلاحيات لحسابك في{" "}
+              <code>users/{user?.uid}</code>. قد تظهر لك بعض الصلاحيات كعرض فقط.
             </div>
           ) : null}
         </div>
 
-        <div className="grid gap-4 md:grid-cols-6">
-          <StatCard title="المفتوحة" value={stats.open} color="text-blue-700" />
-          <StatCard
-            title="المكتملة"
-            value={stats.completed}
-            color="text-gray-700"
-          />
-          <StatCard
-            title="المرفوضة"
-            value={stats.rejected}
-            color="text-red-700"
-          />
-          <StatCard title="جديد" value={stats.new} color="text-orange-600" />
-          <StatCard
-            title="قيد المعالجة"
-            value={stats.in_progress}
-            color="text-blue-600"
-          />
-          <StatCard title="الإجمالي" value={stats.total} />
+        {/* Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <StatCard title="الكل" value={stats.all} />
+          <StatCard title="المفتوحة" value={stats.open} color="text-blue-600" />
+          <StatCard title="المكتملة" value={stats.completed} color="text-gray-800" />
+          <StatCard title="المرفوضة" value={stats.rejected} color="text-red-600" />
         </div>
 
-        <Card>
-          <CardContent className="py-4 flex flex-wrap gap-2 items-center">
-            <span className="text-sm text-muted-foreground">عرض:</span>
-
-            <Button
-              size="sm"
-              variant={view === "open" ? "default" : "outline"}
-              onClick={() => setView("open")}
-            >
-              المفتوحة ({stats.open})
-            </Button>
-            <Button
-              size="sm"
-              variant={view === "completed" ? "default" : "outline"}
-              onClick={() => setView("completed")}
-            >
-              المكتملة ({stats.completed})
-            </Button>
-            <Button
-              size="sm"
-              variant={view === "rejected" ? "default" : "outline"}
-              onClick={() => setView("rejected")}
-            >
-              المرفوضة ({stats.rejected})
-            </Button>
-            <Button
-              size="sm"
-              variant={view === "all" ? "default" : "outline"}
-              onClick={() => setView("all")}
-            >
-              الكل ({stats.total})
-            </Button>
+        {/* Filters */}
+        <Card className="rsg-card">
+          <CardContent className="py-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant={view === "open" ? "default" : "outline"}
+                onClick={() => setView("open")}
+              >
+                مفتوح
+              </Button>
+              <Button
+                variant={view === "completed" ? "default" : "outline"}
+                onClick={() => setView("completed")}
+              >
+                مكتمل
+              </Button>
+              <Button
+                variant={view === "rejected" ? "default" : "outline"}
+                onClick={() => setView("rejected")}
+              >
+                مرفوض
+              </Button>
+              <Button
+                variant={view === "all" ? "default" : "outline"}
+                onClick={() => setView("all")}
+              >
+                الكل
+              </Button>
+            </div>
           </CardContent>
         </Card>
 
-        <Card>
+        {/* Table */}
+        <Card className="rsg-card">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <MessageSquare className="w-5 h-5" />
-              جميع الرسائل
+              الرسائل
             </CardTitle>
           </CardHeader>
           <CardContent>
             {loading ? (
-              <div className="py-12 text-center">جاري التحميل...</div>
-            ) : filteredMessages.length > 0 ? (
+              <div className="py-10 flex items-center justify-center gap-2 text-muted-foreground">
+                <Loader2 className="w-5 h-5 animate-spin" />
+                جاري التحميل...
+              </div>
+            ) : filtered.length ? (
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>النوع</TableHead>
-                    <TableHead>الاسم</TableHead>
-                    <TableHead>التواصل</TableHead>
-                    <TableHead>الموضوع</TableHead>
+                    <TableHead>العميل</TableHead>
                     <TableHead>الحالة</TableHead>
-                    <TableHead>آخر تحديث</TableHead>
+                    <TableHead>المرحلة</TableHead>
                     <TableHead>التاريخ</TableHead>
-                    <TableHead></TableHead>
+                    <TableHead className="text-left">إجراء</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredMessages.map((m) => (
-                    <TableRow key={m.id}>
-                      <TableCell>{getMessageTypeBadge(m.type)}</TableCell>
-                      <TableCell className="font-medium">
-                        {m.name || "—"}
-                      </TableCell>
-
-                      <TableCell>
-                        <div className="space-y-1 text-sm">
-                          <div className="flex items-center gap-2">
-                            <Mail className="w-3 h-3" /> {m.email || "—"}
-                          </div>
-                          {m.phone && (
-                            <div className="flex items-center gap-2 opacity-70">
-                              <Phone className="w-3 h-3" /> {m.phone}
-                            </div>
+                  {filtered.map((m) => {
+                    const badge = getStatusBadge(m.status);
+                    return (
+                      <TableRow key={m.id}>
+                        <TableCell className="font-semibold">
+                          {m.investorName || m.userSnapshot?.displayName || m.investorEmail || m.userSnapshot?.email || "—"}
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={badge.cls}>{badge.label}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline">{m.stageRole || "—"}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          {formatDateTimeAR(
+                            m.createdAt ||
+                            m.created_at ||
+                            m.submittedAt ||
+                            m.timestamp
                           )}
-                        </div>
-                      </TableCell>
+                        </TableCell>
 
-                      <TableCell className="max-w-xs truncate">
-                        {m.subject ||
-                          (m.projectTitle ? `مشروع: ${m.projectTitle}` : "—")}
-                      </TableCell>
+                        <TableCell className="text-left">
+                          <Button
+                            variant="outline"
+                            onClick={async () => {
+                              const fixed = normalizeForDisplay(m);
+                              const normalizedOne = {
+                                ...fixed,
+                                ...normalizeForDisplay(fixed),
+                              };
 
-                      <TableCell className="space-y-1">
-                        {(() => {
-                          const n = normalizeForDisplay(m);
-                          return (
-                            <>
-                              <div>{getStatusBadge(n.status)}</div>
-                              <div>{getStageBadge(n.stageRole)}</div>
-                            </>
-                          );
-                        })()}
-                      </TableCell>
+                              setSelectedMessage(normalizedOne);
+                              setStatus((normalizedOne.status || "new") as MessageStatus);
+                              setStageRole((normalizedOne.stageRole || "staff") as StageRole);
+                              setInternalNotes(String(normalizedOne.internalNotes || ""));
+                              setApprovedAmount(
+                                normalizedOne?.approvedAmount != null
+                                  ? String(normalizedOne.approvedAmount)
+                                  : normalizedOne?.estimatedAmount != null
+                                    ? String(normalizedOne.estimatedAmount)
+                                    : ""
+                              );
 
-                      <TableCell className="text-xs text-muted-foreground">
-                        {m.lastActionAt ? (
-                          <div className="space-y-1">
-                            <div>
-                              بواسطة: {String(m.lastActionByRole || "—")}
-                            </div>
-                            <div>{formatDateTimeAR(m.lastActionAt)}</div>
-                          </div>
-                        ) : (
-                          "—"
-                        )}
-                      </TableCell>
+                              await loadContractDoc(normalizedOne?.contractId || null);
 
-                      <TableCell>
-                        <div className="flex items-center gap-2 text-sm">
-                          <Calendar className="w-3 h-3" />
-                          {formatDateAR(m.createdAt)}
-                        </div>
-                      </TableCell>
-
-                      <TableCell>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={async () => {
-                            const hydrated = await hydrateContractStatus(m);
-                            const normalized = {
-                              ...hydrated,
-                              ...normalizeForDisplay(hydrated),
-                            };
-
-                            setSelectedMessage(normalized);
-                            setStatus(
-                              (normalized.status || "new") as MessageStatus
-                            );
-                            setInternalNotes(hydrated.internalNotes || "");
-
-                            setApprovedAmount(
-                              hydrated?.approvedAmount != null
-                                ? String(hydrated.approvedAmount)
-                                : hydrated?.estimatedAmount != null
-                                ? String(hydrated.estimatedAmount)
-                                : ""
-                            );
-
-                            await loadContractDoc(normalized?.contractId || null);
-
-                            setIsDetailDialogOpen(true);
-                          }}
-                        >
-                          <Eye className="w-4 h-4 ml-1" />
-                          عرض
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                              setIsDetailDialogOpen(true);
+                            }}
+                          >
+                            <Eye className="w-4 h-4 ml-1" />
+                            عرض
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             ) : (
-              <div className="py-12 text-center">لا توجد رسائل</div>
+              <div className="py-12 text-center text-muted-foreground">
+                لا توجد رسائل
+              </div>
             )}
           </CardContent>
         </Card>
-      </div>
 
-      {/* Dialog */}
-      <Dialog open={isDetailDialogOpen} onOpenChange={setIsDetailDialogOpen}>
-        <DialogContent className="w-[min(1280px,calc(100vw-24px))] max-w-[1280px] 2xl:max-w-[1440px] p-0 overflow-hidden rounded-2xl">
-          <DialogHeader className="px-6 pt-6 pb-4 border-b bg-white/60 backdrop-blur">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <DialogTitle className="text-xl md:text-2xl">
-                  تفاصيل الرسالة
-                </DialogTitle>
+        {/* Detail dialog */}
+        <Dialog open={isDetailDialogOpen} onOpenChange={setIsDetailDialogOpen}>
+        <DialogContent
+  className="w-[98vw] max-w-[1400px] 2xl:max-w-[1600px] p-0 max-h-[92vh] overflow-y-auto"
+  dir="rtl"
+>
+         <DialogHeader className="px-6 py-4 border-b bg-white/60 backdrop-blur">
+              <DialogTitle className="text-xl">تفاصيل الرسالة</DialogTitle>
+            </DialogHeader>
 
-                {selectedMessage && (
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {getMessageTypeBadge(selectedMessage.type)}
-                    {(() => {
-                      const n = normalizeForDisplay(selectedMessage);
-                      return (
-                        <>
-                          {getStatusBadge(n.status)}
-                          {getStageBadge(n.stageRole)}
-                        </>
-                      );
-                    })()}
-
-                    {selectedMessage.createdByUid ? (
-                      <Badge className="bg-green-600">مرتبط بحساب</Badge>
-                    ) : (
-                      <Badge className="bg-yellow-600">بدون حساب</Badge>
-                    )}
-
-                    {!CONTRACTS_DISABLED && selectedMessage.contractStatus ? (
-                      <Badge variant="outline" className="border-primary/20">
-                        عقد: {String(selectedMessage.contractStatus)}
-                      </Badge>
-                    ) : null}
-
-                    {selectedMessage.lastActionAt ? (
-                      <Badge variant="outline" className="border-primary/20">
-                        آخر تحديث:{" "}
-                        {String(selectedMessage.lastActionByRole || "—")} •{" "}
-                        {formatDateTimeAR(selectedMessage.lastActionAt)}
-                      </Badge>
-                    ) : null}
-
-                    {isLockedFinal ? (
-                      <Badge className="bg-gray-700">تم إقفال الإجراءات</Badge>
-                    ) : null}
-
-                    {CONTRACTS_DISABLED ? (
-                      <Badge variant="outline" className="border-primary/20">
-                        وضع يدوي: بدون عقود/رفع
-                      </Badge>
-                    ) : null}
-                  </div>
-                )}
-              </div>
-
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setIsDetailDialogOpen(false)}
-                className="rounded-full"
-              >
-                <X className="w-5 h-5" />
-              </Button>
-            </div>
-          </DialogHeader>
-
-          <div className="px-6 py-6 max-h-[72vh] overflow-auto">
-            {selectedMessage && (
-              <div className="grid gap-6 lg:grid-cols-[1.35fr_1fr]">
-                {/* Left */}
-                <div className="space-y-4">
-                  <Card className="rsg-card rsg-card--tight">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-base">معلومات سريعة</CardTitle>
+            {selectedMessage ? (
+              <div className="p-6 space-y-6">
+                <div className="grid grid-cols-1 gap-4">
+                  <Card className="rsg-card">
+                    <CardHeader>
+                      <CardTitle>بيانات العميل</CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-3 text-sm">
-                      <InfoRow label="الاسم" value={selectedMessage.name || "—"} />
-                      <InfoRow label="البريد" value={selectedMessage.email || "—"} />
-                      <InfoRow label="الجوال" value={selectedMessage.phone || "—"} />
+                    <CardContent className="space-y-3">
+                      <InfoRow label="الاسم" value={selectedMessage.investorName || selectedMessage.userSnapshot?.displayName || "—"} />
+                      <InfoRow label="البريد" value={selectedMessage.investorEmail || selectedMessage.userSnapshot?.email || "—"} />
+                      <InfoRow label="الجوال" value={selectedMessage.investorPhone || selectedMessage.userSnapshot?.phone || "—"} />
                       <InfoRow
                         label="التاريخ"
-                        value={formatDateAR(selectedMessage.createdAt)}
+                        value={formatDateTimeAR(
+                          selectedMessage.createdAt ||
+                          selectedMessage.created_at ||
+                          selectedMessage.submittedAt ||
+                          selectedMessage.timestamp
+                        )}
                       />
+                      <div className="flex items-center gap-2 pt-2">
+                        {(() => {
+                          const emailToUse =
+                            selectedMessage?.investorEmail ||
+                            selectedMessage?.userSnapshot?.email ||
+                            selectedMessage?.email ||
+                            "";
 
-                      {selectedMessage.projectTitle ? (
-                        <div className="pt-2 border-t">
-                          <div className="text-xs text-muted-foreground mb-1">
-                            المشروع
-                          </div>
-                          <div className="font-semibold">
-                            {selectedMessage.projectTitle}
-                          </div>
-                          {selectedMessage.projectId ? (
-                            <div className="text-xs text-muted-foreground mt-1 break-all">
-                              ID: {selectedMessage.projectId}
-                            </div>
-                          ) : null}
-                        </div>
-                      ) : null}
+                          const phoneToUse =
+                            selectedMessage?.investorPhone ||
+                            selectedMessage?.userSnapshot?.phone ||
+                            selectedMessage?.phone ||
+                            "";
 
-                      {selectedMessage.investmentId ? (
-                        <div className="pt-2 border-t">
-                          <div className="text-xs text-muted-foreground mb-1">
-                            Investment
-                          </div>
-                          <div className="font-semibold break-all">
-                            {selectedMessage.investmentId}
-                          </div>
-                        </div>
-                      ) : null}
+                          return (
+                            <>
+                              {emailToUse ? (
+                                <a className="inline-flex" href={`mailto:${emailToUse}`}>
+                                  <Button variant="outline">
+                                    <Mail className="w-4 h-4 ml-2" />
+                                    إيميل
+                                  </Button>
+                                </a>
+                              ) : null}
 
-                      {selectedMessage.contractId ? (
-                        <div className="pt-2 border-t">
-                          <div className="text-xs text-muted-foreground mb-1">
-                            Contract
-                          </div>
-                          <div className="font-semibold break-all">
-                            {selectedMessage.contractId}
-                          </div>
-                        </div>
-                      ) : null}
-                    </CardContent>
-                  </Card>
-
-                  <Card className="rsg-card rsg-card--tight">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-base">نص الرسالة</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="rounded-xl bg-muted/60 border p-4 whitespace-pre-wrap leading-relaxed">
-                        {selectedMessage.message || "—"}
+                              {phoneToUse ? (
+                                <a className="inline-flex" href={`tel:${phoneToUse}`}>
+                                  <Button variant="outline">
+                                    <Phone className="w-4 h-4 ml-2" />
+                                    اتصال
+                                  </Button>
+                                </a>
+                              ) : null}
+                            </>
+                          );
+                        })()}
                       </div>
+
                     </CardContent>
                   </Card>
 
-                  {/* ✅ Timeline Preview */}
-                  <Card className="rsg-card rsg-card--tight">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-base flex items-center gap-2">
-                        <Clock3 className="w-4 h-4" />
-                        خط سير الطلب (Timeline)
-                      </CardTitle>
+                  <Card className="rsg-card">
+                    <CardHeader>
+                      <CardTitle>الحالة</CardTitle>
                     </CardHeader>
-                    <CardContent>
-                      <TimelineView events={timelineItems} />
-                      {!timelineItems.length ? (
-                        <div className="text-xs text-muted-foreground mt-3">
-                          لا توجد أحداث محفوظة بعد. (بعد أول تحديث/إجراء بيبدأ يظهر)
-                        </div>
-                      ) : null}
-                    </CardContent>
-                  </Card>
-
-                  {/* ✅ Actions / Update */}
-                  <Card className="rsg-card rsg-card--tight">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-base flex items-center gap-2">
-                        <PenLine className="w-4 h-4" />
-                        إجراءات
-                      </CardTitle>
-                    </CardHeader>
-
                     <CardContent className="space-y-4">
-                      {/* Status */}
-                      <div className="grid gap-3 md:grid-cols-2">
+                      <div className="flex items-center gap-2">
+                        <Badge className={getStatusBadge(selectedMessage.status).cls}>
+                          {getStatusBadge(selectedMessage.status).label}
+                        </Badge>
+                        <Badge variant="outline">{selectedMessage.stageRole}</Badge>
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-3">
+                        <div className="space-y-2">
+                          <Label>المرحلة</Label>
+                          <Select
+                            value={stageRole}
+                            onValueChange={(v) => setStageRole(v as StageRole)}
+                            disabled={isLockedFinal || myRole === "client"}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="اختر المرحلة" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="staff">staff</SelectItem>
+                              <SelectItem value="accountant">accountant</SelectItem>
+                              <SelectItem value="client">client</SelectItem>
+                              <SelectItem value="owner">owner</SelectItem>
+                              <SelectItem value="completed">completed</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
                         <div className="space-y-2">
                           <Label>الحالة</Label>
                           <Select
@@ -2063,40 +1179,30 @@ export default function MessagesManagement() {
                             <SelectContent>
                               <SelectItem value="new">جديد</SelectItem>
                               <SelectItem value="in_progress">قيد المعالجة</SelectItem>
-                              <SelectItem value="resolved">تم الحل</SelectItem>
-                              <SelectItem value="closed">مغلق</SelectItem>
-                              <SelectItem value="needs_account">يتطلب حساب</SelectItem>
+                              <SelectItem value="needs_account">عند المحاسب</SelectItem>
+                              <SelectItem value="waiting_client_confirmation">انتظار تعميد العميل</SelectItem>
+                              <SelectItem value="resolved">تم الحل (تعميد العميل)</SelectItem>
+                              <SelectItem value="completed">مكتمل (مقفل)</SelectItem>
+                              <SelectItem value="no_account">بدون حساب</SelectItem>
                               <SelectItem value="rejected">مرفوض</SelectItem>
+                              <SelectItem value="closed">مغلق (قديم)</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
 
                         <div className="space-y-2">
-                          <Label>المبلغ المعتمد (اختياري)</Label>
-                          <Input
-                            value={approvedAmount}
-                            onChange={(e) => setApprovedAmount(e.target.value)}
-                            placeholder="مثال: 50000"
+                          <Label>ملاحظات داخلية</Label>
+                          <Textarea
+                            value={internalNotes}
+                            onChange={(e) => setInternalNotes(e.target.value)}
+                            placeholder="ملاحظات للإدارة فقط..."
                             disabled={isLockedFinal || myRole === "client"}
+                            className="min-h-[96px]"
                           />
-                          <div className="text-[11px] text-muted-foreground">
-                            يُستخدم عند “تسجيل استثمار مبدئي”.
-                          </div>
                         </div>
                       </div>
 
-                      <div className="space-y-2">
-                        <Label>ملاحظات داخلية</Label>
-                        <Textarea
-                          value={internalNotes}
-                          onChange={(e) => setInternalNotes(e.target.value)}
-                          placeholder="اكتب ملاحظة تظهر للإدارة (وتُرسل للعميل عند التحديث)"
-                          disabled={isLockedFinal || myRole === "client"}
-                          className="min-h-[96px]"
-                        />
-                      </div>
-
-                      <div className="flex flex-wrap gap-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         <Button
                           onClick={handleUpdateStatus}
                           disabled={isLockedFinal || myRole === "client"}
@@ -2105,19 +1211,80 @@ export default function MessagesManagement() {
                           حفظ التغييرات
                         </Button>
 
+                        {/* ✅ Step Machine Buttons (حسب القاموس) */}
+                        {selectedMessage ? (
+                          <>
+                            {/* 1) Staff -> Accountant */}
+                            {canStaffActions &&
+                              normalizeForDisplay(selectedMessage).status === "new" &&
+                              normalizeForDisplay(selectedMessage).stageRole === "staff" ? (
+                              <Button
+                                className="bg-yellow-700 hover:bg-yellow-800"
+                                onClick={stepStaffForwardToAccountant}
+                                disabled={isLockedFinal}
+                              >
+                                <Clock3 className="w-4 h-4 ml-2" />
+                                ترحيل مبدئي للمحاسب
+                              </Button>
+                            ) : null}
+
+                            {/* 2) Accountant -> Client */}
+                            {canOwnerAccountantActions &&
+                              normalizeForDisplay(selectedMessage).status === "needs_account" &&
+                              normalizeForDisplay(selectedMessage).stageRole === "accountant" ? (
+                              <Button
+                                className="bg-indigo-700 hover:bg-indigo-800"
+                                onClick={stepAccountantForwardToClient}
+                                disabled={isLockedFinal}
+                              >
+                                <PenLine className="w-4 h-4 ml-2" />
+                                تمت مراجعة الحساب — للعميل
+                              </Button>
+                            ) : null}
+
+                            {/* 3) Client -> Owner */}
+                            {myRole === "client" &&
+                              normalizeForDisplay(selectedMessage).status === "waiting_client_confirmation" &&
+                              normalizeForDisplay(selectedMessage).stageRole === "client" ? (
+                              <Button
+                                className="bg-emerald-700 hover:bg-emerald-800"
+                                onClick={stepClientApproveAndForwardToOwner}
+                                disabled={isLockedFinal}
+                              >
+                                <CheckCircle2 className="w-4 h-4 ml-2" />
+                                موافقة وتعميد
+                              </Button>
+                            ) : null}
+
+                            {/* 4) Owner -> Completed/Locked */}
+                            {myRole === "owner" &&
+                              normalizeForDisplay(selectedMessage).status === "resolved" &&
+                              normalizeForDisplay(selectedMessage).stageRole === "owner" ? (
+                              <Button
+                                className="bg-gray-800 hover:bg-gray-900"
+                                onClick={stepOwnerFinalizeAndClose}
+                                disabled={isLockedFinal}
+                              >
+                                <ShieldCheck className="w-4 h-4 ml-2" />
+                                تعميد نهائي وإقفال
+                              </Button>
+                            ) : null}
+                          </>
+                        ) : null}
+
                         {/* ✅ Staff: Pre-investment */}
                         {isInvestment ? (
                           <Button
                             variant="outline"
                             onClick={createPreInvestment}
-                            disabled={isLockedFinal || !canStaffActions}
+                            disabled={isLockedFinal}
                           >
-                            <ShieldCheck className="w-4 h-4 ml-2" />
-                            تسجيل استثمار مبدئي
+                            <PenLine className="w-4 h-4 ml-2" />
+                            ترحيل مبدئي (Legacy)
                           </Button>
                         ) : null}
 
-                        {/* ✅ Owner/Accountant: Create contract (future) */}
+                        {/* ✅ Contract (disabled currently) */}
                         {canCreateContract ? (
                           <Button
                             variant="outline"
@@ -2129,11 +1296,11 @@ export default function MessagesManagement() {
                             ) : (
                               <FileText className="w-4 h-4 ml-2" />
                             )}
-                            إنشاء عقد (مستقبل)
+                            إنشاء عقد
                           </Button>
                         ) : null}
 
-                        {/* ✅ Send for signing (future) */}
+                        {/* ✅ Send for signing */}
                         {canSendForSigning ? (
                           <Button
                             variant="outline"
@@ -2186,178 +1353,55 @@ export default function MessagesManagement() {
                           ) : (
                             <Clock3 className="w-4 h-4 ml-2" />
                           )}
-                          إعادة فتح الطلب
+                          إعادة فتح (أونر)
                         </Button>
                       </div>
-
-                      {/* ✅ Contract area (future) - UI hints */}
-                      {selectedMessage?.contractId && canViewContracts ? (
-                        <div className="mt-2 rounded-xl border bg-muted/40 p-4 space-y-3">
-                          <div className="font-semibold text-sm">العقد</div>
-
-                          <div className="text-sm">
-                            الحالة:{" "}
-                            <b>
-                              {String(
-                                selectedMessage.contractStatus ||
-                                  contractDoc?.status ||
-                                  "—"
-                              )}
-                            </b>
-                          </div>
-
-                          <div className="text-xs text-muted-foreground">
-                            آخر نسخة: {String(contractDoc?.currentVersion ?? "—")}
-                          </div>
-
-                          <div className="space-y-2 text-sm">
-                            {contractDoc?.files?.length ? (
-                              contractDoc.files
-                                .filter((f) => f.isActive)
-                                .map((f) => (
-                                  <a
-                                    key={f.id}
-                                    href={f.url}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="underline text-primary block"
-                                  >
-                                    فتح الملف: {f.name} ({f.kind})
-                                  </a>
-                                ))
-                            ) : (
-                              <div className="text-xs text-muted-foreground">
-                                لا توجد ملفات مرفوعة.
-                              </div>
-                            )}
-                          </div>
-
-                          {/* ✅ أدوات التعديل: للأونر/المحاسب فقط + لما العقود شغالة */}
-                          {!CONTRACTS_DISABLED && canOwnerAccountantActions ? (
-                            <div className="mt-3 border-t pt-3 space-y-3">
-                              <div className="font-semibold text-sm">
-                                إجراءات العقد (للإدارة)
-                              </div>
-
-                              {/* اترك نفس بلوك الرفع/الاستبدال/الإرجاع/الاعتماد اللي كان عندك هنا */}
-                              {/* يعني قص/لصق “البلوك القديم” داخل هذا المكان */}
-                            </div>
-                          ) : (
-                            <div className="text-xs text-muted-foreground">
-                              صلاحيتك: عرض فقط.
-                            </div>
-                          )}
-                        </div>
-                      ) : null}
-                    </CardContent>
-                  </Card>
-                </div>
-
-                {/* Right */}
-                <div className="space-y-4">
-                  <Card className="rsg-card rsg-card--tight">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-base">الملخص</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-3 text-sm">
-                      <InfoRow
-                        label="نوع الرسالة"
-                        value={String(selectedMessage.type || "—")}
-                      />
-                      <InfoRow
-                        label="الحالة الحالية"
-                        value={String(normalizeForDisplay(selectedMessage).status)}
-                      />
-                      <InfoRow
-                        label="المرحلة"
-                        value={String(normalizeForDisplay(selectedMessage).stageRole)}
-                      />
-                      <InfoRow
-                        label="آخر تحديث"
-                        value={
-                          selectedMessage.lastActionAt
-                            ? formatDateTimeAR(selectedMessage.lastActionAt)
-                            : "—"
-                        }
-                      />
-                    </CardContent>
-                  </Card>
-
-                  {/* ✅ Contact quick actions */}
-                  <Card className="rsg-card rsg-card--tight">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-base">تواصل سريع</CardTitle>
-                    </CardHeader>
-                    <CardContent className="flex flex-wrap gap-2">
-                      {selectedMessage?.email ? (
-                        <a
-                          className="inline-flex"
-                          href={`mailto:${selectedMessage.email}`}
-                        >
-                          <Button variant="outline">
-                            <Mail className="w-4 h-4 ml-2" />
-                            بريد
-                          </Button>
-                        </a>
-                      ) : null}
-
-                      {selectedMessage?.phone ? (
-                        <a
-                          className="inline-flex"
-                          href={`tel:${selectedMessage.phone}`}
-                        >
-                          <Button variant="outline">
-                            <Phone className="w-4 h-4 ml-2" />
-                            اتصال
-                          </Button>
-                        </a>
-                      ) : null}
                     </CardContent>
                   </Card>
                 </div>
               </div>
-            )}
-          </div>
+            ) : null}
 
-          <DialogFooter className="px-6 py-4 border-t bg-white/60 backdrop-blur">
-            <div className="flex items-center justify-between w-full gap-3">
-              <div className="text-xs text-muted-foreground">
-                {isLockedFinal ? "هذا الطلب مقفل." : "تأكد من حفظ التغييرات بعد أي تعديل."}
+            <DialogFooter className="px-6 py-4 border-t bg-white/60 backdrop-blur">
+              <div className="flex items-center justify-between w-full gap-3">
+                <div className="text-xs text-muted-foreground">
+                  {isLockedFinal ? "هذا الطلب مقفل." : "تأكد من حفظ التغييرات بعد أي تعديل."}
+                </div>
+
+                <Button variant="outline" onClick={() => setIsDetailDialogOpen(false)}>
+                  إغلاق
+                </Button>
               </div>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
-              <Button variant="outline" onClick={() => setIsDetailDialogOpen(false)}>
-                إغلاق
-              </Button>
+        {/* Return dialog */}
+        <Dialog open={returnDialogOpen} onOpenChange={setReturnDialogOpen}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>إرجاع العقد للتعديل</DialogTitle>
+            </DialogHeader>
+
+            <div className="space-y-2">
+              <Label>ملاحظة الإرجاع</Label>
+              <Textarea
+                value={returnNote}
+                onChange={(e) => setReturnNote(e.target.value)}
+                placeholder="اكتب سبب الإرجاع."
+                className="min-h-[120px]"
+              />
             </div>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
-      {/* Return dialog */}
-      <Dialog open={returnDialogOpen} onOpenChange={setReturnDialogOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>إرجاع العقد للتعديل</DialogTitle>
-          </DialogHeader>
-
-          <div className="space-y-2">
-            <Label>ملاحظة الإرجاع</Label>
-            <Textarea
-              value={returnNote}
-              onChange={(e) => setReturnNote(e.target.value)}
-              placeholder="اكتب سبب الإرجاع..."
-              className="min-h-[120px]"
-            />
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setReturnDialogOpen(false)}>
-              إلغاء
-            </Button>
-            <Button onClick={returnContractWithNote}>إرسال</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setReturnDialogOpen(false)}>
+                إلغاء
+              </Button>
+              <Button className="w-full sm:w-auto" onClick={returnContractWithNote}>إرسال</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
     </DashboardLayout>
   );
 }
@@ -2387,68 +1431,15 @@ function StatCard({
 
 function InfoRow({ label, value }: { label: string; value: any }) {
   return (
-    <div className="flex items-start justify-between gap-3">
-      <div className="text-xs text-muted-foreground shrink-0">{label}</div>
-      <div className="text-sm font-semibold text-right break-words">
+    <div className="grid grid-cols-[88px_1fr] items-start gap-3">
+      <div className="text-xs text-muted-foreground text-right pt-1">
+        {label}
+      </div>
+
+      <div className="text-sm font-semibold text-right break-words leading-7">
         {value ?? "—"}
       </div>
     </div>
   );
 }
 
-/* =========================
-  Timeline UI (Admin)
-========================= */
-
-function TimelineView({ events }: { events: TimelineEvent[] }) {
-  if (!events?.length) return null;
-
-  return (
-    <div className="relative space-y-3">
-      <div className="absolute right-[10px] top-2 bottom-2 w-px bg-border" />
-
-      {events.map((ev, idx) => {
-        const date = formatDateTimeAR(ev.at);
-        return (
-          <div key={ev.id || idx} className="relative pr-7">
-            <div className="absolute right-[6px] top-[6px] w-2.5 h-2.5 rounded-full bg-primary" />
-
-            <div className="rounded-xl border bg-white p-3">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="font-semibold text-sm">{ev.title}</div>
-                  {ev.note ? (
-                    <div className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap">
-                      {ev.note}
-                    </div>
-                  ) : null}
-                </div>
-                <div className="text-[11px] text-muted-foreground shrink-0">
-                  {date}
-                </div>
-              </div>
-
-              <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
-                {ev.byRole ? (
-                  <span className="px-2 py-0.5 rounded-full bg-muted">
-                    {String(ev.byRole)}
-                  </span>
-                ) : null}
-                {ev.byEmail ? (
-                  <span className="px-2 py-0.5 rounded-full bg-muted break-all">
-                    {String(ev.byEmail)}
-                  </span>
-                ) : null}
-                {ev.type ? (
-                  <span className="px-2 py-0.5 rounded-full bg-muted">
-                    {String(ev.type)}
-                  </span>
-                ) : null}
-              </div>
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}

@@ -155,12 +155,37 @@ service cloud.firestore {
       allow update, delete: if isAdmin();
     }
 
-    match /admin_users/{docId} {
-      allow read, write: if isAdmin();
-    }
+match /admin_users/{docId} {
+  // ✅ أي شخص يقرأ وثيقته فقط (docId = email lower)
+  allow read: if signedIn()
+    && lower(request.auth.token.email) != ""
+    && docId == lower(request.auth.token.email);
 
-    match /role_invites/{docId} {
-      allow read, write: if isAdmin();
+  // ✅ التعديل/الإنشاء/الحذف للإدارة فقط
+  allow create, update, delete: if isAdmin();
+}
+
+
+ match /role_invites/{docId} {
+  allow read: if true; // أو نفس منطق الإيميل إذا docId = email
+  allow write: if isAdmin();
+}
+
+
+    /* =========================
+       interest_requests ✅ (مخفف عشان يشتغل الإرسال)
+    ========================= */
+    match /interest_requests/{id} {
+      // العميل يرسل طلبه (المهم يطابق investorUid)
+      allow create: if signedIn()
+        && request.resource.data.investorUid == request.auth.uid;
+
+      // العميل يشوف طلباته فقط + ops يشوف الكل
+      allow read: if isOps()
+        || (signedIn() && resource.data.investorUid == request.auth.uid);
+
+      // التعديل/الحذف للإدارة فقط
+      allow update, delete: if isOps();
     }
 
     match /{document=**} {

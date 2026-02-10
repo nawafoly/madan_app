@@ -54,11 +54,16 @@ import {
   deleteDoc,
   doc,
   getDoc,
+  getDocs,
+  limit,
   onSnapshot,
+  query,
   serverTimestamp,
   setDoc,
   updateDoc,
+  where,
 } from "firebase/firestore";
+
 
 /* =========================
    Types
@@ -239,6 +244,9 @@ export default function Settings() {
   const [adminUsers, setAdminUsers] = useState<AdminUserDoc[]>([]);
 
   // ✅ NEW: role invites
+  const [promoteEmail, setPromoteEmail] = useState("");
+  const [promoteRoleKey, setPromoteRoleKey] = useState<AppRoleKey>("accountant");
+  const [promoting, setPromoting] = useState(false);
   const [roleInvites, setRoleInvites] = useState<RoleInviteDoc[]>([]);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRoleKey, setInviteRoleKey] =
@@ -670,7 +678,7 @@ export default function Settings() {
   };
 
   const openEditAdmin = (u: AdminUserDoc) => {
-    setEditingAdminId(u.id);
+    setEditingAdminId((u.email || "").trim().toLowerCase());
     setAdminForm({
       displayName: u.displayName || "",
       email: u.email || "",
@@ -700,39 +708,47 @@ export default function Settings() {
     const permissionsDeny = Array.from(new Set(adminForm.permissionsDeny || []));
 
     try {
-      if (editingAdminId) {
-        await updateDoc(doc(db, "admin_users", editingAdminId), {
+      // ✅ ALWAYS upsert by emailLower (docId = email)
+      await setDoc(
+        doc(db, "admin_users", email),
+        {
           ...adminForm,
           displayName,
           email,
+          roleKey,
           permissionsAllow,
           permissionsDeny,
+
+          // ✅ حافظ على createdAt إذا موجود (لا تعيد تصفيره)
+          createdAt: (adminForm as any).createdAt ?? serverTimestamp(),
           updatedAt: serverTimestamp(),
-        });
-        toast.success("تم تحديث حساب الإدارة");
-      } else {
-        await addDoc(collection(db, "admin_users"), {
-          ...adminForm,
-          displayName,
-          email,
-          permissionsAllow,
-          permissionsDeny,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        });
-        toast.success("تم إنشاء حساب إدارة جديد");
+        },
+        { merge: true }
+      );
+
+      // ✅ تنظيف تلقائي: لو كنت تعدّل سجل قديم (random id) أو تغير الإيميل
+      // احذف الوثيقة القديمة إذا كانت مختلفة عن email الحالي
+      if (editingAdminId && editingAdminId !== email) {
+        try {
+          await deleteDoc(doc(db, "admin_users", editingAdminId));
+        } catch {
+          // ignore
+        }
       }
 
+      toast.success(editingAdminId ? "تم تحديث حساب الإدارة" : "تم إنشاء حساب إدارة جديد");
       setIsAdminDialogOpen(false);
     } catch (e) {
       console.error(e);
       toast.error("فشل حفظ حساب الإدارة");
     }
+
   };
 
   const handleToggleAdminActive = async (u: AdminUserDoc) => {
     try {
-      await updateDoc(doc(db, "admin_users", u.id), {
+      const id = (u.email || u.id || "").trim().toLowerCase(); // ✅ canonical
+      await updateDoc(doc(db, "admin_users", id), {
         isActive: !u.isActive,
         updatedAt: serverTimestamp(),
       });
@@ -743,8 +759,10 @@ export default function Settings() {
     }
   };
 
-  const handleDeleteAdmin = async (id: string) => {
+
+  const handleDeleteAdmin = async (u: AdminUserDoc) => {
     try {
+      const id = (u.email || u.id || "").trim().toLowerCase(); // ✅ canonical
       await deleteDoc(doc(db, "admin_users", id));
       toast.success("تم حذف الحساب");
     } catch (e) {
@@ -752,10 +770,71 @@ export default function Settings() {
       toast.error("فشل حذف الحساب");
     }
   };
+  
 
   /* =========================
      Role Invites (Promote by Email)
   ========================= */
+
+  const promoteExistingUserByEmail = async () => {
+    const email = promoteEmail.trim().toLowerCase();
+    const roleKey = promoteRoleKey;
+
+    if (!email || !email.includes("@")) return toast.error("البريد غير صحيح");
+    if (!roleKey) return toast.error("اختر Role");
+
+    setPromoting(true);
+    try {
+      // ✅ ابحث عن المستخدم في users حسب email
+      const q = query(collection(db, "users"), where("email", "==", email), limit(1));
+      const snap = await getDocs(q);
+
+      if (snap.empty) {
+        toast.error("هذا الإيميل ما له حساب مسجل (لا يوجد users doc). خليّه يسوي تسجيل مرة واحدة ثم رقّيه.");
+        return;
+      }
+
+      const userDoc = snap.docs[0];
+      const userData = userDoc.data() as any;
+
+      // ✅ (1) تحديث role داخل users
+      await updateDoc(doc(db, "users", userDoc.id), {
+        role: roleKey,
+        updatedAt: serverTimestamp(),
+      });
+
+      // ✅ (2) إنشاء/تحديث سجل داخل admin_users عشان يظهر في قسم حسابات الإدارة
+      // نخلي docId = email (أسهل تعديل لاحقًا)
+      await setDoc(
+        doc(db, "admin_users", email),
+        {
+          displayName: userData?.displayName || userData?.name || email.split("@")[0],
+          email,
+          roleKey,          // نفس المفتاح اللي تستخدمه في الواجهة
+          title: "",
+          isActive: true,
+          notes: "",
+          permissionsAllow: [],
+          permissionsDeny: [],
+          updatedAt: serverTimestamp(),
+          createdAt: userData?.createdAt ?? serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      toast.success(`تمت الترقية + إضافته لحسابات الإدارة: ${email} → ${roleKey}`);
+      setPromoteEmail("");
+      setPromoteRoleKey("accountant");
+    } catch (e) {
+      console.error(e);
+      toast.error("فشل ترقية المستخدم");
+    } finally {
+      setPromoting(false);
+    }
+  };
+
+
+
 
   const upsertRoleInvite = async () => {
     const email = inviteEmail.trim().toLowerCase();
@@ -1244,6 +1323,53 @@ export default function Settings() {
               Admin Accounts
           ========================= */}
           <TabsContent value="admins">
+
+            <Card className="mb-4">
+              <CardHeader>
+                <CardTitle>ترقية مباشرة (بدون دعوة)</CardTitle>
+                <CardDescription>
+                  يرقّي مستخدم موجود بالفعل في users حسب الإيميل (لا ينشئ حساب جديد).
+                </CardDescription>
+              </CardHeader>
+
+              <CardContent className="space-y-4">
+                <div className="grid md:grid-cols-3 gap-4">
+                  <div className="space-y-1 md:col-span-2">
+                    <Label>الإيميل</Label>
+                    <Input
+                      value={promoteEmail}
+                      onChange={(e) => setPromoteEmail(e.target.value)}
+                      placeholder="info@madanalbena.com"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label>الدور</Label>
+                    <Select
+                      value={promoteRoleKey}
+                      onValueChange={(v: any) => setPromoteRoleKey(v as AppRoleKey)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="accountant">محاسب (accountant)</SelectItem>
+                        <SelectItem value="staff">موظف (staff)</SelectItem>
+                        <SelectItem value="admin">أدمن (admin)</SelectItem>
+                        <SelectItem value="owner">أونر (owner)</SelectItem>
+                        <SelectItem value="client">عميل (client)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <Button className="bg-[#F2B705]" onClick={promoteExistingUserByEmail} disabled={promoting}>
+                  {promoting ? "جاري الترقية..." : "ترقية الآن"}
+                </Button>
+              </CardContent>
+            </Card>
+
+
             {/* ✅ NEW: Promote by email (no UID needed) */}
             <Card className="mb-4">
               <CardHeader>
@@ -1298,7 +1424,7 @@ export default function Settings() {
                   />
                 </div>
 
-                <div className="flex flex-wrap gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <Button className="bg-[#F2B705]" onClick={upsertRoleInvite}>
                     حفظ الدعوة
                   </Button>
@@ -1459,8 +1585,8 @@ export default function Settings() {
                             </Button>
                             <Button
                               variant="destructive"
-                              onClick={() => handleDeleteAdmin(u.id)}
-                            >
+                              onClick={() => handleDeleteAdmin(u)}
+                              >
                               <Trash2 className="w-4 h-4 ml-2" /> حذف
                             </Button>
                           </div>
@@ -1730,7 +1856,7 @@ export default function Settings() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="flex flex-wrap gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <Button variant="outline" onClick={handleExport}>
                     <FileDown className="w-4 h-4 ml-2" /> Export JSON
                   </Button>
@@ -1781,14 +1907,14 @@ export default function Settings() {
           Role Dialog
       ========================= */}
       <Dialog open={isRoleDialogOpen} onOpenChange={setIsRoleDialogOpen}>
-        <DialogContent className="max-w-3xl w-[95vw] max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="!w-[98vw] !max-w-none h-[92vh] overflow-hidden p-0 sm:!w-[95vw]">
+          <DialogHeader className="p-6 pb-0">
             <DialogTitle>
               {editingRoleKey ? "تعديل Role" : "إنشاء Role جديد"}
             </DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-4">
+          <div className="flex-1 overflow-y-auto p-6 space-y-4">
             <div className="grid md:grid-cols-2 gap-4">
               <div className="space-y-1">
                 <Label>Role Key (unique)</Label>
@@ -1902,14 +2028,14 @@ export default function Settings() {
         Admin User Dialog
     ========================= */}
       <Dialog open={isAdminDialogOpen} onOpenChange={setIsAdminDialogOpen}>
-        <DialogContent className="max-w-3xl w-[95vw] max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="!w-[98vw] !max-w-none h-[92vh] overflow-hidden p-0 sm:!w-[95vw]">
+          <DialogHeader className="p-6 pb-0">
             <DialogTitle>
               {editingAdminId ? "تعديل حساب إداري" : "إنشاء حساب إداري"}
             </DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-4">
+          <div className="flex-1 overflow-y-auto p-6 space-y-4">
             <div className="grid md:grid-cols-2 gap-4">
               <div className="space-y-1">
                 <Label>الاسم</Label>
@@ -1996,7 +2122,7 @@ export default function Settings() {
             <div className="grid md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Permissions Allow (اختياري)</Label>
-                <div className="flex flex-wrap gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {DEFAULT_PERMISSIONS.map((perm) => {
                     const checked = (adminForm.permissionsAllow || []).includes(
                       perm.key
@@ -2019,8 +2145,12 @@ export default function Settings() {
                           });
                         }}
                       >
-                        + {perm.key}
+                        <div className="flex flex-col items-start leading-tight">
+                          <span className="text-sm font-medium">سماح: {perm.label}</span>
+                          <span className="text-[11px] opacity-70">{perm.key}</span>
+                        </div>
                       </Button>
+
                     );
                   })}
                 </div>
@@ -2031,7 +2161,7 @@ export default function Settings() {
 
               <div className="space-y-2">
                 <Label>Permissions Deny (اختياري)</Label>
-                <div className="flex flex-wrap gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {DEFAULT_PERMISSIONS.map((perm) => {
                     const checked = (adminForm.permissionsDeny || []).includes(
                       perm.key
@@ -2053,8 +2183,12 @@ export default function Settings() {
                           });
                         }}
                       >
-                        - {perm.key}
+                        <div className="flex flex-col items-start leading-tight">
+                          <span className="text-sm font-medium">منع: {perm.label}</span>
+                          <span className="text-[11px] opacity-70">{perm.key}</span>
+                        </div>
                       </Button>
+
                     );
                   })}
                 </div>

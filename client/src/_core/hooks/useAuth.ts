@@ -20,40 +20,66 @@ export type AppRole =
  * ✅ Permission Keys (مرنة)
  */
 export type Permission =
-  | "project.view"
-  | "project.create"
-  | "project.edit"
-  | "project.publish"
-  | "project.delete"
+  | "dashboard.view"
+  | "projects.view"
+  | "projects.manage"
+  | "projects.publish"
+  | "investments.view"
+  | "investments.manage"
+  | "users.view"
+  | "users.manage"
+  | "messages.view"
+  | "messages.manage"
+  | "reports.view"
   | "financial.view"
   | "financial.edit"
-  | "users.manage"
   | "settings.manage";
 
-const ROLE_DEFAULT_PERMS: Record<AppRole, Permission[]> = {
-  owner: [
-    "project.view",
-    "project.create",
-    "project.edit",
-    "project.publish",
-    "project.delete",
-    "financial.view",
-    "financial.edit",
-    "users.manage",
-    "settings.manage",
-  ],
-  admin: [
-    "project.view",
-    "project.create",
-    "project.edit",
-    "project.publish",
-    "financial.view",
-  ],
-  accountant: ["project.view", "financial.view", "financial.edit"],
-  staff: ["project.view"],
-  client: ["project.view"],
-  guest: ["project.view"],
-};
+
+  const ROLE_DEFAULT_PERMS: Record<AppRole, Permission[]> = {
+    owner: [
+      "dashboard.view",
+      "projects.view",
+      "projects.manage",
+      "projects.publish",
+      "investments.view",
+      "investments.manage",
+      "users.view",
+      "users.manage",
+      "messages.view",
+      "messages.manage",
+      "reports.view",
+      "financial.view",
+      "financial.edit",
+      "settings.manage",
+    ],
+    admin: [
+      "dashboard.view",
+      "projects.view",
+      "projects.manage",
+      "projects.publish",
+      "investments.view",
+      "investments.manage",
+      "users.view",
+      "users.manage",
+      "messages.view",
+      "messages.manage",
+      "reports.view",
+      "settings.manage",
+    ],
+    accountant: [
+      "dashboard.view",
+      "projects.view",
+      "investments.view",
+      "financial.view",
+      "financial.edit",
+      "reports.view",
+    ],
+    staff: ["dashboard.view", "projects.view", "messages.view"],
+    client: ["projects.view"],
+    guest: ["projects.view"],
+  };
+  
 
 export type AppUser = {
   uid: string;
@@ -85,6 +111,36 @@ function normalizePerms(list: any): Permission[] {
   if (!Array.isArray(list)) return [];
   return list.filter((x) => typeof x === "string") as Permission[];
 }
+
+type AdminOverrides = {
+  roleKey?: AppRole;
+  permissionsAllow?: Permission[];
+  permissionsDeny?: Permission[];
+  isActive?: boolean;
+};
+
+async function getAdminOverridesByEmail(fb: FbUser): Promise<AdminOverrides | null> {
+  const email = (fb.email ?? "").toLowerCase().trim();
+  if (!email) return null;
+
+  try {
+    const snap = await getDoc(doc(db, "admin_users", email));
+    if (!snap.exists()) return null;
+
+    const d = snap.data() as any;
+    if (d?.isActive === false) return null;
+
+    return {
+      roleKey: normalizeRole(d?.roleKey),
+      permissionsAllow: normalizePerms(d?.permissionsAllow),
+      permissionsDeny: normalizePerms(d?.permissionsDeny),
+      isActive: !!d?.isActive,
+    };
+  } catch {
+    return null;
+  }
+}
+
 
 /** ✅ Bootstrap Owners (Email + UID) */
 const BOOTSTRAP_OWNER_EMAILS = new Set<string>([
@@ -163,7 +219,20 @@ async function ensureUserDocAndGetRuntime(fb: FbUser): Promise<UserRuntimeData> 
         // ignore
       }
 
-      return { role, permissionsAllow, permissionsDeny };
+      // ✅ اقرأ overrides من admin_users (لو موجود)
+      const adminOv = await getAdminOverridesByEmail(fb);
+
+      const finalRole = adminOv?.roleKey ?? role;
+
+      const mergedAllow = Array.from(
+        new Set([...(permissionsAllow || []), ...(adminOv?.permissionsAllow || [])])
+      );
+
+      const mergedDeny = Array.from(
+        new Set([...(permissionsDeny || []), ...(adminOv?.permissionsDeny || [])])
+      );
+
+      return { role: finalRole, permissionsAllow: mergedAllow, permissionsDeny: mergedDeny };
     }
 
     // ✅ غير موجود: أنشئ doc من الصفر (create مسموح)

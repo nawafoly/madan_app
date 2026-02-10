@@ -29,14 +29,11 @@ import {
   where,
   Timestamp,
   orderBy,
-  Query,
-  QuerySnapshot,
-  DocumentData,
 } from "firebase/firestore";
 
 type Investment = any;
 type Project = any;
-type MessageRequest = any;
+type InterestRequest = any;
 
 function toDateSafe(v: any) {
   try {
@@ -59,30 +56,30 @@ export default function MyInvestments() {
   const { user, logout } = useAuth();
 
   const [investments, setInvestments] = useState<Investment[]>([]);
-  const [requests, setRequests] = useState<MessageRequest[]>([]); // ✅ NEW: من messages
+  const [requests, setRequests] = useState<InterestRequest[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
 
   const role = String((user as any)?.role || "").toLowerCase();
-  const isClient = role === "client";
+  const isClient = role === "client" || role === "investor";
   const isGuest = role === "guest";
 
-  // ✅ Live: investments + messages (طلبات الاستثمار)
+  // ✅ Live: investments + interest_requests
   useEffect(() => {
     let unsubInv: null | (() => void) = null;
-    let unsubMsg: null | (() => void) = null;
+    let unsubReq: null | (() => void) = null;
 
     let invLoaded = false;
-    let msgLoaded = false;
+    let reqLoaded = false;
     const done = () => {
-      if (invLoaded && msgLoaded) setLoading(false);
+      if (invLoaded && reqLoaded) setLoading(false);
     };
 
     const run = async () => {
       try {
         setLoading(true);
         invLoaded = false;
-        msgLoaded = false;
+        reqLoaded = false;
 
         // ✅ مو مسجل دخول
         if (!user?.uid) {
@@ -93,7 +90,7 @@ export default function MyInvestments() {
           return;
         }
 
-        // ✅ إذا مو عميل: ما نجيب investments/requests (نخليها واضحة)
+        // ✅ إذا مو عميل: ما نجيب investments/requests
         if (!isClient) {
           setInvestments([]);
           setRequests([]);
@@ -137,61 +134,39 @@ export default function MyInvestments() {
           }
         );
 
-        // ✅ listener لطلبات الاستثمار من messages (رسائلي فقط)
-        // ملاحظة: نجرب orderBy، ولو فشل (index/createdAt) نعمل fallback بدون orderBy
-        const baseMsg = collection(db, "messages");
-        const qMsgOrdered = query(
-          baseMsg,
-          where("createdByUid", "==", user.uid),
+        // ✅ listener لطلبات الاهتمام من interest_requests (طلبات المستثمر)
+        const qReq = query(
+          collection(db, "interest_requests"),
+          where("investorUid", "==", user.uid),
           orderBy("createdAt", "desc")
         );
 
-        const attachMsgListener = (qToUse: Query<DocumentData>, isFallback = false) => {
-          unsubMsg = onSnapshot(
-            qToUse,
-            (snap: QuerySnapshot<DocumentData>) => {
-              let rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        unsubReq = onSnapshot(
+          qReq,
+          (snap) => {
+            const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
-              // ✅ نعرض فقط طلبات الاستثمار
-              rows = rows.filter((m: any) => String(m?.type || "") === "investment_request");
+            // (اختياري) لو عندك استثمارات لاحقاً لنفس المشروع، ممكن ما تعرض الطلب لتجنب التكرار
+            const invProjectIds = new Set(
+              (investments || []).map((i: any) => String(i?.projectId || ""))
+            );
+            const filtered = rows.filter(
+              (r: any) => !invProjectIds.has(String(r?.projectId || ""))
+            );
 
-              // ✅ لو الرسالة صار لها investmentId، غالبًا الاستثمار سيظهر من investments، فنتجنب التكرار
-              const invIds = new Set(
-                (investments || []).map((i: any) => String(i?.sourceMessageId || ""))
-              );
-              rows = rows.filter((m: any) => !invIds.has(String(m?.id || "")));
+            setRequests(filtered as any);
+            reqLoaded = true;
+            done();
+          },
+          (err) => {
+            console.error("interest_requests_permission_or_error", err);
+            setRequests([]);
+            reqLoaded = true;
+            done();
+          }
+        );
 
-              // ✅ لو fallback: نرتب محلي
-              if (isFallback) {
-                rows.sort((a: any, b: any) => {
-                  const ta = toDateSafe(a.createdAt)?.getTime() ?? 0;
-                  const tb = toDateSafe(b.createdAt)?.getTime() ?? 0;
-                  return tb - ta;
-                });
-              }
-
-              setRequests(rows);
-              msgLoaded = true;
-              done();
-            },
-            (err) => {
-              console.error("messages_permission_or_error", err);
-              setRequests([]);
-              msgLoaded = true;
-              done();
-            }
-          );
-        };
-
-        try {
-          attachMsgListener(qMsgOrdered, false);
-        } catch (e) {
-          console.warn("messages ordered listener failed, fallback without orderBy", e);
-          const qMsgFallback = query(baseMsg, where("createdByUid", "==", user.uid));
-          attachMsgListener(qMsgFallback, true);
-        }
-
-        // ✅ مشاريع منشورة (أسماء المشاريع + قسم المشاريع)
+        // ✅ مشاريع منشورة
         const projSnap = await getDocs(
           query(collection(db, "projects"), where("status", "==", "published"))
         );
@@ -206,13 +181,12 @@ export default function MyInvestments() {
 
     return () => {
       if (unsubInv) unsubInv();
-      if (unsubMsg) unsubMsg();
+      if (unsubReq) unsubReq();
     };
-    // مهم: investments داخل فلترة requests يعتمد على listener؛ لذلك نخليه يعتمد فقط على uid/isClient
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.uid, isClient]);
 
-  // ✅ إجماليات (نحسبها من investments فقط عشان ما يصير تكرار)
+  // ✅ إجماليات (من investments فقط)
   const totalInvested = useMemo(
     () => investments.reduce((s, i) => s + Number(i.amount || 0), 0),
     [investments]
@@ -231,19 +205,25 @@ export default function MyInvestments() {
     [investments]
   );
 
-  const pendingInvestments = useMemo(
+  const pendingInvestmentsOnly = useMemo(
     () =>
       investments.filter((i) =>
-        ["pending", "pending_review", "pending_contract"].includes(
-          String(i.status || "")
-        )
+        ["pending", "pending_review", "pending_contract"].includes(String(i.status || ""))
       ).length,
     [investments]
   );
 
+  const pendingRequests = useMemo(
+    () => requests.filter((r: any) => ["pending", "pending_review"].includes(String(r.status || "pending"))).length,
+    [requests]
+  );
+
+  // ✅ قيد المراجعة = pending investments + pending requests
+  const pendingTotal = pendingInvestmentsOnly + pendingRequests;
+
   const statusBadge = (status: string) => {
     const map: any = {
-      pending: ["معلق", "bg-orange-500"],
+      pending: ["قيد المراجعة", "bg-blue-600"],
       pending_review: ["قيد المراجعة", "bg-blue-600"],
       approved: ["معتمد", "bg-green-600"],
       active: ["نشط", "bg-emerald-700"],
@@ -254,7 +234,7 @@ export default function MyInvestments() {
       signing: ["قيد الإجراء", "bg-indigo-600"],
       signed: ["تم الإجراء", "bg-green-700"],
 
-      // رسائل (messages)
+      // قد تظهر حالات أخرى في المستقبل
       new: ["جديد", "bg-orange-500"],
       in_progress: ["قيد المعالجة", "bg-blue-600"],
       resolved: ["تمت المعالجة", "bg-green-600"],
@@ -380,10 +360,10 @@ export default function MyInvestments() {
             green
           />
           <Stat title="استثمارات نشطة" icon={CheckCircle} value={activeInvestments} />
-          <Stat title="قيد المراجعة" icon={Clock} value={pendingInvestments} />
+          <Stat title="قيد المراجعة" icon={Clock} value={pendingTotal} />
         </div>
 
-        {/* ✅ Requests (messages) */}
+        {/* ✅ Requests (interest_requests) */}
         <Card>
           <CardHeader className="flex items-center justify-between">
             <CardTitle>طلباتي الاستثمارية</CardTitle>
@@ -402,16 +382,8 @@ export default function MyInvestments() {
                 {requests.map((m: any) => {
                   const project = projects.find((p) => p.id === m.projectId);
                   const createdAt = m.createdAt ? formatDateAR(m.createdAt) : "—";
-                  const status = String(m.status || "pending_review");
-
-                  const amount =
-                    m.approvedAmount != null
-                      ? Number(m.approvedAmount)
-                      : m.estimatedAmount != null
-                      ? Number(m.estimatedAmount)
-                      : null;
-
-                  const hasInvestment = !!m.investmentId;
+                  const status = String(m.status || "pending");
+                  const amount = m.amount != null ? Number(m.amount) : null;
 
                   return (
                     <Card key={m.id} className="overflow-hidden">
@@ -442,19 +414,10 @@ export default function MyInvestments() {
                             {statusBadge(status)}
 
                             <div className="flex flex-wrap gap-2 justify-end">
-                              {hasInvestment ? (
-                                <Link href={`/client/investments/${m.investmentId}`}>
-                                  <Button size="sm">
-                                    <FileText className="w-4 h-4 ml-2" />
-                                    فتح الاستثمار
-                                  </Button>
-                                </Link>
-                              ) : (
-                                <Button size="sm" variant="outline" disabled>
-                                  <FileText className="w-4 h-4 ml-2" />
-                                  بانتظار إنشاء الاستثمار
-                                </Button>
-                              )}
+                              <Button size="sm" variant="outline" disabled>
+                                <FileText className="w-4 h-4 ml-2" />
+                                بانتظار إنشاء الاستثمار
+                              </Button>
                             </div>
                           </div>
                         </div>

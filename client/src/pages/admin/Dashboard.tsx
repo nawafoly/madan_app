@@ -1,4 +1,4 @@
-// pages/admin/Dashboard.tsx
+// src/pages/admin/Dashboard.tsx
 import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import DashboardLayout from "@/components/DashboardLayout";
@@ -12,7 +12,9 @@ import {
   Clock,
   AlertCircle,
 } from "lucide-react";
-import { useAuth } from "@/_core/hooks/useAuth";
+
+// ✅ IMPORTANT: named exports (هذا اللي يحل useAuth is not defined)
+import { useAuth, hasPermission } from "@/_core/hooks/useAuth";
 
 import { collection, onSnapshot, Timestamp } from "firebase/firestore";
 import { db } from "@/_core/firebase";
@@ -31,48 +33,16 @@ import {
 } from "recharts";
 
 type AnyDoc = Record<string, any> & { id: string };
-type AppRole = "owner" | "admin" | "accountant" | "staff" | "client" | "guest";
-
-/* =========================
-   Role helpers
-========================= */
-
-function normalizeRole(raw: any): AppRole {
-  if (!raw) return "guest";
-  const r = String(raw).toLowerCase();
-
-  if (r.includes("owner")) return "owner";
-  if (r.includes("admin")) return "admin";
-  if (r.includes("account")) return "accountant";
-  if (r.includes("staff") || r.includes("reception")) return "staff";
-  if (r.includes("client")) return "client";
-  if (r.includes("guest")) return "guest";
-
-  return "guest";
-}
-
-function pickRoleFromUser(u: any): AppRole {
-  const raw =
-    u?.role ??
-    (Array.isArray(u?.roles) ? u?.roles?.[0] : undefined) ??
-    u?.userRole ??
-    u?.accountRole;
-
-  return normalizeRole(raw);
-}
 
 export default function AdminDashboard() {
-  const { user } = useAuth();
+  // ✅ لازم useAuth() مو useAuth
+  const { user, refresh } = useAuth();
 
-  const role = useMemo<AppRole>(() => pickRoleFromUser(user), [user]);
-
-  // ✅ قواعد العرض داخل الداشبورد
-  const canSeeInvestments =
-    role === "owner" || role === "admin" || role === "accountant";
-  const canSeeUsers = role === "owner" || role === "admin";
-  const canSeeMessages = role === "owner" || role === "admin" || role === "staff";
-  const canSeeProjects =
-    role === "owner" || role === "admin" || role === "accountant" || role === "staff";
+  // ✅ Permissions-based gates (بدل role-based)
+  const canSeeProjects = hasPermission(user, "projects.view");
+  const canSeeInvestments = hasPermission(user, "investments.view");
+  const canSeeUsers = hasPermission(user, "users.view");
+  const canSeeMessages = hasPermission(user, "messages.view");
 
   const [projects, setProjects] = useState<AnyDoc[]>([]);
   const [investments, setInvestments] = useState<AnyDoc[]>([]);
@@ -82,7 +52,7 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>("");
 
-  // ✅ Realtime subscriptions (حسب الدور)
+  // ✅ Realtime subscriptions (حسب الصلاحيات)
   useEffect(() => {
     setLoading(true);
     setError("");
@@ -126,7 +96,6 @@ export default function AdminDashboard() {
     };
 
     // ✅ نختار “مصدر تحميل” واحد فقط يوقف loading
-    // ترتيب منطقي: projects -> investments -> users -> messages
     const loaders: Array<{
       allowed: boolean;
       col: string;
@@ -154,7 +123,7 @@ export default function AdminDashboard() {
     if (canSeeMessages)
       sub("messages", setMessages, firstLoader?.col === "messages");
 
-    // ✅ إذا ما عنده ولا شيء مسموح (نادر) لا نعلق
+    // ✅ إذا ما عنده ولا شيء مسموح لا نعلق
     if (!firstLoader) setLoading(false);
 
     return () => {
@@ -188,8 +157,7 @@ export default function AdminDashboard() {
   }, [investments]);
 
   const approvedInvestments = useMemo(() => {
-    return investments.filter((i) => i.status === "approved" || i.status === "active")
-      .length;
+    return investments.filter((i) => i.status === "approved" || i.status === "active").length;
   }, [investments]);
 
   // ✅ Dynamic line chart: آخر 6 شهور
@@ -250,10 +218,7 @@ export default function AdminDashboard() {
   const projectDistribution = useMemo(() => {
     return [
       { name: "صكوك", value: projects.filter((p) => p.projectType === "sukuk").length },
-      {
-        name: "أراضي",
-        value: projects.filter((p) => p.projectType === "land_development").length,
-      },
+      { name: "أراضي", value: projects.filter((p) => p.projectType === "land_development").length },
       { name: "VIP", value: projects.filter((p) => p.projectType === "vip_exclusive").length },
     ];
   }, [projects]);
