@@ -214,11 +214,14 @@ function normalizeRole(raw: any): "owner" | "admin" | "accountant" | "staff" | "
 
 function roleLabelAr(rawRole: any) {
   const role = normalizeRole(rawRole);
-  if (role === "owner" || role === "admin") return "اونر";
+
+  if (role === "owner") return "أونر";
+  if (role === "admin") return "أدمن";
   if (role === "accountant") return "محاسب";
-  if (role === "staff") return "استاف";
+  if (role === "staff") return "موظف";
   return "";
 }
+
 
 export default function DashboardLayout({
   children,
@@ -236,8 +239,8 @@ export default function DashboardLayout({
     typeof document !== "undefined" && document.documentElement.dir === "rtl"
       ? "rtl"
       : language === "ar"
-      ? "rtl"
-      : "ltr";
+        ? "rtl"
+        : "ltr";
 
   const sidebarSide = layoutDir === "rtl" ? "right" : "left";
 
@@ -309,38 +312,44 @@ function DashboardLayoutContent({
   const { user, logout } = useAuth();
   const [location, setLocation] = useLocation();
   const { state, toggleSidebar } = useSidebar();
-  
+
   const isCollapsed = state === "collapsed";
   const [isResizing, setIsResizing] = useState(false);
-  
+
   const sidebarRef = useRef<HTMLDivElement>(null);
   const mainRef = useRef<HTMLElement>(null);
-  
+
   const isMobile = useIsMobile();
   const isRight = sidebarSide === "right";
-  
+
   // ✅ 1) الدور
   const role = (user as any)?.role as RoleKey | undefined;
-  
+
   // ✅ 2) العناصر المسموحة
   const visibleMenuItems = useMemo(() => {
     if (!role) return [];
     return menuItems.filter((it) => it.allow.includes(role));
   }, [role]);
-  
+
   // ✅ 3) العنصر النشط
   const activeMenuItem = visibleMenuItems.find(
     (item) => item.path === location
   );
-  
+
 
 
   // ✅ اسم العرض: يفضّل user.name، وإلا من الإيميل (بالعربي)
+  // ✅ اسم العرض: استخدم displayName من useAuth أولاً (مو name)
   const displayName = useMemo(() => {
-    const n = String((user as any)?.name ?? "").trim();
-    if (n && n !== "-" && n.length >= 2) return n;
+    const dn = String((user as any)?.displayName ?? "").trim();
+    if (dn && dn !== "-" && dn.length >= 2) return dn;
+
+    const dn2 = String((user as any)?.name ?? "").trim(); // احتياط لو عندك مكان ثاني
+    if (dn2 && dn2 !== "-" && dn2.length >= 2) return dn2;
+
     return nameFromEmail((user as any)?.email);
   }, [user]);
+
 
   // ✅ الدور: يدعم role أو roles[0] أو userRole
   const roleRaw =
@@ -443,7 +452,7 @@ function DashboardLayoutContent({
 
           <SidebarContent className="gap-0">
             <SidebarMenu className="px-2 py-1">
-            {visibleMenuItems.map((item) => {
+              {visibleMenuItems.map((item) => {
                 const isActive = location === item.path;
                 return (
                   <SidebarMenuItem key={item.path}>
@@ -470,7 +479,7 @@ function DashboardLayoutContent({
                 <button className="flex items-center gap-3 rounded-lg px-1 py-1 hover:bg-accent/50 transition-colors w-full text-left group-data-[collapsible=icon]:justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                   <Avatar className="h-9 w-9 border shrink-0">
                     <AvatarFallback className="text-xs font-medium">
-                      {String(displayName ?? "م").charAt(0)}
+                      {String(displayName ?? "م").trim().charAt(0)}
                     </AvatarFallback>
                   </Avatar>
                   <div className="flex-1 min-w-0 group-data-[collapsible=icon]:hidden">
@@ -498,9 +507,8 @@ function DashboardLayoutContent({
         </Sidebar>
 
         <div
-          className={`absolute top-0 ${isRight ? "left-0" : "right-0"} w-1 h-full cursor-col-resize hover:bg-primary/20 transition-colors ${
-            isCollapsed ? "hidden" : ""
-          }`}
+          className={`absolute top-0 ${isRight ? "left-0" : "right-0"} w-1 h-full cursor-col-resize hover:bg-primary/20 transition-colors ${isCollapsed ? "hidden" : ""
+            }`}
           onMouseDown={() => {
             if (isCollapsed) return;
             setIsResizing(true);

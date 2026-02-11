@@ -54,7 +54,7 @@ export default defineConfig({
   publicDir: path.resolve(clientRoot, "public"),
 
   build: {
-    outDir: path.resolve(repoRoot, "dist/public"),
+    outDir: "dist",
     emptyOutDir: true,
   },
 
