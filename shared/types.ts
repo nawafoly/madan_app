@@ -153,6 +153,9 @@ export interface ProjectDoc {
 }
 
 export interface InvestmentDoc {
+
+
+
   projectId: string;
 
   // Optional snapshots (helpful to avoid breaking old UI when project changes)
@@ -186,6 +189,39 @@ export interface InvestmentDoc {
    */
   signedAt?: Timestamp;
 
+
+  /* =========================
+ Investor financial details (Accountant view)
+========================= */
+
+  // ✅ تاريخ بداية الاستثمار (نثبته وقت الاعتماد)
+  startAt?: Timestamp;
+
+  // ✅ تاريخ نهاية الاستثمار المخطط (نثبته وقت الاعتماد)
+  plannedEndAt?: Timestamp;
+
+  // ✅ تاريخ النهاية الفعلي (لو انتهى أو انسحب مبكر)
+  actualEndAt?: Timestamp;
+
+  // ✅ لو انسحب مبكر
+  withdrawnAt?: Timestamp;
+
+  // ✅ نسبة/عائد سنوي وقت التثبيت (Snapshot)
+  annualReturnAtSign?: number; // % سنوي
+
+  // ✅ مدة الاستثمار المثبتة (بالشهور) وقت الاعتماد
+  durationMonthsAtSign?: number;
+
+  // ✅ الربح المتوقع كامل المدة
+  expectedProfit?: number;
+
+  // ✅ الربح الفعلي (في الانسحاب المبكر يكون prorated)
+  earnedProfit?: number;
+
+  // ✅ نوع الإنهاء (اختياري للتقارير)
+  exitType?: "normal" | "early_withdrawal";
+
+
   /**
    * ✅ مدة استثمار العميل (بالشهور)
    * نثبتها هنا لأن الخطة تعتمد عليها للحساب
@@ -198,6 +234,7 @@ export interface InvestmentDoc {
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
+
 
 export interface InvestorMeta {
   totalInvested: number;

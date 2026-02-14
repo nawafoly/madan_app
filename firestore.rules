@@ -47,18 +47,14 @@ service cloud.firestore {
     /* =========================
        projects
     ========================= */
-    match /projects/{projectId} {
-      allow read: if true;
-      allow create, delete: if isAdmin();
+match /projects/{projectId} {
+  allow read: if true;
+  allow create, delete: if isAdmin();
 
-      allow update: if isAdmin() && !touchingProjectAggregates();
+  // ✅ المحاسب + الأدمن يقدرون يحدثون status + aggregates
+  allow update: if isAdmin() || isAccountant();
+}
 
-      function touchingProjectAggregates() {
-        return request.resource.data.diff(resource.data).changedKeys().hasAny([
-          "currentAmount","investorsCount","pendingAmount","updatedAt"
-        ]);
-      }
-    }
 
     /* =========================
        users  ✅ أهم إصلاح
@@ -142,7 +138,7 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/projects/$(request.resource.data.projectId))
       );
 
-      allow update, delete: if isAdmin();
+allow update, delete: if isAdmin() || isAccountant();
     }
 
     /* =========================
@@ -152,7 +148,7 @@ service cloud.firestore {
     match /notifications/{id} {
       allow read: if signedIn() && resource.data.uid == request.auth.uid;
       allow create: if isOps();
-      allow update, delete: if isAdmin();
+allow update, delete: if isAdmin() || isAccountant();
     }
 
 match /admin_users/{docId} {
