@@ -28,7 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Users, Crown, Search, Edit2 } from "lucide-react";
+import { Users, Crown, Search, Edit2, FileText } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -39,6 +39,7 @@ import {
   Timestamp,
 } from "firebase/firestore";
 import { db } from "@/_core/firebase";
+import { recomputeInvestorAggregates } from "../../_core/recomputeInvestorAggregates";
 
 type UserDoc = {
   id: string;
@@ -69,26 +70,35 @@ export default function ClientsManagement() {
   const [vipTier, setVipTier] = useState("");
   const [notes, setNotes] = useState("");
 
-  // users
-  const unsub = onSnapshot(
-    collection(db, "users"),
-    (snap) => {
-      const rows = snap.docs.map((d) => ({
-        id: d.id,
-        ...(d.data() as any),
-      }));
-      setUsers(rows);
-      setLoading(false);
-    },
-    (err) => {
-      console.error("users snapshot error:", err);
-      setLoading(false);
-      toast.error("تعذر تحميل العملاء");
-    }
-  );
-  
+  /* =========================
+     USERS SNAPSHOT
+  ========================= */
+  useEffect(() => {
+    const unsub = onSnapshot(
+      collection(db, "users"),
+      (snap) => {
+        const rows = snap.docs.map((d) => ({
+          id: d.id,
+          ...(d.data() as any),
+        }));
 
-  // investments
+        setUsers(rows);
+        setLoading(false);
+
+      },
+      (err) => {
+        console.error("users snapshot error:", err);
+        setLoading(false);
+        toast.error("تعذر تحميل العملاء");
+      }
+    );
+
+    return () => unsub();
+  }, []);
+
+  /* =========================
+     INVESTMENTS SNAPSHOT
+  ========================= */
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "investments"), (snap) => {
       const rows = snap.docs.map((d) => ({
@@ -171,6 +181,7 @@ export default function ClientsManagement() {
               <div className="text-3xl font-bold">{users.length}</div>
             </CardContent>
           </Card>
+
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm flex items-center gap-2">
@@ -182,6 +193,7 @@ export default function ClientsManagement() {
               <div className="text-3xl font-bold text-accent">{vipUsers}</div>
             </CardContent>
           </Card>
+
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm">عملاء عاديون</CardTitle>
@@ -267,6 +279,18 @@ export default function ClientsManagement() {
                         </TableCell>
                         <TableCell>
                           <div className="flex gap-2">
+                            {/* ✅ زر ملف العميل */}
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                window.location.href = `/admin/client-profile?id=${user.id}`;
+                              }}
+                            >
+                              <FileText className="w-4 h-4 ml-1" />
+                              ملف العميل
+                            </Button>
+
                             <Button
                               size="sm"
                               variant="outline"
@@ -280,6 +304,7 @@ export default function ClientsManagement() {
                               <Crown className="w-4 h-4 ml-1" />
                               VIP
                             </Button>
+
                             <Button
                               size="sm"
                               variant="outline"
@@ -366,7 +391,10 @@ export default function ClientsManagement() {
           />
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsNotesDialogOpen(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setIsNotesDialogOpen(false)}
+            >
               إلغاء
             </Button>
             <Button onClick={handleUpdateNotes}>حفظ</Button>

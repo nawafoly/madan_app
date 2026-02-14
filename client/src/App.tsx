@@ -28,6 +28,7 @@ import Reports from "@/pages/admin/Reports";
 import Settings from "@/pages/admin/Settings";
 import FinancialManagement from "./pages/admin/Financial";
 import ClientsManagement from "./pages/admin/Clients";
+import ClientProfile from "./pages/admin/ClientProfile";
 import MessagesManagement from "./pages/admin/Messages";
 import AuditLogPage from "./pages/admin/AuditLog";
 import DebugAuthPage from "./pages/admin/DebugAuth";
@@ -120,8 +121,8 @@ function Router() {
 
         {/* ===== Admin: Financial ===== */}
         <Route path="/admin/financial">
-        <RequireRole allow={["owner", "admin", "accountant"]}>
-        <FinancialManagement />
+          <RequireRole allow={["owner", "admin", "accountant"]}>
+            <FinancialManagement />
           </RequireRole>
         </Route>
 
@@ -131,6 +132,14 @@ function Router() {
             <ClientsManagement />
           </RequireRole>
         </Route>
+
+        {/* ===== Admin: Client Profile ===== */}
+        <Route path="/admin/client-profile">
+          <RequireRole allow={["owner", "admin"]}>
+            <ClientProfile />
+          </RequireRole>
+        </Route>
+
 
         {/* ===== Admin: VIP ===== */}
         <Route path="/admin/vip">
