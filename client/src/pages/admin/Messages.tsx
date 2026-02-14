@@ -65,9 +65,7 @@ import {
   MessageSquare,
   Mail,
   Phone,
-  Calendar,
   Eye,
-  X,
   Upload,
   FileText,
   Loader2,
@@ -77,6 +75,7 @@ import {
   Clock3,
   Building2,
   AlertTriangle,
+  ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -108,12 +107,12 @@ function formatDateTimeAR(v: any) {
   const d = toDateSafe(v);
   return d
     ? d.toLocaleString("ar-SA", {
-      year: "numeric",
-      month: "short",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    })
+        year: "numeric",
+        month: "short",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
     : "—";
 }
 
@@ -135,7 +134,9 @@ const getClientName = (m: any) =>
     m?.customerName,
     m?.contactName,
     m?.contact?.name,
-    m?.profile?.name
+    m?.profile?.name,
+    m?.investorName,
+    m?.userSnapshot?.displayName
   );
 
 const getClientEmail = (m: any) =>
@@ -145,7 +146,9 @@ const getClientEmail = (m: any) =>
     m?.clientEmail,
     m?.userEmail,
     m?.contact?.email,
-    m?.profile?.email
+    m?.profile?.email,
+    m?.investorEmail,
+    m?.userSnapshot?.email
   );
 
 const getClientPhone = (m: any) =>
@@ -156,23 +159,66 @@ const getClientPhone = (m: any) =>
     m?.contactPhone,
     m?.clientPhone,
     m?.contact?.phone,
-    m?.profile?.phone
+    m?.profile?.phone,
+    m?.investorPhone,
+    m?.userSnapshot?.phone
   );
 
+function toNum(v: any) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
 
+function moneySAR(v: any) {
+  const n = toNum(v);
+  return `${n.toLocaleString("ar-SA")} ر.س`;
+}
+
+function stageLabel(v: any) {
+  const s = String(v || "");
+  const map: Record<string, string> = {
+    staff: "مراجع",
+    accountant: "محاسب",
+    client: "العميل",
+    owner: "المالك",
+    completed: "مقفل",
+  };
+  return map[s] || (s ? s : "—");
+}
+
+function requestNumber(m: any) {
+  return (
+    pick(m?.issueNumber, m?.requestNumber, m?.mk) ||
+    (m?.id ? String(m.id).slice(0, 8) : "—")
+  );
+}
+
+function lastTouchedBy(m: any) {
+  // ✅ أفضلية: آخر تحديث محفوظ
+  const v = pick(m?.updatedByEmail, m?.updatedByUid, m?.processedByName, m?.processedByUid);
+  if (v) return v;
+
+  // ✅ fallback: آخر حدث
+  if (Array.isArray(m?.events) && m.events.length) {
+    const last = m.events[m.events.length - 1];
+    return pick(last?.byEmail, last?.byUid, last?.byRole) || "—";
+  }
+
+  return "—";
+}
 
 type StageRole = "staff" | "accountant" | "client" | "owner" | "completed";
 
 type MessageStatus =
-  | "new" // جديد
-  | "in_progress" // قيد المعالجة (اختياري)
-  | "needs_account" // ✅ (حسب قاموس الخطوات) عند المحاسب بعد "ترحيل مبدئي"
-  | "waiting_client_confirmation" // ✅ جديد: انتظار تعميد العميل
-  | "resolved" // تم الحل (بعد تعميد العميل -> عند الأونر)
-  | "completed" // ✅ مقفل نهائياً
-  | "rejected" // مرفوض
-  | "no_account" // ✅ جديد: الطلب مرسل بدون حساب (لا يمكن ربطه بعميل)
-  | "closed"; // ✅ Legacy alias (إن وجدت بيانات قديمة)
+  | "new"
+  | "in_progress"
+  | "needs_account"
+  | "waiting_client_confirmation"
+  | "resolved"
+  | "completed"
+  | "rejected"
+  | "no_account"
+  | "closed";
 
 type ContractFileKind = "draft_pdf" | "signed_pdf" | "other";
 
@@ -301,9 +347,49 @@ export default function MessagesManagement() {
   );
 
   /* =========================
+    ✅ تحميل المشاريع مرة وحدة (عشان نعرض اسم المشروع في الجدول)
+  ========================= */
+  const [projectsMap, setProjectsMap] = useState<Record<string, any>>({});
+
+  useEffect(() => {
+    const loadProjects = async () => {
+      try {
+        const snap = await getDocs(collection(db, "projects"));
+        const map: Record<string, any> = {};
+        snap.docs.forEach((d) => {
+          map[d.id] = { id: d.id, ...(d.data() as any) };
+        });
+        setProjectsMap(map);
+      } catch (e) {
+        console.error(e);
+        // لا نوقف الصفحة لو فشل، بس نخلي الاسم يظهر "—"
+      }
+    };
+    loadProjects();
+  }, []);
+
+  const getProjectTitle = (projectId: any) => {
+    const pid = String(projectId || "");
+    if (!pid) return "—";
+    const p = projectsMap[pid];
+    if (!p) return "—";
+    return pick(p?.titleAr, p?.nameAr, p?.title, p?.name) || "—";
+  };
+
+  const getProjectRemaining = (projectId: any) => {
+    const pid = String(projectId || "");
+    if (!pid) return null;
+    const p = projectsMap[pid];
+    if (!p) return null;
+
+    const target = toNum(p?.targetAmount);
+    const current = toNum(p?.currentAmount);
+    if (!target) return null;
+    return Math.max(0, target - current);
+  };
+
+  /* =========================
     ✅ Role permissions (MAEDIN principle)
-    - role is source of truth in Firestore: users/{uid}.role
-    - BUT: support old accounts (missing doc / missing role)
   ========================= */
   const OWNER_EMAIL = "nawafaaa0@gmail.com";
 
@@ -362,14 +448,14 @@ export default function MessagesManagement() {
     const map: any = {
       new: { label: "جديد", cls: "bg-orange-500" },
       in_progress: { label: "قيد المعالجة", cls: "bg-blue-500" },
-      resolved: { label: "تم الحل", cls: "bg-green-600" },
-      closed: { label: "مغلق", cls: "bg-gray-500" },
+      resolved: { label: "تم تعميد العميل", cls: "bg-emerald-700" },
+      closed: { label: "مغلق (قديم)", cls: "bg-gray-500" },
       approved: { label: "مقبول", cls: "bg-green-600" },
       rejected: { label: "مرفوض", cls: "bg-red-600" },
       needs_account: { label: "عند المحاسب", cls: "bg-yellow-600" },
       no_account: { label: "بدون حساب", cls: "bg-rose-700" },
-      waiting_client_confirmation: { label: "انتظار تعميد العميل", cls: "bg-indigo-700" },
-      completed: { label: "مكتمل", cls: "bg-gray-800" },
+      waiting_client_confirmation: { label: "بانتظار تعميد العميل", cls: "bg-indigo-700" },
+      completed: { label: "مقفل نهائيًا", cls: "bg-gray-800" },
     };
 
     const key = String(s || "new");
@@ -535,10 +621,10 @@ export default function MessagesManagement() {
       setSelectedMessage((prev: any) =>
         prev
           ? {
-            ...prev,
-            internalNotes: internalNotes || null,
-            events: Array.isArray(prev.events) ? [...prev.events, ev] : [ev],
-          }
+              ...prev,
+              internalNotes: internalNotes || null,
+              events: Array.isArray(prev.events) ? [...prev.events, ev] : [ev],
+            }
           : prev
       );
     } catch (e) {
@@ -585,12 +671,12 @@ export default function MessagesManagement() {
       setSelectedMessage((prev: any) =>
         prev
           ? {
-            ...prev,
-            status,
-            stageRole,
-            internalNotes: internalNotes || null,
-            events: Array.isArray(prev.events) ? [...prev.events, ev] : [ev],
-          }
+              ...prev,
+              status,
+              stageRole,
+              internalNotes: internalNotes || null,
+              events: Array.isArray(prev.events) ? [...prev.events, ev] : [ev],
+            }
           : prev
       );
       loadMessages();
@@ -627,9 +713,7 @@ export default function MessagesManagement() {
     const ev = makeEvent({
       type: "status_changed",
       title: "تحديث خطوة الطلب",
-      note:
-        next.note ||
-        `تم نقل الطلب إلى: ${next.status} / ${next.stageRole}`,
+      note: next.note || `تم نقل الطلب إلى: ${next.status} / ${next.stageRole}`,
       ...myActor(user, myRole),
       meta: { status: next.status, stageRole: next.stageRole },
     });
@@ -647,19 +731,13 @@ export default function MessagesManagement() {
     setSelectedMessage((prev: any) =>
       prev
         ? {
-          ...prev,
-          status: next.status,
-          stageRole: next.stageRole,
-          events: Array.isArray(prev.events) ? [...prev.events, ev] : [ev],
-        }
+            ...prev,
+            status: next.status,
+            stageRole: next.stageRole,
+            events: Array.isArray(prev.events) ? [...prev.events, ev] : [ev],
+          }
         : prev
     );
-
-    // ✅ Notify client (optional)
-    if (next.notifyClientText && selectedMessage?.email) {
-      // هنا لو عندك Notifications/Email system
-      // تركناه للهيكل فقط
-    }
 
     toast.success("تم ترحيل الطلب ✅");
     loadMessages();
@@ -699,14 +777,14 @@ export default function MessagesManagement() {
     await moveTo({
       status: "resolved",
       stageRole: "owner",
-      note: "تم تعميد العميل — تحويل للأونر للتعميد النهائي",
-      notifyClientText: "تم استلام تعميدك، وسيتم الإقفال النهائي بعد مراجعة الأونر.",
+      note: "تم تعميد العميل — تحويل للمالك للتعميد النهائي",
+      notifyClientText: "تم استلام تعميدك، وسيتم الإقفال النهائي بعد مراجعة المالك.",
     });
   };
 
   // 4) Owner: تعميد نهائي + قفل
   const stepOwnerFinalizeAndClose = async () => {
-    if (myRole !== "owner") return toast.error("هذا الإجراء للأونر فقط");
+    if (myRole !== "owner") return toast.error("هذا الإجراء للمالك فقط");
     if (isLockedFinal) return toast.warning("الطلب مقفل.");
 
     await moveTo({
@@ -849,7 +927,7 @@ export default function MessagesManagement() {
   ========================= */
   const reopenMessage = async () => {
     if (!selectedMessage) return;
-    if (myRole !== "owner") return toast.error("هذا الإجراء للأونر فقط");
+    if (myRole !== "owner") return toast.error("هذا الإجراء للمالك فقط");
 
     try {
       setReopenBusy(true);
@@ -905,9 +983,9 @@ export default function MessagesManagement() {
   const canFinalize = CONTRACTS_DISABLED
     ? isInvestment && !!selectedMessage?.investmentId
     : isInvestment &&
-    !!selectedMessage?.investmentId &&
-    !!selectedMessage?.contractId &&
-    isSigned;
+      !!selectedMessage?.investmentId &&
+      !!selectedMessage?.contractId &&
+      isSigned;
 
   /* =========================
     Render
@@ -934,7 +1012,7 @@ export default function MessagesManagement() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <StatCard title="الكل" value={stats.all} />
           <StatCard title="المفتوحة" value={stats.open} color="text-blue-600" />
-          <StatCard title="المكتملة" value={stats.completed} color="text-gray-800" />
+          <StatCard title="المقفلة" value={stats.completed} color="text-gray-800" />
           <StatCard title="المرفوضة" value={stats.rejected} color="text-red-600" />
         </div>
 
@@ -952,7 +1030,7 @@ export default function MessagesManagement() {
                 variant={view === "completed" ? "default" : "outline"}
                 onClick={() => setView("completed")}
               >
-                مكتمل
+                مقفل
               </Button>
               <Button
                 variant={view === "rejected" ? "default" : "outline"}
@@ -989,8 +1067,14 @@ export default function MessagesManagement() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>العميل</TableHead>
+                    <TableHead>اسم المشروع</TableHead>
+                    <TableHead>رقم الطلب</TableHead>
+                    <TableHead>المبلغ</TableHead>
+                    <TableHead>المتبقي</TableHead>
+                    <TableHead>الاستثمار</TableHead>
                     <TableHead>الحالة</TableHead>
                     <TableHead>المرحلة</TableHead>
+                    <TableHead>آخر تعديل</TableHead>
                     <TableHead>التاريخ</TableHead>
                     <TableHead className="text-left">إجراء</TableHead>
                   </TableRow>
@@ -998,56 +1082,157 @@ export default function MessagesManagement() {
                 <TableBody>
                   {filtered.map((m) => {
                     const badge = getStatusBadge(m.status);
+
+                    const pid = pick(m?.projectId, m?.project_id, m?.project?.id);
+                    const projectTitle = getProjectTitle(pid);
+
+                    const amount =
+                      toNum(m?.approvedAmount) ||
+                      toNum(m?.amount) ||
+                      toNum(m?.requestedAmount) ||
+                      toNum(m?.estimatedAmount) ||
+                      0;
+
+                    const remaining = getProjectRemaining(pid);
+                    const exceeded = remaining != null ? amount > remaining : false;
+
+                    const invState = m?.investmentId
+                      ? { label: "تم الإنشاء", cls: "bg-emerald-700" }
+                      : { label: "بانتظار", cls: "bg-slate-600" };
+
+                    const touchedBy = lastTouchedBy(m);
+
                     return (
                       <TableRow key={m.id}>
                         <TableCell className="font-semibold">
-                          {m.investorName || m.userSnapshot?.displayName || m.investorEmail || m.userSnapshot?.email || "—"}
+                          {getClientName(m) || "—"}
                         </TableCell>
+
+                        <TableCell className="font-medium">
+                          {projectTitle}
+                        </TableCell>
+
+                        <TableCell className="font-mono">
+                          {requestNumber(m)}
+                        </TableCell>
+
+                        <TableCell className="font-semibold">
+                          {moneySAR(amount)}
+                        </TableCell>
+
+                        <TableCell>
+                          {remaining == null ? (
+                            <span className="text-muted-foreground">—</span>
+                          ) : exceeded ? (
+                            <Badge className="bg-red-700">
+                              {moneySAR(remaining)} (تجاوز)
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline">{moneySAR(remaining)}</Badge>
+                          )}
+                        </TableCell>
+
+                        <TableCell>
+                          <Badge className={invState.cls}>{invState.label}</Badge>
+                        </TableCell>
+
                         <TableCell>
                           <Badge className={badge.cls}>{badge.label}</Badge>
                         </TableCell>
+
                         <TableCell>
-                          <Badge variant="outline">{m.stageRole || "—"}</Badge>
+                          <Badge variant="outline">{stageLabel(m.stageRole)}</Badge>
                         </TableCell>
+
+                        <TableCell className="text-xs">
+                          {touchedBy}
+                        </TableCell>
+
                         <TableCell>
                           {formatDateTimeAR(
                             m.createdAt ||
-                            m.created_at ||
-                            m.submittedAt ||
-                            m.timestamp
+                              m.created_at ||
+                              m.submittedAt ||
+                              m.timestamp
                           )}
                         </TableCell>
 
                         <TableCell className="text-left">
-                          <Button
-                            variant="outline"
-                            onClick={async () => {
-                              const fixed = normalizeForDisplay(m);
-                              const normalizedOne = {
-                                ...fixed,
-                                ...normalizeForDisplay(fixed),
-                              };
+                          <div className="flex gap-2 justify-end">
+                            {/* ✅ ملف العميل */}
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                const clientId = pick(
+                                  m?.createdByUid,
+                                  m?.investorUid,
+                                  m?.userId,
+                                  m?.userSnapshot?.uid
+                                );
+                                if (!clientId) {
+                                  toast.warning("لا يوجد حساب عميل مرتبط بهذا الطلب.");
+                                  return;
+                                }
+                                window.location.href = `/admin/client-profile?id=${clientId}`;
+                              }}
+                            >
+                              <FileText className="w-4 h-4 ml-1" />
+                              ملف العميل
+                            </Button>
 
-                              setSelectedMessage(normalizedOne);
-                              setStatus((normalizedOne.status || "new") as MessageStatus);
-                              setStageRole((normalizedOne.stageRole || "staff") as StageRole);
-                              setInternalNotes(String(normalizedOne.internalNotes || ""));
-                              setApprovedAmount(
-                                normalizedOne?.approvedAmount != null
-                                  ? String(normalizedOne.approvedAmount)
-                                  : normalizedOne?.estimatedAmount != null
+                            {/* ✅ فتح المشروع */}
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                if (!pid) {
+                                  toast.warning("لا يوجد مشروع مرتبط بهذا الطلب.");
+                                  return;
+                                }
+                                window.location.href = `/admin/projects/${pid}/edit`;
+                              }}
+                            >
+                              <ExternalLink className="w-4 h-4 ml-1" />
+                              المشروع
+                            </Button>
+
+                            {/* ✅ عرض */}
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={async () => {
+                                const fixed = normalizeForDisplay(m);
+                                const normalizedOne = {
+                                  ...fixed,
+                                  ...normalizeForDisplay(fixed),
+                                };
+
+                                setSelectedMessage(normalizedOne);
+                                setStatus(
+                                  (normalizedOne.status || "new") as MessageStatus
+                                );
+                                setStageRole(
+                                  (normalizedOne.stageRole || "staff") as StageRole
+                                );
+                                setInternalNotes(String(normalizedOne.internalNotes || ""));
+                                setApprovedAmount(
+                                  normalizedOne?.approvedAmount != null
+                                    ? String(normalizedOne.approvedAmount)
+                                    : normalizedOne?.estimatedAmount != null
                                     ? String(normalizedOne.estimatedAmount)
                                     : ""
-                              );
+                                );
 
-                              await loadContractDoc(normalizedOne?.contractId || null);
+                                await loadContractDoc(normalizedOne?.contractId || null);
 
-                              setIsDetailDialogOpen(true);
-                            }}
-                          >
-                            <Eye className="w-4 h-4 ml-1" />
-                            عرض
-                          </Button>
+                                setIsDetailDialogOpen(true);
+                              }}
+                            >
+                              <Eye className="w-4 h-4 ml-1" />
+                              عرض
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     );
@@ -1064,12 +1249,12 @@ export default function MessagesManagement() {
 
         {/* Detail dialog */}
         <Dialog open={isDetailDialogOpen} onOpenChange={setIsDetailDialogOpen}>
-        <DialogContent
-  className="w-[98vw] max-w-[1400px] 2xl:max-w-[1600px] p-0 max-h-[92vh] overflow-y-auto"
-  dir="rtl"
->
-         <DialogHeader className="px-6 py-4 border-b bg-white/60 backdrop-blur">
-              <DialogTitle className="text-xl">تفاصيل الرسالة</DialogTitle>
+          <DialogContent
+            className="w-[98vw] max-w-[1400px] 2xl:max-w-[1600px] p-0 max-h-[92vh] overflow-y-auto"
+            dir="rtl"
+          >
+            <DialogHeader className="px-6 py-4 border-b bg-white/60 backdrop-blur">
+              <DialogTitle className="text-xl">تفاصيل الطلب</DialogTitle>
             </DialogHeader>
 
             {selectedMessage ? (
@@ -1080,31 +1265,63 @@ export default function MessagesManagement() {
                       <CardTitle>بيانات العميل</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-3">
-                      <InfoRow label="الاسم" value={selectedMessage.investorName || selectedMessage.userSnapshot?.displayName || "—"} />
-                      <InfoRow label="البريد" value={selectedMessage.investorEmail || selectedMessage.userSnapshot?.email || "—"} />
-                      <InfoRow label="الجوال" value={selectedMessage.investorPhone || selectedMessage.userSnapshot?.phone || "—"} />
-                      <InfoRow
-                        label="التاريخ"
-                        value={formatDateTimeAR(
-                          selectedMessage.createdAt ||
-                          selectedMessage.created_at ||
-                          selectedMessage.submittedAt ||
-                          selectedMessage.timestamp
-                        )}
-                      />
+                      <InfoRow label="الاسم" value={getClientName(selectedMessage) || "—"} />
+                      <InfoRow label="البريد" value={getClientEmail(selectedMessage) || "—"} />
+                      <InfoRow label="الجوال" value={getClientPhone(selectedMessage) || "—"} />
+
+                      <div className="pt-2 flex flex-wrap gap-2">
+                        {(() => {
+                          const clientId = pick(
+                            selectedMessage?.createdByUid,
+                            selectedMessage?.investorUid,
+                            selectedMessage?.userId,
+                            selectedMessage?.userSnapshot?.uid
+                          );
+
+                          const pid = pick(
+                            selectedMessage?.projectId,
+                            selectedMessage?.project_id,
+                            selectedMessage?.project?.id
+                          );
+
+                          return (
+                            <>
+                              <Button
+                                variant="outline"
+                                onClick={() => {
+                                  if (!clientId) {
+                                    toast.warning("لا يوجد حساب عميل مرتبط بهذا الطلب.");
+                                    return;
+                                  }
+                                  window.location.href = `/admin/client-profile?id=${clientId}`;
+                                }}
+                              >
+                                <FileText className="w-4 h-4 ml-2" />
+                                فتح ملف العميل
+                              </Button>
+
+                              <Button
+                                variant="outline"
+                                onClick={() => {
+                                  if (!pid) {
+                                    toast.warning("لا يوجد مشروع مرتبط بهذا الطلب.");
+                                    return;
+                                  }
+                                  window.location.href = `/admin/projects/${pid}/edit`;
+                                }}
+                              >
+                                <ExternalLink className="w-4 h-4 ml-2" />
+                                فتح المشروع
+                              </Button>
+                            </>
+                          );
+                        })()}
+                      </div>
+
                       <div className="flex items-center gap-2 pt-2">
                         {(() => {
-                          const emailToUse =
-                            selectedMessage?.investorEmail ||
-                            selectedMessage?.userSnapshot?.email ||
-                            selectedMessage?.email ||
-                            "";
-
-                          const phoneToUse =
-                            selectedMessage?.investorPhone ||
-                            selectedMessage?.userSnapshot?.phone ||
-                            selectedMessage?.phone ||
-                            "";
+                          const emailToUse = getClientEmail(selectedMessage);
+                          const phoneToUse = getClientPhone(selectedMessage);
 
                           return (
                             <>
@@ -1129,7 +1346,65 @@ export default function MessagesManagement() {
                           );
                         })()}
                       </div>
+                    </CardContent>
+                  </Card>
 
+                  <Card className="rsg-card">
+                    <CardHeader>
+                      <CardTitle>ملخص الطلب</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      {(() => {
+                        const pid = pick(
+                          selectedMessage?.projectId,
+                          selectedMessage?.project_id,
+                          selectedMessage?.project?.id
+                        );
+
+                        const projectTitle = getProjectTitle(pid);
+
+                        const amount =
+                          toNum(selectedMessage?.approvedAmount) ||
+                          toNum(selectedMessage?.amount) ||
+                          toNum(selectedMessage?.requestedAmount) ||
+                          toNum(selectedMessage?.estimatedAmount) ||
+                          0;
+
+                        const remaining = getProjectRemaining(pid);
+                        const exceeded = remaining != null ? amount > remaining : false;
+
+                        const invState = selectedMessage?.investmentId
+                          ? "تم إنشاء الاستثمار"
+                          : "بانتظار إنشاء الاستثمار";
+
+                        return (
+                          <>
+                            <InfoRow label="رقم الطلب" value={requestNumber(selectedMessage)} />
+                            <InfoRow label="اسم المشروع" value={projectTitle} />
+                            <InfoRow label="المبلغ" value={moneySAR(amount)} />
+                            <InfoRow
+                              label="المتبقي"
+                              value={
+                                remaining == null
+                                  ? "—"
+                                  : exceeded
+                                  ? `${moneySAR(remaining)} (تجاوز)`
+                                  : moneySAR(remaining)
+                              }
+                            />
+                            <InfoRow label="الاستثمار" value={invState} />
+                            <InfoRow
+                              label="التاريخ"
+                              value={formatDateTimeAR(
+                                selectedMessage.createdAt ||
+                                  selectedMessage.created_at ||
+                                  selectedMessage.submittedAt ||
+                                  selectedMessage.timestamp
+                              )}
+                            />
+                          </>
+                        );
+                      })()}
                     </CardContent>
                   </Card>
 
@@ -1142,7 +1417,7 @@ export default function MessagesManagement() {
                         <Badge className={getStatusBadge(selectedMessage.status).cls}>
                           {getStatusBadge(selectedMessage.status).label}
                         </Badge>
-                        <Badge variant="outline">{selectedMessage.stageRole}</Badge>
+                        <Badge variant="outline">{stageLabel(selectedMessage.stageRole)}</Badge>
                       </div>
 
                       <div className="grid grid-cols-1 gap-3">
@@ -1157,11 +1432,11 @@ export default function MessagesManagement() {
                               <SelectValue placeholder="اختر المرحلة" />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="staff">staff</SelectItem>
-                              <SelectItem value="accountant">accountant</SelectItem>
-                              <SelectItem value="client">client</SelectItem>
-                              <SelectItem value="owner">owner</SelectItem>
-                              <SelectItem value="completed">completed</SelectItem>
+                              <SelectItem value="staff">مراجع</SelectItem>
+                              <SelectItem value="accountant">محاسب</SelectItem>
+                              <SelectItem value="client">العميل</SelectItem>
+                              <SelectItem value="owner">المالك</SelectItem>
+                              <SelectItem value="completed">مقفل</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
@@ -1180,9 +1455,9 @@ export default function MessagesManagement() {
                               <SelectItem value="new">جديد</SelectItem>
                               <SelectItem value="in_progress">قيد المعالجة</SelectItem>
                               <SelectItem value="needs_account">عند المحاسب</SelectItem>
-                              <SelectItem value="waiting_client_confirmation">انتظار تعميد العميل</SelectItem>
-                              <SelectItem value="resolved">تم الحل (تعميد العميل)</SelectItem>
-                              <SelectItem value="completed">مكتمل (مقفل)</SelectItem>
+                              <SelectItem value="waiting_client_confirmation">بانتظار تعميد العميل</SelectItem>
+                              <SelectItem value="resolved">تم تعميد العميل</SelectItem>
+                              <SelectItem value="completed">مقفل نهائيًا</SelectItem>
                               <SelectItem value="no_account">بدون حساب</SelectItem>
                               <SelectItem value="rejected">مرفوض</SelectItem>
                               <SelectItem value="closed">مغلق (قديم)</SelectItem>
@@ -1211,41 +1486,41 @@ export default function MessagesManagement() {
                           حفظ التغييرات
                         </Button>
 
-                        {/* ✅ Step Machine Buttons (حسب القاموس) */}
+                        {/* ✅ Step Machine Buttons */}
                         {selectedMessage ? (
                           <>
                             {/* 1) Staff -> Accountant */}
                             {canStaffActions &&
-                              normalizeForDisplay(selectedMessage).status === "new" &&
-                              normalizeForDisplay(selectedMessage).stageRole === "staff" ? (
+                            normalizeForDisplay(selectedMessage).status === "new" &&
+                            normalizeForDisplay(selectedMessage).stageRole === "staff" ? (
                               <Button
                                 className="bg-yellow-700 hover:bg-yellow-800"
                                 onClick={stepStaffForwardToAccountant}
                                 disabled={isLockedFinal}
                               >
                                 <Clock3 className="w-4 h-4 ml-2" />
-                                ترحيل مبدئي للمحاسب
+                                ترحيل للمحاسب
                               </Button>
                             ) : null}
 
                             {/* 2) Accountant -> Client */}
                             {canOwnerAccountantActions &&
-                              normalizeForDisplay(selectedMessage).status === "needs_account" &&
-                              normalizeForDisplay(selectedMessage).stageRole === "accountant" ? (
+                            normalizeForDisplay(selectedMessage).status === "needs_account" &&
+                            normalizeForDisplay(selectedMessage).stageRole === "accountant" ? (
                               <Button
                                 className="bg-indigo-700 hover:bg-indigo-800"
                                 onClick={stepAccountantForwardToClient}
                                 disabled={isLockedFinal}
                               >
                                 <PenLine className="w-4 h-4 ml-2" />
-                                تمت مراجعة الحساب — للعميل
+                                تمّت المراجعة — للعميل
                               </Button>
                             ) : null}
 
                             {/* 3) Client -> Owner */}
                             {myRole === "client" &&
-                              normalizeForDisplay(selectedMessage).status === "waiting_client_confirmation" &&
-                              normalizeForDisplay(selectedMessage).stageRole === "client" ? (
+                            normalizeForDisplay(selectedMessage).status === "waiting_client_confirmation" &&
+                            normalizeForDisplay(selectedMessage).stageRole === "client" ? (
                               <Button
                                 className="bg-emerald-700 hover:bg-emerald-800"
                                 onClick={stepClientApproveAndForwardToOwner}
@@ -1258,8 +1533,8 @@ export default function MessagesManagement() {
 
                             {/* 4) Owner -> Completed/Locked */}
                             {myRole === "owner" &&
-                              normalizeForDisplay(selectedMessage).status === "resolved" &&
-                              normalizeForDisplay(selectedMessage).stageRole === "owner" ? (
+                            normalizeForDisplay(selectedMessage).status === "resolved" &&
+                            normalizeForDisplay(selectedMessage).stageRole === "owner" ? (
                               <Button
                                 className="bg-gray-800 hover:bg-gray-900"
                                 onClick={stepOwnerFinalizeAndClose}
@@ -1280,39 +1555,7 @@ export default function MessagesManagement() {
                             disabled={isLockedFinal}
                           >
                             <PenLine className="w-4 h-4 ml-2" />
-                            ترحيل مبدئي (Legacy)
-                          </Button>
-                        ) : null}
-
-                        {/* ✅ Contract (disabled currently) */}
-                        {canCreateContract ? (
-                          <Button
-                            variant="outline"
-                            onClick={createContractForInvestment}
-                            disabled={isLockedFinal || contractBusy}
-                          >
-                            {contractBusy ? (
-                              <Loader2 className="w-4 h-4 ml-2 animate-spin" />
-                            ) : (
-                              <FileText className="w-4 h-4 ml-2" />
-                            )}
-                            إنشاء عقد
-                          </Button>
-                        ) : null}
-
-                        {/* ✅ Send for signing */}
-                        {canSendForSigning ? (
-                          <Button
-                            variant="outline"
-                            onClick={sendContractForSigning}
-                            disabled={isLockedFinal || contractBusy}
-                          >
-                            {contractBusy ? (
-                              <Loader2 className="w-4 h-4 ml-2 animate-spin" />
-                            ) : (
-                              <Upload className="w-4 h-4 ml-2" />
-                            )}
-                            إرسال للتوقيع (مستقبل)
+                            إنشاء الاستثمار (قديم)
                           </Button>
                         ) : null}
 
@@ -1328,7 +1571,7 @@ export default function MessagesManagement() {
                             ) : (
                               <Building2 className="w-4 h-4 ml-2" />
                             )}
-                            ترحيل نهائي للمشروع
+                            إقفال نهائي
                           </Button>
                         ) : null}
 
@@ -1353,7 +1596,7 @@ export default function MessagesManagement() {
                           ) : (
                             <Clock3 className="w-4 h-4 ml-2" />
                           )}
-                          إعادة فتح (أونر)
+                          إعادة فتح (للمالك)
                         </Button>
                       </div>
                     </CardContent>
@@ -1397,7 +1640,9 @@ export default function MessagesManagement() {
               <Button variant="outline" onClick={() => setReturnDialogOpen(false)}>
                 إلغاء
               </Button>
-              <Button className="w-full sm:w-auto" onClick={returnContractWithNote}>إرسال</Button>
+              <Button className="w-full sm:w-auto" onClick={returnContractWithNote}>
+                إرسال
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -1431,10 +1676,8 @@ function StatCard({
 
 function InfoRow({ label, value }: { label: string; value: any }) {
   return (
-    <div className="grid grid-cols-[88px_1fr] items-start gap-3">
-      <div className="text-xs text-muted-foreground text-right pt-1">
-        {label}
-      </div>
+    <div className="grid grid-cols-[110px_1fr] items-start gap-3">
+      <div className="text-xs text-muted-foreground text-right pt-1">{label}</div>
 
       <div className="text-sm font-semibold text-right break-words leading-7">
         {value ?? "—"}
@@ -1442,4 +1685,3 @@ function InfoRow({ label, value }: { label: string; value: any }) {
     </div>
   );
 }
-

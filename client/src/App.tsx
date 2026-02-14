@@ -28,7 +28,7 @@ import Reports from "@/pages/admin/Reports";
 import Settings from "@/pages/admin/Settings";
 import FinancialManagement from "./pages/admin/Financial";
 import ClientsManagement from "./pages/admin/Clients";
-import ClientProfile from "./pages/admin/ClientProfile";
+import ClientProfile from "@/pages/admin/ClientProfile";
 import MessagesManagement from "./pages/admin/Messages";
 import AuditLogPage from "./pages/admin/AuditLog";
 import DebugAuthPage from "./pages/admin/DebugAuth";
