@@ -117,7 +117,7 @@ function isMilestoneDone(status: any) {
   );
 }
 
-type Attachment = { name?: string; url?: string };
+type Attachment = { name?: string; url?: string; externalUrl?: string };
 type Milestone = { title?: string; date?: string; status?: string; description?: string };
 type Faq = { q?: string; a?: string };
 
@@ -735,22 +735,55 @@ export default function ProjectDetails() {
                 </CardHeader>
                 <CardContent className="grid md:grid-cols-2 gap-3">
                   {attachments.map((a, idx) => {
-                    const url = (a?.url || "").toString().trim();
-                    if (!url) return null;
+                    const fileUrl = (a?.url || "").toString().trim();
+                    const externalUrl = (a?.externalUrl || "").toString().trim();
+                    if (!fileUrl && !externalUrl) return null;
+
                     return (
-                      <a
+                      <div
                         key={idx}
-                        href={url}
-                        target="_blank"
-                        rel="noreferrer"
                         className="rounded-xl border p-4 hover:bg-muted/40 transition flex items-start gap-3"
                       >
                         <FileText className="w-5 h-5 mt-0.5 text-primary" />
-                        <div className="space-y-1">
+                        <div className="space-y-2 w-full">
                           <div className="font-semibold">{a?.name || "ملف"}</div>
-                          <div className="text-xs text-muted-foreground break-all">{url}</div>
+
+                          <div className="flex flex-wrap gap-2">
+                            {fileUrl ? (
+                              <a
+                                href={fileUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-xs px-2 py-1 rounded border hover:bg-muted"
+                              >
+                                فتح الملف
+                              </a>
+                            ) : null}
+
+                            {externalUrl ? (
+                              <a
+                                href={externalUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-xs px-2 py-1 rounded border hover:bg-muted"
+                              >
+                                فتح الرابط
+                              </a>
+                            ) : null}
+                          </div>
+
+                          {fileUrl ? (
+                            <div className="text-xs text-muted-foreground break-all">
+                              ملف: {fileUrl}
+                            </div>
+                          ) : null}
+                          {externalUrl ? (
+                            <div className="text-xs text-muted-foreground break-all">
+                              رابط: {externalUrl}
+                            </div>
+                          ) : null}
                         </div>
-                      </a>
+                      </div>
                     );
                   })}
                 </CardContent>

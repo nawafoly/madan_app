@@ -1,0 +1,45 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userDocExists() {
+      return signedIn()
+        && firestore.exists(/databases/(default)/documents/users/$(request.auth.uid));
+    }
+
+    function myRole() {
+      return (userDocExists()
+        && (firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role is string))
+        ? firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role.lower()
+        : "guest";
+    }
+
+    function isOps() {
+      return signedIn() && myRole() in ["owner", "admin", "staff", "accountant"];
+    }
+
+    function isImageUpload() {
+      return request.resource != null
+        && request.resource.contentType != null
+        && request.resource.contentType.matches("image/.*");
+    }
+
+    match /projects/{projectId}/images/{allPaths=**} {
+      allow read: if true;
+      allow create, update: if isOps() && isImageUpload();
+      allow delete: if isOps();
+    }
+
+    match /projects/{projectId}/attachments/{allPaths=**} {
+      allow read: if true;
+      allow write: if isOps();
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

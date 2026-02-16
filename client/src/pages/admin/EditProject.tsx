@@ -1,7 +1,8 @@
 // client/src/pages/admin/EditProject.tsx
 import { useEffect, useMemo, useState } from "react";
 import { useRoute, useLocation } from "wouter";
-import { doc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, updateDoc } from "firebase/firestore";
+import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db } from "@/_core/firebase";
 
 import DashboardLayout from "@/components/DashboardLayout";
@@ -34,7 +35,6 @@ type ProgressMode = "funding" | "milestones" | "hybrid";
 function cleanStr(v: any) {
   return String(v ?? "").trim();
 }
-
 function toNumOrNull(v: any) {
   const s = cleanStr(v).replace(/,/g, "");
   if (!s) return null;
@@ -76,19 +76,129 @@ function normalizeCover(src?: string) {
   return `/${s}`;
 }
 
-type Attachment = { name?: string; url?: string };
+function safeFileName(name: string) {
+  return name.replace(/[^\w.\-]+/g, "_");
+}
+
+type Attachment = { name?: string; url?: string; externalUrl?: string };
 type Milestone = { title?: string; date?: string; status?: string; description?: string };
 type Faq = { q?: string; a?: string };
 
-function parseJsonArray<T>(text: string): T[] {
-  const raw = cleanStr(text);
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? (parsed as T[]) : [];
-  } catch {
-    return [];
-  }
+type ParseResult<T> = { items: T[]; errors: string[] };
+
+type AttachmentRow = { name: string; url: string; externalUrl: string; uploading?: boolean };
+type MilestoneRow = { title: string; date: string; status: string; description: string };
+type FaqRow = { q: string; a: string };
+
+const newAttachmentRow = (): AttachmentRow => ({ name: "", url: "", externalUrl: "" });
+const newMilestoneRow = (): MilestoneRow => ({
+  title: "",
+  date: "",
+  status: "",
+  description: "",
+});
+const newFaqRow = (): FaqRow => ({ q: "", a: "" });
+
+function attachmentRowsFromItems(items: Attachment[]): AttachmentRow[] {
+  const rows = items
+    .map((item) => ({
+      name: cleanStr(item?.name),
+      url: cleanStr(item?.url),
+      externalUrl: cleanStr(item?.externalUrl),
+      uploading: false,
+    }))
+    .filter((row) => row.name || row.url || row.externalUrl);
+  return rows.length ? rows : [newAttachmentRow()];
+}
+
+function milestoneRowsFromItems(items: Milestone[]): MilestoneRow[] {
+  const rows = items
+    .map((item) => ({
+      title: cleanStr(item?.title),
+      date: cleanStr(item?.date),
+      status: cleanStr(item?.status),
+      description: cleanStr(item?.description),
+    }))
+    .filter((row) => row.title || row.date || row.status || row.description);
+  return rows.length ? rows : [newMilestoneRow()];
+}
+
+function faqRowsFromItems(items: Faq[]): FaqRow[] {
+  const rows = items
+    .map((item) => ({
+      q: cleanStr(item?.q),
+      a: cleanStr(item?.a),
+    }))
+    .filter((row) => row.q || row.a);
+  return rows.length ? rows : [newFaqRow()];
+}
+
+function parseAttachmentRows(rows: AttachmentRow[]): ParseResult<Attachment> {
+  const items: Attachment[] = [];
+  const errors: string[] = [];
+
+  rows.forEach((row, idx) => {
+    const name = cleanStr(row.name);
+    const fileUrl = cleanStr(row.url);
+    const externalUrl = cleanStr(row.externalUrl);
+    if (!name && !fileUrl && !externalUrl) return;
+    if (!fileUrl && !externalUrl) {
+      errors.push(`المرفق ${idx + 1}: أضف ملفًا أو رابطًا خارجيًا على الأقل.`);
+      return;
+    }
+    items.push({
+      name: name || `مرفق ${idx + 1}`,
+      ...(fileUrl ? { url: fileUrl } : {}),
+      ...(externalUrl ? { externalUrl } : {}),
+    });
+  });
+
+  return { items, errors };
+}
+
+function parseMilestoneRows(rows: MilestoneRow[]): ParseResult<Milestone> {
+  const items: Milestone[] = [];
+  const errors: string[] = [];
+
+  rows.forEach((row, idx) => {
+    const title = cleanStr(row.title);
+    const date = cleanStr(row.date);
+    const status = cleanStr(row.status);
+    const description = cleanStr(row.description);
+
+    if (!title && !date && !status && !description) return;
+    if (!title) {
+      errors.push(`المرحلة ${idx + 1}: العنوان مطلوب.`);
+      return;
+    }
+
+    items.push({
+      title,
+      ...(date ? { date } : {}),
+      ...(status ? { status } : {}),
+      ...(description ? { description } : {}),
+    });
+  });
+
+  return { items, errors };
+}
+
+function parseFaqRows(rows: FaqRow[]): ParseResult<Faq> {
+  const items: Faq[] = [];
+  const errors: string[] = [];
+
+  rows.forEach((row, idx) => {
+    const q = cleanStr(row.q);
+    const a = cleanStr(row.a);
+    if (!q && !a) return;
+    if (!q) {
+      errors.push(`سؤال FAQ رقم ${idx + 1}: السؤال مطلوب.`);
+      return;
+    }
+    items.push(a ? { q, a } : { q });
+  });
+
+  return { items, errors };
 }
 
 export default function EditProject() {
@@ -98,6 +208,8 @@ export default function EditProject() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [coverUploading, setCoverUploading] = useState(false);
+  const [galleryUploading, setGalleryUploading] = useState(false);
   const [projectExists, setProjectExists] = useState(true);
 
   const [meta, setMeta] = useState<{ createdAt?: any; updatedAt?: any }>({});
@@ -137,12 +249,6 @@ export default function EditProject() {
     isVip: "false" as "true" | "false",
     vipTier: "none" as VipTier,
 
-    // ✅ NEW (for ProjectDetails)
-    highlightsText: "",   // كل سطر = ميزة
-    attachmentsJson: "",  // JSON array
-    milestonesJson: "",   // JSON array
-    faqJson: "",          // JSON array
-
     // ✅ NEW (progress control)
     progressMode: "hybrid" as ProgressMode,
     progressFundingWeight: "60",
@@ -150,23 +256,107 @@ export default function EditProject() {
   });
 
   const galleryUrls = useMemo(() => splitLines(formData.galleryText), [formData.galleryText]);
+  const [highlightRows, setHighlightRows] = useState<string[]>([""]);
+  const [attachmentRows, setAttachmentRows] = useState<AttachmentRow[]>([
+    newAttachmentRow(),
+  ]);
+  const [milestoneRows, setMilestoneRows] = useState<MilestoneRow[]>([
+    newMilestoneRow(),
+  ]);
+  const [faqRows, setFaqRows] = useState<FaqRow[]>([newFaqRow()]);
 
-  const highlightsArr = useMemo(() => splitLines(formData.highlightsText), [formData.highlightsText]);
+  const handleAttachmentFileUpload = async (index: number, file?: File | null) => {
+    if (!file || !projectId) return;
 
-  const attachmentsArr = useMemo(
-    () => parseJsonArray<Attachment>(formData.attachmentsJson),
-    [formData.attachmentsJson]
-  );
+    try {
+      setAttachmentRows((prev) =>
+        prev.map((row, i) => (i === index ? { ...row, uploading: true } : row))
+      );
 
-  const milestonesArr = useMemo(
-    () => parseJsonArray<Milestone>(formData.milestonesJson),
-    [formData.milestonesJson]
-  );
+      const storage = getStorage();
+      const path = `projects/${projectId}/attachments/${Date.now()}-${index}-${safeFileName(
+        file.name
+      )}`;
+      const ref = storageRef(storage, path);
+      await uploadBytes(ref, file);
+      const downloadUrl = await getDownloadURL(ref);
 
-  const faqArr = useMemo(
-    () => parseJsonArray<Faq>(formData.faqJson),
-    [formData.faqJson]
-  );
+      setAttachmentRows((prev) =>
+        prev.map((row, i) =>
+          i === index
+            ? {
+                ...row,
+                url: downloadUrl,
+                name: row.name || file.name,
+                uploading: false,
+              }
+            : row
+        )
+      );
+      toast.success("تم رفع الملف بنجاح");
+    } catch (e) {
+      console.error(e);
+      setAttachmentRows((prev) =>
+        prev.map((row, i) => (i === index ? { ...row, uploading: false } : row))
+      );
+      toast.error("فشل رفع الملف");
+    }
+  };
+
+  const handleCoverImageUpload = async (file?: File | null) => {
+    if (!file || !projectId) return;
+
+    try {
+      setCoverUploading(true);
+      const storage = getStorage();
+      const path = `projects/${projectId}/images/cover/${Date.now()}-${safeFileName(file.name)}`;
+      const ref = storageRef(storage, path);
+      await uploadBytes(ref, file);
+      const downloadUrl = await getDownloadURL(ref);
+      setFormData((prev) => ({ ...prev, coverImage: downloadUrl }));
+      toast.success("تم رفع صورة الغلاف بنجاح");
+    } catch (e) {
+      console.error(e);
+      toast.error("فشل رفع صورة الغلاف");
+    } finally {
+      setCoverUploading(false);
+    }
+  };
+
+  const handleGalleryImageUpload = async (files?: FileList | null) => {
+    if (!projectId) return;
+    const selected = Array.from(files ?? []);
+    if (!selected.length) return;
+
+    try {
+      setGalleryUploading(true);
+      const storage = getStorage();
+      const uploadedUrls = await Promise.all(
+        selected.map(async (file, index) => {
+          const path = `projects/${projectId}/images/gallery/${Date.now()}-${index}-${safeFileName(file.name)}`;
+          const ref = storageRef(storage, path);
+          await uploadBytes(ref, file);
+          return getDownloadURL(ref);
+        })
+      );
+
+      setFormData((prev) => {
+        const current = prev.galleryText.trim();
+        const appended = uploadedUrls.join("\n");
+        return { ...prev, galleryText: current ? `${current}\n${appended}` : appended };
+      });
+      toast.success(
+        selected.length === 1
+          ? "تم رفع صورة المعرض بنجاح"
+          : `تم رفع ${selected.length} صور للمعرض بنجاح`
+      );
+    } catch (e) {
+      console.error(e);
+      toast.error("فشل رفع صور المعرض");
+    } finally {
+      setGalleryUploading(false);
+    }
+  };
 
   /* =========================
      Load project from Firestore
@@ -235,12 +425,6 @@ export default function EditProject() {
           isVip: String(Boolean(p.isVip)) as "true" | "false",
           vipTier: (p.vipTier ?? "none") as VipTier,
 
-          // ✅ NEW
-          highlightsText: highlightsArr.join("\n"),
-          attachmentsJson: attachmentsArr.length ? JSON.stringify(attachmentsArr, null, 2) : "",
-          milestonesJson: milestonesArr.length ? JSON.stringify(milestonesArr, null, 2) : "",
-          faqJson: faqArr.length ? JSON.stringify(faqArr, null, 2) : "",
-
           // ✅ progress control
           progressMode: (p.progressMode ?? "hybrid") as ProgressMode,
           progressFundingWeight:
@@ -248,6 +432,10 @@ export default function EditProject() {
           progressMilestonesWeight:
             p.progressMilestonesWeight != null ? String(p.progressMilestonesWeight) : "40",
         });
+        setHighlightRows(highlightsArr.length ? highlightsArr : [""]);
+        setAttachmentRows(attachmentRowsFromItems(attachmentsArr));
+        setMilestoneRows(milestoneRowsFromItems(milestonesArr));
+        setFaqRows(faqRowsFromItems(faqArr));
       } catch (err) {
         console.error(err);
         toast.error("فشل تحميل المشروع");
@@ -266,23 +454,34 @@ export default function EditProject() {
     e.preventDefault();
     if (!projectId) return;
 
-    // ✅ تحقق JSON قبل الحفظ (عشان ما تحفظ نص مكسر)
-    const validateJson = (label: string, text: string) => {
-      const t = cleanStr(text);
-      if (!t) return true;
-      try {
-        const parsed = JSON.parse(t);
-        if (!Array.isArray(parsed)) throw new Error("not array");
-        return true;
-      } catch {
-        toast.error(`${label}: لازم يكون JSON Array صحيح`);
-        return false;
-      }
-    };
+    if (coverUploading || galleryUploading) {
+      toast.warning("انتظر حتى يكتمل رفع الصور.");
+      return;
+    }
+    if (attachmentRows.some((row) => row.uploading)) {
+      toast.warning("انتظر حتى يكتمل رفع المرفقات.");
+      return;
+    }
 
-    if (!validateJson("Attachments", formData.attachmentsJson)) return;
-    if (!validateJson("Milestones", formData.milestonesJson)) return;
-    if (!validateJson("FAQ", formData.faqJson)) return;
+    const highlightsArr = highlightRows.map((x) => cleanStr(x)).filter(Boolean);
+
+    const parsedAttachments = parseAttachmentRows(attachmentRows);
+    if (parsedAttachments.errors.length) {
+      toast.error(`المرفقات: ${parsedAttachments.errors[0]}`);
+      return;
+    }
+
+    const parsedMilestones = parseMilestoneRows(milestoneRows);
+    if (parsedMilestones.errors.length) {
+      toast.error(`المراحل: ${parsedMilestones.errors[0]}`);
+      return;
+    }
+
+    const parsedFaq = parseFaqRows(faqRows);
+    if (parsedFaq.errors.length) {
+      toast.error(`الأسئلة الشائعة: ${parsedFaq.errors[0]}`);
+      return;
+    }
 
     try {
       setSaving(true);
@@ -320,9 +519,9 @@ export default function EditProject() {
 
         // ✅ NEW (for ProjectDetails)
         highlights: highlightsArr,
-        attachments: parseJsonArray<Attachment>(formData.attachmentsJson),
-        milestones: parseJsonArray<Milestone>(formData.milestonesJson),
-        faq: parseJsonArray<Faq>(formData.faqJson),
+        attachments: parsedAttachments.items,
+        milestones: parsedMilestones.items,
+        faq: parsedFaq.items,
 
         // ✅ progress control (NEW)
         progressMode: formData.progressMode,
@@ -401,15 +600,19 @@ export default function EditProject() {
             <CardContent className="space-y-4">
               <div className="grid md:grid-cols-2 gap-4">
                 <div>
-                  <Label>العنوان (عربي)</Label>
+                  <Label className="mb-2 block">العنوان (عربي)</Label>
                   <Input
+                    dir="rtl"
+                    className="text-right"
                     value={formData.titleAr}
                     onChange={(e) => setFormData({ ...formData, titleAr: e.target.value })}
                   />
                 </div>
                 <div>
-                  <Label>العنوان (إنجليزي)</Label>
+                  <Label className="mb-2 block">العنوان (إنجليزي)</Label>
                   <Input
+                    dir="ltr"
+                    className="text-left"
                     value={formData.titleEn}
                     onChange={(e) => setFormData({ ...formData, titleEn: e.target.value })}
                   />
@@ -417,18 +620,22 @@ export default function EditProject() {
               </div>
 
               <div>
-                <Label>الوصف (عربي)</Label>
+                <Label className="mb-2 block">الوصف (عربي)</Label>
                 <Textarea
                   rows={4}
+                  dir="rtl"
+                  className="py-3 text-right leading-8"
                   value={formData.descriptionAr}
                   onChange={(e) => setFormData({ ...formData, descriptionAr: e.target.value })}
                 />
               </div>
 
               <div>
-                <Label>الوصف (إنجليزي)</Label>
+                <Label className="mb-2 block">الوصف (إنجليزي)</Label>
                 <Textarea
                   rows={4}
+                  dir="ltr"
+                  className="py-3 text-left leading-8"
                   value={formData.descriptionEn}
                   onChange={(e) => setFormData({ ...formData, descriptionEn: e.target.value })}
                 />
@@ -445,12 +652,12 @@ export default function EditProject() {
 
             <CardContent className="grid md:grid-cols-2 gap-4">
               <div>
-                <Label>نوع المشروع</Label>
+                <Label className="mb-2 block">نوع المشروع</Label>
                 <Select
                   value={formData.projectType}
                   onValueChange={(v) => setFormData({ ...formData, projectType: v as ProjectType })}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="text-right">
                     <SelectValue placeholder="اختر النوع" />
                   </SelectTrigger>
                   <SelectContent>
@@ -462,12 +669,12 @@ export default function EditProject() {
               </div>
 
               <div>
-                <Label>الحالة</Label>
+                <Label className="mb-2 block">الحالة</Label>
                 <Select
                   value={formData.status}
                   onValueChange={(v) => setFormData({ ...formData, status: v as ProjectStatus })}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="text-right">
                     <SelectValue placeholder="اختر الحالة" />
                   </SelectTrigger>
                   <SelectContent>
@@ -480,8 +687,10 @@ export default function EditProject() {
               </div>
 
               <div>
-                <Label>رقم الإصدار </Label>
+                <Label className="mb-2 block">رقم الإصدار </Label>
                 <Input
+                  dir="ltr"
+                  className="text-left"
                   value={formData.issueNumber}
                   onChange={(e) => setFormData({ ...formData, issueNumber: e.target.value })}
                   placeholder="مثال: 2026-01"
@@ -489,16 +698,20 @@ export default function EditProject() {
               </div>
 
               <div>
-                <Label>الموقع (عربي)</Label>
+                <Label className="mb-2 block">الموقع (عربي)</Label>
                 <Input
+                  dir="rtl"
+                  className="text-right"
                   value={formData.locationAr}
                   onChange={(e) => setFormData({ ...formData, locationAr: e.target.value })}
                 />
               </div>
 
               <div className="md:col-span-2">
-                <Label>الموقع (إنجليزي)</Label>
+                <Label className="mb-2 block">الموقع (إنجليزي)</Label>
                 <Input
+                  dir="ltr"
+                  className="text-left"
                   value={formData.locationEn}
                   onChange={(e) => setFormData({ ...formData, locationEn: e.target.value })}
                 />
@@ -525,6 +738,19 @@ export default function EditProject() {
                   <p className="text-xs text-muted-foreground">
                     إذا الصورة داخل public اكتب اسم الملف أو ابدأ بـ /
                   </p>
+                  <Label className="mt-2 block">أو إرفاق صورة غلاف</Label>
+                  <Input
+                    type="file"
+                    accept="image/*"
+                    disabled={coverUploading}
+                    onChange={(e) => {
+                      void handleCoverImageUpload(e.target.files?.[0] ?? null);
+                      e.currentTarget.value = "";
+                    }}
+                  />
+                  {coverUploading ? (
+                    <p className="text-xs text-muted-foreground">جاري رفع صورة الغلاف...</p>
+                  ) : null}
                 </div>
 
                 <div className="rounded-lg border overflow-hidden bg-muted h-[180px] flex items-center justify-center">
@@ -551,6 +777,20 @@ export default function EditProject() {
                   onChange={(e) => setFormData({ ...formData, galleryText: e.target.value })}
                   placeholder={`HOOM-HERO.png\n/bg-01-l.png\nhttps://...`}
                 />
+                <Label className="mt-2 block">أو إرفاق صور للمعرض</Label>
+                <Input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  disabled={galleryUploading}
+                  onChange={(e) => {
+                    void handleGalleryImageUpload(e.target.files);
+                    e.currentTarget.value = "";
+                  }}
+                />
+                {galleryUploading ? (
+                  <p className="text-xs text-muted-foreground">جاري رفع صور المعرض...</p>
+                ) : null}
               </div>
 
               {galleryUrls.length > 0 && (
@@ -579,15 +819,43 @@ export default function EditProject() {
           <Card>
             <CardHeader>
               <CardTitle>مميزات المشروع</CardTitle>
-              <CardDescription>كل ميزة في سطر</CardDescription>
+              <CardDescription>كل ميزة في خانة مستقلة</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-2">
-              <Textarea
-                rows={6}
-                value={formData.highlightsText}
-                onChange={(e) => setFormData({ ...formData, highlightsText: e.target.value })}
-                placeholder={`موقع استراتيجي\nعائد سنوي مستهدف\nإدارة احترافية`}
-              />
+            <CardContent className="space-y-3">
+              {highlightRows.map((value, idx) => (
+                <div key={`highlight-${idx}`} className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2">
+                  <Input
+                    dir="rtl"
+                    className="text-right"
+                    value={value}
+                    onChange={(e) =>
+                      setHighlightRows((prev) =>
+                        prev.map((row, i) => (i === idx ? e.target.value : row))
+                      )
+                    }
+                    placeholder={`الميزة ${idx + 1}`}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() =>
+                      setHighlightRows((prev) =>
+                        prev.length === 1 ? prev : prev.filter((_, i) => i !== idx)
+                      )
+                    }
+                    disabled={highlightRows.length === 1}
+                  >
+                    حذف
+                  </Button>
+                </div>
+              ))}
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setHighlightRows((prev) => [...prev, ""])}
+              >
+                إضافة ميزة
+              </Button>
               <p className="text-xs text-muted-foreground">
                 ProjectDetails بيعرضها تلقائي إذا فيه عناصر.
               </p>
@@ -598,21 +866,105 @@ export default function EditProject() {
           <Card>
             <CardHeader>
               <CardTitle>مرفقات</CardTitle>
-              <CardDescription>اكتب JSON Array (نسخ/لصق)</CardDescription>
+              <CardDescription>كل مرفق في صف: الاسم + ملف مرفوع + رابط خارجي</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-2">
-              <Textarea
-                rows={8}
-                value={formData.attachmentsJson}
-                onChange={(e) => setFormData({ ...formData, attachmentsJson: e.target.value })}
-                placeholder={`[
-  { "name": "دراسة الجدوى", "url": "https://example.com/file.pdf" },
-  { "name": "النشرة", "url": "https://example.com/brochure.pdf" }
-]`}
-              />
-              <p className="text-xs text-muted-foreground">
-                لازم يكون JSON صحيح ومصفوفة.
-              </p>
+            <CardContent className="space-y-3">
+              {attachmentRows.map((row, idx) => (
+                <div key={`attachment-${idx}`} className="rounded-md border p-3 space-y-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label>الاسم</Label>
+                      <Input
+                        dir="rtl"
+                        className="text-right"
+                        value={row.name}
+                        onChange={(e) =>
+                          setAttachmentRows((prev) =>
+                            prev.map((item, i) =>
+                              i === idx ? { ...item, name: e.target.value } : item
+                            )
+                          )
+                        }
+                        placeholder={`اسم المرفق ${idx + 1}`}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>رابط خارجي (اختياري)</Label>
+                      <Input
+                        dir="ltr"
+                        className="text-left"
+                        value={row.externalUrl}
+                        onChange={(e) =>
+                          setAttachmentRows((prev) =>
+                            prev.map((item, i) =>
+                              i === idx ? { ...item, externalUrl: e.target.value } : item
+                            )
+                          )
+                        }
+                        placeholder="https://example.com"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3 items-end">
+                    <div className="space-y-1">
+                      <Label>إرفاق ملف</Label>
+                      <Input
+                        type="file"
+                        onChange={(e) => handleAttachmentFileUpload(idx, e.target.files?.[0] ?? null)}
+                        disabled={row.uploading}
+                      />
+                      {row.uploading ? (
+                        <p className="text-xs text-muted-foreground">جاري رفع الملف...</p>
+                      ) : row.url ? (
+                        <a
+                          href={row.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs text-blue-600 underline break-all"
+                        >
+                          عرض الملف المرفوع
+                        </a>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">لم يتم رفع ملف بعد.</p>
+                      )}
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() =>
+                        setAttachmentRows((prev) =>
+                          prev.map((item, i) => (i === idx ? { ...item, url: "" } : item))
+                        )
+                      }
+                      disabled={!row.url || row.uploading}
+                    >
+                      مسح الملف
+                    </Button>
+                  </div>
+                  <div className="flex justify-end">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() =>
+                        setAttachmentRows((prev) =>
+                          prev.length === 1 ? prev : prev.filter((_, i) => i !== idx)
+                        )
+                      }
+                      disabled={attachmentRows.length === 1}
+                    >
+                      حذف المرفق
+                    </Button>
+                  </div>
+                </div>
+              ))}
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setAttachmentRows((prev) => [...prev, newAttachmentRow()])}
+              >
+                إضافة مرفق
+              </Button>
             </CardContent>
           </Card>
 
@@ -620,18 +972,100 @@ export default function EditProject() {
           <Card>
             <CardHeader>
               <CardTitle>المراحل</CardTitle>
-              <CardDescription>JSON Array</CardDescription>
+              <CardDescription>كل مرحلة في صف مستقل: عنوان + تاريخ + حالة + وصف</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-2">
-              <Textarea
-                rows={10}
-                value={formData.milestonesJson}
-                onChange={(e) => setFormData({ ...formData, milestonesJson: e.target.value })}
-                placeholder={`[
-  { "title": "التصميم", "date": "2026-02", "status": "قيد التنفيذ", "description": "..." },
-  { "title": "بدء التنفيذ", "date": "2026-04", "status": "قريباً" }
-]`}
-              />
+            <CardContent className="space-y-3">
+              {milestoneRows.map((row, idx) => (
+                <div key={`milestone-${idx}`} className="rounded-md border p-3 space-y-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label>العنوان</Label>
+                      <Input
+                        dir="rtl"
+                        className="text-right"
+                        value={row.title}
+                        onChange={(e) =>
+                          setMilestoneRows((prev) =>
+                            prev.map((item, i) =>
+                              i === idx ? { ...item, title: e.target.value } : item
+                            )
+                          )
+                        }
+                        placeholder={`عنوان المرحلة ${idx + 1}`}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>التاريخ</Label>
+                      <Input
+                        dir="ltr"
+                        className="text-left"
+                        value={row.date}
+                        onChange={(e) =>
+                          setMilestoneRows((prev) =>
+                            prev.map((item, i) =>
+                              i === idx ? { ...item, date: e.target.value } : item
+                            )
+                          )
+                        }
+                        placeholder="2026-02"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>الحالة</Label>
+                      <Input
+                        dir="rtl"
+                        className="text-right"
+                        value={row.status}
+                        onChange={(e) =>
+                          setMilestoneRows((prev) =>
+                            prev.map((item, i) =>
+                              i === idx ? { ...item, status: e.target.value } : item
+                            )
+                          )
+                        }
+                        placeholder="قيد التنفيذ"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>الوصف</Label>
+                      <Input
+                        dir="rtl"
+                        className="text-right"
+                        value={row.description}
+                        onChange={(e) =>
+                          setMilestoneRows((prev) =>
+                            prev.map((item, i) =>
+                              i === idx ? { ...item, description: e.target.value } : item
+                            )
+                          )
+                        }
+                        placeholder="وصف مختصر للمرحلة"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex justify-end">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() =>
+                        setMilestoneRows((prev) =>
+                          prev.length === 1 ? prev : prev.filter((_, i) => i !== idx)
+                        )
+                      }
+                      disabled={milestoneRows.length === 1}
+                    >
+                      حذف المرحلة
+                    </Button>
+                  </div>
+                </div>
+              ))}
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setMilestoneRows((prev) => [...prev, newMilestoneRow()])}
+              >
+                إضافة مرحلة
+              </Button>
             </CardContent>
           </Card>
 
@@ -639,18 +1073,67 @@ export default function EditProject() {
           <Card>
             <CardHeader>
               <CardTitle>الأسئلة الشائعة (faq)</CardTitle>
-              <CardDescription>JSON Array</CardDescription>
+              <CardDescription>كل سؤال في صف مستقل: سؤال + جواب</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-2">
-              <Textarea
-                rows={10}
-                value={formData.faqJson}
-                onChange={(e) => setFormData({ ...formData, faqJson: e.target.value })}
-                placeholder={`[
-  { "q": "كيف الاستثمار؟", "a": "تسجل حساب ثم تختار المبلغ وتقدّم الطلب." },
-  { "q": "هل متوافق مع الشريعة؟", "a": "نعم وفق ضوابط محددة." }
-]`}
-              />
+            <CardContent className="space-y-3">
+              {faqRows.map((row, idx) => (
+                <div key={`faq-${idx}`} className="rounded-md border p-3 space-y-3">
+                  <div className="space-y-1">
+                    <Label>السؤال</Label>
+                    <Input
+                      dir="rtl"
+                      className="text-right"
+                      value={row.q}
+                      onChange={(e) =>
+                        setFaqRows((prev) =>
+                          prev.map((item, i) =>
+                            i === idx ? { ...item, q: e.target.value } : item
+                          )
+                        )
+                      }
+                      placeholder={`السؤال ${idx + 1}`}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>الجواب</Label>
+                    <Textarea
+                      rows={2}
+                      dir="rtl"
+                      className="text-right"
+                      value={row.a}
+                      onChange={(e) =>
+                        setFaqRows((prev) =>
+                          prev.map((item, i) =>
+                            i === idx ? { ...item, a: e.target.value } : item
+                          )
+                        )
+                      }
+                      placeholder="اكتب الجواب"
+                    />
+                  </div>
+                  <div className="flex justify-end">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() =>
+                        setFaqRows((prev) =>
+                          prev.length === 1 ? prev : prev.filter((_, i) => i !== idx)
+                        )
+                      }
+                      disabled={faqRows.length === 1}
+                    >
+                      حذف السؤال
+                    </Button>
+                  </div>
+                </div>
+              ))}
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setFaqRows((prev) => [...prev, newFaqRow()])}
+              >
+                إضافة سؤال
+              </Button>
             </CardContent>
           </Card>
 
@@ -663,54 +1146,66 @@ export default function EditProject() {
 
             <CardContent className="grid md:grid-cols-3 gap-4">
               <div>
-                <Label>المبلغ المستهدف </Label>
+                <Label className="mb-2 block">المبلغ المستهدف </Label>
                 <Input
                   inputMode="numeric"
+                  dir="ltr"
+                  className="text-left"
                   value={formData.targetAmount}
                   onChange={(e) => setFormData({ ...formData, targetAmount: e.target.value })}
                 />
               </div>
 
               <div>
-                <Label>المبلغ الحالي</Label>
+                <Label className="mb-2 block">المبلغ الحالي</Label>
                 <Input
                   inputMode="numeric"
+                  dir="ltr"
+                  className="text-left"
                   value={formData.currentAmount}
                   onChange={(e) => setFormData({ ...formData, currentAmount: e.target.value })}
                 />
               </div>
 
               <div>
-                <Label>الحد الأدنى</Label>
+                <Label className="mb-2 block">الحد الأدنى</Label>
                 <Input
                   inputMode="numeric"
+                  dir="ltr"
+                  className="text-left"
                   value={formData.minInvestment}
                   onChange={(e) => setFormData({ ...formData, minInvestment: e.target.value })}
                 />
               </div>
 
               <div>
-                <Label>العائد السنوي % </Label>
+                <Label className="mb-2 block">العائد السنوي % </Label>
                 <Input
                   inputMode="numeric"
+                  dir="ltr"
+                  className="text-left"
                   value={formData.annualReturn}
                   onChange={(e) => setFormData({ ...formData, annualReturn: e.target.value })}
                 />
               </div>
 
               <div>
-                <Label>المدة بالشهور </Label>
+                <Label className="mb-2 block">المدة بالشهور </Label>
                 <Input
                   inputMode="numeric"
+                  dir="ltr"
+                  className="text-left"
                   value={formData.duration}
                   onChange={(e) => setFormData({ ...formData, duration: e.target.value })}
                 />
               </div>
 
               <div>
-                <Label>عدد المستثمرين </Label>
+                <Label className="mb-2 block">عدد المستثمرين </Label>
                 <Input
                   inputMode="numeric"
+                  dir="ltr"
+                  className="text-left"
                   value={formData.investorsCount}
                   onChange={(e) => setFormData({ ...formData, investorsCount: e.target.value })}
                 />
@@ -739,14 +1234,14 @@ export default function EditProject() {
 
             <CardContent className="grid md:grid-cols-3 gap-4">
               <div>
-                <Label>طريقة الحساب</Label>
+                <Label className="mb-2 block">طريقة الحساب</Label>
                 <Select
                   value={formData.progressMode}
                   onValueChange={(v) =>
                     setFormData({ ...formData, progressMode: v as ProgressMode })
                   }
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="text-right">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -760,9 +1255,11 @@ export default function EditProject() {
               {formData.progressMode === "hybrid" && (
                 <>
                   <div>
-                    <Label>معدل التمويل (%)</Label>
+                    <Label className="mb-2 block">معدل التمويل (%)</Label>
                     <Input
                       inputMode="numeric"
+                      dir="ltr"
+                      className="text-left"
                       value={formData.progressFundingWeight}
                       onChange={(e) =>
                         setFormData({ ...formData, progressFundingWeight: e.target.value })
@@ -772,9 +1269,11 @@ export default function EditProject() {
                   </div>
 
                   <div>
-                    <Label>معدل المراحل (%)</Label>
+                    <Label className="mb-2 block">معدل المراحل (%)</Label>
                     <Input
                       inputMode="numeric"
+                      dir="ltr"
+                      className="text-left"
                       value={formData.progressMilestonesWeight}
                       onChange={(e) =>
                         setFormData({ ...formData, progressMilestonesWeight: e.target.value })
@@ -800,12 +1299,12 @@ export default function EditProject() {
 
             <CardContent className="grid md:grid-cols-3 gap-4">
               <div>
-                <Label>مميز (featured)</Label>
+                <Label className="mb-2 block">مميز (featured)</Label>
                 <Select
                   value={formData.featured}
                   onValueChange={(v) => setFormData({ ...formData, featured: v as "true" | "false" })}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="text-right">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -816,12 +1315,12 @@ export default function EditProject() {
               </div>
 
               <div>
-                <Label>VIP (isVip)</Label>
+                <Label className="mb-2 block">VIP (isVip)</Label>
                 <Select
                   value={formData.isVip}
                   onValueChange={(v) => setFormData({ ...formData, isVip: v as "true" | "false" })}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="text-right">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -832,12 +1331,12 @@ export default function EditProject() {
               </div>
 
               <div>
-                <Label>مستوى VIP (vipTier)</Label>
+                <Label className="mb-2 block">مستوى VIP (vipTier)</Label>
                 <Select
                   value={formData.vipTier}
                   onValueChange={(v) => setFormData({ ...formData, vipTier: v as VipTier })}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="text-right">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -857,12 +1356,16 @@ export default function EditProject() {
               type="button"
               variant="outline"
               onClick={() => setLocation("/admin/projects")}
-              disabled={saving}
+              disabled={saving || coverUploading || galleryUploading}
             >
               إلغاء
             </Button>
 
-            <Button type="submit" disabled={saving} className="bg-[#F2B705] hover:bg-[#d9a504]">
+            <Button
+              type="submit"
+              disabled={saving || coverUploading || galleryUploading}
+              className="bg-[#F2B705] hover:bg-[#d9a504]"
+            >
               <Save className="w-4 h-4 ml-2" />
               {saving ? "جاري الحفظ..." : "حفظ التغييرات"}
             </Button>

@@ -53,13 +53,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 
 import {
   MessageSquare,
@@ -321,9 +314,6 @@ export default function MessagesManagement() {
 
   const [selectedMessage, setSelectedMessage] = useState<any>(null);
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
-
-  const [status, setStatus] = useState<MessageStatus>("new");
-  const [stageRole, setStageRole] = useState<StageRole>("staff");
 
   const [internalNotes, setInternalNotes] = useState("");
 
@@ -630,59 +620,6 @@ export default function MessagesManagement() {
     } catch (e) {
       console.error(e);
       toast.error("فشل حفظ الملاحظات");
-    }
-  };
-
-  // ✅ حفظ الحالة/المرحلة + الملاحظات (يدوي) — للباك أوفيس فقط
-  const handleUpdateStatus = async () => {
-    if (!selectedMessage) return;
-
-    if (myRole === "client") {
-      toast.error("صلاحيتك عرض فقط.");
-      return;
-    }
-
-    if (isLockedFinal && myRole !== "owner") {
-      toast.warning("الطلب مقفل ولا يمكن تعديل حالته.");
-      return;
-    }
-
-    try {
-      const ev = makeEvent({
-        type: "status_changed",
-        title: "تحديث الحالة/المرحلة",
-        note: `status: ${status} • stageRole: ${stageRole}`,
-        ...myActor(user, myRole),
-        meta: { status, stageRole },
-      });
-
-      await updateDoc(doc(db, REQUESTS_COL, selectedMessage.id), {
-        status,
-        stageRole,
-        internalNotes: internalNotes || null,
-        updatedAt: serverTimestamp(),
-        updatedByUid: user?.uid || null,
-        updatedByEmail: user?.email || null,
-        events: arrayUnion(ev),
-        ...actionMeta(user, myRole),
-      });
-
-      toast.success("تم حفظ التغييرات");
-      setSelectedMessage((prev: any) =>
-        prev
-          ? {
-              ...prev,
-              status,
-              stageRole,
-              internalNotes: internalNotes || null,
-              events: Array.isArray(prev.events) ? [...prev.events, ev] : [ev],
-            }
-          : prev
-      );
-      loadMessages();
-    } catch (e) {
-      console.error(e);
-      toast.error("فشل حفظ التغييرات");
     }
   };
 
@@ -1209,12 +1146,6 @@ export default function MessagesManagement() {
                                 };
 
                                 setSelectedMessage(normalizedOne);
-                                setStatus(
-                                  (normalizedOne.status || "new") as MessageStatus
-                                );
-                                setStageRole(
-                                  (normalizedOne.stageRole || "staff") as StageRole
-                                );
                                 setInternalNotes(String(normalizedOne.internalNotes || ""));
                                 setApprovedAmount(
                                   normalizedOne?.approvedAmount != null
@@ -1422,50 +1353,6 @@ export default function MessagesManagement() {
 
                       <div className="grid grid-cols-1 gap-3">
                         <div className="space-y-2">
-                          <Label>المرحلة</Label>
-                          <Select
-                            value={stageRole}
-                            onValueChange={(v) => setStageRole(v as StageRole)}
-                            disabled={isLockedFinal || myRole === "client"}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="اختر المرحلة" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="staff">مراجع</SelectItem>
-                              <SelectItem value="accountant">محاسب</SelectItem>
-                              <SelectItem value="client">العميل</SelectItem>
-                              <SelectItem value="owner">المالك</SelectItem>
-                              <SelectItem value="completed">مقفل</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-
-                        <div className="space-y-2">
-                          <Label>الحالة</Label>
-                          <Select
-                            value={status}
-                            onValueChange={(v) => setStatus(v as MessageStatus)}
-                            disabled={isLockedFinal || myRole === "client"}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="اختر الحالة" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="new">جديد</SelectItem>
-                              <SelectItem value="in_progress">قيد المعالجة</SelectItem>
-                              <SelectItem value="needs_account">عند المحاسب</SelectItem>
-                              <SelectItem value="waiting_client_confirmation">بانتظار تعميد العميل</SelectItem>
-                              <SelectItem value="resolved">تم تعميد العميل</SelectItem>
-                              <SelectItem value="completed">مقفل نهائيًا</SelectItem>
-                              <SelectItem value="no_account">بدون حساب</SelectItem>
-                              <SelectItem value="rejected">مرفوض</SelectItem>
-                              <SelectItem value="closed">مغلق (قديم)</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-
-                        <div className="space-y-2">
                           <Label>ملاحظات داخلية</Label>
                           <Textarea
                             value={internalNotes}
@@ -1479,11 +1366,11 @@ export default function MessagesManagement() {
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         <Button
-                          onClick={handleUpdateStatus}
+                          onClick={handleSaveNotesOnly}
                           disabled={isLockedFinal || myRole === "client"}
                         >
                           <CheckCircle2 className="w-4 h-4 ml-2" />
-                          حفظ التغييرات
+                          حفظ الملاحظات
                         </Button>
 
                         {/* ✅ Step Machine Buttons */}
