@@ -1,0 +1,5 @@
+{
+  "name": "madan_app",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:20",
+  "postCreateCommand": "corepack enable && pnpm install"
+}
