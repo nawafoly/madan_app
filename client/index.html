@@ -1,56 +1,56 @@
 <!doctype html>
 <html lang="ar">
-  <head>
-    <meta charset="UTF-8" />
 
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+<head>
+  <meta charset="UTF-8" />
 
-    <title>MAEDIN - منصة الاستثمار العقاري</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
 
-    <!-- ✅ Favicons (متوافق مع جميع المتصفحات) -->
-    <link rel="icon" href="/favicon.ico" sizes="any" />
-    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
-    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+  <title>MAEDIN - منصة الاستثمار العقاري</title>
 
-    <link rel="apple-touch-icon" sizes="180x180" href="/apple-icon-180x180.png" />
-    <link rel="manifest" href="/manifest.json" />
+  <!-- ✅ Favicons (متوافق مع جميع المتصفحات) -->
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
 
-    <meta name="theme-color" content="#ffffff" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-icon-180x180.png" />
+  <script type="module">
+    if (import.meta.env.PROD) {
+      const link = document.createElement("link");
+      link.rel = "manifest";
+      link.href = "/manifest.json";
+      document.head.appendChild(link);
+    }
+  </script>
+  <meta name="theme-color" content="#ffffff" />
 
-    <!-- ✅ Open Graph (Link Preview عند إرسال الرابط) -->
-    <meta property="og:title" content="MAEDIN - منصة الاستثمار العقاري" />
-    <meta
-      property="og:description"
-      content="منصة معدن لإدارة الاستثمارات والمشاريع العقارية بطريقة احترافية وآمنة."
-    />
-    <meta property="og:image" content="https://madan-app.vercel.app/og.png" />
-    <meta property="og:image:width" content="1200" />
-    <meta property="og:image:height" content="630" />
-    <meta property="og:image:type" content="image/png" />
-    <meta property="og:url" content="https://madan-app.vercel.app/" />
-    <meta property="og:type" content="website" />
+  <!-- ✅ Open Graph (Link Preview عند إرسال الرابط) -->
+  <meta property="og:title" content="MAEDIN - منصة الاستثمار العقاري" />
+  <meta property="og:description" content="منصة معدن لإدارة الاستثمارات والمشاريع العقارية بطريقة احترافية وآمنة." />
+  <meta property="og:image" content="https://madan-app.vercel.app/og.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:type" content="image/png" />
+  <meta property="og:url" content="https://madan-app.vercel.app/" />
+  <meta property="og:type" content="website" />
 
-    <!-- ✅ Twitter Preview -->
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="MAEDIN - منصة الاستثمار العقاري" />
-    <meta
-      name="twitter:description"
-      content="منصة معدن لإدارة الاستثمارات والمشاريع العقارية بطريقة احترافية وآمنة."
-    />
-    <meta name="twitter:image" content="https://madan-app.vercel.app/og.png" />
+  <!-- ✅ Twitter Preview -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="MAEDIN - منصة الاستثمار العقاري" />
+  <meta name="twitter:description" content="منصة معدن لإدارة الاستثمارات والمشاريع العقارية بطريقة احترافية وآمنة." />
+  <meta name="twitter:image" content="https://madan-app.vercel.app/og.png" />
 
-    <!-- Google Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Inter:wght@400;500;600;700&display=swap"
-      rel="stylesheet" />
-  </head>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Inter:wght@400;500;600;700&display=swap"
+    rel="stylesheet" />
+</head>
 
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+
 </html>
