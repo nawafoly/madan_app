@@ -8,6 +8,7 @@ import {
   updateDoc,
   Timestamp,
   runTransaction,
+  serverTimestamp,
 } from "firebase/firestore";
 
 import { db } from "@/_core/firebase";
@@ -50,7 +51,12 @@ const toNumber = (v: any, fallback = 0) => {
 
 const addMonths = (d: Date, months: number) => {
   const x = new Date(d);
-  x.setMonth(x.getMonth() + months);
+  const wholeMonths = Math.trunc(months);
+  const fractionalMonths = months - wholeMonths;
+  x.setMonth(x.getMonth() + wholeMonths);
+  if (fractionalMonths !== 0) {
+    x.setDate(x.getDate() + Math.round(fractionalMonths * 30.4375));
+  }
   return x;
 };
 
@@ -58,6 +64,14 @@ const diffDays = (a: Date, b: Date) => {
   const ms = a.getTime() - b.getTime();
   return Math.max(0, Math.floor(ms / (1000 * 60 * 60 * 24)));
 };
+
+const monthsBetween = (start: Date, end: Date) => {
+  const days = Math.max(0, diffDays(end, start));
+  // Average month length to support pro-rata without over/under-bias.
+  return days / 30.4375;
+};
+
+const roundMoney = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
 // ✅ PDF Download helpers
 const downloadBytes = (bytes: Uint8Array, filename: string) => {
@@ -174,7 +188,10 @@ export default function Financial() {
   );
 
   const approvedInvestments = useMemo(
-    () => investments.filter((i) => i.status === "approved" || i.status === "active"),
+    () =>
+      investments.filter((i) =>
+        ["active", "completed"].includes(String(i.status || ""))
+      ),
     [investments]
   );
 
@@ -211,6 +228,7 @@ export default function Financial() {
   ========================= */
   const approveInvestmentTx = async () => {
     if (!selectedInvestment) return;
+    const generatedContractRef = doc(collection(db, "contracts"));
 
     try {
       const inv = selectedInvestment;
@@ -234,35 +252,89 @@ export default function Financial() {
         if (!projSnap.exists()) throw new Error("project_not_found");
 
         const proj: any = projSnap.data();
+        const settingsRef = doc(db, "settings", "app");
+        const settingsSnap = await tx.get(settingsRef);
+        const appSettings: any = settingsSnap.exists() ? settingsSnap.data() : {};
 
         const amount = toNumber(invData.amount, 0);
-        const targetAmount = toNumber(proj.targetAmount, 0);
-        const currentAmount = toNumber(proj.currentAmount, 0);
-        const pendingAmount = toNumber(proj.pendingAmount, 0);
 
-        const durationMonths =
-          toNumber(invData.customDuration, 0) ||
-          toNumber(invData.durationMonths, 0) ||
-          toNumber(proj.durationMonths, 0) ||
-          toNumber(proj.duration, 0) ||
-          0;
+        const investorDurationMonths =
+          toNumber(invData.customDuration, 0) || toNumber(invData.durationMonths, 0);
+        const projectDurationMonths =
+          toNumber(proj.durationMonths, 0) || toNumber(proj.duration, 0);
+        const defaultHorizonYears = toNumber(appSettings.defaultHorizonYears, 0);
+        const settingsDurationMonths = defaultHorizonYears > 0 ? defaultHorizonYears * 12 : 0;
 
+        const investorAnnualReturn = toNumber(invData.customRate, 0);
+        const projectAnnualReturn = toNumber(proj.annualReturn, 0);
+        const settingsAnnualReturn = toNumber(appSettings.defaultReturn, 0);
+
+        const annualReturnSource =
+          investorAnnualReturn > 0
+            ? "investments.customRate"
+            : projectAnnualReturn > 0
+              ? "projects.annualReturn"
+              : "settings.app.defaultReturn";
         const annualReturn =
-          toNumber(invData.customRate, 0) || toNumber(proj.annualReturn, 0);
+          investorAnnualReturn > 0
+            ? investorAnnualReturn
+            : projectAnnualReturn > 0
+              ? projectAnnualReturn
+              : settingsAnnualReturn;
+
+        if (annualReturn <= 0) throw new Error("missing_final_annual_return");
 
         const startAt = Timestamp.now();
+        const projectEndAt = proj.plannedEndAt instanceof Timestamp ? proj.plannedEndAt : null;
+        const projectDurationFromEndAt = projectEndAt
+          ? monthsBetween(startAt.toDate(), projectEndAt.toDate())
+          : 0;
+        const durationSource =
+          investorDurationMonths > 0
+            ? "investments.customDuration"
+            : projectDurationMonths > 0
+              ? "projects.duration"
+              : projectDurationFromEndAt > 0
+                ? "projects.plannedEndAt"
+                : "settings.app.defaultHorizonYears";
+        const durationMonths =
+          investorDurationMonths > 0
+            ? investorDurationMonths
+            : projectDurationMonths > 0
+              ? projectDurationMonths
+              : projectDurationFromEndAt > 0
+                ? projectDurationFromEndAt
+                : settingsDurationMonths;
 
-        const plannedEndAt =
-          (proj.plannedEndAt instanceof Timestamp ? proj.plannedEndAt : null) ||
-          Timestamp.fromDate(addMonths(startAt.toDate(), durationMonths));
+        if (durationMonths <= 0) throw new Error("missing_final_duration_months");
+        const plannedEndAt = Timestamp.fromDate(addMonths(startAt.toDate(), durationMonths));
 
         const expectedProfit =
-          amount * (annualReturn / 100) * ((durationMonths || 0) / 12);
+          roundMoney(amount * (annualReturn / 100) * (durationMonths / 12));
+        const legalTermsSnapshot = {
+          version: 1,
+          approvedAt: startAt,
+          principalAmount: amount,
+          annualReturnPercent: annualReturn,
+          annualReturnSource,
+          durationMonths,
+          durationSource,
+          startAt,
+          endAt: plannedEndAt,
+          expectedProfit,
+          formula: "principal * annualRate * (durationMonths / 12)",
+          isFrozen: true,
+        };
 
-        const newCurrent = currentAmount + amount;
-
-        tx.update(invRef, {
-          status: "approved",
+        const contractId = String(invData.contractId || "").trim();
+        const contractRef = contractId
+          ? doc(db, "contracts", contractId)
+          : generatedContractRef;
+        const invUpdate: any = {
+          status: "active",
+          approvedAmount: amount,
+          approvedAt: startAt,
+          finalizedAt: serverTimestamp(),
           signedAt: startAt,
           startAt,
           plannedEndAt,
@@ -273,24 +345,45 @@ export default function Financial() {
           withdrawnAt: null,
           actualEndAt: null,
           exitType: null,
-          updatedAt: new Date(),
-        });
-
-        const projUpdate: any = {
-          currentAmount: newCurrent,
-          investorsCount: toNumber(proj.investorsCount, 0) + 1,
-          pendingAmount: Math.max(0, pendingAmount - amount),
+          projectTitleAtSign: String(
+            proj.titleAr || proj.title || invData.projectTitle || ""
+          ),
+          termsLockedAt: startAt,
+          legalTermsSnapshot,
+          contractId: contractRef.id,
           updatedAt: new Date(),
         };
+        tx.update(invRef, invUpdate);
 
-        if (targetAmount > 0 && newCurrent >= targetAmount) {
-          projUpdate.status = "closed";
-        }
-
-        tx.update(projRef, projUpdate);
+        tx.set(
+          contractRef,
+          {
+            investmentId: inv.id,
+            projectId,
+            projectTitle: String(proj.titleAr || proj.title || invData.projectTitle || ""),
+            investorUid: String(invData.investorUid || invData.userId || ""),
+            investorName: String(invData.investorName || ""),
+            investorEmail: invData.investorEmail || null,
+            investorPhone: invData.investorPhone || null,
+            amount,
+            currency: invData.currency || "SAR",
+            status: contractId ? invData.contractStatus || "signed" : "signed",
+            signedAt: startAt,
+            termsLockedAt: startAt,
+            legalTermsSnapshot,
+            legalReference: {
+              source: "investment.approval",
+              isFinal: true,
+              version: 1,
+            },
+            ...(contractId ? {} : { createdAt: new Date() }),
+            updatedAt: new Date(),
+          },
+          { merge: true }
+        );
       });
 
-      toast.success("تم اعتماد الاستثمار وتحديث المشروع");
+      toast.success("تم اعتماد الاستثمار بنجاح");
       setIsApproveDialogOpen(false);
       loadAll();
     } catch (e) {
@@ -310,8 +403,11 @@ export default function Financial() {
 
         const inv: any = invSnap.data();
 
-        const st = String(inv.status || "");
-        if (st !== "approved" && st !== "active") {
+        const st = String(inv.status || "").toLowerCase();
+        if (st === "completed" || st === "closed") {
+          throw new Error("investment_already_closed");
+        }
+        if (st !== "approved" && st !== "active" && st !== "signed") {
           throw new Error("invalid_status_for_close");
         }
 
@@ -324,24 +420,45 @@ export default function Financial() {
 
         const proj: any = projSnap.data();
 
-        const amount = toNumber(inv.amount, 0);
+        const amount = toNumber(inv.approvedAmount, 0) || toNumber(inv.amount, 0);
+        const startAtValue = inv.startAt || inv.signedAt || inv.createdAt;
+        if (!startAtValue) throw new Error("missing_start_date");
+        const startDate = toDate(startAtValue);
+        const exitDate = closeDate ? new Date(`${closeDate}T00:00:00`) : new Date();
+        if (!Number.isFinite(exitDate.getTime())) throw new Error("invalid_close_date");
+        if (exitDate.getTime() < startDate.getTime()) throw new Error("close_before_start");
 
-        const currentAmount = toNumber(proj.currentAmount, 0);
-        const investorsCount = toNumber(proj.investorsCount, 0);
+        const annualReturnAtSign =
+          toNumber(inv.annualReturnAtSign, 0) ||
+          toNumber(inv.customRate, 0) ||
+          toNumber(proj.annualReturn, 0);
+        if (annualReturnAtSign <= 0) throw new Error("missing_frozen_rate");
+
+        const actualDurationMonths = monthsBetween(startDate, exitDate);
+        const earnedProfit = roundMoney(
+          amount * (annualReturnAtSign / 100) * (actualDurationMonths / 12)
+        );
+        const settlementTotal = roundMoney(amount + earnedProfit);
+
+        const closureAt = Timestamp.fromDate(exitDate);
 
         tx.update(invRef, {
           status: "completed",
-          actualEndAt: new Date(),
-          exitType: "early_closure",
-          earnedProfit: inv.expectedProfit, // For simplicity, assuming expected profit is earned
+          actualEndAt: closureAt,
+          withdrawnAt: closureAt,
+          exitType: "early_withdrawal",
+          earnedProfit,
+          actualDurationMonths,
+          settlementTotal,
+          settlementPrincipal: amount,
+          settlementAnnualReturnPercent: annualReturnAtSign,
+          settlementFormula: "principal * annualRate * (actualDurationMonths / 12)",
+          settlementLockedAt: closureAt,
+          settlementLocked: true,
+          closureLocked: true,
           updatedAt: new Date(),
         });
 
-        tx.update(projRef, {
-          currentAmount: Math.max(0, currentAmount - amount),
-          investorsCount: Math.max(0, investorsCount - 1),
-          updatedAt: new Date(),
-        });
       });
 
       toast.success("تم إنهاء الاستثمار بنجاح");
@@ -355,6 +472,11 @@ export default function Financial() {
 
   const updateFinancials = async () => {
     if (!selectedInvestment) return;
+    const status = String(selectedInvestment.status || "").toLowerCase();
+    if (status !== "pending") {
+      toast.error("لا يمكن تعديل الشروط بعد الاعتماد/الإغلاق.");
+      return;
+    }
 
     try {
       const invRef = doc(db, "investments", selectedInvestment.id);
@@ -374,6 +496,11 @@ export default function Financial() {
 
   const updateStatus = async (status: string, data: any = {}) => {
     if (!selectedInvestment) return;
+    const currentStatus = String(selectedInvestment.status || "").toLowerCase();
+    if (currentStatus === "completed" || currentStatus === "closed") {
+      toast.error("لا يمكن تعديل الاستثمار بعد الإغلاق.");
+      return;
+    }
 
     try {
       const invRef = doc(db, "investments", selectedInvestment.id);
@@ -787,7 +914,9 @@ export default function Financial() {
                       <TableCell>{getStatusBadge(inv.status)}</TableCell>
 
                       <TableCell>
-                        {inv.status === "approved" || inv.status === "active" ? (
+                        {inv.status === "approved" ||
+                        inv.status === "active" ||
+                        inv.status === "signed" ? (
                           <Button
                             size="sm"
                             variant="destructive"

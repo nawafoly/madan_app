@@ -36,6 +36,29 @@ service cloud.firestore {
       return signedIn() && (isOwner() || isAdmin() || isStaff() || isAccountant());
     }
 
+    function isInvestmentClosedData(d) {
+      return d.status in ["completed", "closed"];
+    }
+
+    function isInvestmentTermsLocked() {
+      return ("termsLockedAt" in resource.data)
+        || (resource.data.status in ["approved", "signed", "active", "completed", "closed"]);
+    }
+
+    function investmentTermsChanged() {
+      return request.resource.data.diff(resource.data).changedKeys().hasAny([
+        "customRate",
+        "customDuration",
+        "annualReturnAtSign",
+        "durationMonthsAtSign",
+        "startAt",
+        "plannedEndAt",
+        "expectedProfit",
+        "termsLockedAt",
+        "legalTermsSnapshot"
+      ]);
+    }
+
     /* =========================
        settings
     ========================= */
@@ -138,7 +161,12 @@ match /projects/{projectId} {
         && exists(/databases/$(database)/documents/projects/$(request.resource.data.projectId))
       );
 
-allow update, delete: if isAdmin() || isAccountant();
+      allow update: if (isAdmin() || isAccountant())
+        && !isInvestmentClosedData(resource.data)
+        && (!isInvestmentTermsLocked() || !investmentTermsChanged());
+
+      allow delete: if isAdmin()
+        && !isInvestmentClosedData(resource.data);
     }
 
     /* =========================

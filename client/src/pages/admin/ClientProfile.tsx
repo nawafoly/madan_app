@@ -54,10 +54,15 @@ type InvestmentDoc = {
   approvedAmount?: number;
   estimatedReturn?: number;
   expectedProfit?: number;
+  annualReturnAtSign?: number;
+  durationMonthsAtSign?: number;
+  durationMonths?: number;
   status?: string;
   createdAt?: any;
   startAt?: any;
+  signedAt?: any;
   plannedEndAt?: any;
+  actualEndAt?: any;
 };
 
 function toDateSafe(v: any): Date | null {
@@ -91,13 +96,35 @@ function projectName(projectId: any, projectsMap: Record<string, any>) {
   return pick(p?.titleAr, p?.nameAr, p?.title, p?.name) || "—";
 }
 
+function durationMonthsFromDates(inv: any): number | null {
+  const start = toDateSafe(inv?.startAt) || toDateSafe(inv?.signedAt) || toDateSafe(inv?.createdAt);
+  const end = toDateSafe(inv?.plannedEndAt) || toDateSafe(inv?.actualEndAt);
+  if (!start || !end) return null;
+  const ms = end.getTime() - start.getTime();
+  if (ms <= 0) return null;
+  return ms / (1000 * 60 * 60 * 24 * 30.4375);
+}
+
 /**
- * ✅ تعديل 1: النسبة من الحقل الحقيقي عندك (annualReturn)
- * - أول شيء نحاول: annualReturn
- * - وباقي التخمينات نخليها احتياط
+ * ✅ مرجع قانوني: نحاول Snapshot المثبت أولاً (annualReturnAtSign)
+ * ثم نرجع لبيانات المشروع كاحتياط للبيانات القديمة فقط.
  */
-function projectProfitPercent(projectId: any, projectsMap: Record<string, any>) {
-  const pid = String(projectId || "");
+function projectProfitPercent(inv: any, projectsMap: Record<string, any>) {
+  const fromSnapshot = Number(inv?.annualReturnAtSign);
+  if (Number.isFinite(fromSnapshot)) return fromSnapshot;
+
+  const principal = Number(inv?.approvedAmount ?? inv?.amount ?? 0);
+  const expected = Number(inv?.expectedProfit ?? inv?.estimatedReturn ?? 0);
+  const directDuration = Number(inv?.durationMonthsAtSign ?? inv?.durationMonths ?? 0);
+  const duration =
+    Number.isFinite(directDuration) && directDuration > 0
+      ? directDuration
+      : durationMonthsFromDates(inv);
+  if (principal > 0 && expected >= 0 && duration && duration > 0) {
+    return (expected / (principal * (duration / 12))) * 100;
+  }
+
+  const pid = String(inv?.projectId || "");
   if (!pid) return null;
   const p = projectsMap[pid];
   if (!p) return null;
@@ -114,12 +141,17 @@ function projectProfitPercent(projectId: any, projectsMap: Record<string, any>) 
 }
 
 /**
- * ✅ تعديل 2: حساب يوم الاستحقاق إذا plannedEndAt غير موجود
- * - نعتمد على مدة المشروع داخل projects:
- *   durationMonths أو duration أو durationInMonths (احتياط)
+ * ✅ مرجع قانوني: نحاول مدة Snapshot المثبتة أولاً (durationMonthsAtSign)
+ * ثم نرجع لبيانات المشروع كاحتياط للبيانات القديمة فقط.
  */
-function projectDurationMonths(projectId: any, projectsMap: Record<string, any>) {
-  const pid = String(projectId || "");
+function projectDurationMonths(inv: any, projectsMap: Record<string, any>) {
+  const fromSnapshot = Number(inv?.durationMonthsAtSign ?? inv?.durationMonths);
+  if (Number.isFinite(fromSnapshot)) return fromSnapshot;
+
+  const fromDates = durationMonthsFromDates(inv);
+  if (Number.isFinite(fromDates)) return fromDates;
+
+  const pid = String(inv?.projectId || "");
   if (!pid) return null;
   const p = projectsMap[pid];
   if (!p) return null;
@@ -272,7 +304,7 @@ export default function ClientProfile() {
 
         // ✅ تعديل 2: الاستحقاق = plannedEndAt أو محسوب من مدة المشروع
         const endDirect = toDateSafe(inv.plannedEndAt);
-        const months = projectDurationMonths(inv.projectId, projectsMap);
+        const months = projectDurationMonths(inv, projectsMap);
         const endComputed =
           !endDirect && start && months ? addMonths(start, months) : null;
         const end = endDirect || endComputed;
@@ -281,7 +313,7 @@ export default function ClientProfile() {
         const exp = Number(inv.expectedProfit ?? inv.estimatedReturn ?? 0);
 
         const pName = projectName(inv.projectId, projectsMap);
-        const pct = projectProfitPercent(inv.projectId, projectsMap);
+        const pct = projectProfitPercent(inv, projectsMap);
         const total = amount + exp;
 
         const st = String(inv.status || "").toLowerCase();
@@ -569,7 +601,7 @@ export default function ClientProfile() {
 
                         // ✅ تعديل 2: الاستحقاق = plannedEndAt أو محسوب من مدة المشروع
                         const endDirect = toDateSafe(inv.plannedEndAt);
-                        const months = projectDurationMonths(inv.projectId, projectsMap);
+                        const months = projectDurationMonths(inv, projectsMap);
                         const endComputed =
                           !endDirect && start && months
                             ? addMonths(start, months)
@@ -581,7 +613,7 @@ export default function ClientProfile() {
                         const total = amount + exp;
 
                         const pName = projectName(inv.projectId, projectsMap);
-                        const pct = projectProfitPercent(inv.projectId, projectsMap);
+                        const pct = projectProfitPercent(inv, projectsMap);
 
                         return (
                           <TableRow key={inv.id}>

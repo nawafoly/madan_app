@@ -164,7 +164,8 @@ export default function InvestmentDetails() {
               return;
             }
 
-            const inv = { id: snap.id, ...snap.data() };
+            const invData = (snap.data() || {}) as Record<string, any>;
+            const inv = { id: snap.id, ...invData } as Record<string, any>;
             setInvestment(inv);
 
             // ✅ أمنياً: نتأكد أنه يخص نفس المستثمر

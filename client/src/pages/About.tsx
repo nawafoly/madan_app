@@ -91,7 +91,7 @@ export default function About() {
   const [statsData, setStatsData] = useState<AboutStats>({
     projects: "50+",
     investors: "500+",
-    annualReturn: "15%",
+    annualReturn: "0%",
     totalInvestment: "2B+",
   });
 

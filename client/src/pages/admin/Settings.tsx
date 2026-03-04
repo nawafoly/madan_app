@@ -77,6 +77,7 @@ type AppSettings = {
   minInvestment: string;
   maxInvestment: string;
   defaultReturn: string;
+  defaultHorizonYears: string;
 };
 
 type NotificationSettings = {
@@ -226,6 +227,7 @@ export default function Settings() {
     minInvestment: "",
     maxInvestment: "",
     defaultReturn: "",
+    defaultHorizonYears: "",
   });
 
   const [notifications, setNotifications] = useState<NotificationSettings>({
@@ -362,7 +364,10 @@ export default function Settings() {
         getDoc(doc(db, "settings", "content")),
       ]);
 
-      if (appSnap.exists()) setApp(appSnap.data() as any);
+      if (appSnap.exists()) {
+        const d = appSnap.data() as any;
+        setApp((prev) => ({ ...prev, ...(d || {}) }));
+      }
       if (notifSnap.exists()) setNotifications(notifSnap.data() as any);
       if (secSnap.exists()) setSecurity(secSnap.data() as any);
 
@@ -1102,7 +1107,7 @@ export default function Settings() {
                   onChange={(v: string) => setApp({ ...app, address: v })}
                 />
 
-                <div className="grid md:grid-cols-3 gap-4">
+                <div className="grid md:grid-cols-4 gap-4">
                   <Field
                     label="الحد الأدنى للاستثمار"
                     value={app.minInvestment}
@@ -1122,6 +1127,13 @@ export default function Settings() {
                     value={app.defaultReturn}
                     onChange={(v: string) =>
                       setApp({ ...app, defaultReturn: v })
+                    }
+                  />
+                  <Field
+                    label="الأفق الافتراضي (سنوات)"
+                    value={app.defaultHorizonYears}
+                    onChange={(v: string) =>
+                      setApp({ ...app, defaultHorizonYears: v })
                     }
                   />
                 </div>

@@ -152,6 +152,21 @@ export interface ProjectDoc {
   updatedAt: Timestamp;
 }
 
+export interface LegalTermsSnapshot {
+  version: number;
+  approvedAt: Timestamp;
+  principalAmount: number;
+  annualReturnPercent: number;
+  annualReturnSource?: string;
+  durationMonths: number;
+  durationSource?: string;
+  startAt: Timestamp;
+  endAt: Timestamp;
+  expectedProfit: number;
+  formula?: string;
+  isFrozen?: boolean;
+}
+
 export interface InvestmentDoc {
 
 
@@ -167,6 +182,8 @@ export interface InvestmentDoc {
 
   amount: number;
   status: InvestmentStatus;
+  customRate?: number;
+  customDuration?: number;
 
   /**
    * ✅ payoutType (موحد حسب الخطة)
@@ -227,6 +244,17 @@ export interface InvestmentDoc {
    * نثبتها هنا لأن الخطة تعتمد عليها للحساب
    */
   durationMonths?: number;
+  termsLockedAt?: Timestamp;
+  legalTermsSnapshot?: LegalTermsSnapshot;
+
+  actualDurationMonths?: number;
+  settlementPrincipal?: number;
+  settlementAnnualReturnPercent?: number;
+  settlementTotal?: number;
+  settlementFormula?: string;
+  settlementLockedAt?: Timestamp;
+  settlementLocked?: boolean;
+  closureLocked?: boolean;
 
   // Delay compensation
   delayPenaltyApplied?: boolean;

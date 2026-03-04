@@ -193,14 +193,18 @@ export default function MyInvestments() {
   );
 
   const totalExpectedReturn = useMemo(
-    () => investments.reduce((s, i) => s + Number(i.estimatedReturn || 0), 0),
+    () =>
+      investments.reduce(
+        (s, i) => s + Number(i.expectedProfit ?? i.estimatedReturn ?? 0),
+        0
+      ),
     [investments]
   );
 
   const activeInvestments = useMemo(
     () =>
       investments.filter((i) =>
-        ["active", "approved", "signing", "signed"].includes(String(i.status || ""))
+        ["active"].includes(String(i.status || ""))
       ).length,
     [investments]
   );

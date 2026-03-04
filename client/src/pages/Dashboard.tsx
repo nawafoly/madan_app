@@ -94,7 +94,11 @@ export default function MyDashboard() {
   );
 
   const totalExpectedReturn = useMemo(
-    () => investments.reduce((s, i) => s + Number(i.estimatedReturn || 0), 0),
+    () =>
+      investments.reduce(
+        (s, i) => s + Number(i.expectedProfit ?? i.estimatedReturn ?? 0),
+        0
+      ),
     [investments]
   );
 
@@ -105,7 +109,7 @@ export default function MyDashboard() {
     return investments.reduce((sum, inv) => {
       if (!inv.startAt || !inv.plannedEndAt) return sum;
 
-      const expected = Number(inv.estimatedReturn || 0);
+      const expected = Number(inv.expectedProfit ?? inv.estimatedReturn ?? 0);
       if (!expected) return sum;
 
       const start = inv.startAt.toDate();
@@ -126,7 +130,7 @@ export default function MyDashboard() {
   const activeInvestments = useMemo(
     () =>
       investments.filter((i) =>
-        ["active", "approved", "signing", "signed"].includes(
+        ["active"].includes(
           String(i.status || "")
         )
       ).length,

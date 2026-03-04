@@ -20,6 +20,7 @@ const OFFICIAL_STATUSES = new Set([
   "pending",
   "pending_contract",
   "signing",
+  "approved",
   "signed",
   "active",
   "completed",
@@ -46,16 +47,6 @@ const normalizeStatus = (inv) => {
   const raw = String(inv?.status ?? "").trim().toLowerCase();
 
   if (OFFICIAL_STATUSES.has(raw)) return { status: raw, update: false };
-
-  // legacy mapping
-  if (raw === "approved") {
-    const next = inv?.finalizedAt ? "active" : "signed";
-    return { status: next, update: true };
-  }
-
-  if (raw === "pending_review") {
-    return { status: "pending", update: true };
-  }
 
   return { status: null, update: false };
 };
@@ -84,14 +75,10 @@ const recomputeProjectAggregates = async (projectId) => {
   let currentAmount = 0;
   let pendingAmount = 0; // optional
   const investors = new Set();
-  const legacyUpdates = [];
 
   invSnap.forEach((docSnap) => {
     const inv = docSnap.data() || {};
-    const { status, update } = normalizeStatus(inv);
-
-    // normalize legacy statuses once, and skip recursive aggregate trigger
-    if (update && status) legacyUpdates.push({ ref: docSnap.ref, status });
+    const { status } = normalizeStatus(inv);
 
     if (!status) return;
 
@@ -105,18 +92,6 @@ const recomputeProjectAggregates = async (projectId) => {
       pendingAmount += amt;
     }
   });
-
-  if (legacyUpdates.length) {
-    const batch = db.batch();
-    legacyUpdates.forEach((u) => {
-      batch.update(u.ref, {
-        status: u.status,
-        __skipAggregates: true,
-        updatedAt: FieldValue.serverTimestamp(),
-      });
-    });
-    await batch.commit();
-  }
 
   await projectRef.set(
     {
@@ -158,7 +133,17 @@ exports.recomputeProjectAggregates = onCall({ region: REGION }, async (request) 
 });
 
 // ✅ Admin-only full backfill
-exports.recomputeAllProjectAggregates = onCall({ region: REGION }, async (request) => {
+const runRecomputeAllProjects = async () => {
+  const projectsSnap = await db.collection("projects").get();
+  const results = [];
+  for (const docSnap of projectsSnap.docs) {
+    const r = await recomputeProjectAggregates(docSnap.id);
+    if (r) results.push(r);
+  }
+  return results;
+};
+
+const adminRecomputeAllProjectsHandler = async (request) => {
   if (!request.auth?.uid) {
     throw new HttpsError("unauthenticated", "Authentication required.");
   }
@@ -168,15 +153,20 @@ exports.recomputeAllProjectAggregates = onCall({ region: REGION }, async (reques
     throw new HttpsError("permission-denied", "Admin access required.");
   }
 
-  const projectsSnap = await db.collection("projects").get();
-  const results = [];
-  for (const docSnap of projectsSnap.docs) {
-    const r = await recomputeProjectAggregates(docSnap.id);
-    if (r) results.push(r);
-  }
-
+  const results = await runRecomputeAllProjects();
   return { ok: true, count: results.length };
-});
+};
+
+exports.recomputeAllProjectAggregates = onCall(
+  { region: REGION },
+  adminRecomputeAllProjectsHandler
+);
+
+// ✅ Temporary admin callable for one-time legacy backfill after flow change.
+exports.adminRecomputeAllProjects = onCall(
+  { region: REGION },
+  adminRecomputeAllProjectsHandler
+);
 
 /**
  * ✅ Auth trigger:

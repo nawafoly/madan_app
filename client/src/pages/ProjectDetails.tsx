@@ -145,7 +145,7 @@ export default function ProjectDetails() {
   const [sending, setSending] = useState(false);
 
   const [formMessage, setFormMessage] = useState<{
-    type: "error" | null;
+    type: "error" | "success" | null;
     text: string;
   }>({ type: null, text: "" });
 
