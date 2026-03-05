@@ -170,9 +170,13 @@ function moneySAR(v: any) {
 function stageLabel(v: any) {
   const s = String(v || "");
   const map: Record<string, string> = {
+    reviewer: "مراجع",
+    review: "مراجعة",
     staff: "مراجع",
     accountant: "محاسب",
     client: "العميل",
+    investment: "الاستثمار",
+    contract: "العقد",
     owner: "المالك",
     completed: "مقفل",
   };
@@ -200,9 +204,19 @@ function lastTouchedBy(m: any) {
   return "—";
 }
 
-type StageRole = "staff" | "accountant" | "client" | "owner" | "completed";
+type StageRole =
+  | "reviewer"
+  | "review"
+  | "staff"
+  | "accountant"
+  | "client"
+  | "investment"
+  | "contract"
+  | "owner"
+  | "completed";
 
 type MessageStatus =
+  | "pending"
   | "new"
   | "in_progress"
   | "needs_account"
@@ -320,6 +334,7 @@ export default function MessagesManagement() {
   const [approvedAmount, setApprovedAmount] = useState<string>("");
 
   const [contractBusy, setContractBusy] = useState(false);
+  const [approveCreateBusy, setApproveCreateBusy] = useState(false);
   const [finalizeBusy, setFinalizeBusy] = useState(false);
   const [reopenBusy, setReopenBusy] = useState(false);
 
@@ -453,16 +468,17 @@ export default function MessagesManagement() {
   };
 
   /* =========================
-    normalize for display
+  normalize for display
   ========================= */
   const normalizeForDisplay = (m: any) => {
-    const st = String(m?.status || "new") as MessageStatus;
-    const sr = (String(m?.stageRole || "staff") as StageRole) || "staff";
+    const st = String(pick(m?.status, "new")) as MessageStatus;
+    const sr = String(pick(m?.stageRole, m?.stage, "staff")) as StageRole;
 
     const fixed: any = {
       ...m,
       status: st,
       stageRole: sr,
+      stage: pick(m?.stage, sr),
       createdAt: m?.createdAt || m?.created_at || null,
     };
 
@@ -770,6 +786,157 @@ export default function MessagesManagement() {
     }
   };
 
+  const approveRequestAndCreateInvestment = async () => {
+    if (!selectedMessage) return;
+
+    if (myRole === "client") return toast.error("صلاحيتك عرض فقط.");
+    if (isLockedFinal && myRole !== "owner") return toast.warning("الطلب مقفل.");
+
+    const requestId = String(selectedMessage?.id || "").trim();
+    const projectId = pick(
+      selectedMessage?.projectId,
+      selectedMessage?.project_id,
+      selectedMessage?.project?.id
+    );
+    const investorUid = pick(
+      selectedMessage?.investorUid,
+      selectedMessage?.userId,
+      selectedMessage?.createdByUid,
+      selectedMessage?.userSnapshot?.uid
+    );
+    const amount =
+      toNum(approvedAmount) ||
+      toNum(selectedMessage?.approvedAmount) ||
+      toNum(selectedMessage?.amount) ||
+      toNum(selectedMessage?.requestedAmount) ||
+      toNum(selectedMessage?.estimatedAmount);
+    const projectTitle = pick(
+      selectedMessage?.projectTitle,
+      selectedMessage?.projectSnapshot?.titleAr,
+      selectedMessage?.projectSnapshot?.title,
+      selectedMessage?.projectSnapshot?.name
+    );
+
+    if (!requestId) return toast.error("تعذر تحديد رقم الطلب.");
+    if (!projectId) return toast.error("لا يوجد مشروع مرتبط بهذا الطلب.");
+    if (!investorUid) return toast.error("لا يوجد مستثمر مرتبط بهذا الطلب.");
+    if (!Number.isFinite(amount) || amount <= 0)
+      return toast.error("المبلغ غير صالح لإنشاء الاستثمار.");
+
+    try {
+      setApproveCreateBusy(true);
+
+      const msgRef = doc(db, REQUESTS_COL, requestId);
+      const existingInvSnap = await getDocs(
+        query(collection(db, "investments"), where("requestId", "==", requestId))
+      );
+      const existingInvId = existingInvSnap.docs[0]?.id || "";
+
+      let finalInvestmentId = "";
+
+      await runTransaction(db, async (tx) => {
+        const msgSnap = await tx.get(msgRef);
+        if (!msgSnap.exists()) throw new Error("request_not_found");
+
+        const msgData = msgSnap.data() as any;
+        const linkedInvId = pick(msgData?.investmentId, existingInvId);
+
+        if (linkedInvId) {
+          finalInvestmentId = linkedInvId;
+          const linkedInvRef = doc(db, "investments", linkedInvId);
+          tx.set(
+            linkedInvRef,
+            {
+              requestId,
+              projectId,
+              investorUid,
+              userId: investorUid,
+              amount,
+              status: "pending_contract",
+              updatedAt: serverTimestamp(),
+              updatedByUid: user?.uid || null,
+              updatedByEmail: user?.email || null,
+            },
+            { merge: true }
+          );
+        } else {
+          const invRef = doc(collection(db, "investments"));
+          finalInvestmentId = invRef.id;
+          tx.set(invRef, {
+            requestId,
+            projectId,
+            investorUid,
+            userId: investorUid,
+            amount,
+            status: "pending_contract",
+            source: "interest_request",
+            projectTitle: projectTitle || null,
+            projectSnapshot: selectedMessage?.projectSnapshot || null,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+            createdByUid: user?.uid || null,
+            createdByEmail: user?.email || null,
+          });
+        }
+
+        const ev = makeEvent({
+          type: "investment_created",
+          title: "قبول الطلب وإنشاء الاستثمار",
+          note: "تم قبول طلب الاهتمام وإنشاء سجل استثمار بانتظار العقد.",
+          ...myActor(user, myRole),
+          meta: {
+            requestId,
+            investmentId: finalInvestmentId,
+            projectId,
+            investorUid,
+            amount,
+            investmentStatus: "pending_contract",
+          },
+        });
+
+        tx.update(msgRef, {
+          status: "approved",
+          stageRole: "investment" as StageRole,
+          stage: "investment",
+          approvedAmount: amount,
+          investmentId: finalInvestmentId,
+          approvedAt: serverTimestamp(),
+          approvedByUid: user?.uid || null,
+          approvedByEmail: user?.email || null,
+          updatedAt: serverTimestamp(),
+          updatedByUid: user?.uid || null,
+          updatedByEmail: user?.email || null,
+          events: arrayUnion(ev),
+          ...actionMeta(user, myRole),
+        });
+      });
+
+      toast.success("تم قبول الطلب وإنشاء الاستثمار ✅");
+      setSelectedMessage((prev: any) =>
+        prev
+          ? {
+              ...prev,
+              status: "approved",
+              stageRole: "investment",
+              stage: "investment",
+              approvedAmount: amount,
+              investmentId: finalInvestmentId,
+            }
+          : prev
+      );
+      loadMessages();
+    } catch (e: any) {
+      console.error(e);
+      if (String(e?.message || "") === "request_not_found") {
+        toast.error("الطلب غير موجود أو تم حذفه.");
+      } else {
+        toast.error("فشل تنفيذ عملية قبول الطلب وإنشاء الاستثمار");
+      }
+    } finally {
+      setApproveCreateBusy(false);
+    }
+  };
+
   const createContractForInvestment = async () => {
     toast.info("نظام العقود موقوف حاليًا (حسب CONTRACTS_DISABLED)");
   };
@@ -923,6 +1090,13 @@ export default function MessagesManagement() {
       !!selectedMessage?.investmentId &&
       !!selectedMessage?.contractId &&
       isSigned;
+
+  const canApproveAndCreateInvestment =
+    !!selectedMessage &&
+    myRole !== "client" &&
+    !isLockedFinal &&
+    String(selectedMessage?.status || "") !== "rejected" &&
+    !selectedMessage?.investmentId;
 
   /* =========================
     Render
@@ -1459,6 +1633,21 @@ export default function MessagesManagement() {
                               <Building2 className="w-4 h-4 ml-2" />
                             )}
                             إقفال نهائي
+                          </Button>
+                        ) : null}
+
+                        {canApproveAndCreateInvestment ? (
+                          <Button
+                            className="bg-blue-700 hover:bg-blue-800"
+                            onClick={approveRequestAndCreateInvestment}
+                            disabled={approveCreateBusy || isLockedFinal}
+                          >
+                            {approveCreateBusy ? (
+                              <Loader2 className="w-4 h-4 ml-2 animate-spin" />
+                            ) : (
+                              <CheckCircle2 className="w-4 h-4 ml-2" />
+                            )}
+                            قبول الطلب وإنشاء الاستثمار
                           </Button>
                         ) : null}
 
