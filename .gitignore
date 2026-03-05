@@ -113,3 +113,5 @@ index-599e8-firebase-adminsdk-*.json
 # Local env
 .env
 .env.*
+
+.vercel
