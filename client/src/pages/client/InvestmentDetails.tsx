@@ -7,20 +7,27 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { Input } from "@/components/ui/input";
 
 import { useAuth } from "@/_core/hooks/useAuth";
 import { db } from "@/_core/firebase";
+import {
+  uploadInvestmentDocument,
+  type InvestmentDocumentKind,
+  type UploadDocumentResult,
+} from "@/lib/documentUploadService";
 
 import {
   Building2,
   Clock3,
-  FileText,
   Phone,
   Mail,
   MessageSquare,
   ArrowLeft,
   CheckCircle2,
+  Loader2,
 } from "lucide-react";
+import { toast } from "sonner";
 
 import {
   doc,
@@ -77,6 +84,113 @@ function statusLabel(status: string) {
     signed: ["تم الإجراء", "bg-green-700"],
   };
   return map[status] || ["قيد المراجعة", "bg-blue-600"];
+}
+
+function getFileNameFromPath(path: any) {
+  const raw = String(path || "").trim();
+  if (!raw) return "â€”";
+  const normalized = raw.replace(/\\/g, "/");
+  const last = normalized.split("/").pop();
+  return String(last || "â€”").trim() || "â€”";
+}
+
+function buildR2DownloadUrl(path: any, forceDownload = false) {
+  const objectPath = String(path || "").trim();
+  if (!objectPath) return "";
+
+  const explicitDownloadBase = String(import.meta.env.VITE_R2_DOWNLOAD_WORKER_URL || "").trim();
+  const uploadWorkerUrl = String(import.meta.env.VITE_R2_UPLOAD_WORKER_URL || "").trim();
+  const baseUrl = explicitDownloadBase || uploadWorkerUrl;
+  if (!baseUrl) return "";
+
+  try {
+    const url = new URL(baseUrl);
+    url.pathname = "/download";
+    url.search = "";
+    url.hash = "";
+    url.searchParams.set("path", objectPath);
+    if (forceDownload) {
+      url.searchParams.set("download", "1");
+    }
+    return url.toString();
+  } catch {
+    return "";
+  }
+}
+
+function expectedContractPath(investmentId: string, kind: "original" | "signed") {
+  const id = String(investmentId || "").trim();
+  if (!id) return "";
+  return kind === "original" ? `contracts/${id}/original.pdf` : `contracts/${id}/signed.pdf`;
+}
+
+type R2ProbeStatus = "exists" | "missing" | "unknown";
+
+async function r2ObjectStatus(path: string): Promise<R2ProbeStatus> {
+  const url = buildR2DownloadUrl(path, false);
+  if (!url) return "unknown";
+  try {
+    const response = await fetch(url, { method: "GET" });
+    try {
+      await response.body?.cancel();
+    } catch {
+      // ignore cancel errors
+    }
+    if (response.ok) return "exists";
+    if (response.status === 404) return "missing";
+    return "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
+function pickFirstNonEmptyString(...values: any[]) {
+  for (const value of values) {
+    const normalized = String(value || "").trim();
+    if (normalized) return normalized;
+  }
+  return "";
+}
+
+function readNestedValue(source: any, path: string) {
+  const keys = String(path || "")
+    .split(".")
+    .map((v) => v.trim())
+    .filter(Boolean);
+  let current = source;
+  for (const key of keys) {
+    if (!current || typeof current !== "object") return undefined;
+    current = current[key];
+  }
+  return current;
+}
+
+function resolveDocPath(
+  source: any,
+  candidates: string[]
+) {
+  for (const candidate of candidates) {
+    const value = pickFirstNonEmptyString(readNestedValue(source, candidate));
+    if (value) return value;
+  }
+  return "";
+}
+
+function getContractStatusMeta(status: any) {
+  const s = String(status || "").trim().toLowerCase();
+  const map: Record<string, { label: string; cls: string }> = {
+    draft: { label: "مسودة", cls: "bg-slate-600" },
+    sent: { label: "مرسل", cls: "bg-blue-600" },
+    signed: { label: "موقّع", cls: "bg-emerald-700" },
+    issued: { label: "مرسل", cls: "bg-blue-600" },
+    signed_uploaded: { label: "موقّع", cls: "bg-emerald-700" },
+    under_review: { label: "قيد المراجعة", cls: "bg-amber-600" },
+    approved: { label: "معتمد", cls: "bg-green-700" },
+  };
+
+  if (map[s]) return map[s];
+  if (s) return { label: String(status), cls: "bg-slate-600" };
+  return { label: "â€”", cls: "bg-slate-500" };
 }
 
 function stageHelp(status: string) {
@@ -140,6 +254,17 @@ export default function InvestmentDetails() {
   const [project, setProject] = useState<any>(null);
   const [messageDoc, setMessageDoc] = useState<any>(null);
   const [contractDoc, setContractDoc] = useState<any>(null);
+  const [signedUploadFile, setSignedUploadFile] = useState<File | null>(null);
+  const [signedUploadBusy, setSignedUploadBusy] = useState(false);
+  const [localUploadedByKind, setLocalUploadedByKind] = useState<
+    Partial<Record<InvestmentDocumentKind, UploadDocumentResult>>
+  >({});
+  const [r2DetectedPathByKind, setR2DetectedPathByKind] = useState<
+    Partial<Record<"original" | "signed", string>>
+  >({});
+  const [r2ProbeStatusByKind, setR2ProbeStatusByKind] = useState<
+    Partial<Record<"original" | "signed", R2ProbeStatus>>
+  >({});
 
   useEffect(() => {
     if (!user?.uid || !id) return;
@@ -247,6 +372,160 @@ export default function InvestmentDetails() {
     return list;
   }, [investment, messageDoc, contractDoc]);
 
+
+  const status = String(investment?.status || "pending_review");
+  const [stLabel, stCls] = statusLabel(status);
+  const help = stageHelp(status);
+  const investmentId = String(investment?.id || "").trim();
+
+  // Display source priority:
+  // 1) live upload result from this page
+  // 2) stored fields (if available)
+  // 3) detected object in R2 using deterministic contract path
+  const resolvedOriginalPathFromDocs = pickFirstNonEmptyString(
+    localUploadedByKind.original?.path,
+    resolveDocPath(investment, [
+      "originalContract.path",
+      "contractFile.path",
+      "originalContractPath",
+      "originalPath",
+      "contractPath",
+      "documentPath",
+    ]),
+    resolveDocPath(contractDoc, [
+      "originalContract.path",
+      "contractFile.path",
+      "originalContractPath",
+      "originalPath",
+      "contractPath",
+      "documentPath",
+    ]),
+    resolveDocPath(messageDoc, ["originalContract.path", "contractFile.path", "contractPath"])
+  );
+
+  const resolvedSignedPathFromDocs = pickFirstNonEmptyString(
+    localUploadedByKind.signed?.path,
+    resolveDocPath(investment, [
+      "signedContract.path",
+      "signedContractFile.path",
+      "signedContractPath",
+      "signedPath",
+      "signedDocumentPath",
+    ]),
+    resolveDocPath(contractDoc, [
+      "signedContract.path",
+      "signedContractFile.path",
+      "signedContractPath",
+      "signedPath",
+      "signedDocumentPath",
+    ]),
+    resolveDocPath(messageDoc, ["signedContract.path", "signedContractFile.path", "signedContractPath"])
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const investmentId = String(investment?.id || "").trim();
+    if (!investmentId) {
+      setR2DetectedPathByKind({});
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const run = async () => {
+      const next: Partial<Record<"original" | "signed", string>> = {};
+      const probe: Partial<Record<"original" | "signed", R2ProbeStatus>> = {};
+
+      if (!resolvedOriginalPathFromDocs) {
+        const candidate = expectedContractPath(investmentId, "original");
+        const status = candidate ? await r2ObjectStatus(candidate) : "unknown";
+        probe.original = status;
+        if (candidate && status === "exists") {
+          next.original = candidate;
+        }
+      }
+
+      if (!resolvedSignedPathFromDocs) {
+        const candidate = expectedContractPath(investmentId, "signed");
+        const status = candidate ? await r2ObjectStatus(candidate) : "unknown";
+        probe.signed = status;
+        if (candidate && status === "exists") {
+          next.signed = candidate;
+        }
+      }
+
+      if (!cancelled) {
+        setR2DetectedPathByKind(next);
+        setR2ProbeStatusByKind(probe);
+      }
+    };
+
+    void run();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [investment?.id, resolvedOriginalPathFromDocs, resolvedSignedPathFromDocs]);
+
+  const originalExpectedPath = expectedContractPath(investmentId, "original");
+  const signedExpectedPath = expectedContractPath(investmentId, "signed");
+
+  const originalPath = pickFirstNonEmptyString(
+    resolvedOriginalPathFromDocs,
+    r2DetectedPathByKind.original,
+    !r2ProbeStatusByKind.original || r2ProbeStatusByKind.original === "unknown"
+      ? originalExpectedPath
+      : ""
+  );
+  const originalDirectUrl = pickFirstNonEmptyString(
+    resolveDocPath(investment, ["originalContract.url", "contractFile.url", "contractUrl"]),
+    resolveDocPath(contractDoc, ["originalContract.url", "contractFile.url", "contractUrl"]),
+    resolveDocPath(messageDoc, ["originalContract.url", "contractFile.url", "contractUrl"])
+  );
+  const originalViewUrl = pickFirstNonEmptyString(buildR2DownloadUrl(originalPath, false), originalDirectUrl);
+  const originalDownloadUrl = pickFirstNonEmptyString(
+    buildR2DownloadUrl(originalPath, true),
+    originalDirectUrl
+  );
+  const originalName = pickFirstNonEmptyString(
+    localUploadedByKind.original?.fileName,
+    resolveDocPath(investment, ["originalContract.fileName", "contractFile.fileName"]),
+    resolveDocPath(contractDoc, ["originalContract.fileName", "contractFile.fileName"]),
+    resolveDocPath(messageDoc, ["originalContract.fileName", "contractFile.fileName"]),
+    getFileNameFromPath(originalPath || originalDirectUrl)
+  );
+  const hasOriginalContract = Boolean(originalPath || originalDirectUrl);
+
+  const signedPath = pickFirstNonEmptyString(
+    resolvedSignedPathFromDocs,
+    r2DetectedPathByKind.signed,
+    !r2ProbeStatusByKind.signed || r2ProbeStatusByKind.signed === "unknown"
+      ? signedExpectedPath
+      : ""
+  );
+  const signedDirectUrl = pickFirstNonEmptyString(
+    resolveDocPath(investment, ["signedContract.url", "signedContractFile.url", "signedContractUrl"]),
+    resolveDocPath(contractDoc, ["signedContract.url", "signedContractFile.url", "signedContractUrl"]),
+    resolveDocPath(messageDoc, ["signedContract.url", "signedContractFile.url", "signedContractUrl"])
+  );
+  const signedViewUrl = pickFirstNonEmptyString(buildR2DownloadUrl(signedPath, false), signedDirectUrl);
+  const signedDownloadUrl = pickFirstNonEmptyString(buildR2DownloadUrl(signedPath, true), signedDirectUrl);
+  const signedName = pickFirstNonEmptyString(
+    localUploadedByKind.signed?.fileName,
+    resolveDocPath(investment, ["signedContract.fileName", "signedContractFile.fileName"]),
+    resolveDocPath(contractDoc, ["signedContract.fileName", "signedContractFile.fileName"]),
+    resolveDocPath(messageDoc, ["signedContract.fileName", "signedContractFile.fileName"]),
+    getFileNameFromPath(signedPath || signedDirectUrl)
+  );
+  const hasSignedContract = Boolean(signedPath || signedDirectUrl);
+
+  const contractStatusValue = String(
+    investment?.contractStatus || (hasSignedContract ? "signed" : hasOriginalContract ? "sent" : "draft")
+  );
+  const contractStatusMeta = getContractStatusMeta(contractStatusValue);
+  const canUploadSigned = Boolean(investmentId && hasOriginalContract && !hasSignedContract);
+
   if (!user) {
     return (
       <ClientLayout className="py-12">
@@ -311,9 +590,62 @@ export default function InvestmentDetails() {
     );
   }
 
-  const status = String(investment.status || "pending_review");
-  const [stLabel, stCls] = statusLabel(status);
-  const help = stageHelp(status);
+  const refreshInvestmentDoc = async () => {
+    try {
+      if (!id) return;
+      const snap = await getDoc(doc(db, "investments", id));
+      if (!snap.exists()) return;
+      setInvestment({ id: snap.id, ...(snap.data() as any) });
+    } catch (e) {
+      console.error("refresh_investment_error", e);
+    }
+  };
+
+  const handleInvestorSignedUpload = async () => {
+    if (!investmentId) {
+      toast.error("فشل الرفع");
+      return;
+    }
+
+    if (!hasOriginalContract) {
+      toast.error("فشل الرفع");
+      return;
+    }
+
+    if (!signedUploadFile) {
+      toast.warning("الرجاء اختيار ملف PDF");
+      return;
+    }
+
+    const signedFileName = String(signedUploadFile.name || "").toLowerCase();
+    const signedFileMime = String(signedUploadFile.type || "").toLowerCase();
+    const isPdf = signedFileMime === "application/pdf" || signedFileName.endsWith(".pdf");
+    if (!isPdf) {
+      toast.warning("الرجاء اختيار ملف PDF");
+      return;
+    }
+
+    try {
+      setSignedUploadBusy(true);
+      const uploaded = await uploadInvestmentDocument({
+        investmentId,
+        file: signedUploadFile,
+        kind: "signed",
+      });
+      setLocalUploadedByKind((prev) => ({
+        ...prev,
+        [uploaded.kind]: uploaded,
+      }));
+      setSignedUploadFile(null);
+      await refreshInvestmentDoc();
+      toast.success("تم رفع العقد الموقّع بنجاح");
+    } catch (e: any) {
+      console.error(e);
+      toast.error(e?.message || "فشل الرفع");
+    } finally {
+      setSignedUploadBusy(false);
+    }
+  };
 
   return (
     <ClientLayout className="py-12">
@@ -416,26 +748,98 @@ export default function InvestmentDetails() {
 
               <Separator />
 
-              {/* ✅ Contract optional */}
-              {investment?.contractUrl ? (
-                <a href={investment.contractUrl} target="_blank" rel="noreferrer">
-                  <Button variant="outline" className="w-full gap-2">
-                    <FileText className="w-4 h-4" />
-                    عرض ملف العقد
-                  </Button>
-                </a>
-              ) : investment?.contractId ? (
-                <Link href={`/client/contracts/${investment.contractId}`}>
-                  <Button variant="outline" className="w-full gap-2">
-                    <FileText className="w-4 h-4" />
-                    عرض العقد (اختياري)
-                  </Button>
-                </Link>
-              ) : (
-                <div className="text-xs text-muted-foreground">
-                  العقد اختياري — الاستثمار مستقل عنه.
+              <div className="space-y-3">
+                <div className="text-xs text-muted-foreground">مستندات الاستثمار (Cloudflare R2)</div>
+
+                <div className="flex items-center gap-2 flex-wrap">
+                  <div className="text-xs text-muted-foreground">حالة العقد:</div>
+                  <Badge className={contractStatusMeta.cls}>{contractStatusMeta.label}</Badge>
                 </div>
-              )}
+
+                <div className="rounded-xl border bg-muted/20 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-xs text-muted-foreground">العقد الأصلي</div>
+                    <Badge variant="outline">{hasOriginalContract ? "مرفوع" : "لا يوجد"}</Badge>
+                  </div>
+                  {hasOriginalContract ? (
+                    <div className="mt-1.5 space-y-2">
+                      <div className="font-semibold break-words">{originalName}</div>
+                      <div className="flex flex-wrap gap-2">
+                        {originalViewUrl ? (
+                          <a href={originalViewUrl} target="_blank" rel="noreferrer">
+                            <Button variant="outline" size="sm">
+                              عرض
+                            </Button>
+                          </a>
+                        ) : null}
+                        {originalDownloadUrl ? (
+                          <a href={originalDownloadUrl} target="_blank" rel="noreferrer">
+                            <Button variant="outline" size="sm">
+                              تنزيل
+                            </Button>
+                          </a>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mt-1.5 text-xs text-muted-foreground">لا يوجد</div>
+                  )}
+                </div>
+
+                <div className="rounded-xl border bg-muted/20 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-xs text-muted-foreground">العقد الموقّع</div>
+                    <Badge variant="outline">{hasSignedContract ? "مرفوع" : "لا يوجد"}</Badge>
+                  </div>
+                  {hasSignedContract ? (
+                    <div className="mt-1.5 space-y-2">
+                      <div className="font-semibold break-words">{signedName}</div>
+                      <div className="flex flex-wrap gap-2">
+                        {signedViewUrl ? (
+                          <a href={signedViewUrl} target="_blank" rel="noreferrer">
+                            <Button variant="outline" size="sm">
+                              عرض
+                            </Button>
+                          </a>
+                        ) : null}
+                        {signedDownloadUrl ? (
+                          <a href={signedDownloadUrl} target="_blank" rel="noreferrer">
+                            <Button variant="outline" size="sm">
+                              تنزيل
+                            </Button>
+                          </a>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mt-1.5 text-xs text-muted-foreground">لم يتم رفع العقد الموقّع بعد</div>
+                  )}
+                </div>
+
+                {investmentId && !hasSignedContract ? (
+                  <div className="rounded-xl border bg-muted/20 p-3 space-y-3">
+                    <div className="text-xs text-muted-foreground">رفع العقد الموقّع</div>
+                    <Input
+                      type="file"
+                      accept="application/pdf"
+                      onChange={(e) => setSignedUploadFile(e.target.files?.[0] ?? null)}
+                      disabled={signedUploadBusy || !canUploadSigned}
+                    />
+                    <Button
+                      className="w-full"
+                      onClick={handleInvestorSignedUpload}
+                      disabled={signedUploadBusy || !canUploadSigned || !signedUploadFile}
+                    >
+                      {signedUploadBusy ? (
+                        <Loader2 className="w-4 h-4 ml-2 animate-spin" />
+                      ) : (
+                        <CheckCircle2 className="w-4 h-4 ml-2" />
+                      )}
+                      رفع العقد الموقّع
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
             </CardContent>
           </Card>
         </div>

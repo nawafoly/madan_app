@@ -146,15 +146,8 @@ export default function MyInvestments() {
           (snap) => {
             const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
-            // (اختياري) لو عندك استثمارات لاحقاً لنفس المشروع، ممكن ما تعرض الطلب لتجنب التكرار
-            const invProjectIds = new Set(
-              (investments || []).map((i: any) => String(i?.projectId || ""))
-            );
-            const filtered = rows.filter(
-              (r: any) => !invProjectIds.has(String(r?.projectId || ""))
-            );
-
-            setRequests(filtered as any);
+            // تخزين الطلبات الخام، ثم فلترتها لاحقًا مع الاستثمارات من state الحي.
+            setRequests(rows as any);
             reqLoaded = true;
             done();
           },
@@ -217,9 +210,38 @@ export default function MyInvestments() {
     [investments]
   );
 
+  const visibleRequests = useMemo(() => {
+    if (!requests.length) return [];
+
+    const investedRequestIds = new Set(
+      investments
+        .map((i: any) => String(i?.requestId || ""))
+        .filter(Boolean)
+    );
+    const investedProjectIds = new Set(
+      investments
+        .map((i: any) => String(i?.projectId || ""))
+        .filter(Boolean)
+    );
+
+    return requests.filter((r: any) => {
+      const rid = String(r?.id || "");
+      if (rid && investedRequestIds.has(rid)) return false;
+
+      // fallback للبيانات القديمة التي لا تحتوي requestId
+      const pid = String(r?.projectId || "");
+      if (pid && investedProjectIds.has(pid)) return false;
+
+      return true;
+    });
+  }, [requests, investments]);
+
   const pendingRequests = useMemo(
-    () => requests.filter((r: any) => ["pending", "pending_review"].includes(String(r.status || "pending"))).length,
-    [requests]
+    () =>
+      visibleRequests.filter((r: any) =>
+        ["pending", "pending_review"].includes(String(r.status || "pending"))
+      ).length,
+    [visibleRequests]
   );
 
   // ✅ قيد المراجعة = pending investments + pending requests
@@ -377,13 +399,13 @@ export default function MyInvestments() {
           </CardHeader>
 
           <CardContent>
-            {requests.length === 0 ? (
+            {visibleRequests.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 لا توجد طلبات استثمار حالياً
               </div>
             ) : (
               <div className="space-y-4">
-                {requests.map((m: any) => {
+                {visibleRequests.map((m: any) => {
                   const project = projects.find((p) => p.id === m.projectId);
                   const createdAt = m.createdAt ? formatDateAR(m.createdAt) : "—";
                   const status = String(m.status || "pending");

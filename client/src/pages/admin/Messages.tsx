@@ -19,18 +19,7 @@ import {
 } from "firebase/firestore";
 import { db } from "@/_core/firebase";
 import { useAuth } from "@/_core/hooks/useAuth";
-
-// ✅ Storage (اختر واحد فقط حسب مشروعك)
-// ملاحظة: العقود/الرفع موقوفة حالياً، لكن تركت الكود كما هو للمستقبل.
-// لا تحذف هذا الآن لو تبغى ترجع العقود لاحقاً.
-import {
-  getStorage,
-  ref as storageRef,
-  uploadBytesResumable,
-  getDownloadURL,
-} from "firebase/storage";
-
-// إذا عندك export جاهز: import { storage } from "@/_core/firebase";
+import { uploadInvestmentDocument } from "@/lib/documentUploadService";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -69,6 +58,7 @@ import {
   Building2,
   AlertTriangle,
   ExternalLink,
+  Download,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -77,7 +67,7 @@ import { toast } from "sonner";
   - True = لا عقود + لا رفع + لا signed (ترحيل يدوي)
   - False = يرجع نظام العقود القديم بالكامل
 ========================= */
-const CONTRACTS_DISABLED = true;
+const CONTRACTS_DISABLED = false;
 
 /* =========================
   helpers
@@ -204,6 +194,92 @@ function lastTouchedBy(m: any) {
   return "—";
 }
 
+function getFileNameFromPath(path: any): string {
+  const p = String(path || "").trim();
+  if (!p) return "â€”";
+  const normalized = p.replace(/\\/g, "/");
+  const last = normalized.split("/").pop();
+  return String(last || "â€”").trim() || "â€”";
+}
+
+function buildR2DownloadUrl(path: any, forceDownload = false) {
+  const objectPath = String(path || "").trim();
+  if (!objectPath) return "";
+
+  const explicitDownloadBase = String(import.meta.env.VITE_R2_DOWNLOAD_WORKER_URL || "").trim();
+  const uploadWorkerUrl = String(import.meta.env.VITE_R2_UPLOAD_WORKER_URL || "").trim();
+  const baseUrl = explicitDownloadBase || uploadWorkerUrl;
+  if (!baseUrl) return "";
+
+  try {
+    const url = new URL(baseUrl);
+    url.pathname = "/download";
+    url.search = "";
+    url.hash = "";
+    url.searchParams.set("path", objectPath);
+    if (forceDownload) {
+      url.searchParams.set("download", "1");
+    }
+    return url.toString();
+  } catch {
+    return "";
+  }
+}
+
+function expectedContractPath(investmentId: string, kind: "original" | "signed") {
+  const id = String(investmentId || "").trim();
+  if (!id) return "";
+  return kind === "original" ? `contracts/${id}/original.pdf` : `contracts/${id}/signed.pdf`;
+}
+
+type R2ProbeStatus = "exists" | "missing" | "unknown";
+
+async function r2ObjectStatus(path: string): Promise<R2ProbeStatus> {
+  const url = buildR2DownloadUrl(path, false);
+  if (!url) return "unknown";
+  try {
+    const response = await fetch(url, { method: "GET" });
+    try {
+      await response.body?.cancel();
+    } catch {
+      // ignore
+    }
+    if (response.ok) return "exists";
+    if (response.status === 404) return "missing";
+    return "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
+function getContractStatusLabel(status: any): string {
+  const s = String(status || "").trim().toLowerCase();
+  const map: Record<string, string> = {
+    draft: "مسودة",
+    sent: "مرسل",
+    signed: "موقّع",
+    issued: "مرسل",
+    signed_uploaded: "موقّع",
+    under_review: "قيد المراجعة",
+    approved: "معتمد",
+  };
+  return map[s] || (s ? String(status) : "â€”");
+}
+
+function getContractStatusClass(status: any): string {
+  const s = String(status || "").trim().toLowerCase();
+  const map: Record<string, string> = {
+    draft: "bg-slate-100 text-slate-700 border-slate-200",
+    sent: "bg-blue-100 text-blue-700 border-blue-200",
+    signed: "bg-emerald-100 text-emerald-700 border-emerald-200",
+    issued: "bg-blue-100 text-blue-700 border-blue-200",
+    signed_uploaded: "bg-emerald-100 text-emerald-700 border-emerald-200",
+    under_review: "bg-amber-100 text-amber-700 border-amber-200",
+    approved: "bg-green-100 text-green-700 border-green-200",
+  };
+  return map[s] || "bg-slate-100 text-slate-700 border-slate-200";
+}
+
 type StageRole =
   | "reviewer"
   | "review"
@@ -242,6 +318,10 @@ type ContractDoc = {
   files?: ContractFile[];
   createdAt?: any;
   updatedAt?: any;
+  originalContract?: { path?: string; fileName?: string; url?: string };
+  contractFile?: { path?: string; fileName?: string; url?: string };
+  signedContract?: { path?: string; fileName?: string; url?: string };
+  signedContractFile?: { path?: string; fileName?: string; url?: string };
 };
 
 type TimelineEvent = {
@@ -340,8 +420,18 @@ export default function MessagesManagement() {
 
   // ✅ ملفات/عقد
   const [contractDoc, setContractDoc] = useState<ContractDoc | null>(null);
+  const [investmentDoc, setInvestmentDoc] = useState<any>(null);
   const [draftFile, setDraftFile] = useState<File | null>(null);
   const [replaceDraftFile, setReplaceDraftFile] = useState<File | null>(null);
+  const [localUploadedByKind, setLocalUploadedByKind] = useState<
+    Partial<Record<"original" | "signed", { path: string; fileName: string }>>
+  >({});
+  const [r2DetectedPathByKind, setR2DetectedPathByKind] = useState<
+    Partial<Record<"original" | "signed", string>>
+  >({});
+  const [r2ProbeStatusByKind, setR2ProbeStatusByKind] = useState<
+    Partial<Record<"original" | "signed", R2ProbeStatus>>
+  >({});
 
   // ✅ إرجاع مع ملاحظة
   const [returnDialogOpen, setReturnDialogOpen] = useState(false);
@@ -540,6 +630,93 @@ export default function MessagesManagement() {
       setContractDoc(null);
     }
   };
+
+  const loadInvestmentDoc = async (investmentId: string | null) => {
+    try {
+      if (!investmentId) {
+        setInvestmentDoc(null);
+        return;
+      }
+
+      const snap = await getDoc(doc(db, "investments", investmentId));
+      if (!snap.exists()) {
+        setInvestmentDoc(null);
+        return;
+      }
+
+      setInvestmentDoc({
+        id: snap.id,
+        ...(snap.data() as any),
+      });
+    } catch (e) {
+      console.error(e);
+      setInvestmentDoc(null);
+    }
+  };
+
+  const activeInvestmentId = pick(selectedMessage?.investmentId, investmentDoc?.id);
+  const originalPathFromDocs = pick(
+    investmentDoc?.originalContract?.path,
+    investmentDoc?.contractFile?.path,
+    contractDoc?.originalContract?.path,
+    contractDoc?.contractFile?.path,
+    ""
+  );
+  const signedPathFromDocs = pick(
+    investmentDoc?.signedContract?.path,
+    investmentDoc?.signedContractFile?.path,
+    contractDoc?.signedContract?.path,
+    contractDoc?.signedContractFile?.path,
+    ""
+  );
+
+  useEffect(() => {
+    setLocalUploadedByKind({});
+    setR2DetectedPathByKind({});
+    setR2ProbeStatusByKind({});
+  }, [activeInvestmentId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!activeInvestmentId) {
+      setR2DetectedPathByKind({});
+      setR2ProbeStatusByKind({});
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const run = async () => {
+      const next: Partial<Record<"original" | "signed", string>> = {};
+      const probe: Partial<Record<"original" | "signed", R2ProbeStatus>> = {};
+
+      if (!originalPathFromDocs && !localUploadedByKind.original?.path) {
+        const candidate = expectedContractPath(activeInvestmentId, "original");
+        const status = candidate ? await r2ObjectStatus(candidate) : "unknown";
+        probe.original = status;
+        if (candidate && status === "exists") next.original = candidate;
+      }
+
+      if (!signedPathFromDocs && !localUploadedByKind.signed?.path) {
+        const candidate = expectedContractPath(activeInvestmentId, "signed");
+        const status = candidate ? await r2ObjectStatus(candidate) : "unknown";
+        probe.signed = status;
+        if (candidate && status === "exists") next.signed = candidate;
+      }
+
+      if (!cancelled) {
+        setR2DetectedPathByKind(next);
+        setR2ProbeStatusByKind(probe);
+      }
+    };
+
+    void run();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeInvestmentId, originalPathFromDocs, signedPathFromDocs, localUploadedByKind]);
 
   /* =========================
     UI filters
@@ -853,6 +1030,7 @@ export default function MessagesManagement() {
               userId: investorUid,
               amount,
               status: "pending_contract",
+              contractStatus: "draft",
               updatedAt: serverTimestamp(),
               updatedByUid: user?.uid || null,
               updatedByEmail: user?.email || null,
@@ -869,6 +1047,7 @@ export default function MessagesManagement() {
             userId: investorUid,
             amount,
             status: "pending_contract",
+            contractStatus: "draft",
             source: "interest_request",
             projectTitle: projectTitle || null,
             projectSnapshot: selectedMessage?.projectSnapshot || null,
@@ -938,7 +1117,109 @@ export default function MessagesManagement() {
   };
 
   const createContractForInvestment = async () => {
-    toast.info("نظام العقود موقوف حاليًا (حسب CONTRACTS_DISABLED)");
+    if (!selectedMessage) return;
+
+    if (!canAdmin) {
+      toast.error("هذا الإجراء يتطلب صلاحية المدير أو المالك.");
+      return;
+    }
+
+    const investmentId = String(selectedMessage?.investmentId || "").trim();
+    if (!investmentId) {
+      toast.error("لا يوجد investmentId مرتبط بهذا الطلب.");
+      return;
+    }
+
+    if (!draftFile) {
+      toast.warning("الرجاء اختيار ملف PDF");
+      return;
+    }
+
+    const draftFileName = String(draftFile.name || "").toLowerCase();
+    const draftFileMime = String(draftFile.type || "").toLowerCase();
+    const isPdf = draftFileMime === "application/pdf" || draftFileName.endsWith(".pdf");
+    if (!isPdf) {
+      toast.warning("الرجاء اختيار ملف PDF");
+      return;
+    }
+
+    try {
+      setContractBusy(true);
+
+      const uploaded = await uploadInvestmentDocument({
+        investmentId,
+        file: draftFile,
+        kind: "original",
+      });
+      setLocalUploadedByKind((prev) => ({
+        ...prev,
+        [uploaded.kind]: { path: uploaded.path, fileName: uploaded.fileName },
+      }));
+
+      toast.success("تم رفع العقد الأصلي بنجاح");
+      setDraftFile(null);
+
+      await loadInvestmentDoc(investmentId);
+      await loadMessages();
+    } catch (e: any) {
+      console.error(e);
+      toast.error(e?.message || "فشل الرفع");
+    } finally {
+      setContractBusy(false);
+    }
+  };
+
+  const uploadSignedContractForInvestment = async () => {
+    if (!selectedMessage) return;
+
+    if (!canAdmin) {
+      toast.error("هذا الإجراء يتطلب صلاحية المدير أو المالك.");
+      return;
+    }
+
+    const investmentId = String(selectedMessage?.investmentId || "").trim();
+    if (!investmentId) {
+      toast.error("لا يوجد investmentId مرتبط بهذا الطلب.");
+      return;
+    }
+
+    if (!replaceDraftFile) {
+      toast.warning("الرجاء اختيار ملف PDF");
+      return;
+    }
+
+    const signedFileName = String(replaceDraftFile.name || "").toLowerCase();
+    const signedFileMime = String(replaceDraftFile.type || "").toLowerCase();
+    const isPdf = signedFileMime === "application/pdf" || signedFileName.endsWith(".pdf");
+    if (!isPdf) {
+      toast.warning("الرجاء اختيار ملف PDF");
+      return;
+    }
+
+    try {
+      setContractBusy(true);
+
+      const uploaded = await uploadInvestmentDocument({
+        investmentId,
+        file: replaceDraftFile,
+        kind: "signed",
+      });
+      setLocalUploadedByKind((prev) => ({
+        ...prev,
+        [uploaded.kind]: { path: uploaded.path, fileName: uploaded.fileName },
+      }));
+
+      toast.success("تم رفع العقد الموقّع بنجاح");
+      setReplaceDraftFile(null);
+
+      await loadInvestmentDoc(investmentId);
+      await loadMessages();
+    } catch (e: any) {
+      console.error(e);
+      toast.error(e?.message || "فشل الرفع");
+    } finally {
+      setContractBusy(false);
+    }
   };
 
   const sendContractForSigning = async () => {
@@ -1080,15 +1361,85 @@ export default function MessagesManagement() {
     !!selectedMessage?.investmentId &&
     !!selectedMessage?.contractId;
 
-  const isSigned = CONTRACTS_DISABLED
-    ? true
-    : String(selectedMessage?.contractStatus || "") === "signed";
+  const originalExpectedPath = expectedContractPath(activeInvestmentId, "original");
+  const signedExpectedPath = expectedContractPath(activeInvestmentId, "signed");
+
+  const originalContractPath = pick(
+    localUploadedByKind.original?.path,
+    originalPathFromDocs,
+    r2DetectedPathByKind.original,
+    !r2ProbeStatusByKind.original || r2ProbeStatusByKind.original === "unknown"
+      ? originalExpectedPath
+      : ""
+  );
+  const originalContractUrlFromDocs = pick(
+    investmentDoc?.originalContract?.url,
+    investmentDoc?.contractFile?.url,
+    contractDoc?.originalContract?.url,
+    contractDoc?.contractFile?.url,
+    selectedMessage?.contractUrl
+  );
+  const originalContractFileName = pick(
+    localUploadedByKind.original?.fileName,
+    investmentDoc?.originalContract?.fileName,
+    investmentDoc?.contractFile?.fileName,
+    contractDoc?.originalContract?.fileName,
+    contractDoc?.contractFile?.fileName,
+    originalContractPath ? getFileNameFromPath(originalContractPath) : ""
+  );
+  const hasOriginalContract = Boolean(originalContractPath || originalContractUrlFromDocs);
+  const originalContractViewUrl = pick(
+    buildR2DownloadUrl(originalContractPath, false),
+    originalContractUrlFromDocs
+  );
+  const originalContractDownloadUrl = pick(
+    buildR2DownloadUrl(originalContractPath, true),
+    originalContractUrlFromDocs
+  );
+
+  const signedContractPath = pick(
+    localUploadedByKind.signed?.path,
+    signedPathFromDocs,
+    r2DetectedPathByKind.signed,
+    !r2ProbeStatusByKind.signed || r2ProbeStatusByKind.signed === "unknown"
+      ? signedExpectedPath
+      : ""
+  );
+  const signedContractUrlFromDocs = pick(
+    investmentDoc?.signedContract?.url,
+    investmentDoc?.signedContractFile?.url,
+    contractDoc?.signedContract?.url,
+    contractDoc?.signedContractFile?.url
+  );
+  const signedContractFileName = pick(
+    localUploadedByKind.signed?.fileName,
+    investmentDoc?.signedContract?.fileName,
+    investmentDoc?.signedContractFile?.fileName,
+    contractDoc?.signedContract?.fileName,
+    contractDoc?.signedContractFile?.fileName,
+    signedContractPath ? getFileNameFromPath(signedContractPath) : ""
+  );
+  const hasSignedContract = Boolean(signedContractPath || signedContractUrlFromDocs);
+  const signedContractViewUrl = pick(
+    buildR2DownloadUrl(signedContractPath, false),
+    signedContractUrlFromDocs
+  );
+  const signedContractDownloadUrl = pick(
+    buildR2DownloadUrl(signedContractPath, true),
+    signedContractUrlFromDocs
+  );
+
+  const contractStatusValue = pick(
+    investmentDoc?.contractStatus,
+    hasSignedContract ? "signed" : hasOriginalContract ? "sent" : "draft"
+  );
+
+  const isSigned = CONTRACTS_DISABLED ? true : contractStatusValue === "signed";
 
   const canFinalize = CONTRACTS_DISABLED
     ? isInvestment && !!selectedMessage?.investmentId
     : isInvestment &&
       !!selectedMessage?.investmentId &&
-      !!selectedMessage?.contractId &&
       isSigned;
 
   const canApproveAndCreateInvestment =
@@ -1330,6 +1681,7 @@ export default function MessagesManagement() {
                                 );
 
                                 await loadContractDoc(normalizedOne?.contractId || null);
+                                await loadInvestmentDoc(normalizedOne?.investmentId || null);
 
                                 setIsDetailDialogOpen(true);
                               }}
@@ -1674,6 +2026,180 @@ export default function MessagesManagement() {
                           )}
                           إعادة فتح (للمالك)
                         </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="rsg-card">
+                    <CardHeader>
+                      <CardTitle>مستندات الاستثمار (Cloudflare R2)</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-5">
+                      <InfoRow
+                        label="رقم الاستثمار"
+                        value={String(selectedMessage?.investmentId || "â€”")}
+                      />
+
+                      <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-3 sm:px-4">
+                        <div className="text-xs text-muted-foreground mb-2">حالة العقد</div>
+                        <div className="flex items-center flex-wrap gap-2">
+                          <span
+                            className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${getContractStatusClass(
+                              contractStatusValue
+                            )}`}
+                          >
+                            {getContractStatusLabel(contractStatusValue)}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div className="rounded-xl border border-slate-200 bg-white px-3 py-3 sm:px-4 space-y-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="text-sm font-semibold">العقد الأصلي</div>
+                            <span
+                              className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${
+                                hasOriginalContract
+                                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                  : "bg-slate-100 text-slate-600 border-slate-200"
+                              }`}
+                            >
+                              {hasOriginalContract ? "مرفوع" : "لا يوجد"}
+                            </span>
+                          </div>
+
+                          {hasOriginalContract ? (
+                            <>
+                              <div className="text-sm font-medium text-slate-900 break-words">
+                                {originalContractFileName}
+                              </div>
+                              <div className="flex flex-wrap gap-2 pt-1">
+                                {originalContractViewUrl ? (
+                                  <a href={originalContractViewUrl} target="_blank" rel="noreferrer">
+                                    <Button variant="outline" size="sm" className="gap-2">
+                                      <Eye className="w-4 h-4" />
+                                      عرض
+                                    </Button>
+                                  </a>
+                                ) : null}
+                                {originalContractDownloadUrl ? (
+                                  <a href={originalContractDownloadUrl} target="_blank" rel="noreferrer">
+                                    <Button variant="outline" size="sm" className="gap-2">
+                                      <Download className="w-4 h-4" />
+                                      تنزيل
+                                    </Button>
+                                  </a>
+                                ) : null}
+                              </div>
+                            </>
+                          ) : (
+                            <div className="text-sm text-muted-foreground">لا يوجد</div>
+                          )}
+                        </div>
+
+                        <div className="rounded-xl border border-slate-200 bg-white px-3 py-3 sm:px-4 space-y-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="text-sm font-semibold">العقد الموقّع</div>
+                            <span
+                              className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${
+                                hasSignedContract
+                                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                  : "bg-slate-100 text-slate-600 border-slate-200"
+                              }`}
+                            >
+                              {hasSignedContract ? "مرفوع" : "لا يوجد"}
+                            </span>
+                          </div>
+
+                          {hasSignedContract ? (
+                            <>
+                              <div className="text-sm font-medium text-slate-900 break-words">
+                                {signedContractFileName}
+                              </div>
+                              <div className="flex flex-wrap gap-2 pt-1">
+                                {signedContractViewUrl ? (
+                                  <a href={signedContractViewUrl} target="_blank" rel="noreferrer">
+                                    <Button variant="outline" size="sm" className="gap-2">
+                                      <Eye className="w-4 h-4" />
+                                      عرض
+                                    </Button>
+                                  </a>
+                                ) : null}
+                                {signedContractDownloadUrl ? (
+                                  <a href={signedContractDownloadUrl} target="_blank" rel="noreferrer">
+                                    <Button variant="outline" size="sm" className="gap-2">
+                                      <Download className="w-4 h-4" />
+                                      تنزيل
+                                    </Button>
+                                  </a>
+                                ) : null}
+                              </div>
+                            </>
+                          ) : (
+                            <div className="text-sm text-muted-foreground">لم يتم رفع العقد الموقّع بعد</div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="border-t border-slate-200 pt-4">
+                        <div className="text-xs text-muted-foreground mb-3">رفع المستندات</div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="rounded-xl border border-slate-200 bg-slate-50/40 px-3 py-3 sm:px-4 space-y-3">
+                            <Label>رفع العقد الأصلي (PDF)</Label>
+                            <Input
+                              type="file"
+                              accept="application/pdf"
+                              onChange={(e) => setDraftFile(e.target.files?.[0] ?? null)}
+                              disabled={contractBusy || !selectedMessage?.investmentId}
+                            />
+                            <Button
+                              className="w-full bg-blue-700 hover:bg-blue-800"
+                              onClick={createContractForInvestment}
+                              disabled={
+                                contractBusy ||
+                                !selectedMessage?.investmentId ||
+                                !draftFile ||
+                                !canAdmin
+                              }
+                            >
+                              {contractBusy ? (
+                                <Loader2 className="w-4 h-4 ml-2 animate-spin" />
+                              ) : (
+                                <Upload className="w-4 h-4 ml-2" />
+                              )}
+                              رفع العقد الأصلي
+                            </Button>
+                          </div>
+
+                          <div className="rounded-xl border border-slate-200 bg-slate-50/40 px-3 py-3 sm:px-4 space-y-3">
+                            <Label>رفع العقد الموقّع (PDF)</Label>
+                            <Input
+                              type="file"
+                              accept="application/pdf"
+                              onChange={(e) => setReplaceDraftFile(e.target.files?.[0] ?? null)}
+                              disabled={contractBusy || !selectedMessage?.investmentId || hasSignedContract}
+                            />
+                            <Button
+                              className="w-full bg-emerald-700 hover:bg-emerald-800"
+                              onClick={uploadSignedContractForInvestment}
+                              disabled={
+                                contractBusy ||
+                                hasSignedContract ||
+                                !selectedMessage?.investmentId ||
+                                !replaceDraftFile ||
+                                !canAdmin
+                              }
+                            >
+                              {contractBusy ? (
+                                <Loader2 className="w-4 h-4 ml-2 animate-spin" />
+                              ) : (
+                                <CheckCircle2 className="w-4 h-4 ml-2" />
+                              )}
+                              رفع العقد الموقّع
+                            </Button>
+                          </div>
+                        </div>
                       </div>
                     </CardContent>
                   </Card>
