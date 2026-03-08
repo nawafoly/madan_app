@@ -3,7 +3,6 @@
  * Architecture contract:
  * - This worker is the source of truth for file storage success.
  * - Upload success must depend only on writing to R2.
- * - Any Firestore/Firebase metadata sync is optional outside this worker and must not block uploads.
  *
  * Required binding:
  * - R2 bucket binding name: R2_BUCKET
@@ -14,7 +13,6 @@
  */
 
 const ALLOWED_KINDS = new Set(["original", "signed", "attachment"]);
-const ALLOWED_CONTENT_TYPES = new Set(["application/pdf"]);
 
 export default {
   async fetch(request, env) {
@@ -73,12 +71,6 @@ async function handleUpload(request, bucket) {
   }
 
   const normalizedType = normalizeContentType(file.type, file.name);
-  if (!ALLOWED_CONTENT_TYPES.has(normalizedType)) {
-    return json(400, {
-      ok: false,
-      message: "unsupported_file_type",
-    });
-  }
 
   if ((kind === "original" || kind === "signed") && normalizedType !== "application/pdf") {
     return json(400, {
@@ -222,6 +214,24 @@ function normalizeContentType(type, fileName) {
 function inferContentTypeFromName(fileName) {
   const lower = String(fileName || "").toLowerCase();
   if (lower.endsWith(".pdf")) return "application/pdf";
+  if (lower.endsWith(".png")) return "image/png";
+  if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
+  if (lower.endsWith(".webp")) return "image/webp";
+  if (lower.endsWith(".gif")) return "image/gif";
+  if (lower.endsWith(".svg")) return "image/svg+xml";
+  if (lower.endsWith(".avif")) return "image/avif";
+  if (lower.endsWith(".txt")) return "text/plain";
+  if (lower.endsWith(".csv")) return "text/csv";
+  if (lower.endsWith(".json")) return "application/json";
+  if (lower.endsWith(".zip")) return "application/zip";
+  if (lower.endsWith(".doc")) return "application/msword";
+  if (lower.endsWith(".docx")) {
+    return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  }
+  if (lower.endsWith(".xls")) return "application/vnd.ms-excel";
+  if (lower.endsWith(".xlsx")) {
+    return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+  }
   return "";
 }
 
@@ -243,6 +253,24 @@ function buildUploadPath(investmentId, kind, originalFileName, contentType) {
 
 function inferExtensionFromType(contentType) {
   if (contentType === "application/pdf") return ".pdf";
+  if (contentType === "image/png") return ".png";
+  if (contentType === "image/jpeg") return ".jpg";
+  if (contentType === "image/webp") return ".webp";
+  if (contentType === "image/gif") return ".gif";
+  if (contentType === "image/svg+xml") return ".svg";
+  if (contentType === "image/avif") return ".avif";
+  if (contentType === "text/plain") return ".txt";
+  if (contentType === "text/csv") return ".csv";
+  if (contentType === "application/json") return ".json";
+  if (contentType === "application/zip") return ".zip";
+  if (contentType === "application/msword") return ".doc";
+  if (contentType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
+    return ".docx";
+  }
+  if (contentType === "application/vnd.ms-excel") return ".xls";
+  if (contentType === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") {
+    return ".xlsx";
+  }
   return "";
 }
 

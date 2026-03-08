@@ -1237,7 +1237,7 @@ export default function MessagesManagement() {
         investmentId,
         file: draftFile,
         kind: "original",
-      }, { strategy: "callable" });
+      });
       setLocalUploadedByKind((prev) => ({
         ...prev,
         [uploaded.kind]: { path: uploaded.path, fileName: uploaded.fileName },

@@ -2,8 +2,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRoute, useLocation } from "wouter";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
-import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db } from "@/_core/firebase";
+import { buildR2DownloadUrl, uploadInvestmentDocument } from "@/lib/documentUploadService";
 
 import DashboardLayout from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
@@ -74,10 +74,6 @@ function normalizeCover(src?: string) {
   if (s.startsWith("http://") || s.startsWith("https://")) return s;
   if (s.startsWith("/")) return s;
   return `/${s}`;
-}
-
-function safeFileName(name: string) {
-  return name.replace(/[^\w.\-]+/g, "_");
 }
 
 type Attachment = { name?: string; url?: string; externalUrl?: string };
@@ -264,6 +260,7 @@ export default function EditProject() {
     newMilestoneRow(),
   ]);
   const [faqRows, setFaqRows] = useState<FaqRow[]>([newFaqRow()]);
+  const projectUploadId = projectId ? `project_${projectId}` : "";
 
   const handleAttachmentFileUpload = async (index: number, file?: File | null) => {
     if (!file || !projectId) return;
@@ -273,13 +270,13 @@ export default function EditProject() {
         prev.map((row, i) => (i === index ? { ...row, uploading: true } : row))
       );
 
-      const storage = getStorage();
-      const path = `projects/${projectId}/attachments/${Date.now()}-${index}-${safeFileName(
-        file.name
-      )}`;
-      const ref = storageRef(storage, path);
-      await uploadBytes(ref, file);
-      const downloadUrl = await getDownloadURL(ref);
+      const uploaded = await uploadInvestmentDocument({
+        investmentId: projectUploadId,
+        file,
+        kind: "attachment",
+      });
+      const downloadUrl = buildR2DownloadUrl(uploaded.path);
+      if (!downloadUrl) throw new Error("Upload failed");
 
       setAttachmentRows((prev) =>
         prev.map((row, i) =>
@@ -308,11 +305,13 @@ export default function EditProject() {
 
     try {
       setCoverUploading(true);
-      const storage = getStorage();
-      const path = `projects/${projectId}/images/cover/${Date.now()}-${safeFileName(file.name)}`;
-      const ref = storageRef(storage, path);
-      await uploadBytes(ref, file);
-      const downloadUrl = await getDownloadURL(ref);
+      const uploaded = await uploadInvestmentDocument({
+        investmentId: projectUploadId,
+        file,
+        kind: "attachment",
+      });
+      const downloadUrl = buildR2DownloadUrl(uploaded.path);
+      if (!downloadUrl) throw new Error("Upload failed");
       setFormData((prev) => ({ ...prev, coverImage: downloadUrl }));
       toast.success("تم رفع صورة الغلاف بنجاح");
     } catch (e) {
@@ -330,13 +329,16 @@ export default function EditProject() {
 
     try {
       setGalleryUploading(true);
-      const storage = getStorage();
       const uploadedUrls = await Promise.all(
-        selected.map(async (file, index) => {
-          const path = `projects/${projectId}/images/gallery/${Date.now()}-${index}-${safeFileName(file.name)}`;
-          const ref = storageRef(storage, path);
-          await uploadBytes(ref, file);
-          return getDownloadURL(ref);
+        selected.map(async (file) => {
+          const uploaded = await uploadInvestmentDocument({
+            investmentId: projectUploadId,
+            file,
+            kind: "attachment",
+          });
+          const downloadUrl = buildR2DownloadUrl(uploaded.path);
+          if (!downloadUrl) throw new Error("Upload failed");
+          return downloadUrl;
         })
       );
 

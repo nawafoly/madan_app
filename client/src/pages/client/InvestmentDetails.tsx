@@ -10,13 +10,12 @@ import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 
 import { useAuth } from "@/_core/hooks/useAuth";
-import { db, fbFunctions } from "@/_core/firebase";
+import { db } from "@/_core/firebase";
 import {
   uploadInvestmentDocument,
   type InvestmentDocumentKind,
   type UploadDocumentResult,
 } from "@/lib/documentUploadService";
-import { httpsCallable } from "firebase/functions";
 
 import {
   Building2,
@@ -27,7 +26,6 @@ import {
   ArrowLeft,
   CheckCircle2,
   Loader2,
-  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -257,11 +255,6 @@ function stageHelp(status: string) {
   };
 }
 
-const removeInvestmentSignedContractCallable = httpsCallable(
-  fbFunctions,
-  "removeInvestmentSignedContract"
-);
-
 export default function InvestmentDetails() {
   const { user } = useAuth();
   const [, params] = useRoute("/client/investments/:id");
@@ -274,7 +267,6 @@ export default function InvestmentDetails() {
   const [contractDoc, setContractDoc] = useState<any>(null);
   const [signedUploadFile, setSignedUploadFile] = useState<File | null>(null);
   const [signedUploadBusy, setSignedUploadBusy] = useState(false);
-  const [signedDeleteBusy, setSignedDeleteBusy] = useState(false);
   const [localUploadedByKind, setLocalUploadedByKind] = useState<
     Partial<Record<InvestmentDocumentKind, UploadDocumentResult>>
   >({});
@@ -736,7 +728,7 @@ export default function InvestmentDetails() {
         investmentId,
         file: signedUploadFile,
         kind: "signed",
-      }, { strategy: "callable" });
+      });
       setLocalUploadedByKind((prev) => ({
         ...prev,
         [uploaded.kind]: uploaded,
@@ -749,53 +741,6 @@ export default function InvestmentDetails() {
       toast.error(e?.message || "فشل الرفع");
     } finally {
       setSignedUploadBusy(false);
-    }
-  };
-
-  const handleInvestorDeleteSigned = async () => {
-    if (!investmentId) {
-      toast.error("فشل حذف العقد");
-      return;
-    }
-
-    if (!isOwnerInvestor) {
-      toast.error("غير مصرح");
-      return;
-    }
-
-    if (!hasSignedContract) {
-      toast.error("لا يوجد عقد موقّع لحذفه");
-      return;
-    }
-
-    const confirmed = window.confirm(
-      "سيتم حذف العقد الموقّع الحالي لتتمكن من رفع نسخة جديدة. هل تريد المتابعة؟"
-    );
-    if (!confirmed) return;
-
-    try {
-      setSignedDeleteBusy(true);
-      await removeInvestmentSignedContractCallable({ investmentId });
-      setLocalUploadedByKind((prev) => {
-        const next = { ...prev };
-        delete next.signed;
-        return next;
-      });
-      setR2DetectedPathByKind((prev) => ({
-        ...prev,
-        signed: "",
-      }));
-      setR2ProbeStatusByKind((prev) => ({
-        ...prev,
-        signed: "unknown",
-      }));
-      await refreshInvestmentDoc();
-      toast.success("تم حذف العقد الموقّع. يمكنك رفع نسخة جديدة الآن.");
-    } catch (e: any) {
-      console.error(e);
-      toast.error(e?.message || "فشل حذف العقد");
-    } finally {
-      setSignedDeleteBusy(false);
     }
   };
 
@@ -973,21 +918,6 @@ export default function InvestmentDetails() {
                               تنزيل
                             </Button>
                           </a>
-                        ) : null}
-                        {isOwnerInvestor ? (
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={handleInvestorDeleteSigned}
-                            disabled={signedDeleteBusy}
-                          >
-                            {signedDeleteBusy ? (
-                              <Loader2 className="w-4 h-4 ml-2 animate-spin" />
-                            ) : (
-                              <Trash2 className="w-4 h-4 ml-2" />
-                            )}
-                            حذف (مؤقت)
-                          </Button>
                         ) : null}
                       </div>
                     </div>
