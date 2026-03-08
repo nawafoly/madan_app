@@ -37,6 +37,10 @@ import {
   FileText,
 } from "lucide-react";
 import { toast } from "sonner";
+import {
+  getInvestorActivationMessage,
+  isInvestmentActivatedStatus,
+} from "@shared/investmentLifecycle";
 
 /* =========================
   إعدادات التواصل (عدّلها مرة وحدة)
@@ -102,9 +106,14 @@ function statusBadge(status: string) {
     in_progress: { label: "قيد المعالجة", cls: "bg-blue-600" },
     needs_account: { label: "يتطلب حساب", cls: "bg-yellow-600" },
     pending_review: { label: "قيد المراجعة", cls: "bg-blue-600" },
-    pending_contract: { label: "بانتظار العقد", cls: "bg-indigo-600" },
-    signing: { label: "بانتظار التوقيع", cls: "bg-indigo-700" },
-    signed: { label: "تم التوقيع", cls: "bg-emerald-700" },
+    pending_contract: { label: "العقد قيد التجهيز", cls: "bg-indigo-600" },
+    signing: { label: "بانتظار توقيعك", cls: "bg-indigo-700" },
+    signed: { label: "بانتظار الاعتماد", cls: "bg-amber-700" },
+    draft: { label: "مسودة عقد", cls: "bg-slate-600" },
+    sent: { label: "العقد مرسل", cls: "bg-blue-600" },
+    pending_signature: { label: "بانتظار التوقيع", cls: "bg-indigo-700" },
+    under_review: { label: "العقد قيد المراجعة", cls: "bg-amber-600" },
+    approved: { label: "تم اعتماد العقد", cls: "bg-green-700" },
     active: { label: "نشط", cls: "bg-emerald-700" },
     resolved: { label: "مكتمل", cls: "bg-gray-700" },
     rejected: { label: "مرفوض", cls: "bg-red-700" },
@@ -382,12 +391,15 @@ export default function ClientContractDetails() {
 
   // ✅ لقط الحالة والمرحلة “بأفضل مصدر”
   const current = useMemo(() => {
-    // أولوية: investment.status > message.status > contract.status
     const invStatus = safeStr(investmentDoc?.status);
     const msgStatus = safeStr(messageDoc?.status);
-    const conStatus = safeStr(contractDoc?.status);
-
-    const status = invStatus || msgStatus || conStatus || "—";
+    const conStatus =
+      safeStr(contractDoc?.status) ||
+      safeStr(investmentDoc?.contractStatus) ||
+      safeStr(messageDoc?.contractStatus);
+    const status = isInvestmentActivatedStatus(invStatus)
+      ? invStatus
+      : conStatus || invStatus || msgStatus || "—";
     const stageRole = safeStr(messageDoc?.stageRole) || "—";
 
     const projectTitle =
@@ -403,6 +415,8 @@ export default function ClientContractDetails() {
 
     return {
       status,
+      investmentStatus: invStatus,
+      contractStatus: conStatus,
       stageRole,
       projectTitle,
       amount,
@@ -490,7 +504,7 @@ export default function ClientContractDetails() {
       };
     }
 
-    if (s === "in_progress" || s === "pending_review" || s === "pending_contract") {
+    if (s === "in_progress" || s === "pending_review") {
       return {
         title: "طلبك قيد المعالجة",
         desc: "نعمل الآن على طلبك. يمكنك إرسال أي معلومات إضافية لتسريع الإجراء.",
@@ -498,11 +512,15 @@ export default function ClientContractDetails() {
       };
     }
 
-    if (s === "signing") {
+    if (current.investmentStatus || current.contractStatus) {
+      const activationMessage = getInvestorActivationMessage(
+        current.investmentStatus,
+        current.contractStatus
+      );
       return {
-        title: "بانتظار إجراء منك",
-        desc: "الطلب في مرحلة تتطلب إجراء. إذا احتجت مساعدة، تواصل معنا فوراً.",
-        cta: "مساعدة فورية",
+        title: activationMessage.title,
+        desc: activationMessage.description,
+        cta: "إرسال متابعة",
       };
     }
 
@@ -519,7 +537,7 @@ export default function ClientContractDetails() {
       desc: "تابع خط السير بالأسفل، ولو تحتاج مساعدة تواصل معنا.",
       cta: "تواصل معنا",
     };
-  }, [current.status, current.stageRole]);
+  }, [current.contractStatus, current.investmentStatus, current.stageRole, current.status]);
 
   // ✅ إرسال متابعة داخل المنصة (رسالة جديدة مرتبطة بالطلب)
   const sendFollowup = async () => {

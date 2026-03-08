@@ -26,7 +26,6 @@ export const OFFICIAL_INVESTMENT_STATUSES = [
 export type InvestmentStatus = (typeof OFFICIAL_INVESTMENT_STATUSES)[number];
 
 export const COUNTED_INVESTMENT_STATUSES = [
-  "signed",
   "active",
   "completed",
 ] as const;
@@ -37,12 +36,13 @@ export const PENDING_INVESTMENT_STATUSES = [
   "pending",
   "pending_contract",
   "signing",
+  "signed",
 ] as const;
 export type PendingInvestmentStatus =
   (typeof PENDING_INVESTMENT_STATUSES)[number];
 
 export const LEGACY_INVESTMENT_STATUS_MAP: Record<string, InvestmentStatus> = {
-  approved: "signed",
+  approved: "pending",
   pending_review: "pending",
 };
 
@@ -200,9 +200,9 @@ export interface InvestmentDoc {
   finalAmount?: number;
 
   /**
-   * ✅ بداية الاستثمار الفعلية = signedAt
-   * ملاحظة: خليناه optional عشان ما نكسر بيانات قديمة pending/signing
-   * لكن عند signed/active لازم يكون موجود (نفرضها في الكود/validation لاحقًا)
+   * SignedAt is for contract completion only.
+   * It must not be treated as the real investment start date.
+   * The actual investment clock starts from startAt after final activation.
    */
   signedAt?: Timestamp;
 

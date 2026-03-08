@@ -1,13 +1,14 @@
 // client/src/pages/client/InvestmentDetails.tsx
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useRoute } from "wouter";
 
 import ClientLayout from "@/components/ClientLayout";
+import ContractFilePicker from "@/components/ContractFilePicker";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
-import { Input } from "@/components/ui/input";
 
 import { useAuth } from "@/_core/hooks/useAuth";
 import { db } from "@/_core/firebase";
@@ -26,8 +27,14 @@ import {
   ArrowLeft,
   CheckCircle2,
   Loader2,
+  TrendingUp,
 } from "lucide-react";
 import { toast } from "sonner";
+import { getInvestmentProfitSnapshot } from "@shared/investmentProfit";
+import {
+  getInvestorActivationMessage,
+  isInvestmentActivatedStatus,
+} from "@shared/investmentLifecycle";
 
 import {
   doc,
@@ -77,13 +84,13 @@ function statusLabel(status: string) {
   const map: any = {
     pending_review: ["قيد المراجعة", "bg-blue-600"],
     pending: ["قيد المراجعة", "bg-blue-600"],
-    approved: ["تمت الموافقة", "bg-green-600"],
+    approved: ["بانتظار التفعيل", "bg-amber-600"],
     active: ["نشط", "bg-emerald-700"],
     rejected: ["مرفوض", "bg-red-600"],
     completed: ["مكتمل", "bg-gray-600"],
-    pending_contract: ["بانتظار مستند", "bg-purple-600"],
-    signing: ["بانتظار إجراء منك", "bg-indigo-600"],
-    signed: ["تم الإجراء", "bg-green-700"],
+    pending_contract: ["العقد قيد التجهيز", "bg-purple-600"],
+    signing: ["بانتظار توقيعك", "bg-indigo-600"],
+    signed: ["بانتظار الاعتماد", "bg-amber-600"],
   };
   return map[status] || ["قيد المراجعة", "bg-blue-600"];
 }
@@ -263,6 +270,77 @@ function stageHelp(status: string) {
   };
 }
 
+function formatMoneyAR(
+  value: number | null | undefined,
+  minimumFractionDigits = 0,
+  maximumFractionDigits = minimumFractionDigits
+) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) return "—";
+  return `${amount.toLocaleString("ar-SA", {
+    minimumFractionDigits,
+    maximumFractionDigits,
+  })} ر.س`;
+}
+
+function formatDateAR(value: Date | null | undefined) {
+  return value ? value.toLocaleDateString("ar-SA") : "—";
+}
+
+function formatPercentAR(value: number | null | undefined, digits = 2) {
+  const percent = Number(value);
+  if (!Number.isFinite(percent)) return "—";
+  return `${percent.toLocaleString("ar-SA", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: digits,
+  })}%`;
+}
+
+function formatDurationLabel(months: number | null | undefined) {
+  const totalMonths = Number(months);
+  if (!Number.isFinite(totalMonths) || totalMonths <= 0) return "—";
+
+  const roundedMonths = Math.round(totalMonths * 10) / 10;
+  if (Math.abs(roundedMonths - 12) < 0.05) return "سنة";
+  if (roundedMonths > 12 && Math.abs(roundedMonths % 12) < 0.05) {
+    return `${(roundedMonths / 12).toLocaleString("ar-SA", {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    })} سنة`;
+  }
+
+  return `${roundedMonths.toLocaleString("ar-SA", {
+    minimumFractionDigits: roundedMonths % 1 === 0 ? 0 : 1,
+    maximumFractionDigits: 1,
+  })} شهر`;
+}
+
+function liveProfitDecimals(profitPerSecond: number, isLive: boolean) {
+  if (!isLive) return 2;
+  if (profitPerSecond >= 0.01) return 2;
+  if (profitPerSecond >= 0.001) return 3;
+  return 4;
+}
+
+function performanceNote(metrics: ReturnType<typeof getInvestmentProfitSnapshot>) {
+  if (!metrics.hasPerformanceTerms) {
+    return "سيظهر عداد الربح بعد تثبيت مبلغ الاستثمار ونسبة الربح وتاريخ البداية والنهاية في النظام.";
+  }
+  if (metrics.freezeReason === "rejected" || metrics.freezeReason === "cancelled") {
+    return "هذا الاستثمار غير نشط، لذلك لا يتم احتساب ربح جارٍ له.";
+  }
+  if (metrics.freezeReason === "not_started") {
+    return "سيبدأ عداد الربح تلقائيًا عند دخول تاريخ بداية الاستثمار.";
+  }
+  if (metrics.freezeReason === "completed") {
+    return "تم إقفال الاستثمار وتثبيت الربح النهائي بناءً على الحالة النهائية المسجلة.";
+  }
+  if (metrics.freezeReason === "timeline_ended") {
+    return "اكتملت مدة المشروع، لذلك توقف العداد عند الربح النهائي المتوقع.";
+  }
+  return "الربح الجاري للعرض فقط، ويتم احتسابه مباشرة من الوقت المنقضي بين بداية الاستثمار ونهاية المشروع.";
+}
+
 export default function InvestmentDetails() {
   const { user } = useAuth();
   const [, params] = useRoute("/client/investments/:id");
@@ -284,6 +362,7 @@ export default function InvestmentDetails() {
   const [r2ProbeStatusByKind, setR2ProbeStatusByKind] = useState<
     Partial<Record<"original" | "signed", R2ProbeStatus>>
   >({});
+  const [profitNow, setProfitNow] = useState(() => new Date());
 
   useEffect(() => {
     if (!user?.uid || !id) return;
@@ -391,11 +470,68 @@ export default function InvestmentDetails() {
     return list;
   }, [investment, messageDoc, contractDoc]);
 
+  const projectProfitFallback = useMemo(
+    () =>
+      project
+        ? {
+            annualReturn: project?.annualReturn ?? null,
+            durationMonths: project?.durationMonths ?? project?.duration ?? null,
+            plannedEndAt: project?.plannedEndAt ?? null,
+          }
+        : null,
+    [project]
+  );
+
+  const profitMetrics = useMemo(
+    () =>
+      getInvestmentProfitSnapshot(investment, {
+        now: profitNow,
+        projectFallback: projectProfitFallback,
+      }),
+    [investment, profitNow, projectProfitFallback]
+  );
+
+  useEffect(() => {
+    setProfitNow(new Date());
+  }, [investment?.id, project?.id]);
+
+  useEffect(() => {
+    if (!profitMetrics.isLive) return;
+
+    const timer = window.setInterval(() => {
+      setProfitNow(new Date());
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [profitMetrics.isLive]);
+
 
   const status = String(investment?.status || "pending_review");
   const [stLabel, stCls] = statusLabel(status);
-  const help = stageHelp(status);
+  const baseHelp = stageHelp(status);
   const investmentId = String(investment?.id || "").trim();
+  const currentProfitDigits = liveProfitDecimals(
+    profitMetrics.profitPerSecond,
+    profitMetrics.isLive
+  );
+  const profitProgressPercent = Math.max(
+    0,
+    Math.min(100, profitMetrics.progressRatio * 100)
+  );
+  const profitStatusMeta = profitMetrics.isLive
+    ? {
+        label: "يتحدث تلقائيًا",
+        cls: "border-emerald-200 bg-emerald-50 text-emerald-700",
+      }
+    : profitMetrics.isFrozen
+      ? {
+          label: "مثبت",
+          cls: "border-slate-200 bg-slate-100 text-slate-700",
+        }
+      : {
+          label: "بانتظار التفعيل",
+          cls: "border-amber-200 bg-amber-50 text-amber-700",
+        };
 
   // Display source priority:
   // 1) live upload result from this page
@@ -465,15 +601,6 @@ export default function InvestmentDetails() {
         }
       }
 
-      if (!resolvedSignedPathFromDocs) {
-        const candidate = expectedContractPath(investmentId, "signed");
-        const status = candidate ? await r2ObjectStatus(candidate) : "unknown";
-        probe.signed = status;
-        if (candidate && status === "exists") {
-          next.signed = candidate;
-        }
-      }
-
       if (!cancelled) {
         setR2DetectedPathByKind(next);
         setR2ProbeStatusByKind(probe);
@@ -515,10 +642,7 @@ export default function InvestmentDetails() {
   );
   const hasOriginalContract = Boolean(originalPath || originalDirectUrl);
 
-  const signedPath = pickFirstNonEmptyString(
-    resolvedSignedPathFromDocs,
-    r2DetectedPathByKind.signed
-  );
+  const signedPath = resolvedSignedPathFromDocs;
   const signedDirectUrl = pickFirstNonEmptyString(
     resolveDocPath(investment, ["signedContract.url", "signedContractFile.url", "signedContractUrl"]),
     resolveDocPath(contractDoc, ["signedContract.url", "signedContractFile.url", "signedContractUrl"]),
@@ -601,10 +725,12 @@ export default function InvestmentDetails() {
     (isSignedOutdatedByFlag || isSignedOutdatedByVersion || isSignedOutdatedByTime);
 
   const storedContractStatus = String(investment?.contractStatus || "").trim().toLowerCase();
+  const needsFreshSignedContract = storedContractStatus === "pending_signature" || isSignedOutdated;
+  const hasCurrentSignedContract = hasSignedContract && !needsFreshSignedContract;
   const contractStatusValue = String(
-    isSignedOutdated
+    needsFreshSignedContract
       ? "pending_signature"
-      : hasSignedContract
+      : hasCurrentSignedContract
       ? ["approved", "under_review"].includes(storedContractStatus)
         ? storedContractStatus
         : "signed"
@@ -619,16 +745,28 @@ export default function InvestmentDetails() {
     contractStatusNormalized === "sent" || contractStatusNormalized === "pending_signature";
   const isOwnerInvestor = String(investment?.investorUid || "").trim() === String(user?.uid || "").trim();
   const contractStatusMeta = getContractStatusMeta(contractStatusValue);
+  const investmentActivated = isInvestmentActivatedStatus(status);
+  const activationMessage = getInvestorActivationMessage(status, contractStatusValue);
+  const help = investmentActivated
+    ? baseHelp
+    : {
+        title: activationMessage.title,
+        desc: activationMessage.description,
+        emphasis: false,
+      };
   const canUploadSigned = Boolean(
     investmentId &&
       isOwnerInvestor &&
-      (canInvestorUploadByStatus || isSignedOutdated) &&
-      (!hasSignedContract || isSignedOutdated)
+      canInvestorUploadByStatus &&
+      !hasCurrentSignedContract
   );
   const originalDisplayName =
     originalName && originalName !== "—" && originalName !== "â€”" ? originalName : "original.pdf";
   const signedDisplayName =
     signedName && signedName !== "—" && signedName !== "â€”" ? signedName : "signed.pdf";
+  const signedSectionEmptyMessage = needsFreshSignedContract
+    ? "لم يتم رفع عقد موقّع من المستثمر بعد."
+    : "لم يتم رفع العقد الموقّع بعد. يرجى تنزيل العقد الأصلي وتوقيعه ثم رفع النسخة الموقّعة هنا.";
 
   if (!user) {
     return (
@@ -778,6 +916,7 @@ export default function InvestmentDetails() {
         signedContractOutdated: false,
         requiresResign: false,
         signedContractOutdatedAt: null,
+        status: "signed",
         contractStatus: "signed",
         lastDocumentUploadAt: now,
         lastDocumentUploadBy: user?.uid || null,
@@ -862,6 +1001,144 @@ export default function InvestmentDetails() {
           </CardContent>
         </Card>
 
+        {investmentActivated ? (
+          <Card className="overflow-hidden border-emerald-200/70 bg-gradient-to-br from-emerald-50 via-white to-white">
+            <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="space-y-2">
+                <CardTitle className="flex items-center gap-2">
+                  <TrendingUp className="h-5 w-5 text-emerald-700" />
+                  أرباح استثمارك
+                </CardTitle>
+                <p className="text-sm leading-6 text-muted-foreground">
+                  {performanceNote(profitMetrics)}
+                </p>
+              </div>
+
+              <Badge
+                variant="outline"
+                className={`w-fit border ${profitStatusMeta.cls}`}
+              >
+                {profitStatusMeta.label}
+              </Badge>
+            </CardHeader>
+
+            <CardContent className="grid gap-6 xl:grid-cols-[1.2fr_1fr]">
+              <div className="rounded-2xl border border-emerald-200/70 bg-white/90 p-5 shadow-sm">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="space-y-2">
+                    <div className="text-sm text-muted-foreground">ربحك حتى الآن</div>
+                    <div className="text-4xl font-bold tracking-tight text-emerald-700 tabular-nums">
+                      {formatMoneyAR(
+                        profitMetrics.currentProfit,
+                        currentProfitDigits,
+                        currentProfitDigits
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-right">
+                    <div className="text-xs text-muted-foreground">من الربح المتوقع</div>
+                    <div className="text-lg font-semibold text-emerald-700 tabular-nums">
+                      {formatPercentAR(profitProgressPercent, 2)}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-5 space-y-2">
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>التقدم الزمني للاستثمار</span>
+                    <span className="tabular-nums">
+                      {formatPercentAR(profitProgressPercent, 2)}
+                    </span>
+                  </div>
+                  <Progress value={profitProgressPercent} className="h-2.5" />
+                </div>
+
+                <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                  <PerformanceMetric
+                    label="الربح المتوقع"
+                    value={formatMoneyAR(profitMetrics.expectedProfit, 2, 2)}
+                  />
+                  <PerformanceMetric
+                    label="تاريخ نهاية المشروع"
+                    value={formatDateAR(profitMetrics.displayEndAt)}
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-1">
+                <PerformanceMetric
+                  label="استثمارك"
+                  value={formatMoneyAR(profitMetrics.principalAmount, 0, 0)}
+                />
+                <PerformanceMetric
+                  label="نسبة الربح"
+                  value={formatPercentAR(profitMetrics.returnPercent, 2)}
+                  note={
+                    profitMetrics.annualReturnPercent != null
+                      ? `المعدل السنوي المثبت ${formatPercentAR(
+                          profitMetrics.annualReturnPercent,
+                          2
+                        )}`
+                      : undefined
+                  }
+                />
+                <PerformanceMetric
+                  label="مدة المشروع"
+                  value={formatDurationLabel(profitMetrics.durationMonths)}
+                  note={
+                    profitMetrics.startAt || profitMetrics.displayEndAt
+                      ? `${formatDateAR(profitMetrics.startAt)} - ${formatDateAR(
+                          profitMetrics.displayEndAt
+                        )}`
+                      : undefined
+                  }
+                />
+                <PerformanceMetric
+                  label="حالة الاستثمار"
+                  value={<Badge className={stCls}>{stLabel}</Badge>}
+                />
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card className="overflow-hidden border-amber-200/70 bg-gradient-to-br from-amber-50 via-white to-white">
+            <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="space-y-2">
+                <CardTitle className="flex items-center gap-2">
+                  <Clock3 className="h-5 w-5 text-amber-700" />
+                  لم يبدأ الاستثمار بعد
+                </CardTitle>
+                <p className="text-sm leading-6 text-muted-foreground">
+                  {activationMessage.description}
+                </p>
+              </div>
+
+              <Badge
+                variant="outline"
+                className="w-fit border border-amber-200 bg-amber-50 text-amber-700"
+              >
+                بانتظار الاعتماد النهائي
+              </Badge>
+            </CardHeader>
+
+            <CardContent className="grid gap-3 md:grid-cols-3">
+              <PerformanceMetric
+                label="حالة الاستثمار"
+                value={<Badge className={stCls}>{stLabel}</Badge>}
+              />
+              <PerformanceMetric
+                label="حالة العقد"
+                value={<Badge className={contractStatusMeta.cls}>{contractStatusMeta.label}</Badge>}
+              />
+              <PerformanceMetric
+                label="استثمارك"
+                value={formatMoneyAR(profitMetrics.principalAmount, 0, 0)}
+              />
+            </CardContent>
+          </Card>
+        )}
+
         <div className="grid gap-6 lg:grid-cols-[1.25fr_1fr]">
           {/* Left: Timeline */}
           <Card>
@@ -891,7 +1168,26 @@ export default function InvestmentDetails() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
-              <InfoRow label="المبلغ" value={investment?.amount != null ? `${Number(investment.amount).toLocaleString()} ر.س` : "—"} />
+              <InfoRow label="المبلغ" value={formatMoneyAR(profitMetrics.principalAmount, 0, 0)} />
+              {investmentActivated ? (
+                <>
+                  <InfoRow label="الربح المتوقع" value={formatMoneyAR(profitMetrics.expectedProfit, 2, 2)} />
+                  <InfoRow
+                    label="ربحك حتى الآن"
+                    value={formatMoneyAR(
+                      profitMetrics.currentProfit,
+                      currentProfitDigits,
+                      currentProfitDigits
+                    )}
+                  />
+                  <InfoRow label="تاريخ نهاية المشروع" value={formatDateAR(profitMetrics.displayEndAt)} />
+                </>
+              ) : (
+                <>
+                  <InfoRow label="حالة العقد" value={<Badge className={contractStatusMeta.cls}>{contractStatusMeta.label}</Badge>} />
+                  <InfoRow label="بدء الاستثمار" value="لم يبدأ بعد" />
+                </>
+              )}
               <InfoRow label="تاريخ الإنشاء" value={investment?.createdAt ? formatDateTimeAR(investment.createdAt) : "—"} />
               <InfoRow label="Project ID" value={investment?.projectId || "—"} />
               <InfoRow label="Investment ID" value={investment?.id || "—"} />
@@ -905,12 +1201,6 @@ export default function InvestmentDetails() {
                   <div className="text-xs text-muted-foreground">حالة العقد:</div>
                   <Badge className={contractStatusMeta.cls}>{contractStatusMeta.label}</Badge>
                 </div>
-
-                {isSignedOutdated ? (
-                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                    تم تحديث العقد الأصلي. الرجاء توقيع النسخة الأحدث ثم رفع العقد الموقّع الجديد.
-                  </div>
-                ) : null}
 
                 <div className="space-y-4">
                   <div className="rounded-xl border bg-muted/20 p-4 space-y-3">
@@ -934,6 +1224,11 @@ export default function InvestmentDetails() {
                             </a>
                           ) : null}
                         </div>
+                        {needsFreshSignedContract ? (
+                          <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                            تم تحديث العقد الأصلي، وسيحتاج المستثمر إلى توقيع النسخة الجديدة.
+                          </div>
+                        ) : null}
                       </>
                     ) : (
                       <div className="text-xs text-muted-foreground">لا يوجد عقد أصلي مرفوع حالياً.</div>
@@ -943,14 +1238,9 @@ export default function InvestmentDetails() {
                   <div className="rounded-xl border bg-muted/20 p-4 space-y-3">
                     <div className="text-sm font-semibold">العقد الموقّع</div>
 
-                    {hasSignedContract ? (
+                    {hasCurrentSignedContract ? (
                       <>
                         <div className="font-semibold break-words">{signedDisplayName}</div>
-                        {isSignedOutdated ? (
-                          <div className="text-xs text-amber-700">
-                            هذا العقد الموقّع يعتمد على نسخة قديمة من العقد الأصلي.
-                          </div>
-                        ) : null}
                         <div className="flex flex-wrap gap-2">
                           {signedViewUrl ? (
                             <a href={signedViewUrl} target="_blank" rel="noreferrer">
@@ -970,17 +1260,13 @@ export default function InvestmentDetails() {
                       </>
                     ) : null}
 
-                    {!hasSignedContract || isSignedOutdated ? (
+                    {!hasCurrentSignedContract ? (
                       <div className="space-y-3 border-t border-border/60 pt-3">
-                        {!hasSignedContract ? (
-                          <div className="text-xs text-muted-foreground">
-                            قم بتحميل العقد الأصلي وتوقيعه ثم رفع النسخة الموقعة هنا.
-                          </div>
-                        ) : null}
-                        <Input
-                          type="file"
-                          accept="application/pdf"
-                          onChange={(e) => setSignedUploadFile(e.target.files?.[0] ?? null)}
+                        <div className="text-xs text-muted-foreground">{signedSectionEmptyMessage}</div>
+                        <ContractFilePicker
+                          buttonLabel="رفع العقد الموقّع (PDF)"
+                          file={signedUploadFile}
+                          onFileChange={setSignedUploadFile}
                           disabled={signedUploadBusy || !canUploadSigned}
                         />
                         <Button
@@ -1019,6 +1305,26 @@ function InfoRow({ label, value }: { label: string; value: any }) {
       <div className="text-sm font-semibold text-right break-words">
         {value ?? "—"}
       </div>
+    </div>
+  );
+}
+
+function PerformanceMetric({
+  label,
+  value,
+  note,
+}: {
+  label: string;
+  value: ReactNode;
+  note?: string;
+}) {
+  return (
+    <div className="rounded-2xl border bg-white/90 p-4 shadow-sm">
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className="mt-2 text-lg font-semibold leading-7">{value}</div>
+      {note ? (
+        <div className="mt-2 text-xs leading-5 text-muted-foreground">{note}</div>
+      ) : null}
     </div>
   );
 }

@@ -10,6 +10,8 @@ import { Progress } from "@/components/ui/progress";
 
 import { useAuth } from "@/_core/hooks/useAuth";
 import { db } from "@/_core/firebase";
+import { getInvestmentProfitSnapshot, roundMoney } from "@shared/investmentProfit";
+import { isInvestmentActivatedStatus } from "@shared/investmentLifecycle";
 
 import {
   TrendingUp,
@@ -31,13 +33,6 @@ type Project = any;
 /* =========================
    Helpers
 ========================= */
-function daysBetween(a: Date, b: Date) {
-  return Math.max(
-    0,
-    Math.floor((b.getTime() - a.getTime()) / (1000 * 60 * 60 * 24))
-  );
-}
-
 export default function MyDashboard() {
   const { user, logout } = useAuth();
 
@@ -85,47 +80,48 @@ export default function MyDashboard() {
     };
   }, [user?.uid, isClient]);
 
+  const activatedInvestmentRecords = useMemo(
+    () => investments.filter((inv) => isInvestmentActivatedStatus(inv?.status)),
+    [investments]
+  );
+
   /* =========================
      Calculations
   ========================= */
   const totalInvested = useMemo(
-    () => investments.reduce((s, i) => s + Number(i.amount || 0), 0),
-    [investments]
+    () =>
+      roundMoney(
+        activatedInvestmentRecords.reduce(
+          (sum, inv) => sum + getInvestmentProfitSnapshot(inv).principalAmount,
+          0
+        )
+      ),
+    [activatedInvestmentRecords]
   );
 
   const totalExpectedReturn = useMemo(
     () =>
-      investments.reduce(
-        (s, i) => s + Number(i.expectedProfit ?? i.estimatedReturn ?? 0),
-        0
+      roundMoney(
+        activatedInvestmentRecords.reduce(
+          (sum, inv) => sum + getInvestmentProfitSnapshot(inv).expectedProfit,
+          0
+        )
       ),
-    [investments]
+    [activatedInvestmentRecords]
   );
 
   /* ✅ الأرباح حتى اليوم */
   const profitToDate = useMemo(() => {
     const today = new Date();
 
-    return investments.reduce((sum, inv) => {
-      if (!inv.startAt || !inv.plannedEndAt) return sum;
-
-      const expected = Number(inv.expectedProfit ?? inv.estimatedReturn ?? 0);
-      if (!expected) return sum;
-
-      const start = inv.startAt.toDate();
-      const end = inv.plannedEndAt.toDate();
-
-      const totalDays = daysBetween(start, end);
-      const elapsedDays = Math.min(
-        totalDays,
-        daysBetween(start, today)
-      );
-
-      if (totalDays <= 0) return sum;
-
-      return sum + expected * (elapsedDays / totalDays);
-    }, 0);
-  }, [investments]);
+    return roundMoney(
+      activatedInvestmentRecords.reduce(
+        (sum, inv) =>
+          sum + getInvestmentProfitSnapshot(inv, { now: today }).currentProfit,
+        0
+      )
+    );
+  }, [activatedInvestmentRecords]);
 
   const activeInvestments = useMemo(
     () =>
@@ -140,7 +136,9 @@ export default function MyDashboard() {
   const pendingInvestments = useMemo(
     () =>
       investments.filter((i) =>
-        ["pending", "pending_contract"].includes(String(i.status || ""))
+        ["pending", "pending_contract", "signing", "signed", "approved"].includes(
+          String(i.status || "")
+        )
       ).length,
     [investments]
   );
@@ -156,6 +154,10 @@ export default function MyDashboard() {
       signing: ["قيد التوقيع", "bg-indigo-600"],
       signed: ["تم التوقيع", "bg-green-700"],
     };
+    map.approved = ["بانتظار التفعيل", "bg-amber-500"];
+    map.pending_contract = ["العقد قيد التجهيز", "bg-purple-600"];
+    map.signing = ["بانتظار توقيعك", "bg-indigo-600"];
+    map.signed = ["بانتظار الاعتماد", "bg-amber-600"];
     const [label, cls] = map[status] || map.pending;
     return <Badge className={cls}>{label}</Badge>;
   };

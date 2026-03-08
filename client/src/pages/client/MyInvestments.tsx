@@ -205,7 +205,9 @@ export default function MyInvestments() {
   const pendingInvestmentsOnly = useMemo(
     () =>
       investments.filter((i) =>
-        ["pending", "pending_review", "pending_contract"].includes(String(i.status || ""))
+        ["pending", "pending_review", "pending_contract", "signing", "signed", "approved"].includes(
+          String(i.status || "")
+        )
       ).length,
     [investments]
   );
@@ -251,14 +253,14 @@ export default function MyInvestments() {
     const map: any = {
       pending: ["قيد المراجعة", "bg-blue-600"],
       pending_review: ["قيد المراجعة", "bg-blue-600"],
-      approved: ["معتمد", "bg-green-600"],
+      approved: ["بانتظار التفعيل", "bg-amber-600"],
       active: ["نشط", "bg-emerald-700"],
       rejected: ["مرفوض", "bg-red-600"],
       completed: ["مكتمل", "bg-gray-600"],
 
-      pending_contract: ["بانتظار العقد", "bg-purple-600"],
-      signing: ["قيد الإجراء", "bg-indigo-600"],
-      signed: ["تم الإجراء", "bg-green-700"],
+      pending_contract: ["العقد قيد التجهيز", "bg-purple-600"],
+      signing: ["بانتظار توقيعك", "bg-indigo-600"],
+      signed: ["بانتظار الاعتماد", "bg-amber-600"],
 
       // قد تظهر حالات أخرى في المستقبل
       new: ["جديد", "bg-orange-500"],

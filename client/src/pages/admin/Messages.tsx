@@ -2,8 +2,10 @@
 // client/src/pages/admin/MessagesManagement.tsx
 import { useEffect, useMemo, useState } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
+import ContractFilePicker from "@/components/ContractFilePicker";
 import {
   collection,
+  deleteField,
   doc,
   getDocs,
   updateDoc,
@@ -18,6 +20,7 @@ import {
   where,
 } from "firebase/firestore";
 import { db } from "@/_core/firebase";
+import { resolveInvestmentActivationTerms } from "@shared/investmentActivation";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { uploadInvestmentDocument } from "@/lib/documentUploadService";
 
@@ -315,7 +318,7 @@ function getContractStatusLabel(status: any): string {
   const map: Record<string, string> = {
     draft: "مسودة",
     sent: "مرسل",
-    pending_signature: "بانتظار توقيع جديد",
+    pending_signature: "بانتظار توقيع المستثمر",
     signed: "موقّع",
     issued: "مرسل",
     signed_uploaded: "موقّع",
@@ -374,7 +377,14 @@ type ContractFile = {
 
 type ContractDoc = {
   id: string;
-  status?: "draft" | "sent" | "signed" | "returned";
+  status?:
+    | "draft"
+    | "sent"
+    | "pending_signature"
+    | "signed"
+    | "under_review"
+    | "approved"
+    | "returned";
   files?: ContractFile[];
   createdAt?: any;
   updatedAt?: any;
@@ -790,13 +800,6 @@ export default function MessagesManagement() {
         const status = candidate ? await r2ObjectStatus(candidate) : "unknown";
         probe.original = status;
         if (candidate && status === "exists") next.original = candidate;
-      }
-
-      if (!signedPathFromDocs && !localUploadedByKind.signed?.path) {
-        const candidate = expectedContractPath(activeInvestmentId, "signed");
-        const status = candidate ? await r2ObjectStatus(candidate) : "unknown";
-        probe.signed = status;
-        if (candidate && status === "exists") next.signed = candidate;
       }
 
       if (!cancelled) {
@@ -1268,21 +1271,13 @@ export default function MessagesManagement() {
           String(inv?.signedContract?.path || "").trim() ||
             String(inv?.signedContractFile?.path || "").trim() ||
             String(inv?.signedContract?.url || "").trim() ||
-            String(inv?.signedContractFile?.url || "").trim()
-        );
-        const signedForVersion = toPositiveInt(
-          inv?.signedContract?.signedForVersion ??
-            inv?.signedContract?.originalVersion ??
-            inv?.signedAgainstContractVersion
-        );
-        const signedAlreadyOutdated = toBooleanSafe(
-          inv?.signedContractOutdated ?? inv?.requiresResign ?? inv?.signedContract?.isOutdated
+            String(inv?.signedContractFile?.url || "").trim() ||
+            String(inv?.signedContractPath || "").trim() ||
+            String(inv?.signedPath || "").trim() ||
+            String(inv?.signedDocumentPath || "").trim() ||
+            String(inv?.signedContractUrl || "").trim()
         );
         const hasSigned = hadSignedBeforeRevision || hasSignedFromDoc;
-        const signedOutdatedAfterRevision =
-          hasSigned &&
-          (signedAlreadyOutdated ||
-            (signedForVersion > 0 ? signedForVersion < nextContractVersion : true));
 
         tx.set(
           invRef,
@@ -1306,16 +1301,18 @@ export default function MessagesManagement() {
               version: nextContractVersion,
             },
             contractVersion: nextContractVersion,
-            signedContractOutdated: signedOutdatedAfterRevision,
-            requiresResign: signedOutdatedAfterRevision,
-            signedContractOutdatedAt: signedOutdatedAfterRevision ? now : null,
-            "signedContract.isOutdated": signedOutdatedAfterRevision,
-            "signedContract.outdatedAt": signedOutdatedAfterRevision ? now : null,
-            "signedContract.outdatedByOriginalVersion": signedOutdatedAfterRevision
-              ? nextContractVersion
-              : null,
-            contractStatus: signedOutdatedAfterRevision ? "pending_signature" : "sent",
-            status: signedOutdatedAfterRevision ? "signing" : "pending_contract",
+            signedContract: deleteField(),
+            signedContractFile: deleteField(),
+            signedContractPath: deleteField(),
+            signedContractUrl: deleteField(),
+            signedPath: deleteField(),
+            signedDocumentPath: deleteField(),
+            signedAgainstContractVersion: deleteField(),
+            signedContractOutdated: false,
+            requiresResign: false,
+            signedContractOutdatedAt: null,
+            contractStatus: hasSigned ? "pending_signature" : "sent",
+            status: hasSigned ? "signing" : "pending_contract",
             updatedAt: now,
             lastDocumentUploadAt: now,
             lastDocumentUploadBy: user?.uid || null,
@@ -1324,10 +1321,9 @@ export default function MessagesManagement() {
         );
       });
 
-      setLocalUploadedByKind((prev) => ({
-        ...prev,
-        [uploaded.kind]: { path: uploaded.path, fileName: uploaded.fileName },
-      }));
+      setLocalUploadedByKind({
+        original: { path: uploaded.path, fileName: uploaded.fileName },
+      });
 
       toast.success("تم رفع العقد الأصلي بنجاح");
       setDraftFile(null);
@@ -1389,6 +1385,240 @@ export default function MessagesManagement() {
     } catch (e) {
       console.error(e);
       toast.error("فشل الترحيل النهائي");
+    } finally {
+      setFinalizeBusy(false);
+    }
+  };
+
+  const activateInvestmentAfterApproval = async () => {
+    if (!selectedMessage) return;
+
+    if (isLockedFinal) return toast.warning("الطلب مقفل.");
+
+    const investmentId = String(selectedMessage?.investmentId || "").trim();
+    if (!investmentId) {
+      toast.error("لا يوجد استثمار مرتبط بهذا الطلب.");
+      return;
+    }
+
+    try {
+      setFinalizeBusy(true);
+      const activatedAt = Timestamp.now();
+      const activatedAtDate = activatedAt.toDate();
+      const activatedAtServer = serverTimestamp();
+
+      await runTransaction(db, async (tx) => {
+        const msgRef = doc(db, REQUESTS_COL, selectedMessage.id);
+        const invRef = doc(db, "investments", investmentId);
+
+        const [msgSnap, invSnap] = await Promise.all([tx.get(msgRef), tx.get(invRef)]);
+        if (!msgSnap.exists()) throw new Error("request_not_found");
+        if (!invSnap.exists()) throw new Error("investment_not_found");
+
+        const msgData = (msgSnap.data() || {}) as Record<string, any>;
+        const invData = (invSnap.data() || {}) as Record<string, any>;
+        const currentInvestmentStatus = String(invData?.status || "")
+          .trim()
+          .toLowerCase();
+        if (["active", "completed", "closed"].includes(currentInvestmentStatus)) {
+          throw new Error("investment_already_activated");
+        }
+
+        const contractId = String(
+          pick(invData?.contractId, msgData?.contractId, selectedMessage?.contractId)
+        ).trim();
+        const contractRef = contractId ? doc(db, "contracts", contractId) : null;
+        const contractSnap = contractRef ? await tx.get(contractRef) : null;
+        const contractData =
+          contractSnap && contractSnap.exists()
+            ? ((contractSnap.data() || {}) as Record<string, any>)
+            : null;
+
+        const currentContractStatus = String(
+          pick(contractData?.status, invData?.contractStatus, msgData?.contractStatus)
+        )
+          .trim()
+          .toLowerCase();
+        if (
+          !CONTRACTS_DISABLED &&
+          !["signed", "under_review"].includes(currentContractStatus)
+        ) {
+          throw new Error("contract_not_ready_for_activation");
+        }
+
+        const projectId = String(
+          pick(
+            invData?.projectId,
+            msgData?.projectId,
+            msgData?.project_id,
+            selectedMessage?.projectId,
+            selectedMessage?.project_id
+          )
+        ).trim();
+        const projectRef = projectId ? doc(db, "projects", projectId) : null;
+        const projectSnap = projectRef ? await tx.get(projectRef) : null;
+        const projectData =
+          projectSnap && projectSnap.exists()
+            ? ((projectSnap.data() || {}) as Record<string, any>)
+            : null;
+
+        const settingsRef = doc(db, "settings", "app");
+        const settingsSnap = await tx.get(settingsRef);
+        const appSettings = settingsSnap.exists()
+          ? ((settingsSnap.data() || {}) as Record<string, any>)
+          : null;
+
+        const amount =
+          toNum(invData?.approvedAmount) ||
+          toNum(invData?.amount) ||
+          toNum(msgData?.approvedAmount) ||
+          toNum(msgData?.amount);
+        if (!Number.isFinite(amount) || amount <= 0) {
+          throw new Error("missing_amount");
+        }
+
+        const activationTerms = resolveInvestmentActivationTerms({
+          amount,
+          investment: invData,
+          project: projectData,
+          appSettings,
+          startAt: activatedAtDate,
+        });
+        const plannedEndAt = Timestamp.fromDate(activationTerms.plannedEndAt);
+        const legalTermsSnapshot = {
+          version: 1,
+          approvedAt: activatedAt,
+          principalAmount: amount,
+          annualReturnPercent: activationTerms.annualReturn,
+          annualReturnSource: activationTerms.annualReturnSource,
+          durationMonths: activationTerms.durationMonths,
+          durationSource: activationTerms.durationSource,
+          startAt: activatedAt,
+          endAt: plannedEndAt,
+          expectedProfit: activationTerms.expectedProfit,
+          formula: activationTerms.legalTermsSnapshot.formula,
+          isFrozen: true,
+        };
+        const projectTitleAtSign =
+          pick(
+            projectData?.titleAr,
+            projectData?.title,
+            msgData?.projectTitle,
+            msgData?.projectSnapshot?.titleAr,
+            msgData?.projectSnapshot?.title,
+            invData?.projectTitle
+          ) || null;
+
+        tx.set(
+          invRef,
+          {
+            status: "active",
+            contractStatus: "approved",
+            approvedAmount: amount,
+            startAt: activatedAt,
+            plannedEndAt,
+            annualReturnAtSign: activationTerms.annualReturn,
+            durationMonthsAtSign: activationTerms.durationMonths,
+            expectedProfit: activationTerms.expectedProfit,
+            earnedProfit: null,
+            actualEndAt: null,
+            withdrawnAt: null,
+            exitType: null,
+            projectTitleAtSign,
+            termsLockedAt: activatedAt,
+            legalTermsSnapshot,
+            activatedAt,
+            activatedByUid: user?.uid || null,
+            activatedByEmail: user?.email || null,
+            finalizedAt: activatedAtServer,
+            updatedAt: activatedAtServer,
+            updatedByUid: user?.uid || null,
+            updatedByEmail: user?.email || null,
+          },
+          { merge: true }
+        );
+
+        if (contractRef) {
+          tx.set(
+            contractRef,
+            {
+              status: "approved",
+              amount,
+              projectId: projectId || null,
+              investmentId,
+              requestId: selectedMessage.id,
+              approvedAt: activatedAt,
+              approvedByUid: user?.uid || null,
+              approvedByEmail: user?.email || null,
+              termsLockedAt: activatedAt,
+              legalTermsSnapshot,
+              legalReference: {
+                source: "investment.activation",
+                isFinal: true,
+                version: 1,
+              },
+              updatedAt: activatedAtServer,
+              updatedByUid: user?.uid || null,
+              updatedByEmail: user?.email || null,
+            },
+            { merge: true }
+          );
+        }
+
+        tx.update(msgRef, {
+          status: "completed",
+          stageRole: "completed" as StageRole,
+          contractStatus: "approved",
+          investmentStatus: "active",
+          finalizedAt: activatedAtServer,
+          finalizedByUid: user?.uid || null,
+          finalizedByEmail: user?.email || null,
+          updatedAt: activatedAtServer,
+          updatedByUid: user?.uid || null,
+          updatedByEmail: user?.email || null,
+          events: arrayUnion(
+            makeEvent({
+              type: "finalized",
+              title: "اعتماد العقد وتفعيل الاستثمار",
+              note:
+                "تم الاعتماد النهائي للعقد وتفعيل الاستثمار. تبدأ مدة الاستثمار وحساب الربح من وقت الاعتماد النهائي فقط.",
+              ...myActor(user, myRole),
+              meta: {
+                messageId: selectedMessage.id,
+                investmentId,
+                projectId: projectId || null,
+                contractStatus: "approved",
+                investmentStatus: "active",
+              },
+            })
+          ),
+          ...actionMeta(user, myRole),
+        });
+      });
+
+      toast.success("تم اعتماد العقد وتفعيل الاستثمار");
+      setIsDetailDialogOpen(false);
+      loadMessages();
+    } catch (e: any) {
+      console.error(e);
+      const code = String(e?.message || "");
+      if (code === "request_not_found") {
+        toast.error("الطلب غير موجود.");
+      } else if (code === "investment_not_found") {
+        toast.error("سجل الاستثمار غير موجود.");
+      } else if (code === "contract_not_ready_for_activation") {
+        toast.error("لا يمكن تفعيل الاستثمار قبل اكتمال توقيع العقد ومراجعته.");
+      } else if (code === "investment_already_activated") {
+        toast.error("الاستثمار مفعّل مسبقًا.");
+      } else if (
+        code === "missing_amount" ||
+        code === "missing_final_annual_return" ||
+        code === "missing_final_duration_months"
+      ) {
+        toast.error("بيانات التفعيل النهائية غير مكتملة بعد.");
+      } else {
+        toast.error("فشل اعتماد العقد وتفعيل الاستثمار");
+      }
     } finally {
       setFinalizeBusy(false);
     }
@@ -1515,8 +1745,7 @@ export default function MessagesManagement() {
 
   const signedContractPath = pick(
     localUploadedByKind.signed?.path,
-    signedPathFromDocs,
-    r2DetectedPathByKind.signed
+    signedPathFromDocs
   );
   const signedContractUrlFromDocs = pickFirstNonEmptyString(
     resolveDocPath(investmentDoc, ["signedContract.url", "signedContractFile.url", "signedContractUrl"]),
@@ -1610,9 +1839,11 @@ export default function MessagesManagement() {
   )
     .trim()
     .toLowerCase();
-  const contractStatusValue = isSignedOutdated
+  const needsFreshSignedContract = storedContractStatus === "pending_signature" || isSignedOutdated;
+  const hasCurrentSignedContract = hasSignedContract && !needsFreshSignedContract;
+  const contractStatusValue = needsFreshSignedContract
     ? "pending_signature"
-    : hasSignedContract
+    : hasCurrentSignedContract
     ? ["approved", "under_review"].includes(storedContractStatus)
       ? storedContractStatus
       : "signed"
@@ -1622,14 +1853,20 @@ export default function MessagesManagement() {
       : "sent"
     : storedContractStatus || "draft";
 
-  const isSigned = CONTRACTS_DISABLED ? true : contractStatusValue === "signed";
-  const needsNewSignedContract = CONTRACTS_DISABLED ? false : !hasSignedContract || isSignedOutdated;
+  const contractReadyForActivation = CONTRACTS_DISABLED
+    ? true
+    : ["signed", "under_review"].includes(contractStatusValue);
+  const needsNewSignedContract = CONTRACTS_DISABLED ? false : !hasCurrentSignedContract;
+  const contractFollowupChipLabel =
+    hasOriginalContract && !hasCurrentSignedContract && contractStatusValue !== "pending_signature"
+    ? "بانتظار توقيع المستثمر"
+    : "";
 
   const canFinalize = CONTRACTS_DISABLED
     ? isInvestment && !!selectedMessage?.investmentId
     : isInvestment &&
       !!selectedMessage?.investmentId &&
-      isSigned &&
+      contractReadyForActivation &&
       !needsNewSignedContract;
 
   const canApproveAndCreateInvestment =
@@ -2166,7 +2403,7 @@ export default function MessagesManagement() {
                         {canFinalize ? (
                           <Button
                             className="bg-emerald-700 hover:bg-emerald-800"
-                            onClick={finalizeInvestment}
+                            onClick={activateInvestmentAfterApproval}
                             disabled={isLockedFinal || finalizeBusy}
                           >
                             {finalizeBusy ? (
@@ -2240,17 +2477,12 @@ export default function MessagesManagement() {
                           >
                             {getContractStatusLabel(contractStatusValue)}
                           </span>
-                          {needsNewSignedContract ? (
+                          {contractFollowupChipLabel ? (
                             <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
-                              يلزم توقيع جديد من المستثمر
+                              {contractFollowupChipLabel}
                             </span>
                           ) : null}
                         </div>
-                        {isSignedOutdated ? (
-                          <div className="mt-2 text-xs text-amber-700">
-                            العقد الموقّع الحالي مرتبط بنسخة أقدم من العقد الأصلي.
-                          </div>
-                        ) : null}
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -2291,6 +2523,11 @@ export default function MessagesManagement() {
                                   </a>
                                 ) : null}
                               </div>
+                              {needsFreshSignedContract ? (
+                                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                                  تم تحديث العقد الأصلي، وسيحتاج المستثمر إلى توقيع النسخة الجديدة.
+                                </div>
+                              ) : null}
                             </>
                           ) : (
                             <div className="text-sm text-muted-foreground">لا يوجد</div>
@@ -2302,31 +2539,20 @@ export default function MessagesManagement() {
                             <div className="text-sm font-semibold">العقد الموقّع</div>
                             <span
                               className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${
-                                isSignedOutdated
-                                  ? "bg-amber-50 text-amber-700 border-amber-200"
-                                  : hasSignedContract
+                                hasCurrentSignedContract
                                   ? "bg-emerald-50 text-emerald-700 border-emerald-200"
                                   : "bg-slate-100 text-slate-600 border-slate-200"
                               }`}
                             >
-                              {isSignedOutdated
-                                ? "قديم"
-                                : hasSignedContract
-                                ? "مرفوع"
-                                : "لا يوجد"}
+                              {hasCurrentSignedContract ? "مرفوع" : "لا يوجد"}
                             </span>
                           </div>
 
-                          {hasSignedContract ? (
+                          {hasCurrentSignedContract ? (
                             <>
                               <div className="text-sm font-medium text-slate-900 break-words">
                                 {signedContractFileName}
                               </div>
-                              {isSignedOutdated ? (
-                                <div className="text-xs text-amber-700">
-                                  هذا الملف تم توقيعه على نسخة سابقة. يلزم رفع توقيع جديد.
-                                </div>
-                              ) : null}
                               <div className="flex flex-wrap gap-2 pt-1">
                                 {signedContractViewUrl ? (
                                   <a href={signedContractViewUrl} target="_blank" rel="noreferrer">
@@ -2347,7 +2573,11 @@ export default function MessagesManagement() {
                               </div>
                             </>
                           ) : (
-                            <div className="text-sm text-muted-foreground">لم يتم رفع العقد الموقّع بعد</div>
+                            <div className="text-sm text-muted-foreground">
+                              {needsFreshSignedContract
+                                ? "لم يتم رفع عقد موقّع من المستثمر بعد."
+                                : "لم يتم رفع العقد الموقّع بعد"}
+                            </div>
                           )}
                         </div>
                       </div>
@@ -2357,11 +2587,10 @@ export default function MessagesManagement() {
 
                         <div className="grid grid-cols-1 gap-4">
                           <div className="rounded-xl border border-slate-200 bg-slate-50/40 px-3 py-3 sm:px-4 space-y-3">
-                            <Label>رفع العقد الأصلي (PDF)</Label>
-                            <Input
-                              type="file"
-                              accept="application/pdf"
-                              onChange={(e) => setDraftFile(e.target.files?.[0] ?? null)}
+                            <ContractFilePicker
+                              buttonLabel="رفع العقد الأصلي (PDF)"
+                              file={draftFile}
+                              onFileChange={setDraftFile}
                               disabled={contractBusy || !selectedMessage?.investmentId}
                             />
                             <Button

@@ -13,7 +13,13 @@ const REGION = "me-central2";
 const COUNTED_STATUSES = new Set(["active", "completed"]);
 
 // (Optional) keep pending tracking if you want it in project doc
-const PENDING_STATUSES = new Set(["pending", "pending_contract", "signing"]);
+const PENDING_STATUSES = new Set([
+  "pending",
+  "pending_contract",
+  "signing",
+  "signed",
+  "approved",
+]);
 
 // official statuses list (as per settings)
 const OFFICIAL_STATUSES = new Set([

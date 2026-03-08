@@ -142,7 +142,11 @@ export default function AdminDashboard() {
       publishedProjects: projects.filter((p) => p.status === "published").length,
 
       totalInvestments: investments.length,
-      pendingInvestments: investments.filter((i) => i.status === "pending").length,
+      pendingInvestments: investments.filter((i) =>
+        ["pending", "pending_contract", "signing", "signed", "approved"].includes(
+          String(i.status || "")
+        )
+      ).length,
 
       totalUsers: usersRows.length,
       vipUsers: usersRows.filter((u) => u.vipStatus === "vip").length,
@@ -157,7 +161,9 @@ export default function AdminDashboard() {
   }, [investments]);
 
   const approvedInvestments = useMemo(() => {
-    return investments.filter((i) => i.status === "approved" || i.status === "active").length;
+    return investments.filter((i) =>
+      ["active", "completed"].includes(String(i.status || ""))
+    ).length;
   }, [investments]);
 
   // ✅ Dynamic line chart: آخر 6 شهور

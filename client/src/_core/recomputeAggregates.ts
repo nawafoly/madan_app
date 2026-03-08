@@ -22,7 +22,13 @@ const toNum = (v: any) => {
 };
 
 const COUNTED = new Set(["active", "completed"]);
-const PENDING = new Set(["pending", "pending_contract", "signing"]);
+const PENDING = new Set([
+  "pending",
+  "pending_contract",
+  "signing",
+  "signed",
+  "approved",
+]);
 
 export async function recomputeProjectAggregatesClient(projectId: string): Promise<Totals> {
   const pid = String(projectId || "").trim();

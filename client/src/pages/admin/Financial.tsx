@@ -214,7 +214,7 @@ export default function Financial() {
   const getStatusBadge = (status: string) => {
     const map: any = {
       pending: { label: "معلق", cls: "bg-orange-500" },
-      approved: { label: "معتمد", cls: "bg-green-500" },
+      approved: { label: "بانتظار التفعيل", cls: "bg-amber-500" },
       rejected: { label: "مرفوض", cls: "bg-red-500" },
       active: { label: "نشط", cls: "bg-blue-500" },
       completed: { label: "مكتمل", cls: "bg-gray-500" },
@@ -240,7 +240,6 @@ export default function Financial() {
 
         const invData: any = invSnap.data();
 
-        // امنع الاعتماد مرتين
         const curStatus = String(invData.status || "");
         if (curStatus !== "pending") throw new Error("not_pending");
 
@@ -252,104 +251,33 @@ export default function Financial() {
         if (!projSnap.exists()) throw new Error("project_not_found");
 
         const proj: any = projSnap.data();
-        const settingsRef = doc(db, "settings", "app");
-        const settingsSnap = await tx.get(settingsRef);
-        const appSettings: any = settingsSnap.exists() ? settingsSnap.data() : {};
-
         const amount = toNumber(invData.amount, 0);
-
-        const investorDurationMonths =
-          toNumber(invData.customDuration, 0) || toNumber(invData.durationMonths, 0);
-        const projectDurationMonths =
-          toNumber(proj.durationMonths, 0) || toNumber(proj.duration, 0);
-        const defaultHorizonYears = toNumber(appSettings.defaultHorizonYears, 0);
-        const settingsDurationMonths = defaultHorizonYears > 0 ? defaultHorizonYears * 12 : 0;
-
-        const investorAnnualReturn = toNumber(invData.customRate, 0);
-        const projectAnnualReturn = toNumber(proj.annualReturn, 0);
-        const settingsAnnualReturn = toNumber(appSettings.defaultReturn, 0);
-
-        const annualReturnSource =
-          investorAnnualReturn > 0
-            ? "investments.customRate"
-            : projectAnnualReturn > 0
-              ? "projects.annualReturn"
-              : "settings.app.defaultReturn";
-        const annualReturn =
-          investorAnnualReturn > 0
-            ? investorAnnualReturn
-            : projectAnnualReturn > 0
-              ? projectAnnualReturn
-              : settingsAnnualReturn;
-
-        if (annualReturn <= 0) throw new Error("missing_final_annual_return");
-
-        const startAt = Timestamp.now();
-        const projectEndAt = proj.plannedEndAt instanceof Timestamp ? proj.plannedEndAt : null;
-        const projectDurationFromEndAt = projectEndAt
-          ? monthsBetween(startAt.toDate(), projectEndAt.toDate())
-          : 0;
-        const durationSource =
-          investorDurationMonths > 0
-            ? "investments.customDuration"
-            : projectDurationMonths > 0
-              ? "projects.duration"
-              : projectDurationFromEndAt > 0
-                ? "projects.plannedEndAt"
-                : "settings.app.defaultHorizonYears";
-        const durationMonths =
-          investorDurationMonths > 0
-            ? investorDurationMonths
-            : projectDurationMonths > 0
-              ? projectDurationMonths
-              : projectDurationFromEndAt > 0
-                ? projectDurationFromEndAt
-                : settingsDurationMonths;
-
-        if (durationMonths <= 0) throw new Error("missing_final_duration_months");
-        const plannedEndAt = Timestamp.fromDate(addMonths(startAt.toDate(), durationMonths));
-
-        const expectedProfit =
-          roundMoney(amount * (annualReturn / 100) * (durationMonths / 12));
-        const legalTermsSnapshot = {
-          version: 1,
-          approvedAt: startAt,
-          principalAmount: amount,
-          annualReturnPercent: annualReturn,
-          annualReturnSource,
-          durationMonths,
-          durationSource,
-          startAt,
-          endAt: plannedEndAt,
-          expectedProfit,
-          formula: "principal * annualRate * (durationMonths / 12)",
-          isFrozen: true,
-        };
+        if (amount <= 0) throw new Error("missing_amount");
 
         const contractId = String(invData.contractId || "").trim();
         const contractRef = contractId
           ? doc(db, "contracts", contractId)
           : generatedContractRef;
+        const now = serverTimestamp();
         const invUpdate: any = {
-          status: "active",
+          status: "pending_contract",
+          contractStatus: "draft",
           approvedAmount: amount,
-          approvedAt: startAt,
-          finalizedAt: serverTimestamp(),
-          signedAt: startAt,
-          startAt,
-          plannedEndAt,
-          annualReturnAtSign: annualReturn,
-          durationMonthsAtSign: durationMonths,
-          expectedProfit,
+          approvedAt: now,
+          finalizedAt: null,
+          signedAt: null,
+          startAt: null,
+          plannedEndAt: null,
+          annualReturnAtSign: null,
+          durationMonthsAtSign: null,
+          expectedProfit: null,
           earnedProfit: null,
           withdrawnAt: null,
           actualEndAt: null,
           exitType: null,
-          projectTitleAtSign: String(
-            proj.titleAr || proj.title || invData.projectTitle || ""
-          ),
-          termsLockedAt: startAt,
-          legalTermsSnapshot,
+          projectTitleAtSign: null,
+          termsLockedAt: null,
+          legalTermsSnapshot: null,
           contractId: contractRef.id,
           updatedAt: new Date(),
         };
@@ -367,15 +295,11 @@ export default function Financial() {
             investorPhone: invData.investorPhone || null,
             amount,
             currency: invData.currency || "SAR",
-            status: contractId ? invData.contractStatus || "signed" : "signed",
-            signedAt: startAt,
-            termsLockedAt: startAt,
-            legalTermsSnapshot,
-            legalReference: {
-              source: "investment.approval",
-              isFinal: true,
-              version: 1,
-            },
+            status: contractId ? invData.contractStatus || "draft" : "draft",
+            signedAt: null,
+            termsLockedAt: null,
+            legalTermsSnapshot: null,
+            legalReference: null,
             ...(contractId ? {} : { createdAt: new Date() }),
             updatedAt: new Date(),
           },
@@ -383,12 +307,12 @@ export default function Financial() {
         );
       });
 
-      toast.success("تم اعتماد الاستثمار بنجاح");
+      toast.success("تم اعتماد الطلب مبدئيًا وتجهيز مسار العقد");
       setIsApproveDialogOpen(false);
       loadAll();
     } catch (e) {
       console.error(e);
-      toast.error("فشل اعتماد الاستثمار");
+      toast.error("فشل اعتماد الطلب مبدئيًا");
     }
   };
 
@@ -407,7 +331,7 @@ export default function Financial() {
         if (st === "completed" || st === "closed") {
           throw new Error("investment_already_closed");
         }
-        if (st !== "approved" && st !== "active" && st !== "signed") {
+        if (st !== "active") {
           throw new Error("invalid_status_for_close");
         }
 
@@ -914,9 +838,7 @@ export default function Financial() {
                       <TableCell>{getStatusBadge(inv.status)}</TableCell>
 
                       <TableCell>
-                        {inv.status === "approved" ||
-                        inv.status === "active" ||
-                        inv.status === "signed" ? (
+                        {inv.status === "active" ? (
                           <Button
                             size="sm"
                             variant="destructive"
