@@ -625,6 +625,10 @@ export default function InvestmentDetails() {
       (canInvestorUploadByStatus || isSignedOutdated) &&
       (!hasSignedContract || isSignedOutdated)
   );
+  const originalDisplayName =
+    originalName && originalName !== "—" && originalName !== "â€”" ? originalName : "original.pdf";
+  const signedDisplayName =
+    signedName && signedName !== "—" && signedName !== "â€”" ? signedName : "signed.pdf";
 
   if (!user) {
     return (
@@ -910,98 +914,93 @@ export default function InvestmentDetails() {
                   </div>
                 ) : null}
 
-                <div className="rounded-xl border bg-muted/20 p-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="text-xs text-muted-foreground">العقد الأصلي</div>
-                    <Badge variant="outline">{hasOriginalContract ? "مرفوع" : "لا يوجد"}</Badge>
-                  </div>
-                  {hasOriginalContract ? (
-                    <div className="mt-1.5 space-y-2">
-                      <div className="font-semibold break-words">{originalName}</div>
-                      <div className="flex flex-wrap gap-2">
-                        {originalViewUrl ? (
-                          <a href={originalViewUrl} target="_blank" rel="noreferrer">
-                            <Button variant="outline" size="sm">
-                              عرض
-                            </Button>
-                          </a>
-                        ) : null}
-                        {originalDownloadUrl ? (
-                          <a href={originalDownloadUrl} target="_blank" rel="noreferrer">
-                            <Button variant="outline" size="sm">
-                              تنزيل
-                            </Button>
-                          </a>
-                        ) : null}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="mt-1.5 text-xs text-muted-foreground">لا يوجد</div>
-                  )}
-                </div>
-
-                <div className="rounded-xl border bg-muted/20 p-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="text-xs text-muted-foreground">العقد الموقّع</div>
-                    <Badge variant="outline">
-                      {isSignedOutdated ? "قديم" : hasSignedContract ? "مرفوع" : "لا يوجد"}
-                    </Badge>
-                  </div>
-                  {hasSignedContract ? (
-                    <div className="mt-1.5 space-y-2">
-                      <div className="font-semibold break-words">{signedName}</div>
-                      {isSignedOutdated ? (
-                        <div className="text-xs text-amber-700">
-                          هذا العقد الموقّع يعتمد على نسخة قديمة من العقد الأصلي.
+                <div className="space-y-4">
+                  <div className="rounded-xl border bg-muted/20 p-4 space-y-3">
+                    <div className="text-sm font-semibold">العقد الأصلي</div>
+                    {hasOriginalContract ? (
+                      <>
+                        <div className="font-semibold break-words">{originalDisplayName}</div>
+                        <div className="flex flex-wrap gap-2">
+                          {originalViewUrl ? (
+                            <a href={originalViewUrl} target="_blank" rel="noreferrer">
+                              <Button variant="outline" size="sm">
+                                عرض
+                              </Button>
+                            </a>
+                          ) : null}
+                          {originalDownloadUrl ? (
+                            <a href={originalDownloadUrl} target="_blank" rel="noreferrer">
+                              <Button variant="outline" size="sm">
+                                تنزيل
+                              </Button>
+                            </a>
+                          ) : null}
                         </div>
-                      ) : null}
-                      <div className="flex flex-wrap gap-2">
-                        {signedViewUrl ? (
-                          <a href={signedViewUrl} target="_blank" rel="noreferrer">
-                            <Button variant="outline" size="sm">
-                              عرض
-                            </Button>
-                          </a>
-                        ) : null}
-                        {signedDownloadUrl ? (
-                          <a href={signedDownloadUrl} target="_blank" rel="noreferrer">
-                            <Button variant="outline" size="sm">
-                              تنزيل
-                            </Button>
-                          </a>
-                        ) : null}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="mt-1.5 text-xs text-muted-foreground">لم يتم رفع العقد الموقّع بعد</div>
-                  )}
-                </div>
-
-                {investmentId && canUploadSigned ? (
-                  <div className="rounded-xl border bg-muted/20 p-3 space-y-3">
-                    <div className="text-xs text-muted-foreground">
-                      {isSignedOutdated ? "رفع العقد الموقّع الجديد" : "رفع العقد الموقّع"}
-                    </div>
-                    <Input
-                      type="file"
-                      accept="application/pdf"
-                      onChange={(e) => setSignedUploadFile(e.target.files?.[0] ?? null)}
-                      disabled={signedUploadBusy || !canUploadSigned}
-                    />
-                    <Button
-                      className="w-full"
-                      onClick={handleInvestorSignedUpload}
-                      disabled={signedUploadBusy || !canUploadSigned || !signedUploadFile}
-                    >
-                      {signedUploadBusy ? (
-                        <Loader2 className="w-4 h-4 ml-2 animate-spin" />
-                      ) : (
-                        <CheckCircle2 className="w-4 h-4 ml-2" />
-                      )}
-                      رفع العقد الموقّع
-                    </Button>
+                      </>
+                    ) : (
+                      <div className="text-xs text-muted-foreground">لا يوجد عقد أصلي مرفوع حالياً.</div>
+                    )}
                   </div>
-                ) : null}
+
+                  <div className="rounded-xl border bg-muted/20 p-4 space-y-3">
+                    <div className="text-sm font-semibold">العقد الموقّع</div>
+
+                    {hasSignedContract ? (
+                      <>
+                        <div className="font-semibold break-words">{signedDisplayName}</div>
+                        {isSignedOutdated ? (
+                          <div className="text-xs text-amber-700">
+                            هذا العقد الموقّع يعتمد على نسخة قديمة من العقد الأصلي.
+                          </div>
+                        ) : null}
+                        <div className="flex flex-wrap gap-2">
+                          {signedViewUrl ? (
+                            <a href={signedViewUrl} target="_blank" rel="noreferrer">
+                              <Button variant="outline" size="sm">
+                                عرض
+                              </Button>
+                            </a>
+                          ) : null}
+                          {signedDownloadUrl ? (
+                            <a href={signedDownloadUrl} target="_blank" rel="noreferrer">
+                              <Button variant="outline" size="sm">
+                                تنزيل
+                              </Button>
+                            </a>
+                          ) : null}
+                        </div>
+                      </>
+                    ) : null}
+
+                    {!hasSignedContract || isSignedOutdated ? (
+                      <div className="space-y-3 border-t border-border/60 pt-3">
+                        {!hasSignedContract ? (
+                          <div className="text-xs text-muted-foreground">
+                            قم بتحميل العقد الأصلي وتوقيعه ثم رفع النسخة الموقعة هنا.
+                          </div>
+                        ) : null}
+                        <Input
+                          type="file"
+                          accept="application/pdf"
+                          onChange={(e) => setSignedUploadFile(e.target.files?.[0] ?? null)}
+                          disabled={signedUploadBusy || !canUploadSigned}
+                        />
+                        <Button
+                          className="w-full"
+                          onClick={handleInvestorSignedUpload}
+                          disabled={signedUploadBusy || !canUploadSigned || !signedUploadFile}
+                        >
+                          {signedUploadBusy ? (
+                            <Loader2 className="w-4 h-4 ml-2 animate-spin" />
+                          ) : (
+                            <CheckCircle2 className="w-4 h-4 ml-2" />
+                          )}
+                          رفع العقد الموقّع
+                        </Button>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>
