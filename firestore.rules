@@ -59,6 +59,25 @@ service cloud.firestore {
       ]);
     }
 
+    function clientSignedContractUpdateOnly() {
+      let changed = request.resource.data.diff(resource.data).changedKeys();
+      return isClient()
+        && request.auth.uid == resource.data.investorUid
+        && !isInvestmentClosedData(resource.data)
+        && changed.hasOnly([
+          "signedContract",
+          "signedContractFile",
+          "signedAgainstContractVersion",
+          "signedContractOutdated",
+          "requiresResign",
+          "signedContractOutdatedAt",
+          "contractStatus",
+          "lastDocumentUploadAt",
+          "lastDocumentUploadBy"
+        ])
+        && request.resource.data.lastDocumentUploadBy == request.auth.uid;
+    }
+
     /* =========================
        settings
     ========================= */
@@ -161,9 +180,11 @@ match /projects/{projectId} {
         && exists(/databases/$(database)/documents/projects/$(request.resource.data.projectId))
       );
 
-      allow update: if (isAdmin() || isAccountant())
-        && !isInvestmentClosedData(resource.data)
-        && (!isInvestmentTermsLocked() || !investmentTermsChanged());
+      allow update: if (
+        (isAdmin() || isAccountant())
+          && !isInvestmentClosedData(resource.data)
+          && (!isInvestmentTermsLocked() || !investmentTermsChanged())
+      ) || clientSignedContractUpdateOnly();
 
       allow delete: if isAdmin()
         && !isInvestmentClosedData(resource.data);

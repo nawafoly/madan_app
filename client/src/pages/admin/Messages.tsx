@@ -482,7 +482,6 @@ export default function MessagesManagement() {
   const [contractDoc, setContractDoc] = useState<ContractDoc | null>(null);
   const [investmentDoc, setInvestmentDoc] = useState<any>(null);
   const [draftFile, setDraftFile] = useState<File | null>(null);
-  const [replaceDraftFile, setReplaceDraftFile] = useState<File | null>(null);
   const [localUploadedByKind, setLocalUploadedByKind] = useState<
     Partial<Record<"original" | "signed", { path: string; fileName: string }>>
   >({});
@@ -1341,12 +1340,6 @@ export default function MessagesManagement() {
     } finally {
       setContractBusy(false);
     }
-  };
-
-  const uploadSignedContractForInvestment = async () => {
-    if (!selectedMessage) return;
-
-    toast.error("رفع العقد الموقّع متاح للمستثمر فقط.");
   };
 
   const sendContractForSigning = async () => {
@@ -2362,7 +2355,7 @@ export default function MessagesManagement() {
                       <div className="border-t border-slate-200 pt-4">
                         <div className="text-xs text-muted-foreground mb-3">رفع المستندات</div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 gap-4">
                           <div className="rounded-xl border border-slate-200 bg-slate-50/40 px-3 py-3 sm:px-4 space-y-3">
                             <Label>رفع العقد الأصلي (PDF)</Label>
                             <Input
@@ -2388,27 +2381,6 @@ export default function MessagesManagement() {
                               )}
                               رفع العقد الأصلي
                             </Button>
-                          </div>
-
-                          <div className="rounded-xl border border-slate-200 bg-slate-50/40 px-3 py-3 sm:px-4 space-y-3">
-                            <Label>رفع العقد الموقّع (PDF) - من المستثمر فقط</Label>
-                            <Input
-                              type="file"
-                              accept="application/pdf"
-                              onChange={(e) => setReplaceDraftFile(e.target.files?.[0] ?? null)}
-                              disabled
-                            />
-                            <Button
-                              className="w-full bg-emerald-700 hover:bg-emerald-800"
-                              onClick={uploadSignedContractForInvestment}
-                              disabled
-                            >
-                              <CheckCircle2 className="w-4 h-4 ml-2" />
-                              متاح للعميل فقط
-                            </Button>
-                            <div className="text-xs text-muted-foreground">
-                              رفع العقد الموقّع يتم من حساب المستثمر فقط.
-                            </div>
                           </div>
                         </div>
                       </div>

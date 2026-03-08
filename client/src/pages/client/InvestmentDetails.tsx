@@ -779,8 +779,6 @@ export default function InvestmentDetails() {
         requiresResign: false,
         signedContractOutdatedAt: null,
         contractStatus: "signed",
-        status: "signed",
-        updatedAt: now,
         lastDocumentUploadAt: now,
         lastDocumentUploadBy: user?.uid || null,
       });
