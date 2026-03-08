@@ -46,8 +46,40 @@ function AlertDialogOverlay({
 
 function AlertDialogContent({
   className,
+  children,
   ...props
 }: React.ComponentProps<typeof AlertDialogPrimitive.Content>) {
+  const fallbackDescriptionId = React.useId();
+  const hasExplicitAriaDescribedBy = Object.prototype.hasOwnProperty.call(
+    props,
+    "aria-describedby"
+  );
+  const hasAlertDescription = React.useMemo(() => {
+    const hasDescriptionNode = (node: React.ReactNode): boolean => {
+      return React.Children.toArray(node).some((child) => {
+        if (!React.isValidElement(child)) return false;
+        if (
+          child.type === AlertDialogDescription ||
+          child.type === AlertDialogPrimitive.Description
+        ) {
+          return true;
+        }
+        return hasDescriptionNode(
+          (child as React.ReactElement<{ children?: React.ReactNode }>).props
+            ?.children
+        );
+      });
+    };
+    return hasDescriptionNode(children);
+  }, [children]);
+  const shouldInjectFallbackDescription =
+    !hasExplicitAriaDescribedBy && !hasAlertDescription;
+  const resolvedAriaDescribedBy = hasExplicitAriaDescribedBy
+    ? props["aria-describedby"]
+    : shouldInjectFallbackDescription
+      ? fallbackDescriptionId
+      : undefined;
+
   return (
     <AlertDialogPortal>
       <AlertDialogOverlay />
@@ -57,8 +89,16 @@ function AlertDialogContent({
           "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border p-6 shadow-lg duration-200 sm:max-w-lg",
           className
         )}
+        aria-describedby={resolvedAriaDescribedBy}
         {...props}
-      />
+      >
+        {shouldInjectFallbackDescription ? (
+          <AlertDialogPrimitive.Description id={fallbackDescriptionId} className="sr-only">
+            Alert details
+          </AlertDialogPrimitive.Description>
+        ) : null}
+        {children}
+      </AlertDialogPrimitive.Content>
     </AlertDialogPortal>
   );
 }

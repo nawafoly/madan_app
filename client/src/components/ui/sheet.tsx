@@ -52,6 +52,37 @@ function SheetContent({
 }: React.ComponentProps<typeof SheetPrimitive.Content> & {
   side?: "top" | "right" | "bottom" | "left";
 }) {
+  const fallbackDescriptionId = React.useId();
+  const hasExplicitAriaDescribedBy = Object.prototype.hasOwnProperty.call(
+    props,
+    "aria-describedby"
+  );
+  const hasSheetDescription = React.useMemo(() => {
+    const hasDescriptionNode = (node: React.ReactNode): boolean => {
+      return React.Children.toArray(node).some((child) => {
+        if (!React.isValidElement(child)) return false;
+        if (
+          child.type === SheetDescription ||
+          child.type === SheetPrimitive.Description
+        ) {
+          return true;
+        }
+        return hasDescriptionNode(
+          (child as React.ReactElement<{ children?: React.ReactNode }>).props
+            ?.children
+        );
+      });
+    };
+    return hasDescriptionNode(children);
+  }, [children]);
+  const shouldInjectFallbackDescription =
+    !hasExplicitAriaDescribedBy && !hasSheetDescription;
+  const resolvedAriaDescribedBy = hasExplicitAriaDescribedBy
+    ? props["aria-describedby"]
+    : shouldInjectFallbackDescription
+      ? fallbackDescriptionId
+      : undefined;
+
   return (
     <SheetPortal>
       <SheetOverlay />
@@ -69,8 +100,14 @@ function SheetContent({
             "data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom inset-x-0 bottom-0 h-auto border-t",
           className
         )}
+        aria-describedby={resolvedAriaDescribedBy}
         {...props}
       >
+        {shouldInjectFallbackDescription ? (
+          <SheetPrimitive.Description id={fallbackDescriptionId} className="sr-only">
+            Sheet details
+          </SheetPrimitive.Description>
+        ) : null}
         {children}
         <SheetPrimitive.Close className="ring-offset-background focus:ring-ring data-[state=open]:bg-secondary absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none">
           <XIcon className="size-4" />

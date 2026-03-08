@@ -113,18 +113,43 @@ async function handleUpload(request, bucket) {
 
 async function handleDownload(url, bucket) {
   const path = normalizeObjectPath(url.searchParams.get("path"));
+  const isProbe =
+    String(url.searchParams.get("probe") || "").trim() === "1" ||
+    String(url.searchParams.get("exists") || "").trim() === "1";
   if (!path) {
-    return json(400, {
+    return json(isProbe ? 200 : 400, {
       ok: false,
+      exists: false,
       message: "invalid_path",
     });
   }
 
   const object = await bucket.get(path);
   if (!object) {
+    if (isProbe) {
+      return json(200, {
+        ok: true,
+        exists: false,
+        path,
+      });
+    }
     return json(404, {
       ok: false,
       message: "file_not_found",
+    });
+  }
+
+  if (isProbe) {
+    const headers = new Headers();
+    object.writeHttpMetadata(headers);
+    const contentType =
+      headers.get("Content-Type") || inferContentTypeFromName(path) || "application/octet-stream";
+    return json(200, {
+      ok: true,
+      exists: true,
+      path,
+      fileName: getFileNameFromPath(path),
+      contentType,
     });
   }
 

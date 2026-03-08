@@ -2,13 +2,44 @@ const admin = require("firebase-admin");
 const { onDocumentWritten } = require("firebase-functions/v2/firestore");
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { onUserCreated } = require("firebase-functions/v2/auth");
-const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");
+const { S3Client, PutObjectCommand, DeleteObjectCommand } = require("@aws-sdk/client-s3");
 
 admin.initializeApp();
 const db = admin.firestore();
 const { FieldValue } = admin.firestore;
 
 const REGION = "me-central2";
+
+const normalizeOrigin = (value) => String(value || "").trim().replace(/\/+$/, "");
+
+const readCsvOrigins = (raw) =>
+  String(raw || "")
+    .split(",")
+    .map((entry) => normalizeOrigin(entry))
+    .filter(Boolean);
+
+const CONTRACT_DEFAULT_ALLOWED_ORIGINS = [
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  "https://madan-app.vercel.app",
+  "https://index-599e8.web.app",
+  "https://index-599e8.firebaseapp.com",
+  "https://maedin.sa",
+  "https://www.maedin.sa",
+].map(normalizeOrigin);
+
+const CONTRACT_ALLOWED_ORIGINS = Array.from(
+  new Set([
+    ...CONTRACT_DEFAULT_ALLOWED_ORIGINS,
+    ...readCsvOrigins(process.env.CONTRACT_CORS_ALLOWED_ORIGINS),
+    ...readCsvOrigins(process.env.CORS_ALLOWED_ORIGINS),
+  ])
+);
+
+const CONTRACT_CALLABLE_OPTIONS = {
+  region: REGION,
+  cors: CONTRACT_ALLOWED_ORIGINS,
+};
 
 // ✅ vNext Contract: countedStatuses = [active, completed]
 const COUNTED_STATUSES = new Set(["active", "completed"]);
@@ -326,14 +357,24 @@ function normalizeAttachmentPath(path, investmentId) {
   return raw;
 }
 
-async function applyInvestmentContractMetadata({
+function toPositiveInt(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.floor(n);
+}
+
+function toBoolean(value) {
+  if (value === true) return true;
+  if (value === false) return false;
+  const raw = String(value || "").trim().toLowerCase();
+  return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
+}
+
+async function authorizeAndNormalizeInvestmentUpload({
   investmentId,
   kind,
   path,
-  fileName,
-  contentType,
   uploadedBy,
-  bucketName,
 }) {
   const invRef = db.doc(`investments/${investmentId}`);
   const invSnap = await invRef.get();
@@ -368,6 +409,29 @@ async function applyInvestmentContractMetadata({
     }
   }
 
+  return {
+    invRef,
+    inv,
+    finalPath,
+  };
+}
+
+async function applyInvestmentContractMetadata({
+  investmentId,
+  kind,
+  path,
+  fileName,
+  contentType,
+  uploadedBy,
+  bucketName,
+}) {
+  const { invRef, inv, finalPath } = await authorizeAndNormalizeInvestmentUpload({
+    investmentId,
+    kind,
+    path,
+    uploadedBy,
+  });
+
   const now = FieldValue.serverTimestamp();
   const safeFileName = String(fileName || "").trim() || "contract.pdf";
   const safeContentType = String(contentType || "application/pdf").trim() || "application/pdf";
@@ -382,12 +446,38 @@ async function applyInvestmentContractMetadata({
   const updatePayload = {
     ...commonFields,
   };
+  const currentContractVersion = toPositiveInt(
+    inv?.contractVersion || inv?.originalContract?.version || inv?.contractFile?.version
+  );
 
   if (kind === "original") {
+    const nextContractVersion = currentContractVersion > 0 ? currentContractVersion + 1 : 1;
+    const signedForVersion = toPositiveInt(
+      inv?.signedContract?.signedForVersion ||
+        inv?.signedContract?.originalVersion ||
+        inv?.signedAgainstContractVersion
+    );
+    const hasSignedContract = Boolean(
+      String(inv?.signedContract?.path || "").trim() ||
+        String(inv?.signedContractFile?.path || "").trim() ||
+        String(inv?.signedContract?.url || "").trim() ||
+        String(inv?.signedContractFile?.url || "").trim()
+    );
+    const signedAlreadyOutdated = toBoolean(
+      inv?.signedContractOutdated ||
+        inv?.requiresResign ||
+        inv?.signedContract?.isOutdated
+    );
+    const signedOutdatedAfterRevision =
+      hasSignedContract &&
+      (signedAlreadyOutdated ||
+        (signedForVersion > 0 ? signedForVersion < nextContractVersion : true));
+
     updatePayload.originalContract = {
       path: finalPath,
       uploadedAt: now,
       uploadedBy,
+      version: nextContractVersion,
     };
     updatePayload.contractFile = {
       ...withBucket,
@@ -396,23 +486,62 @@ async function applyInvestmentContractMetadata({
       contentType: safeContentType,
       uploadedAt: now,
       uploadedBy,
+      version: nextContractVersion,
     };
-    updatePayload.contractStatus = "sent";
-    updatePayload.status = "pending_contract";
+    updatePayload.contractVersion = nextContractVersion;
+    updatePayload.signedContractOutdated = signedOutdatedAfterRevision;
+    updatePayload.requiresResign = signedOutdatedAfterRevision;
+    if (signedOutdatedAfterRevision) {
+      updatePayload.contractStatus = "pending_signature";
+      updatePayload.status = "signing";
+      updatePayload.signedContractOutdatedAt = now;
+      updatePayload.signedContract = {
+        ...(inv?.signedContract || {}),
+        isOutdated: true,
+        outdatedAt: now,
+        outdatedByOriginalVersion: nextContractVersion,
+      };
+    } else {
+      updatePayload.contractStatus = "sent";
+      updatePayload.status = "pending_contract";
+      updatePayload.signedContractOutdatedAt = FieldValue.delete();
+      updatePayload.signedContract = {
+        ...(inv?.signedContract || {}),
+        isOutdated: false,
+        outdatedAt: FieldValue.delete(),
+        outdatedByOriginalVersion: FieldValue.delete(),
+      };
+    }
   } else if (kind === "signed") {
+    const signedStoragePath = expectedContractPath(investmentId, "signed");
+    const signedFileName = "signed.pdf";
+    const signedForVersion = currentContractVersion > 0 ? currentContractVersion : 1;
+    updatePayload.contractVersion = signedForVersion;
     updatePayload.signedContract = {
-      path: finalPath,
+      fileName: signedFileName,
       uploadedAt: now,
       uploadedBy,
+      storagePath: signedStoragePath,
+      path: finalPath,
+      signedForVersion,
+      originalVersion: signedForVersion,
+      isOutdated: false,
+      outdatedAt: FieldValue.delete(),
+      outdatedByOriginalVersion: FieldValue.delete(),
     };
     updatePayload.signedContractFile = {
       ...withBucket,
       path: finalPath,
-      fileName: safeFileName,
+      fileName: signedFileName,
       contentType: safeContentType,
       uploadedAt: now,
       uploadedBy,
+      signedForVersion,
     };
+    updatePayload.signedAgainstContractVersion = signedForVersion;
+    updatePayload.signedContractOutdated = false;
+    updatePayload.requiresResign = false;
+    updatePayload.signedContractOutdatedAt = FieldValue.delete();
     updatePayload.contractStatus = "signed";
     updatePayload.status = "signed";
   } else {
@@ -435,7 +564,7 @@ async function applyInvestmentContractMetadata({
   };
 }
 
-exports.uploadContractToR2 = onCall({ region: REGION }, async (request) => {
+exports.uploadContractToR2 = onCall(CONTRACT_CALLABLE_OPTIONS, async (request) => {
   if (!request.auth?.uid) {
     throw new HttpsError("unauthenticated", "Authentication required.");
   }
@@ -477,11 +606,18 @@ exports.uploadContractToR2 = onCall({ region: REGION }, async (request) => {
     const { bucketName } = getR2Env();
     const client = getR2Client();
     const buffer = Buffer.from(base64, "base64");
+    const uploadedBy = String(request.auth.uid || "");
+    const { finalPath } = await authorizeAndNormalizeInvestmentUpload({
+      investmentId,
+      kind,
+      path: objectKey,
+      uploadedBy,
+    });
 
     await client.send(
       new PutObjectCommand({
         Bucket: bucketName,
-        Key: objectKey,
+        Key: finalPath,
         Body: buffer,
         ContentType: contentType,
       })
@@ -490,17 +626,17 @@ exports.uploadContractToR2 = onCall({ region: REGION }, async (request) => {
     await applyInvestmentContractMetadata({
       investmentId,
       kind,
-      path: objectKey,
+      path: finalPath,
       fileName,
       contentType,
-      uploadedBy: String(request.auth.uid || ""),
+      uploadedBy,
       bucketName,
     });
 
     return {
       ok: true,
       bucket: bucketName,
-      path: objectKey,
+      path: finalPath,
       fileName,
       kind,
     };
@@ -511,7 +647,7 @@ exports.uploadContractToR2 = onCall({ region: REGION }, async (request) => {
   }
 });
 
-exports.syncInvestmentContractMetadata = onCall({ region: REGION }, async (request) => {
+exports.syncInvestmentContractMetadata = onCall(CONTRACT_CALLABLE_OPTIONS, async (request) => {
   if (!request.auth?.uid) {
     throw new HttpsError("unauthenticated", "Authentication required.");
   }
@@ -553,5 +689,75 @@ exports.syncInvestmentContractMetadata = onCall({ region: REGION }, async (reque
     ok: true,
     kind: result.kind,
     path: result.path,
+  };
+});
+
+exports.removeInvestmentSignedContract = onCall(CONTRACT_CALLABLE_OPTIONS, async (request) => {
+  if (!request.auth?.uid) {
+    throw new HttpsError("unauthenticated", "Authentication required.");
+  }
+
+  const data = request.data || {};
+  const investmentId = normalizeInvestmentId(data.investmentId);
+  if (!investmentId) {
+    throw new HttpsError("invalid-argument", "investmentId is required.");
+  }
+
+  const signedPath = expectedContractPath(investmentId, "signed");
+  const actorUid = String(request.auth.uid || "");
+  const { invRef, inv, finalPath } = await authorizeAndNormalizeInvestmentUpload({
+    investmentId,
+    kind: "signed",
+    path: signedPath,
+    uploadedBy: actorUid,
+  });
+
+  try {
+    const { bucketName } = getR2Env();
+    const client = getR2Client();
+    await client.send(
+      new DeleteObjectCommand({
+        Bucket: bucketName,
+        Key: finalPath,
+      })
+    );
+  } catch (error) {
+    console.error("removeInvestmentSignedContract failed:", error);
+    if (error instanceof HttpsError) throw error;
+    throw new HttpsError("internal", "Failed to remove signed contract from R2.");
+  }
+
+  const now = FieldValue.serverTimestamp();
+  const hasOriginalContract = Boolean(
+    String(inv?.originalContract?.path || "").trim() ||
+      String(inv?.contractFile?.path || "").trim() ||
+      String(inv?.originalContract?.url || "").trim() ||
+      String(inv?.contractFile?.url || "").trim()
+  );
+  const nextContractStatus = hasOriginalContract ? "pending_signature" : "draft";
+  const nextInvestmentStatus = hasOriginalContract ? "signing" : "pending_contract";
+
+  await invRef.set(
+    {
+      signedContract: FieldValue.delete(),
+      signedContractFile: FieldValue.delete(),
+      signedAgainstContractVersion: FieldValue.delete(),
+      signedContractOutdated: hasOriginalContract,
+      requiresResign: hasOriginalContract,
+      signedContractOutdatedAt: hasOriginalContract ? now : FieldValue.delete(),
+      contractStatus: nextContractStatus,
+      status: nextInvestmentStatus,
+      updatedAt: now,
+      lastDocumentUploadAt: now,
+      lastDocumentUploadBy: actorUid,
+    },
+    { merge: true }
+  );
+
+  return {
+    ok: true,
+    investmentId,
+    removedPath: finalPath,
+    contractStatus: nextContractStatus,
   };
 });

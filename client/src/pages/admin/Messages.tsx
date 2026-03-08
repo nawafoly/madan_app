@@ -108,6 +108,45 @@ const pick = (...vals: any[]) => {
   return "";
 };
 
+const pickFirstNonEmptyString = (...vals: any[]) => {
+  for (const v of vals) {
+    const s = String(v || "").trim();
+    if (s && s !== "undefined" && s !== "null") return s;
+  }
+  return "";
+};
+
+function readNestedValue(source: any, path: string) {
+  const keys = String(path || "")
+    .split(".")
+    .map((v) => v.trim())
+    .filter(Boolean);
+  let current = source;
+  for (const key of keys) {
+    if (!current || typeof current !== "object") return undefined;
+    current = current[key];
+  }
+  return current;
+}
+
+function resolveDocPath(source: any, candidates: string[]) {
+  for (const candidate of candidates) {
+    const value = pickFirstNonEmptyString(readNestedValue(source, candidate));
+    if (value) return value;
+  }
+  return "";
+}
+
+function resolveDocValue(source: any, candidates: string[]) {
+  for (const candidate of candidates) {
+    const value = readNestedValue(source, candidate);
+    if (value === undefined || value === null) continue;
+    if (typeof value === "string" && !value.trim()) continue;
+    return value;
+  }
+  return undefined;
+}
+
 const getClientName = (m: any) =>
   pick(
     m?.name,
@@ -235,10 +274,16 @@ function expectedContractPath(investmentId: string, kind: "original" | "signed")
 type R2ProbeStatus = "exists" | "missing" | "unknown";
 
 async function r2ObjectStatus(path: string): Promise<R2ProbeStatus> {
-  const url = buildR2DownloadUrl(path, false);
-  if (!url) return "unknown";
+  const rawUrl = buildR2DownloadUrl(path, false);
+  if (!rawUrl) return "unknown";
   try {
-    const response = await fetch(url, { method: "GET" });
+    const probeUrl = new URL(rawUrl);
+    probeUrl.searchParams.set("probe", "1");
+    const response = await fetch(probeUrl.toString(), { method: "GET" });
+    const payload = await response.json().catch(() => null);
+    if (response.ok && payload && typeof payload.exists === "boolean") {
+      return payload.exists ? "exists" : "missing";
+    }
     try {
       await response.body?.cancel();
     } catch {
@@ -257,6 +302,7 @@ function getContractStatusLabel(status: any): string {
   const map: Record<string, string> = {
     draft: "مسودة",
     sent: "مرسل",
+    pending_signature: "بانتظار توقيع جديد",
     signed: "موقّع",
     issued: "مرسل",
     signed_uploaded: "موقّع",
@@ -271,6 +317,7 @@ function getContractStatusClass(status: any): string {
   const map: Record<string, string> = {
     draft: "bg-slate-100 text-slate-700 border-slate-200",
     sent: "bg-blue-100 text-blue-700 border-blue-200",
+    pending_signature: "bg-amber-100 text-amber-700 border-amber-200",
     signed: "bg-emerald-100 text-emerald-700 border-emerald-200",
     issued: "bg-blue-100 text-blue-700 border-blue-200",
     signed_uploaded: "bg-emerald-100 text-emerald-700 border-emerald-200",
@@ -655,19 +702,54 @@ export default function MessagesManagement() {
   };
 
   const activeInvestmentId = pick(selectedMessage?.investmentId, investmentDoc?.id);
-  const originalPathFromDocs = pick(
-    investmentDoc?.originalContract?.path,
-    investmentDoc?.contractFile?.path,
-    contractDoc?.originalContract?.path,
-    contractDoc?.contractFile?.path,
-    ""
+  const originalPathFromDocs = pickFirstNonEmptyString(
+    resolveDocPath(investmentDoc, [
+      "originalContract.path",
+      "contractFile.path",
+      "originalContractPath",
+      "originalPath",
+      "contractPath",
+      "documentPath",
+    ]),
+    resolveDocPath(contractDoc, [
+      "originalContract.path",
+      "contractFile.path",
+      "originalContractPath",
+      "originalPath",
+      "contractPath",
+      "documentPath",
+    ]),
+    resolveDocPath(selectedMessage, [
+      "originalContract.path",
+      "contractFile.path",
+      "originalContractPath",
+      "originalPath",
+      "contractPath",
+      "documentPath",
+    ])
   );
-  const signedPathFromDocs = pick(
-    investmentDoc?.signedContract?.path,
-    investmentDoc?.signedContractFile?.path,
-    contractDoc?.signedContract?.path,
-    contractDoc?.signedContractFile?.path,
-    ""
+  const signedPathFromDocs = pickFirstNonEmptyString(
+    resolveDocPath(investmentDoc, [
+      "signedContract.path",
+      "signedContractFile.path",
+      "signedContractPath",
+      "signedPath",
+      "signedDocumentPath",
+    ]),
+    resolveDocPath(contractDoc, [
+      "signedContract.path",
+      "signedContractFile.path",
+      "signedContractPath",
+      "signedPath",
+      "signedDocumentPath",
+    ]),
+    resolveDocPath(selectedMessage, [
+      "signedContract.path",
+      "signedContractFile.path",
+      "signedContractPath",
+      "signedPath",
+      "signedDocumentPath",
+    ])
   );
 
   useEffect(() => {
@@ -716,7 +798,12 @@ export default function MessagesManagement() {
     return () => {
       cancelled = true;
     };
-  }, [activeInvestmentId, originalPathFromDocs, signedPathFromDocs, localUploadedByKind]);
+  }, [
+    activeInvestmentId,
+    originalPathFromDocs,
+    signedPathFromDocs,
+    localUploadedByKind,
+  ]);
 
   /* =========================
     UI filters
@@ -1150,7 +1237,7 @@ export default function MessagesManagement() {
         investmentId,
         file: draftFile,
         kind: "original",
-      });
+      }, { strategy: "callable" });
       setLocalUploadedByKind((prev) => ({
         ...prev,
         [uploaded.kind]: { path: uploaded.path, fileName: uploaded.fileName },
@@ -1172,54 +1259,7 @@ export default function MessagesManagement() {
   const uploadSignedContractForInvestment = async () => {
     if (!selectedMessage) return;
 
-    if (!canAdmin) {
-      toast.error("هذا الإجراء يتطلب صلاحية المدير أو المالك.");
-      return;
-    }
-
-    const investmentId = String(selectedMessage?.investmentId || "").trim();
-    if (!investmentId) {
-      toast.error("لا يوجد investmentId مرتبط بهذا الطلب.");
-      return;
-    }
-
-    if (!replaceDraftFile) {
-      toast.warning("الرجاء اختيار ملف PDF");
-      return;
-    }
-
-    const signedFileName = String(replaceDraftFile.name || "").toLowerCase();
-    const signedFileMime = String(replaceDraftFile.type || "").toLowerCase();
-    const isPdf = signedFileMime === "application/pdf" || signedFileName.endsWith(".pdf");
-    if (!isPdf) {
-      toast.warning("الرجاء اختيار ملف PDF");
-      return;
-    }
-
-    try {
-      setContractBusy(true);
-
-      const uploaded = await uploadInvestmentDocument({
-        investmentId,
-        file: replaceDraftFile,
-        kind: "signed",
-      });
-      setLocalUploadedByKind((prev) => ({
-        ...prev,
-        [uploaded.kind]: { path: uploaded.path, fileName: uploaded.fileName },
-      }));
-
-      toast.success("تم رفع العقد الموقّع بنجاح");
-      setReplaceDraftFile(null);
-
-      await loadInvestmentDoc(investmentId);
-      await loadMessages();
-    } catch (e: any) {
-      console.error(e);
-      toast.error(e?.message || "فشل الرفع");
-    } finally {
-      setContractBusy(false);
-    }
+    toast.error("رفع العقد الموقّع متاح للمستثمر فقط.");
   };
 
   const sendContractForSigning = async () => {
@@ -1362,7 +1402,6 @@ export default function MessagesManagement() {
     !!selectedMessage?.contractId;
 
   const originalExpectedPath = expectedContractPath(activeInvestmentId, "original");
-  const signedExpectedPath = expectedContractPath(activeInvestmentId, "signed");
 
   const originalContractPath = pick(
     localUploadedByKind.original?.path,
@@ -1372,19 +1411,16 @@ export default function MessagesManagement() {
       ? originalExpectedPath
       : ""
   );
-  const originalContractUrlFromDocs = pick(
-    investmentDoc?.originalContract?.url,
-    investmentDoc?.contractFile?.url,
-    contractDoc?.originalContract?.url,
-    contractDoc?.contractFile?.url,
-    selectedMessage?.contractUrl
+  const originalContractUrlFromDocs = pickFirstNonEmptyString(
+    resolveDocPath(investmentDoc, ["originalContract.url", "contractFile.url", "contractUrl"]),
+    resolveDocPath(contractDoc, ["originalContract.url", "contractFile.url", "contractUrl"]),
+    resolveDocPath(selectedMessage, ["originalContract.url", "contractFile.url", "contractUrl"])
   );
-  const originalContractFileName = pick(
+  const originalContractFileName = pickFirstNonEmptyString(
     localUploadedByKind.original?.fileName,
-    investmentDoc?.originalContract?.fileName,
-    investmentDoc?.contractFile?.fileName,
-    contractDoc?.originalContract?.fileName,
-    contractDoc?.contractFile?.fileName,
+    resolveDocPath(investmentDoc, ["originalContract.fileName", "contractFile.fileName"]),
+    resolveDocPath(contractDoc, ["originalContract.fileName", "contractFile.fileName"]),
+    resolveDocPath(selectedMessage, ["originalContract.fileName", "contractFile.fileName"]),
     originalContractPath ? getFileNameFromPath(originalContractPath) : ""
   );
   const hasOriginalContract = Boolean(originalContractPath || originalContractUrlFromDocs);
@@ -1400,23 +1436,18 @@ export default function MessagesManagement() {
   const signedContractPath = pick(
     localUploadedByKind.signed?.path,
     signedPathFromDocs,
-    r2DetectedPathByKind.signed,
-    !r2ProbeStatusByKind.signed || r2ProbeStatusByKind.signed === "unknown"
-      ? signedExpectedPath
-      : ""
+    r2DetectedPathByKind.signed
   );
-  const signedContractUrlFromDocs = pick(
-    investmentDoc?.signedContract?.url,
-    investmentDoc?.signedContractFile?.url,
-    contractDoc?.signedContract?.url,
-    contractDoc?.signedContractFile?.url
+  const signedContractUrlFromDocs = pickFirstNonEmptyString(
+    resolveDocPath(investmentDoc, ["signedContract.url", "signedContractFile.url", "signedContractUrl"]),
+    resolveDocPath(contractDoc, ["signedContract.url", "signedContractFile.url", "signedContractUrl"]),
+    resolveDocPath(selectedMessage, ["signedContract.url", "signedContractFile.url", "signedContractUrl"])
   );
-  const signedContractFileName = pick(
+  const signedContractFileName = pickFirstNonEmptyString(
     localUploadedByKind.signed?.fileName,
-    investmentDoc?.signedContract?.fileName,
-    investmentDoc?.signedContractFile?.fileName,
-    contractDoc?.signedContract?.fileName,
-    contractDoc?.signedContractFile?.fileName,
+    resolveDocPath(investmentDoc, ["signedContract.fileName", "signedContractFile.fileName"]),
+    resolveDocPath(contractDoc, ["signedContract.fileName", "signedContractFile.fileName"]),
+    resolveDocPath(selectedMessage, ["signedContract.fileName", "signedContractFile.fileName"]),
     signedContractPath ? getFileNameFromPath(signedContractPath) : ""
   );
   const hasSignedContract = Boolean(signedContractPath || signedContractUrlFromDocs);
@@ -1429,18 +1460,97 @@ export default function MessagesManagement() {
     signedContractUrlFromDocs
   );
 
-  const contractStatusValue = pick(
-    investmentDoc?.contractStatus,
-    hasSignedContract ? "signed" : hasOriginalContract ? "sent" : "draft"
+  const originalUploadedAt = resolveDocValue(investmentDoc, ["originalContract.uploadedAt", "contractFile.uploadedAt"]) ??
+    resolveDocValue(contractDoc, ["originalContract.uploadedAt", "contractFile.uploadedAt"]) ??
+    resolveDocValue(selectedMessage, ["originalContract.uploadedAt", "contractFile.uploadedAt"]);
+  const signedUploadedAt = resolveDocValue(investmentDoc, ["signedContract.uploadedAt", "signedContractFile.uploadedAt"]) ??
+    resolveDocValue(contractDoc, ["signedContract.uploadedAt", "signedContractFile.uploadedAt"]) ??
+    resolveDocValue(selectedMessage, ["signedContract.uploadedAt", "signedContractFile.uploadedAt"]);
+
+  const originalVersion = Number(
+    pick(
+      resolveDocValue(investmentDoc, ["contractVersion", "originalContract.version", "contractFile.version"]),
+      resolveDocValue(contractDoc, ["contractVersion", "originalContract.version", "contractFile.version"]),
+      resolveDocValue(selectedMessage, ["contractVersion", "originalContract.version", "contractFile.version"]),
+      0
+    )
   );
+  const signedForVersion = Number(
+    pick(
+      resolveDocValue(investmentDoc, [
+        "signedContract.signedForVersion",
+        "signedContract.originalVersion",
+        "signedAgainstContractVersion",
+      ]),
+      resolveDocValue(contractDoc, [
+        "signedContract.signedForVersion",
+        "signedContract.originalVersion",
+        "signedAgainstContractVersion",
+      ]),
+      resolveDocValue(selectedMessage, [
+        "signedContract.signedForVersion",
+        "signedContract.originalVersion",
+        "signedAgainstContractVersion",
+      ]),
+      0
+    )
+  );
+  const outdatedFlag = String(
+    pick(
+      resolveDocValue(investmentDoc, ["signedContractOutdated", "requiresResign", "signedContract.isOutdated"]),
+      resolveDocValue(contractDoc, ["signedContractOutdated", "requiresResign", "signedContract.isOutdated"]),
+      resolveDocValue(selectedMessage, ["signedContractOutdated", "requiresResign", "signedContract.isOutdated"]),
+      ""
+    )
+  )
+    .trim()
+    .toLowerCase();
+  const isSignedOutdatedByVersion =
+    hasSignedContract &&
+    Number.isFinite(originalVersion) &&
+    Number.isFinite(signedForVersion) &&
+    originalVersion > 0 &&
+    signedForVersion > 0 &&
+    signedForVersion < originalVersion;
+  const originalUploadedAtDate = toDateSafe(originalUploadedAt);
+  const signedUploadedAtDate = toDateSafe(signedUploadedAt);
+  const isSignedOutdatedByTime =
+    hasSignedContract &&
+    !!originalUploadedAtDate &&
+    !!signedUploadedAtDate &&
+    originalUploadedAtDate.getTime() > signedUploadedAtDate.getTime();
+  const isSignedOutdatedByFlag =
+    outdatedFlag === "true" || outdatedFlag === "1" || outdatedFlag === "yes" || outdatedFlag === "on";
+  const isSignedOutdated =
+    hasSignedContract &&
+    (isSignedOutdatedByFlag || isSignedOutdatedByVersion || isSignedOutdatedByTime);
+
+  const storedContractStatus = String(
+    pick(investmentDoc?.contractStatus, contractDoc?.status, selectedMessage?.contractStatus)
+  )
+    .trim()
+    .toLowerCase();
+  const contractStatusValue = isSignedOutdated
+    ? "pending_signature"
+    : hasSignedContract
+    ? ["approved", "under_review"].includes(storedContractStatus)
+      ? storedContractStatus
+      : "signed"
+    : hasOriginalContract
+    ? storedContractStatus && storedContractStatus !== "draft"
+      ? storedContractStatus
+      : "sent"
+    : storedContractStatus || "draft";
 
   const isSigned = CONTRACTS_DISABLED ? true : contractStatusValue === "signed";
+  const needsNewSignedContract = CONTRACTS_DISABLED ? false : !hasSignedContract || isSignedOutdated;
 
   const canFinalize = CONTRACTS_DISABLED
     ? isInvestment && !!selectedMessage?.investmentId
     : isInvestment &&
       !!selectedMessage?.investmentId &&
-      isSigned;
+      isSigned &&
+      !needsNewSignedContract;
 
   const canApproveAndCreateInvestment =
     !!selectedMessage &&
@@ -2050,7 +2160,17 @@ export default function MessagesManagement() {
                           >
                             {getContractStatusLabel(contractStatusValue)}
                           </span>
+                          {needsNewSignedContract ? (
+                            <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
+                              يلزم توقيع جديد من المستثمر
+                            </span>
+                          ) : null}
                         </div>
+                        {isSignedOutdated ? (
+                          <div className="mt-2 text-xs text-amber-700">
+                            العقد الموقّع الحالي مرتبط بنسخة أقدم من العقد الأصلي.
+                          </div>
+                        ) : null}
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -2102,12 +2222,18 @@ export default function MessagesManagement() {
                             <div className="text-sm font-semibold">العقد الموقّع</div>
                             <span
                               className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${
-                                hasSignedContract
+                                isSignedOutdated
+                                  ? "bg-amber-50 text-amber-700 border-amber-200"
+                                  : hasSignedContract
                                   ? "bg-emerald-50 text-emerald-700 border-emerald-200"
                                   : "bg-slate-100 text-slate-600 border-slate-200"
                               }`}
                             >
-                              {hasSignedContract ? "مرفوع" : "لا يوجد"}
+                              {isSignedOutdated
+                                ? "قديم"
+                                : hasSignedContract
+                                ? "مرفوع"
+                                : "لا يوجد"}
                             </span>
                           </div>
 
@@ -2116,6 +2242,11 @@ export default function MessagesManagement() {
                               <div className="text-sm font-medium text-slate-900 break-words">
                                 {signedContractFileName}
                               </div>
+                              {isSignedOutdated ? (
+                                <div className="text-xs text-amber-700">
+                                  هذا الملف تم توقيعه على نسخة سابقة. يلزم رفع توقيع جديد.
+                                </div>
+                              ) : null}
                               <div className="flex flex-wrap gap-2 pt-1">
                                 {signedContractViewUrl ? (
                                   <a href={signedContractViewUrl} target="_blank" rel="noreferrer">
@@ -2173,31 +2304,24 @@ export default function MessagesManagement() {
                           </div>
 
                           <div className="rounded-xl border border-slate-200 bg-slate-50/40 px-3 py-3 sm:px-4 space-y-3">
-                            <Label>رفع العقد الموقّع (PDF)</Label>
+                            <Label>رفع العقد الموقّع (PDF) - من المستثمر فقط</Label>
                             <Input
                               type="file"
                               accept="application/pdf"
                               onChange={(e) => setReplaceDraftFile(e.target.files?.[0] ?? null)}
-                              disabled={contractBusy || !selectedMessage?.investmentId || hasSignedContract}
+                              disabled
                             />
                             <Button
                               className="w-full bg-emerald-700 hover:bg-emerald-800"
                               onClick={uploadSignedContractForInvestment}
-                              disabled={
-                                contractBusy ||
-                                hasSignedContract ||
-                                !selectedMessage?.investmentId ||
-                                !replaceDraftFile ||
-                                !canAdmin
-                              }
+                              disabled
                             >
-                              {contractBusy ? (
-                                <Loader2 className="w-4 h-4 ml-2 animate-spin" />
-                              ) : (
-                                <CheckCircle2 className="w-4 h-4 ml-2" />
-                              )}
-                              رفع العقد الموقّع
+                              <CheckCircle2 className="w-4 h-4 ml-2" />
+                              متاح للعميل فقط
                             </Button>
+                            <div className="text-xs text-muted-foreground">
+                              رفع العقد الموقّع يتم من حساب المستثمر فقط.
+                            </div>
                           </div>
                         </div>
                       </div>

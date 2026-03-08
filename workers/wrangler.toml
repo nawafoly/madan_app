@@ -1,0 +1,7 @@
+name = "upload"
+main = "r2-upload-worker.js"
+compatibility_date = "2026-03-08"
+
+[[r2_buckets]]
+binding = "R2_BUCKET"
+bucket_name = "maedin-storage"

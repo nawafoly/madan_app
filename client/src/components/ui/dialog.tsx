@@ -99,6 +99,38 @@ function DialogContent({
   showCloseButton?: boolean;
 }) {
   const { isComposing } = useDialogComposition();
+  const fallbackDescriptionId = React.useId();
+  const hasExplicitAriaDescribedBy = Object.prototype.hasOwnProperty.call(
+    props,
+    "aria-describedby"
+  );
+
+  const hasDialogDescription = React.useMemo(() => {
+    const hasDescriptionNode = (node: React.ReactNode): boolean => {
+      return React.Children.toArray(node).some((child) => {
+        if (!React.isValidElement(child)) return false;
+        if (
+          child.type === DialogDescription ||
+          child.type === DialogPrimitive.Description
+        ) {
+          return true;
+        }
+        return hasDescriptionNode(
+          (child as React.ReactElement<{ children?: React.ReactNode }>).props
+            ?.children
+        );
+      });
+    };
+    return hasDescriptionNode(children);
+  }, [children]);
+
+  const shouldInjectFallbackDescription =
+    !hasExplicitAriaDescribedBy && !hasDialogDescription;
+  const resolvedAriaDescribedBy = hasExplicitAriaDescribedBy
+    ? props["aria-describedby"]
+    : shouldInjectFallbackDescription
+      ? fallbackDescriptionId
+      : undefined;
 
   const handleEscapeKeyDown = React.useCallback(
     (e: KeyboardEvent) => {
@@ -128,8 +160,14 @@ function DialogContent({
           className
         )}
         onEscapeKeyDown={handleEscapeKeyDown}
+        aria-describedby={resolvedAriaDescribedBy}
         {...props}
       >
+        {shouldInjectFallbackDescription ? (
+          <DialogPrimitive.Description id={fallbackDescriptionId} className="sr-only">
+            Dialog details
+          </DialogPrimitive.Description>
+        ) : null}
         {children}
         {showCloseButton && (
           <DialogPrimitive.Close
@@ -206,4 +244,3 @@ export {
   DialogTitle,
   DialogTrigger
 };
-

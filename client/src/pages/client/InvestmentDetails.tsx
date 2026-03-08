@@ -10,12 +10,13 @@ import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 
 import { useAuth } from "@/_core/hooks/useAuth";
-import { db } from "@/_core/firebase";
+import { db, fbFunctions } from "@/_core/firebase";
 import {
   uploadInvestmentDocument,
   type InvestmentDocumentKind,
   type UploadDocumentResult,
 } from "@/lib/documentUploadService";
+import { httpsCallable } from "firebase/functions";
 
 import {
   Building2,
@@ -26,6 +27,7 @@ import {
   ArrowLeft,
   CheckCircle2,
   Loader2,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -176,11 +178,22 @@ function resolveDocPath(
   return "";
 }
 
+function resolveDocValue(source: any, candidates: string[]) {
+  for (const candidate of candidates) {
+    const value = readNestedValue(source, candidate);
+    if (value === undefined || value === null) continue;
+    if (typeof value === "string" && !value.trim()) continue;
+    return value;
+  }
+  return undefined;
+}
+
 function getContractStatusMeta(status: any) {
   const s = String(status || "").trim().toLowerCase();
   const map: Record<string, { label: string; cls: string }> = {
     draft: { label: "مسودة", cls: "bg-slate-600" },
     sent: { label: "مرسل", cls: "bg-blue-600" },
+    pending_signature: { label: "بانتظار توقيعك", cls: "bg-indigo-600" },
     signed: { label: "موقّع", cls: "bg-emerald-700" },
     issued: { label: "مرسل", cls: "bg-blue-600" },
     signed_uploaded: { label: "موقّع", cls: "bg-emerald-700" },
@@ -244,6 +257,11 @@ function stageHelp(status: string) {
   };
 }
 
+const removeInvestmentSignedContractCallable = httpsCallable(
+  fbFunctions,
+  "removeInvestmentSignedContract"
+);
+
 export default function InvestmentDetails() {
   const { user } = useAuth();
   const [, params] = useRoute("/client/investments/:id");
@@ -256,6 +274,7 @@ export default function InvestmentDetails() {
   const [contractDoc, setContractDoc] = useState<any>(null);
   const [signedUploadFile, setSignedUploadFile] = useState<File | null>(null);
   const [signedUploadBusy, setSignedUploadBusy] = useState(false);
+  const [signedDeleteBusy, setSignedDeleteBusy] = useState(false);
   const [localUploadedByKind, setLocalUploadedByKind] = useState<
     Partial<Record<InvestmentDocumentKind, UploadDocumentResult>>
   >({});
@@ -469,7 +488,6 @@ export default function InvestmentDetails() {
   }, [investment?.id, resolvedOriginalPathFromDocs, resolvedSignedPathFromDocs]);
 
   const originalExpectedPath = expectedContractPath(investmentId, "original");
-  const signedExpectedPath = expectedContractPath(investmentId, "signed");
 
   const originalPath = pickFirstNonEmptyString(
     resolvedOriginalPathFromDocs,
@@ -499,10 +517,7 @@ export default function InvestmentDetails() {
 
   const signedPath = pickFirstNonEmptyString(
     resolvedSignedPathFromDocs,
-    r2DetectedPathByKind.signed,
-    !r2ProbeStatusByKind.signed || r2ProbeStatusByKind.signed === "unknown"
-      ? signedExpectedPath
-      : ""
+    r2DetectedPathByKind.signed
   );
   const signedDirectUrl = pickFirstNonEmptyString(
     resolveDocPath(investment, ["signedContract.url", "signedContractFile.url", "signedContractUrl"]),
@@ -520,11 +535,96 @@ export default function InvestmentDetails() {
   );
   const hasSignedContract = Boolean(signedPath || signedDirectUrl);
 
-  const contractStatusValue = String(
-    investment?.contractStatus || (hasSignedContract ? "signed" : hasOriginalContract ? "sent" : "draft")
+  const originalUploadedAt = resolveDocValue(investment, ["originalContract.uploadedAt", "contractFile.uploadedAt"]) ??
+    resolveDocValue(contractDoc, ["originalContract.uploadedAt", "contractFile.uploadedAt"]) ??
+    resolveDocValue(messageDoc, ["originalContract.uploadedAt", "contractFile.uploadedAt"]);
+  const signedUploadedAt = resolveDocValue(investment, ["signedContract.uploadedAt", "signedContractFile.uploadedAt"]) ??
+    resolveDocValue(contractDoc, ["signedContract.uploadedAt", "signedContractFile.uploadedAt"]) ??
+    resolveDocValue(messageDoc, ["signedContract.uploadedAt", "signedContractFile.uploadedAt"]);
+
+  const originalVersion = Number(
+    pickFirstNonEmptyString(
+      resolveDocPath(investment, ["contractVersion", "originalContract.version", "contractFile.version"]),
+      resolveDocPath(contractDoc, ["contractVersion", "originalContract.version", "contractFile.version"]),
+      resolveDocPath(messageDoc, ["contractVersion", "originalContract.version", "contractFile.version"]),
+      "0"
+    )
   );
+  const signedForVersion = Number(
+    pickFirstNonEmptyString(
+      resolveDocPath(investment, [
+        "signedContract.signedForVersion",
+        "signedContract.originalVersion",
+        "signedAgainstContractVersion",
+      ]),
+      resolveDocPath(contractDoc, [
+        "signedContract.signedForVersion",
+        "signedContract.originalVersion",
+        "signedAgainstContractVersion",
+      ]),
+      resolveDocPath(messageDoc, [
+        "signedContract.signedForVersion",
+        "signedContract.originalVersion",
+        "signedAgainstContractVersion",
+      ]),
+      "0"
+    )
+  );
+  const outdatedFlag = String(
+    pickFirstNonEmptyString(
+      resolveDocPath(investment, ["signedContractOutdated", "requiresResign", "signedContract.isOutdated"]),
+      resolveDocPath(contractDoc, ["signedContractOutdated", "requiresResign", "signedContract.isOutdated"]),
+      resolveDocPath(messageDoc, ["signedContractOutdated", "requiresResign", "signedContract.isOutdated"]),
+      ""
+    )
+  )
+    .trim()
+    .toLowerCase();
+  const isSignedOutdatedByVersion =
+    hasSignedContract &&
+    Number.isFinite(originalVersion) &&
+    Number.isFinite(signedForVersion) &&
+    originalVersion > 0 &&
+    signedForVersion > 0 &&
+    signedForVersion < originalVersion;
+  const originalUploadedAtDate = toDateSafe(originalUploadedAt);
+  const signedUploadedAtDate = toDateSafe(signedUploadedAt);
+  const isSignedOutdatedByTime =
+    hasSignedContract &&
+    !!originalUploadedAtDate &&
+    !!signedUploadedAtDate &&
+    originalUploadedAtDate.getTime() > signedUploadedAtDate.getTime();
+  const isSignedOutdatedByFlag =
+    outdatedFlag === "true" || outdatedFlag === "1" || outdatedFlag === "yes" || outdatedFlag === "on";
+  const isSignedOutdated =
+    hasSignedContract &&
+    (isSignedOutdatedByFlag || isSignedOutdatedByVersion || isSignedOutdatedByTime);
+
+  const storedContractStatus = String(investment?.contractStatus || "").trim().toLowerCase();
+  const contractStatusValue = String(
+    isSignedOutdated
+      ? "pending_signature"
+      : hasSignedContract
+      ? ["approved", "under_review"].includes(storedContractStatus)
+        ? storedContractStatus
+        : "signed"
+      : hasOriginalContract
+      ? storedContractStatus && storedContractStatus !== "draft"
+        ? storedContractStatus
+        : "sent"
+      : storedContractStatus || "draft"
+  );
+  const contractStatusNormalized = contractStatusValue.trim().toLowerCase();
+  const canInvestorUploadByStatus =
+    contractStatusNormalized === "sent" || contractStatusNormalized === "pending_signature";
+  const isOwnerInvestor = String(investment?.investorUid || "").trim() === String(user?.uid || "").trim();
   const contractStatusMeta = getContractStatusMeta(contractStatusValue);
-  const canUploadSigned = Boolean(investmentId && hasOriginalContract && !hasSignedContract);
+  const canUploadSigned = Boolean(
+    investmentId &&
+      isOwnerInvestor &&
+      (canInvestorUploadByStatus || isSignedOutdated) &&
+      (!hasSignedContract || isSignedOutdated)
+  );
 
   if (!user) {
     return (
@@ -607,7 +707,12 @@ export default function InvestmentDetails() {
       return;
     }
 
-    if (!hasOriginalContract) {
+    if (!isOwnerInvestor) {
+      toast.error("غير مصرح");
+      return;
+    }
+
+    if (!canInvestorUploadByStatus && !isSignedOutdated) {
       toast.error("فشل الرفع");
       return;
     }
@@ -631,7 +736,7 @@ export default function InvestmentDetails() {
         investmentId,
         file: signedUploadFile,
         kind: "signed",
-      });
+      }, { strategy: "callable" });
       setLocalUploadedByKind((prev) => ({
         ...prev,
         [uploaded.kind]: uploaded,
@@ -644,6 +749,53 @@ export default function InvestmentDetails() {
       toast.error(e?.message || "فشل الرفع");
     } finally {
       setSignedUploadBusy(false);
+    }
+  };
+
+  const handleInvestorDeleteSigned = async () => {
+    if (!investmentId) {
+      toast.error("فشل حذف العقد");
+      return;
+    }
+
+    if (!isOwnerInvestor) {
+      toast.error("غير مصرح");
+      return;
+    }
+
+    if (!hasSignedContract) {
+      toast.error("لا يوجد عقد موقّع لحذفه");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "سيتم حذف العقد الموقّع الحالي لتتمكن من رفع نسخة جديدة. هل تريد المتابعة؟"
+    );
+    if (!confirmed) return;
+
+    try {
+      setSignedDeleteBusy(true);
+      await removeInvestmentSignedContractCallable({ investmentId });
+      setLocalUploadedByKind((prev) => {
+        const next = { ...prev };
+        delete next.signed;
+        return next;
+      });
+      setR2DetectedPathByKind((prev) => ({
+        ...prev,
+        signed: "",
+      }));
+      setR2ProbeStatusByKind((prev) => ({
+        ...prev,
+        signed: "unknown",
+      }));
+      await refreshInvestmentDoc();
+      toast.success("تم حذف العقد الموقّع. يمكنك رفع نسخة جديدة الآن.");
+    } catch (e: any) {
+      console.error(e);
+      toast.error(e?.message || "فشل حذف العقد");
+    } finally {
+      setSignedDeleteBusy(false);
     }
   };
 
@@ -756,6 +908,12 @@ export default function InvestmentDetails() {
                   <Badge className={contractStatusMeta.cls}>{contractStatusMeta.label}</Badge>
                 </div>
 
+                {isSignedOutdated ? (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    تم تحديث العقد الأصلي. الرجاء توقيع النسخة الأحدث ثم رفع العقد الموقّع الجديد.
+                  </div>
+                ) : null}
+
                 <div className="rounded-xl border bg-muted/20 p-3">
                   <div className="flex items-center justify-between gap-2">
                     <div className="text-xs text-muted-foreground">العقد الأصلي</div>
@@ -789,11 +947,18 @@ export default function InvestmentDetails() {
                 <div className="rounded-xl border bg-muted/20 p-3">
                   <div className="flex items-center justify-between gap-2">
                     <div className="text-xs text-muted-foreground">العقد الموقّع</div>
-                    <Badge variant="outline">{hasSignedContract ? "مرفوع" : "لا يوجد"}</Badge>
+                    <Badge variant="outline">
+                      {isSignedOutdated ? "قديم" : hasSignedContract ? "مرفوع" : "لا يوجد"}
+                    </Badge>
                   </div>
                   {hasSignedContract ? (
                     <div className="mt-1.5 space-y-2">
                       <div className="font-semibold break-words">{signedName}</div>
+                      {isSignedOutdated ? (
+                        <div className="text-xs text-amber-700">
+                          هذا العقد الموقّع يعتمد على نسخة قديمة من العقد الأصلي.
+                        </div>
+                      ) : null}
                       <div className="flex flex-wrap gap-2">
                         {signedViewUrl ? (
                           <a href={signedViewUrl} target="_blank" rel="noreferrer">
@@ -809,6 +974,21 @@ export default function InvestmentDetails() {
                             </Button>
                           </a>
                         ) : null}
+                        {isOwnerInvestor ? (
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={handleInvestorDeleteSigned}
+                            disabled={signedDeleteBusy}
+                          >
+                            {signedDeleteBusy ? (
+                              <Loader2 className="w-4 h-4 ml-2 animate-spin" />
+                            ) : (
+                              <Trash2 className="w-4 h-4 ml-2" />
+                            )}
+                            حذف (مؤقت)
+                          </Button>
+                        ) : null}
                       </div>
                     </div>
                   ) : (
@@ -816,9 +996,11 @@ export default function InvestmentDetails() {
                   )}
                 </div>
 
-                {investmentId && !hasSignedContract ? (
+                {investmentId && canUploadSigned ? (
                   <div className="rounded-xl border bg-muted/20 p-3 space-y-3">
-                    <div className="text-xs text-muted-foreground">رفع العقد الموقّع</div>
+                    <div className="text-xs text-muted-foreground">
+                      {isSignedOutdated ? "رفع العقد الموقّع الجديد" : "رفع العقد الموقّع"}
+                    </div>
                     <Input
                       type="file"
                       accept="application/pdf"

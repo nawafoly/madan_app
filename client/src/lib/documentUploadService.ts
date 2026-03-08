@@ -18,6 +18,10 @@ export interface UploadDocumentResult {
   bucket?: string;
 }
 
+export interface UploadDocumentOptions {
+  strategy?: "worker" | "callable";
+}
+
 const MAX_FILE_SIZE_MB = 10;
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 
@@ -26,6 +30,7 @@ const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 // 2) A successful worker response means upload is successful.
 // 3) Firestore / Cloud Functions metadata sync is optional and must NEVER block upload success.
 const R2_UPLOAD_WORKER_URL = String(import.meta.env.VITE_R2_UPLOAD_WORKER_URL || "").trim();
+const uploadContractToR2Callable = httpsCallable(fbFunctions, "uploadContractToR2");
 const syncInvestmentContractMetadataCallable = httpsCallable(
   fbFunctions,
   "syncInvestmentContractMetadata"
@@ -113,6 +118,26 @@ function normalizeUploadErrorMessage(raw: any) {
   return "Upload failed";
 }
 
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result || "");
+      const marker = "base64,";
+      const markerIndex = result.indexOf(marker);
+      const encoded =
+        markerIndex >= 0 ? result.slice(markerIndex + marker.length).trim() : result.trim();
+      if (!encoded) {
+        reject(new Error("Upload failed"));
+        return;
+      }
+      resolve(encoded);
+    };
+    reader.onerror = () => reject(new Error("Upload failed"));
+    reader.readAsDataURL(file);
+  });
+}
+
 async function syncInvestmentDocumentMetadata(
   investmentId: string,
   upload: UploadDocumentResult,
@@ -144,11 +169,13 @@ async function syncInvestmentDocumentMetadata(
 }
 
 export async function uploadInvestmentDocument(
-  input: UploadDocumentInput
+  input: UploadDocumentInput,
+  options: UploadDocumentOptions = {}
 ): Promise<UploadDocumentResult> {
   const investmentId = String(input.investmentId || "").trim();
   const { file } = input;
   const kind = String(input.kind || "").trim().toLowerCase() as InvestmentDocumentKind;
+  const strategy = String(options.strategy || "worker").trim().toLowerCase();
 
   if (!investmentId) {
     throw new Error("investmentId is required.");
@@ -160,13 +187,48 @@ export async function uploadInvestmentDocument(
 
   validateUploadFile(file);
 
-  if (!R2_UPLOAD_WORKER_URL) {
-    throw new Error("Missing VITE_R2_UPLOAD_WORKER_URL.");
-  }
-
   const currentUser = auth.currentUser;
   if (!currentUser?.uid) {
     throw new Error("Authentication required.");
+  }
+
+  if (strategy === "callable") {
+    const encoded = await fileToBase64(file);
+    try {
+      const callableRes = await uploadContractToR2Callable({
+        investmentId,
+        kind,
+        fileName: file.name || "signed.pdf",
+        contentType: "application/pdf",
+        base64: encoded,
+      });
+      const raw = callableRes?.data as any;
+      const normalized = normalizeWorkerResponse(
+        {
+          ok: raw?.ok,
+          path: raw?.path,
+          fileName: raw?.fileName,
+          kind: raw?.kind,
+          contentType: "application/pdf",
+          bucket: raw?.bucket,
+        },
+        kind,
+        file.type || "application/pdf"
+      );
+      const expectedPath = expectedContractPath(investmentId, normalized.kind);
+      if (expectedPath && normalized.path !== expectedPath) {
+        throw new Error("Upload failed");
+      }
+      return normalized;
+    } catch (error: any) {
+      throw new Error(
+        normalizeUploadErrorMessage(error?.message || error?.details || "Upload failed")
+      );
+    }
+  }
+
+  if (!R2_UPLOAD_WORKER_URL) {
+    throw new Error("Missing VITE_R2_UPLOAD_WORKER_URL.");
   }
 
   const form = new FormData();
