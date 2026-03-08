@@ -33,6 +33,8 @@ import {
   doc,
   onSnapshot,
   getDoc,
+  updateDoc,
+  serverTimestamp,
   Timestamp,
 } from "firebase/firestore";
 
@@ -184,6 +186,12 @@ function resolveDocValue(source: any, candidates: string[]) {
     return value;
   }
   return undefined;
+}
+
+function toPositiveInt(v: any) {
+  const n = Number(v);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.floor(n);
 }
 
 function getContractStatusMeta(status: any) {
@@ -728,6 +736,49 @@ export default function InvestmentDetails() {
         investmentId,
         file: signedUploadFile,
         kind: "signed",
+      });
+      const invRef = doc(db, "investments", investmentId);
+      const latestInvSnap = await getDoc(invRef);
+      const latestInv = latestInvSnap.exists() ? (latestInvSnap.data() as Record<string, any>) : {};
+      const signedForVersion = toPositiveInt(
+        latestInv?.contractVersion ??
+          latestInv?.originalContract?.version ??
+          latestInv?.contractFile?.version ??
+          originalVersion
+      ) || 1;
+      const now = serverTimestamp();
+      await updateDoc(invRef, {
+        signedContract: {
+          fileName: uploaded.fileName,
+          path: uploaded.path,
+          storagePath: uploaded.path,
+          contentType: uploaded.contentType,
+          uploadedAt: now,
+          uploadedBy: user?.uid || null,
+          signedForVersion,
+          originalVersion: signedForVersion,
+          isOutdated: false,
+          outdatedAt: null,
+          outdatedByOriginalVersion: null,
+        },
+        signedContractFile: {
+          fileName: uploaded.fileName,
+          path: uploaded.path,
+          storagePath: uploaded.path,
+          contentType: uploaded.contentType,
+          uploadedAt: now,
+          uploadedBy: user?.uid || null,
+          signedForVersion,
+        },
+        signedAgainstContractVersion: signedForVersion,
+        signedContractOutdated: false,
+        requiresResign: false,
+        signedContractOutdatedAt: null,
+        contractStatus: "signed",
+        status: "signed",
+        updatedAt: now,
+        lastDocumentUploadAt: now,
+        lastDocumentUploadBy: user?.uid || null,
       });
       setLocalUploadedByKind((prev) => ({
         ...prev,

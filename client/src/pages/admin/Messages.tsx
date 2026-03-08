@@ -191,6 +191,19 @@ function toNum(v: any) {
   return Number.isFinite(n) ? n : 0;
 }
 
+function toPositiveInt(v: any) {
+  const n = toNum(v);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.floor(n);
+}
+
+function toBooleanSafe(v: any) {
+  if (v === true) return true;
+  if (v === false) return false;
+  const raw = String(v || "").trim().toLowerCase();
+  return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
+}
+
 function moneySAR(v: any) {
   const n = toNum(v);
   return `${n.toLocaleString("ar-SA")} ر.س`;
@@ -1232,12 +1245,86 @@ export default function MessagesManagement() {
 
     try {
       setContractBusy(true);
+      const hadSignedBeforeRevision = hasSignedContract;
 
       const uploaded = await uploadInvestmentDocument({
         investmentId,
         file: draftFile,
         kind: "original",
       });
+      await runTransaction(db, async (tx) => {
+        const invRef = doc(db, "investments", investmentId);
+        const invSnap = await tx.get(invRef);
+        if (!invSnap.exists()) {
+          throw new Error("investment_not_found");
+        }
+
+        const inv = (invSnap.data() || {}) as Record<string, any>;
+        const now = serverTimestamp();
+        const currentVersion = toPositiveInt(
+          inv?.contractVersion ?? inv?.originalContract?.version ?? inv?.contractFile?.version
+        );
+        const nextContractVersion = currentVersion > 0 ? currentVersion + 1 : 1;
+        const hasSignedFromDoc = Boolean(
+          String(inv?.signedContract?.path || "").trim() ||
+            String(inv?.signedContractFile?.path || "").trim() ||
+            String(inv?.signedContract?.url || "").trim() ||
+            String(inv?.signedContractFile?.url || "").trim()
+        );
+        const signedForVersion = toPositiveInt(
+          inv?.signedContract?.signedForVersion ??
+            inv?.signedContract?.originalVersion ??
+            inv?.signedAgainstContractVersion
+        );
+        const signedAlreadyOutdated = toBooleanSafe(
+          inv?.signedContractOutdated ?? inv?.requiresResign ?? inv?.signedContract?.isOutdated
+        );
+        const hasSigned = hadSignedBeforeRevision || hasSignedFromDoc;
+        const signedOutdatedAfterRevision =
+          hasSigned &&
+          (signedAlreadyOutdated ||
+            (signedForVersion > 0 ? signedForVersion < nextContractVersion : true));
+
+        tx.set(
+          invRef,
+          {
+            originalContract: {
+              fileName: uploaded.fileName,
+              path: uploaded.path,
+              storagePath: uploaded.path,
+              contentType: uploaded.contentType,
+              uploadedAt: now,
+              uploadedBy: user?.uid || null,
+              version: nextContractVersion,
+            },
+            contractFile: {
+              fileName: uploaded.fileName,
+              path: uploaded.path,
+              storagePath: uploaded.path,
+              contentType: uploaded.contentType,
+              uploadedAt: now,
+              uploadedBy: user?.uid || null,
+              version: nextContractVersion,
+            },
+            contractVersion: nextContractVersion,
+            signedContractOutdated: signedOutdatedAfterRevision,
+            requiresResign: signedOutdatedAfterRevision,
+            signedContractOutdatedAt: signedOutdatedAfterRevision ? now : null,
+            "signedContract.isOutdated": signedOutdatedAfterRevision,
+            "signedContract.outdatedAt": signedOutdatedAfterRevision ? now : null,
+            "signedContract.outdatedByOriginalVersion": signedOutdatedAfterRevision
+              ? nextContractVersion
+              : null,
+            contractStatus: signedOutdatedAfterRevision ? "pending_signature" : "sent",
+            status: signedOutdatedAfterRevision ? "signing" : "pending_contract",
+            updatedAt: now,
+            lastDocumentUploadAt: now,
+            lastDocumentUploadBy: user?.uid || null,
+          },
+          { merge: true }
+        );
+      });
+
       setLocalUploadedByKind((prev) => ({
         ...prev,
         [uploaded.kind]: { path: uploaded.path, fileName: uploaded.fileName },
