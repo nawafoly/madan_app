@@ -37,9 +37,14 @@ import {
 } from "@shared/investmentLifecycle";
 
 import {
+  collection,
   doc,
-  onSnapshot,
   getDoc,
+  getDocs,
+  limit,
+  onSnapshot,
+  query,
+  where,
   updateDoc,
   serverTimestamp,
   Timestamp,
@@ -193,6 +198,19 @@ function resolveDocValue(source: any, candidates: string[]) {
     return value;
   }
   return undefined;
+}
+
+async function tryGetDocSafe(colName: string, docId: string) {
+  const normalizedId = String(docId || "").trim();
+  if (!normalizedId) return null;
+  try {
+    const snap = await getDoc(doc(db, colName, normalizedId));
+    if (!snap.exists()) return null;
+    return { id: snap.id, ...(snap.data() as any) };
+  } catch (error) {
+    console.error(`${colName}_read_error`, error);
+    return null;
+  }
 }
 
 function toPositiveInt(v: any) {
@@ -377,7 +395,7 @@ export default function InvestmentDetails() {
 
         unsubInv = onSnapshot(
           invRef,
-          async (snap) => {
+          (snap) => {
             if (!snap.exists()) {
               setInvestment(null);
               setProject(null);
@@ -394,32 +412,11 @@ export default function InvestmentDetails() {
             // ✅ أمنياً: نتأكد أنه يخص نفس المستثمر
             if (String(inv.investorUid || "") !== String(user.uid)) {
               setInvestment({ __forbidden: true });
+              setProject(null);
+              setMessageDoc(null);
+              setContractDoc(null);
               setLoading(false);
               return;
-            }
-
-            // ✅ load project (مرة واحدة كل تحديث)
-            if (inv.projectId) {
-              const pSnap = await getDoc(doc(db, "projects", String(inv.projectId)));
-              setProject(pSnap.exists() ? { id: pSnap.id, ...pSnap.data() } : null);
-            } else {
-              setProject(null);
-            }
-
-            // ✅ load source message (إن وجد)
-            if (inv.sourceMessageId) {
-              const mSnap = await getDoc(doc(db, "messages", String(inv.sourceMessageId)));
-              setMessageDoc(mSnap.exists() ? { id: mSnap.id, ...mSnap.data() } : null);
-            } else {
-              setMessageDoc(null);
-            }
-
-            // ✅ contract optional
-            if (inv.contractId) {
-              const cSnap = await getDoc(doc(db, "contracts", String(inv.contractId)));
-              setContractDoc(cSnap.exists() ? { id: cSnap.id, ...cSnap.data() } : null);
-            } else {
-              setContractDoc(null);
             }
 
             setLoading(false);
@@ -442,16 +439,170 @@ export default function InvestmentDetails() {
     };
   }, [user?.uid, id]);
 
+  useEffect(() => {
+    const projectId = String(investment?.projectId || "").trim();
+    if (!projectId || investment?.__forbidden) {
+      setProject(null);
+      return;
+    }
+
+    const ref = doc(db, "projects", projectId);
+    const unsub = onSnapshot(
+      ref,
+      (snap) => {
+        setProject(snap.exists() ? { id: snap.id, ...(snap.data() as any) } : null);
+      },
+      (error) => {
+        console.error("project_snapshot_error", error);
+        setProject(null);
+      }
+    );
+
+    return () => {
+      unsub();
+    };
+  }, [investment?.projectId, investment?.__forbidden]);
+
+  useEffect(() => {
+    const investmentId = String(investment?.id || "").trim();
+    const investorUid = String(investment?.investorUid || "").trim();
+    if (!investmentId || !user?.uid || investment?.__forbidden || investorUid !== String(user.uid)) {
+      setMessageDoc(null);
+      return;
+    }
+
+    let cancelled = false;
+    let unsub: null | (() => void) = null;
+
+    const attachRequestSnapshot = (colName: "interest_requests" | "messages", docId: string) => {
+      const ref = doc(db, colName, docId);
+      unsub = onSnapshot(
+        ref,
+        (snap) => {
+          if (cancelled) return;
+          setMessageDoc(snap.exists() ? { id: snap.id, ...(snap.data() as any) } : null);
+        },
+        (error) => {
+          console.error(`${colName}_snapshot_error`, error);
+          if (!cancelled) setMessageDoc(null);
+        }
+      );
+    };
+
+    const resolveRequestDoc = async () => {
+      setMessageDoc(null);
+
+      const candidates: Array<{ col: "interest_requests" | "messages"; id: string }> = [
+        { col: "interest_requests", id: String(investment?.requestId || "").trim() },
+        { col: "interest_requests", id: String(investment?.sourceMessageId || "").trim() },
+        { col: "messages", id: String(investment?.sourceMessageId || "").trim() },
+      ];
+
+      const seen = new Set<string>();
+      for (const candidate of candidates) {
+        if (!candidate.id) continue;
+        const key = `${candidate.col}:${candidate.id}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+
+        const docData = await tryGetDocSafe(candidate.col, candidate.id);
+        if (cancelled) return;
+        if (!docData) continue;
+
+        setMessageDoc(docData);
+        attachRequestSnapshot(candidate.col, candidate.id);
+        return;
+      }
+
+      try {
+        const requestQuery = query(
+          collection(db, "interest_requests"),
+          where("investmentId", "==", investmentId),
+          limit(1)
+        );
+        const requestSnap = await getDocs(requestQuery);
+        if (cancelled) return;
+        const firstMatch = requestSnap.docs[0];
+        if (firstMatch) {
+          setMessageDoc({ id: firstMatch.id, ...(firstMatch.data() as any) });
+          attachRequestSnapshot("interest_requests", firstMatch.id);
+          return;
+        }
+      } catch (error) {
+        console.error("interest_requests_lookup_error", error);
+      }
+
+      if (!cancelled) setMessageDoc(null);
+    };
+
+    void resolveRequestDoc();
+
+    return () => {
+      cancelled = true;
+      if (unsub) unsub();
+    };
+  }, [investment?.id, investment?.requestId, investment?.sourceMessageId, investment?.investorUid, investment?.__forbidden, user?.uid]);
+
+  useEffect(() => {
+    const contractId = String(investment?.contractId || "").trim();
+    if (!contractId || investment?.__forbidden) {
+      setContractDoc(null);
+      return;
+    }
+
+    let cancelled = false;
+    let unsub: null | (() => void) = null;
+
+    const run = async () => {
+      const contract = await tryGetDocSafe("contracts", contractId);
+      if (cancelled) return;
+      if (!contract) {
+        setContractDoc(null);
+        return;
+      }
+
+      setContractDoc(contract);
+      const ref = doc(db, "contracts", contractId);
+      unsub = onSnapshot(
+        ref,
+        (snap) => {
+          if (cancelled) return;
+          setContractDoc(snap.exists() ? { id: snap.id, ...(snap.data() as any) } : null);
+        },
+        (error) => {
+          console.error("contract_snapshot_error", error);
+          if (!cancelled) setContractDoc(null);
+        }
+      );
+    };
+
+    void run();
+
+    return () => {
+      cancelled = true;
+      if (unsub) unsub();
+    };
+  }, [investment?.contractId, investment?.__forbidden]);
+
   const mergedTimeline = useMemo(() => {
     const list: TimelineEvent[] = [];
+
+    const pushEvent = (event: TimelineEvent | null | undefined) => {
+      if (!event) return;
+      const atMs = toDateSafe(event.at)?.getTime() ?? 0;
+      const stableId = String(
+        event.id || `${event._source || "system"}:${event.type || "update"}:${atMs}:${event.title || ""}`
+      );
+      if (list.some((existing) => String(existing.id || "") === stableId)) return;
+      list.push({ ...event, id: stableId });
+    };
 
     const pushEvents = (src: TimelineEvent["_source"], docAny: any) => {
       const evs = Array.isArray(docAny?.events) ? docAny.events : [];
       evs.forEach((ev: any) =>
-        list.push({
+        pushEvent({
           ...(ev || {}),
           _source: src,
-          id: ev?.id || `${src}-${Math.random().toString(16).slice(2)}`,
         })
       );
     };
@@ -459,6 +610,111 @@ export default function InvestmentDetails() {
     pushEvents("investment", investment);
     pushEvents("message", messageDoc);
     pushEvents("contract", contractDoc);
+
+    const hasType = (...types: string[]) =>
+      list.some((ev) => types.includes(String(ev?.type || "").trim().toLowerCase()));
+
+    const requestCreatedAt =
+      toDateSafe(messageDoc?.createdAt) || toDateSafe(investment?.createdAt);
+    if (requestCreatedAt && !hasType("interest_request_created", "request_created", "created")) {
+      pushEvent({
+        _source: "message",
+        type: "request_created",
+        title: "تم استلام الطلب",
+        note: "تم إنشاء طلب الاهتمام الاستثماري وتسجيله داخل النظام.",
+        at: requestCreatedAt,
+      });
+    }
+
+    const investmentCreatedAt =
+      toDateSafe(messageDoc?.investmentCreatedAt) || toDateSafe(investment?.createdAt);
+    if (investmentCreatedAt && !hasType("investment_created")) {
+      pushEvent({
+        _source: "investment",
+        type: "investment_created",
+        title: "تم إنشاء سجل الاستثمار",
+        note: "تم إنشاء سجل الاستثمار وربطه بالطلب تمهيدًا لتجهيز العقد.",
+        at: investmentCreatedAt,
+      });
+    }
+
+    const originalContractUploadedAt =
+      toDateSafe(investment?.originalContract?.uploadedAt) ||
+      toDateSafe(investment?.contractFile?.uploadedAt) ||
+      toDateSafe(contractDoc?.originalContract?.uploadedAt) ||
+      toDateSafe(contractDoc?.contractFile?.uploadedAt) ||
+      toDateSafe(messageDoc?.originalContract?.uploadedAt) ||
+      toDateSafe(messageDoc?.contractFile?.uploadedAt);
+    if (
+      originalContractUploadedAt &&
+      !hasType("contract_uploaded", "contract_prepared", "original_contract_uploaded")
+    ) {
+      pushEvent({
+        _source: "investment",
+        type: "contract_uploaded",
+        title: "تم تجهيز العقد",
+        note: "تم رفع العقد الأصلي وإتاحته للمراجعة والتوقيع.",
+        at: originalContractUploadedAt,
+      });
+    }
+
+    const signedContractAt =
+      toDateSafe(investment?.signedAt) ||
+      toDateSafe(investment?.signedContract?.uploadedAt) ||
+      toDateSafe(investment?.signedContractFile?.uploadedAt) ||
+      toDateSafe(contractDoc?.signedContract?.uploadedAt) ||
+      toDateSafe(contractDoc?.signedContractFile?.uploadedAt) ||
+      toDateSafe(messageDoc?.signedContract?.uploadedAt) ||
+      toDateSafe(messageDoc?.signedContractFile?.uploadedAt);
+    if (signedContractAt && !hasType("contract_signed", "signed_uploaded")) {
+      pushEvent({
+        _source: "investment",
+        type: "contract_signed",
+        title: "تم استلام العقد الموقّع",
+        note: "تم رفع العقد الموقّع من المستثمر وبانتظار التحقق والاعتماد النهائي.",
+        at: signedContractAt,
+      });
+    }
+
+    const contractVerifiedAt =
+      toDateSafe(investment?.verifiedAt) ||
+      toDateSafe(contractDoc?.verifiedAt) ||
+      toDateSafe(messageDoc?.verifiedAt);
+    if (contractVerifiedAt && !hasType("contract_verified")) {
+      pushEvent({
+        _source: "investment",
+        type: "contract_verified",
+        title: "تم اعتماد العقد",
+        note: "تم التحقق من العقد الموقّع وأصبح الاستثمار جاهزًا للتفعيل.",
+        at: contractVerifiedAt,
+      });
+    }
+
+    const activatedAt =
+      toDateSafe(investment?.activatedAt) || toDateSafe(investment?.startAt);
+    if (
+      activatedAt &&
+      isInvestmentActivatedStatus(investment?.status) &&
+      !hasType("finalized", "investment_activated", "activated")
+    ) {
+      pushEvent({
+        _source: "investment",
+        type: "investment_activated",
+        title: "تم تفعيل الاستثمار",
+        note: "بدأت مدة الاستثمار واحتساب الربح من هذا الوقت.",
+        at: activatedAt,
+      });
+    }
+
+    if (!list.length) {
+      pushEvent({
+        _source: "investment",
+        type: "created",
+        title: "تم إنشاء الاستثمار",
+        note: "تم إنشاء سجل الاستثمار، ولا توجد أحداث إضافية مسجلة بعد.",
+        at: investment?.createdAt || messageDoc?.createdAt || contractDoc?.createdAt,
+      });
+    }
 
     // sort asc
     list.sort((a, b) => {
@@ -917,7 +1173,8 @@ export default function InvestmentDetails() {
         requiresResign: false,
         signedContractOutdatedAt: null,
         status: "signed",
-        contractStatus: "signed",
+        contractStatus: "under_review",
+        signedAt: now,
         lastDocumentUploadAt: now,
         lastDocumentUploadBy: user?.uid || null,
       });

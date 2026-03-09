@@ -205,7 +205,7 @@ export default function MyInvestments() {
   const pendingInvestmentsOnly = useMemo(
     () =>
       investments.filter((i) =>
-        ["pending", "pending_review", "pending_contract", "signing", "signed", "approved"].includes(
+        ["pending", "pending_review", "reviewing", "pending_contract", "signing", "signed", "approved"].includes(
           String(i.status || "")
         )
       ).length,
@@ -241,7 +241,7 @@ export default function MyInvestments() {
   const pendingRequests = useMemo(
     () =>
       visibleRequests.filter((r: any) =>
-        ["pending", "pending_review"].includes(String(r.status || "pending"))
+        ["pending", "pending_review", "reviewing", "approved"].includes(String(r.status || "pending"))
       ).length,
     [visibleRequests]
   );
@@ -251,6 +251,7 @@ export default function MyInvestments() {
 
   const statusBadge = (status: string) => {
     const map: any = {
+      reviewing: ["قيد المراجعة", "bg-blue-600"],
       pending: ["قيد المراجعة", "bg-blue-600"],
       pending_review: ["قيد المراجعة", "bg-blue-600"],
       approved: ["بانتظار التفعيل", "bg-amber-600"],

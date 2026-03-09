@@ -390,6 +390,7 @@ export default function ProjectDetails() {
       }
 
       await addDoc(collection(db, "interest_requests"), {
+        type: "investment_request",
         projectId: project?.id || projectId,
         projectTitle: project?.titleAr || project?.title || "",
 
@@ -403,6 +404,8 @@ export default function ProjectDetails() {
         // ✅ amount/status
         amount,
         status: "pending",
+        stageRole: "review",
+        stage: "review",
         note: formData.message || null,
 
         // ✅ snapshots (ثابتة)

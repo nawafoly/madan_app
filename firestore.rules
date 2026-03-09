@@ -71,11 +71,140 @@ service cloud.firestore {
           "signedContractOutdated",
           "requiresResign",
           "signedContractOutdatedAt",
+          "signedAt",
+          "status",
           "contractStatus",
           "lastDocumentUploadAt",
           "lastDocumentUploadBy"
         ])
+        && resource.data.status in ["signing", "signed"]
+        && request.resource.data.status == "signed"
+        && request.resource.data.contractStatus == "under_review"
         && request.resource.data.lastDocumentUploadBy == request.auth.uid;
+    }
+
+    function investmentStatusValue(data) {
+      return ("status" in data && data.status is string) ? lower(data.status) : "";
+    }
+
+    function investmentContractStatusValue(data) {
+      return ("contractStatus" in data && data.contractStatus is string)
+        ? lower(data.contractStatus)
+        : "";
+    }
+
+    function hasSignedContractData(data) {
+      return (
+        (("signedContract" in data)
+          && ("path" in data.signedContract)
+          && data.signedContract.path is string
+          && data.signedContract.path.size() > 0)
+        || (("signedContractFile" in data)
+          && ("path" in data.signedContractFile)
+          && data.signedContractFile.path is string
+          && data.signedContractFile.path.size() > 0)
+        || (("signedContractPath" in data)
+          && data.signedContractPath is string
+          && data.signedContractPath.size() > 0)
+        || (("signedPath" in data)
+          && data.signedPath is string
+          && data.signedPath.size() > 0)
+      );
+    }
+
+    function isValidInvestmentWorkflowState(data) {
+      let status = investmentStatusValue(data);
+      let contractStatus = investmentContractStatusValue(data);
+      return (
+        (status in ["pending", "pending_review"] && contractStatus in ["", "draft"])
+        || (status == "pending_contract" && contractStatus == "draft")
+        || (status == "signing" && contractStatus in ["sent", "pending_signature"])
+        || (status == "signed" && contractStatus in ["under_review", "approved"])
+        || (status == "active" && contractStatus == "approved")
+        || (status in ["completed", "closed", "rejected", "cancelled"])
+      );
+    }
+
+    function isValidInvestmentWorkflowTransition() {
+      let beforeStatus = investmentStatusValue(resource.data);
+      let afterStatus = investmentStatusValue(request.resource.data);
+      let beforeContractStatus = investmentContractStatusValue(resource.data);
+      let afterContractStatus = investmentContractStatusValue(request.resource.data);
+
+      return isValidInvestmentWorkflowState(request.resource.data)
+        && (
+          beforeStatus == afterStatus
+          || (beforeStatus in ["pending", "pending_review"] && afterStatus == "pending_contract")
+          || (beforeStatus == "pending_contract" && afterStatus == "signing")
+          || (beforeStatus == "signing" && afterStatus == "signed")
+          || (beforeStatus == "signed" && afterStatus == "signing")
+          || (beforeStatus == "signed" && afterStatus == "active")
+          || (beforeStatus == "active" && afterStatus in ["completed", "closed"])
+          || (beforeStatus in ["pending_contract", "signing", "signed"] && afterStatus in ["rejected", "cancelled"])
+        )
+        && (
+          afterStatus != "active"
+          || (
+            beforeStatus == "signed"
+            && beforeContractStatus == "approved"
+            && afterContractStatus == "approved"
+            && ("startAt" in request.resource.data)
+            && request.resource.data.startAt != null
+            && ("plannedEndAt" in request.resource.data)
+            && request.resource.data.plannedEndAt != null
+            && ("termsLockedAt" in request.resource.data)
+            && request.resource.data.termsLockedAt != null
+            && ("legalTermsSnapshot" in request.resource.data)
+            && request.resource.data.legalTermsSnapshot != null
+            && hasSignedContractData(request.resource.data)
+          )
+        );
+    }
+
+    function requestStatusValue(data) {
+      return ("status" in data && data.status is string) ? lower(data.status) : "";
+    }
+
+    function requestHasInvestment(data) {
+      return ("investmentId" in data)
+        && (data.investmentId is string)
+        && data.investmentId.size() > 0;
+    }
+
+    function isValidInterestRequestCreate() {
+      return signedIn()
+        && request.resource.data.investorUid == request.auth.uid
+        && requestStatusValue(request.resource.data) == "pending"
+        && (!("type" in request.resource.data) || request.resource.data.type == "investment_request")
+        && (!requestHasInvestment(request.resource.data));
+    }
+
+    function isValidInterestRequestUpdateByOps() {
+      let beforeStatus = requestStatusValue(resource.data);
+      let afterStatus = requestStatusValue(request.resource.data);
+      let beforeHasInvestment = requestHasInvestment(resource.data);
+      let afterHasInvestment = requestHasInvestment(request.resource.data);
+
+      return (
+        beforeStatus == afterStatus
+        || (beforeStatus in ["pending", "new"] && afterStatus == "reviewing")
+        || (beforeStatus in ["reviewing", "in_progress", "needs_account", "waiting_client_confirmation"] && afterStatus == "approved")
+        || (beforeStatus == "approved" && afterStatus == "completed")
+        || (beforeStatus in ["pending", "reviewing", "approved"] && afterStatus == "rejected")
+        || (beforeStatus in ["rejected", "completed", "closed"] && afterStatus == "reviewing")
+      )
+      && (
+        beforeHasInvestment
+        || !afterHasInvestment
+        || (beforeStatus == "approved" && afterStatus == "approved")
+      )
+      && (
+        afterStatus != "completed"
+        || (
+          ("investmentStatus" in request.resource.data)
+          && lower(request.resource.data.investmentStatus) == "active"
+        )
+      );
     }
 
     /* =========================
@@ -169,7 +298,8 @@ match /projects/{projectId} {
     match /investments/{investmentId} {
       allow read: if (signedIn() && request.auth.uid == resource.data.investorUid) || isAdmin() || isOps();
 
-      allow create: if isAdmin() || (
+      allow create: if (isAdmin() && isValidInvestmentWorkflowState(request.resource.data)
+        && investmentStatusValue(request.resource.data) != "active") || (
         signedIn()
         && request.resource.data.investorUid == request.auth.uid
         && (request.resource.data.status == "pending_review" || request.resource.data.status == "pending")
@@ -184,6 +314,7 @@ match /projects/{projectId} {
         (isAdmin() || isAccountant())
           && !isInvestmentClosedData(resource.data)
           && (!isInvestmentTermsLocked() || !investmentTermsChanged())
+          && isValidInvestmentWorkflowTransition()
       ) || clientSignedContractUpdateOnly();
 
       allow delete: if isAdmin()
@@ -222,15 +353,15 @@ match /admin_users/{docId} {
     ========================= */
     match /interest_requests/{id} {
       // العميل يرسل طلبه (المهم يطابق investorUid)
-      allow create: if signedIn()
-        && request.resource.data.investorUid == request.auth.uid;
+      allow create: if isValidInterestRequestCreate();
 
       // العميل يشوف طلباته فقط + ops يشوف الكل
       allow read: if isOps()
         || (signedIn() && resource.data.investorUid == request.auth.uid);
 
       // التعديل/الحذف للإدارة فقط
-      allow update, delete: if isOps();
+      allow update: if isOps() && isValidInterestRequestUpdateByOps();
+      allow delete: if isOps();
     }
 
     match /{document=**} {

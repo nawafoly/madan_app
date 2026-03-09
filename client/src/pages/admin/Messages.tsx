@@ -228,6 +228,56 @@ function stageLabel(v: any) {
   return map[s] || (s ? s : "—");
 }
 
+function normalizeRequestStatus(raw: any): MessageStatus {
+  const s = String(raw || "").trim().toLowerCase();
+  const legacyMap: Record<string, MessageStatus> = {
+    new: "pending",
+    in_progress: "reviewing",
+    pending_review: "reviewing",
+    needs_account: "reviewing",
+    waiting_client_confirmation: "reviewing",
+    resolved: "approved",
+    closed: "completed",
+  };
+  if (legacyMap[s]) return legacyMap[s];
+  if (
+    [
+      "pending",
+      "reviewing",
+      "approved",
+      "completed",
+      "rejected",
+      "no_account",
+      "closed",
+    ].includes(s)
+  ) {
+    return s as MessageStatus;
+  }
+  return "pending";
+}
+
+function normalizeStageRole(raw: any, status: MessageStatus, hasInvestment: boolean): StageRole {
+  const s = String(raw || "").trim().toLowerCase();
+  if (
+    [
+      "reviewer",
+      "review",
+      "staff",
+      "accountant",
+      "client",
+      "investment",
+      "contract",
+      "owner",
+      "completed",
+    ].includes(s)
+  ) {
+    return s as StageRole;
+  }
+  if (status === "completed" || status === "rejected" || status === "closed") return "completed";
+  if (hasInvestment || status === "approved") return "investment";
+  return "review";
+}
+
 function requestNumber(m: any) {
   return (
     pick(m?.issueNumber, m?.requestNumber, m?.mk) ||
@@ -356,6 +406,8 @@ type StageRole =
 
 type MessageStatus =
   | "pending"
+  | "reviewing"
+  | "approved"
   | "new"
   | "in_progress"
   | "needs_account"
@@ -622,7 +674,16 @@ export default function MessagesManagement() {
       completed: { label: "مقفل نهائيًا", cls: "bg-gray-800" },
     };
 
-    const key = String(s || "new");
+    map.pending = { label: "قيد الانتظار", cls: "bg-slate-600" };
+    map.reviewing = { label: "قيد المراجعة", cls: "bg-blue-600" };
+    map.new = { label: "قيد الانتظار", cls: "bg-slate-600" };
+    map.in_progress = { label: "قيد المراجعة", cls: "bg-blue-600" };
+    map.resolved = { label: "موافقة أولية", cls: "bg-emerald-700" };
+    map.approved = { label: "موافقة أولية", cls: "bg-green-600" };
+    map.needs_account = { label: "قيد المراجعة", cls: "bg-blue-600" };
+    map.waiting_client_confirmation = { label: "قيد المراجعة", cls: "bg-blue-600" };
+
+    const key = normalizeRequestStatus(s);
     return map[key] || { label: key, cls: "bg-gray-400" };
   };
 
@@ -630,8 +691,9 @@ export default function MessagesManagement() {
   normalize for display
   ========================= */
   const normalizeForDisplay = (m: any) => {
-    const st = String(pick(m?.status, "new")) as MessageStatus;
-    const sr = String(pick(m?.stageRole, m?.stage, "staff")) as StageRole;
+    const hasInvestment = !!pick(m?.investmentId);
+    const st = normalizeRequestStatus(pick(m?.status, "pending"));
+    const sr = normalizeStageRole(pick(m?.stageRole, m?.stage, ""), st, hasInvestment);
 
     const fixed: any = {
       ...m,
@@ -869,7 +931,13 @@ export default function MessagesManagement() {
   /* =========================
     flags
   ========================= */
-  const isInvestment = selectedMessage?.type === "investment_request";
+  const isInvestment = !!selectedMessage;
+  const selectedRequestStatus = normalizeRequestStatus(selectedMessage?.status);
+  const selectedInvestmentStatus = String(
+    pick(investmentDoc?.status, selectedMessage?.investmentStatus)
+  )
+    .trim()
+    .toLowerCase();
 
   const isLockedFinal =
     String(selectedMessage?.status || "") === "completed" ||
@@ -1071,6 +1139,10 @@ export default function MessagesManagement() {
     if (myRole === "client") return toast.error("صلاحيتك عرض فقط.");
     if (isLockedFinal && myRole !== "owner") return toast.warning("الطلب مقفل.");
 
+    if (normalizeRequestStatus(selectedMessage?.status) !== "approved") {
+      return toast.warning("لا يمكن إنشاء الاستثمار قبل المراجعة والموافقة الأولية.");
+    }
+
     const requestId = String(selectedMessage?.id || "").trim();
     const projectId = pick(
       selectedMessage?.projectId,
@@ -1118,6 +1190,9 @@ export default function MessagesManagement() {
         if (!msgSnap.exists()) throw new Error("request_not_found");
 
         const msgData = msgSnap.data() as any;
+        if (normalizeRequestStatus(msgData?.status) !== "approved") {
+          throw new Error("request_not_initially_approved");
+        }
         const linkedInvId = pick(msgData?.investmentId, existingInvId);
 
         if (linkedInvId) {
@@ -1181,9 +1256,11 @@ export default function MessagesManagement() {
           stage: "investment",
           approvedAmount: amount,
           investmentId: finalInvestmentId,
-          approvedAt: serverTimestamp(),
-          approvedByUid: user?.uid || null,
-          approvedByEmail: user?.email || null,
+          investmentStatus: "pending_contract",
+          contractStatus: "draft",
+          investmentCreatedAt: serverTimestamp(),
+          investmentCreatedByUid: user?.uid || null,
+          investmentCreatedByEmail: user?.email || null,
           updatedAt: serverTimestamp(),
           updatedByUid: user?.uid || null,
           updatedByEmail: user?.email || null,
@@ -1202,13 +1279,18 @@ export default function MessagesManagement() {
               stage: "investment",
               approvedAmount: amount,
               investmentId: finalInvestmentId,
+              investmentStatus: "pending_contract",
+              contractStatus: "draft",
             }
           : prev
       );
       loadMessages();
     } catch (e: any) {
       console.error(e);
-      if (String(e?.message || "") === "request_not_found") {
+      const errorCode = String(e?.message || "");
+      if (errorCode === "request_not_initially_approved") {
+        toast.error("يلزم إنهاء المراجعة والموافقة الأولية قبل إنشاء الاستثمار.");
+      } else if (errorCode === "request_not_found") {
         toast.error("الطلب غير موجود أو تم حذفه.");
       } else {
         toast.error("فشل تنفيذ عملية قبول الطلب وإنشاء الاستثمار");
@@ -1255,6 +1337,7 @@ export default function MessagesManagement() {
         kind: "original",
       });
       await runTransaction(db, async (tx) => {
+        const msgRef = doc(db, REQUESTS_COL, selectedMessage.id);
         const invRef = doc(db, "investments", investmentId);
         const invSnap = await tx.get(invRef);
         if (!invSnap.exists()) {
@@ -1311,11 +1394,27 @@ export default function MessagesManagement() {
             signedContractOutdated: false,
             requiresResign: false,
             signedContractOutdatedAt: null,
+            signedAt: null,
+            verifiedAt: deleteField(),
+            verifiedByUid: deleteField(),
+            verifiedByEmail: deleteField(),
             contractStatus: hasSigned ? "pending_signature" : "sent",
-            status: hasSigned ? "signing" : "pending_contract",
+            status: "signing",
             updatedAt: now,
             lastDocumentUploadAt: now,
             lastDocumentUploadBy: user?.uid || null,
+          },
+          { merge: true }
+        );
+        tx.set(
+          msgRef,
+          {
+            stageRole: "contract",
+            contractStatus: hasSigned ? "pending_signature" : "sent",
+            investmentStatus: "signing",
+            updatedAt: now,
+            updatedByUid: user?.uid || null,
+            updatedByEmail: user?.email || null,
           },
           { merge: true }
         );
@@ -1390,6 +1489,172 @@ export default function MessagesManagement() {
     }
   };
 
+  const verifySignedContract = async () => {
+    if (!selectedMessage) return;
+
+    if (!canAdmin) {
+      toast.error("هذا الإجراء يتطلب صلاحية المدير أو المالك.");
+      return;
+    }
+
+    if (isLockedFinal) return toast.warning("الطلب مقفل.");
+
+    const investmentId = String(selectedMessage?.investmentId || "").trim();
+    if (!investmentId) {
+      toast.error("لا يوجد استثمار مرتبط بهذا الطلب.");
+      return;
+    }
+
+    try {
+      setFinalizeBusy(true);
+      const verifiedAt = serverTimestamp();
+
+      await runTransaction(db, async (tx) => {
+        const msgRef = doc(db, REQUESTS_COL, selectedMessage.id);
+        const invRef = doc(db, "investments", investmentId);
+
+        const [msgSnap, invSnap] = await Promise.all([tx.get(msgRef), tx.get(invRef)]);
+        if (!msgSnap.exists()) throw new Error("request_not_found");
+        if (!invSnap.exists()) throw new Error("investment_not_found");
+
+        const msgData = (msgSnap.data() || {}) as Record<string, any>;
+        const invData = (invSnap.data() || {}) as Record<string, any>;
+        const currentInvestmentStatus = String(invData?.status || "")
+          .trim()
+          .toLowerCase();
+        if (["active", "completed", "closed"].includes(currentInvestmentStatus)) {
+          throw new Error("investment_already_activated");
+        }
+        const currentContractStatus = String(
+          pick(invData?.contractStatus, msgData?.contractStatus, selectedMessage?.contractStatus)
+        )
+          .trim()
+          .toLowerCase();
+        if (!["under_review", "signed"].includes(currentContractStatus)) {
+          throw new Error("contract_not_ready_for_verification");
+        }
+
+        const hasSignedPath = Boolean(
+          pick(
+            invData?.signedContract?.path,
+            invData?.signedContractFile?.path,
+            invData?.signedContractPath,
+            invData?.signedPath,
+            invData?.signedDocumentPath,
+            invData?.signedContractUrl
+          )
+        );
+        if (!hasSignedPath) {
+          throw new Error("signed_contract_missing");
+        }
+
+        const originalVersion = toPositiveInt(
+          invData?.contractVersion ?? invData?.originalContract?.version ?? invData?.contractFile?.version
+        );
+        const signedForVersion = toPositiveInt(
+          invData?.signedAgainstContractVersion ??
+            invData?.signedContract?.signedForVersion ??
+            invData?.signedContract?.originalVersion
+        );
+        const outdatedFlag = toBooleanSafe(
+          invData?.signedContractOutdated ?? invData?.requiresResign ?? invData?.signedContract?.isOutdated
+        );
+        const isSignedOutdated =
+          outdatedFlag ||
+          (originalVersion > 0 && signedForVersion > 0 && signedForVersion < originalVersion);
+        if (isSignedOutdated) {
+          throw new Error("signed_contract_outdated");
+        }
+
+        const contractId = String(
+          pick(invData?.contractId, msgData?.contractId, selectedMessage?.contractId)
+        ).trim();
+        const contractRef = contractId ? doc(db, "contracts", contractId) : null;
+
+        tx.set(
+          invRef,
+          {
+            status: "signed",
+            contractStatus: "approved",
+            signedAt: invData?.signedAt || verifiedAt,
+            verifiedAt,
+            verifiedByUid: user?.uid || null,
+            verifiedByEmail: user?.email || null,
+            updatedAt: verifiedAt,
+            updatedByUid: user?.uid || null,
+            updatedByEmail: user?.email || null,
+          },
+          { merge: true }
+        );
+
+        if (contractRef) {
+          tx.set(
+            contractRef,
+            {
+              status: "approved",
+              verifiedAt,
+              verifiedByUid: user?.uid || null,
+              verifiedByEmail: user?.email || null,
+              updatedAt: verifiedAt,
+              updatedByUid: user?.uid || null,
+              updatedByEmail: user?.email || null,
+            },
+            { merge: true }
+          );
+        }
+
+        tx.update(msgRef, {
+          stageRole: "owner" as StageRole,
+          contractStatus: "approved",
+          investmentStatus: "signed",
+          verifiedAt,
+          verifiedByUid: user?.uid || null,
+          verifiedByEmail: user?.email || null,
+          updatedAt: verifiedAt,
+          updatedByUid: user?.uid || null,
+          updatedByEmail: user?.email || null,
+          events: arrayUnion(
+            makeEvent({
+              type: "contract_verified",
+              title: "تم التحقق من العقد الموقّع",
+              note: "تم اعتماد العقد الموقّع وأصبح الاستثمار جاهزًا للتفعيل النهائي.",
+              ...myActor(user, myRole),
+              meta: {
+                messageId: selectedMessage.id,
+                investmentId,
+                contractStatus: "approved",
+                investmentStatus: "signed",
+              },
+            })
+          ),
+          ...actionMeta(user, myRole),
+        });
+      });
+
+      toast.success("تم التحقق من العقد الموقّع.");
+      await loadInvestmentDoc(investmentId);
+      await loadMessages();
+    } catch (e: any) {
+      console.error(e);
+      const code = String(e?.message || "");
+      if (code === "contract_not_ready_for_verification") {
+        toast.error("يجب أن يرفع المستثمر العقد الموقّع أولًا قبل التحقق.");
+      } else if (code === "signed_contract_missing") {
+        toast.error("لا يوجد عقد موقّع صالح للتحقق.");
+      } else if (code === "signed_contract_outdated") {
+        toast.error("العقد الموقّع قديم ويجب رفع نسخة محدثة.");
+      } else if (code === "request_not_found") {
+        toast.error("الطلب غير موجود.");
+      } else if (code === "investment_not_found") {
+        toast.error("سجل الاستثمار غير موجود.");
+      } else {
+        toast.error("فشل التحقق من العقد الموقّع.");
+      }
+    } finally {
+      setFinalizeBusy(false);
+    }
+  };
+
   const activateInvestmentAfterApproval = async () => {
     if (!selectedMessage) return;
 
@@ -1423,6 +1688,9 @@ export default function MessagesManagement() {
         if (["active", "completed", "closed"].includes(currentInvestmentStatus)) {
           throw new Error("investment_already_activated");
         }
+        if (currentInvestmentStatus !== "signed") {
+          throw new Error("investment_not_ready_for_activation");
+        }
 
         const contractId = String(
           pick(invData?.contractId, msgData?.contractId, selectedMessage?.contractId)
@@ -1439,10 +1707,7 @@ export default function MessagesManagement() {
         )
           .trim()
           .toLowerCase();
-        if (
-          !CONTRACTS_DISABLED &&
-          !["signed", "under_review"].includes(currentContractStatus)
-        ) {
+        if (!CONTRACTS_DISABLED && currentContractStatus !== "approved") {
           throw new Error("contract_not_ready_for_activation");
         }
 
@@ -1608,6 +1873,8 @@ export default function MessagesManagement() {
         toast.error("سجل الاستثمار غير موجود.");
       } else if (code === "contract_not_ready_for_activation") {
         toast.error("لا يمكن تفعيل الاستثمار قبل اكتمال توقيع العقد ومراجعته.");
+      } else if (code === "investment_not_ready_for_activation") {
+        toast.error("يجب التحقق من العقد الموقّع قبل تفعيل الاستثمار.");
       } else if (code === "investment_already_activated") {
         toast.error("الاستثمار مفعّل مسبقًا.");
       } else if (
@@ -1675,8 +1942,8 @@ export default function MessagesManagement() {
       });
 
       await updateDoc(doc(db, REQUESTS_COL, selectedMessage.id), {
-        status: "in_progress",
-        stageRole: "owner" as StageRole,
+        status: "reviewing",
+        stageRole: "review" as StageRole,
         reopenedAt: serverTimestamp(),
         reopenedByUid: user?.uid || null,
         reopenedByEmail: user?.email || null,
@@ -1853,31 +2120,105 @@ export default function MessagesManagement() {
       : "sent"
     : storedContractStatus || "draft";
 
-  const contractReadyForActivation = CONTRACTS_DISABLED
-    ? true
-    : ["signed", "under_review"].includes(contractStatusValue);
   const needsNewSignedContract = CONTRACTS_DISABLED ? false : !hasCurrentSignedContract;
   const contractFollowupChipLabel =
     hasOriginalContract && !hasCurrentSignedContract && contractStatusValue !== "pending_signature"
     ? "بانتظار توقيع المستثمر"
     : "";
 
-  const canFinalize = CONTRACTS_DISABLED
-    ? isInvestment && !!selectedMessage?.investmentId
-    : isInvestment &&
-      !!selectedMessage?.investmentId &&
-      contractReadyForActivation &&
-      !needsNewSignedContract;
-
-  const canApproveAndCreateInvestment =
+  const canStartRequestReview =
     !!selectedMessage &&
     myRole !== "client" &&
     !isLockedFinal &&
-    String(selectedMessage?.status || "") !== "rejected" &&
-    !selectedMessage?.investmentId;
+    !selectedMessage?.investmentId &&
+    selectedRequestStatus === "pending";
+  const canInitialApproveRequest =
+    !!selectedMessage &&
+    myRole !== "client" &&
+    !isLockedFinal &&
+    !selectedMessage?.investmentId &&
+    selectedRequestStatus === "reviewing";
+  const canCreateInvestmentFromRequest =
+    !!selectedMessage &&
+    myRole !== "client" &&
+    !isLockedFinal &&
+    !selectedMessage?.investmentId &&
+    selectedRequestStatus === "approved";
+  const canVerifySignedContract =
+    !!selectedMessage &&
+    canAdmin &&
+    !isLockedFinal &&
+    !!selectedMessage?.investmentId &&
+    ["signing", "signed"].includes(selectedInvestmentStatus) &&
+    ["under_review", "signed"].includes(contractStatusValue) &&
+    hasCurrentSignedContract &&
+    !needsNewSignedContract;
+  const canFinalize = CONTRACTS_DISABLED
+    ? !!selectedMessage?.investmentId && selectedInvestmentStatus === "signed"
+    : isInvestment &&
+      !!selectedMessage?.investmentId &&
+      selectedInvestmentStatus === "signed" &&
+      contractStatusValue === "approved" &&
+      hasCurrentSignedContract &&
+      !needsNewSignedContract;
+
+  const canApproveAndCreateInvestment = canCreateInvestmentFromRequest;
+
+  const startRequestReview = async () => {
+    if (!selectedMessage) return;
+    await moveTo({
+      status: "reviewing",
+      stageRole: "review",
+      note: "تم بدء مراجعة طلب الاستثمار.",
+    });
+  };
+
+  const initialApproveRequest = async () => {
+    if (!selectedMessage) return;
+
+    const ev = makeEvent({
+      type: "request_initial_approved",
+      title: "تمت الموافقة الأولية على الطلب",
+      note: "اكتملت مراجعة الطلب وأصبح جاهزًا لإنشاء سجل الاستثمار.",
+      ...myActor(user, myRole),
+      meta: { messageId: selectedMessage.id, status: "approved", stageRole: "investment" },
+    });
+
+    try {
+      await updateDoc(doc(db, REQUESTS_COL, selectedMessage.id), {
+        status: "approved",
+        stageRole: "investment" as StageRole,
+        initialApprovedAt: serverTimestamp(),
+        initialApprovedByUid: user?.uid || null,
+        initialApprovedByEmail: user?.email || null,
+        updatedAt: serverTimestamp(),
+        updatedByUid: user?.uid || null,
+        updatedByEmail: user?.email || null,
+        events: arrayUnion(ev),
+        ...actionMeta(user, myRole),
+      });
+
+      setSelectedMessage((prev: any) =>
+        prev
+          ? {
+              ...prev,
+              status: "approved",
+              stageRole: "investment",
+              events: Array.isArray(prev.events) ? [...prev.events, ev] : [ev],
+            }
+          : prev
+      );
+
+      toast.success("تمت الموافقة الأولية على الطلب.");
+      loadMessages();
+    } catch (e) {
+      console.error(e);
+      toast.error("فشل تحديث حالة الطلب.");
+    }
+  };
 
   /* =========================
-    Render
+     Render
   ========================= */
   return (
     <DashboardLayout>
@@ -2325,12 +2666,63 @@ export default function MessagesManagement() {
                           <CheckCircle2 className="w-4 h-4 ml-2" />
                           حفظ الملاحظات
                         </Button>
+                        {canStartRequestReview ? (
+                          <Button
+                            className="bg-yellow-700 hover:bg-yellow-800"
+                            onClick={startRequestReview}
+                            disabled={isLockedFinal}
+                          >
+                            <Clock3 className="w-4 h-4 ml-2" />
+                            بدء المراجعة
+                          </Button>
+                        ) : null}
+
+                        {canInitialApproveRequest ? (
+                          <Button
+                            className="bg-indigo-700 hover:bg-indigo-800"
+                            onClick={initialApproveRequest}
+                            disabled={isLockedFinal}
+                          >
+                            <ShieldCheck className="w-4 h-4 ml-2" />
+                            موافقة أولية
+                          </Button>
+                        ) : null}
+
+                        {canCreateInvestmentFromRequest ? (
+                          <Button
+                            className="bg-blue-700 hover:bg-blue-800"
+                            onClick={approveRequestAndCreateInvestment}
+                            disabled={approveCreateBusy || isLockedFinal}
+                          >
+                            {approveCreateBusy ? (
+                              <Loader2 className="w-4 h-4 ml-2 animate-spin" />
+                            ) : (
+                              <CheckCircle2 className="w-4 h-4 ml-2" />
+                            )}
+                            إنشاء الاستثمار
+                          </Button>
+                        ) : null}
+
+                        {canVerifySignedContract ? (
+                          <Button
+                            className="bg-amber-700 hover:bg-amber-800"
+                            onClick={verifySignedContract}
+                            disabled={isLockedFinal || finalizeBusy}
+                          >
+                            {finalizeBusy ? (
+                              <Loader2 className="w-4 h-4 ml-2 animate-spin" />
+                            ) : (
+                              <ShieldCheck className="w-4 h-4 ml-2" />
+                            )}
+                            اعتماد العقد الموقّع
+                          </Button>
+                        ) : null}
 
                         {/* ✅ Step Machine Buttons */}
                         {selectedMessage ? (
                           <>
                             {/* 1) Staff -> Accountant */}
-                            {canStaffActions &&
+                            {false && canStaffActions &&
                             normalizeForDisplay(selectedMessage).status === "new" &&
                             normalizeForDisplay(selectedMessage).stageRole === "staff" ? (
                               <Button
@@ -2344,7 +2736,7 @@ export default function MessagesManagement() {
                             ) : null}
 
                             {/* 2) Accountant -> Client */}
-                            {canOwnerAccountantActions &&
+                            {false && canOwnerAccountantActions &&
                             normalizeForDisplay(selectedMessage).status === "needs_account" &&
                             normalizeForDisplay(selectedMessage).stageRole === "accountant" ? (
                               <Button
@@ -2358,7 +2750,7 @@ export default function MessagesManagement() {
                             ) : null}
 
                             {/* 3) Client -> Owner */}
-                            {myRole === "client" &&
+                            {false && myRole === "client" &&
                             normalizeForDisplay(selectedMessage).status === "waiting_client_confirmation" &&
                             normalizeForDisplay(selectedMessage).stageRole === "client" ? (
                               <Button
@@ -2372,7 +2764,7 @@ export default function MessagesManagement() {
                             ) : null}
 
                             {/* 4) Owner -> Completed/Locked */}
-                            {myRole === "owner" &&
+                            {false && myRole === "owner" &&
                             normalizeForDisplay(selectedMessage).status === "resolved" &&
                             normalizeForDisplay(selectedMessage).stageRole === "owner" ? (
                               <Button
@@ -2388,7 +2780,7 @@ export default function MessagesManagement() {
                         ) : null}
 
                         {/* ✅ Staff: Pre-investment */}
-                        {isInvestment ? (
+                        {false && isInvestment ? (
                           <Button
                             variant="outline"
                             onClick={createPreInvestment}
@@ -2415,7 +2807,7 @@ export default function MessagesManagement() {
                           </Button>
                         ) : null}
 
-                        {canApproveAndCreateInvestment ? (
+                        {false && canApproveAndCreateInvestment ? (
                           <Button
                             className="bg-blue-700 hover:bg-blue-800"
                             onClick={approveRequestAndCreateInvestment}
