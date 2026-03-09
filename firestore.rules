@@ -61,7 +61,7 @@ service cloud.firestore {
 
     function clientSignedContractUpdateOnly() {
       let changed = request.resource.data.diff(resource.data).changedKeys();
-      return isClient()
+      return signedIn()
         && request.auth.uid == resource.data.investorUid
         && !isInvestmentClosedData(resource.data)
         && changed.hasOnly([

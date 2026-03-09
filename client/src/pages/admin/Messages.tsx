@@ -8,6 +8,7 @@ import {
   deleteField,
   doc,
   getDocs,
+  onSnapshot,
   updateDoc,
   Timestamp,
   serverTimestamp,
@@ -733,7 +734,27 @@ export default function MessagesManagement() {
   };
 
   useEffect(() => {
-    loadMessages();
+    const q = query(collection(db, REQUESTS_COL), orderBy("createdAt", "desc"));
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const list = snap.docs.map((d) => ({
+          id: d.id,
+          ...d.data(),
+        }));
+        setMessages(list);
+        setLoading(false);
+      },
+      (e) => {
+        console.error(e);
+        toast.error("فشل تحميل الرسائل");
+        setLoading(false);
+      }
+    );
+
+    return () => {
+      unsub();
+    };
   }, []);
 
   /* =========================
@@ -857,6 +878,81 @@ export default function MessagesManagement() {
   };
 
   const activeInvestmentId = pick(investmentDoc?.id, selectedMessage?.investmentId);
+  const activeContractId = pick(investmentDoc?.contractId, selectedMessage?.contractId);
+
+  useEffect(() => {
+    if (!isDetailDialogOpen || !selectedMessage?.id) return;
+
+    const unsub = onSnapshot(
+      doc(db, REQUESTS_COL, selectedMessage.id),
+      (snap) => {
+        if (!snap.exists()) return;
+        const liveMessage = normalizeForDisplay({
+          id: snap.id,
+          ...(snap.data() as any),
+        });
+        setSelectedMessage((prev: any) =>
+          prev && prev.id === snap.id ? { ...prev, ...liveMessage } : prev
+        );
+      },
+      (e) => console.error(e)
+    );
+
+    return () => {
+      unsub();
+    };
+  }, [isDetailDialogOpen, selectedMessage?.id]);
+
+  useEffect(() => {
+    if (!isDetailDialogOpen || !activeInvestmentId) return;
+
+    const unsub = onSnapshot(
+      doc(db, "investments", activeInvestmentId),
+      (snap) => {
+        if (!snap.exists()) {
+          setInvestmentDoc(null);
+          return;
+        }
+        setInvestmentDoc({
+          id: snap.id,
+          ...(snap.data() as any),
+        });
+      },
+      (e) => console.error(e)
+    );
+
+    return () => {
+      unsub();
+    };
+  }, [isDetailDialogOpen, activeInvestmentId]);
+
+  useEffect(() => {
+    if (!isDetailDialogOpen) return;
+    if (!activeContractId) {
+      setContractDoc(null);
+      return;
+    }
+
+    const unsub = onSnapshot(
+      doc(db, "contracts", activeContractId),
+      (snap) => {
+        if (!snap.exists()) {
+          setContractDoc(null);
+          return;
+        }
+        setContractDoc({
+          id: snap.id,
+          ...(snap.data() as any),
+        });
+      },
+      (e) => console.error(e)
+    );
+
+    return () => {
+      unsub();
+    };
+  }, [isDetailDialogOpen, activeContractId]);
+
   const originalPathFromDocs = pickFirstNonEmptyString(
     resolveDocPath(investmentDoc, [
       "originalContract.path",
@@ -933,6 +1029,13 @@ export default function MessagesManagement() {
         const status = candidate ? await r2ObjectStatus(candidate) : "unknown";
         probe.original = status;
         if (candidate && status === "exists") next.original = candidate;
+      }
+
+      if (!signedPathFromDocs && !localUploadedByKind.signed?.path) {
+        const candidate = expectedContractPath(activeInvestmentId, "signed");
+        const status = candidate ? await r2ObjectStatus(candidate) : "unknown";
+        probe.signed = status;
+        if (candidate && status === "exists") next.signed = candidate;
       }
 
       if (!cancelled) {
@@ -1656,20 +1759,23 @@ export default function MessagesManagement() {
         )
           .trim()
           .toLowerCase();
-        if (!["under_review", "signed"].includes(currentContractStatus)) {
+        const fallbackSignedPath = pick(
+          invData?.signedContract?.path,
+          invData?.signedContractFile?.path,
+          invData?.signedContractPath,
+          invData?.signedPath,
+          invData?.signedDocumentPath,
+          invData?.signedContractUrl,
+          signedContractPath
+        );
+        const canVerifyLegacySignedUpload =
+          !!fallbackSignedPath &&
+          ["sent", "pending_signature", "draft"].includes(currentContractStatus);
+        if (!["under_review", "signed"].includes(currentContractStatus) && !canVerifyLegacySignedUpload) {
           throw new Error("contract_not_ready_for_verification");
         }
 
-        const hasSignedPath = Boolean(
-          pick(
-            invData?.signedContract?.path,
-            invData?.signedContractFile?.path,
-            invData?.signedContractPath,
-            invData?.signedPath,
-            invData?.signedDocumentPath,
-            invData?.signedContractUrl
-          )
-        );
+        const hasSignedPath = Boolean(fallbackSignedPath);
         if (!hasSignedPath) {
           throw new Error("signed_contract_missing");
         }
@@ -1691,6 +1797,20 @@ export default function MessagesManagement() {
         if (isSignedOutdated) {
           throw new Error("signed_contract_outdated");
         }
+        const shouldBackfillSignedDoc =
+          !pick(
+            invData?.signedContract?.path,
+            invData?.signedContractFile?.path,
+            invData?.signedContractPath,
+            invData?.signedPath,
+            invData?.signedDocumentPath,
+            invData?.signedContractUrl
+          ) &&
+          !!fallbackSignedPath;
+        const resolvedSignedForVersion = signedForVersion || originalVersion || 1;
+        const fallbackSignedFileName = fallbackSignedPath
+          ? getFileNameFromPath(fallbackSignedPath)
+          : "signed.pdf";
 
         const contractId = String(
           pick(invData?.contractId, msgData?.contractId, selectedMessage?.contractId)
@@ -1700,6 +1820,34 @@ export default function MessagesManagement() {
         tx.set(
           invRef,
           {
+            ...(shouldBackfillSignedDoc
+              ? {
+                  signedContract: {
+                    fileName: fallbackSignedFileName,
+                    path: fallbackSignedPath,
+                    storagePath: fallbackSignedPath,
+                    uploadedAt: invData?.signedAt || verifiedAt,
+                    uploadedBy: invData?.lastDocumentUploadBy || invData?.investorUid || null,
+                    signedForVersion: resolvedSignedForVersion,
+                    originalVersion: resolvedSignedForVersion,
+                    isOutdated: false,
+                    outdatedAt: null,
+                    outdatedByOriginalVersion: null,
+                  },
+                  signedContractFile: {
+                    fileName: fallbackSignedFileName,
+                    path: fallbackSignedPath,
+                    storagePath: fallbackSignedPath,
+                    uploadedAt: invData?.signedAt || verifiedAt,
+                    uploadedBy: invData?.lastDocumentUploadBy || invData?.investorUid || null,
+                    signedForVersion: resolvedSignedForVersion,
+                  },
+                  signedAgainstContractVersion: resolvedSignedForVersion,
+                  signedContractOutdated: false,
+                  requiresResign: false,
+                  signedContractOutdatedAt: null,
+                }
+              : {}),
             status: "signed",
             contractStatus: "approved",
             signedAt: invData?.signedAt || verifiedAt,
@@ -1717,6 +1865,34 @@ export default function MessagesManagement() {
           tx.set(
             contractRef,
             {
+              ...(shouldBackfillSignedDoc
+                ? {
+                    signedContract: {
+                      fileName: fallbackSignedFileName,
+                      path: fallbackSignedPath,
+                      storagePath: fallbackSignedPath,
+                      uploadedAt: invData?.signedAt || verifiedAt,
+                      uploadedBy: invData?.lastDocumentUploadBy || invData?.investorUid || null,
+                      signedForVersion: resolvedSignedForVersion,
+                      originalVersion: resolvedSignedForVersion,
+                      isOutdated: false,
+                      outdatedAt: null,
+                      outdatedByOriginalVersion: null,
+                    },
+                    signedContractFile: {
+                      fileName: fallbackSignedFileName,
+                      path: fallbackSignedPath,
+                      storagePath: fallbackSignedPath,
+                      uploadedAt: invData?.signedAt || verifiedAt,
+                      uploadedBy: invData?.lastDocumentUploadBy || invData?.investorUid || null,
+                      signedForVersion: resolvedSignedForVersion,
+                    },
+                    signedAgainstContractVersion: resolvedSignedForVersion,
+                    signedContractOutdated: false,
+                    requiresResign: false,
+                    signedContractOutdatedAt: null,
+                  }
+                : {}),
               status: "approved",
               verifiedAt,
               verifiedByUid: user?.uid || null,
@@ -2105,6 +2281,7 @@ export default function MessagesManagement() {
     !!selectedMessage?.contractId;
 
   const originalExpectedPath = expectedContractPath(activeInvestmentId, "original");
+  const signedExpectedPath = expectedContractPath(activeInvestmentId, "signed");
 
   const originalContractPath = pick(
     localUploadedByKind.original?.path,
@@ -2138,7 +2315,11 @@ export default function MessagesManagement() {
 
   const signedContractPath = pick(
     localUploadedByKind.signed?.path,
-    signedPathFromDocs
+    signedPathFromDocs,
+    r2DetectedPathByKind.signed,
+    !r2ProbeStatusByKind.signed || r2ProbeStatusByKind.signed === "unknown"
+      ? signedExpectedPath
+      : ""
   );
   const signedContractUrlFromDocs = pickFirstNonEmptyString(
     resolveDocPath(investmentDoc, ["signedContract.url", "signedContractFile.url", "signedContractUrl"]),
