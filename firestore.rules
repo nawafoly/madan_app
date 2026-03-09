@@ -171,6 +171,27 @@ service cloud.firestore {
         && data.investmentId.size() > 0;
     }
 
+    function currentUserOwnsInvestment(investmentId) {
+      return signedIn()
+        && investmentId is string
+        && investmentId.size() > 0
+        && exists(/databases/$(database)/documents/investments/$(investmentId))
+        && get(/databases/$(database)/documents/investments/$(investmentId)).data.investorUid == request.auth.uid;
+    }
+
+    function currentUserCanReadContract() {
+      return signedIn() && (
+        (("investorUid" in resource.data)
+          && resource.data.investorUid is string
+          && resource.data.investorUid == request.auth.uid)
+        || (("userId" in resource.data)
+          && resource.data.userId is string
+          && resource.data.userId == request.auth.uid)
+        || (("investmentId" in resource.data)
+          && currentUserOwnsInvestment(resource.data.investmentId))
+      );
+    }
+
     function isValidInterestRequestCreate() {
       return signedIn()
         && request.resource.data.investorUid == request.auth.uid
@@ -319,6 +340,16 @@ match /projects/{projectId} {
 
       allow delete: if isAdmin()
         && !isInvestmentClosedData(resource.data);
+    }
+
+    /* =========================
+       contracts
+    ========================= */
+    match /contracts/{contractId} {
+      allow get: if isOps() || currentUserCanReadContract();
+      allow list: if isOps();
+      allow create, update: if isOps();
+      allow delete: if isAdmin();
     }
 
     /* =========================

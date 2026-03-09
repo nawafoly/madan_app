@@ -762,30 +762,101 @@ export default function MessagesManagement() {
     }
   };
 
-  const loadInvestmentDoc = async (investmentId: string | null) => {
+  const isInvestmentLinkedToRequest = (
+    invData: Record<string, any> | null | undefined,
+    requestData: Record<string, any> | null | undefined
+  ) => {
+    if (!invData || !requestData) return false;
+
+    const explicitInvestmentId = pick(requestData?.investmentId);
+    const currentInvestmentId = pick(invData?.id);
+    if (explicitInvestmentId && currentInvestmentId && currentInvestmentId !== explicitInvestmentId) {
+      return false;
+    }
+
+    const requestId = pick(requestData?.id, requestData?.requestId);
+    const investmentRequestId = pick(
+      invData?.requestId,
+      invData?.sourceRequestId,
+      invData?.sourceMessageId,
+      invData?.messageId
+    );
+    if (requestId) {
+      if (investmentRequestId) {
+        if (investmentRequestId !== requestId) return false;
+      } else if (!explicitInvestmentId || currentInvestmentId !== explicitInvestmentId) {
+        return false;
+      }
+    }
+
+    const requestInvestorUid = pick(
+      requestData?.investorUid,
+      requestData?.userId,
+      requestData?.createdByUid,
+      requestData?.userSnapshot?.uid
+    );
+    const investmentInvestorUid = pick(invData?.investorUid, invData?.userId);
+    if (requestInvestorUid && investmentInvestorUid && investmentInvestorUid !== requestInvestorUid) {
+      return false;
+    }
+
+    const requestProjectId = pick(
+      requestData?.projectId,
+      requestData?.project_id,
+      requestData?.project?.id
+    );
+    const investmentProjectId = pick(invData?.projectId);
+    if (requestProjectId && investmentProjectId && investmentProjectId !== requestProjectId) {
+      return false;
+    }
+
+    return true;
+  };
+
+  const loadInvestmentDoc = async (investmentId: string | null, requestData?: any) => {
     try {
-      if (!investmentId) {
-        setInvestmentDoc(null);
-        return;
+      const requestedInvestmentId = String(investmentId || "").trim();
+
+      if (requestedInvestmentId) {
+        const snap = await getDoc(doc(db, "investments", requestedInvestmentId));
+        if (snap.exists()) {
+          const directDoc = {
+            id: snap.id,
+            ...(snap.data() as any),
+          };
+
+          if (!requestData || isInvestmentLinkedToRequest(directDoc, requestData)) {
+            setInvestmentDoc(directDoc);
+            return directDoc;
+          }
+        }
       }
 
-      const snap = await getDoc(doc(db, "investments", investmentId));
-      if (!snap.exists()) {
-        setInvestmentDoc(null);
-        return;
+      const requestId = pick(requestData?.id, requestData?.requestId);
+      if (requestId) {
+        const linkedSnap = await getDocs(
+          query(collection(db, "investments"), where("requestId", "==", requestId))
+        );
+        const linkedDoc = linkedSnap.docs
+          .map((row) => ({ id: row.id, ...(row.data() as any) }))
+          .find((row) => isInvestmentLinkedToRequest(row, requestData));
+
+        if (linkedDoc) {
+          setInvestmentDoc(linkedDoc);
+          return linkedDoc;
+        }
       }
 
-      setInvestmentDoc({
-        id: snap.id,
-        ...(snap.data() as any),
-      });
+      setInvestmentDoc(null);
+      return null;
     } catch (e) {
       console.error(e);
       setInvestmentDoc(null);
+      return null;
     }
   };
 
-  const activeInvestmentId = pick(selectedMessage?.investmentId, investmentDoc?.id);
+  const activeInvestmentId = pick(investmentDoc?.id, selectedMessage?.investmentId);
   const originalPathFromDocs = pickFirstNonEmptyString(
     resolveDocPath(investmentDoc, [
       "originalContract.path",
@@ -1181,7 +1252,7 @@ export default function MessagesManagement() {
       const existingInvSnap = await getDocs(
         query(collection(db, "investments"), where("requestId", "==", requestId))
       );
-      const existingInvId = existingInvSnap.docs[0]?.id || "";
+      const existingInvIds = existingInvSnap.docs.map((row) => row.id);
 
       let finalInvestmentId = "";
 
@@ -1193,7 +1264,41 @@ export default function MessagesManagement() {
         if (normalizeRequestStatus(msgData?.status) !== "approved") {
           throw new Error("request_not_initially_approved");
         }
-        const linkedInvId = pick(msgData?.investmentId, existingInvId);
+        const candidateInvestmentIds = Array.from(
+          new Set([pick(msgData?.investmentId), ...existingInvIds].filter(Boolean))
+        );
+        let linkedInvId = "";
+        const explicitLinkedInvestmentId = pick(msgData?.investmentId);
+
+        for (const candidateInvestmentId of candidateInvestmentIds) {
+          const candidateInvRef = doc(db, "investments", candidateInvestmentId);
+          const candidateInvSnap = await tx.get(candidateInvRef);
+          if (!candidateInvSnap.exists()) continue;
+
+          const candidateInvData = candidateInvSnap.data() as any;
+          const candidateRequestId = pick(
+            candidateInvData?.requestId,
+            candidateInvData?.sourceRequestId,
+            candidateInvData?.sourceMessageId,
+            candidateInvData?.messageId
+          );
+          const candidateInvestorUid = pick(
+            candidateInvData?.investorUid,
+            candidateInvData?.userId
+          );
+          const candidateProjectId = pick(candidateInvData?.projectId);
+
+          if (candidateRequestId) {
+            if (candidateRequestId !== requestId) continue;
+          } else if (!explicitLinkedInvestmentId || explicitLinkedInvestmentId !== candidateInvSnap.id) {
+            continue;
+          }
+          if (candidateInvestorUid && candidateInvestorUid !== investorUid) continue;
+          if (candidateProjectId && candidateProjectId !== projectId) continue;
+
+          linkedInvId = candidateInvSnap.id;
+          break;
+        }
 
         if (linkedInvId) {
           finalInvestmentId = linkedInvId;
@@ -1202,12 +1307,23 @@ export default function MessagesManagement() {
             linkedInvRef,
             {
               requestId,
+              sourceRequestId: requestId,
+              sourceMessageId: requestId,
               projectId,
               investorUid,
               userId: investorUid,
+              investorName: pick(
+                msgData?.investorName,
+                msgData?.userSnapshot?.displayName,
+                selectedMessage?.investorName
+              ) || null,
+              investorEmail: pick(msgData?.investorEmail, msgData?.userSnapshot?.email) || null,
+              investorPhone: pick(msgData?.investorPhone, msgData?.userSnapshot?.phone) || null,
               amount,
               status: "pending_contract",
               contractStatus: "draft",
+              projectTitle: projectTitle || null,
+              projectSnapshot: msgData?.projectSnapshot || selectedMessage?.projectSnapshot || null,
               updatedAt: serverTimestamp(),
               updatedByUid: user?.uid || null,
               updatedByEmail: user?.email || null,
@@ -1219,15 +1335,24 @@ export default function MessagesManagement() {
           finalInvestmentId = invRef.id;
           tx.set(invRef, {
             requestId,
+            sourceRequestId: requestId,
+            sourceMessageId: requestId,
             projectId,
             investorUid,
             userId: investorUid,
+            investorName: pick(
+              msgData?.investorName,
+              msgData?.userSnapshot?.displayName,
+              selectedMessage?.investorName
+            ) || null,
+            investorEmail: pick(msgData?.investorEmail, msgData?.userSnapshot?.email) || null,
+            investorPhone: pick(msgData?.investorPhone, msgData?.userSnapshot?.phone) || null,
             amount,
             status: "pending_contract",
             contractStatus: "draft",
             source: "interest_request",
             projectTitle: projectTitle || null,
-            projectSnapshot: selectedMessage?.projectSnapshot || null,
+            projectSnapshot: msgData?.projectSnapshot || selectedMessage?.projectSnapshot || null,
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
             createdByUid: user?.uid || null,
@@ -1251,6 +1376,7 @@ export default function MessagesManagement() {
         });
 
         tx.update(msgRef, {
+          requestId,
           status: "approved",
           stageRole: "investment" as StageRole,
           stage: "investment",
@@ -2438,18 +2564,34 @@ export default function MessagesManagement() {
                                   ...normalizeForDisplay(fixed),
                                 };
 
-                                setSelectedMessage(normalizedOne);
-                                setInternalNotes(String(normalizedOne.internalNotes || ""));
+                                const linkedInvestmentDoc = await loadInvestmentDoc(
+                                  normalizedOne?.investmentId || null,
+                                  normalizedOne
+                                );
+                                const hydratedMessage = linkedInvestmentDoc
+                                  ? {
+                                      ...normalizedOne,
+                                      investmentId: linkedInvestmentDoc.id,
+                                      contractId: pick(
+                                        normalizedOne?.contractId,
+                                        linkedInvestmentDoc?.contractId
+                                      ),
+                                    }
+                                  : normalizedOne;
+
+                                setSelectedMessage(hydratedMessage);
+                                setInternalNotes(String(hydratedMessage.internalNotes || ""));
                                 setApprovedAmount(
-                                  normalizedOne?.approvedAmount != null
-                                    ? String(normalizedOne.approvedAmount)
-                                    : normalizedOne?.estimatedAmount != null
-                                    ? String(normalizedOne.estimatedAmount)
+                                  hydratedMessage?.approvedAmount != null
+                                    ? String(hydratedMessage.approvedAmount)
+                                    : hydratedMessage?.estimatedAmount != null
+                                    ? String(hydratedMessage.estimatedAmount)
                                     : ""
                                 );
 
-                                await loadContractDoc(normalizedOne?.contractId || null);
-                                await loadInvestmentDoc(normalizedOne?.investmentId || null);
+                                await loadContractDoc(
+                                  pick(hydratedMessage?.contractId, linkedInvestmentDoc?.contractId) || null
+                                );
 
                                 setIsDetailDialogOpen(true);
                               }}

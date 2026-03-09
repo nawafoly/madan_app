@@ -31,7 +31,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { doc, getDoc, addDoc, collection, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, setDoc, collection, serverTimestamp } from "firebase/firestore";
 import { db } from "@/_core/firebase";
 import { useAuth } from "@/_core/hooks/useAuth";
 
@@ -389,7 +389,10 @@ export default function ProjectDetails() {
         return;
       }
 
-      await addDoc(collection(db, "interest_requests"), {
+      const requestRef = doc(collection(db, "interest_requests"));
+
+      await setDoc(requestRef, {
+        requestId: requestRef.id,
         type: "investment_request",
         projectId: project?.id || projectId,
         projectTitle: project?.titleAr || project?.title || "",
@@ -397,6 +400,8 @@ export default function ProjectDetails() {
         // ✅ user links
         investorUid: user.uid,
         userId: user.uid,
+        createdByUid: user.uid,
+        createdByEmail: user.email || null,
         investorEmail: user.email || null,
         investorName: formData.name || null,
         investorPhone: phone || null,
@@ -417,12 +422,14 @@ export default function ProjectDetails() {
           duration: project?.duration ?? null,
         },
         userSnapshot: {
+          uid: user.uid,
           displayName: formData.name || null,
           email: formData.email || null,
           phone: phone || null,
           isInvestor: userProfile?.isInvestor ?? false,
         },
 
+        source: "project_details",
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });

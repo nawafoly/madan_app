@@ -12,6 +12,12 @@ import { Label } from "@/components/ui/label";
 
 import { useAuth } from "@/_core/hooks/useAuth";
 import { db } from "@/_core/firebase";
+import {
+  findInterestRequestForInvestor,
+  findInvestmentForInvestor,
+  normalizeLinkId,
+  pickLinkId,
+} from "@/lib/requestInvestmentLink";
 
 import {
   doc,
@@ -211,6 +217,7 @@ export default function ClientContractDetails() {
   const [loading, setLoading] = useState(true);
 
   // ممكن يكون id عقد أو استثمار أو رسالة
+  const [requestDoc, setRequestDoc] = useState<AnyDoc | null>(null);
   const [messageDoc, setMessageDoc] = useState<AnyDoc | null>(null);
   const [investmentDoc, setInvestmentDoc] = useState<AnyDoc | null>(null);
   const [contractDoc, setContractDoc] = useState<AnyDoc | null>(null);
@@ -220,22 +227,71 @@ export default function ClientContractDetails() {
 
   // ✅ helper: حمل وثيقة وتأكد موجودة
   const tryGet = async (colName: string, docId: string) => {
-    const ref = doc(db, colName, docId);
-    const snap = await getDoc(ref);
-    if (!snap.exists()) return null;
-    return { id: snap.id, ...(snap.data() as any) } as AnyDoc;
+    try {
+      const ref = doc(db, colName, docId);
+      const snap = await getDoc(ref);
+      if (!snap.exists()) return null;
+      return { id: snap.id, ...(snap.data() as any) } as AnyDoc;
+    } catch (error) {
+      const code = String((error as any)?.code || "").toLowerCase();
+      if (!code.includes("permission-denied")) {
+        console.error(`${colName}_read_error`, error);
+      }
+      return null;
+    }
+  };
+
+  const logSnapshotError = (scope: string, error: unknown) => {
+    const code = String((error as any)?.code || "").toLowerCase();
+    if (code.includes("permission-denied")) return;
+    console.error(`${scope}_error`, error);
   };
 
   // ✅ Realtime subscriptions
   useEffect(() => {
     if (!match || !id) return;
 
+    let unsubReq: (() => void) | null = null;
     let unsubMsg: (() => void) | null = null;
     let unsubInv: (() => void) | null = null;
     let unsubCon: (() => void) | null = null;
 
+    const attachRequestSnapshot = (requestId: string, expectedInvestmentId = "") => {
+      const normalizedRequestId = normalizeLinkId(requestId);
+      if (!normalizedRequestId) return;
+
+      unsubReq = onSnapshot(
+        doc(db, "interest_requests", normalizedRequestId),
+        (snap) => {
+          if (!snap.exists()) {
+            setRequestDoc(null);
+            return;
+          }
+
+          const data = snap.data() as Record<string, any>;
+          const ownerId = normalizeLinkId(data?.investorUid || data?.userId || data?.createdByUid);
+          const linkedInvestmentId = normalizeLinkId(data?.investmentId);
+          const currentUserId = normalizeLinkId(user?.uid);
+
+          if (currentUserId && ownerId && ownerId !== currentUserId) {
+            setRequestDoc(null);
+            return;
+          }
+
+          if (expectedInvestmentId && linkedInvestmentId && linkedInvestmentId !== expectedInvestmentId) {
+            setRequestDoc(null);
+            return;
+          }
+
+          setRequestDoc({ id: snap.id, ...(data as any) });
+        },
+        (error) => logSnapshotError("interest_request_snapshot", error)
+      );
+    };
+
     const run = async () => {
       setLoading(true);
+      setRequestDoc(null);
       setMessageDoc(null);
       setInvestmentDoc(null);
       setContractDoc(null);
@@ -247,17 +303,37 @@ export default function ClientContractDetails() {
           setContractDoc(c);
 
           // ممكن العقد فيه messageId / investmentId
-          const msgId = safeStr(c.messageId);
+          const msgId = safeStr(c.messageId || c.sourceMessageId);
           const invId = safeStr(c.investmentId);
+          const requestId = pickLinkId(
+            c.requestId,
+            c.sourceRequestId,
+            c.messageId,
+            c.sourceMessageId
+          );
+          let linkedRequest: AnyDoc | null = null;
 
-          if (msgId) {
+          if (user?.uid) {
+            linkedRequest = (await findInterestRequestForInvestor({
+              investorUid: user.uid,
+              requestIds: [requestId],
+              investmentIds: [invId],
+            })) as AnyDoc | null;
+
+            if (linkedRequest) {
+              setRequestDoc(linkedRequest);
+              attachRequestSnapshot(linkedRequest.id, invId);
+            }
+          }
+
+          if (msgId && !linkedRequest) {
             const ref = doc(db, "messages", msgId);
             unsubMsg = onSnapshot(
               ref,
               (s) => {
                 if (s.exists()) setMessageDoc({ id: s.id, ...(s.data() as any) });
               },
-              (e) => console.error("message_snapshot_error", e)
+              (e) => logSnapshotError("message_snapshot", e)
             );
           }
 
@@ -268,7 +344,7 @@ export default function ClientContractDetails() {
               (s) => {
                 if (s.exists()) setInvestmentDoc({ id: s.id, ...(s.data() as any) });
               },
-              (e) => console.error("investment_snapshot_error", e)
+              (e) => logSnapshotError("investment_snapshot", e)
             );
           }
 
@@ -278,7 +354,7 @@ export default function ClientContractDetails() {
             (s) => {
               if (s.exists()) setContractDoc({ id: s.id, ...(s.data() as any) });
             },
-            (e) => console.error("contract_snapshot_error", e)
+            (e) => logSnapshotError("contract_snapshot", e)
           );
 
           setLoading(false);
@@ -290,28 +366,46 @@ export default function ClientContractDetails() {
         if (inv) {
           setInvestmentDoc(inv);
 
+          const contractId = safeStr(inv.contractId);
           const msgId = safeStr(inv.sourceMessageId);
-          const conId = safeStr(inv.contractId);
+          const requestId = pickLinkId(inv.requestId, inv.sourceRequestId, inv.sourceMessageId);
+          let linkedRequest: AnyDoc | null = null;
 
-          if (msgId) {
+          if (user?.uid) {
+            linkedRequest = (await findInterestRequestForInvestor({
+              investorUid: user.uid,
+              requestIds: [requestId],
+              investmentIds: [inv.id],
+            })) as AnyDoc | null;
+
+            if (linkedRequest) {
+              setRequestDoc(linkedRequest);
+              attachRequestSnapshot(linkedRequest.id, inv.id);
+            }
+          }
+
+          if (msgId && !linkedRequest) {
             const ref = doc(db, "messages", msgId);
             unsubMsg = onSnapshot(
               ref,
               (s) => {
                 if (s.exists()) setMessageDoc({ id: s.id, ...(s.data() as any) });
               },
-              (e) => console.error("message_snapshot_error", e)
+              (e) => logSnapshotError("message_snapshot", e)
             );
           }
 
-          if (conId) {
-            const ref = doc(db, "contracts", conId);
+          if (contractId) {
+            const contract = await tryGet("contracts", contractId);
+            if (contract) setContractDoc(contract);
+
+            const cref = doc(db, "contracts", contractId);
             unsubCon = onSnapshot(
-              ref,
+              cref,
               (s) => {
                 if (s.exists()) setContractDoc({ id: s.id, ...(s.data() as any) });
               },
-              (e) => console.error("contract_snapshot_error", e)
+              (e) => logSnapshotError("contract_snapshot", e)
             );
           }
 
@@ -321,7 +415,7 @@ export default function ClientContractDetails() {
             (s) => {
               if (s.exists()) setInvestmentDoc({ id: s.id, ...(s.data() as any) });
             },
-            (e) => console.error("investment_snapshot_error", e)
+            (e) => logSnapshotError("investment_snapshot", e)
           );
 
           setLoading(false);
@@ -329,13 +423,60 @@ export default function ClientContractDetails() {
         }
 
         // 3) جرّب: messages/{id}
+        if (user?.uid) {
+          const request = await findInterestRequestForInvestor({
+            investorUid: user.uid,
+            requestIds: [id],
+          });
+
+          if (request) {
+            setRequestDoc(request as AnyDoc);
+            attachRequestSnapshot(request.id, normalizeLinkId(request?.investmentId));
+
+            const linkedInvestment = await findInvestmentForInvestor({
+              investorUid: user.uid,
+              investmentIds: [request?.investmentId],
+              requestIds: [request.id],
+            });
+
+            if (linkedInvestment) {
+              setInvestmentDoc(linkedInvestment as AnyDoc);
+
+              const iref = doc(db, "investments", linkedInvestment.id);
+              unsubInv = onSnapshot(
+                iref,
+                (s) => {
+                  if (s.exists()) setInvestmentDoc({ id: s.id, ...(s.data() as any) });
+                },
+                (e) => logSnapshotError("investment_snapshot", e)
+              );
+
+              const contractId = safeStr(linkedInvestment?.contractId);
+              if (contractId) {
+                const contract = await tryGet("contracts", contractId);
+                if (contract) setContractDoc(contract);
+
+                const cref = doc(db, "contracts", contractId);
+                unsubCon = onSnapshot(
+                  cref,
+                  (s) => {
+                    if (s.exists()) setContractDoc({ id: s.id, ...(s.data() as any) });
+                  },
+                  (e) => logSnapshotError("contract_snapshot", e)
+                );
+              }
+            }
+
+            setLoading(false);
+            return;
+          }
+        }
+
         const msg = await tryGet("messages", id);
         if (msg) {
           setMessageDoc(msg);
 
           const invId = safeStr(msg.investmentId);
-          const conId = safeStr(msg.contractId);
-
           if (invId) {
             const ref = doc(db, "investments", invId);
             unsubInv = onSnapshot(
@@ -343,18 +484,7 @@ export default function ClientContractDetails() {
               (s) => {
                 if (s.exists()) setInvestmentDoc({ id: s.id, ...(s.data() as any) });
               },
-              (e) => console.error("investment_snapshot_error", e)
-            );
-          }
-
-          if (conId) {
-            const ref = doc(db, "contracts", conId);
-            unsubCon = onSnapshot(
-              ref,
-              (s) => {
-                if (s.exists()) setContractDoc({ id: s.id, ...(s.data() as any) });
-              },
-              (e) => console.error("contract_snapshot_error", e)
+              (e) => logSnapshotError("investment_snapshot", e)
             );
           }
 
@@ -364,7 +494,7 @@ export default function ClientContractDetails() {
             (s) => {
               if (s.exists()) setMessageDoc({ id: s.id, ...(s.data() as any) });
             },
-            (e) => console.error("message_snapshot_error", e)
+            (e) => logSnapshotError("message_snapshot", e)
           );
 
           setLoading(false);
@@ -382,35 +512,42 @@ export default function ClientContractDetails() {
 
     return () => {
       try {
+        unsubReq?.();
         unsubMsg?.();
         unsubInv?.();
         unsubCon?.();
       } catch {}
     };
-  }, [match, id]);
+  }, [match, id, user?.uid]);
 
   // ✅ لقط الحالة والمرحلة “بأفضل مصدر”
+  const requestStateDoc = requestDoc || messageDoc;
+
   const current = useMemo(() => {
     const invStatus = safeStr(investmentDoc?.status);
-    const msgStatus = safeStr(messageDoc?.status);
+    const msgStatus = safeStr(requestStateDoc?.status);
     const conStatus =
       safeStr(contractDoc?.status) ||
       safeStr(investmentDoc?.contractStatus) ||
-      safeStr(messageDoc?.contractStatus);
+      safeStr(requestStateDoc?.contractStatus);
     const status = isInvestmentActivatedStatus(invStatus)
       ? invStatus
       : conStatus || invStatus || msgStatus || "—";
-    const stageRole = safeStr(messageDoc?.stageRole) || "—";
+    const stageRole =
+      safeStr(requestDoc?.stageRole) ||
+      safeStr(messageDoc?.stageRole) ||
+      safeStr(investmentDoc?.stageRole) ||
+      "—";
 
     const projectTitle =
       safeStr(investmentDoc?.projectTitle) ||
-      safeStr(messageDoc?.projectTitle) ||
+      safeStr(requestStateDoc?.projectTitle) ||
       "—";
 
     const amount =
       investmentDoc?.amount ??
-      messageDoc?.approvedAmount ??
-      messageDoc?.estimatedAmount ??
+      requestStateDoc?.approvedAmount ??
+      requestStateDoc?.estimatedAmount ??
       null;
 
     return {
@@ -420,9 +557,9 @@ export default function ClientContractDetails() {
       stageRole,
       projectTitle,
       amount,
-      createdAt: investmentDoc?.createdAt || messageDoc?.createdAt || contractDoc?.createdAt,
+      createdAt: investmentDoc?.createdAt || requestStateDoc?.createdAt || contractDoc?.createdAt,
     };
-  }, [messageDoc, investmentDoc, contractDoc]);
+  }, [requestStateDoc, requestDoc, messageDoc, investmentDoc, contractDoc]);
 
   // ✅ Timeline: دمج events من message + investment + contract
   const timeline = useMemo(() => {
@@ -439,7 +576,7 @@ export default function ClientContractDetails() {
       });
     };
 
-    push(messageDoc, "message");
+    push(requestStateDoc, "request");
     push(investmentDoc, "investment");
     push(contractDoc, "contract");
 
@@ -464,7 +601,7 @@ export default function ClientContractDetails() {
     });
 
     return sorted;
-  }, [messageDoc, investmentDoc, contractDoc, current.createdAt]);
+  }, [requestStateDoc, investmentDoc, contractDoc, current.createdAt]);
 
   // ✅ “مساعد المرحلة”: نص إرشادي + زر تواصل مناسب
   const stageHelp = useMemo(() => {
@@ -549,13 +686,19 @@ export default function ClientContractDetails() {
     const text = safeStr(followupText);
     if (!text) return toast.error("اكتب رسالتك أولاً");
 
+    const parentRequestId =
+      requestDoc?.id ||
+      safeStr(investmentDoc?.requestId) ||
+      safeStr(contractDoc?.requestId) ||
+      null;
     const parentMessageId =
       messageDoc?.id ||
+      parentRequestId ||
       safeStr(investmentDoc?.sourceMessageId) ||
       safeStr(contractDoc?.messageId) ||
       null;
 
-    if (!parentMessageId) {
+    if (!parentMessageId && !parentRequestId) {
       toast.error("لا يمكن ربط المتابعة بالطلب حالياً");
       return;
     }
@@ -565,7 +708,9 @@ export default function ClientContractDetails() {
 
       await addDoc(collection(db, "messages"), {
         type: "client_followup",
-        parentMessageId,
+        parentMessageId: parentMessageId || null,
+        parentRequestId: parentRequestId || null,
+        requestId: parentRequestId || null,
         message: text,
 
         createdByUid: user.uid,

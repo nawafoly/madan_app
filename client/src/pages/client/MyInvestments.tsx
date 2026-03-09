@@ -10,6 +10,7 @@ import { Progress } from "@/components/ui/progress";
 
 import { useAuth } from "@/_core/hooks/useAuth";
 import { db } from "@/_core/firebase";
+import { normalizeLinkId } from "@/lib/requestInvestmentLink";
 
 import {
   TrendingUp,
@@ -217,22 +218,22 @@ export default function MyInvestments() {
 
     const investedRequestIds = new Set(
       investments
-        .map((i: any) => String(i?.requestId || ""))
+        .map((i: any) => normalizeLinkId(i?.requestId))
         .filter(Boolean)
     );
-    const investedProjectIds = new Set(
+    const investedInvestmentIds = new Set(
       investments
-        .map((i: any) => String(i?.projectId || ""))
+        .map((i: any) => normalizeLinkId(i?.id))
         .filter(Boolean)
     );
 
     return requests.filter((r: any) => {
-      const rid = String(r?.id || "");
+      const rid = normalizeLinkId(r?.id);
       if (rid && investedRequestIds.has(rid)) return false;
 
       // fallback للبيانات القديمة التي لا تحتوي requestId
-      const pid = String(r?.projectId || "");
-      if (pid && investedProjectIds.has(pid)) return false;
+      const linkedInvestmentId = normalizeLinkId(r?.investmentId);
+      if (linkedInvestmentId && investedInvestmentIds.has(linkedInvestmentId)) return false;
 
       return true;
     });
@@ -413,6 +414,7 @@ export default function MyInvestments() {
                   const createdAt = m.createdAt ? formatDateAR(m.createdAt) : "—";
                   const status = String(m.status || "pending");
                   const amount = m.amount != null ? Number(m.amount) : null;
+                  const linkedInvestmentId = normalizeLinkId(m?.investmentId);
 
                   return (
                     <Card key={m.id} className="overflow-hidden">
@@ -443,10 +445,19 @@ export default function MyInvestments() {
                             {statusBadge(status)}
 
                             <div className="flex flex-wrap gap-2 justify-end">
-                              <Button size="sm" variant="outline" disabled>
-                                <FileText className="w-4 h-4 ml-2" />
-                                بانتظار إنشاء الاستثمار
-                              </Button>
+                              {linkedInvestmentId ? (
+                                <Link href={`/client/investments/${linkedInvestmentId}`}>
+                                  <Button size="sm" variant="outline">
+                                    <FileText className="w-4 h-4 ml-2" />
+                                    تفاصيل الاستثمار
+                                  </Button>
+                                </Link>
+                              ) : (
+                                <Button size="sm" variant="outline" disabled>
+                                  <FileText className="w-4 h-4 ml-2" />
+                                  بانتظار إنشاء الاستثمار
+                                </Button>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -522,7 +533,7 @@ export default function MyInvestments() {
                                   </Button>
                                 </a>
                               ) : contractId ? (
-                                <Link href={`/client/contracts/${contractId}`}>
+                                <Link href={`/client/contracts/${inv.id}`}>
                                   <Button size="sm" variant="outline">
                                     عرض العقد (اختياري)
                                   </Button>

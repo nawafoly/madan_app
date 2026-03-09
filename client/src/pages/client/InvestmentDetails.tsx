@@ -17,6 +17,10 @@ import {
   type InvestmentDocumentKind,
   type UploadDocumentResult,
 } from "@/lib/documentUploadService";
+import {
+  findInterestRequestForInvestor,
+  normalizeLinkId,
+} from "@/lib/requestInvestmentLink";
 
 import {
   Building2,
@@ -37,14 +41,8 @@ import {
 } from "@shared/investmentLifecycle";
 
 import {
-  collection,
   doc,
-  getDoc,
-  getDocs,
-  limit,
   onSnapshot,
-  query,
-  where,
   updateDoc,
   serverTimestamp,
   Timestamp,
@@ -59,7 +57,7 @@ type TimelineEvent = {
   byEmail?: string | null;
   at?: any;
   meta?: Record<string, any>;
-  _source?: "message" | "investment" | "contract";
+  _source?: "request" | "investment";
 };
 
 function toDateSafe(v: any) {
@@ -198,19 +196,6 @@ function resolveDocValue(source: any, candidates: string[]) {
     return value;
   }
   return undefined;
-}
-
-async function tryGetDocSafe(colName: string, docId: string) {
-  const normalizedId = String(docId || "").trim();
-  if (!normalizedId) return null;
-  try {
-    const snap = await getDoc(doc(db, colName, normalizedId));
-    if (!snap.exists()) return null;
-    return { id: snap.id, ...(snap.data() as any) };
-  } catch (error) {
-    console.error(`${colName}_read_error`, error);
-    return null;
-  }
 }
 
 function toPositiveInt(v: any) {
@@ -367,8 +352,7 @@ export default function InvestmentDetails() {
   const [loading, setLoading] = useState(true);
   const [investment, setInvestment] = useState<any>(null);
   const [project, setProject] = useState<any>(null);
-  const [messageDoc, setMessageDoc] = useState<any>(null);
-  const [contractDoc, setContractDoc] = useState<any>(null);
+  const [requestDoc, setRequestDoc] = useState<any>(null);
   const [signedUploadFile, setSignedUploadFile] = useState<File | null>(null);
   const [signedUploadBusy, setSignedUploadBusy] = useState(false);
   const [localUploadedByKind, setLocalUploadedByKind] = useState<
@@ -399,8 +383,6 @@ export default function InvestmentDetails() {
             if (!snap.exists()) {
               setInvestment(null);
               setProject(null);
-              setMessageDoc(null);
-              setContractDoc(null);
               setLoading(false);
               return;
             }
@@ -413,8 +395,6 @@ export default function InvestmentDetails() {
             if (String(inv.investorUid || "") !== String(user.uid)) {
               setInvestment({ __forbidden: true });
               setProject(null);
-              setMessageDoc(null);
-              setContractDoc(null);
               setLoading(false);
               return;
             }
@@ -464,114 +444,59 @@ export default function InvestmentDetails() {
   }, [investment?.projectId, investment?.__forbidden]);
 
   useEffect(() => {
-    const investmentId = String(investment?.id || "").trim();
-    const investorUid = String(investment?.investorUid || "").trim();
-    if (!investmentId || !user?.uid || investment?.__forbidden || investorUid !== String(user.uid)) {
-      setMessageDoc(null);
+    const investorUid = normalizeLinkId(user?.uid);
+    const investmentId = normalizeLinkId(investment?.id);
+
+    if (!investorUid || !investmentId || investment?.__forbidden) {
+      setRequestDoc(null);
       return;
     }
 
     let cancelled = false;
-    let unsub: null | (() => void) = null;
-
-    const attachRequestSnapshot = (colName: "interest_requests" | "messages", docId: string) => {
-      const ref = doc(db, colName, docId);
-      unsub = onSnapshot(
-        ref,
-        (snap) => {
-          if (cancelled) return;
-          setMessageDoc(snap.exists() ? { id: snap.id, ...(snap.data() as any) } : null);
-        },
-        (error) => {
-          console.error(`${colName}_snapshot_error`, error);
-          if (!cancelled) setMessageDoc(null);
-        }
-      );
-    };
-
-    const resolveRequestDoc = async () => {
-      setMessageDoc(null);
-
-      const candidates: Array<{ col: "interest_requests" | "messages"; id: string }> = [
-        { col: "interest_requests", id: String(investment?.requestId || "").trim() },
-        { col: "interest_requests", id: String(investment?.sourceMessageId || "").trim() },
-        { col: "messages", id: String(investment?.sourceMessageId || "").trim() },
-      ];
-
-      const seen = new Set<string>();
-      for (const candidate of candidates) {
-        if (!candidate.id) continue;
-        const key = `${candidate.col}:${candidate.id}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-
-        const docData = await tryGetDocSafe(candidate.col, candidate.id);
-        if (cancelled) return;
-        if (!docData) continue;
-
-        setMessageDoc(docData);
-        attachRequestSnapshot(candidate.col, candidate.id);
-        return;
-      }
-
-      try {
-        const requestQuery = query(
-          collection(db, "interest_requests"),
-          where("investmentId", "==", investmentId),
-          limit(1)
-        );
-        const requestSnap = await getDocs(requestQuery);
-        if (cancelled) return;
-        const firstMatch = requestSnap.docs[0];
-        if (firstMatch) {
-          setMessageDoc({ id: firstMatch.id, ...(firstMatch.data() as any) });
-          attachRequestSnapshot("interest_requests", firstMatch.id);
-          return;
-        }
-      } catch (error) {
-        console.error("interest_requests_lookup_error", error);
-      }
-
-      if (!cancelled) setMessageDoc(null);
-    };
-
-    void resolveRequestDoc();
-
-    return () => {
-      cancelled = true;
-      if (unsub) unsub();
-    };
-  }, [investment?.id, investment?.requestId, investment?.sourceMessageId, investment?.investorUid, investment?.__forbidden, user?.uid]);
-
-  useEffect(() => {
-    const contractId = String(investment?.contractId || "").trim();
-    if (!contractId || investment?.__forbidden) {
-      setContractDoc(null);
-      return;
-    }
-
-    let cancelled = false;
-    let unsub: null | (() => void) = null;
+    let unsubReq: null | (() => void) = null;
 
     const run = async () => {
-      const contract = await tryGetDocSafe("contracts", contractId);
-      if (cancelled) return;
-      if (!contract) {
-        setContractDoc(null);
-        return;
-      }
+      const resolved = await findInterestRequestForInvestor({
+        investorUid,
+        requestIds: [investment?.requestId, investment?.sourceRequestId, investment?.sourceMessageId],
+        investmentIds: [investmentId],
+      });
 
-      setContractDoc(contract);
-      const ref = doc(db, "contracts", contractId);
-      unsub = onSnapshot(
-        ref,
+      if (cancelled) return;
+
+      setRequestDoc(resolved);
+
+      const resolvedRequestId = normalizeLinkId(resolved?.id);
+      if (!resolvedRequestId) return;
+
+      unsubReq = onSnapshot(
+        doc(db, "interest_requests", resolvedRequestId),
         (snap) => {
           if (cancelled) return;
-          setContractDoc(snap.exists() ? { id: snap.id, ...(snap.data() as any) } : null);
+          if (!snap.exists()) {
+            setRequestDoc(null);
+            return;
+          }
+
+          const data = snap.data() as Record<string, any>;
+          const ownerId = normalizeLinkId(data?.investorUid || data?.userId || data?.createdByUid);
+          const linkedInvestmentId = normalizeLinkId(data?.investmentId);
+
+          if (ownerId !== investorUid) {
+            setRequestDoc(null);
+            return;
+          }
+
+          if (linkedInvestmentId && linkedInvestmentId !== investmentId) {
+            setRequestDoc(null);
+            return;
+          }
+
+          setRequestDoc({ id: snap.id, ...data });
         },
         (error) => {
-          console.error("contract_snapshot_error", error);
-          if (!cancelled) setContractDoc(null);
+          console.error("interest_request_snapshot_error", error);
+          if (!cancelled) setRequestDoc(null);
         }
       );
     };
@@ -580,9 +505,16 @@ export default function InvestmentDetails() {
 
     return () => {
       cancelled = true;
-      if (unsub) unsub();
+      if (unsubReq) unsubReq();
     };
-  }, [investment?.contractId, investment?.__forbidden]);
+  }, [
+    investment?.id,
+    investment?.requestId,
+    investment?.sourceRequestId,
+    investment?.sourceMessageId,
+    investment?.__forbidden,
+    user?.uid,
+  ]);
 
   const mergedTimeline = useMemo(() => {
     const list: TimelineEvent[] = [];
@@ -607,44 +539,40 @@ export default function InvestmentDetails() {
       );
     };
 
+    pushEvents("request", requestDoc);
     pushEvents("investment", investment);
-    pushEvents("message", messageDoc);
-    pushEvents("contract", contractDoc);
 
     const hasType = (...types: string[]) =>
       list.some((ev) => types.includes(String(ev?.type || "").trim().toLowerCase()));
 
-    const requestCreatedAt =
-      toDateSafe(messageDoc?.createdAt) || toDateSafe(investment?.createdAt);
-    if (requestCreatedAt && !hasType("interest_request_created", "request_created", "created")) {
+    const requestCreatedAt = toDateSafe(requestDoc?.createdAt);
+    if (
+      requestCreatedAt &&
+      !hasType("interest_request_created", "request_created", "request_submitted")
+    ) {
       pushEvent({
-        _source: "message",
+        _source: "request",
         type: "request_created",
-        title: "تم استلام الطلب",
-        note: "تم إنشاء طلب الاهتمام الاستثماري وتسجيله داخل النظام.",
+        title: "طھظ… ط§ط³طھظ„ط§ظ… ط·ظ„ط¨ ط§ظ„ط§ط³طھط«ظ…ط§ط±",
+        note: "طھظ… طھط³ط¬ظٹظ„ ط·ظ„ط¨ظƒ ط§ظ„ط§ط³طھط«ظ…ط§ط±ظٹ ظˆط±ط¨ط·ظ‡ ط¨ط­ط³ط§ط¨ظƒ ظ„ظ…طھط§ط¨ط¹ط© ط§ظ„ط¥ط¬ط±ط§ط،ط§طھ.",
         at: requestCreatedAt,
       });
     }
 
-    const investmentCreatedAt =
-      toDateSafe(messageDoc?.investmentCreatedAt) || toDateSafe(investment?.createdAt);
+    const investmentCreatedAt = toDateSafe(investment?.createdAt);
     if (investmentCreatedAt && !hasType("investment_created")) {
       pushEvent({
         _source: "investment",
         type: "investment_created",
         title: "تم إنشاء سجل الاستثمار",
-        note: "تم إنشاء سجل الاستثمار وربطه بالطلب تمهيدًا لتجهيز العقد.",
+        note: "تم إنشاء سجل الاستثمار داخل النظام تمهيدًا لتجهيز العقد ومتابعة التفعيل.",
         at: investmentCreatedAt,
       });
     }
 
     const originalContractUploadedAt =
       toDateSafe(investment?.originalContract?.uploadedAt) ||
-      toDateSafe(investment?.contractFile?.uploadedAt) ||
-      toDateSafe(contractDoc?.originalContract?.uploadedAt) ||
-      toDateSafe(contractDoc?.contractFile?.uploadedAt) ||
-      toDateSafe(messageDoc?.originalContract?.uploadedAt) ||
-      toDateSafe(messageDoc?.contractFile?.uploadedAt);
+      toDateSafe(investment?.contractFile?.uploadedAt);
     if (
       originalContractUploadedAt &&
       !hasType("contract_uploaded", "contract_prepared", "original_contract_uploaded")
@@ -661,11 +589,7 @@ export default function InvestmentDetails() {
     const signedContractAt =
       toDateSafe(investment?.signedAt) ||
       toDateSafe(investment?.signedContract?.uploadedAt) ||
-      toDateSafe(investment?.signedContractFile?.uploadedAt) ||
-      toDateSafe(contractDoc?.signedContract?.uploadedAt) ||
-      toDateSafe(contractDoc?.signedContractFile?.uploadedAt) ||
-      toDateSafe(messageDoc?.signedContract?.uploadedAt) ||
-      toDateSafe(messageDoc?.signedContractFile?.uploadedAt);
+      toDateSafe(investment?.signedContractFile?.uploadedAt);
     if (signedContractAt && !hasType("contract_signed", "signed_uploaded")) {
       pushEvent({
         _source: "investment",
@@ -676,10 +600,7 @@ export default function InvestmentDetails() {
       });
     }
 
-    const contractVerifiedAt =
-      toDateSafe(investment?.verifiedAt) ||
-      toDateSafe(contractDoc?.verifiedAt) ||
-      toDateSafe(messageDoc?.verifiedAt);
+    const contractVerifiedAt = toDateSafe(investment?.verifiedAt);
     if (contractVerifiedAt && !hasType("contract_verified")) {
       pushEvent({
         _source: "investment",
@@ -712,11 +633,10 @@ export default function InvestmentDetails() {
         type: "created",
         title: "تم إنشاء الاستثمار",
         note: "تم إنشاء سجل الاستثمار، ولا توجد أحداث إضافية مسجلة بعد.",
-        at: investment?.createdAt || messageDoc?.createdAt || contractDoc?.createdAt,
+        at: investment?.createdAt,
       });
     }
 
-    // sort asc
     list.sort((a, b) => {
       const ta = toDateSafe(a.at)?.getTime() ?? 0;
       const tb = toDateSafe(b.at)?.getTime() ?? 0;
@@ -724,7 +644,7 @@ export default function InvestmentDetails() {
     });
 
     return list;
-  }, [investment, messageDoc, contractDoc]);
+  }, [investment, requestDoc]);
 
   const projectProfitFallback = useMemo(
     () =>
@@ -789,10 +709,10 @@ export default function InvestmentDetails() {
           cls: "border-amber-200 bg-amber-50 text-amber-700",
         };
 
-  // Display source priority:
+  // Contract files source of truth:
   // 1) live upload result from this page
-  // 2) stored fields (if available)
-  // 3) detected object in R2 using deterministic contract path
+  // 2) stored path fields on the investment document
+  // 3) deterministic R2 path verified through the Cloudflare worker
   const resolvedOriginalPathFromDocs = pickFirstNonEmptyString(
     localUploadedByKind.original?.path,
     resolveDocPath(investment, [
@@ -802,16 +722,7 @@ export default function InvestmentDetails() {
       "originalPath",
       "contractPath",
       "documentPath",
-    ]),
-    resolveDocPath(contractDoc, [
-      "originalContract.path",
-      "contractFile.path",
-      "originalContractPath",
-      "originalPath",
-      "contractPath",
-      "documentPath",
-    ]),
-    resolveDocPath(messageDoc, ["originalContract.path", "contractFile.path", "contractPath"])
+    ])
   );
 
   const resolvedSignedPathFromDocs = pickFirstNonEmptyString(
@@ -822,15 +733,7 @@ export default function InvestmentDetails() {
       "signedContractPath",
       "signedPath",
       "signedDocumentPath",
-    ]),
-    resolveDocPath(contractDoc, [
-      "signedContract.path",
-      "signedContractFile.path",
-      "signedContractPath",
-      "signedPath",
-      "signedDocumentPath",
-    ]),
-    resolveDocPath(messageDoc, ["signedContract.path", "signedContractFile.path", "signedContractPath"])
+    ])
   );
 
   useEffect(() => {
@@ -857,6 +760,15 @@ export default function InvestmentDetails() {
         }
       }
 
+      if (!resolvedSignedPathFromDocs) {
+        const candidate = expectedContractPath(investmentId, "signed");
+        const status = candidate ? await r2ObjectStatus(candidate) : "unknown";
+        probe.signed = status;
+        if (candidate && status === "exists") {
+          next.signed = candidate;
+        }
+      }
+
       if (!cancelled) {
         setR2DetectedPathByKind(next);
         setR2ProbeStatusByKind(probe);
@@ -871,6 +783,7 @@ export default function InvestmentDetails() {
   }, [investment?.id, resolvedOriginalPathFromDocs, resolvedSignedPathFromDocs]);
 
   const originalExpectedPath = expectedContractPath(investmentId, "original");
+  const signedExpectedPath = expectedContractPath(investmentId, "signed");
 
   const originalPath = pickFirstNonEmptyString(
     resolvedOriginalPathFromDocs,
@@ -879,54 +792,39 @@ export default function InvestmentDetails() {
       ? originalExpectedPath
       : ""
   );
-  const originalDirectUrl = pickFirstNonEmptyString(
-    resolveDocPath(investment, ["originalContract.url", "contractFile.url", "contractUrl"]),
-    resolveDocPath(contractDoc, ["originalContract.url", "contractFile.url", "contractUrl"]),
-    resolveDocPath(messageDoc, ["originalContract.url", "contractFile.url", "contractUrl"])
-  );
-  const originalViewUrl = pickFirstNonEmptyString(buildR2DownloadUrl(originalPath, false), originalDirectUrl);
-  const originalDownloadUrl = pickFirstNonEmptyString(
-    buildR2DownloadUrl(originalPath, true),
-    originalDirectUrl
-  );
+  const originalViewUrl = buildR2DownloadUrl(originalPath, false);
+  const originalDownloadUrl = buildR2DownloadUrl(originalPath, true);
   const originalName = pickFirstNonEmptyString(
     localUploadedByKind.original?.fileName,
     resolveDocPath(investment, ["originalContract.fileName", "contractFile.fileName"]),
-    resolveDocPath(contractDoc, ["originalContract.fileName", "contractFile.fileName"]),
-    resolveDocPath(messageDoc, ["originalContract.fileName", "contractFile.fileName"]),
-    getFileNameFromPath(originalPath || originalDirectUrl)
+    getFileNameFromPath(originalPath)
   );
-  const hasOriginalContract = Boolean(originalPath || originalDirectUrl);
+  const hasOriginalContract = Boolean(originalPath);
 
-  const signedPath = resolvedSignedPathFromDocs;
-  const signedDirectUrl = pickFirstNonEmptyString(
-    resolveDocPath(investment, ["signedContract.url", "signedContractFile.url", "signedContractUrl"]),
-    resolveDocPath(contractDoc, ["signedContract.url", "signedContractFile.url", "signedContractUrl"]),
-    resolveDocPath(messageDoc, ["signedContract.url", "signedContractFile.url", "signedContractUrl"])
+  const signedPath = pickFirstNonEmptyString(
+    resolvedSignedPathFromDocs,
+    r2DetectedPathByKind.signed,
+    !r2ProbeStatusByKind.signed || r2ProbeStatusByKind.signed === "unknown"
+      ? signedExpectedPath
+      : ""
   );
-  const signedViewUrl = pickFirstNonEmptyString(buildR2DownloadUrl(signedPath, false), signedDirectUrl);
-  const signedDownloadUrl = pickFirstNonEmptyString(buildR2DownloadUrl(signedPath, true), signedDirectUrl);
+  const signedViewUrl = buildR2DownloadUrl(signedPath, false);
+  const signedDownloadUrl = buildR2DownloadUrl(signedPath, true);
   const signedName = pickFirstNonEmptyString(
     localUploadedByKind.signed?.fileName,
     resolveDocPath(investment, ["signedContract.fileName", "signedContractFile.fileName"]),
-    resolveDocPath(contractDoc, ["signedContract.fileName", "signedContractFile.fileName"]),
-    resolveDocPath(messageDoc, ["signedContract.fileName", "signedContractFile.fileName"]),
-    getFileNameFromPath(signedPath || signedDirectUrl)
+    getFileNameFromPath(signedPath)
   );
-  const hasSignedContract = Boolean(signedPath || signedDirectUrl);
+  const hasSignedContract = Boolean(signedPath);
 
-  const originalUploadedAt = resolveDocValue(investment, ["originalContract.uploadedAt", "contractFile.uploadedAt"]) ??
-    resolveDocValue(contractDoc, ["originalContract.uploadedAt", "contractFile.uploadedAt"]) ??
-    resolveDocValue(messageDoc, ["originalContract.uploadedAt", "contractFile.uploadedAt"]);
-  const signedUploadedAt = resolveDocValue(investment, ["signedContract.uploadedAt", "signedContractFile.uploadedAt"]) ??
-    resolveDocValue(contractDoc, ["signedContract.uploadedAt", "signedContractFile.uploadedAt"]) ??
-    resolveDocValue(messageDoc, ["signedContract.uploadedAt", "signedContractFile.uploadedAt"]);
+  const originalUploadedAt =
+    resolveDocValue(investment, ["originalContract.uploadedAt", "contractFile.uploadedAt"]);
+  const signedUploadedAt =
+    resolveDocValue(investment, ["signedContract.uploadedAt", "signedContractFile.uploadedAt"]);
 
   const originalVersion = Number(
     pickFirstNonEmptyString(
       resolveDocPath(investment, ["contractVersion", "originalContract.version", "contractFile.version"]),
-      resolveDocPath(contractDoc, ["contractVersion", "originalContract.version", "contractFile.version"]),
-      resolveDocPath(messageDoc, ["contractVersion", "originalContract.version", "contractFile.version"]),
       "0"
     )
   );
@@ -937,24 +835,12 @@ export default function InvestmentDetails() {
         "signedContract.originalVersion",
         "signedAgainstContractVersion",
       ]),
-      resolveDocPath(contractDoc, [
-        "signedContract.signedForVersion",
-        "signedContract.originalVersion",
-        "signedAgainstContractVersion",
-      ]),
-      resolveDocPath(messageDoc, [
-        "signedContract.signedForVersion",
-        "signedContract.originalVersion",
-        "signedAgainstContractVersion",
-      ]),
       "0"
     )
   );
   const outdatedFlag = String(
     pickFirstNonEmptyString(
       resolveDocPath(investment, ["signedContractOutdated", "requiresResign", "signedContract.isOutdated"]),
-      resolveDocPath(contractDoc, ["signedContractOutdated", "requiresResign", "signedContract.isOutdated"]),
-      resolveDocPath(messageDoc, ["signedContractOutdated", "requiresResign", "signedContract.isOutdated"]),
       ""
     )
   )
@@ -1088,17 +974,6 @@ export default function InvestmentDetails() {
     );
   }
 
-  const refreshInvestmentDoc = async () => {
-    try {
-      if (!id) return;
-      const snap = await getDoc(doc(db, "investments", id));
-      if (!snap.exists()) return;
-      setInvestment({ id: snap.id, ...(snap.data() as any) });
-    } catch (e) {
-      console.error("refresh_investment_error", e);
-    }
-  };
-
   const handleInvestorSignedUpload = async () => {
     if (!investmentId) {
       toast.error("فشل الرفع");
@@ -1136,12 +1011,10 @@ export default function InvestmentDetails() {
         kind: "signed",
       });
       const invRef = doc(db, "investments", investmentId);
-      const latestInvSnap = await getDoc(invRef);
-      const latestInv = latestInvSnap.exists() ? (latestInvSnap.data() as Record<string, any>) : {};
       const signedForVersion = toPositiveInt(
-        latestInv?.contractVersion ??
-          latestInv?.originalContract?.version ??
-          latestInv?.contractFile?.version ??
+        investment?.contractVersion ??
+          investment?.originalContract?.version ??
+          investment?.contractFile?.version ??
           originalVersion
       ) || 1;
       const now = serverTimestamp();
@@ -1183,7 +1056,6 @@ export default function InvestmentDetails() {
         [uploaded.kind]: uploaded,
       }));
       setSignedUploadFile(null);
-      await refreshInvestmentDoc();
       toast.success("تم رفع العقد الموقّع بنجاح");
     } catch (e: any) {
       console.error(e);
@@ -1596,11 +1468,9 @@ function TimelineView({ events }: { events: TimelineEvent[] }) {
         const srcLabel =
           ev._source === "investment"
             ? "استثمار"
-            : ev._source === "message"
+            : ev._source === "request"
               ? "طلب"
-              : ev._source === "contract"
-                ? "عقد"
-                : "—";
+              : "—";
 
         return (
           <div key={ev.id || idx} className="relative pr-7">
