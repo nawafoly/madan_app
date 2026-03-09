@@ -53,6 +53,17 @@ function formatDateAR(v: any) {
   return d ? d.toLocaleDateString("ar-SA") : "—";
 }
 
+function shouldIgnoreFirestoreError(error: unknown) {
+  const code = String((error as any)?.code || "").toLowerCase();
+  const message = String((error as any)?.message || "").toLowerCase();
+  return code.includes("permission-denied") || message.includes("permission-denied");
+}
+
+function logFirestoreBackgroundError(scope: string, error: unknown) {
+  if (shouldIgnoreFirestoreError(error)) return;
+  console.error(scope, error);
+}
+
 export default function MyInvestments() {
   const { user, logout } = useAuth();
 
@@ -128,7 +139,7 @@ export default function MyInvestments() {
             done();
           },
           (err) => {
-            console.error("investments_permission_or_error", err);
+            logFirestoreBackgroundError("investments_permission_or_error", err);
             setInvestments([]);
             invLoaded = true;
             done();
@@ -153,7 +164,7 @@ export default function MyInvestments() {
             done();
           },
           (err) => {
-            console.error("interest_requests_permission_or_error", err);
+            logFirestoreBackgroundError("interest_requests_permission_or_error", err);
             setRequests([]);
             reqLoaded = true;
             done();
@@ -166,7 +177,7 @@ export default function MyInvestments() {
         );
         setProjects(projSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
       } catch (e) {
-        console.error(e);
+        logFirestoreBackgroundError("my_investments_load_error", e);
         setLoading(false);
       }
     };

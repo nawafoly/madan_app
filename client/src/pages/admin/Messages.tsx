@@ -302,10 +302,10 @@ function lastTouchedBy(m: any) {
 
 function getFileNameFromPath(path: any): string {
   const p = String(path || "").trim();
-  if (!p) return "â€”";
+  if (!p) return "-";
   const normalized = p.replace(/\\/g, "/");
   const last = normalized.split("/").pop();
-  return String(last || "â€”").trim() || "â€”";
+  return String(last || "-").trim() || "-";
 }
 
 function buildR2DownloadUrl(path: any, forceDownload = false) {
@@ -376,7 +376,7 @@ function getContractStatusLabel(status: any): string {
     under_review: "قيد المراجعة",
     approved: "معتمد",
   };
-  return map[s] || (s ? String(status) : "â€”");
+  return map[s] || (s ? String(status) : "-");
 }
 
 function getContractStatusClass(status: any): string {
@@ -1029,13 +1029,6 @@ export default function MessagesManagement() {
         const status = candidate ? await r2ObjectStatus(candidate) : "unknown";
         probe.original = status;
         if (candidate && status === "exists") next.original = candidate;
-      }
-
-      if (!signedPathFromDocs && !localUploadedByKind.signed?.path) {
-        const candidate = expectedContractPath(activeInvestmentId, "signed");
-        const status = candidate ? await r2ObjectStatus(candidate) : "unknown";
-        probe.signed = status;
-        if (candidate && status === "exists") next.signed = candidate;
       }
 
       if (!cancelled) {
@@ -2281,8 +2274,6 @@ export default function MessagesManagement() {
     !!selectedMessage?.contractId;
 
   const originalExpectedPath = expectedContractPath(activeInvestmentId, "original");
-  const signedExpectedPath = expectedContractPath(activeInvestmentId, "signed");
-
   const originalContractPath = pick(
     localUploadedByKind.original?.path,
     originalPathFromDocs,
@@ -2315,11 +2306,7 @@ export default function MessagesManagement() {
 
   const signedContractPath = pick(
     localUploadedByKind.signed?.path,
-    signedPathFromDocs,
-    r2DetectedPathByKind.signed,
-    !r2ProbeStatusByKind.signed || r2ProbeStatusByKind.signed === "unknown"
-      ? signedExpectedPath
-      : ""
+    signedPathFromDocs
   );
   const signedContractUrlFromDocs = pickFirstNonEmptyString(
     resolveDocPath(investmentDoc, ["signedContract.url", "signedContractFile.url", "signedContractUrl"]),
@@ -3179,7 +3166,7 @@ export default function MessagesManagement() {
                     <CardContent className="space-y-5">
                       <InfoRow
                         label="رقم الاستثمار"
-                        value={String(selectedMessage?.investmentId || "â€”")}
+                        value={String(selectedMessage?.investmentId || "-")}
                       />
 
                       <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-3 sm:px-4">

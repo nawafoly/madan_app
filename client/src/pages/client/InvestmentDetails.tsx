@@ -100,10 +100,10 @@ function statusLabel(status: string) {
 
 function getFileNameFromPath(path: any) {
   const raw = String(path || "").trim();
-  if (!raw) return "â€”";
+  if (!raw) return "-";
   const normalized = raw.replace(/\\/g, "/");
   const last = normalized.split("/").pop();
-  return String(last || "â€”").trim() || "â€”";
+  return String(last || "-").trim() || "-";
 }
 
 function buildR2DownloadUrl(path: any, forceDownload = false) {
@@ -154,6 +154,17 @@ async function r2ObjectStatus(path: string): Promise<R2ProbeStatus> {
   } catch {
     return "unknown";
   }
+}
+
+function shouldIgnoreFirestoreError(error: unknown) {
+  const code = String((error as any)?.code || "").toLowerCase();
+  const message = String((error as any)?.message || "").toLowerCase();
+  return code.includes("permission-denied") || message.includes("permission-denied");
+}
+
+function logFirestoreBackgroundError(scope: string, error: unknown) {
+  if (shouldIgnoreFirestoreError(error)) return;
+  console.error(scope, error);
 }
 
 function pickFirstNonEmptyString(...values: any[]) {
@@ -219,7 +230,7 @@ function getContractStatusMeta(status: any) {
 
   if (map[s]) return map[s];
   if (s) return { label: String(status), cls: "bg-slate-600" };
-  return { label: "â€”", cls: "bg-slate-500" };
+  return { label: "-", cls: "bg-slate-500" };
 }
 
 function stageHelp(status: string) {
@@ -402,12 +413,12 @@ export default function InvestmentDetails() {
             setLoading(false);
           },
           (err) => {
-            console.error("investment_read_error", err);
+            logFirestoreBackgroundError("investment_read_error", err);
             setLoading(false);
           }
         );
       } catch (e) {
-        console.error(e);
+        logFirestoreBackgroundError("investment_load_error", e);
         setLoading(false);
       }
     };
@@ -433,7 +444,7 @@ export default function InvestmentDetails() {
         setProject(snap.exists() ? { id: snap.id, ...(snap.data() as any) } : null);
       },
       (error) => {
-        console.error("project_snapshot_error", error);
+        logFirestoreBackgroundError("project_snapshot_error", error);
         setProject(null);
       }
     );
@@ -495,7 +506,7 @@ export default function InvestmentDetails() {
           setRequestDoc({ id: snap.id, ...data });
         },
         (error) => {
-          console.error("interest_request_snapshot_error", error);
+          logFirestoreBackgroundError("interest_request_snapshot_error", error);
           if (!cancelled) setRequestDoc(null);
         }
       );
@@ -553,8 +564,8 @@ export default function InvestmentDetails() {
       pushEvent({
         _source: "request",
         type: "request_created",
-        title: "طھظ… ط§ط³طھظ„ط§ظ… ط·ظ„ط¨ ط§ظ„ط§ط³طھط«ظ…ط§ط±",
-        note: "طھظ… طھط³ط¬ظٹظ„ ط·ظ„ط¨ظƒ ط§ظ„ط§ط³طھط«ظ…ط§ط±ظٹ ظˆط±ط¨ط·ظ‡ ط¨ط­ط³ط§ط¨ظƒ ظ„ظ…طھط§ط¨ط¹ط© ط§ظ„ط¥ط¬ط±ط§ط،ط§طھ.",
+        title: "تم استلام طلب الاستثمار",
+        note: "تم تسجيل طلبك الاستثماري وربطه بحسابك لمتابعة الإجراءات.",
         at: requestCreatedAt,
       });
     }
@@ -760,15 +771,6 @@ export default function InvestmentDetails() {
         }
       }
 
-      if (!resolvedSignedPathFromDocs) {
-        const candidate = expectedContractPath(investmentId, "signed");
-        const status = candidate ? await r2ObjectStatus(candidate) : "unknown";
-        probe.signed = status;
-        if (candidate && status === "exists") {
-          next.signed = candidate;
-        }
-      }
-
       if (!cancelled) {
         setR2DetectedPathByKind(next);
         setR2ProbeStatusByKind(probe);
@@ -783,7 +785,6 @@ export default function InvestmentDetails() {
   }, [investment?.id, resolvedOriginalPathFromDocs, resolvedSignedPathFromDocs]);
 
   const originalExpectedPath = expectedContractPath(investmentId, "original");
-  const signedExpectedPath = expectedContractPath(investmentId, "signed");
 
   const originalPath = pickFirstNonEmptyString(
     resolvedOriginalPathFromDocs,
@@ -802,11 +803,7 @@ export default function InvestmentDetails() {
   const hasOriginalContract = Boolean(originalPath);
 
   const signedPath = pickFirstNonEmptyString(
-    resolvedSignedPathFromDocs,
-    r2DetectedPathByKind.signed,
-    !r2ProbeStatusByKind.signed || r2ProbeStatusByKind.signed === "unknown"
-      ? signedExpectedPath
-      : ""
+    resolvedSignedPathFromDocs
   );
   const signedViewUrl = buildR2DownloadUrl(signedPath, false);
   const signedDownloadUrl = buildR2DownloadUrl(signedPath, true);
@@ -903,9 +900,9 @@ export default function InvestmentDetails() {
       !hasCurrentSignedContract
   );
   const originalDisplayName =
-    originalName && originalName !== "—" && originalName !== "â€”" ? originalName : "original.pdf";
+    originalName && originalName !== "—" && originalName !== "-" ? originalName : "original.pdf";
   const signedDisplayName =
-    signedName && signedName !== "—" && signedName !== "â€”" ? signedName : "signed.pdf";
+    signedName && signedName !== "—" && signedName !== "-" ? signedName : "signed.pdf";
   const signedSectionEmptyMessage = needsFreshSignedContract
     ? "لم يتم رفع عقد موقّع من المستثمر بعد."
     : "لم يتم رفع العقد الموقّع بعد. يرجى تنزيل العقد الأصلي وتوقيعه ثم رفع النسخة الموقّعة هنا.";

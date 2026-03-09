@@ -68,6 +68,17 @@ function toLinkedDoc(id: string, data: any): LinkedFirestoreDoc {
   return { id, ...(data as Record<string, any>) };
 }
 
+function shouldIgnoreLookupError(error: unknown) {
+  const code = String((error as any)?.code || "").toLowerCase();
+  const message = String((error as any)?.message || "").toLowerCase();
+  return code.includes("permission-denied") || message.includes("permission-denied");
+}
+
+function logLookupError(scope: string, error: unknown) {
+  if (shouldIgnoreLookupError(error)) return;
+  console.error(scope, error);
+}
+
 type RequestLookupInput = {
   investorUid: string;
   requestIds?: any[];
@@ -126,7 +137,7 @@ export async function findInterestRequestForInvestor(
 
       return toLinkedDoc(snap.id, data);
     } catch (error) {
-      console.error("interest_request_lookup_error", error);
+      logLookupError("interest_request_lookup_error", error);
     }
   }
 
@@ -147,7 +158,7 @@ export async function findInterestRequestForInvestor(
       );
       if (rows[0]) return rows[0];
     } catch (error) {
-      console.error("interest_request_by_investment_lookup_error", error);
+      logLookupError("interest_request_by_investment_lookup_error", error);
     }
   }
 
@@ -170,7 +181,7 @@ export async function findInvestmentForInvestor(
 
       return toLinkedDoc(snap.id, data);
     } catch (error) {
-      console.error("investment_lookup_error", error);
+      logLookupError("investment_lookup_error", error);
     }
   }
 
@@ -191,7 +202,7 @@ export async function findInvestmentForInvestor(
       );
       if (rows[0]) return rows[0];
     } catch (error) {
-      console.error("investment_by_request_lookup_error", error);
+      logLookupError("investment_by_request_lookup_error", error);
     }
   }
 

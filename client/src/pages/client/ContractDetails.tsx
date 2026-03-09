@@ -303,7 +303,6 @@ export default function ClientContractDetails() {
           setContractDoc(c);
 
           // ممكن العقد فيه messageId / investmentId
-          const msgId = safeStr(c.messageId || c.sourceMessageId);
           const invId = safeStr(c.investmentId);
           const requestId = pickLinkId(
             c.requestId,
@@ -324,17 +323,6 @@ export default function ClientContractDetails() {
               setRequestDoc(linkedRequest);
               attachRequestSnapshot(linkedRequest.id, invId);
             }
-          }
-
-          if (msgId && !linkedRequest) {
-            const ref = doc(db, "messages", msgId);
-            unsubMsg = onSnapshot(
-              ref,
-              (s) => {
-                if (s.exists()) setMessageDoc({ id: s.id, ...(s.data() as any) });
-              },
-              (e) => logSnapshotError("message_snapshot", e)
-            );
           }
 
           if (invId) {
@@ -367,7 +355,6 @@ export default function ClientContractDetails() {
           setInvestmentDoc(inv);
 
           const contractId = safeStr(inv.contractId);
-          const msgId = safeStr(inv.sourceMessageId);
           const requestId = pickLinkId(inv.requestId, inv.sourceRequestId, inv.sourceMessageId);
           let linkedRequest: AnyDoc | null = null;
 
@@ -382,17 +369,6 @@ export default function ClientContractDetails() {
               setRequestDoc(linkedRequest);
               attachRequestSnapshot(linkedRequest.id, inv.id);
             }
-          }
-
-          if (msgId && !linkedRequest) {
-            const ref = doc(db, "messages", msgId);
-            unsubMsg = onSnapshot(
-              ref,
-              (s) => {
-                if (s.exists()) setMessageDoc({ id: s.id, ...(s.data() as any) });
-              },
-              (e) => logSnapshotError("message_snapshot", e)
-            );
           }
 
           if (contractId) {
@@ -695,7 +671,7 @@ export default function ClientContractDetails() {
       messageDoc?.id ||
       parentRequestId ||
       safeStr(investmentDoc?.sourceMessageId) ||
-      safeStr(contractDoc?.messageId) ||
+      safeStr(contractDoc?.messageId || contractDoc?.sourceMessageId) ||
       null;
 
     if (!parentMessageId && !parentRequestId) {
