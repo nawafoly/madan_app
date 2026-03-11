@@ -27,7 +27,10 @@ import {
   buildAuditSource,
   runAuditedOperation,
 } from "@/lib/auditLog";
-import { uploadInvestmentDocument } from "@/lib/documentUploadService";
+import {
+  uploadInvestmentDocument,
+  type UploadDocumentResult,
+} from "@/lib/documentUploadService";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -339,7 +342,9 @@ function buildR2DownloadUrl(path: any, forceDownload = false) {
 function expectedContractPath(investmentId: string, kind: "original" | "signed") {
   const id = String(investmentId || "").trim();
   if (!id) return "";
-  return kind === "original" ? `contracts/${id}/original.pdf` : `contracts/${id}/signed.pdf`;
+  return kind === "original"
+    ? `investments/${id}/contracts/original.pdf`
+    : `investments/${id}/contracts/signed.pdf`;
 }
 
 type R2ProbeStatus = "exists" | "missing" | "unknown";
@@ -557,7 +562,7 @@ export default function MessagesManagement() {
   const [investmentDoc, setInvestmentDoc] = useState<any>(null);
   const [draftFile, setDraftFile] = useState<File | null>(null);
   const [localUploadedByKind, setLocalUploadedByKind] = useState<
-    Partial<Record<"original" | "signed", { path: string; fileName: string }>>
+    Partial<Record<"original" | "signed", UploadDocumentResult>>
   >({});
   const [r2DetectedPathByKind, setR2DetectedPathByKind] = useState<
     Partial<Record<"original" | "signed", string>>
@@ -1126,6 +1131,13 @@ export default function MessagesManagement() {
         const status = candidate ? await r2ObjectStatus(candidate) : "unknown";
         probe.original = status;
         if (candidate && status === "exists") next.original = candidate;
+      }
+
+      if (!signedPathFromDocs && !localUploadedByKind.signed?.path) {
+        const candidate = expectedContractPath(activeInvestmentId, "signed");
+        const status = candidate ? await r2ObjectStatus(candidate) : "unknown";
+        probe.signed = status;
+        if (candidate && status === "exists") next.signed = candidate;
       }
 
       if (!cancelled) {
@@ -1720,14 +1732,35 @@ export default function MessagesManagement() {
       return;
     }
 
+    let uploadedResult: UploadDocumentResult | null = null;
+
     try {
       setContractBusy(true);
       const hadSignedBeforeRevision = hasSignedContract;
 
-      const uploaded = await uploadInvestmentDocument({
+      // ARCHITECTURE NOTE (2026-03-12):
+      // STEP 1 uploads the file through Cloudflare Worker -> R2 -> D1.
+      // Firestore updates below are limited to workflow state only. Do not
+      // reintroduce originalContract/contractFile metadata writes here.
+      uploadedResult = await uploadInvestmentDocument({
+        entityType: "investment",
+        entityId: investmentId,
+        category: "contract_original",
         investmentId,
+        contractId: String(selectedMessage.contractId || "").trim() || undefined,
+        requestId: String(selectedMessage.id || "").trim() || undefined,
+        uploadedBy: String(user?.uid || "").trim() || undefined,
         file: draftFile,
         kind: "original",
+      });
+      console.log("[upload] stage A completed", uploadedResult);
+      setLocalUploadedByKind({
+        original: uploadedResult,
+      });
+      setDraftFile(null);
+      console.log("[upload] updating workflow state in firestore", {
+        investmentId,
+        requestId: selectedMessage.id,
       });
       await runAuditedOperation({
         action: AUDIT_ACTIONS.CONTRACT_UPLOADED,
@@ -1741,8 +1774,7 @@ export default function MessagesManagement() {
         },
         message: `Uploaded contract for investment ${investmentId}`,
         meta: {
-          fileName: uploaded.fileName,
-          fileType: uploaded.contentType,
+          contractVersionSource: "cloudflare_upload",
         },
         targets: [
           { ref: doc(db, REQUESTS_COL, selectedMessage.id), entityType: "request", label: "request" },
@@ -1778,31 +1810,7 @@ export default function MessagesManagement() {
         tx.set(
           invRef,
           {
-            originalContract: {
-              fileName: uploaded.fileName,
-              path: uploaded.path,
-              storagePath: uploaded.path,
-              contentType: uploaded.contentType,
-              uploadedAt: now,
-              uploadedBy: user?.uid || null,
-              version: nextContractVersion,
-            },
-            contractFile: {
-              fileName: uploaded.fileName,
-              path: uploaded.path,
-              storagePath: uploaded.path,
-              contentType: uploaded.contentType,
-              uploadedAt: now,
-              uploadedBy: user?.uid || null,
-              version: nextContractVersion,
-            },
             contractVersion: nextContractVersion,
-            signedContract: deleteField(),
-            signedContractFile: deleteField(),
-            signedContractPath: deleteField(),
-            signedContractUrl: deleteField(),
-            signedPath: deleteField(),
-            signedDocumentPath: deleteField(),
             signedAgainstContractVersion: deleteField(),
             signedContractOutdated: false,
             requiresResign: false,
@@ -1814,8 +1822,6 @@ export default function MessagesManagement() {
             contractStatus: hasSigned ? "pending_signature" : "sent",
             status: "signing",
             updatedAt: now,
-            lastDocumentUploadAt: now,
-            lastDocumentUploadBy: user?.uid || null,
           },
           { merge: true }
         );
@@ -1833,19 +1839,25 @@ export default function MessagesManagement() {
         );
           }),
       });
-
-      setLocalUploadedByKind({
-        original: { path: uploaded.path, fileName: uploaded.fileName },
+      console.log("[upload] workflow state updated in firestore", {
+        investmentId,
+        requestId: selectedMessage.id,
       });
 
       toast.success("تم رفع العقد الأصلي بنجاح");
-      setDraftFile(null);
-
       await loadInvestmentDoc(investmentId);
       await loadMessages();
     } catch (e: any) {
-      console.error(e);
-      toast.error(e?.message || "فشل الرفع");
+      if (uploadedResult) {
+        console.error("[upload] workflow state update failed", e, {
+          investmentId,
+          uploadedPath: uploadedResult.path,
+        });
+        toast.warning("تم رفع الملف لكن تعذر تحديث حالة العقد تلقائيا.");
+      } else {
+        console.error("[upload] failed", e);
+        toast.error(e?.message || "فشل الرفع");
+      }
     } finally {
       setContractBusy(false);
     }
@@ -2552,6 +2564,7 @@ export default function MessagesManagement() {
   );
   const hasOriginalContract = Boolean(originalContractPath || originalContractUrlFromDocs);
   const originalContractViewUrl = pick(
+    localUploadedByKind.original?.fileUrl,
     buildR2DownloadUrl(originalContractPath, false),
     originalContractUrlFromDocs
   );
@@ -2562,7 +2575,11 @@ export default function MessagesManagement() {
 
   const signedContractPath = pick(
     localUploadedByKind.signed?.path,
-    signedPathFromDocs
+    signedPathFromDocs,
+    r2DetectedPathByKind.signed,
+    !r2ProbeStatusByKind.signed || r2ProbeStatusByKind.signed === "unknown"
+      ? expectedContractPath(activeInvestmentId, "signed")
+      : ""
   );
   const signedContractUrlFromDocs = pickFirstNonEmptyString(
     resolveDocPath(investmentDoc, ["signedContract.url", "signedContractFile.url", "signedContractUrl"]),
@@ -2578,6 +2595,7 @@ export default function MessagesManagement() {
   );
   const hasSignedContract = Boolean(signedContractPath || signedContractUrlFromDocs);
   const signedContractViewUrl = pick(
+    localUploadedByKind.signed?.fileUrl,
     buildR2DownloadUrl(signedContractPath, false),
     signedContractUrlFromDocs
   );

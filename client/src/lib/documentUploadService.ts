@@ -1,36 +1,89 @@
 export type InvestmentDocumentKind = "original" | "signed" | "attachment";
 
-export interface UploadDocumentInput {
-  investmentId: string;
-  file: File;
+export type FileEntityType = "project" | "investment" | "request" | "contract" | string;
+export type FileCategory =
+  | "project_cover"
+  | "project_gallery"
+  | "project_attachment"
+  | "contract_original"
+  | "contract_signed"
+  | string;
+
+export interface CloudflareFileRecord {
+  id: string;
   kind: InvestmentDocumentKind;
+  category: FileCategory;
+  entityType: FileEntityType;
+  entityId: string;
+  projectId?: string | null;
+  investmentId?: string | null;
+  contractId?: string | null;
+  requestId?: string | null;
+  fileName: string;
+  filePath: string;
+  fileUrl: string;
+  contentType: string;
+  fileSize: number;
+  uploadedBy?: string | null;
+  uploadedAt: string;
+  status: string;
+  version?: number | null;
+  bucket?: string | null;
 }
 
-export interface UploadDocumentResult {
+export interface UploadDocumentInput {
+  entityType: FileEntityType;
+  entityId: string;
+  category: FileCategory;
+  file: File;
+  kind: InvestmentDocumentKind;
+  projectId?: string;
+  investmentId?: string;
+  contractId?: string;
+  requestId?: string;
+  uploadedBy?: string;
+  status?: string;
+  version?: number | null;
+}
+
+export interface UploadDocumentResult extends CloudflareFileRecord {
   ok: boolean;
   path: string;
-  fileName: string;
-  kind: InvestmentDocumentKind;
-  contentType: string;
-  bucket?: string;
+}
+
+export interface ListDocumentMetadataQuery {
+  entityType?: FileEntityType;
+  entityId?: string;
+  entityIds?: string[];
+  category?: FileCategory;
+  categories?: FileCategory[];
+  projectId?: string;
+  investmentId?: string;
+  contractId?: string;
+  requestId?: string;
+  status?: string;
+  limit?: number;
 }
 
 const MAX_FILE_SIZE_MB = 10;
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
+
+// ARCHITECTURE NOTE (2026-03-12):
+// Files are stored in Cloudflare R2.
+// File metadata is stored in Cloudflare D1.
+// Do not reintroduce Firestore metadata writes into this upload flow.
+// Cloudflare R2 upload endpoint. This must point to the Worker that writes the
+// binary object to R2 and persists the metadata record in D1.
 const R2_UPLOAD_WORKER_URL = String(import.meta.env.VITE_R2_UPLOAD_WORKER_URL || "").trim();
 const R2_DOWNLOAD_WORKER_URL = String(import.meta.env.VITE_R2_DOWNLOAD_WORKER_URL || "").trim();
+const UPLOAD_PROBE_RETRIES = 5;
+const UPLOAD_PROBE_DELAY_MS = 750;
 
 function isPdfFile(file: File) {
   if (!file) return false;
   const mime = String(file.type || "").trim().toLowerCase();
   const name = String(file.name || "").trim().toLowerCase();
   return mime === "application/pdf" || name.endsWith(".pdf");
-}
-
-function expectedContractPath(investmentId: string, kind: InvestmentDocumentKind) {
-  if (kind === "original") return `contracts/${investmentId}/original.pdf`;
-  if (kind === "signed") return `contracts/${investmentId}/signed.pdf`;
-  return "";
 }
 
 function validateUploadFile(file: File, kind: InvestmentDocumentKind) {
@@ -48,45 +101,46 @@ function validateUploadFile(file: File, kind: InvestmentDocumentKind) {
   }
 }
 
-function normalizeWorkerResponse(
-  raw: any,
-  fallbackKind: InvestmentDocumentKind,
-  fallbackType: string
-): UploadDocumentResult {
-  const ok = Boolean(raw?.ok);
-  const path = String(raw?.path || "").trim();
-  const fileName = String(raw?.fileName || "").trim();
-  const kind = String(raw?.kind || fallbackKind).trim() as InvestmentDocumentKind;
-  const contentType = String(raw?.contentType || fallbackType || "application/octet-stream").trim();
+function sanitizeKeyPart(value: string) {
+  return String(value || "")
+    .trim()
+    .replace(/[^A-Za-z0-9_-]/g, "_");
+}
 
-  if (!ok) {
-    throw new Error(String(raw?.message || "Upload failed."));
+function expectedUploadPrefix(
+  entityType: FileEntityType,
+  entityId: string,
+  category: FileCategory
+) {
+  const safeEntityType = sanitizeKeyPart(entityType);
+  const safeEntityId = sanitizeKeyPart(entityId);
+
+  if (category === "contract_original") {
+    return `${safeEntityType}s/${safeEntityId}/contracts/original`;
   }
 
-  if (!path) {
-    throw new Error("Worker response missing path.");
+  if (category === "contract_signed") {
+    return `${safeEntityType}s/${safeEntityId}/contracts/signed`;
   }
 
-  if (!fileName) {
-    throw new Error("Worker response missing fileName.");
+  if (category === "project_cover") {
+    return `${safeEntityType}s/${safeEntityId}/cover/`;
   }
 
-  if (!kind || !["original", "signed", "attachment"].includes(kind)) {
-    throw new Error("Worker response has invalid kind.");
+  if (category === "project_gallery") {
+    return `${safeEntityType}s/${safeEntityId}/gallery/`;
   }
 
-  return {
-    ok: true,
-    path,
-    fileName,
-    kind,
-    contentType,
-    ...(raw?.bucket ? { bucket: String(raw.bucket) } : {}),
-  };
+  if (category === "project_attachment") {
+    return `${safeEntityType}s/${safeEntityId}/attachments/`;
+  }
+
+  return `${safeEntityType}s/${safeEntityId}/`;
 }
 
 function normalizeUploadErrorMessage(raw: any) {
-  const msg = String(raw || "").trim().toLowerCase();
+  const original = String(raw || "").trim();
+  const msg = original.toLowerCase();
   if (!msg) return "Upload failed";
   if (
     msg.includes("unsupported_file_type") ||
@@ -95,60 +149,218 @@ function normalizeUploadErrorMessage(raw: any) {
   ) {
     return "Please select a PDF file";
   }
-  return "Upload failed";
+  return original.replace(/_/g, " ");
 }
 
-export function buildR2DownloadUrl(path: string, forceDownload = false) {
-  const objectPath = String(path || "").trim();
-  if (!objectPath) return "";
-  const baseUrl = R2_DOWNLOAD_WORKER_URL || R2_UPLOAD_WORKER_URL;
+function sleep(ms: number) {
+  return new Promise((resolve) => globalThis.setTimeout(resolve, ms));
+}
+
+function getWorkerBaseUrl() {
+  return R2_DOWNLOAD_WORKER_URL || R2_UPLOAD_WORKER_URL;
+}
+
+function buildWorkerUrl(pathname: string, params?: Record<string, string | undefined>) {
+  const baseUrl = getWorkerBaseUrl();
   if (!baseUrl) return "";
   try {
     const url = new URL(baseUrl);
-    url.pathname = "/download";
+    url.pathname = pathname;
     url.search = "";
     url.hash = "";
-    url.searchParams.set("path", objectPath);
-    if (forceDownload) {
-      url.searchParams.set("download", "1");
-    }
+    Object.entries(params || {}).forEach(([key, value]) => {
+      if (value) url.searchParams.set(key, value);
+    });
     return url.toString();
   } catch {
     return "";
   }
 }
 
-export async function uploadInvestmentDocument(
+function normalizeOptionalString(value: unknown) {
+  const normalized = String(value || "").trim();
+  return normalized || null;
+}
+
+function normalizeOptionalNumber(value: unknown) {
+  const normalized = Number(value);
+  return Number.isFinite(normalized) ? normalized : null;
+}
+
+function normalizeWorkerRecord(raw: any, fallback?: Partial<CloudflareFileRecord>): CloudflareFileRecord {
+  const source = raw?.file && typeof raw.file === "object" ? raw.file : raw;
+  const id = String(source?.id || fallback?.id || "").trim();
+  const filePath = String(source?.filePath || source?.path || fallback?.filePath || "").trim();
+  const fileName = String(source?.fileName || fallback?.fileName || "").trim();
+  const fileUrl = String(
+    source?.fileUrl || source?.url || fallback?.fileUrl || buildR2DownloadUrl(filePath, false)
+  ).trim();
+  const category = String(source?.category || fallback?.category || "").trim();
+  const entityType = String(source?.entityType || fallback?.entityType || "").trim();
+  const entityId = String(source?.entityId || fallback?.entityId || "").trim();
+  const kind = String(source?.kind || fallback?.kind || "attachment").trim() as InvestmentDocumentKind;
+  const contentType = String(
+    source?.contentType || fallback?.contentType || "application/octet-stream"
+  ).trim();
+  const fileSize = Number(source?.fileSize ?? fallback?.fileSize ?? 0);
+  const uploadedAt = String(source?.uploadedAt || fallback?.uploadedAt || "").trim();
+  const status = String(source?.status || fallback?.status || "uploaded").trim();
+
+  if (!id) throw new Error("Worker response missing metadata id.");
+  if (!filePath) throw new Error("Worker response missing filePath.");
+  if (!fileName) throw new Error("Worker response missing fileName.");
+  if (!fileUrl) throw new Error("Worker response missing fileUrl.");
+  if (!category) throw new Error("Worker response missing category.");
+  if (!entityType) throw new Error("Worker response missing entityType.");
+  if (!entityId) throw new Error("Worker response missing entityId.");
+  if (!uploadedAt) throw new Error("Worker response missing uploadedAt.");
+
+  return {
+    id,
+    kind,
+    category,
+    entityType,
+    entityId,
+    projectId: normalizeOptionalString(source?.projectId ?? fallback?.projectId),
+    investmentId: normalizeOptionalString(source?.investmentId ?? fallback?.investmentId),
+    contractId: normalizeOptionalString(source?.contractId ?? fallback?.contractId),
+    requestId: normalizeOptionalString(source?.requestId ?? fallback?.requestId),
+    fileName,
+    filePath,
+    fileUrl,
+    contentType,
+    fileSize: Number.isFinite(fileSize) ? fileSize : 0,
+    uploadedBy: normalizeOptionalString(source?.uploadedBy ?? fallback?.uploadedBy),
+    uploadedAt,
+    status,
+    version: normalizeOptionalNumber(source?.version ?? fallback?.version),
+    bucket: normalizeOptionalString(source?.bucket ?? fallback?.bucket),
+  };
+}
+
+function normalizeUploadResponse(
+  raw: any,
   input: UploadDocumentInput
-): Promise<UploadDocumentResult> {
-  const investmentId = String(input.investmentId || "").trim();
-  const { file } = input;
-  const kind = String(input.kind || "").trim().toLowerCase() as InvestmentDocumentKind;
-
-  if (!investmentId) {
-    throw new Error("investmentId is required.");
+): UploadDocumentResult {
+  const success = Boolean(raw?.ok ?? raw?.success);
+  if (!success) {
+    throw new Error(String(raw?.message || "Upload failed."));
   }
 
-  if (!kind || !["original", "signed", "attachment"].includes(kind)) {
-    throw new Error("kind is required.");
-  }
-
-  validateUploadFile(file, kind);
-
-  if (!R2_UPLOAD_WORKER_URL) {
-    throw new Error("Missing VITE_R2_UPLOAD_WORKER_URL.");
-  }
-
-  const form = new FormData();
-  form.append("investmentId", investmentId);
-  form.append("kind", kind);
-  form.append("file", file, file.name);
-
-  const response = await fetch(R2_UPLOAD_WORKER_URL, {
-    method: "POST",
-    body: form,
+  const normalized = normalizeWorkerRecord(raw, {
+    kind: input.kind,
+    category: input.category,
+    entityType: input.entityType,
+    entityId: input.entityId,
+    projectId: input.projectId || null,
+    investmentId: input.investmentId || null,
+    contractId: input.contractId || null,
+    requestId: input.requestId || null,
+    uploadedBy: input.uploadedBy || null,
+    version: input.version ?? null,
   });
 
+  const expectedPrefix = expectedUploadPrefix(input.entityType, input.entityId, input.category);
+  if (!normalized.filePath.startsWith(expectedPrefix)) {
+    throw new Error("Upload failed");
+  }
+
+  return {
+    ...normalized,
+    ok: true,
+    path: normalized.filePath,
+  };
+}
+
+function buildProbeUrl(path: string) {
+  return buildWorkerUrl("/download", {
+    path: String(path || "").trim(),
+    probe: "1",
+  });
+}
+
+async function verifyUploadedPathExists(path: string) {
+  const probeUrl = buildProbeUrl(path);
+  if (!probeUrl) {
+    console.warn("[upload] probe url unavailable", { path });
+    return;
+  }
+
+  for (let attempt = 1; attempt <= UPLOAD_PROBE_RETRIES; attempt += 1) {
+    console.log("[upload] probe request", { attempt, path, probeUrl });
+
+    let response: Response;
+    try {
+      response = await fetch(probeUrl, { method: "GET" });
+    } catch (error) {
+      console.error("[upload] probe request failed", error, { attempt, path, probeUrl });
+      if (attempt === UPLOAD_PROBE_RETRIES) {
+        throw new Error("Uploaded file could not be verified in R2.");
+      }
+      await sleep(UPLOAD_PROBE_DELAY_MS);
+      continue;
+    }
+
+    let payload: any = null;
+    try {
+      payload = await response.json();
+    } catch {
+      payload = null;
+    }
+
+    console.log("[upload] probe response status", response.status, { attempt, path });
+    console.log("[upload] probe response body", payload);
+
+    if (response.ok && payload?.exists === true) {
+      console.log("[upload] probe verified object exists", { attempt, path });
+      return;
+    }
+
+    if (attempt < UPLOAD_PROBE_RETRIES) {
+      await sleep(UPLOAD_PROBE_DELAY_MS);
+    }
+  }
+
+  throw new Error("Uploaded file could not be verified in R2.");
+}
+
+export function buildR2DownloadUrl(path: string, forceDownload = false) {
+  const objectPath = String(path || "").trim();
+  if (!objectPath) return "";
+  return buildWorkerUrl("/download", {
+    path: objectPath,
+    ...(forceDownload ? { download: "1" } : {}),
+  });
+}
+
+export async function listDocumentMetadata(
+  query: ListDocumentMetadataQuery
+): Promise<CloudflareFileRecord[]> {
+  const filesUrl = buildWorkerUrl("/files", {
+    entityType: query.entityType ? String(query.entityType) : undefined,
+    entityId: query.entityId ? String(query.entityId) : undefined,
+    entityIds:
+      query.entityIds && query.entityIds.length
+        ? query.entityIds.map((value) => String(value).trim()).filter(Boolean).join(",")
+        : undefined,
+    category: query.category ? String(query.category) : undefined,
+    categories:
+      query.categories && query.categories.length
+        ? query.categories.map((value) => String(value).trim()).filter(Boolean).join(",")
+        : undefined,
+    projectId: query.projectId ? String(query.projectId) : undefined,
+    investmentId: query.investmentId ? String(query.investmentId) : undefined,
+    contractId: query.contractId ? String(query.contractId) : undefined,
+    requestId: query.requestId ? String(query.requestId) : undefined,
+    status: query.status ? String(query.status) : undefined,
+    limit: query.limit ? String(query.limit) : undefined,
+  });
+
+  if (!filesUrl) {
+    throw new Error("Missing worker URL for file metadata.");
+  }
+
+  const response = await fetch(filesUrl, { method: "GET" });
   let payload: any = null;
   try {
     payload = await response.json();
@@ -157,15 +369,144 @@ export async function uploadInvestmentDocument(
   }
 
   if (!response.ok) {
-    throw new Error(
-      normalizeUploadErrorMessage(payload?.message || payload?.error || response.statusText)
-    );
+    throw new Error(String(payload?.message || "Failed to load file metadata."));
   }
 
-  const normalized = normalizeWorkerResponse(payload, kind, file.type || "application/pdf");
-  const expectedPath = expectedContractPath(investmentId, normalized.kind);
-  if (expectedPath && normalized.path !== expectedPath) {
-    throw new Error("Upload failed");
-  }
-  return normalized;
+  const rows = Array.isArray(payload?.files) ? payload.files : [];
+  return rows.map((row: any) => normalizeWorkerRecord(row));
 }
+
+export function groupLatestFilesByEntityAndCategory(
+  records: CloudflareFileRecord[]
+) {
+  const grouped: Record<string, Record<string, CloudflareFileRecord>> = {};
+
+  records.forEach((record) => {
+    const entityId = String(record.entityId || "").trim();
+    const category = String(record.category || "").trim();
+    if (!entityId || !category) return;
+    grouped[entityId] ||= {};
+    if (!grouped[entityId][category]) {
+      grouped[entityId][category] = record;
+    }
+  });
+
+  return grouped;
+}
+
+export function groupFilesByCategory(records: CloudflareFileRecord[]) {
+  const grouped: Record<string, CloudflareFileRecord[]> = {};
+  records.forEach((record) => {
+    const category = String(record.category || "").trim();
+    if (!category) return;
+    grouped[category] ||= [];
+    grouped[category].push(record);
+  });
+  return grouped;
+}
+
+export function pickLatestFileByCategory(
+  records: CloudflareFileRecord[],
+  category: FileCategory
+) {
+  return records.find((record) => String(record.category || "").trim() === String(category).trim()) || null;
+}
+
+// STEP 1 (Cloudflare R2):
+// Upload the binary to Cloudflare Worker + R2 first.
+// STEP 2 (Cloudflare D1):
+// The Worker persists file metadata in D1 and returns the final record.
+// Do not add Firestore metadata writes after this function.
+export async function uploadDocumentToCloudflare(
+  input: UploadDocumentInput
+): Promise<UploadDocumentResult> {
+  const entityId = String(input.entityId || "").trim();
+  const entityType = String(input.entityType || "").trim();
+  const category = String(input.category || "").trim();
+  const { file } = input;
+  const kind = String(input.kind || "").trim().toLowerCase() as InvestmentDocumentKind;
+
+  try {
+    if (!entityType) throw new Error("entityType is required.");
+    if (!entityId) throw new Error("entityId is required.");
+    if (!category) throw new Error("category is required.");
+    if (!kind || !["original", "signed", "attachment"].includes(kind)) {
+      throw new Error("kind is required.");
+    }
+
+    validateUploadFile(file, kind);
+
+    console.log("[upload] start", {
+      entityType,
+      entityId,
+      category,
+      fileName: file.name,
+      size: file.size,
+      type: file.type || "application/octet-stream",
+    });
+
+    if (!R2_UPLOAD_WORKER_URL) {
+      throw new Error("Missing VITE_R2_UPLOAD_WORKER_URL.");
+    }
+
+    console.log("[upload] worker url", R2_UPLOAD_WORKER_URL);
+
+    const form = new FormData();
+    form.append("entityType", entityType);
+    form.append("entityId", entityId);
+    form.append("category", category);
+    form.append("kind", kind);
+    form.append("file", file, file.name);
+
+    if (input.projectId) form.append("projectId", input.projectId);
+    if (input.investmentId) form.append("investmentId", input.investmentId);
+    if (input.contractId) form.append("contractId", input.contractId);
+    if (input.requestId) form.append("requestId", input.requestId);
+    if (input.uploadedBy) form.append("uploadedBy", input.uploadedBy);
+    if (input.status) form.append("status", input.status);
+    if (input.version !== undefined && input.version !== null) {
+      form.append("version", String(input.version));
+    }
+
+    console.log("[upload] sending request...");
+    const response = await fetch(R2_UPLOAD_WORKER_URL, {
+      method: "POST",
+      body: form,
+    });
+
+    let payload: any = null;
+    let responseText = "";
+    try {
+      responseText = await response.text();
+      payload = responseText ? JSON.parse(responseText) : null;
+    } catch {
+      payload = null;
+    }
+
+    console.log("[upload] response status", response.status);
+    console.log("[upload] response text", responseText);
+    console.log("[upload] response body", payload);
+
+    if (!response.ok) {
+      throw new Error(
+        normalizeUploadErrorMessage(payload?.message || payload?.error || response.statusText)
+      );
+    }
+
+    const normalized = normalizeUploadResponse(payload, input);
+    await verifyUploadedPathExists(normalized.filePath);
+    console.log("[upload] upload verified", normalized);
+    return normalized;
+  } catch (error) {
+    console.error("[upload] failed", error);
+    throw error;
+  }
+}
+
+// LEGACY NAME — DO NOT EXPAND
+// This alias is kept temporarily so existing imports can migrate incrementally,
+// but the implementation is Cloudflare Worker + R2 + D1 only.
+export const uploadInvestmentDocument = uploadDocumentToCloudflare;
+// LEGACY NAME - DO NOT EXPAND
+// This ASCII duplicate comment exists because the older encoded comment above is
+// still present in the file history and should not be relied on for future edits.

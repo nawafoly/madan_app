@@ -133,7 +133,9 @@ function buildR2DownloadUrl(path: any, forceDownload = false) {
 function expectedContractPath(investmentId: string, kind: "original" | "signed") {
   const id = String(investmentId || "").trim();
   if (!id) return "";
-  return kind === "original" ? `contracts/${id}/original.pdf` : `contracts/${id}/signed.pdf`;
+  return kind === "original"
+    ? `investments/${id}/contracts/original.pdf`
+    : `investments/${id}/contracts/signed.pdf`;
 }
 
 type R2ProbeStatus = "exists" | "missing" | "unknown";
@@ -777,6 +779,15 @@ export default function InvestmentDetails() {
         }
       }
 
+      if (!resolvedSignedPathFromDocs) {
+        const candidate = expectedContractPath(investmentId, "signed");
+        const status = candidate ? await r2ObjectStatus(candidate) : "unknown";
+        probe.signed = status;
+        if (candidate && status === "exists") {
+          next.signed = candidate;
+        }
+      }
+
       if (!cancelled) {
         setR2DetectedPathByKind(next);
         setR2ProbeStatusByKind(probe);
@@ -799,7 +810,10 @@ export default function InvestmentDetails() {
       ? originalExpectedPath
       : ""
   );
-  const originalViewUrl = buildR2DownloadUrl(originalPath, false);
+  const originalViewUrl = pickFirstNonEmptyString(
+    localUploadedByKind.original?.fileUrl,
+    buildR2DownloadUrl(originalPath, false)
+  );
   const originalDownloadUrl = buildR2DownloadUrl(originalPath, true);
   const originalName = pickFirstNonEmptyString(
     localUploadedByKind.original?.fileName,
@@ -808,10 +822,18 @@ export default function InvestmentDetails() {
   );
   const hasOriginalContract = Boolean(originalPath);
 
+  const signedExpectedPath = expectedContractPath(investmentId, "signed");
   const signedPath = pickFirstNonEmptyString(
-    resolvedSignedPathFromDocs
+    resolvedSignedPathFromDocs,
+    r2DetectedPathByKind.signed,
+    !r2ProbeStatusByKind.signed || r2ProbeStatusByKind.signed === "unknown"
+      ? signedExpectedPath
+      : ""
   );
-  const signedViewUrl = buildR2DownloadUrl(signedPath, false);
+  const signedViewUrl = pickFirstNonEmptyString(
+    localUploadedByKind.signed?.fileUrl,
+    buildR2DownloadUrl(signedPath, false)
+  );
   const signedDownloadUrl = buildR2DownloadUrl(signedPath, true);
   const signedName = pickFirstNonEmptyString(
     localUploadedByKind.signed?.fileName,
@@ -977,6 +999,11 @@ export default function InvestmentDetails() {
     );
   }
 
+  // FIX (2026-03-12):
+  // This upload flow is intentionally split into two phases.
+  // Stage 1 stores the file through Cloudflare Worker -> R2 -> D1.
+  // Stage 2 updates only the investment workflow state in Firestore.
+  // Do not add file metadata writes back into Firestore from this handler.
   const handleInvestorSignedUpload = async () => {
     if (!investmentId) {
       toast.error("فشل الرفع");
@@ -1006,87 +1033,94 @@ export default function InvestmentDetails() {
       return;
     }
 
+    let uploadedResult: UploadDocumentResult | null = null;
+
     try {
       setSignedUploadBusy(true);
-      const uploaded = await uploadInvestmentDocument({
+      // ARCHITECTURE NOTE (2026-03-12):
+      // STEP 1 uploads the file through Cloudflare Worker -> R2 -> D1.
+      // Firestore is updated below only for investment workflow state, not for
+      // file metadata storage. Do not add signedContract/contractFile writes here.
+      uploadedResult = await uploadInvestmentDocument({
+        entityType: "investment",
+        entityId: investmentId,
+        category: "contract_signed",
         investmentId,
+        contractId: String(investment?.contractId || "").trim() || undefined,
+        requestId: String(linkedRequestId || "").trim() || undefined,
+        uploadedBy: String(user?.uid || "").trim() || undefined,
         file: signedUploadFile,
         kind: "signed",
       });
-      const invRef = doc(db, "investments", investmentId);
+      console.log("[upload] stage A completed", uploadedResult);
+      const signedUpload = uploadedResult;
+      setLocalUploadedByKind((prev) => ({
+        ...prev,
+        [signedUpload.kind]: signedUpload,
+      }));
+      setSignedUploadFile(null);
+
       const signedForVersion = toPositiveInt(
         investment?.contractVersion ??
           investment?.originalContract?.version ??
           investment?.contractFile?.version ??
           originalVersion
       ) || 1;
-      const now = serverTimestamp();
-      await auditedUpdateDoc({
-        ref: invRef,
-        data: {
-        signedContract: {
-          fileName: uploaded.fileName,
-          path: uploaded.path,
-          storagePath: uploaded.path,
-          contentType: uploaded.contentType,
-          uploadedAt: now,
-          uploadedBy: user?.uid || null,
-          signedForVersion,
-          originalVersion: signedForVersion,
-          isOutdated: false,
-          outdatedAt: null,
-          outdatedByOriginalVersion: null,
-        },
-        signedContractFile: {
-          fileName: uploaded.fileName,
-          path: uploaded.path,
-          storagePath: uploaded.path,
-          contentType: uploaded.contentType,
-          uploadedAt: now,
-          uploadedBy: user?.uid || null,
-          signedForVersion,
-        },
+      const workflowPatch = {
         signedAgainstContractVersion: signedForVersion,
         signedContractOutdated: false,
         requiresResign: false,
         signedContractOutdatedAt: null,
         status: "signed",
         contractStatus: "under_review",
-        signedAt: now,
-        lastDocumentUploadAt: now,
-        lastDocumentUploadBy: user?.uid || null,
-        },
-        action: AUDIT_ACTIONS.CONTRACT_SIGNED,
-        category: "contract",
-        entityType: "investment",
-        source: buildAuditSource({
-          area: "client",
-          page: "InvestmentDetails",
-          method: "upload_signed_contract",
-        }),
-        relatedIds: {
-          investmentId,
-          contractId: String(investment?.contractId || "") || undefined,
-          requestId: String(linkedRequestId || "") || undefined,
-          userId: user?.uid || undefined,
-        },
-        message: `Uploaded signed contract for investment ${investmentId}`,
-        meta: {
-          fileName: uploaded.fileName,
-          fileType: uploaded.contentType,
-          investmentCode: investmentId,
-          contractVersion: signedForVersion,
-        },
-        ignoreFields: ["lastDocumentUploadAt"],
+        signedAt: serverTimestamp(),
+      };
+      console.log("[upload] updating workflow state in firestore", {
+        investmentId,
+        userId: user?.uid || null,
+        signedForVersion,
       });
-      setLocalUploadedByKind((prev) => ({
-        ...prev,
-        [uploaded.kind]: uploaded,
-      }));
-      setSignedUploadFile(null);
+      try {
+        await auditedUpdateDoc({
+          ref: doc(db, "investments", investmentId),
+          data: workflowPatch,
+          action: AUDIT_ACTIONS.CONTRACT_SIGNED,
+          category: "contract",
+          entityType: "investment",
+          source: buildAuditSource({
+            area: "client",
+            page: "InvestmentDetails",
+            method: "upload_signed_contract",
+          }),
+          relatedIds: {
+            investmentId,
+            contractId: String(investment?.contractId || "") || undefined,
+            requestId: String(linkedRequestId || "") || undefined,
+            userId: user?.uid || undefined,
+          },
+          message: `Uploaded signed contract for investment ${investmentId}`,
+          meta: {
+            investmentCode: investmentId,
+            contractVersion: signedForVersion,
+          },
+        });
+        console.log("[upload] workflow state updated in firestore", {
+          investmentId,
+          signedForVersion,
+        });
+      } catch (workflowError) {
+        console.error("[upload] workflow state update failed", workflowError, {
+          investmentId,
+          signedForVersion,
+        });
+        toast.warning("تم رفع الملف لكن تعذر تحديث حالة الاستثمار تلقائيا.");
+      }
       toast.success("تم رفع العقد الموقّع بنجاح");
     } catch (e: any) {
-      console.error(e);
+      console.error("[upload] failed", e, {
+        investmentId,
+        uploadedPath: uploadedResult?.path || null,
+      });
       toast.error(e?.message || "فشل الرفع");
     } finally {
       setSignedUploadBusy(false);

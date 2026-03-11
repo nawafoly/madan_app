@@ -4,7 +4,7 @@ import { useRoute, useLocation } from "wouter";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/_core/firebase";
 import { AUDIT_ACTIONS, auditedUpdateDoc, buildAuditSource } from "@/lib/auditLog";
-import { buildR2DownloadUrl, uploadInvestmentDocument } from "@/lib/documentUploadService";
+import { uploadInvestmentDocument } from "@/lib/documentUploadService";
 
 import DashboardLayout from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
@@ -261,7 +261,9 @@ export default function EditProject() {
     newMilestoneRow(),
   ]);
   const [faqRows, setFaqRows] = useState<FaqRow[]>([newFaqRow()]);
-  const projectUploadId = projectId ? `project_${projectId}` : "";
+  // ARCHITECTURE NOTE (2026-03-12):
+  // The Worker response is the source of truth for uploaded file URLs.
+  // Do not rebuild download URLs locally when the Worker already returns fileUrl.
 
   const handleAttachmentFileUpload = async (index: number, file?: File | null) => {
     if (!file || !projectId) return;
@@ -272,11 +274,14 @@ export default function EditProject() {
       );
 
       const uploaded = await uploadInvestmentDocument({
-        investmentId: projectUploadId,
+        entityType: "project",
+        entityId: projectId,
+        category: "project_attachment",
+        projectId,
         file,
         kind: "attachment",
       });
-      const downloadUrl = buildR2DownloadUrl(uploaded.path);
+      const downloadUrl = uploaded.fileUrl;
       if (!downloadUrl) throw new Error("Upload failed");
 
       setAttachmentRows((prev) =>
@@ -307,11 +312,14 @@ export default function EditProject() {
     try {
       setCoverUploading(true);
       const uploaded = await uploadInvestmentDocument({
-        investmentId: projectUploadId,
+        entityType: "project",
+        entityId: projectId,
+        category: "project_cover",
+        projectId,
         file,
         kind: "attachment",
       });
-      const downloadUrl = buildR2DownloadUrl(uploaded.path);
+      const downloadUrl = uploaded.fileUrl;
       if (!downloadUrl) throw new Error("Upload failed");
       setFormData((prev) => ({ ...prev, coverImage: downloadUrl }));
       toast.success("تم رفع صورة الغلاف بنجاح");
@@ -333,11 +341,14 @@ export default function EditProject() {
       const uploadedUrls = await Promise.all(
         selected.map(async (file) => {
           const uploaded = await uploadInvestmentDocument({
-            investmentId: projectUploadId,
+            entityType: "project",
+            entityId: projectId,
+            category: "project_gallery",
+            projectId,
             file,
             kind: "attachment",
           });
-          const downloadUrl = buildR2DownloadUrl(uploaded.path);
+          const downloadUrl = uploaded.fileUrl;
           if (!downloadUrl) throw new Error("Upload failed");
           return downloadUrl;
         })
@@ -505,6 +516,10 @@ export default function EditProject() {
         locationEn: cleanStr(formData.locationEn),
 
         // media
+        // LEGACY READ MODEL NOTE (2026-03-12):
+        // These URLs are still mirrored into Firestore so the existing project
+        // reader pages keep working during phase 1. The upload source of truth
+        // is still Cloudflare Worker -> R2 -> D1.
         coverImage: cleanStr(formData.coverImage),
         // ✅ IMPORTANT: نحفظها باسم gallery (اللي ProjectDetails يقرأه)
         gallery: galleryUrls,

@@ -1,18 +1,21 @@
 /**
- * Cloudflare Worker for MAEDIN document uploads/downloads on R2.
- * Architecture contract:
- * - This worker is the source of truth for file storage success.
- * - Upload success must depend only on writing to R2.
+ * ARCHITECTURE NOTE (2026-03-12):
+ * Files are stored in Cloudflare R2.
+ * File metadata is stored in Cloudflare D1.
+ * Do not reintroduce Firestore metadata writes into this upload flow.
  *
- * Required binding:
- * - R2 bucket binding name: R2_BUCKET
- *
- * Optional compatible binding names (fallback):
- * - MAEDIN_STORAGE
- * - BUCKET
+ * Upload contract:
+ * 1. Receive multipart form-data from the frontend.
+ * 2. Upload the binary to R2.
+ * 3. Insert the metadata record into D1.
+ * 4. If the D1 insert fails, delete the R2 object before returning an error.
  */
 
 const ALLOWED_KINDS = new Set(["original", "signed", "attachment"]);
+const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
+const DEFAULT_STATUS = "uploaded";
+const LIST_LIMIT_DEFAULT = 50;
+const LIST_LIMIT_MAX = 200;
 
 export default {
   async fetch(request, env) {
@@ -21,25 +24,52 @@ export default {
     }
 
     const bucket = getBucket(env);
-    if (!bucket) {
-      return json(500, {
-        ok: false,
-        message: "missing_r2_binding",
-      });
-    }
-
+    const db = getDatabase(env);
     const url = new URL(request.url);
 
     if (request.method === "GET" && url.pathname === "/download") {
+      if (!bucket) {
+        return json(500, {
+          ok: false,
+          success: false,
+          message: "missing_r2_binding",
+        });
+      }
       return handleDownload(url, bucket);
     }
 
-    if (request.method === "POST") {
-      return handleUpload(request, bucket);
+    if (request.method === "GET" && url.pathname === "/files") {
+      if (!db) {
+        return json(500, {
+          ok: false,
+          success: false,
+          message: "missing_d1_binding",
+        });
+      }
+      return handleList(url, db, request.url);
+    }
+
+    if (request.method === "POST" && (url.pathname === "/" || url.pathname === "/upload")) {
+      if (!bucket) {
+        return json(500, {
+          ok: false,
+          success: false,
+          message: "missing_r2_binding",
+        });
+      }
+      if (!db) {
+        return json(500, {
+          ok: false,
+          success: false,
+          message: "missing_d1_binding",
+        });
+      }
+      return handleUpload(request, bucket, db);
     }
 
     return json(405, {
       ok: false,
+      success: false,
       message: "method_not_allowed",
     });
   },
@@ -49,57 +79,311 @@ function getBucket(env) {
   return env?.R2_BUCKET || env?.MAEDIN_STORAGE || env?.BUCKET || null;
 }
 
-async function handleUpload(request, bucket) {
+function getDatabase(env) {
+  return env?.DOCUMENTS_DB || env?.DB || null;
+}
+
+async function handleUpload(request, bucket, db) {
   const contentType = String(request.headers.get("content-type") || "").toLowerCase();
   if (!contentType.includes("multipart/form-data")) {
     return json(400, {
       ok: false,
+      success: false,
       message: "expected_multipart_form_data",
     });
   }
 
   const form = await request.formData();
-  const investmentId = normalizeInvestmentId(form.get("investmentId"));
-  const kind = normalizeKind(form.get("kind"));
   const file = form.get("file");
-
-  if (!investmentId || !kind || !(file instanceof File)) {
+  if (!(file instanceof File)) {
     return json(400, {
       ok: false,
-      message: "missing data",
+      success: false,
+      message: "missing_file",
+    });
+  }
+
+  if (file.size <= 0) {
+    return json(400, {
+      ok: false,
+      success: false,
+      message: "empty_file",
+    });
+  }
+
+  if (file.size > MAX_FILE_SIZE_BYTES) {
+    return json(413, {
+      ok: false,
+      success: false,
+      message: "file_too_large",
+    });
+  }
+
+  const entityType = normalizeSlug(form.get("entityType"));
+  const entityId = normalizeSlug(form.get("entityId"));
+  const category = normalizeSlug(form.get("category"));
+  const kind = normalizeKind(form.get("kind"));
+
+  if (!entityType || !entityId || !category || !kind) {
+    return json(400, {
+      ok: false,
+      success: false,
+      message: "missing_required_fields",
     });
   }
 
   const normalizedType = normalizeContentType(file.type, file.name);
-
   if ((kind === "original" || kind === "signed") && normalizedType !== "application/pdf") {
     return json(400, {
       ok: false,
+      success: false,
       message: "contract_files_must_be_pdf",
     });
   }
 
-  const uploadPath = buildUploadPath(investmentId, kind, file.name, normalizedType);
-  const fileName = getFileNameFromPath(uploadPath);
-
-  await bucket.put(uploadPath, await file.arrayBuffer(), {
-    httpMetadata: {
-      contentType: normalizedType,
-    },
-    customMetadata: {
-      investmentId,
-      kind,
-      uploadedAt: new Date().toISOString(),
-      originalFileName: sanitizeFileName(file.name),
-    },
+  const uploadedAt = new Date().toISOString();
+  const filePath = buildUploadPath({
+    entityType,
+    entityId,
+    category,
+    kind,
+    fileName: file.name,
+    contentType: normalizedType,
   });
+  const fileName = getFileNameFromPath(filePath);
+  const fileUrl = buildDownloadUrl(request.url, filePath, false);
+  const record = {
+    id: crypto.randomUUID(),
+    kind,
+    category,
+    entityType,
+    entityId,
+    projectId: normalizeNullableSlug(form.get("projectId")),
+    investmentId: normalizeNullableSlug(form.get("investmentId")),
+    contractId: normalizeNullableSlug(form.get("contractId")),
+    requestId: normalizeNullableSlug(form.get("requestId")),
+    fileName,
+    filePath,
+    fileUrl,
+    contentType: normalizedType,
+    fileSize: file.size,
+    uploadedBy: normalizeNullableString(form.get("uploadedBy")),
+    uploadedAt,
+    status: normalizeStatus(form.get("status")) || DEFAULT_STATUS,
+    version: normalizeNullableInteger(form.get("version")),
+    bucket: "R2_BUCKET",
+  };
+
+  console.log("[worker] upload received", {
+    entityType,
+    entityId,
+    category,
+    kind,
+    fileName: file.name,
+    fileSize: file.size,
+    contentType: normalizedType,
+    uploadedBy: record.uploadedBy,
+  });
+
+  try {
+    await bucket.put(filePath, await file.arrayBuffer(), {
+      httpMetadata: {
+        contentType: normalizedType,
+      },
+      customMetadata: {
+        entityType,
+        entityId,
+        category,
+        kind,
+        uploadedAt,
+        originalFileName: sanitizeFileName(file.name),
+      },
+    });
+    console.log("[worker] r2 upload success", {
+      filePath,
+      fileName,
+      contentType: normalizedType,
+      fileSize: file.size,
+    });
+  } catch (error) {
+    console.error("[worker] failed", {
+      stage: "r2_upload",
+      message: errorToMessage(error),
+      filePath,
+    });
+    return json(500, {
+      ok: false,
+      success: false,
+      message: "r2_upload_failed",
+      detail: errorToMessage(error),
+    });
+  }
+
+  try {
+    console.log("[worker] d1 insert start", {
+      id: record.id,
+      filePath: record.filePath,
+      category: record.category,
+      entityType: record.entityType,
+      entityId: record.entityId,
+    });
+    await insertFileMetadata(db, record);
+    console.log("[worker] d1 insert success", {
+      id: record.id,
+      filePath: record.filePath,
+    });
+    console.log("[worker] metadata id", record.id);
+  } catch (error) {
+    let cleanupDeleted = false;
+    let cleanupError = "";
+
+    try {
+      await bucket.delete(filePath);
+      cleanupDeleted = true;
+    } catch (cleanupFailure) {
+      cleanupError = errorToMessage(cleanupFailure);
+    }
+
+    console.error("[worker] failed", {
+      stage: "d1_insert",
+      message: errorToMessage(error),
+      filePath,
+      cleanupDeleted,
+      cleanupError,
+    });
+
+    return json(500, {
+      ok: false,
+      success: false,
+      message: "metadata_write_failed",
+      detail: errorToMessage(error),
+      cleanupDeleted,
+      cleanupError: cleanupError || undefined,
+    });
+  }
+
+  const responsePayload = {
+    ok: true,
+    success: true,
+    message: "upload_complete",
+    path: record.filePath,
+    url: record.fileUrl,
+    fileName: record.fileName,
+    contentType: record.contentType,
+    fileSize: record.fileSize,
+    file: record,
+  };
+
+  console.log("[worker] final response", responsePayload);
+
+  return json(200, responsePayload);
+}
+
+async function handleList(url, db, requestUrl) {
+  const filters = [];
+  const bindings = [];
+
+  const entityType = normalizeSlug(url.searchParams.get("entityType"));
+  const entityId = normalizeSlug(url.searchParams.get("entityId"));
+  const entityIds = normalizeCsvSlugs(url.searchParams.get("entityIds"));
+  const category = normalizeSlug(url.searchParams.get("category"));
+  const categories = normalizeCsvSlugs(url.searchParams.get("categories"));
+  const projectId = normalizeNullableSlug(url.searchParams.get("projectId"));
+  const investmentId = normalizeNullableSlug(url.searchParams.get("investmentId"));
+  const contractId = normalizeNullableSlug(url.searchParams.get("contractId"));
+  const requestId = normalizeNullableSlug(url.searchParams.get("requestId"));
+  const status = normalizeStatus(url.searchParams.get("status"));
+  const limit = clampLimit(url.searchParams.get("limit"));
+
+  if (entityType) {
+    filters.push("entity_type = ?");
+    bindings.push(entityType);
+  }
+
+  if (entityId) {
+    filters.push("entity_id = ?");
+    bindings.push(entityId);
+  }
+
+  if (entityIds.length) {
+    filters.push(`entity_id IN (${entityIds.map(() => "?").join(", ")})`);
+    bindings.push(...entityIds);
+  }
+
+  if (category) {
+    filters.push("category = ?");
+    bindings.push(category);
+  }
+
+  if (categories.length) {
+    filters.push(`category IN (${categories.map(() => "?").join(", ")})`);
+    bindings.push(...categories);
+  }
+
+  if (projectId) {
+    filters.push("project_id = ?");
+    bindings.push(projectId);
+  }
+
+  if (investmentId) {
+    filters.push("investment_id = ?");
+    bindings.push(investmentId);
+  }
+
+  if (contractId) {
+    filters.push("contract_id = ?");
+    bindings.push(contractId);
+  }
+
+  if (requestId) {
+    filters.push("request_id = ?");
+    bindings.push(requestId);
+  }
+
+  if (status) {
+    filters.push("status = ?");
+    bindings.push(status);
+  }
+
+  const whereSql = filters.length ? `WHERE ${filters.join(" AND ")}` : "";
+  const statement = db
+    .prepare(
+      `
+        SELECT
+          id,
+          kind,
+          category,
+          entity_type,
+          entity_id,
+          project_id,
+          investment_id,
+          contract_id,
+          request_id,
+          file_name,
+          file_path,
+          file_url,
+          content_type,
+          file_size,
+          uploaded_by,
+          uploaded_at,
+          status,
+          version,
+          bucket
+        FROM file_metadata
+        ${whereSql}
+        ORDER BY uploaded_at DESC
+        LIMIT ?
+      `
+    )
+    .bind(...bindings, limit);
+
+  const result = await statement.all();
+  const rows = Array.isArray(result?.results) ? result.results : [];
 
   return json(200, {
     ok: true,
-    path: uploadPath,
-    fileName,
-    kind,
-    contentType: normalizedType,
+    success: true,
+    files: rows.map((row) => mapDbRowToFileRecord(row, requestUrl)),
   });
 }
 
@@ -108,9 +392,11 @@ async function handleDownload(url, bucket) {
   const isProbe =
     String(url.searchParams.get("probe") || "").trim() === "1" ||
     String(url.searchParams.get("exists") || "").trim() === "1";
+
   if (!path) {
     return json(isProbe ? 200 : 400, {
       ok: false,
+      success: false,
       exists: false,
       message: "invalid_path",
     });
@@ -121,12 +407,15 @@ async function handleDownload(url, bucket) {
     if (isProbe) {
       return json(200, {
         ok: true,
+        success: true,
         exists: false,
         path,
       });
     }
+
     return json(404, {
       ok: false,
+      success: false,
       message: "file_not_found",
     });
   }
@@ -136,8 +425,10 @@ async function handleDownload(url, bucket) {
     object.writeHttpMetadata(headers);
     const contentType =
       headers.get("Content-Type") || inferContentTypeFromName(path) || "application/octet-stream";
+
     return json(200, {
       ok: true,
+      success: true,
       exists: true,
       path,
       fileName: getFileNameFromPath(path),
@@ -169,23 +460,181 @@ async function handleDownload(url, bucket) {
   );
 }
 
+async function insertFileMetadata(db, record) {
+  await db
+    .prepare(
+      `
+        INSERT INTO file_metadata (
+          id,
+          kind,
+          category,
+          entity_type,
+          entity_id,
+          project_id,
+          investment_id,
+          contract_id,
+          request_id,
+          file_name,
+          file_path,
+          file_url,
+          content_type,
+          file_size,
+          uploaded_by,
+          uploaded_at,
+          status,
+          version,
+          bucket
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `
+    )
+    .bind(
+      record.id,
+      record.kind,
+      record.category,
+      record.entityType,
+      record.entityId,
+      record.projectId,
+      record.investmentId,
+      record.contractId,
+      record.requestId,
+      record.fileName,
+      record.filePath,
+      record.fileUrl,
+      record.contentType,
+      record.fileSize,
+      record.uploadedBy,
+      record.uploadedAt,
+      record.status,
+      record.version,
+      record.bucket
+    )
+    .run();
+}
+
+function mapDbRowToFileRecord(row, requestUrl) {
+  const filePath = String(row?.file_path || "").trim();
+  const fileUrl = String(row?.file_url || buildDownloadUrl(requestUrl, filePath, false)).trim();
+
+  return {
+    id: String(row?.id || "").trim(),
+    kind: String(row?.kind || "attachment").trim(),
+    category: String(row?.category || "").trim(),
+    entityType: String(row?.entity_type || "").trim(),
+    entityId: String(row?.entity_id || "").trim(),
+    projectId: normalizeNullableString(row?.project_id),
+    investmentId: normalizeNullableString(row?.investment_id),
+    contractId: normalizeNullableString(row?.contract_id),
+    requestId: normalizeNullableString(row?.request_id),
+    fileName: String(row?.file_name || "").trim(),
+    filePath,
+    fileUrl,
+    contentType: String(row?.content_type || "application/octet-stream").trim(),
+    fileSize: Number(row?.file_size || 0),
+    uploadedBy: normalizeNullableString(row?.uploaded_by),
+    uploadedAt: String(row?.uploaded_at || "").trim(),
+    status: String(row?.status || DEFAULT_STATUS).trim(),
+    version: normalizeNullableInteger(row?.version),
+    bucket: normalizeNullableString(row?.bucket),
+  };
+}
+
+function buildUploadPath({ entityType, entityId, category, kind, fileName, contentType }) {
+  const safeEntityType = `${entityType}s`;
+  const safeEntityId = entityId;
+
+  if (category === "contract_original" && kind === "original") {
+    return `${safeEntityType}/${safeEntityId}/contracts/original.pdf`;
+  }
+
+  if (category === "contract_signed" && kind === "signed") {
+    return `${safeEntityType}/${safeEntityId}/contracts/signed.pdf`;
+  }
+
+  const safeName = sanitizeFileName(fileName || "attachment");
+  const ext = safeName.includes(".") ? "" : inferExtensionFromType(contentType);
+  const stamp = Date.now();
+
+  if (category === "project_cover") {
+    return `${safeEntityType}/${safeEntityId}/cover/${stamp}-${safeName}${ext}`;
+  }
+
+  if (category === "project_gallery") {
+    return `${safeEntityType}/${safeEntityId}/gallery/${stamp}-${safeName}${ext}`;
+  }
+
+  if (category === "project_attachment") {
+    return `${safeEntityType}/${safeEntityId}/attachments/${stamp}-${safeName}${ext}`;
+  }
+
+  return `${safeEntityType}/${safeEntityId}/${category}/${stamp}-${safeName}${ext}`;
+}
+
+function buildDownloadUrl(requestUrl, path, forceDownload) {
+  const objectPath = String(path || "").trim();
+  if (!objectPath) return "";
+
+  const url = new URL(requestUrl);
+  url.pathname = "/download";
+  url.search = "";
+  url.hash = "";
+  url.searchParams.set("path", objectPath);
+  if (forceDownload) {
+    url.searchParams.set("download", "1");
+  }
+  return url.toString();
+}
+
 function normalizeKind(value) {
   const kind = String(value || "").trim().toLowerCase();
   return ALLOWED_KINDS.has(kind) ? kind : "";
 }
 
-function normalizeInvestmentId(value) {
-  const id = String(value || "").trim();
-  if (!id) return "";
-  if (!/^[A-Za-z0-9_-]+$/.test(id)) return "";
-  return id;
+function normalizeSlug(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  if (!/^[A-Za-z0-9_-]+$/.test(raw)) return "";
+  return raw;
+}
+
+function normalizeNullableSlug(value) {
+  const normalized = normalizeSlug(value);
+  return normalized || null;
+}
+
+function normalizeNullableString(value) {
+  const normalized = String(value || "").trim();
+  return normalized || null;
+}
+
+function normalizeNullableInteger(value) {
+  const normalized = Number(value);
+  return Number.isInteger(normalized) ? normalized : null;
+}
+
+function normalizeStatus(value) {
+  const raw = String(value || "").trim().toLowerCase();
+  if (!raw) return "";
+  if (!/^[a-z0-9_-]+$/.test(raw)) return "";
+  return raw;
+}
+
+function normalizeCsvSlugs(value) {
+  return String(value || "")
+    .split(",")
+    .map((part) => normalizeSlug(part))
+    .filter(Boolean);
+}
+
+function clampLimit(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return LIST_LIMIT_DEFAULT;
+  return Math.min(LIST_LIMIT_MAX, Math.floor(parsed));
 }
 
 function normalizeObjectPath(value) {
   const raw = String(value || "").trim().replace(/^\/+/, "");
   if (!raw) return "";
   if (raw.includes("..") || raw.includes("\\")) return "";
-  if (!raw.startsWith("contracts/")) return "";
   return raw;
 }
 
@@ -235,22 +684,6 @@ function inferContentTypeFromName(fileName) {
   return "";
 }
 
-function buildUploadPath(investmentId, kind, originalFileName, contentType) {
-  if (kind === "original") {
-    return `contracts/${investmentId}/original.pdf`;
-  }
-
-  if (kind === "signed") {
-    return `contracts/${investmentId}/signed.pdf`;
-  }
-
-  const safeName = sanitizeFileName(originalFileName || "attachment");
-  const ext = safeName.includes(".") ? "" : inferExtensionFromType(contentType);
-  const stamp = Date.now();
-
-  return `contracts/${investmentId}/attachments/${stamp}-${safeName}${ext}`;
-}
-
 function inferExtensionFromType(contentType) {
   if (contentType === "application/pdf") return ".pdf";
   if (contentType === "image/png") return ".png";
@@ -274,6 +707,10 @@ function inferExtensionFromType(contentType) {
   return "";
 }
 
+function errorToMessage(error) {
+  return String(error?.message || error || "unknown_error").trim();
+}
+
 function toHeaderSafeFileName(value) {
   return String(value || "file")
     .replace(/[\r\n"]/g, "")
@@ -286,6 +723,7 @@ function json(status, payload) {
       status,
       headers: {
         "Content-Type": "application/json; charset=utf-8",
+        "Cache-Control": "no-store",
       },
     })
   );

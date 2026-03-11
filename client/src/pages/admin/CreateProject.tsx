@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { collection, doc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/_core/firebase";
 import { AUDIT_ACTIONS, auditedSetDoc, buildAuditSource } from "@/lib/auditLog";
-import { buildR2DownloadUrl, uploadInvestmentDocument } from "@/lib/documentUploadService";
+import { uploadInvestmentDocument } from "@/lib/documentUploadService";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -143,18 +143,23 @@ export default function CreateProject() {
   const [milestoneRows, setMilestoneRows] = useState<MilestoneRow[]>([newMilestoneRow()]);
   const [faqRows, setFaqRows] = useState<FaqRow[]>([newFaqRow()]);
   const galleryUrls = useMemo(() => splitLines(formData.galleryText), [formData.galleryText]);
-  const projectUploadId = `project_${draftProjectId}`;
 
+  // ARCHITECTURE NOTE (2026-03-12):
+  // The Worker response is the source of truth for uploaded file URLs.
+  // Do not rebuild download URLs locally when the Worker already returns fileUrl.
   const handleAttachmentFileUpload = async (index: number, file?: File | null) => {
     if (!file) return;
     try {
       setAttachmentRows((prev) => prev.map((r, i) => (i === index ? { ...r, uploading: true } : r)));
       const uploaded = await uploadInvestmentDocument({
-        investmentId: projectUploadId,
+        entityType: "project",
+        entityId: draftProjectId,
+        category: "project_attachment",
+        projectId: draftProjectId,
         file,
         kind: "attachment",
       });
-      const url = buildR2DownloadUrl(uploaded.path);
+      const url = uploaded.fileUrl;
       if (!url) throw new Error("Upload failed");
       setAttachmentRows((prev) =>
         prev.map((r, i) => (i === index ? { ...r, uploading: false, url, name: r.name || file.name } : r))
@@ -172,11 +177,14 @@ export default function CreateProject() {
     try {
       setCoverUploading(true);
       const uploaded = await uploadInvestmentDocument({
-        investmentId: projectUploadId,
+        entityType: "project",
+        entityId: draftProjectId,
+        category: "project_cover",
+        projectId: draftProjectId,
         file,
         kind: "attachment",
       });
-      const url = buildR2DownloadUrl(uploaded.path);
+      const url = uploaded.fileUrl;
       if (!url) throw new Error("Upload failed");
       setFormData((prev) => ({ ...prev, coverImage: url }));
       toast.success("تم رفع صورة الغلاف بنجاح");
@@ -197,11 +205,14 @@ export default function CreateProject() {
       const uploadedUrls = await Promise.all(
         selected.map(async (file) => {
           const uploaded = await uploadInvestmentDocument({
-            investmentId: projectUploadId,
+            entityType: "project",
+            entityId: draftProjectId,
+            category: "project_gallery",
+            projectId: draftProjectId,
             file,
             kind: "attachment",
           });
-          const url = buildR2DownloadUrl(uploaded.path);
+          const url = uploaded.fileUrl;
           if (!url) throw new Error("Upload failed");
           return url;
         })
@@ -269,6 +280,10 @@ export default function CreateProject() {
         locationAr: locAr,
         locationEn: locEn,
         location: locEn || locAr,
+        // LEGACY READ MODEL NOTE (2026-03-12):
+        // These URLs are still mirrored into Firestore so the existing project
+        // reader pages keep working during phase 1. The upload source of truth
+        // is still Cloudflare Worker -> R2 -> D1.
         coverImage: cleanStr(formData.coverImage),
         gallery: galleryUrls,
         images: galleryUrls,
