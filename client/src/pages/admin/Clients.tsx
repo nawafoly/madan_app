@@ -34,8 +34,9 @@ import {
 import { Users, Crown, Search, Edit2, FileText } from "lucide-react";
 import { toast } from "sonner";
 
-import { collection, onSnapshot, updateDoc, doc, Timestamp } from "firebase/firestore";
+import { collection, onSnapshot, doc, Timestamp } from "firebase/firestore";
 import { db } from "@/_core/firebase";
+import { AUDIT_ACTIONS, auditedUpdateDoc, buildAuditSource } from "@/lib/auditLog";
 
 type UserDoc = {
   id: string;
@@ -119,9 +120,28 @@ export default function ClientsManagement() {
   const handleUpdateVipStatus = async () => {
     if (!selectedUser) return;
     try {
-      await updateDoc(doc(db, "users", selectedUser.id), {
-        vipStatus,
-        vipTier: vipStatus === "vip" ? vipTier : "",
+      await auditedUpdateDoc({
+        ref: doc(db, "users", selectedUser.id),
+        data: {
+          vipStatus,
+          vipTier: vipStatus === "vip" ? vipTier : "",
+        },
+        action: AUDIT_ACTIONS.USER_UPDATED,
+        category: "user",
+        entityType: "user",
+        source: buildAuditSource({
+          area: "admin",
+          page: "Clients",
+          method: "update_vip_status",
+        }),
+        relatedIds: { userId: selectedUser.id },
+        message: `Updated VIP status for ${selectedUser.name || selectedUser.email || selectedUser.id}`,
+        meta: {
+          targetUserEmail: selectedUser.email || null,
+          targetUserName: selectedUser.name || null,
+          vipStatus,
+          vipTier: vipStatus === "vip" ? vipTier : "",
+        },
       });
       toast.success("تم تحديث حالة VIP");
       setIsVipDialogOpen(false);
@@ -133,8 +153,26 @@ export default function ClientsManagement() {
   const handleUpdateNotes = async () => {
     if (!selectedUser) return;
     try {
-      await updateDoc(doc(db, "users", selectedUser.id), {
-        internalNotes: notes,
+      await auditedUpdateDoc({
+        ref: doc(db, "users", selectedUser.id),
+        data: {
+          internalNotes: notes,
+        },
+        action: AUDIT_ACTIONS.USER_UPDATED,
+        category: "user",
+        entityType: "user",
+        source: buildAuditSource({
+          area: "admin",
+          page: "Clients",
+          method: "update_notes",
+        }),
+        relatedIds: { userId: selectedUser.id },
+        message: `Updated internal notes for ${selectedUser.name || selectedUser.email || selectedUser.id}`,
+        meta: {
+          targetUserEmail: selectedUser.email || null,
+          targetUserName: selectedUser.name || null,
+          noteLength: notes.trim().length,
+        },
       });
       toast.success("تم حفظ الملاحظات");
       setIsNotesDialogOpen(false);

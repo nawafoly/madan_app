@@ -8,6 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "check": "tsc --noEmit",
+    "audit:backfill": "node scripts/backfill-audit-logs.mjs",
+    "audit:backfill:dry": "node scripts/backfill-audit-logs.mjs --dry-run",
     "format": "prettier --write .",
     "test": "vitest run"
   },

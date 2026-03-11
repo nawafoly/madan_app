@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 
 import { useAuth } from "@/_core/hooks/useAuth";
 import { db } from "@/_core/firebase";
+import { AUDIT_ACTIONS, auditedSetDoc, buildAuditSource } from "@/lib/auditLog";
 import {
   findInterestRequestForInvestor,
   findInvestmentForInvestor,
@@ -24,7 +25,6 @@ import {
   getDoc,
   onSnapshot,
   collection,
-  addDoc,
   serverTimestamp,
   Timestamp,
 } from "firebase/firestore";
@@ -681,8 +681,8 @@ export default function ClientContractDetails() {
 
     try {
       setSendingFollowup(true);
-
-      await addDoc(collection(db, "messages"), {
+      const messageRef = doc(collection(db, "messages"));
+      const payload = {
         type: "client_followup",
         parentMessageId: parentMessageId || null,
         parentRequestId: parentRequestId || null,
@@ -703,6 +703,31 @@ export default function ClientContractDetails() {
           investmentId: investmentDoc?.id || null,
           contractId: contractDoc?.id || null,
         },
+      };
+      await auditedSetDoc({
+        ref: messageRef,
+        data: payload,
+        action: AUDIT_ACTIONS.MESSAGE_CREATED,
+        category: "message",
+        entityType: "message",
+        source: buildAuditSource({
+          area: "client",
+          page: "ContractDetails",
+          method: "create_followup",
+        }),
+        relatedIds: {
+          requestId: parentRequestId || undefined,
+          investmentId: investmentDoc?.id || undefined,
+          contractId: contractDoc?.id || undefined,
+          userId: user.uid,
+        },
+        message: `Created follow-up message ${messageRef.id}`,
+        meta: {
+          requestCode: parentRequestId || null,
+          investmentCode: investmentDoc?.id || null,
+          fileName: null,
+        },
+        ignoreFields: ["createdAt"],
       });
 
       toast.success("تم إرسال المتابعة ✅");

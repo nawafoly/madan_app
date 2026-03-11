@@ -61,9 +61,23 @@ service cloud.firestore {
 
     function clientSignedContractUpdateOnly() {
       let changed = request.resource.data.diff(resource.data).changedKeys();
+      let currentStatus = investmentStatusValue(resource.data);
+      let currentContractStatus = investmentContractStatusValue(resource.data);
+      let needsResign = (
+        (("signedContractOutdated" in resource.data) && resource.data.signedContractOutdated == true)
+        || (("requiresResign" in resource.data) && resource.data.requiresResign == true)
+        || (
+          ("contractVersion" in resource.data)
+          && resource.data.contractVersion is number
+          && ("signedAgainstContractVersion" in resource.data)
+          && request.resource.data.signedAgainstContractVersion is number
+          && resource.data.contractVersion > request.resource.data.signedAgainstContractVersion
+        )
+      );
       return signedIn()
         && request.auth.uid == resource.data.investorUid
         && !isInvestmentClosedData(resource.data)
+        && !(currentStatus in ["rejected", "cancelled"])
         && changed.hasOnly([
           "signedContract",
           "signedContractFile",
@@ -77,7 +91,11 @@ service cloud.firestore {
           "lastDocumentUploadAt",
           "lastDocumentUploadBy"
         ])
-        && resource.data.status in ["signing", "signed"]
+        && (
+          currentContractStatus in ["sent", "pending_signature"]
+          || (currentContractStatus == "draft" && hasOriginalContractData(resource.data))
+          || needsResign
+        )
         && request.resource.data.status == "signed"
         && request.resource.data.contractStatus == "under_review"
         && request.resource.data.lastDocumentUploadBy == request.auth.uid;
@@ -109,6 +127,31 @@ service cloud.firestore {
         || (("signedPath" in data)
           && data.signedPath is string
           && data.signedPath.size() > 0)
+      );
+    }
+
+    function hasOriginalContractData(data) {
+      return (
+        (("originalContract" in data)
+          && ("path" in data.originalContract)
+          && data.originalContract.path is string
+          && data.originalContract.path.size() > 0)
+        || (("contractFile" in data)
+          && ("path" in data.contractFile)
+          && data.contractFile.path is string
+          && data.contractFile.path.size() > 0)
+        || (("originalContractPath" in data)
+          && data.originalContractPath is string
+          && data.originalContractPath.size() > 0)
+        || (("originalPath" in data)
+          && data.originalPath is string
+          && data.originalPath.size() > 0)
+        || (("contractPath" in data)
+          && data.contractPath is string
+          && data.contractPath.size() > 0)
+        || (("documentPath" in data)
+          && data.documentPath is string
+          && data.documentPath.size() > 0)
       );
     }
 
@@ -393,6 +436,17 @@ match /admin_users/{docId} {
       // التعديل/الحذف للإدارة فقط
       allow update: if isOps() && isValidInterestRequestUpdateByOps();
       allow delete: if isOps();
+    }
+
+    /* =========================
+       audit_logs
+       - Read: owner/admin only
+       - Client writes are blocked; audit entries are created via trusted server code
+       - Append-only from the application's point of view
+    ========================= */
+    match /audit_logs/{id} {
+      allow read: if isAdmin();
+      allow create, update, delete: if false;
     }
 
     match /{document=**} {

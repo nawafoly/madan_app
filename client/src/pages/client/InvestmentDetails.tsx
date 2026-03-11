@@ -12,6 +12,7 @@ import { Separator } from "@/components/ui/separator";
 
 import { useAuth } from "@/_core/hooks/useAuth";
 import { db } from "@/_core/firebase";
+import { AUDIT_ACTIONS, auditedUpdateDoc, buildAuditSource } from "@/lib/auditLog";
 import {
   uploadInvestmentDocument,
   type InvestmentDocumentKind,
@@ -43,7 +44,6 @@ import {
 import {
   doc,
   onSnapshot,
-  updateDoc,
   serverTimestamp,
   Timestamp,
 } from "firebase/firestore";
@@ -697,6 +697,12 @@ export default function InvestmentDetails() {
   const [stLabel, stCls] = statusLabel(status);
   const baseHelp = stageHelp(status);
   const investmentId = String(investment?.id || "").trim();
+  const linkedRequestId =
+    normalizeLinkId(requestDoc?.id) ||
+    normalizeLinkId(investment?.requestId) ||
+    normalizeLinkId(investment?.sourceRequestId) ||
+    normalizeLinkId(investment?.sourceMessageId) ||
+    "";
   const currentProfitDigits = liveProfitDecimals(
     profitMetrics.profitPerSecond,
     profitMetrics.isLive
@@ -1015,7 +1021,9 @@ export default function InvestmentDetails() {
           originalVersion
       ) || 1;
       const now = serverTimestamp();
-      await updateDoc(invRef, {
+      await auditedUpdateDoc({
+        ref: invRef,
+        data: {
         signedContract: {
           fileName: uploaded.fileName,
           path: uploaded.path,
@@ -1047,6 +1055,29 @@ export default function InvestmentDetails() {
         signedAt: now,
         lastDocumentUploadAt: now,
         lastDocumentUploadBy: user?.uid || null,
+        },
+        action: AUDIT_ACTIONS.CONTRACT_SIGNED,
+        category: "contract",
+        entityType: "investment",
+        source: buildAuditSource({
+          area: "client",
+          page: "InvestmentDetails",
+          method: "upload_signed_contract",
+        }),
+        relatedIds: {
+          investmentId,
+          contractId: String(investment?.contractId || "") || undefined,
+          requestId: String(linkedRequestId || "") || undefined,
+          userId: user?.uid || undefined,
+        },
+        message: `Uploaded signed contract for investment ${investmentId}`,
+        meta: {
+          fileName: uploaded.fileName,
+          fileType: uploaded.contentType,
+          investmentCode: investmentId,
+          contractVersion: signedForVersion,
+        },
+        ignoreFields: ["lastDocumentUploadAt"],
       });
       setLocalUploadedByKind((prev) => ({
         ...prev,

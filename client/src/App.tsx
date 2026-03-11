@@ -164,7 +164,7 @@ function Router() {
 
         {/* ===== Admin: Audit Log ===== */}
         <Route path="/admin/audit-log">
-          <RequireRole allow={["owner"]}>
+          <RequireRole allow={["owner", "admin"]}>
             <AuditLogPage />
           </RequireRole>
         </Route>

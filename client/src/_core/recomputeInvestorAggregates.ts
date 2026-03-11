@@ -4,16 +4,31 @@ import {
   query,
   where,
   doc,
-  updateDoc,
   serverTimestamp,
 } from "firebase/firestore";
 
 import { db } from "@/_core/firebase";
+import {
+  AUDIT_ACTIONS,
+  auditedUpdateDoc,
+  buildAuditSource,
+  type AuditRelatedIds,
+  type AuditSourceInput,
+} from "@/lib/auditLog";
 import { getInvestmentProfitSnapshot, roundMoney } from "@shared/investmentProfit";
 
 type Investment = Record<string, any>;
 
-export async function recomputeInvestorAggregates(investorUid: string) {
+type RecomputeInvestorAuditContext = {
+  source?: AuditSourceInput;
+  reason?: string;
+  relatedIds?: AuditRelatedIds;
+};
+
+export async function recomputeInvestorAggregates(
+  investorUid: string,
+  auditContext: RecomputeInvestorAuditContext = {}
+) {
   const invRef = collection(db, "investments");
   const q = query(invRef, where("investorUid", "==", investorUid));
   const snap = await getDocs(q);
@@ -34,11 +49,33 @@ export async function recomputeInvestorAggregates(investorUid: string) {
 
   const userRef = doc(db, "users", investorUid);
 
-  await updateDoc(userRef, {
-    totalInvested: roundMoney(totalInvested),
-    expectedProfitTotal: roundMoney(expectedProfitTotal),
-    profitToDate: roundMoney(profitToDate),
-    aggregatesUpdatedAt: serverTimestamp(),
+  await auditedUpdateDoc({
+    ref: userRef,
+    data: {
+      totalInvested: roundMoney(totalInvested),
+      expectedProfitTotal: roundMoney(expectedProfitTotal),
+      profitToDate: roundMoney(profitToDate),
+      aggregatesUpdatedAt: serverTimestamp(),
+    },
+    action: AUDIT_ACTIONS.AGGREGATES_RECOMPUTED,
+    category: "finance",
+    entityType: "user",
+    source: buildAuditSource(
+      auditContext.source || {
+        area: "admin",
+        page: "recomputeInvestorAggregates",
+        method: "recompute",
+      }
+    ),
+    relatedIds: {
+      userId: investorUid,
+      ...(auditContext.relatedIds || {}),
+    },
+    message: `Recomputed investor aggregates for ${investorUid}`,
+    meta: {
+      reason: auditContext.reason || "client_recompute_investor_aggregates",
+      investmentCount: snap.size,
+    },
   });
 }
   

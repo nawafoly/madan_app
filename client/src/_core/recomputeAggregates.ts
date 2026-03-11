@@ -6,14 +6,26 @@ import {
   where,
   getDocs,
   doc,
-  updateDoc,
   serverTimestamp,
 } from "firebase/firestore";
+import {
+  AUDIT_ACTIONS,
+  auditedUpdateDoc,
+  buildAuditSource,
+  type AuditRelatedIds,
+  type AuditSourceInput,
+} from "@/lib/auditLog";
 
 type Totals = {
   currentAmount: number;
   investorsCount: number;
   pendingAmount?: number;
+};
+
+type RecomputeProjectAuditContext = {
+  source?: AuditSourceInput;
+  reason?: string;
+  relatedIds?: AuditRelatedIds;
 };
 
 const toNum = (v: any) => {
@@ -30,7 +42,10 @@ const PENDING = new Set([
   "approved",
 ]);
 
-export async function recomputeProjectAggregatesClient(projectId: string): Promise<Totals> {
+export async function recomputeProjectAggregatesClient(
+  projectId: string,
+  auditContext: RecomputeProjectAuditContext = {}
+): Promise<Totals> {
   const pid = String(projectId || "").trim();
   if (!pid) throw new Error("projectId missing");
 
@@ -58,11 +73,33 @@ export async function recomputeProjectAggregatesClient(projectId: string): Promi
     }
   });
 
-  await updateDoc(doc(db, "projects", pid), {
-    currentAmount,
-    investorsCount: investors.size,
-    pendingAmount,
-    updatedAt: serverTimestamp(),
+  await auditedUpdateDoc({
+    ref: doc(db, "projects", pid),
+    data: {
+      currentAmount,
+      investorsCount: investors.size,
+      pendingAmount,
+      updatedAt: serverTimestamp(),
+    },
+    action: AUDIT_ACTIONS.AGGREGATES_RECOMPUTED,
+    category: "finance",
+    entityType: "project",
+    source: buildAuditSource(
+      auditContext.source || {
+        area: "admin",
+        page: "recomputeProjectAggregatesClient",
+        method: "recompute",
+      }
+    ),
+    relatedIds: {
+      projectId: pid,
+      ...(auditContext.relatedIds || {}),
+    },
+    message: `Recomputed project aggregates for ${pid}`,
+    meta: {
+      reason: auditContext.reason || "client_recompute_project_aggregates",
+      investmentCount: snap.size,
+    },
   });
 
   return { currentAmount, investorsCount: investors.size, pendingAmount };

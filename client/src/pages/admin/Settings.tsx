@@ -49,6 +49,16 @@ import {
 
 import { db } from "@/_core/firebase";
 import {
+  AUDIT_ACTIONS,
+  auditedDeleteDoc,
+  auditedSetDoc,
+  auditedUpdateDoc,
+  buildAuditSource,
+  diffAuditTargets,
+  logAuditEvent,
+  runAuditedOperation,
+} from "@/lib/auditLog";
+import {
   addDoc,
   collection,
   deleteDoc,
@@ -460,13 +470,40 @@ export default function Settings() {
   /* =========================
      Save handlers
   ========================= */
+  const settingsSource = (method: string) =>
+    buildAuditSource({
+      area: "admin",
+      page: "Settings",
+      method,
+    });
+
+  const persistSettingsDoc = async (
+    docId: string,
+    payload: Record<string, unknown>,
+    message: string
+  ) => {
+    await auditedSetDoc({
+      ref: doc(db, "settings", docId),
+      data: {
+        ...payload,
+        updatedAt: serverTimestamp(),
+      },
+      action: AUDIT_ACTIONS.SETTINGS_UPDATED,
+      category: "settings",
+      entityType: "settings",
+      entityId: docId,
+      source: settingsSource(`save_${docId}`),
+      message,
+      meta: {
+        settingDocId: docId,
+      },
+      ignoreFields: ["updatedAt"],
+    });
+  };
 
   const saveApp = async () => {
     try {
-      await setDoc(doc(db, "settings", "app"), {
-        ...app,
-        updatedAt: serverTimestamp(),
-      });
+      await persistSettingsDoc("app", app as unknown as Record<string, unknown>, "Updated app settings");
       toast.success("تم حفظ الإعدادات العامة");
     } catch (e) {
       console.error(e);
@@ -476,10 +513,11 @@ export default function Settings() {
 
   const saveNotifications = async () => {
     try {
-      await setDoc(doc(db, "settings", "notifications"), {
-        ...notifications,
-        updatedAt: serverTimestamp(),
-      });
+      await persistSettingsDoc(
+        "notifications",
+        notifications as unknown as Record<string, unknown>,
+        "Updated notification settings"
+      );
       toast.success("تم حفظ إعدادات الإشعارات");
     } catch (e) {
       console.error(e);
@@ -489,10 +527,11 @@ export default function Settings() {
 
   const saveSecurity = async () => {
     try {
-      await setDoc(doc(db, "settings", "security"), {
-        ...security,
-        updatedAt: serverTimestamp(),
-      });
+      await persistSettingsDoc(
+        "security",
+        security as unknown as Record<string, unknown>,
+        "Updated security settings"
+      );
       toast.success("تم حفظ إعدادات الأمان");
     } catch (e) {
       console.error(e);
@@ -502,10 +541,11 @@ export default function Settings() {
 
   const saveLabels = async () => {
     try {
-      await setDoc(doc(db, "settings", "labels"), {
-        ...labels,
-        updatedAt: serverTimestamp(),
-      });
+      await persistSettingsDoc(
+        "labels",
+        labels as unknown as Record<string, unknown>,
+        "Updated labels settings"
+      );
       toast.success("تم حفظ المسميات");
     } catch (e) {
       console.error(e);
@@ -515,10 +555,11 @@ export default function Settings() {
 
   const saveFlags = async () => {
     try {
-      await setDoc(doc(db, "settings", "flags"), {
-        ...flags,
-        updatedAt: serverTimestamp(),
-      });
+      await persistSettingsDoc(
+        "flags",
+        flags as unknown as Record<string, unknown>,
+        "Updated feature flags"
+      );
       toast.success("تم حفظ Feature Flags");
     } catch (e) {
       console.error(e);
@@ -528,10 +569,11 @@ export default function Settings() {
 
   const saveContent = async () => {
     try {
-      await setDoc(doc(db, "settings", "content"), {
-        ...content,
-        updatedAt: serverTimestamp(),
-      });
+      await persistSettingsDoc(
+        "content",
+        content as unknown as Record<string, unknown>,
+        "Updated site content settings"
+      );
       toast.success("تم حفظ محتوى الموقع");
     } catch (e) {
       console.error(e);
@@ -544,9 +586,22 @@ export default function Settings() {
   ========================= */
 
   const saveRolesDoc = async (nextRoles: RoleDoc[]) => {
-    await setDoc(doc(db, "settings", "roles"), {
-      roles: nextRoles,
-      updatedAt: serverTimestamp(),
+    await auditedSetDoc({
+      ref: doc(db, "settings", "roles"),
+      data: {
+        roles: nextRoles,
+        updatedAt: serverTimestamp(),
+      },
+      action: AUDIT_ACTIONS.SETTINGS_UPDATED,
+      category: "settings",
+      entityType: "settings",
+      entityId: "roles",
+      source: settingsSource("save_roles"),
+      message: "Updated roles settings",
+      meta: {
+        roleCount: nextRoles.length,
+      },
+      ignoreFields: ["updatedAt"],
     });
   };
 
@@ -714,9 +769,9 @@ export default function Settings() {
 
     try {
       // ✅ ALWAYS upsert by emailLower (docId = email)
-      await setDoc(
-        doc(db, "admin_users", email),
-        {
+      await auditedSetDoc({
+        ref: doc(db, "admin_users", email),
+        data: {
           ...adminForm,
           displayName,
           email,
@@ -728,14 +783,38 @@ export default function Settings() {
           createdAt: (adminForm as any).createdAt ?? serverTimestamp(),
           updatedAt: serverTimestamp(),
         },
-        { merge: true }
-      );
+        options: { merge: true },
+        action: editingAdminId ? AUDIT_ACTIONS.USER_UPDATED : AUDIT_ACTIONS.USER_CREATED,
+        category: "user",
+        entityType: "user",
+        source: settingsSource(editingAdminId ? "update_admin_user" : "create_admin_user"),
+        relatedIds: { userId: email },
+        message: `${editingAdminId ? "Updated" : "Created"} admin user ${email}`,
+        meta: {
+          roleKey,
+          permissionsAllow,
+          permissionsDeny,
+          targetUserEmail: email,
+        },
+        ignoreFields: ["updatedAt"],
+      });
 
       // ✅ تنظيف تلقائي: لو كنت تعدّل سجل قديم (random id) أو تغير الإيميل
       // احذف الوثيقة القديمة إذا كانت مختلفة عن email الحالي
       if (editingAdminId && editingAdminId !== email) {
         try {
-          await deleteDoc(doc(db, "admin_users", editingAdminId));
+          await auditedDeleteDoc({
+            ref: doc(db, "admin_users", editingAdminId),
+            action: AUDIT_ACTIONS.USER_UPDATED,
+            category: "user",
+            entityType: "user",
+            source: settingsSource("cleanup_old_admin_user"),
+            relatedIds: { userId: editingAdminId },
+            message: `Removed stale admin user record ${editingAdminId}`,
+            meta: {
+              replacedBy: email,
+            },
+          });
         } catch {
           // ignore
         }
@@ -753,9 +832,21 @@ export default function Settings() {
   const handleToggleAdminActive = async (u: AdminUserDoc) => {
     try {
       const id = (u.email || u.id || "").trim().toLowerCase(); // ✅ canonical
-      await updateDoc(doc(db, "admin_users", id), {
-        isActive: !u.isActive,
-        updatedAt: serverTimestamp(),
+      await auditedUpdateDoc({
+        ref: doc(db, "admin_users", id),
+        data: {
+          isActive: !u.isActive,
+          updatedAt: serverTimestamp(),
+        },
+        action: u.isActive ? AUDIT_ACTIONS.USER_DISABLED : AUDIT_ACTIONS.USER_ENABLED,
+        category: "user",
+        entityType: "user",
+        source: settingsSource(u.isActive ? "disable_admin_user" : "enable_admin_user"),
+        relatedIds: { userId: id },
+        message: `${u.isActive ? "Disabled" : "Enabled"} admin user ${id}`,
+        meta: {
+          targetUserEmail: id,
+        },
       });
       toast.success(u.isActive ? "تم تعطيل الحساب" : "تم تفعيل الحساب");
     } catch (e) {
@@ -768,7 +859,18 @@ export default function Settings() {
   const handleDeleteAdmin = async (u: AdminUserDoc) => {
     try {
       const id = (u.email || u.id || "").trim().toLowerCase(); // ✅ canonical
-      await deleteDoc(doc(db, "admin_users", id));
+      await auditedDeleteDoc({
+        ref: doc(db, "admin_users", id),
+        action: AUDIT_ACTIONS.USER_UPDATED,
+        category: "user",
+        entityType: "user",
+        source: settingsSource("delete_admin_user"),
+        relatedIds: { userId: id },
+        message: `Deleted admin user ${id}`,
+        meta: {
+          targetUserEmail: id,
+        },
+      });
       toast.success("تم حذف الحساب");
     } catch (e) {
       console.error(e);
@@ -801,6 +903,8 @@ export default function Settings() {
 
       const userDoc = snap.docs[0];
       const userData = userDoc.data() as any;
+      const beforeAdminSnap = await getDoc(doc(db, "admin_users", email));
+      const beforeAdminData = beforeAdminSnap.exists() ? beforeAdminSnap.data() : null;
 
       // ✅ (1) تحديث role داخل users
       await updateDoc(doc(db, "users", userDoc.id), {
@@ -827,6 +931,35 @@ export default function Settings() {
         { merge: true }
       );
 
+      const refreshedUserSnap = await getDoc(doc(db, "users", userDoc.id));
+      const refreshedAdminSnap = await getDoc(doc(db, "admin_users", email));
+      await logAuditEvent({
+        action: AUDIT_ACTIONS.USER_ROLE_UPDATED,
+        category: "user",
+        entityType: "user",
+        entityId: userDoc.id,
+        entityPath: `users/${userDoc.id}`,
+        source: settingsSource("promote_existing_user"),
+        relatedIds: { userId: userDoc.id },
+        message: `Promoted user ${email} to ${roleKey}`,
+        changes: diffAuditTargets([
+          {
+            label: "user",
+            before: userData,
+            after: refreshedUserSnap.exists() ? refreshedUserSnap.data() : null,
+          },
+          {
+            label: "admin_user",
+            before: beforeAdminData,
+            after: refreshedAdminSnap.exists() ? refreshedAdminSnap.data() : null,
+          },
+        ]),
+        meta: {
+          roleKey,
+          targetUserEmail: email,
+        },
+      });
+
       toast.success(`تمت الترقية + إضافته لحسابات الإدارة: ${email} → ${roleKey}`);
       setPromoteEmail("");
       setPromoteRoleKey("accountant");
@@ -849,9 +982,9 @@ export default function Settings() {
     if (!roleKey) return toast.error("اختر Role");
 
     try {
-      await setDoc(
-        doc(db, "role_invites", email),
-        {
+      await auditedSetDoc({
+        ref: doc(db, "role_invites", email),
+        data: {
           email,
           roleKey,
           isActive: true,
@@ -859,8 +992,19 @@ export default function Settings() {
           updatedAt: serverTimestamp(),
           createdAt: serverTimestamp(),
         },
-        { merge: true }
-      );
+        options: { merge: true },
+        action: AUDIT_ACTIONS.ROLE_INVITE_CREATED,
+        category: "user",
+        entityType: "user",
+        source: settingsSource("upsert_role_invite"),
+        relatedIds: { userId: email },
+        message: `Upserted role invite for ${email}`,
+        meta: {
+          roleKey,
+          note: inviteNotes.trim() || null,
+        },
+        ignoreFields: ["updatedAt"],
+      });
 
       toast.success("تم حفظ الدعوة — سيتم تطبيق الدور عند أول تسجيل دخول");
       setInviteEmail("");
@@ -874,9 +1018,21 @@ export default function Settings() {
 
   const toggleInviteActive = async (inv: RoleInviteDoc) => {
     try {
-      await updateDoc(doc(db, "role_invites", inv.id), {
-        isActive: !inv.isActive,
-        updatedAt: serverTimestamp(),
+      await auditedUpdateDoc({
+        ref: doc(db, "role_invites", inv.id),
+        data: {
+          isActive: !inv.isActive,
+          updatedAt: serverTimestamp(),
+        },
+        action: AUDIT_ACTIONS.ROLE_INVITE_UPDATED,
+        category: "user",
+        entityType: "user",
+        source: settingsSource("toggle_role_invite"),
+        relatedIds: { userId: inv.id },
+        message: `${inv.isActive ? "Disabled" : "Enabled"} role invite ${inv.id}`,
+        meta: {
+          roleKey: inv.roleKey,
+        },
       });
       toast.success(inv.isActive ? "تم تعطيل الدعوة" : "تم تفعيل الدعوة");
     } catch (e) {
@@ -887,7 +1043,15 @@ export default function Settings() {
 
   const deleteInvite = async (id: string) => {
     try {
-      await deleteDoc(doc(db, "role_invites", id));
+      await auditedDeleteDoc({
+        ref: doc(db, "role_invites", id),
+        action: AUDIT_ACTIONS.ROLE_INVITE_DELETED,
+        category: "user",
+        entityType: "user",
+        source: settingsSource("delete_role_invite"),
+        relatedIds: { userId: id },
+        message: `Deleted role invite ${id}`,
+      });
       toast.success("تم حذف الدعوة");
     } catch (e) {
       console.error(e);
@@ -932,44 +1096,66 @@ export default function Settings() {
 
   const applyImport = async (payload: SettingsExport) => {
     const s = payload.settings;
-
-    await Promise.all([
-      setDoc(doc(db, "settings", "app"), {
-        ...s.app,
-        importedAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      }),
-      setDoc(doc(db, "settings", "notifications"), {
-        ...s.notifications,
-        importedAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      }),
-      setDoc(doc(db, "settings", "security"), {
-        ...s.security,
-        importedAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      }),
-      setDoc(doc(db, "settings", "roles"), {
-        roles: s.roles,
-        importedAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      }),
-      setDoc(doc(db, "settings", "labels"), {
-        ...s.labels,
-        importedAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      }),
-      setDoc(doc(db, "settings", "flags"), {
-        ...s.flags,
-        importedAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      }),
-      setDoc(doc(db, "settings", "content"), {
-        ...s.content,
-        importedAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      }),
-    ]);
+    await runAuditedOperation({
+      action: AUDIT_ACTIONS.SETTINGS_IMPORTED,
+      category: "settings",
+      entityType: "settings",
+      entityId: "bulk_import",
+      source: settingsSource("import"),
+      message: "Imported settings payload",
+      meta: {
+        sections: ["app", "notifications", "security", "roles", "labels", "flags", "content"],
+        roleCount: s.roles.length,
+      },
+      targets: [
+        { ref: doc(db, "settings", "app"), entityType: "settings", label: "app" },
+        { ref: doc(db, "settings", "notifications"), entityType: "settings", label: "notifications" },
+        { ref: doc(db, "settings", "security"), entityType: "settings", label: "security" },
+        { ref: doc(db, "settings", "roles"), entityType: "settings", label: "roles" },
+        { ref: doc(db, "settings", "labels"), entityType: "settings", label: "labels" },
+        { ref: doc(db, "settings", "flags"), entityType: "settings", label: "flags" },
+        { ref: doc(db, "settings", "content"), entityType: "settings", label: "content" },
+      ],
+      execute: async () => {
+        await Promise.all([
+          setDoc(doc(db, "settings", "app"), {
+            ...s.app,
+            importedAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          }),
+          setDoc(doc(db, "settings", "notifications"), {
+            ...s.notifications,
+            importedAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          }),
+          setDoc(doc(db, "settings", "security"), {
+            ...s.security,
+            importedAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          }),
+          setDoc(doc(db, "settings", "roles"), {
+            roles: s.roles,
+            importedAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          }),
+          setDoc(doc(db, "settings", "labels"), {
+            ...s.labels,
+            importedAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          }),
+          setDoc(doc(db, "settings", "flags"), {
+            ...s.flags,
+            importedAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          }),
+          setDoc(doc(db, "settings", "content"), {
+            ...s.content,
+            importedAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          }),
+        ]);
+      },
+    });
 
     setApp(s.app);
     setNotifications(s.notifications);

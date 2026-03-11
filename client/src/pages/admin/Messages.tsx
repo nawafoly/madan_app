@@ -9,12 +9,10 @@ import {
   doc,
   getDocs,
   onSnapshot,
-  updateDoc,
   Timestamp,
   serverTimestamp,
   runTransaction,
   getDoc,
-  addDoc,
   arrayUnion,
   query,
   orderBy,
@@ -23,6 +21,12 @@ import {
 import { db } from "@/_core/firebase";
 import { resolveInvestmentActivationTerms } from "@shared/investmentActivation";
 import { useAuth } from "@/_core/hooks/useAuth";
+import {
+  AUDIT_ACTIONS,
+  auditedUpdateDoc,
+  buildAuditSource,
+  runAuditedOperation,
+} from "@/lib/auditLog";
 import { uploadInvestmentDocument } from "@/lib/documentUploadService";
 
 import { Button } from "@/components/ui/button";
@@ -524,6 +528,13 @@ function normalizeRole(raw: any): AppRole {
 export default function MessagesManagement() {
   const REQUESTS_COL = "interest_requests"; // ✅ مصدر الحقيقة
 
+  const messagesAuditSource = (method: string) =>
+    buildAuditSource({
+      area: "admin",
+      page: "Messages",
+      method,
+    });
+
   const { user } = useAuth();
 
   const [loading, setLoading] = useState(true);
@@ -562,6 +573,17 @@ export default function MessagesManagement() {
   const [view, setView] = useState<"all" | "open" | "completed" | "rejected">(
     "open"
   );
+  const [requestedRequestId, setRequestedRequestId] = useState(() => {
+    if (typeof window === "undefined") return "";
+    return new URLSearchParams(window.location.search).get("requestId")?.trim() || "";
+  });
+
+  const clearRequestedRequestId = () => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("requestId");
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  };
 
   /* =========================
     ✅ تحميل المشاريع مرة وحدة (عشان نعرض اسم المشروع في الجدول)
@@ -877,6 +899,45 @@ export default function MessagesManagement() {
     }
   };
 
+  const openMessageDetails = async (rawMessage: any) => {
+    const fixed = normalizeForDisplay(rawMessage);
+    const normalizedOne = {
+      ...fixed,
+      ...normalizeForDisplay(fixed),
+    };
+
+    const linkedInvestmentDoc = await loadInvestmentDoc(
+      normalizedOne?.investmentId || null,
+      normalizedOne
+    );
+    const hydratedMessage = linkedInvestmentDoc
+      ? {
+          ...normalizedOne,
+          investmentId: linkedInvestmentDoc.id,
+          contractId: pick(
+            normalizedOne?.contractId,
+            linkedInvestmentDoc?.contractId
+          ),
+        }
+      : normalizedOne;
+
+    setSelectedMessage(hydratedMessage);
+    setInternalNotes(String(hydratedMessage.internalNotes || ""));
+    setApprovedAmount(
+      hydratedMessage?.approvedAmount != null
+        ? String(hydratedMessage.approvedAmount)
+        : hydratedMessage?.estimatedAmount != null
+        ? String(hydratedMessage.estimatedAmount)
+        : ""
+    );
+
+    await loadContractDoc(
+      pick(hydratedMessage?.contractId, linkedInvestmentDoc?.contractId) || null
+    );
+
+    setIsDetailDialogOpen(true);
+  };
+
   const activeInvestmentId = pick(investmentDoc?.id, selectedMessage?.investmentId);
   const activeContractId = pick(investmentDoc?.contractId, selectedMessage?.contractId);
 
@@ -902,6 +963,42 @@ export default function MessagesManagement() {
       unsub();
     };
   }, [isDetailDialogOpen, selectedMessage?.id]);
+
+  useEffect(() => {
+    if (!isDetailDialogOpen || !selectedMessage?.id || selectedMessage?.adminSeenAt) return;
+
+    const run = async () => {
+      try {
+        await auditedUpdateDoc({
+          ref: doc(db, REQUESTS_COL, selectedMessage.id),
+          data: {
+            adminSeenAt: serverTimestamp(),
+            adminSeenByUid: user?.uid || null,
+            adminSeenByEmail: user?.email || null,
+            updatedAt: serverTimestamp(),
+          },
+          action: AUDIT_ACTIONS.REQUEST_REVIEWED,
+          category: "request",
+          entityType: "request",
+          source: messagesAuditSource("detail_open_seen"),
+          relatedIds: { requestId: selectedMessage.id },
+          message: `Marked request ${selectedMessage.id} as seen in detail view`,
+          recordFailure: false,
+        });
+      } catch (e) {
+        console.error(e);
+      }
+    };
+
+    void run();
+  }, [
+    REQUESTS_COL,
+    isDetailDialogOpen,
+    selectedMessage?.id,
+    selectedMessage?.adminSeenAt,
+    user?.uid,
+    user?.email,
+  ]);
 
   useEffect(() => {
     if (!isDetailDialogOpen || !activeInvestmentId) return;
@@ -1054,6 +1151,25 @@ export default function MessagesManagement() {
   ========================= */
   const normalized = useMemo(() => messages.map(normalizeForDisplay), [messages]);
 
+  useEffect(() => {
+    if (!requestedRequestId || !normalized.length || isDetailDialogOpen) return;
+
+    const target = normalized.find(
+      (message) => String(message?.id || "").trim() === requestedRequestId
+    );
+    if (!target) return;
+
+    setRequestedRequestId("");
+    clearRequestedRequestId();
+    void openMessageDetails(target);
+  }, [
+    requestedRequestId,
+    normalized,
+    isDetailDialogOpen,
+    clearRequestedRequestId,
+    openMessageDetails,
+  ]);
+
   const filtered = useMemo(() => {
     if (view === "all") return normalized;
 
@@ -1128,13 +1244,25 @@ export default function MessagesManagement() {
         ...myActor(user, myRole),
       });
 
-      await updateDoc(doc(db, REQUESTS_COL, selectedMessage.id), {
-        internalNotes: internalNotes || null,
-        updatedAt: serverTimestamp(),
-        updatedByUid: user?.uid || null,
-        updatedByEmail: user?.email || null,
-        events: arrayUnion(ev),
-        ...actionMeta(user, myRole),
+      await auditedUpdateDoc({
+        ref: doc(db, REQUESTS_COL, selectedMessage.id),
+        data: {
+          internalNotes: internalNotes || null,
+          updatedAt: serverTimestamp(),
+          updatedByUid: user?.uid || null,
+          updatedByEmail: user?.email || null,
+          events: arrayUnion(ev),
+          ...actionMeta(user, myRole),
+        },
+        action: AUDIT_ACTIONS.REQUEST_UPDATED,
+        category: "request",
+        entityType: "request",
+        source: messagesAuditSource("save_notes"),
+        relatedIds: { requestId: selectedMessage.id },
+        message: `Updated internal notes for request ${selectedMessage.id}`,
+        meta: {
+          noteLength: (internalNotes || "").trim().length,
+        },
       });
 
       toast.success("تم حفظ الملاحظات");
@@ -1185,14 +1313,27 @@ export default function MessagesManagement() {
       meta: { status: next.status, stageRole: next.stageRole },
     });
 
-    await updateDoc(doc(db, REQUESTS_COL, selectedMessage.id), {
-      status: next.status,
-      stageRole: next.stageRole,
-      updatedAt: serverTimestamp(),
-      updatedByUid: user?.uid || null,
-      updatedByEmail: user?.email || null,
-      events: arrayUnion(ev),
-      ...actionMeta(user, myRole),
+    await auditedUpdateDoc({
+      ref: doc(db, REQUESTS_COL, selectedMessage.id),
+      data: {
+        status: next.status,
+        stageRole: next.stageRole,
+        updatedAt: serverTimestamp(),
+        updatedByUid: user?.uid || null,
+        updatedByEmail: user?.email || null,
+        events: arrayUnion(ev),
+        ...actionMeta(user, myRole),
+      },
+      action: AUDIT_ACTIONS.REQUEST_STATUS_CHANGED,
+      category: "request",
+      entityType: "request",
+      source: messagesAuditSource("move_request"),
+      relatedIds: { requestId: selectedMessage.id },
+      message: `Moved request ${selectedMessage.id} to ${next.status}/${next.stageRole}`,
+      meta: {
+        nextStatus: next.status,
+        nextStageRole: next.stageRole,
+      },
     });
 
     setSelectedMessage((prev: any) =>
@@ -1280,11 +1421,23 @@ export default function MessagesManagement() {
           meta: { messageId: selectedMessage.id },
         });
 
-        await updateDoc(doc(db, REQUESTS_COL, selectedMessage.id), {
-          status: "no_account",
-          stageRole: "client" as StageRole,
-          events: arrayUnion(ev),
-          ...actionMeta(user, myRole),
+        await auditedUpdateDoc({
+          ref: doc(db, REQUESTS_COL, selectedMessage.id),
+          data: {
+            status: "no_account",
+            stageRole: "client" as StageRole,
+            events: arrayUnion(ev),
+            ...actionMeta(user, myRole),
+          },
+          action: AUDIT_ACTIONS.REQUEST_STATUS_CHANGED,
+          category: "request",
+          entityType: "request",
+          source: messagesAuditSource("mark_no_account"),
+          relatedIds: { requestId: selectedMessage.id },
+          message: `Marked request ${selectedMessage.id} as no_account`,
+          meta: {
+            nextStatus: "no_account",
+          },
         });
 
         toast.warning("هذا الطلب بدون حساب — تم تحويله إلى: بدون حساب");
@@ -1352,7 +1505,24 @@ export default function MessagesManagement() {
 
       let finalInvestmentId = "";
 
-      await runTransaction(db, async (tx) => {
+      await runAuditedOperation({
+        action: AUDIT_ACTIONS.REQUEST_CONVERTED_TO_INVESTMENT,
+        category: "request",
+        entityType: "request",
+        source: messagesAuditSource("approve_request_create_investment"),
+        relatedIds: {
+          requestId,
+          projectId: projectId || undefined,
+          userId: investorUid || undefined,
+        },
+        message: `Converted request ${requestId} into investment`,
+        meta: {
+          amount,
+          projectName: projectTitle || null,
+        },
+        targets: [{ ref: msgRef, entityType: "request" }],
+        execute: async () =>
+          runTransaction(db, async (tx) => {
         const msgSnap = await tx.get(msgRef);
         if (!msgSnap.exists()) throw new Error("request_not_found");
 
@@ -1489,6 +1659,7 @@ export default function MessagesManagement() {
           events: arrayUnion(ev),
           ...actionMeta(user, myRole),
         });
+          }),
       });
 
       toast.success("تم قبول الطلب وإنشاء الاستثمار ✅");
@@ -1558,7 +1729,27 @@ export default function MessagesManagement() {
         file: draftFile,
         kind: "original",
       });
-      await runTransaction(db, async (tx) => {
+      await runAuditedOperation({
+        action: AUDIT_ACTIONS.CONTRACT_UPLOADED,
+        category: "contract",
+        entityType: "investment",
+        source: messagesAuditSource("upload_contract"),
+        relatedIds: {
+          requestId: selectedMessage.id,
+          investmentId,
+          contractId: String(selectedMessage.contractId || "") || undefined,
+        },
+        message: `Uploaded contract for investment ${investmentId}`,
+        meta: {
+          fileName: uploaded.fileName,
+          fileType: uploaded.contentType,
+        },
+        targets: [
+          { ref: doc(db, REQUESTS_COL, selectedMessage.id), entityType: "request", label: "request" },
+          { ref: doc(db, "investments", investmentId), entityType: "investment" },
+        ],
+        execute: async () =>
+          runTransaction(db, async (tx) => {
         const msgRef = doc(db, REQUESTS_COL, selectedMessage.id);
         const invRef = doc(db, "investments", investmentId);
         const invSnap = await tx.get(invRef);
@@ -1640,6 +1831,7 @@ export default function MessagesManagement() {
           },
           { merge: true }
         );
+          }),
       });
 
       setLocalUploadedByKind({
@@ -1675,7 +1867,19 @@ export default function MessagesManagement() {
     try {
       setFinalizeBusy(true);
 
-      await runTransaction(db, async (tx) => {
+      await runAuditedOperation({
+        action: AUDIT_ACTIONS.REQUEST_STATUS_CHANGED,
+        category: "request",
+        entityType: "request",
+        source: messagesAuditSource("finalize_request"),
+        relatedIds: { requestId: selectedMessage.id },
+        message: `Finalized request ${selectedMessage.id}`,
+        meta: {
+          nextStatus: "completed",
+        },
+        targets: [{ ref: doc(db, REQUESTS_COL, selectedMessage.id), entityType: "request" }],
+        execute: async () =>
+          runTransaction(db, async (tx) => {
         const msgRef = doc(db, REQUESTS_COL, selectedMessage.id);
 
         tx.update(msgRef, {
@@ -1698,6 +1902,7 @@ export default function MessagesManagement() {
           ),
           ...actionMeta(user, myRole),
         });
+          }),
       });
 
       toast.success("تم الترحيل النهائي ✅");
@@ -1731,7 +1936,23 @@ export default function MessagesManagement() {
       setFinalizeBusy(true);
       const verifiedAt = serverTimestamp();
 
-      await runTransaction(db, async (tx) => {
+      await runAuditedOperation({
+        action: AUDIT_ACTIONS.CONTRACT_VERIFIED,
+        category: "contract",
+        entityType: "investment",
+        source: messagesAuditSource("verify_signed_contract"),
+        relatedIds: {
+          requestId: selectedMessage.id,
+          investmentId,
+          contractId: String(selectedMessage.contractId || "") || undefined,
+        },
+        message: `Verified signed contract for investment ${investmentId}`,
+        targets: [
+          { ref: doc(db, REQUESTS_COL, selectedMessage.id), entityType: "request", label: "request" },
+          { ref: doc(db, "investments", investmentId), entityType: "investment" },
+        ],
+        execute: async () =>
+          runTransaction(db, async (tx) => {
         const msgRef = doc(db, REQUESTS_COL, selectedMessage.id);
         const invRef = doc(db, "investments", investmentId);
 
@@ -1924,6 +2145,7 @@ export default function MessagesManagement() {
           ),
           ...actionMeta(user, myRole),
         });
+          }),
       });
 
       toast.success("تم التحقق من العقد الموقّع.");
@@ -1967,7 +2189,22 @@ export default function MessagesManagement() {
       const activatedAtDate = activatedAt.toDate();
       const activatedAtServer = serverTimestamp();
 
-      await runTransaction(db, async (tx) => {
+      await runAuditedOperation({
+        action: AUDIT_ACTIONS.INVESTMENT_ACTIVATED,
+        category: "investment",
+        entityType: "investment",
+        source: messagesAuditSource("activate_investment"),
+        relatedIds: {
+          requestId: selectedMessage.id,
+          investmentId,
+        },
+        message: `Activated investment ${investmentId}`,
+        targets: [
+          { ref: doc(db, REQUESTS_COL, selectedMessage.id), entityType: "request", label: "request" },
+          { ref: doc(db, "investments", investmentId), entityType: "investment" },
+        ],
+        execute: async () =>
+          runTransaction(db, async (tx) => {
         const msgRef = doc(db, REQUESTS_COL, selectedMessage.id);
         const invRef = doc(db, "investments", investmentId);
 
@@ -2154,6 +2391,7 @@ export default function MessagesManagement() {
           ),
           ...actionMeta(user, myRole),
         });
+          }),
       });
 
       toast.success("تم اعتماد العقد وتفعيل الاستثمار");
@@ -2200,14 +2438,23 @@ export default function MessagesManagement() {
         meta: { messageId: selectedMessage.id },
       });
 
-      await updateDoc(doc(db, REQUESTS_COL, selectedMessage.id), {
-        status: "rejected",
-        stageRole: "completed" as StageRole,
-        rejectedAt: serverTimestamp(),
-        rejectedByUid: user?.uid || null,
-        rejectedByEmail: user?.email || null,
-        events: arrayUnion(ev),
-        ...actionMeta(user, myRole),
+      await auditedUpdateDoc({
+        ref: doc(db, REQUESTS_COL, selectedMessage.id),
+        data: {
+          status: "rejected",
+          stageRole: "completed" as StageRole,
+          rejectedAt: serverTimestamp(),
+          rejectedByUid: user?.uid || null,
+          rejectedByEmail: user?.email || null,
+          events: arrayUnion(ev),
+          ...actionMeta(user, myRole),
+        },
+        action: AUDIT_ACTIONS.REQUEST_REJECTED,
+        category: "request",
+        entityType: "request",
+        source: messagesAuditSource("reject_request"),
+        relatedIds: { requestId: selectedMessage.id },
+        message: `Rejected request ${selectedMessage.id}`,
       });
 
       toast.success("تم رفض الطلب");
@@ -2236,14 +2483,23 @@ export default function MessagesManagement() {
         ...myActor(user, myRole),
       });
 
-      await updateDoc(doc(db, REQUESTS_COL, selectedMessage.id), {
-        status: "reviewing",
-        stageRole: "review" as StageRole,
-        reopenedAt: serverTimestamp(),
-        reopenedByUid: user?.uid || null,
-        reopenedByEmail: user?.email || null,
-        events: arrayUnion(ev),
-        ...actionMeta(user, myRole),
+      await auditedUpdateDoc({
+        ref: doc(db, REQUESTS_COL, selectedMessage.id),
+        data: {
+          status: "reviewing",
+          stageRole: "review" as StageRole,
+          reopenedAt: serverTimestamp(),
+          reopenedByUid: user?.uid || null,
+          reopenedByEmail: user?.email || null,
+          events: arrayUnion(ev),
+          ...actionMeta(user, myRole),
+        },
+        action: AUDIT_ACTIONS.REQUEST_REOPENED,
+        category: "request",
+        entityType: "request",
+        source: messagesAuditSource("reopen_request"),
+        relatedIds: { requestId: selectedMessage.id },
+        message: `Reopened request ${selectedMessage.id}`,
       });
 
       toast.success("تمت إعادة فتح الطلب");
@@ -2479,17 +2735,26 @@ export default function MessagesManagement() {
     });
 
     try {
-      await updateDoc(doc(db, REQUESTS_COL, selectedMessage.id), {
-        status: "approved",
-        stageRole: "investment" as StageRole,
-        initialApprovedAt: serverTimestamp(),
-        initialApprovedByUid: user?.uid || null,
-        initialApprovedByEmail: user?.email || null,
-        updatedAt: serverTimestamp(),
-        updatedByUid: user?.uid || null,
-        updatedByEmail: user?.email || null,
-        events: arrayUnion(ev),
-        ...actionMeta(user, myRole),
+      await auditedUpdateDoc({
+        ref: doc(db, REQUESTS_COL, selectedMessage.id),
+        data: {
+          status: "approved",
+          stageRole: "investment" as StageRole,
+          initialApprovedAt: serverTimestamp(),
+          initialApprovedByUid: user?.uid || null,
+          initialApprovedByEmail: user?.email || null,
+          updatedAt: serverTimestamp(),
+          updatedByUid: user?.uid || null,
+          updatedByEmail: user?.email || null,
+          events: arrayUnion(ev),
+          ...actionMeta(user, myRole),
+        },
+        action: AUDIT_ACTIONS.REQUEST_INITIAL_APPROVED,
+        category: "request",
+        entityType: "request",
+        source: messagesAuditSource("initial_approve_request"),
+        relatedIds: { requestId: selectedMessage.id },
+        message: `Initially approved request ${selectedMessage.id}`,
       });
 
       setSelectedMessage((prev: any) =>
@@ -2725,44 +2990,7 @@ export default function MessagesManagement() {
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={async () => {
-                                const fixed = normalizeForDisplay(m);
-                                const normalizedOne = {
-                                  ...fixed,
-                                  ...normalizeForDisplay(fixed),
-                                };
-
-                                const linkedInvestmentDoc = await loadInvestmentDoc(
-                                  normalizedOne?.investmentId || null,
-                                  normalizedOne
-                                );
-                                const hydratedMessage = linkedInvestmentDoc
-                                  ? {
-                                      ...normalizedOne,
-                                      investmentId: linkedInvestmentDoc.id,
-                                      contractId: pick(
-                                        normalizedOne?.contractId,
-                                        linkedInvestmentDoc?.contractId
-                                      ),
-                                    }
-                                  : normalizedOne;
-
-                                setSelectedMessage(hydratedMessage);
-                                setInternalNotes(String(hydratedMessage.internalNotes || ""));
-                                setApprovedAmount(
-                                  hydratedMessage?.approvedAmount != null
-                                    ? String(hydratedMessage.approvedAmount)
-                                    : hydratedMessage?.estimatedAmount != null
-                                    ? String(hydratedMessage.estimatedAmount)
-                                    : ""
-                                );
-
-                                await loadContractDoc(
-                                  pick(hydratedMessage?.contractId, linkedInvestmentDoc?.contractId) || null
-                                );
-
-                                setIsDetailDialogOpen(true);
-                              }}
+                              onClick={() => void openMessageDetails(m)}
                             >
                               <Eye className="w-4 h-4 ml-1" />
                               عرض

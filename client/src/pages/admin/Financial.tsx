@@ -5,13 +5,18 @@ import {
   collection,
   doc,
   getDocs,
-  updateDoc,
   Timestamp,
   runTransaction,
   serverTimestamp,
 } from "firebase/firestore";
 
 import { db } from "@/_core/firebase";
+import {
+  AUDIT_ACTIONS,
+  auditedUpdateDoc,
+  buildAuditSource,
+  runAuditedOperation,
+} from "@/lib/auditLog";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -232,8 +237,36 @@ export default function Financial() {
 
     try {
       const inv = selectedInvestment;
+      const projectId = String(inv.projectId || "").trim();
+      const investmentRef = doc(db, "investments", inv.id);
+      const contractRef = doc(db, "contracts", String(inv.contractId || generatedContractRef.id));
 
-      await runTransaction(db, async (tx) => {
+      await runAuditedOperation({
+        action: AUDIT_ACTIONS.INVESTMENT_APPROVED,
+        category: "investment",
+        entityType: "investment",
+        source: buildAuditSource({
+          area: "admin",
+          page: "Financial",
+          method: "approve",
+        }),
+        relatedIds: {
+          investmentId: inv.id,
+          projectId: projectId || undefined,
+          contractId: contractRef.id,
+          userId: String(inv.investorUid || inv.userId || "") || undefined,
+        },
+        message: `Approved investment ${inv.id} and prepared contract ${contractRef.id}`,
+        meta: {
+          amount: toNumber(inv.amount, 0),
+          projectName: getProjectName(projectId),
+        },
+        targets: [
+          { ref: investmentRef, entityType: "investment" },
+          { ref: contractRef, entityType: "contract", label: "contract" },
+        ],
+        execute: async () =>
+          runTransaction(db, async (tx) => {
         const invRef = doc(db, "investments", inv.id);
         const invSnap = await tx.get(invRef);
         if (!invSnap.exists()) throw new Error("investment_not_found");
@@ -305,6 +338,7 @@ export default function Financial() {
           },
           { merge: true }
         );
+          }),
       });
 
       toast.success("تم اعتماد الطلب مبدئيًا وتجهيز مسار العقد");
@@ -320,7 +354,28 @@ export default function Financial() {
     if (!selectedInvestment) return;
 
     try {
-      await runTransaction(db, async (tx) => {
+      await runAuditedOperation({
+        action: AUDIT_ACTIONS.INVESTMENT_COMPLETED,
+        category: "investment",
+        entityType: "investment",
+        source: buildAuditSource({
+          area: "admin",
+          page: "Financial",
+          method: "close",
+        }),
+        relatedIds: {
+          investmentId: selectedInvestment.id,
+          projectId: String(selectedInvestment.projectId || "") || undefined,
+          userId: String(selectedInvestment.investorUid || selectedInvestment.userId || "") || undefined,
+        },
+        message: `Closed investment ${selectedInvestment.id} early`,
+        meta: {
+          closeDate,
+          projectName: getProjectName(String(selectedInvestment.projectId || "")),
+        },
+        targets: [{ ref: doc(db, "investments", selectedInvestment.id), entityType: "investment" }],
+        execute: async () =>
+          runTransaction(db, async (tx) => {
         const invRef = doc(db, "investments", selectedInvestment.id);
         const invSnap = await tx.get(invRef);
         if (!invSnap.exists()) throw new Error("investment_not_found");
@@ -383,6 +438,7 @@ export default function Financial() {
           updatedAt: new Date(),
         });
 
+          }),
       });
 
       toast.success("تم إنهاء الاستثمار بنجاح");
@@ -404,10 +460,31 @@ export default function Financial() {
 
     try {
       const invRef = doc(db, "investments", selectedInvestment.id);
-      await updateDoc(invRef, {
-        customRate: toNumber(customRate) || null,
-        customDuration: toNumber(customDuration) || null,
-        updatedAt: new Date(),
+      await auditedUpdateDoc({
+        ref: invRef,
+        data: {
+          customRate: toNumber(customRate) || null,
+          customDuration: toNumber(customDuration) || null,
+          updatedAt: new Date(),
+        },
+        action: AUDIT_ACTIONS.INVESTMENT_FINANCIALS_UPDATED,
+        category: "investment",
+        entityType: "investment",
+        source: buildAuditSource({
+          area: "admin",
+          page: "Financial",
+          method: "update_financials",
+        }),
+        relatedIds: {
+          investmentId: selectedInvestment.id,
+          projectId: String(selectedInvestment.projectId || "") || undefined,
+          userId: String(selectedInvestment.investorUid || selectedInvestment.userId || "") || undefined,
+        },
+        message: `Updated financial terms for investment ${selectedInvestment.id}`,
+        meta: {
+          customRate: toNumber(customRate) || null,
+          customDuration: toNumber(customDuration) || null,
+        },
       });
       toast.success("تم تحديث البيانات المالية");
       setIsEditDialogOpen(false);
@@ -428,10 +505,34 @@ export default function Financial() {
 
     try {
       const invRef = doc(db, "investments", selectedInvestment.id);
-      await updateDoc(invRef, {
-        status,
-        ...data,
-        updatedAt: new Date(),
+      await auditedUpdateDoc({
+        ref: invRef,
+        data: {
+          status,
+          ...data,
+          updatedAt: new Date(),
+        },
+        action:
+          status === "rejected"
+            ? AUDIT_ACTIONS.INVESTMENT_REJECTED
+            : AUDIT_ACTIONS.INVESTMENT_STATUS_CHANGED,
+        category: "investment",
+        entityType: "investment",
+        source: buildAuditSource({
+          area: "admin",
+          page: "Financial",
+          method: status === "rejected" ? "reject" : "update_status",
+        }),
+        relatedIds: {
+          investmentId: selectedInvestment.id,
+          projectId: String(selectedInvestment.projectId || "") || undefined,
+          userId: String(selectedInvestment.investorUid || selectedInvestment.userId || "") || undefined,
+        },
+        message: `Updated investment ${selectedInvestment.id} status to ${status}`,
+        meta: {
+          nextStatus: status,
+          rejectionReason: data?.rejectionReason || null,
+        },
       });
       toast.success("تم تحديث حالة الاستثمار");
       setIsRejectDialogOpen(false);

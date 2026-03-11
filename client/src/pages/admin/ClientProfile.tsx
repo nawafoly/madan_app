@@ -225,7 +225,15 @@ export default function ClientProfile() {
       setLoading(true);
 
       // ✅ تحديث حسابات العميل أول ما تفتح ملفه
-      await recomputeInvestorAggregates(userId);
+      await recomputeInvestorAggregates(userId, {
+        source: {
+          area: "admin",
+          page: "ClientProfile",
+          method: "manual_recompute",
+        },
+        reason: "client_profile_open_recompute",
+        relatedIds: { userId },
+      });
 
       // ✅ تحميل العميل
       const uSnap = await getDoc(doc(db, "users", userId));

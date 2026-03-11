@@ -31,9 +31,10 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { doc, getDoc, setDoc, collection, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, collection, serverTimestamp } from "firebase/firestore";
 import { db } from "@/_core/firebase";
 import { useAuth } from "@/_core/hooks/useAuth";
+import { AUDIT_ACTIONS, auditedSetDoc, buildAuditSource } from "@/lib/auditLog";
 
 type BiLabel = { ar?: string; en?: string };
 type LabelValue = string | BiLabel;
@@ -390,8 +391,7 @@ export default function ProjectDetails() {
       }
 
       const requestRef = doc(collection(db, "interest_requests"));
-
-      await setDoc(requestRef, {
+      const payload = {
         requestId: requestRef.id,
         type: "investment_request",
         projectId: project?.id || projectId,
@@ -432,6 +432,30 @@ export default function ProjectDetails() {
         source: "project_details",
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
+      };
+      await auditedSetDoc({
+        ref: requestRef,
+        data: payload,
+        action: AUDIT_ACTIONS.REQUEST_CREATED,
+        category: "request",
+        entityType: "request",
+        source: buildAuditSource({
+          area: "client",
+          page: "ProjectDetails",
+          method: "create_request",
+        }),
+        relatedIds: {
+          requestId: requestRef.id,
+          projectId: String(project?.id || projectId || ""),
+          userId: user.uid,
+        },
+        message: `Created interest request ${requestRef.id}`,
+        meta: {
+          projectName: project?.titleAr || project?.title || null,
+          amount,
+          requestCode: requestRef.id,
+        },
+        ignoreFields: ["updatedAt"],
       });
 
       setIsInterestFormOpen(false); // يقفل نموذج الاهتمام

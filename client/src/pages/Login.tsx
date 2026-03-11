@@ -7,9 +7,15 @@ import {
   sendPasswordResetEmail,
   updateProfile,
 } from "firebase/auth";
-import { doc, serverTimestamp, setDoc } from "firebase/firestore";
+import { doc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "@/_core/firebase";
 import { useAuth } from "@/_core/hooks/useAuth";
+import {
+  AUDIT_ACTIONS,
+  auditedSetDoc,
+  buildAuditSource,
+  logAuditEvent,
+} from "@/lib/auditLog";
 import { faEye, faEyeSlash } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 
@@ -118,7 +124,26 @@ export default function LoginPage() {
 
     try {
       if (mode === "login") {
-        await signInWithEmailAndPassword(auth, e, p);
+        const cred = await signInWithEmailAndPassword(auth, e, p);
+        await logAuditEvent({
+          action: AUDIT_ACTIONS.USER_LOGIN,
+          category: "system",
+          severity: "info",
+          status: "success",
+          message: `User login: ${cred.user.uid}`,
+          entityType: "user",
+          entityId: cred.user.uid,
+          entityPath: `users/${cred.user.uid}`,
+          relatedIds: { userId: cred.user.uid },
+          source: buildAuditSource({
+            area: "public",
+            page: "Login",
+            method: "login",
+          }),
+          meta: {
+            loginMode: "password",
+          },
+        });
         // redirect يتم من useEffect
         return;
       }
@@ -161,7 +186,25 @@ export default function LoginPage() {
       };
 
 
-      await setDoc(ref, payload, { merge: true });
+      await auditedSetDoc({
+        ref,
+        data: payload,
+        options: { merge: true },
+        action: AUDIT_ACTIONS.USER_CREATED,
+        category: "user",
+        entityType: "user",
+        source: buildAuditSource({
+          area: "public",
+          page: "Login",
+          method: "register",
+        }),
+        relatedIds: { userId: cred.user.uid },
+        message: `Registered user ${cred.user.uid}`,
+        meta: {
+          signupSource: "ui_signup",
+        },
+        ignoreFields: ["updatedAt"],
+      });
 
       // redirect يتم من useEffect
     } catch (err: any) {

@@ -2,6 +2,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "wouter";
 import DashboardLayout from "@/components/DashboardLayout";
+import {
+  AUDIT_ACTIONS,
+  auditedDeleteDoc,
+  auditedUpdateDoc,
+  buildAuditSource,
+} from "@/lib/auditLog";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,13 +41,11 @@ import { toast } from "sonner";
 
 import {
   collection,
-  deleteDoc,
   doc,
   getDoc,
   onSnapshot,
   orderBy,
   query,
-  updateDoc,
   Timestamp,
 } from "firebase/firestore";
 import { db } from "@/_core/firebase";
@@ -283,8 +287,24 @@ export default function ProjectsManagement() {
       setBusyId(p.id);
 
       const nextStatus = p.status === "published" ? "draft" : "published";
-      await updateDoc(doc(db, "projects", p.id), {
-        status: nextStatus,
+      await auditedUpdateDoc({
+        ref: doc(db, "projects", p.id),
+        data: { status: nextStatus },
+        action: AUDIT_ACTIONS.PROJECT_STATUS_CHANGED,
+        category: "project",
+        entityType: "project",
+        source: buildAuditSource({
+          area: "admin",
+          page: "ProjectsAdmin",
+          method: "toggle_status",
+        }),
+        relatedIds: { projectId: p.id },
+        message: `${nextStatus === "published" ? "Published" : "Unpublished"} project ${p.titleAr || p.titleEn || p.id}`,
+        meta: {
+          projectName: p.titleAr || p.titleEn || p.id,
+          previousStatus: p.status,
+          nextStatus,
+        },
       });
 
       toast.success(nextStatus === "published" ? "تم نشر المشروع" : "تم إخفاء المشروع");
@@ -304,7 +324,23 @@ export default function ProjectsManagement() {
 
     try {
       setBusyId(p.id);
-      await deleteDoc(doc(db, "projects", p.id));
+      await auditedDeleteDoc({
+        ref: doc(db, "projects", p.id),
+        action: AUDIT_ACTIONS.PROJECT_DELETED,
+        category: "project",
+        entityType: "project",
+        source: buildAuditSource({
+          area: "admin",
+          page: "ProjectsAdmin",
+          method: "delete",
+        }),
+        relatedIds: { projectId: p.id },
+        message: `Deleted project ${p.titleAr || p.titleEn || p.id}`,
+        meta: {
+          projectName: p.titleAr || p.titleEn || p.id,
+          projectStatus: p.status,
+        },
+      });
       toast.success("تم حذف المشروع");
     } catch (e) {
       console.error(e);
@@ -598,7 +634,15 @@ export default function ProjectsManagement() {
                         onClick={async () => {
                           try {
                             setRecomputeId(p.id);
-                            const r = await recomputeProjectAggregatesClient(p.id);
+                            const r = await recomputeProjectAggregatesClient(p.id, {
+                              source: {
+                                area: "admin",
+                                page: "ProjectsAdmin",
+                                method: "manual_recompute",
+                              },
+                              reason: "projects_admin_manual_recompute",
+                              relatedIds: { projectId: p.id },
+                            });
                             toast.success(`تم التحديث ✅ (المبلغ: ${r.currentAmount} | المستثمرين: ${r.investorsCount})`);
                           } catch (e: any) {
                             toast.error(e?.message || "فشل إعادة الحساب");

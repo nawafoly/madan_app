@@ -1,7 +1,8 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { useLocation } from "wouter";
-import { collection, doc, serverTimestamp, setDoc } from "firebase/firestore";
+import { collection, doc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/_core/firebase";
+import { AUDIT_ACTIONS, auditedSetDoc, buildAuditSource } from "@/lib/auditLog";
 import { buildR2DownloadUrl, uploadInvestmentDocument } from "@/lib/documentUploadService";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
@@ -253,7 +254,8 @@ export default function CreateProject() {
 
     try {
       setSaving(true);
-      await setDoc(doc(db, "projects", draftProjectId), {
+      const projectRef = doc(db, "projects", draftProjectId);
+      const payload = {
         issueNumber,
         titleAr,
         titleEn,
@@ -290,6 +292,27 @@ export default function CreateProject() {
         vipTier: formData.vipTier,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
+      };
+      await auditedSetDoc({
+        ref: projectRef,
+        data: payload,
+        action: AUDIT_ACTIONS.PROJECT_CREATED,
+        category: "project",
+        entityType: "project",
+        source: buildAuditSource({
+          area: "admin",
+          page: "CreateProject",
+          method: "create",
+        }),
+        relatedIds: { projectId: draftProjectId },
+        message: `Created project ${titleAr || titleEn || draftProjectId}`,
+        meta: {
+          projectName: titleAr || titleEn || draftProjectId,
+          issueNumber,
+          status: formData.status,
+          projectType: formData.projectType,
+        },
+        ignoreFields: ["updatedAt"],
       });
       toast.success("تم إنشاء المشروع بنجاح");
       setLocation("/admin/projects");

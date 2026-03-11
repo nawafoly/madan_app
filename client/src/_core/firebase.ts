@@ -2,6 +2,7 @@
 import { initializeApp, getApps } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
+import { getFunctions } from "firebase/functions";
 
 const firebaseConfig = {
   apiKey: (import.meta.env.VITE_FB_API_KEY ?? "").trim(),
@@ -51,6 +52,14 @@ export const auth = getAuth(app);
 export const db = getFirestore(app);
 
 // =========================
+// Callable Functions
+// =========================
+export const firebaseFunctions = getFunctions(
+  app,
+  (import.meta.env.VITE_FB_FUNCTIONS_REGION ?? "me-central2").trim()
+);
+
+// =========================
 // ✅ تشخيص وقت التطوير فقط
 // =========================
 if (import.meta.env.DEV) {
@@ -59,6 +68,7 @@ if (import.meta.env.DEV) {
     app,
     auth,
     db,
+    firebaseFunctions,
     firebaseConfig,
   };
 }

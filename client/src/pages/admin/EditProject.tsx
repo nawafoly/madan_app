@@ -1,8 +1,9 @@
 // client/src/pages/admin/EditProject.tsx
 import { useEffect, useMemo, useState } from "react";
 import { useRoute, useLocation } from "wouter";
-import { doc, getDoc, updateDoc } from "firebase/firestore";
+import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/_core/firebase";
+import { AUDIT_ACTIONS, auditedUpdateDoc, buildAuditSource } from "@/lib/auditLog";
 import { buildR2DownloadUrl, uploadInvestmentDocument } from "@/lib/documentUploadService";
 
 import DashboardLayout from "@/components/DashboardLayout";
@@ -532,7 +533,26 @@ export default function EditProject() {
 
       };
 
-      await updateDoc(doc(db, "projects", projectId), payload);
+      await auditedUpdateDoc({
+        ref: doc(db, "projects", projectId),
+        data: payload,
+        action: AUDIT_ACTIONS.PROJECT_UPDATED,
+        category: "project",
+        entityType: "project",
+        source: buildAuditSource({
+          area: "admin",
+          page: "EditProject",
+          method: "update",
+        }),
+        relatedIds: { projectId },
+        message: `Updated project ${cleanStr(formData.titleAr) || cleanStr(formData.titleEn) || projectId}`,
+        meta: {
+          projectName: cleanStr(formData.titleAr) || cleanStr(formData.titleEn) || projectId,
+          status: formData.status,
+          projectType: formData.projectType,
+        },
+        ignoreFields: ["updatedAt"],
+      });
 
       toast.success("تم تحديث المشروع بنجاح");
       setLocation("/admin/projects");

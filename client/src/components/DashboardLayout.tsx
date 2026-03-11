@@ -63,7 +63,7 @@ const menuItems: MenuItem[] = [
 
   { icon: MessageSquare, label: "الرسائل", path: "/admin/messages", allow: ["owner", "admin", "staff"] },
 
-  { icon: FileText, label: "سجل التعديلات", path: "/admin/audit-log", allow: ["owner"] },
+  { icon: FileText, label: "سجل التعديلات", path: "/admin/audit-log", allow: ["owner", "admin"] },
 
   { icon: BarChart3, label: "التقارير", path: "/admin/reports", allow: ["owner", "admin", "accountant"] },
 
