@@ -85,6 +85,7 @@ export type AppUser = {
   uid: string;
   email?: string | null;
   displayName?: string | null;
+  title?: string | null;
   role: AppRole;
 
   permissionsAllow?: Permission[];
@@ -112,11 +113,40 @@ function normalizePerms(list: any): Permission[] {
   return list.filter((x) => typeof x === "string") as Permission[];
 }
 
+function isRoleLikeDisplayName(name: string) {
+  const n = (name ?? "").trim();
+  if (!n) return false;
+
+  const nl = n.toLowerCase();
+  if (
+    nl === "owner" ||
+    nl === "admin" ||
+    nl === "accountant" ||
+    nl === "staff" ||
+    nl === "client" ||
+    nl === "guest"
+  ) {
+    return true;
+  }
+
+  // Arabic variants (avoid showing role as a "name")
+  if (n === "أونر" || n === "اونر" || n === "الأونر" || n === "الاونر")
+    return true;
+  if (n === "أدمن" || n === "ادمن") return true;
+  if (n === "محاسب" || n === "موظف" || n === "عميل" || n === "زائر")
+    return true;
+  if (n === "مالك" || n === "المالك") return true;
+
+  return false;
+}
+
 type AdminOverrides = {
   roleKey?: AppRole;
   permissionsAllow?: Permission[];
   permissionsDeny?: Permission[];
   isActive?: boolean;
+  title?: string;
+  displayName?: string;
 };
 
 async function getAdminOverridesByEmail(fb: FbUser): Promise<AdminOverrides | null> {
@@ -130,11 +160,17 @@ async function getAdminOverridesByEmail(fb: FbUser): Promise<AdminOverrides | nu
     const d = snap.data() as any;
     if (d?.isActive === false) return null;
 
+    const title = typeof d?.title === "string" ? d.title.trim() : "";
+    const displayName =
+      typeof d?.displayName === "string" ? d.displayName.trim() : "";
+
     return {
       roleKey: normalizeRole(d?.roleKey),
       permissionsAllow: normalizePerms(d?.permissionsAllow),
       permissionsDeny: normalizePerms(d?.permissionsDeny),
       isActive: !!d?.isActive,
+      title: title || undefined,
+      displayName: displayName || undefined,
     };
   } catch {
     return null;
@@ -163,6 +199,8 @@ type UserRuntimeData = {
   role: AppRole;
   permissionsAllow: Permission[];
   permissionsDeny: Permission[];
+  title?: string;
+  displayName?: string;
 };
 
 // ✅ helper: نميّز permission-denied
@@ -232,7 +270,13 @@ async function ensureUserDocAndGetRuntime(fb: FbUser): Promise<UserRuntimeData> 
         new Set([...(permissionsDeny || []), ...(adminOv?.permissionsDeny || [])])
       );
 
-      return { role: finalRole, permissionsAllow: mergedAllow, permissionsDeny: mergedDeny };
+      return {
+        role: finalRole,
+        permissionsAllow: mergedAllow,
+        permissionsDeny: mergedDeny,
+        title: adminOv?.title,
+        displayName: adminOv?.displayName,
+      };
     }
 
     // ✅ غير موجود: أنشئ doc من الصفر (create مسموح)
@@ -251,7 +295,15 @@ async function ensureUserDocAndGetRuntime(fb: FbUser): Promise<UserRuntimeData> 
       { merge: true }
     );
 
-    return { role: bootstrapRole, permissionsAllow: [], permissionsDeny: [] };
+    const adminOv = await getAdminOverridesByEmail(fb);
+
+    return {
+      role: adminOv?.roleKey ?? bootstrapRole,
+      permissionsAllow: adminOv?.permissionsAllow ?? [],
+      permissionsDeny: adminOv?.permissionsDeny ?? [],
+      title: adminOv?.title,
+      displayName: adminOv?.displayName,
+    };
   } catch (e: any) {
     // ✅ إذا rules مانعة: لا نخرب الدخول -> خله client/owner
     if (isPermissionDenied(e)) {
@@ -306,10 +358,23 @@ export function useAuth() {
       const runtime = await ensureUserDocAndGetRuntime(fb);
       if (!aliveRef.current) return;
 
+      const fbNameRaw =
+        typeof fb.displayName === "string" ? fb.displayName.trim() : "";
+      const adminName =
+        typeof runtime.displayName === "string" ? runtime.displayName.trim() : "";
+
+      const fbName = fbNameRaw && !isRoleLikeDisplayName(fbNameRaw) ? fbNameRaw : "";
+      const safeAdminName =
+        adminName && !isRoleLikeDisplayName(adminName) ? adminName : "";
+
+      const preferredDisplayName =
+        fbName || safeAdminName || null;
+
       setUser({
         uid: fb.uid,
         email: fb.email,
-        displayName: fb.displayName,
+        displayName: preferredDisplayName,
+        title: runtime.title ?? null,
         role: runtime.role,
         permissionsAllow: runtime.permissionsAllow,
         permissionsDeny: runtime.permissionsDeny,
@@ -353,10 +418,26 @@ export function useAuth() {
         const runtime = await ensureUserDocAndGetRuntime(fb);
         if (!aliveRef.current) return;
 
+        const fbNameRaw =
+          typeof fb.displayName === "string" ? fb.displayName.trim() : "";
+        const adminName =
+          typeof runtime.displayName === "string"
+            ? runtime.displayName.trim()
+            : "";
+
+        const fbName =
+          fbNameRaw && !isRoleLikeDisplayName(fbNameRaw) ? fbNameRaw : "";
+        const safeAdminName =
+          adminName && !isRoleLikeDisplayName(adminName) ? adminName : "";
+
+        const preferredDisplayName =
+          fbName || safeAdminName || null;
+
         setUser({
           uid: fb.uid,
           email: fb.email,
-          displayName: fb.displayName,
+          displayName: preferredDisplayName,
+          title: runtime.title ?? null,
           role: runtime.role,
           permissionsAllow: runtime.permissionsAllow,
           permissionsDeny: runtime.permissionsDeny,

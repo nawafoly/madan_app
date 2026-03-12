@@ -125,6 +125,7 @@ function latinToArabicApprox(word: string) {
     [/ee/g, "ي"],
     [/oo/g, "و"],
     [/ou/g, "و"],
+    [/aw/g, "و"],
     [/ai/g, "اي"],
     [/ei/g, "اي"],
   ];
@@ -166,6 +167,7 @@ function latinToArabicApprox(word: string) {
   for (const ch of s) {
     if (map[ch]) out += map[ch];
     else if (ch === " ") out += " ";
+    else if (/[\u0600-\u06FF]/.test(ch)) out += ch; // احتفظ بالأحرف العربية (من digraphs)
     // تجاهل أي رموز أخرى
   }
 
@@ -199,29 +201,6 @@ function nameFromEmail(email?: string) {
 
   return arName;
 }
-
-function normalizeRole(raw: any): "owner" | "admin" | "accountant" | "staff" | "" {
-  if (!raw) return "";
-  const r = String(raw).toLowerCase();
-
-  if (r.includes("owner")) return "owner";
-  if (r.includes("admin")) return "admin";
-  if (r.includes("account")) return "accountant";
-  if (r.includes("staff") || r.includes("reception")) return "staff";
-
-  return "";
-}
-
-function roleLabelAr(rawRole: any) {
-  const role = normalizeRole(rawRole);
-
-  if (role === "owner") return "أونر";
-  if (role === "admin") return "أدمن";
-  if (role === "accountant") return "محاسب";
-  if (role === "staff") return "موظف";
-  return "";
-}
-
 
 export default function DashboardLayout({
   children,
@@ -351,19 +330,15 @@ function DashboardLayoutContent({
   }, [user]);
 
 
-  // ✅ الدور: يدعم role أو roles[0] أو userRole
-  const roleRaw =
-    (user as any)?.role ??
-    (Array.isArray((user as any)?.roles) ? (user as any)?.roles?.[0] : undefined) ??
-    (user as any)?.userRole ??
-    (user as any)?.accountRole;
+  const titleText = useMemo(() => {
+    const t = String((user as any)?.title ?? "").trim();
+    return t && t !== "-" ? t : "";
+  }, [user]);
 
-  const roleText = useMemo(() => roleLabelAr(roleRaw), [roleRaw]);
-
-  const displayNameWithRole = useMemo(() => {
-    if (!roleText) return displayName;
-    return `${displayName} (${roleText})`;
-  }, [displayName, roleText]);
+  const displayNameWithTitle = useMemo(() => {
+    if (!titleText) return displayName;
+    return `${displayName} ${titleText}`.trim();
+  }, [displayName, titleText]);
 
   useEffect(() => {
     if (isCollapsed) setIsResizing(false);
@@ -484,7 +459,7 @@ function DashboardLayoutContent({
                   </Avatar>
                   <div className="flex-1 min-w-0 group-data-[collapsible=icon]:hidden">
                     <p className="text-sm font-medium truncate leading-none">
-                      {displayNameWithRole}
+                      {displayNameWithTitle}
                     </p>
                     <p className="text-xs text-muted-foreground truncate mt-1.5">
                       {(user as any)?.email || "-"}
