@@ -87,7 +87,7 @@ const DEFAULT_STATS: StatsDoc = {
 const FALLBACK_IMG = "/HOOM-HERO.png";
 
 // ✅ صورة قسم "قصتنا"
-const STORY_IMG = "/about-story.jpg";
+const STORY_IMG = "/about-poto1.jpg";
 
 function pickLabel(v: unknown, lang: "ar" | "en" = "ar", fallback = "") {
   if (typeof v === "string") return v;

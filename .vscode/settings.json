@@ -7,5 +7,20 @@
     "codex-project-manager.paratextReorderMigrationCompleted": true,
     "codex-project-manager.globalReferencesMigrationCompleted": true,
     "codex-project-manager.cellIdsToUuidMigrationCompleted": true,
-    "git.enabled": false
+    "git.enabled": true,
+    "git.blame.editorDecoration.enabled": true,
+    "git.diagnosticsCommitHook.enabled": true,
+    "search.useGlobalIgnoreFiles": true,
+    "search.useParentIgnoreFiles": true,
+    "git.verboseCommit": true,
+    "explorer.excludeGitIgnore": true,
+    "git.allowForcePush": true,
+    "git.allowNoVerifyCommit": true,
+    "git.alwaysShowStagedChangesResourceGroup": true,
+    "git.alwaysSignOff": true,
+    "git.autoStash": true,
+    "git.blame.editorDecoration.disableHover": true,
+    "git.blame.ignoreWhitespace": true,
+    "git.branchRandomName.enable": true,
+    "git.closeDiffOnOperation": true
 }
