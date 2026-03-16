@@ -1,0 +1,11 @@
+{
+    "codex-project-manager.timestampsDataMigrationCompleted": true,
+    "codex-project-manager.cellTypePromotionMigrationCompleted": true,
+    "codex-project-manager.editHistoryFormatMigrationCompleted": true,
+    "codex-project-manager.documentContextHoistMigrationCompleted": true,
+    "codex-project-manager.milestoneCellsMigrationCompleted": true,
+    "codex-project-manager.paratextReorderMigrationCompleted": true,
+    "codex-project-manager.globalReferencesMigrationCompleted": true,
+    "codex-project-manager.cellIdsToUuidMigrationCompleted": true,
+    "git.enabled": false
+}

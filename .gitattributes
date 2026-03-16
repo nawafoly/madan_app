@@ -1,24 +1,17 @@
-* text=auto eol=lf
+# Audio files
+*.wav filter=lfs diff=lfs merge=lfs -text
+*.mp3 filter=lfs diff=lfs merge=lfs -text
+*.m4a filter=lfs diff=lfs merge=lfs -text
+*.ogg filter=lfs diff=lfs merge=lfs -text
+*.webm filter=lfs diff=lfs merge=lfs -text
 
-*.js   text eol=lf
-*.jsx  text eol=lf
-*.ts   text eol=lf
-*.tsx  text eol=lf
-*.css  text eol=lf
-*.scss text eol=lf
-*.json text eol=lf
-*.html text eol=lf
+# Video files
+*.mp4 filter=lfs diff=lfs merge=lfs -text
+*.avi filter=lfs diff=lfs merge=lfs -text
+*.mov filter=lfs diff=lfs merge=lfs -text
+*.mkv filter=lfs diff=lfs merge=lfs -text
 
-*.yml  text eol=lf
-*.yaml text eol=lf
-*.md   text eol=lf
-*.env  text eol=lf
-
-*.png  binary
-*.jpg  binary
-*.jpeg binary
-*.webp binary
-*.gif  binary
-*.svg  binary
-*.ico  binary
-*.pdf  binary
+# Image files over 1MB should use LFS
+*.jpg filter=lfs diff=lfs merge=lfs -text
+*.jpeg filter=lfs diff=lfs merge=lfs -text
+*.png filter=lfs diff=lfs merge=lfs -text

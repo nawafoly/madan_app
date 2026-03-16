@@ -1,0 +1,278 @@
+[debug] [2026-03-11T21:18:01.543Z] ----------------------------------------------------------------------
+[debug] [2026-03-11T21:18:01.547Z] Command:       C:\nvm4w\nodejs\node.exe C:\nvm4w\nodejs\node_modules\firebase-tools\lib\bin\firebase.js functions:list --json
+[debug] [2026-03-11T21:18:01.547Z] CLI Version:   15.9.0
+[debug] [2026-03-11T21:18:01.548Z] Platform:      win32
+[debug] [2026-03-11T21:18:01.548Z] Node Version:  v20.19.6
+[debug] [2026-03-11T21:18:01.548Z] Time:          Thu Mar 12 2026 00:18:01 GMT+0300 (التوقيت العربي الرسمي)
+[debug] [2026-03-11T21:18:01.548Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-03-11T21:18:01.550Z] >>> [apiv2][query] GET https://firebase-public.firebaseio.com/cli.json [none]
+[debug] [2026-03-11T21:18:01.774Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-03-11T21:18:01.774Z] > authorizing via signed-in user (nawafaaa0@gmail.com)
+[debug] [2026-03-11T21:18:01.774Z] [iam] checking project index-599e8 for permissions ["cloudfunctions.functions.list","firebase.projects.get","run.services.list"]
+[debug] [2026-03-11T21:18:01.775Z] Checked if tokens are valid: false, expires at: 1773012617580
+[debug] [2026-03-11T21:18:01.775Z] Checked if tokens are valid: false, expires at: 1773012617580
+[debug] [2026-03-11T21:18:01.775Z] > refreshing access token with scopes: []
+[debug] [2026-03-11T21:18:01.776Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2026-03-11T21:18:01.776Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-03-11T21:18:02.368Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 200
+[debug] [2026-03-11T21:18:02.368Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-03-11T21:18:02.373Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/index-599e8:testIamPermissions [none]
+[debug] [2026-03-11T21:18:02.373Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/index-599e8:testIamPermissions  x-goog-user-project=index-599e8
+[debug] [2026-03-11T21:18:02.373Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/index-599e8:testIamPermissions {"permissions":["cloudfunctions.functions.list","firebase.projects.get","run.services.list"]}
+[debug] [2026-03-11T21:18:02.490Z] <<< [apiv2][status] GET https://firebase-public.firebaseio.com/cli.json 200
+[debug] [2026-03-11T21:18:02.490Z] <<< [apiv2][body] GET https://firebase-public.firebaseio.com/cli.json {"cloudBuildErrorAfter":1594252800000,"cloudBuildWarnAfter":1590019200000,"defaultNode10After":1594252800000,"minVersion":"3.0.5","node8DeploysDisabledAfter":1613390400000,"node8RuntimeDisabledAfter":1615809600000,"node8WarnAfter":1600128000000}
+[debug] [2026-03-11T21:18:03.161Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/index-599e8:testIamPermissions 200
+[debug] [2026-03-11T21:18:03.161Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/index-599e8:testIamPermissions {"permissions":["cloudfunctions.functions.list","firebase.projects.get","run.services.list"]}
+[debug] [2026-03-11T21:18:03.161Z] Checked if tokens are valid: true, expires at: 1773267481368
+[debug] [2026-03-11T21:18:03.161Z] Checked if tokens are valid: true, expires at: 1773267481368
+[debug] [2026-03-11T21:18:03.161Z] >>> [apiv2][query] GET https://cloudfunctions.googleapis.com/v1/projects/index-599e8/locations/-/functions [none]
+[debug] [2026-03-11T21:18:01.543Z] ----------------------------------------------------------------------
+[debug] [2026-03-11T21:18:01.547Z] Command:       C:\nvm4w\nodejs\node.exe C:\nvm4w\nodejs\node_modules\firebase-tools\lib\bin\firebase.js deploy --only functions:writeAuditLog --dry-run
+[debug] [2026-03-11T21:18:01.547Z] CLI Version:   15.9.0
+[debug] [2026-03-11T21:18:01.547Z] Platform:      win32
+[debug] [2026-03-11T21:18:01.547Z] Node Version:  v20.19.6
+[debug] [2026-03-11T21:18:01.548Z] Time:          Thu Mar 12 2026 00:18:01 GMT+0300 (التوقيت العربي الرسمي)
+[debug] [2026-03-11T21:18:01.548Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-03-11T21:18:01.550Z] >>> [apiv2][query] GET https://firebase-public.firebaseio.com/cli.json [none]
+[debug] [2026-03-11T21:18:03.616Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-03-11T21:18:03.617Z] > authorizing via signed-in user (nawafaaa0@gmail.com)
+[debug] [2026-03-11T21:18:03.617Z] [iam] checking project index-599e8 for permissions ["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]
+[debug] [2026-03-11T21:18:03.618Z] Checked if tokens are valid: true, expires at: 1773267481368
+[debug] [2026-03-11T21:18:03.618Z] Checked if tokens are valid: true, expires at: 1773267481368
+[debug] [2026-03-11T21:18:03.618Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/index-599e8:testIamPermissions [none]
+[debug] [2026-03-11T21:18:03.618Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/index-599e8:testIamPermissions  x-goog-user-project=index-599e8
+[debug] [2026-03-11T21:18:03.618Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/index-599e8:testIamPermissions {"permissions":["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]}
+[debug] [2026-03-11T21:18:04.192Z] <<< [apiv2][status] GET https://firebase-public.firebaseio.com/cli.json 200
+[debug] [2026-03-11T21:18:04.192Z] <<< [apiv2][body] GET https://firebase-public.firebaseio.com/cli.json {"cloudBuildErrorAfter":1594252800000,"cloudBuildWarnAfter":1590019200000,"defaultNode10After":1594252800000,"minVersion":"3.0.5","node8DeploysDisabledAfter":1613390400000,"node8RuntimeDisabledAfter":1615809600000,"node8WarnAfter":1600128000000}
+[debug] [2026-03-11T21:18:04.282Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/index-599e8:testIamPermissions 200
+[debug] [2026-03-11T21:18:04.282Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/index-599e8:testIamPermissions {"permissions":["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]}
+[debug] [2026-03-11T21:18:04.283Z] Checked if tokens are valid: true, expires at: 1773267481368
+[debug] [2026-03-11T21:18:04.283Z] Checked if tokens are valid: true, expires at: 1773267481368
+[debug] [2026-03-11T21:18:04.283Z] >>> [apiv2][query] POST https://iam.googleapis.com/v1/projects/index-599e8/serviceAccounts/index-599e8@appspot.gserviceaccount.com:testIamPermissions [none]
+[debug] [2026-03-11T21:18:04.283Z] >>> [apiv2][body] POST https://iam.googleapis.com/v1/projects/index-599e8/serviceAccounts/index-599e8@appspot.gserviceaccount.com:testIamPermissions {"permissions":["iam.serviceAccounts.actAs"]}
+[debug] [2026-03-11T21:18:04.360Z] <<< [apiv2][status] GET https://cloudfunctions.googleapis.com/v1/projects/index-599e8/locations/-/functions 200
+[debug] [2026-03-11T21:18:04.360Z] <<< [apiv2][body] GET https://cloudfunctions.googleapis.com/v1/projects/index-599e8/locations/-/functions {}
+[debug] [2026-03-11T21:18:04.360Z] Checked if tokens are valid: true, expires at: 1773267481368
+[debug] [2026-03-11T21:18:04.360Z] Checked if tokens are valid: true, expires at: 1773267481368
+[debug] [2026-03-11T21:18:04.360Z] >>> [apiv2][query] GET https://cloudfunctions.googleapis.com/v2/projects/index-599e8/locations/-/functions filter=environment%3D%22GEN_2%22
+[debug] [2026-03-11T21:18:05.470Z] <<< [apiv2][status] POST https://iam.googleapis.com/v1/projects/index-599e8/serviceAccounts/index-599e8@appspot.gserviceaccount.com:testIamPermissions 200
+[debug] [2026-03-11T21:18:05.470Z] <<< [apiv2][body] POST https://iam.googleapis.com/v1/projects/index-599e8/serviceAccounts/index-599e8@appspot.gserviceaccount.com:testIamPermissions {"permissions":["iam.serviceAccounts.actAs"]}
+[info] 
+[info] === Deploying to 'index-599e8'...
+[info] 
+[info] i  deploying functions 
+[debug] [2026-03-11T21:18:05.473Z] Checked if tokens are valid: true, expires at: 1773267481368
+[debug] [2026-03-11T21:18:05.473Z] Checked if tokens are valid: true, expires at: 1773267481368
+[debug] [2026-03-11T21:18:05.473Z] >>> [apiv2][query] GET https://cloudresourcemanager.googleapis.com/v1/projects/index-599e8 [none]
+[debug] [2026-03-11T21:18:05.684Z] <<< [apiv2][status] GET https://cloudfunctions.googleapis.com/v2/projects/index-599e8/locations/-/functions 200
+[debug] [2026-03-11T21:18:05.858Z] <<< [apiv2][status] GET https://cloudresourcemanager.googleapis.com/v1/projects/index-599e8 200
+[debug] [2026-03-11T21:18:05.858Z] <<< [apiv2][body] GET https://cloudresourcemanager.googleapis.com/v1/projects/index-599e8 {"projectNumber":"57008792504","projectId":"index-599e8","lifecycleState":"ACTIVE","name":"madanApp","labels":{"firebase":"enabled","firebase-core":"disabled"},"createTime":"2025-08-28T15:26:19.475597Z"}
+[info] i  functions: preparing codebase default for deployment 
+[info] i  functions: ensuring required API cloudfunctions.googleapis.com is enabled... 
+[info] i  functions: ensuring required API cloudbuild.googleapis.com is enabled... 
+[debug] [2026-03-11T21:18:05.863Z] Checked if tokens are valid: true, expires at: 1773267481368
+[debug] [2026-03-11T21:18:05.863Z] Checked if tokens are valid: true, expires at: 1773267481368
+[info] i  artifactregistry: ensuring required API artifactregistry.googleapis.com is enabled... 
+[debug] [2026-03-11T21:18:05.864Z] Checked if tokens are valid: true, expires at: 1773267481368
+[debug] [2026-03-11T21:18:05.864Z] Checked if tokens are valid: true, expires at: 1773267481368
+[debug] [2026-03-11T21:18:05.864Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/index-599e8/services/cloudbuild.googleapis.com [none]
+[debug] [2026-03-11T21:18:05.864Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/index-599e8/services/cloudbuild.googleapis.com  x-goog-user-project=index-599e8
+[debug] [2026-03-11T21:18:05.866Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/index-599e8/services/artifactregistry.googleapis.com [none]
+[debug] [2026-03-11T21:18:05.866Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/index-599e8/services/artifactregistry.googleapis.com  x-goog-user-project=index-599e8
+[debug] [2026-03-11T21:18:07.114Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/index-599e8/services/artifactregistry.googleapis.com 200
+[debug] [2026-03-11T21:18:07.114Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/index-599e8/services/artifactregistry.googleapis.com [omitted]
+[warn] !  artifactregistry: missing required API artifactregistry.googleapis.com. Enabling now... 
+[debug] [2026-03-11T21:18:07.115Z] Checked if tokens are valid: true, expires at: 1773267481368
+[debug] [2026-03-11T21:18:07.116Z] Checked if tokens are valid: true, expires at: 1773267481368
+[debug] [2026-03-11T21:18:07.117Z] >>> [apiv2][query] POST https://serviceusage.googleapis.com/v1/projects/index-599e8/services/artifactregistry.googleapis.com:enable [none]
+[debug] [2026-03-11T21:18:07.117Z] >>> [apiv2][(partial)header] POST https://serviceusage.googleapis.com/v1/projects/index-599e8/services/artifactregistry.googleapis.com:enable  x-goog-user-project=index-599e8
+[debug] [2026-03-11T21:18:07.121Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/index-599e8/services/cloudbuild.googleapis.com 200
+[debug] [2026-03-11T21:18:07.121Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/index-599e8/services/cloudbuild.googleapis.com [omitted]
+[warn] !  functions: missing required API cloudbuild.googleapis.com. Enabling now... 
+[debug] [2026-03-11T21:18:07.121Z] Checked if tokens are valid: true, expires at: 1773267481368
+[debug] [2026-03-11T21:18:07.121Z] Checked if tokens are valid: true, expires at: 1773267481368
+[debug] [2026-03-11T21:18:07.121Z] >>> [apiv2][query] POST https://serviceusage.googleapis.com/v1/projects/index-599e8/services/cloudbuild.googleapis.com:enable [none]
+[debug] [2026-03-11T21:18:07.121Z] >>> [apiv2][(partial)header] POST https://serviceusage.googleapis.com/v1/projects/index-599e8/services/cloudbuild.googleapis.com:enable  x-goog-user-project=index-599e8
+[debug] [2026-03-11T21:18:08.076Z] <<< [apiv2][status] POST https://serviceusage.googleapis.com/v1/projects/index-599e8/services/cloudbuild.googleapis.com:enable 400
+[debug] [2026-03-11T21:18:08.076Z] <<< [apiv2][body] POST https://serviceusage.googleapis.com/v1/projects/index-599e8/services/cloudbuild.googleapis.com:enable [omitted]
+[error] 
+[error] Error: Your project index-599e8 must be on the Blaze (pay-as-you-go) plan to complete this command. Required API cloudbuild.googleapis.com can't be enabled until the upgrade is complete. To upgrade, visit the following URL:
+
+https://console.firebase.google.com/project/index-599e8/usage/details
+[debug] [2026-03-11T21:18:08.078Z] <<< [apiv2][status] POST https://serviceusage.googleapis.com/v1/projects/index-599e8/services/artifactregistry.googleapis.com:enable 400
+[debug] [2026-03-11T21:18:08.078Z] <<< [apiv2][body] POST https://serviceusage.googleapis.com/v1/projects/index-599e8/services/artifactregistry.googleapis.com:enable [omitted]
+[debug] [2026-03-11T21:20:04.271Z] ----------------------------------------------------------------------
+[debug] [2026-03-11T21:20:04.273Z] Command:       C:\nvm4w\nodejs\node.exe C:\nvm4w\nodejs\node_modules\firebase-tools\lib\bin\firebase.js deploy --only firestore:rules --dry-run
+[debug] [2026-03-11T21:20:04.273Z] CLI Version:   15.9.0
+[debug] [2026-03-11T21:20:04.274Z] Platform:      win32
+[debug] [2026-03-11T21:20:04.274Z] Node Version:  v20.19.6
+[debug] [2026-03-11T21:20:04.274Z] Time:          Thu Mar 12 2026 00:20:04 GMT+0300 (التوقيت العربي الرسمي)
+[debug] [2026-03-11T21:20:04.274Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-03-11T21:20:05.361Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-03-11T21:20:05.362Z] > authorizing via signed-in user (nawafaaa0@gmail.com)
+[debug] [2026-03-11T21:20:05.362Z] [iam] checking project index-599e8 for permissions ["datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get"]
+[debug] [2026-03-11T21:20:05.364Z] Checked if tokens are valid: true, expires at: 1773267481368
+[debug] [2026-03-11T21:20:05.364Z] Checked if tokens are valid: true, expires at: 1773267481368
+[debug] [2026-03-11T21:20:05.365Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/index-599e8:testIamPermissions [none]
+[debug] [2026-03-11T21:20:05.365Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/index-599e8:testIamPermissions  x-goog-user-project=index-599e8
+[debug] [2026-03-11T21:20:05.365Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/index-599e8:testIamPermissions {"permissions":["datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get"]}
+[debug] [2026-03-11T21:20:04.270Z] ----------------------------------------------------------------------
+[debug] [2026-03-11T21:20:04.272Z] Command:       C:\nvm4w\nodejs\node.exe C:\nvm4w\nodejs\node_modules\firebase-tools\lib\bin\firebase.js deploy --only functions:writeAuditLog --dry-run
+[debug] [2026-03-11T21:20:04.273Z] CLI Version:   15.9.0
+[debug] [2026-03-11T21:20:04.273Z] Platform:      win32
+[debug] [2026-03-11T21:20:04.273Z] Node Version:  v20.19.6
+[debug] [2026-03-11T21:20:04.273Z] Time:          Thu Mar 12 2026 00:20:04 GMT+0300 (التوقيت العربي الرسمي)
+[debug] [2026-03-11T21:20:04.273Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-03-11T21:20:05.367Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-03-11T21:20:05.368Z] > authorizing via signed-in user (nawafaaa0@gmail.com)
+[debug] [2026-03-11T21:20:05.368Z] [iam] checking project index-599e8 for permissions ["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]
+[debug] [2026-03-11T21:20:05.369Z] Checked if tokens are valid: true, expires at: 1773267481368
+[debug] [2026-03-11T21:20:05.369Z] Checked if tokens are valid: true, expires at: 1773267481368
+[debug] [2026-03-11T21:20:05.370Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/index-599e8:testIamPermissions [none]
+[debug] [2026-03-11T21:20:05.370Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/index-599e8:testIamPermissions  x-goog-user-project=index-599e8
+[debug] [2026-03-11T21:20:05.370Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/index-599e8:testIamPermissions {"permissions":["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]}
+[debug] [2026-03-11T21:20:06.010Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/index-599e8:testIamPermissions 200
+[debug] [2026-03-11T21:20:06.010Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/index-599e8:testIamPermissions {"permissions":["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]}
+[debug] [2026-03-11T21:20:06.010Z] Checked if tokens are valid: true, expires at: 1773267481368
+[debug] [2026-03-11T21:20:06.010Z] Checked if tokens are valid: true, expires at: 1773267481368
+[debug] [2026-03-11T21:20:06.010Z] >>> [apiv2][query] POST https://iam.googleapis.com/v1/projects/index-599e8/serviceAccounts/index-599e8@appspot.gserviceaccount.com:testIamPermissions [none]
+[debug] [2026-03-11T21:20:06.011Z] >>> [apiv2][body] POST https://iam.googleapis.com/v1/projects/index-599e8/serviceAccounts/index-599e8@appspot.gserviceaccount.com:testIamPermissions {"permissions":["iam.serviceAccounts.actAs"]}
+[debug] [2026-03-11T21:20:06.101Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/index-599e8:testIamPermissions 200
+[debug] [2026-03-11T21:20:06.102Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/index-599e8:testIamPermissions {"permissions":["datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get"]}
+[info] 
+[info] === Deploying to 'index-599e8'...
+[info] 
+[info] i  deploying firestore 
+[info] i  firestore: ensuring required API firestore.googleapis.com is enabled... 
+[info] i  firestore: ensuring required API firestore.googleapis.com is enabled... 
+[debug] [2026-03-11T21:20:06.104Z] Checked if tokens are valid: true, expires at: 1773267481368
+[debug] [2026-03-11T21:20:06.104Z] Checked if tokens are valid: true, expires at: 1773267481368
+[debug] [2026-03-11T21:20:06.104Z] >>> [apiv2][query] GET https://firestore.googleapis.com/v1/projects/index-599e8/databases/(default) [none]
+[debug] [2026-03-11T21:20:06.908Z] <<< [apiv2][status] GET https://firestore.googleapis.com/v1/projects/index-599e8/databases/(default) 200
+[debug] [2026-03-11T21:20:07.004Z] <<< [apiv2][status] POST https://iam.googleapis.com/v1/projects/index-599e8/serviceAccounts/index-599e8@appspot.gserviceaccount.com:testIamPermissions 200
+[debug] [2026-03-11T21:20:07.004Z] <<< [apiv2][body] POST https://iam.googleapis.com/v1/projects/index-599e8/serviceAccounts/index-599e8@appspot.gserviceaccount.com:testIamPermissions {"permissions":["iam.serviceAccounts.actAs"]}
+[info] 
+[info] === Deploying to 'index-599e8'...
+[info] 
+[info] i  deploying functions 
+[debug] [2026-03-11T21:20:07.009Z] Checked if tokens are valid: true, expires at: 1773267481368
+[debug] [2026-03-11T21:20:07.009Z] Checked if tokens are valid: true, expires at: 1773267481368
+[debug] [2026-03-11T21:20:07.010Z] >>> [apiv2][query] GET https://cloudresourcemanager.googleapis.com/v1/projects/index-599e8 [none]
+[debug] [2026-03-11T21:20:07.363Z] <<< [apiv2][status] GET https://cloudresourcemanager.googleapis.com/v1/projects/index-599e8 200
+[debug] [2026-03-11T21:20:07.363Z] <<< [apiv2][body] GET https://cloudresourcemanager.googleapis.com/v1/projects/index-599e8 {"projectNumber":"57008792504","projectId":"index-599e8","lifecycleState":"ACTIVE","name":"madanApp","labels":{"firebase":"enabled","firebase-core":"disabled"},"createTime":"2025-08-28T15:26:19.475597Z"}
+[info] i  functions: preparing codebase default for deployment 
+[info] i  functions: ensuring required API cloudfunctions.googleapis.com is enabled... 
+[info] i  functions: ensuring required API cloudbuild.googleapis.com is enabled... 
+[debug] [2026-03-11T21:20:07.365Z] Checked if tokens are valid: true, expires at: 1773267481368
+[debug] [2026-03-11T21:20:07.365Z] Checked if tokens are valid: true, expires at: 1773267481368
+[info] i  artifactregistry: ensuring required API artifactregistry.googleapis.com is enabled... 
+[debug] [2026-03-11T21:20:07.365Z] Checked if tokens are valid: true, expires at: 1773267481368
+[debug] [2026-03-11T21:20:07.365Z] Checked if tokens are valid: true, expires at: 1773267481368
+[debug] [2026-03-11T21:20:07.365Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/index-599e8/services/cloudbuild.googleapis.com [none]
+[debug] [2026-03-11T21:20:07.365Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/index-599e8/services/cloudbuild.googleapis.com  x-goog-user-project=index-599e8
+[debug] [2026-03-11T21:20:07.366Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/index-599e8/services/artifactregistry.googleapis.com [none]
+[debug] [2026-03-11T21:20:07.366Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/index-599e8/services/artifactregistry.googleapis.com  x-goog-user-project=index-599e8
+[debug] [2026-03-11T21:20:08.430Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/index-599e8/services/cloudbuild.googleapis.com 200
+[debug] [2026-03-11T21:20:08.431Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/index-599e8/services/cloudbuild.googleapis.com [omitted]
+[warn] !  functions: missing required API cloudbuild.googleapis.com. Enabling now... 
+[debug] [2026-03-11T21:20:08.431Z] Checked if tokens are valid: true, expires at: 1773267481368
+[debug] [2026-03-11T21:20:08.431Z] Checked if tokens are valid: true, expires at: 1773267481368
+[debug] [2026-03-11T21:20:08.431Z] >>> [apiv2][query] POST https://serviceusage.googleapis.com/v1/projects/index-599e8/services/cloudbuild.googleapis.com:enable [none]
+[debug] [2026-03-11T21:20:08.432Z] >>> [apiv2][(partial)header] POST https://serviceusage.googleapis.com/v1/projects/index-599e8/services/cloudbuild.googleapis.com:enable  x-goog-user-project=index-599e8
+[debug] [2026-03-11T21:20:08.440Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/index-599e8/services/artifactregistry.googleapis.com 200
+[debug] [2026-03-11T21:20:08.440Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/index-599e8/services/artifactregistry.googleapis.com [omitted]
+[warn] !  artifactregistry: missing required API artifactregistry.googleapis.com. Enabling now... 
+[debug] [2026-03-11T21:20:08.440Z] Checked if tokens are valid: true, expires at: 1773267481368
+[debug] [2026-03-11T21:20:08.440Z] Checked if tokens are valid: true, expires at: 1773267481368
+[debug] [2026-03-11T21:20:08.440Z] >>> [apiv2][query] POST https://serviceusage.googleapis.com/v1/projects/index-599e8/services/artifactregistry.googleapis.com:enable [none]
+[debug] [2026-03-11T21:20:08.440Z] >>> [apiv2][(partial)header] POST https://serviceusage.googleapis.com/v1/projects/index-599e8/services/artifactregistry.googleapis.com:enable  x-goog-user-project=index-599e8
+[debug] [2026-03-11T21:20:09.345Z] <<< [apiv2][status] POST https://serviceusage.googleapis.com/v1/projects/index-599e8/services/artifactregistry.googleapis.com:enable 400
+[debug] [2026-03-11T21:20:09.345Z] <<< [apiv2][body] POST https://serviceusage.googleapis.com/v1/projects/index-599e8/services/artifactregistry.googleapis.com:enable [omitted]
+[error] 
+[error] Error: Your project index-599e8 must be on the Blaze (pay-as-you-go) plan to complete this command. Required API artifactregistry.googleapis.com can't be enabled until the upgrade is complete. To upgrade, visit the following URL:
+
+https://console.firebase.google.com/project/index-599e8/usage/details
+[debug] [2026-03-11T21:20:09.363Z] <<< [apiv2][status] POST https://serviceusage.googleapis.com/v1/projects/index-599e8/services/cloudbuild.googleapis.com:enable 400
+[debug] [2026-03-11T21:20:09.363Z] <<< [apiv2][body] POST https://serviceusage.googleapis.com/v1/projects/index-599e8/services/cloudbuild.googleapis.com:enable [omitted]
+[debug] [2026-03-11T21:21:27.132Z] ----------------------------------------------------------------------
+[debug] [2026-03-11T21:21:27.134Z] Command:       C:\nvm4w\nodejs\node.exe C:\nvm4w\nodejs\node_modules\firebase-tools\lib\bin\firebase.js deploy --only firestore:rules
+[debug] [2026-03-11T21:21:27.134Z] CLI Version:   15.9.0
+[debug] [2026-03-11T21:21:27.135Z] Platform:      win32
+[debug] [2026-03-11T21:21:27.135Z] Node Version:  v20.19.6
+[debug] [2026-03-11T21:21:27.135Z] Time:          Thu Mar 12 2026 00:21:27 GMT+0300 (التوقيت العربي الرسمي)
+[debug] [2026-03-11T21:21:27.135Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-03-11T21:21:28.251Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-03-11T21:21:28.252Z] > authorizing via signed-in user (nawafaaa0@gmail.com)
+[debug] [2026-03-11T21:21:28.252Z] [iam] checking project index-599e8 for permissions ["datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get"]
+[debug] [2026-03-11T21:21:28.253Z] Checked if tokens are valid: true, expires at: 1773267481368
+[debug] [2026-03-11T21:21:28.253Z] Checked if tokens are valid: true, expires at: 1773267481368
+[debug] [2026-03-11T21:21:28.254Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/index-599e8:testIamPermissions [none]
+[debug] [2026-03-11T21:21:28.254Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/index-599e8:testIamPermissions  x-goog-user-project=index-599e8
+[debug] [2026-03-11T21:21:28.254Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/index-599e8:testIamPermissions {"permissions":["datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get"]}
+[debug] [2026-03-11T21:21:29.003Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/index-599e8:testIamPermissions 200
+[debug] [2026-03-11T21:21:29.003Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/index-599e8:testIamPermissions {"permissions":["datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get"]}
+[info] 
+[info] === Deploying to 'index-599e8'...
+[info] 
+[info] i  deploying firestore 
+[info] i  firestore: ensuring required API firestore.googleapis.com is enabled... 
+[info] i  firestore: ensuring required API firestore.googleapis.com is enabled... 
+[debug] [2026-03-11T21:21:29.006Z] Checked if tokens are valid: true, expires at: 1773267481368
+[debug] [2026-03-11T21:21:29.006Z] Checked if tokens are valid: true, expires at: 1773267481368
+[debug] [2026-03-11T21:21:29.006Z] >>> [apiv2][query] GET https://firestore.googleapis.com/v1/projects/index-599e8/databases/(default) [none]
+[debug] [2026-03-11T21:21:29.601Z] <<< [apiv2][status] GET https://firestore.googleapis.com/v1/projects/index-599e8/databases/(default) 200
+[debug] [2026-03-11T21:21:29.601Z] <<< [apiv2][body] GET https://firestore.googleapis.com/v1/projects/index-599e8/databases/(default) {"name":"projects/index-599e8/databases/(default)","uid":"06a76d50-c5d1-4552-a2eb-9ba2eb39ca16","createTime":"2025-08-28T15:33:27.160061Z","updateTime":"2025-08-28T15:33:27.160061Z","locationId":"me-central2","type":"FIRESTORE_NATIVE","concurrencyMode":"PESSIMISTIC","versionRetentionPeriod":"3600s","earliestVersionTime":"2026-03-11T20:21:28.796593Z","appEngineIntegrationMode":"DISABLED","pointInTimeRecoveryEnablement":"POINT_IN_TIME_RECOVERY_DISABLED","deleteProtectionState":"DELETE_PROTECTION_DISABLED","databaseEdition":"STANDARD","freeTier":true,"realtimeUpdatesMode":"REALTIME_UPDATES_MODE_ENABLED","etag":"ILKV7MDjmJMDMNyb4re05JID"}
+[info] i  firestore: reading indexes from firestore.indexes.json... 
+[debug] [2026-03-11T21:21:29.604Z] Checked if tokens are valid: true, expires at: 1773267481368
+[debug] [2026-03-11T21:21:29.604Z] Checked if tokens are valid: true, expires at: 1773267481368
+[debug] [2026-03-11T21:21:29.605Z] >>> [apiv2][query] GET https://firebaserules.googleapis.com/v1/projects/index-599e8/releases pageSize=10&pageToken=
+[debug] [2026-03-11T21:21:30.795Z] <<< [apiv2][status] GET https://firebaserules.googleapis.com/v1/projects/index-599e8/releases 200
+[debug] [2026-03-11T21:21:30.795Z] <<< [apiv2][body] GET https://firebaserules.googleapis.com/v1/projects/index-599e8/releases {"releases":[{"name":"projects/index-599e8/releases/cloud.firestore","rulesetName":"projects/index-599e8/rulesets/6ad4f7a9-1c41-4c74-a0d3-b6d9a5870f43","createTime":"2025-08-28T15:33:31.934675Z","updateTime":"2026-03-09T20:16:52.973226Z"}]}
+[debug] [2026-03-11T21:21:30.795Z] Checked if tokens are valid: true, expires at: 1773267481368
+[debug] [2026-03-11T21:21:30.795Z] Checked if tokens are valid: true, expires at: 1773267481368
+[debug] [2026-03-11T21:21:30.795Z] >>> [apiv2][query] GET https://firebaserules.googleapis.com/v1/projects/index-599e8/rulesets/6ad4f7a9-1c41-4c74-a0d3-b6d9a5870f43 [none]
+[debug] [2026-03-11T21:21:31.507Z] <<< [apiv2][status] GET https://firebaserules.googleapis.com/v1/projects/index-599e8/rulesets/6ad4f7a9-1c41-4c74-a0d3-b6d9a5870f43 200
+[debug] [2026-03-11T21:24:34.301Z] ----------------------------------------------------------------------
+[debug] [2026-03-11T21:24:34.303Z] Command:       C:\nvm4w\nodejs\node.exe C:\nvm4w\nodejs\node_modules\firebase-tools\lib\bin\firebase.js deploy --only firestore:rules
+[debug] [2026-03-11T21:24:34.303Z] CLI Version:   15.9.0
+[debug] [2026-03-11T21:24:34.303Z] Platform:      win32
+[debug] [2026-03-11T21:24:34.303Z] Node Version:  v20.19.6
+[debug] [2026-03-11T21:24:34.303Z] Time:          Thu Mar 12 2026 00:24:34 GMT+0300 (التوقيت العربي الرسمي)
+[debug] [2026-03-11T21:24:34.303Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-03-11T21:24:35.428Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-03-11T21:24:35.429Z] > authorizing via signed-in user (nawafaaa0@gmail.com)
+[debug] [2026-03-11T21:24:35.429Z] [iam] checking project index-599e8 for permissions ["datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get"]
+[debug] [2026-03-11T21:24:35.430Z] Checked if tokens are valid: true, expires at: 1773267481368
+[debug] [2026-03-11T21:24:35.431Z] Checked if tokens are valid: true, expires at: 1773267481368
+[debug] [2026-03-11T21:24:35.432Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/index-599e8:testIamPermissions [none]
+[debug] [2026-03-11T21:24:35.432Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/index-599e8:testIamPermissions  x-goog-user-project=index-599e8
+[debug] [2026-03-11T21:24:35.432Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/index-599e8:testIamPermissions {"permissions":["datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get"]}
+[debug] [2026-03-11T21:24:36.302Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/index-599e8:testIamPermissions 200
+[debug] [2026-03-11T21:24:36.302Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/index-599e8:testIamPermissions {"permissions":["datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get"]}
+[info] 
+[info] === Deploying to 'index-599e8'...
+[info] 
+[info] i  deploying firestore 
+[info] i  firestore: ensuring required API firestore.googleapis.com is enabled... 
+[info] i  firestore: ensuring required API firestore.googleapis.com is enabled... 
+[debug] [2026-03-11T21:24:36.305Z] Checked if tokens are valid: true, expires at: 1773267481368
+[debug] [2026-03-11T21:24:36.305Z] Checked if tokens are valid: true, expires at: 1773267481368
+[debug] [2026-03-11T21:24:36.306Z] >>> [apiv2][query] GET https://firestore.googleapis.com/v1/projects/index-599e8/databases/(default) [none]
+[debug] [2026-03-11T21:24:36.994Z] <<< [apiv2][status] GET https://firestore.googleapis.com/v1/projects/index-599e8/databases/(default) 200
+[debug] [2026-03-11T21:24:36.994Z] <<< [apiv2][body] GET https://firestore.googleapis.com/v1/projects/index-599e8/databases/(default) {"name":"projects/index-599e8/databases/(default)","uid":"06a76d50-c5d1-4552-a2eb-9ba2eb39ca16","createTime":"2025-08-28T15:33:27.160061Z","updateTime":"2025-08-28T15:33:27.160061Z","locationId":"me-central2","type":"FIRESTORE_NATIVE","concurrencyMode":"PESSIMISTIC","versionRetentionPeriod":"3600s","earliestVersionTime":"2026-03-11T20:24:36.213466Z","appEngineIntegrationMode":"DISABLED","pointInTimeRecoveryEnablement":"POINT_IN_TIME_RECOVERY_DISABLED","deleteProtectionState":"DELETE_PROTECTION_DISABLED","databaseEdition":"STANDARD","freeTier":true,"realtimeUpdatesMode":"REALTIME_UPDATES_MODE_ENABLED","etag":"INyXm5rkmJMDMNyb4re05JID"}
+[info] i  firestore: reading indexes from firestore.indexes.json... 
+[debug] [2026-03-11T21:24:36.996Z] Checked if tokens are valid: true, expires at: 1773267481368
+[debug] [2026-03-11T21:24:36.996Z] Checked if tokens are valid: true, expires at: 1773267481368
+[debug] [2026-03-11T21:24:36.997Z] >>> [apiv2][query] GET https://firebaserules.googleapis.com/v1/projects/index-599e8/releases pageSize=10&pageToken=
+[debug] [2026-03-11T21:24:38.052Z] <<< [apiv2][status] GET https://firebaserules.googleapis.com/v1/projects/index-599e8/releases 200
+[debug] [2026-03-11T21:24:38.053Z] <<< [apiv2][body] GET https://firebaserules.googleapis.com/v1/projects/index-599e8/releases {"releases":[{"name":"projects/index-599e8/releases/cloud.firestore","rulesetName":"projects/index-599e8/rulesets/6ad4f7a9-1c41-4c74-a0d3-b6d9a5870f43","createTime":"2025-08-28T15:33:31.934675Z","updateTime":"2026-03-09T20:16:52.973226Z"}]}
+[debug] [2026-03-11T21:24:38.053Z] Checked if tokens are valid: true, expires at: 1773267481368
+[debug] [2026-03-11T21:24:38.053Z] Checked if tokens are valid: true, expires at: 1773267481368
+[debug] [2026-03-11T21:24:38.053Z] >>> [apiv2][query] GET https://firebaserules.googleapis.com/v1/projects/index-599e8/rulesets/6ad4f7a9-1c41-4c74-a0d3-b6d9a5870f43 [none]
+[debug] [2026-03-11T21:24:38.612Z] <<< [apiv2][status] GET https://firebaserules.googleapis.com/v1/projects/index-599e8/rulesets/6ad4f7a9-1c41-4c74-a0d3-b6d9a5870f43 200
