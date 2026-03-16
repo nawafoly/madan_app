@@ -362,7 +362,7 @@ export default function Home() {
           <section className={`${SECTION} relative w-full overflow-hidden`}>
             <div className="absolute inset-0 z-0">
               <img
-                src="/hoom-hero1.jpg"
+                src="/HOOM-HERO1.jpg"
                 alt="MAEDIN Hero"
                 className="w-full h-full object-cover object-top"
               />
