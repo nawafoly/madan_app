@@ -14,5 +14,5 @@ bucket_name = "maedin-storage"
 [[d1_databases]]
 binding = "DOCUMENTS_DB"
 database_name = "maedin-documents"
-database_id = "REPLACE_WITH_CLOUDFLARE_D1_DATABASE_ID"
+database_id = "ddc201f4-f49b-4634-a4fa-0c0f3fc4732f"
 migrations_dir = "migrations"
