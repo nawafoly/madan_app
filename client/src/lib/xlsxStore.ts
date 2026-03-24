@@ -1,0 +1,370 @@
+import { buildStoredZip, type ZipEntryInput } from "@/lib/zipStore";
+
+export type XlsxCellValue = string | number | boolean | null | undefined;
+
+export type XlsxColumn = {
+  key: string;
+  header: string;
+  width?: number;
+};
+
+export type XlsxRow = Record<string, XlsxCellValue>;
+
+export type XlsxSheet = {
+  name: string;
+  columns: XlsxColumn[];
+  rows: XlsxRow[];
+  freezeHeader?: boolean;
+};
+
+export type XlsxWorkbookInput = {
+  title: string;
+  creator?: string;
+  description?: string;
+  sheets: XlsxSheet[];
+};
+
+const XML_HEADER = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+
+function escapeXml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+function sanitizeXmlText(value: string) {
+  return value.replace(/[^\x09\x0A\x0D\x20-\uD7FF\uE000-\uFFFD]/g, "");
+}
+
+function normalizeText(value: unknown) {
+  return sanitizeXmlText(String(value ?? ""));
+}
+
+function needsPreserveSpace(value: string) {
+  return /(^\s|\s$)|[\r\n\t]/.test(value);
+}
+
+function toExcelColumnName(index: number) {
+  let current = index + 1;
+  let columnName = "";
+
+  while (current > 0) {
+    const remainder = (current - 1) % 26;
+    columnName = String.fromCharCode(65 + remainder) + columnName;
+    current = Math.floor((current - 1) / 26);
+  }
+
+  return columnName || "A";
+}
+
+function sanitizeSheetName(value: string, index: number) {
+  const cleaned = String(value || "")
+    .trim()
+    .replace(/[:\\/?*\[\]]/g, " ")
+    .replace(/\s+/g, " ");
+
+  const fallback = cleaned || `Sheet ${index + 1}`;
+  return fallback.slice(0, 31) || `Sheet ${index + 1}`;
+}
+
+function uniqueSheetNames(sheets: XlsxSheet[]) {
+  const seen = new Set<string>();
+
+  return sheets.map((sheet, index) => {
+    const baseName = sanitizeSheetName(sheet.name, index);
+    let nextName = baseName;
+    let suffix = 2;
+
+    while (seen.has(nextName)) {
+      const prefix = baseName.slice(0, Math.max(0, 31 - String(suffix).length - 1)).trim() || "Sheet";
+      nextName = `${prefix} ${suffix}`.slice(0, 31);
+      suffix += 1;
+    }
+
+    seen.add(nextName);
+    return {
+      ...sheet,
+      name: nextName,
+    };
+  });
+}
+
+function displayLength(value: XlsxCellValue) {
+  if (value === null || value === undefined) return 0;
+  if (typeof value === "boolean") return value ? 3 : 2;
+  return String(value).length;
+}
+
+function buildColsXml(columns: XlsxColumn[], rows: XlsxRow[]) {
+  const cols = columns.map((column, index) => {
+    const autoWidth = rows.reduce(
+      (maxWidth, row) => Math.max(maxWidth, displayLength(row[column.key])),
+      column.header.length
+    );
+    const width = Math.min(Math.max(column.width ?? autoWidth + 2, 10), 48);
+    return `<col min="${index + 1}" max="${index + 1}" width="${width}" customWidth="1"/>`;
+  });
+
+  return `<cols>${cols.join("")}</cols>`;
+}
+
+function buildInlineStringCell(ref: string, text: string, styleId: number) {
+  const normalized = normalizeText(text);
+  const preserve = needsPreserveSpace(normalized) ? ' xml:space="preserve"' : "";
+  return `<c r="${ref}" s="${styleId}" t="inlineStr"><is><t${preserve}>${escapeXml(
+    normalized
+  )}</t></is></c>`;
+}
+
+function buildCellXml(ref: string, value: XlsxCellValue, styleId: number) {
+  if (value === null || value === undefined || value === "") {
+    return buildInlineStringCell(ref, "", styleId);
+  }
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return `<c r="${ref}" s="${styleId}"><v>${value}</v></c>`;
+  }
+
+  if (typeof value === "boolean") {
+    return buildInlineStringCell(ref, value ? "Yes" : "No", styleId);
+  }
+
+  return buildInlineStringCell(ref, String(value), styleId);
+}
+
+function buildSheetXml(sheet: XlsxSheet) {
+  if (!sheet.columns.length) {
+    throw new Error(`Worksheet "${sheet.name}" must include at least one column.`);
+  }
+
+  const lastColumn = toExcelColumnName(sheet.columns.length - 1);
+  const lastRowNumber = Math.max(sheet.rows.length + 1, 1);
+  const dimension = `A1:${lastColumn}${lastRowNumber}`;
+
+  const headerCells = sheet.columns.map((column, index) =>
+    buildCellXml(`${toExcelColumnName(index)}1`, column.header, 1)
+  );
+
+  const dataRows = sheet.rows.map((row, rowIndex) => {
+    const cells = sheet.columns.map((column, columnIndex) =>
+      buildCellXml(
+        `${toExcelColumnName(columnIndex)}${rowIndex + 2}`,
+        row[column.key],
+        0
+      )
+    );
+
+    return `<row r="${rowIndex + 2}">${cells.join("")}</row>`;
+  });
+
+  const freezeHeader =
+    sheet.freezeHeader !== false
+      ? `<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="A2" sqref="A2"/></sheetView></sheetViews>`
+      : `<sheetViews><sheetView workbookViewId="0"/></sheetViews>`;
+
+  return [
+    XML_HEADER,
+    '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">',
+    `<dimension ref="${dimension}"/>`,
+    freezeHeader,
+    '<sheetFormatPr defaultRowHeight="18"/>',
+    buildColsXml(sheet.columns, sheet.rows),
+    "<sheetData>",
+    `<row r="1">${headerCells.join("")}</row>`,
+    dataRows.join(""),
+    "</sheetData>",
+    `<autoFilter ref="${dimension}"/>`,
+    '<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/>',
+    "</worksheet>",
+  ].join("");
+}
+
+function buildWorkbookXml(sheets: XlsxSheet[]) {
+  const sheetEntries = sheets.map(
+    (sheet, index) =>
+      `<sheet name="${escapeXml(sheet.name)}" sheetId="${index + 1}" r:id="rId${index + 1}"/>`
+  );
+
+  return [
+    XML_HEADER,
+    '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">',
+    '<bookViews><workbookView activeTab="0"/></bookViews>',
+    `<sheets>${sheetEntries.join("")}</sheets>`,
+    "</workbook>",
+  ].join("");
+}
+
+function buildWorkbookRelsXml(sheets: XlsxSheet[]) {
+  const sheetRelationships = sheets.map(
+    (_, index) =>
+      `<Relationship Id="rId${index + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${
+        index + 1
+      }.xml"/>`
+  );
+  const styleRelationshipId = sheets.length + 1;
+
+  return [
+    XML_HEADER,
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">',
+    sheetRelationships.join(""),
+    `<Relationship Id="rId${styleRelationshipId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>`,
+    "</Relationships>",
+  ].join("");
+}
+
+function buildContentTypesXml(sheets: XlsxSheet[]) {
+  const sheetOverrides = sheets.map(
+    (_, index) =>
+      `<Override PartName="/xl/worksheets/sheet${
+        index + 1
+      }.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`
+  );
+
+  return [
+    XML_HEADER,
+    '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">',
+    '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>',
+    '<Default Extension="xml" ContentType="application/xml"/>',
+    '<Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>',
+    '<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>',
+    '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>',
+    '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>',
+    sheetOverrides.join(""),
+    "</Types>",
+  ].join("");
+}
+
+function buildRootRelsXml() {
+  return [
+    XML_HEADER,
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">',
+    '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>',
+    '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>',
+    '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>',
+    "</Relationships>",
+  ].join("");
+}
+
+function buildStylesXml() {
+  return [
+    XML_HEADER,
+    '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">',
+    "<fonts count=\"2\">",
+    '<font><sz val="11"/><name val="Calibri"/><family val="2"/></font>',
+    '<font><b/><sz val="11"/><name val="Calibri"/><family val="2"/></font>',
+    "</fonts>",
+    "<fills count=\"2\">",
+    '<fill><patternFill patternType="none"/></fill>',
+    '<fill><patternFill patternType="solid"><fgColor rgb="FFF4F1E8"/><bgColor indexed="64"/></patternFill></fill>',
+    "</fills>",
+    '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>',
+    '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>',
+    '<cellXfs count="2">',
+    '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>',
+    '<xf numFmtId="0" fontId="1" fillId="1" borderId="0" xfId="0" applyFont="1" applyFill="1"/>',
+    "</cellXfs>",
+    '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>',
+    "</styleSheet>",
+  ].join("");
+}
+
+function buildCorePropsXml(title: string, creator: string, description: string) {
+  const now = new Date().toISOString();
+
+  return [
+    XML_HEADER,
+    '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">',
+    `<dc:title>${escapeXml(normalizeText(title))}</dc:title>`,
+    `<dc:creator>${escapeXml(normalizeText(creator))}</dc:creator>`,
+    `<dc:description>${escapeXml(normalizeText(description))}</dc:description>`,
+    `<cp:lastModifiedBy>${escapeXml(normalizeText(creator))}</cp:lastModifiedBy>`,
+    `<dcterms:created xsi:type="dcterms:W3CDTF">${now}</dcterms:created>`,
+    `<dcterms:modified xsi:type="dcterms:W3CDTF">${now}</dcterms:modified>`,
+    "</cp:coreProperties>",
+  ].join("");
+}
+
+function buildAppPropsXml(title: string, sheets: XlsxSheet[]) {
+  const partNames = sheets.map(
+    (sheet) => `<vt:lpstr>${escapeXml(normalizeText(sheet.name))}</vt:lpstr>`
+  );
+  const headingPairs =
+    '<HeadingPairs><vt:vector size="2" baseType="variant"><vt:variant><vt:lpstr>Worksheets</vt:lpstr></vt:variant><vt:variant><vt:i4>' +
+    String(sheets.length) +
+    "</vt:i4></vt:variant></vt:vector></HeadingPairs>";
+
+  return [
+    XML_HEADER,
+    '<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">',
+    '<Application>Codex</Application>',
+    headingPairs,
+    `<TitlesOfParts><vt:vector size="${sheets.length}" baseType="lpstr">${partNames.join(
+      ""
+    )}</vt:vector></TitlesOfParts>`,
+    `<Company>${escapeXml(normalizeText(title))}</Company>`,
+    "<LinksUpToDate>false</LinksUpToDate>",
+    "<SharedDoc>false</SharedDoc>",
+    "<HyperlinksChanged>false</HyperlinksChanged>",
+    "<AppVersion>1.0</AppVersion>",
+    "</Properties>",
+  ].join("");
+}
+
+export async function buildWorkbookXlsx(input: XlsxWorkbookInput) {
+  const workbookTitle = String(input.title || "Workbook").trim() || "Workbook";
+  const creator = String(input.creator || "MAEDIN").trim() || "MAEDIN";
+  const description =
+    String(input.description || "Generated workbook export").trim() ||
+    "Generated workbook export";
+  const sheets = uniqueSheetNames(input.sheets || []);
+
+  if (!sheets.length) {
+    throw new Error("Workbook must include at least one worksheet.");
+  }
+
+  const entries: ZipEntryInput[] = [
+    {
+      path: "[Content_Types].xml",
+      data: buildContentTypesXml(sheets),
+    },
+    {
+      path: "_rels/.rels",
+      data: buildRootRelsXml(),
+    },
+    {
+      path: "docProps/core.xml",
+      data: buildCorePropsXml(workbookTitle, creator, description),
+    },
+    {
+      path: "docProps/app.xml",
+      data: buildAppPropsXml(workbookTitle, sheets),
+    },
+    {
+      path: "xl/workbook.xml",
+      data: buildWorkbookXml(sheets),
+    },
+    {
+      path: "xl/_rels/workbook.xml.rels",
+      data: buildWorkbookRelsXml(sheets),
+    },
+    {
+      path: "xl/styles.xml",
+      data: buildStylesXml(),
+    },
+  ];
+
+  sheets.forEach((sheet, index) => {
+    entries.push({
+      path: `xl/worksheets/sheet${index + 1}.xml`,
+      data: buildSheetXml(sheet),
+    });
+  });
+
+  const zipBlob = await buildStoredZip(entries);
+  return new Blob([await zipBlob.arrayBuffer()], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+}

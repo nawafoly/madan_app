@@ -65,6 +65,41 @@ export interface ListDocumentMetadataQuery {
   limit?: number;
 }
 
+export type DocumentStorageServiceState = "success" | "failed" | "not_ready";
+
+export interface DocumentStorageServiceHealth {
+  status: DocumentStorageServiceState;
+  message: string | null;
+  detail: string | null;
+}
+
+export type DocumentStorageMetricSource = "d1" | "r2" | null;
+
+export interface DocumentStorageMetricsSnapshot {
+  totalFiles: number | null;
+  totalBytes: number | null;
+  latestUploadAt: string | null;
+  d1Records: number | null;
+}
+
+export interface DocumentStorageMetricSources {
+  totalFiles: DocumentStorageMetricSource;
+  totalBytes: DocumentStorageMetricSource;
+  latestUploadAt: DocumentStorageMetricSource;
+  d1Records: DocumentStorageMetricSource;
+}
+
+export interface DocumentStorageDashboardSnapshot {
+  checkedAt: string | null;
+  services: {
+    worker: DocumentStorageServiceHealth;
+    d1: DocumentStorageServiceHealth;
+    r2: DocumentStorageServiceHealth;
+  };
+  metrics: DocumentStorageMetricsSnapshot;
+  sources: DocumentStorageMetricSources;
+}
+
 const MAX_FILE_SIZE_MB = 10;
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 
@@ -175,6 +210,17 @@ function buildWorkerUrl(pathname: string, params?: Record<string, string | undef
   } catch {
     return "";
   }
+}
+
+export function getDocumentWorkerBaseUrl() {
+  return getWorkerBaseUrl();
+}
+
+export function buildDocumentWorkerUrl(
+  pathname: string,
+  params?: Record<string, string | undefined>
+) {
+  return buildWorkerUrl(pathname, params);
 }
 
 function normalizeOptionalString(value: unknown) {
@@ -374,6 +420,84 @@ export async function listDocumentMetadata(
 
   const rows = Array.isArray(payload?.files) ? payload.files : [];
   return rows.map((row: any) => normalizeWorkerRecord(row));
+}
+
+function normalizeDashboardServiceState(value: unknown): DocumentStorageServiceState {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (normalized === "success" || normalized === "failed" || normalized === "not_ready") {
+    return normalized;
+  }
+  return "failed";
+}
+
+function normalizeMetricSource(value: unknown): DocumentStorageMetricSource {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (normalized === "d1" || normalized === "r2") return normalized;
+  return null;
+}
+
+function normalizeDashboardService(raw: any): DocumentStorageServiceHealth {
+  return {
+    status: normalizeDashboardServiceState(raw?.status),
+    message: normalizeOptionalString(raw?.message),
+    detail: normalizeOptionalString(raw?.detail),
+  };
+}
+
+function normalizeIsoString(value: unknown) {
+  const normalized = String(value || "").trim();
+  if (!normalized) return null;
+  const parsed = new Date(normalized);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
+function normalizeNullableMetricNumber(value: unknown) {
+  const normalized = Number(value);
+  return Number.isFinite(normalized) && normalized >= 0 ? normalized : null;
+}
+
+function normalizeDashboardSnapshot(raw: any): DocumentStorageDashboardSnapshot {
+  return {
+    checkedAt: normalizeIsoString(raw?.checkedAt),
+    services: {
+      worker: normalizeDashboardService(raw?.services?.worker),
+      d1: normalizeDashboardService(raw?.services?.d1),
+      r2: normalizeDashboardService(raw?.services?.r2),
+    },
+    metrics: {
+      totalFiles: normalizeNullableMetricNumber(raw?.metrics?.totalFiles),
+      totalBytes: normalizeNullableMetricNumber(raw?.metrics?.totalBytes),
+      latestUploadAt: normalizeIsoString(raw?.metrics?.latestUploadAt),
+      d1Records: normalizeNullableMetricNumber(raw?.metrics?.d1Records),
+    },
+    sources: {
+      totalFiles: normalizeMetricSource(raw?.sources?.totalFiles),
+      totalBytes: normalizeMetricSource(raw?.sources?.totalBytes),
+      latestUploadAt: normalizeMetricSource(raw?.sources?.latestUploadAt),
+      d1Records: normalizeMetricSource(raw?.sources?.d1Records),
+    },
+  };
+}
+
+export async function fetchDocumentStorageDashboardSnapshot(): Promise<DocumentStorageDashboardSnapshot> {
+  const statsUrl = buildWorkerUrl("/stats");
+  if (!statsUrl) {
+    throw new Error("Missing worker URL for document storage.");
+  }
+
+  const response = await fetch(statsUrl, { method: "GET" });
+  let payload: any = null;
+  try {
+    payload = await response.json();
+  } catch {
+    payload = null;
+  }
+
+  if (!response.ok) {
+    throw new Error(String(payload?.message || "Failed to load document storage snapshot."));
+  }
+
+  return normalizeDashboardSnapshot(payload);
 }
 
 export function groupLatestFilesByEntityAndCategory(

@@ -1,6 +1,11 @@
 // client/src/pages/admin/Settings.tsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,6 +20,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -45,9 +51,21 @@ import {
   FileDown,
   FileUp,
   Type,
+  Archive,
+  CheckCircle2,
+  CircleAlert,
+  Clock3,
+  Files,
+  FolderOpen,
+  Globe,
+  HardDrive,
+  RefreshCw,
+  ServerCog,
+  type LucideIcon,
 } from "lucide-react";
 
 import { db } from "@/_core/firebase";
+import { cn } from "@/lib/utils";
 import {
   AUDIT_ACTIONS,
   auditedDeleteDoc,
@@ -58,6 +76,23 @@ import {
   logAuditEvent,
   runAuditedOperation,
 } from "@/lib/auditLog";
+import {
+  fetchDocumentStorageDashboardSnapshot,
+  getDocumentWorkerBaseUrl,
+  type DocumentStorageDashboardSnapshot,
+  type DocumentStorageMetricSource,
+  type DocumentStorageServiceHealth,
+} from "@/lib/documentUploadService";
+import {
+  generateBusinessExcelExport,
+  type BusinessExcelExportSummary,
+} from "@/lib/businessExcelExport";
+import {
+  generateContractExportPackage,
+  listContractExportCandidates,
+  type ContractExportCandidate,
+  type ContractExportSummary,
+} from "@/lib/contractExport";
 import {
   addDoc,
   collection,
@@ -169,6 +204,335 @@ type ContentSettings = {
   contactEmail: string;
   contactPhone: string;
 };
+
+type DatabaseServiceKey = "worker" | "d1" | "r2";
+type DatabaseUiStatus = "success" | "failed" | "not_ready" | "checking";
+type DatabaseMetricKey = "totalFiles" | "totalBytes" | "latestUploadAt" | "d1Records";
+type DatabaseActionKey =
+  | "browseFiles"
+  | "refreshStatus"
+  | "exportData"
+  | "backup"
+  | "cleanup";
+
+type DatabaseOverviewCard = {
+  key: DatabaseServiceKey | "overall";
+  title: string;
+  value: string;
+  subtitle: string;
+  icon: LucideIcon;
+  valueDir?: "ltr" | "rtl";
+  status: DatabaseUiStatus;
+  statusLabel: string;
+  statusDetail?: string | null;
+};
+
+type DatabaseMetricCard = {
+  key: DatabaseMetricKey;
+  title: string;
+  value: string;
+  helper: string;
+  icon: LucideIcon;
+  valueDir?: "ltr" | "rtl";
+};
+
+type DatabaseActionCard = {
+  key: DatabaseActionKey;
+  title: string;
+  description: string;
+  icon: LucideIcon;
+};
+
+type DatabaseDetailRow = {
+  label: string;
+  value: string;
+  valueDir?: "ltr" | "rtl";
+};
+
+const DATABASE_OVERVIEW_CARDS: DatabaseOverviewCard[] = [
+  {
+    key: "d1",
+    title: "قاعدة البيانات",
+    value: "Cloudflare D1",
+    subtitle: "maedin-documents",
+    icon: Database,
+    valueDir: "ltr",
+    status: "not_ready",
+    statusLabel: "غير مهيأ",
+  },
+  {
+    key: "r2",
+    title: "التخزين",
+    value: "Cloudflare R2",
+    subtitle: "maedin-storage",
+    icon: HardDrive,
+    valueDir: "ltr",
+    status: "not_ready",
+    statusLabel: "غير مهيأ",
+  },
+  {
+    key: "worker",
+    title: "خدمة الرفع",
+    value: "Cloudflare Workers",
+    subtitle: "upload.maedin.workers.dev",
+    icon: ServerCog,
+    valueDir: "ltr",
+    status: "not_ready",
+    statusLabel: "غير مهيأ",
+  },
+  {
+    key: "overall",
+    title: "الحالة",
+    value: "غير مهيأ",
+    subtitle: "لم يتم تنفيذ الفحص بعد.",
+    icon: CheckCircle2,
+    status: "not_ready",
+    statusLabel: "غير مهيأ",
+  },
+];
+
+const DATABASE_METRIC_CARDS: DatabaseMetricCard[] = [
+  {
+    key: "totalFiles",
+    title: "عدد الملفات",
+    value: "—",
+    helper: "قريبًا",
+    icon: Files,
+    valueDir: "ltr",
+  },
+  {
+    key: "totalBytes",
+    title: "إجمالي الحجم",
+    value: "—",
+    helper: "قريبًا",
+    icon: HardDrive,
+    valueDir: "ltr",
+  },
+  {
+    key: "latestUploadAt",
+    title: "آخر عملية رفع",
+    value: "—",
+    helper: "قريبًا",
+    icon: Clock3,
+    valueDir: "rtl",
+  },
+  {
+    key: "d1Records",
+    title: "عدد سجلات D1",
+    value: "—",
+    helper: "قريبًا",
+    icon: Database,
+    valueDir: "ltr",
+  },
+];
+
+const DATABASE_ACTION_CARDS: DatabaseActionCard[] = [
+  {
+    key: "browseFiles",
+    title: "عرض الملفات",
+    description: "واجهة لتصفح الملفات الفعلية المخزنة في R2.",
+    icon: FolderOpen,
+  },
+  {
+    key: "refreshStatus",
+    title: "تحديث الحالة",
+    description: "إعادة فحص جاهزية خدمات التخزين والرفع.",
+    icon: RefreshCw,
+  },
+  {
+    key: "exportData",
+    title: "تصدير البيانات",
+    description: "إعداد تصدير إداري لبيانات D1 والملفات المرتبطة.",
+    icon: FileDown,
+  },
+  {
+    key: "backup",
+    title: "نسخة احتياطية",
+    description: "تجهيز آلية نسخ احتياطي تشغيلي لهذه البنية.",
+    icon: Archive,
+  },
+  {
+    key: "cleanup",
+    title: "تنظيف الملفات اليتيمة",
+    description: "مراجعة الملفات غير المرتبطة بسجلات D1 قبل الحذف.",
+    icon: Trash2,
+  },
+];
+
+const DATABASE_TECHNICAL_DETAILS: DatabaseDetailRow[] = [
+  { label: "Database", value: "maedin-documents", valueDir: "ltr" },
+  { label: "Bucket", value: "maedin-storage", valueDir: "ltr" },
+  { label: "Worker", value: "upload.maedin.workers.dev", valueDir: "ltr" },
+  { label: "Provider", value: "Cloudflare", valueDir: "ltr" },
+  { label: "Environment", value: "Production", valueDir: "ltr" },
+];
+
+const DATABASE_NOTES = [
+  "Firebase لا يستخدم لهذا القسم.",
+  "هذا التبويب يعتمد على Cloudflare فقط.",
+  "النسخ الاحتياطي المتقدم سيضاف لاحقًا.",
+];
+
+const EMPTY_DATABASE_DASHBOARD: DocumentStorageDashboardSnapshot = {
+  checkedAt: null,
+  services: {
+    worker: { status: "not_ready", message: "idle", detail: null },
+    d1: { status: "not_ready", message: "idle", detail: null },
+    r2: { status: "not_ready", message: "idle", detail: null },
+  },
+  metrics: {
+    totalFiles: null,
+    totalBytes: null,
+    latestUploadAt: null,
+    d1Records: null,
+  },
+  sources: {
+    totalFiles: null,
+    totalBytes: null,
+    latestUploadAt: null,
+    d1Records: null,
+  },
+};
+
+function createUnavailableDatabaseDashboard(
+  workerStatus: DocumentStorageServiceHealth["status"],
+  reason: string
+): DocumentStorageDashboardSnapshot {
+  return {
+    checkedAt: null,
+    services: {
+      worker: {
+        status: workerStatus,
+        message: reason,
+        detail: reason,
+      },
+      d1: {
+        status: "not_ready",
+        message: "worker_unavailable",
+        detail: reason,
+      },
+      r2: {
+        status: "not_ready",
+        message: "worker_unavailable",
+        detail: reason,
+      },
+    },
+    metrics: {
+      totalFiles: null,
+      totalBytes: null,
+      latestUploadAt: null,
+      d1Records: null,
+    },
+    sources: {
+      totalFiles: null,
+      totalBytes: null,
+      latestUploadAt: null,
+      d1Records: null,
+    },
+  };
+}
+
+function getDatabaseStatusLabel(status: DatabaseUiStatus) {
+  switch (status) {
+    case "success":
+      return "جاهز";
+    case "failed":
+      return "فشل";
+    case "checking":
+      return "جارٍ الفحص";
+    case "not_ready":
+    default:
+      return "غير مهيأ";
+  }
+}
+
+function getDatabaseStatusTone(status: DatabaseUiStatus) {
+  switch (status) {
+    case "success":
+      return "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
+    case "failed":
+      return "border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300";
+    case "checking":
+      return "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300";
+    case "not_ready":
+    default:
+      return "border-slate-500/30 bg-slate-500/10 text-slate-700 dark:text-slate-300";
+  }
+}
+
+function formatDatabaseMetricSource(source: DocumentStorageMetricSource, hasValue: boolean) {
+  if (!hasValue) return "غير متاح";
+  if (source === "r2") return "من R2";
+  if (source === "d1") return "من D1";
+  return "—";
+}
+
+function formatDatabaseCount(value: number | null) {
+  if (value === null) return "—";
+  return value.toLocaleString("ar-SA");
+}
+
+function formatDatabaseBytes(value: number | null) {
+  if (value === null) return "—";
+  if (value === 0) return "0 B";
+
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let size = value;
+  let unitIndex = 0;
+
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex += 1;
+  }
+
+  return `${size.toLocaleString("en-US", {
+    maximumFractionDigits: size >= 100 ? 0 : size >= 10 ? 1 : 2,
+  })} ${units[unitIndex]}`;
+}
+
+function formatDatabaseTimestamp(value: string | null) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleString("ar-SA", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+}
+
+function formatDatabaseServiceDetail(detail: string | null | undefined, fallback: string) {
+  const normalized = String(detail || "").trim();
+  if (!normalized) return fallback;
+
+  switch (normalized) {
+    case "stats_endpoint_responded":
+      return "استجابة مباشرة من الـ Worker.";
+    case "d1_metadata_aggregated":
+      return "تمت قراءة إحصاءات file_metadata.";
+    case "r2_objects_aggregated":
+      return "تم عدّ كائنات R2 الفعلية.";
+    case "worker_unavailable":
+      return "يتطلب نجاح الوصول إلى الـ Worker أولًا.";
+    case "Missing VITE_R2_UPLOAD_WORKER_URL":
+      return "رابط Cloudflare Worker غير مهيأ في البيئة.";
+    default:
+      return normalized.replace(/_/g, " ");
+  }
+}
+
+function getOverallDatabaseStatus(
+  snapshot: DocumentStorageDashboardSnapshot
+): DatabaseUiStatus {
+  const statuses = [
+    snapshot.services.worker.status,
+    snapshot.services.d1.status,
+    snapshot.services.r2.status,
+  ];
+
+  if (statuses.includes("failed")) return "failed";
+  if (statuses.includes("not_ready")) return "not_ready";
+  return "success";
+}
 
 /* =========================
    Permissions Catalog
@@ -314,6 +678,14 @@ export default function Settings() {
   });
 
   const [error, setError] = useState<string>("");
+  const databaseWorkerUrl = useMemo(() => getDocumentWorkerBaseUrl(), []);
+  const [databaseDashboard, setDatabaseDashboard] = useState<DocumentStorageDashboardSnapshot>(() =>
+    databaseWorkerUrl
+      ? EMPTY_DATABASE_DASHBOARD
+      : createUnavailableDatabaseDashboard("not_ready", "Missing VITE_R2_UPLOAD_WORKER_URL")
+  );
+  const [databaseRefreshing, setDatabaseRefreshing] = useState(false);
+  const [databaseLoaded, setDatabaseLoaded] = useState(Boolean(!databaseWorkerUrl));
 
   /* =========================
      Dialogs state
@@ -349,6 +721,19 @@ export default function Settings() {
   // Import JSON
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [importing, setImporting] = useState(false);
+  const [contractExportItems, setContractExportItems] = useState<ContractExportCandidate[]>([]);
+  const [contractExportLoading, setContractExportLoading] = useState(false);
+  const [contractExporting, setContractExporting] = useState(false);
+  const [contractExcelExporting, setContractExcelExporting] = useState(false);
+  const [selectedContractIds, setSelectedContractIds] = useState<string[]>([]);
+  const [contractSearch, setContractSearch] = useState("");
+  const [contractStatusFilter, setContractStatusFilter] = useState("all");
+  const [contractExportSummary, setContractExportSummary] =
+    useState<ContractExportSummary | null>(null);
+  const [contractExcelExportSummary, setContractExcelExportSummary] =
+    useState<BusinessExcelExportSummary | null>(null);
+  const [contractExportError, setContractExportError] = useState("");
+  const [contractExcelExportError, setContractExcelExportError] = useState("");
 
   /* =========================
      Load settings (Firestore)
@@ -419,6 +804,72 @@ export default function Settings() {
     }
   };
 
+  const refreshDatabaseDashboard = async ({ manual = false } = {}) => {
+    if (!databaseWorkerUrl) {
+      setDatabaseDashboard(
+        createUnavailableDatabaseDashboard("not_ready", "Missing VITE_R2_UPLOAD_WORKER_URL")
+      );
+      setDatabaseLoaded(true);
+      if (manual) {
+        toast.error("تعذر فحص الخدمات لأن رابط الـ Worker غير مهيأ");
+      }
+      return;
+    }
+
+    setDatabaseRefreshing(true);
+    try {
+      const snapshot = await fetchDocumentStorageDashboardSnapshot();
+      setDatabaseDashboard(snapshot);
+      if (manual) {
+        toast.success("تم تحديث حالة الخدمات والبيانات");
+      }
+    } catch (e) {
+      const reason = e instanceof Error ? e.message : "document_storage_snapshot_failed";
+      console.error("database dashboard refresh failed:", e);
+      setDatabaseDashboard(createUnavailableDatabaseDashboard("failed", reason));
+      if (manual) {
+        toast.error("فشل تحديث حالة خدمات التخزين");
+      }
+    } finally {
+      setDatabaseRefreshing(false);
+      setDatabaseLoaded(true);
+    }
+  };
+
+  const downloadBlob = (blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const loadContractExportItems = async ({ manual = false } = {}) => {
+    setContractExportLoading(true);
+    setContractExportError("");
+
+    try {
+      const rows = await listContractExportCandidates();
+      setContractExportItems(rows);
+      setSelectedContractIds((previous) =>
+        previous.filter((contractId) => rows.some((row) => row.id === contractId))
+      );
+      if (manual) {
+        toast.success("Contract list refreshed.");
+      }
+    } catch (error) {
+      console.error("contract export candidates failed:", error);
+      const message = error instanceof Error ? error.message : "Failed to load contracts.";
+      setContractExportError(message);
+      if (manual) {
+        toast.error("Failed to refresh contract list.");
+      }
+    } finally {
+      setContractExportLoading(false);
+    }
+  };
+
   useEffect(() => {
     setLoading(true);
     setError("");
@@ -426,6 +877,9 @@ export default function Settings() {
     loadSettingsOnce()
       .catch(() => null)
       .finally(() => setLoading(false));
+
+    void refreshDatabaseDashboard();
+    void loadContractExportItems();
 
     // Realtime: admin_users
     const unsubAdmins = onSnapshot(
@@ -465,7 +919,7 @@ export default function Settings() {
       unsubAdmins();
       unsubInvites();
     };
-  }, []);
+  }, [databaseWorkerUrl]);
 
   /* =========================
      Save handlers
@@ -1194,6 +1648,310 @@ export default function Settings() {
       e.target.value = "";
     }
   };
+
+  const contractStatusOptions = useMemo(() => {
+    return Array.from(
+      new Set(contractExportItems.map((item) => String(item.status || "").trim()).filter(Boolean))
+    ).sort((left, right) => left.localeCompare(right));
+  }, [contractExportItems]);
+
+  const filteredContractExportItems = useMemo(() => {
+    const normalizedSearch = contractSearch.trim().toLowerCase();
+    return contractExportItems.filter((item) => {
+      const matchesStatus =
+        contractStatusFilter === "all" || String(item.status || "") === contractStatusFilter;
+
+      if (!matchesStatus) return false;
+      if (!normalizedSearch) return true;
+
+      const haystack = [
+        item.id,
+        item.investmentId,
+        item.projectId,
+        item.projectTitle,
+        item.investorName,
+        item.investorEmail,
+        item.status,
+      ]
+        .join(" ")
+        .toLowerCase();
+
+      return haystack.includes(normalizedSearch);
+    });
+  }, [contractExportItems, contractSearch, contractStatusFilter]);
+
+  const selectedContractIdSet = useMemo(
+    () => new Set(selectedContractIds),
+    [selectedContractIds]
+  );
+
+  const allFilteredSelected =
+    filteredContractExportItems.length > 0 &&
+    filteredContractExportItems.every((item) => selectedContractIdSet.has(item.id));
+
+  const toggleContractSelection = (contractId: string, checked: boolean) => {
+    setSelectedContractIds((previous) => {
+      if (checked) {
+        return Array.from(new Set([...previous, contractId]));
+      }
+      return previous.filter((value) => value !== contractId);
+    });
+  };
+
+  const toggleSelectAllFilteredContracts = (checked: boolean) => {
+    setSelectedContractIds((previous) => {
+      if (!checked) {
+        const filteredIds = new Set(filteredContractExportItems.map((item) => item.id));
+        return previous.filter((value) => !filteredIds.has(value));
+      }
+      return Array.from(
+        new Set([...previous, ...filteredContractExportItems.map((item) => item.id)])
+      );
+    });
+  };
+
+  const handleContractExport = async () => {
+    if (!selectedContractIds.length) {
+      toast.error("Please select at least one contract.");
+      return;
+    }
+
+    setContractExporting(true);
+    setContractExportError("");
+
+    try {
+      const result = await generateContractExportPackage({
+        contractIds: selectedContractIds,
+      });
+
+      downloadBlob(result.blob, result.fileName);
+      setContractExportSummary(result.summary);
+
+      await logAuditEvent({
+        action: "contract_export_generated",
+        category: "contract",
+        entityType: "contract_export",
+        entityId: result.summary.exportedContractCount === 1 ? selectedContractIds[0] : "multi",
+        source: settingsSource("contract_export"),
+        relatedIds:
+          result.summary.exportedContractCount === 1
+            ? { contractId: selectedContractIds[0] }
+            : undefined,
+        message: `Generated contract export package for ${result.summary.exportedContractCount} contract(s)`,
+        meta: {
+          requestedContractIds: selectedContractIds,
+          exportedContractCount: result.summary.exportedContractCount,
+          attachmentCount: result.summary.attachmentCount,
+          warningCount: result.summary.warningCount,
+          fileName: result.fileName,
+        },
+      });
+
+      toast.success(
+        result.summary.warningCount
+          ? `Contract package exported with ${result.summary.warningCount} warning(s).`
+          : "Contract package exported successfully."
+      );
+    } catch (error) {
+      console.error("contract export failed:", error);
+      const message = error instanceof Error ? error.message : "Contract export failed.";
+      setContractExportError(message);
+      toast.error(message);
+    } finally {
+      setContractExporting(false);
+    }
+  };
+
+  const handleBusinessExcelExport = async () => {
+    if (!selectedContractIds.length) {
+      toast.error("Please select at least one contract.");
+      return;
+    }
+
+    setContractExcelExporting(true);
+    setContractExcelExportError("");
+
+    try {
+      const result = await generateBusinessExcelExport({
+        contractIds: selectedContractIds,
+      });
+
+      downloadBlob(result.blob, result.fileName);
+      setContractExcelExportSummary(result.summary);
+
+      await logAuditEvent({
+        action: "contract_excel_export_generated",
+        category: "contract",
+        entityType: "contract_export_excel",
+        entityId: result.summary.exportedContractCount === 1 ? selectedContractIds[0] : "multi",
+        source: settingsSource("contract_export_excel"),
+        relatedIds:
+          result.summary.exportedContractCount === 1
+            ? { contractId: selectedContractIds[0] }
+            : undefined,
+        message: `Generated Excel contract export for ${result.summary.exportedContractCount} contract(s)`,
+        meta: {
+          requestedContractIds: selectedContractIds,
+          exportedContractCount: result.summary.exportedContractCount,
+          workbookCount: result.summary.workbookCount,
+          warningCount: result.summary.warningCount,
+          fileName: result.fileName,
+        },
+      });
+
+      toast.success(
+        result.summary.warningCount
+          ? `Excel export generated with ${result.summary.warningCount} warning(s).`
+          : "Excel export generated successfully."
+      );
+    } catch (error) {
+      console.error("business excel export failed:", error);
+      const message = error instanceof Error ? error.message : "Excel export failed.";
+      setContractExcelExportError(message);
+      toast.error(message);
+    } finally {
+      setContractExcelExporting(false);
+    }
+  };
+
+  const databaseOverviewCards = useMemo<DatabaseOverviewCard[]>(() => {
+    const overallStatus: DatabaseUiStatus = databaseRefreshing
+      ? "checking"
+      : getOverallDatabaseStatus(databaseDashboard);
+
+    return DATABASE_OVERVIEW_CARDS.map((card) => {
+      if (card.key === "overall") {
+        return {
+          ...card,
+          value:
+            overallStatus === "success"
+              ? "مستقر"
+              : overallStatus === "failed"
+                ? "تنبيه"
+                : overallStatus === "checking"
+                  ? "جارٍ الفحص"
+                  : "غير جاهز",
+          subtitle: databaseDashboard.checkedAt
+            ? `آخر فحص: ${formatDatabaseTimestamp(databaseDashboard.checkedAt)}`
+            : databaseLoaded
+              ? "بانتظار أول فحص ناجح."
+              : "جاري تنفيذ أول فحص للخدمات.",
+          status: overallStatus,
+          statusLabel: getDatabaseStatusLabel(overallStatus),
+          statusDetail:
+            overallStatus === "success"
+              ? "جميع الخدمات الرئيسية استجابت بنجاح."
+              : overallStatus === "checking"
+                ? "يتم الآن تحديث البيانات وحالة الخدمات."
+                : "يوجد خلل أو عدم جاهزية في واحدة أو أكثر من الخدمات.",
+        };
+      }
+
+      const service = databaseDashboard.services[card.key];
+      const status: DatabaseUiStatus = databaseRefreshing ? "checking" : service.status;
+      const fallbackDetail =
+        card.key === "d1"
+          ? "المرجع: maedin-documents"
+          : card.key === "r2"
+            ? "المرجع: maedin-storage"
+            : "المرجع: upload.maedin.workers.dev";
+
+      return {
+        ...card,
+        subtitle:
+          card.key === "worker" && databaseWorkerUrl
+            ? databaseWorkerUrl
+            : card.subtitle,
+        status,
+        statusLabel: getDatabaseStatusLabel(status),
+        statusDetail: databaseRefreshing
+          ? "يتم الآن إعادة الفحص..."
+          : formatDatabaseServiceDetail(service.detail, fallbackDetail),
+      };
+    });
+  }, [databaseDashboard, databaseLoaded, databaseRefreshing, databaseWorkerUrl]);
+
+  const databaseMetricCards = useMemo(() => {
+    return DATABASE_METRIC_CARDS.map((metric) => {
+      switch (metric.key) {
+        case "totalFiles":
+          return {
+            ...metric,
+            value: formatDatabaseCount(databaseDashboard.metrics.totalFiles),
+            helper: databaseRefreshing
+              ? "جارٍ التحديث"
+              : !databaseLoaded
+                ? "جاري القراءة"
+                : formatDatabaseMetricSource(
+                    databaseDashboard.sources.totalFiles,
+                    databaseDashboard.metrics.totalFiles !== null
+                  ),
+          };
+        case "totalBytes":
+          return {
+            ...metric,
+            value: formatDatabaseBytes(databaseDashboard.metrics.totalBytes),
+            helper: databaseRefreshing
+              ? "جارٍ التحديث"
+              : !databaseLoaded
+                ? "جاري القراءة"
+                : formatDatabaseMetricSource(
+                    databaseDashboard.sources.totalBytes,
+                    databaseDashboard.metrics.totalBytes !== null
+                  ),
+          };
+        case "latestUploadAt":
+          return {
+            ...metric,
+            value: formatDatabaseTimestamp(databaseDashboard.metrics.latestUploadAt),
+            helper: databaseRefreshing
+              ? "جارٍ التحديث"
+              : !databaseLoaded
+                ? "جاري القراءة"
+                : formatDatabaseMetricSource(
+                    databaseDashboard.sources.latestUploadAt,
+                    databaseDashboard.metrics.latestUploadAt !== null
+                  ),
+          };
+        case "d1Records":
+        default:
+          return {
+            ...metric,
+            value: formatDatabaseCount(databaseDashboard.metrics.d1Records),
+            helper: databaseRefreshing
+              ? "جارٍ التحديث"
+              : !databaseLoaded
+                ? "جاري القراءة"
+                : formatDatabaseMetricSource(
+                    databaseDashboard.sources.d1Records,
+                    databaseDashboard.metrics.d1Records !== null
+                  ),
+          };
+      }
+    });
+  }, [databaseDashboard, databaseLoaded, databaseRefreshing]);
+
+  const databaseTechnicalDetails = useMemo(() => {
+    return DATABASE_TECHNICAL_DETAILS.map((item) => {
+      if (item.label !== "Worker" || !databaseWorkerUrl) return item;
+      return {
+        ...item,
+        value: databaseWorkerUrl,
+      };
+    });
+  }, [databaseWorkerUrl]);
+
+  const databaseNotes = useMemo(() => {
+    const notes = [...DATABASE_NOTES];
+    notes.push(
+      databaseDashboard.checkedAt
+        ? `آخر فحص ناجح/متاح: ${formatDatabaseTimestamp(databaseDashboard.checkedAt)}.`
+        : databaseLoaded
+          ? "لم يتم الحصول بعد على قراءة ناجحة من خدمات التخزين."
+          : "جارٍ تنفيذ أول فحص لخدمات Cloudflare."
+    );
+    return notes;
+  }, [databaseDashboard.checkedAt, databaseLoaded]);
 
   /* =========================
      UI
@@ -2045,7 +2803,7 @@ export default function Settings() {
           {/* =========================
               Backup
           ========================= */}
-          <TabsContent value="backup">
+          <TabsContent value="backup" className="space-y-6">
             <Card>
               <CardHeader>
                 <CardTitle>Backup / Restore</CardTitle>
@@ -2078,25 +2836,688 @@ export default function Settings() {
                 </div>
               </CardContent>
             </Card>
+
+            <Card>
+              <CardHeader className="gap-4">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="space-y-2">
+                    <CardTitle>Contract Export</CardTitle>
+                    <CardDescription className="max-w-2xl leading-6">
+                      Generate either the system package or the human-readable Excel bundle from
+                      the current live sources: Firestore business data, D1 file metadata, and R2
+                      file references.
+                    </CardDescription>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant="outline">
+                      {selectedContractIds.length.toLocaleString("en-US")} selected
+                    </Badge>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void loadContractExportItems({ manual: true })}
+                      disabled={
+                        contractExportLoading || contractExporting || contractExcelExporting
+                      }
+                    >
+                      <RefreshCw
+                        className={cn("mr-2 h-4 w-4", contractExportLoading && "animate-spin")}
+                      />
+                      Refresh Contracts
+                    </Button>
+                  </div>
+                </div>
+              </CardHeader>
+
+              <CardContent className="space-y-4">
+                {contractExportError ? (
+                  <Alert className="border-red-500/40 bg-red-500/5 text-red-700">
+                    <CircleAlert className="h-4 w-4" />
+                    <AlertTitle>Contract Export Error</AlertTitle>
+                    <AlertDescription>{contractExportError}</AlertDescription>
+                  </Alert>
+                ) : null}
+
+                {contractExcelExportError ? (
+                  <Alert className="border-red-500/40 bg-red-500/5 text-red-700">
+                    <CircleAlert className="h-4 w-4" />
+                    <AlertTitle>Excel Export Error</AlertTitle>
+                    <AlertDescription>{contractExcelExportError}</AlertDescription>
+                  </Alert>
+                ) : null}
+
+                {contractExportSummary ? (
+                  <Alert className="border-emerald-500/30 bg-emerald-500/5 text-emerald-700">
+                    <CheckCircle2 className="h-4 w-4" />
+                    <AlertTitle>Last System Package Export</AlertTitle>
+                    <AlertDescription className="space-y-1">
+                      <p>
+                        {contractExportSummary.fileName} generated at{" "}
+                        {formatDatabaseTimestamp(contractExportSummary.generatedAt)}.
+                      </p>
+                      <p>
+                        Contracts: {contractExportSummary.rowCounts.contracts} | Investments:{" "}
+                        {contractExportSummary.rowCounts.investments} | Attachments:{" "}
+                        {contractExportSummary.attachmentCount} | Warnings:{" "}
+                        {contractExportSummary.warningCount}
+                      </p>
+                    </AlertDescription>
+                  </Alert>
+                ) : null}
+
+                {contractExcelExportSummary ? (
+                  <Alert className="border-sky-500/30 bg-sky-500/5 text-sky-700">
+                    <CheckCircle2 className="h-4 w-4" />
+                    <AlertTitle>Last Excel Export</AlertTitle>
+                    <AlertDescription className="space-y-1">
+                      <p>
+                        {contractExcelExportSummary.fileName} generated at{" "}
+                        {formatDatabaseTimestamp(contractExcelExportSummary.generatedAt)}.
+                      </p>
+                      <p>
+                        Workbooks: {contractExcelExportSummary.workbookCount} | Contracts:{" "}
+                        {contractExcelExportSummary.rowCounts.contracts} | Files:{" "}
+                        {contractExcelExportSummary.rowCounts.files} | Warnings:{" "}
+                        {contractExcelExportSummary.warningCount}
+                      </p>
+                    </AlertDescription>
+                  </Alert>
+                ) : null}
+
+                <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_220px]">
+                  <div className="space-y-2">
+                    <Label htmlFor="contract-export-search">Search contracts</Label>
+                    <Input
+                      id="contract-export-search"
+                      value={contractSearch}
+                      onChange={(event) => setContractSearch(event.target.value)}
+                      placeholder="Search by contract, project, investor, or investment ID"
+                      disabled={contractExporting || contractExcelExporting}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Status filter</Label>
+                    <Select value={contractStatusFilter} onValueChange={setContractStatusFilter}>
+                      <SelectTrigger disabled={contractExporting || contractExcelExporting}>
+                        <SelectValue placeholder="All statuses" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All statuses</SelectItem>
+                        {contractStatusOptions.map((status) => (
+                          <SelectItem key={status} value={status}>
+                            {status}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => toggleSelectAllFilteredContracts(!allFilteredSelected)}
+                    disabled={
+                      !filteredContractExportItems.length ||
+                      contractExportLoading ||
+                      contractExporting ||
+                      contractExcelExporting
+                    }
+                  >
+                    {allFilteredSelected ? "Deselect Filtered" : "Select Filtered"}
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    onClick={() => setSelectedContractIds([])}
+                    disabled={
+                      !selectedContractIds.length || contractExporting || contractExcelExporting
+                    }
+                  >
+                    Clear Selection
+                  </Button>
+
+                  <Button
+                    className="bg-[#F2B705] text-black hover:bg-[#d7a404]"
+                    onClick={() => void handleContractExport()}
+                    disabled={
+                      !selectedContractIds.length ||
+                      contractExportLoading ||
+                      contractExporting ||
+                      contractExcelExporting
+                    }
+                  >
+                    <Archive className="mr-2 h-4 w-4" />
+                    {contractExporting
+                      ? "Generating System Package..."
+                      : "Contract Export (System Package)"}
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    className="border-[#F2B705] text-[#7a5b00] hover:bg-[#fff7d1] hover:text-[#5e4600]"
+                    onClick={() => void handleBusinessExcelExport()}
+                    disabled={
+                      !selectedContractIds.length ||
+                      contractExportLoading ||
+                      contractExporting ||
+                      contractExcelExporting
+                    }
+                  >
+                    <Files className="mr-2 h-4 w-4" />
+                    {contractExcelExporting
+                      ? "Generating Excel Bundle..."
+                      : "Contract Export (Excel)"}
+                  </Button>
+                </div>
+
+                <div className="rounded-2xl border">
+                  {contractExportLoading ? (
+                    <div className="p-6 text-sm text-muted-foreground">
+                      Loading contracts for export...
+                    </div>
+                  ) : filteredContractExportItems.length ? (
+                    <div className="max-h-[420px] divide-y overflow-y-auto">
+                      {filteredContractExportItems.map((item) => {
+                        const checked = selectedContractIdSet.has(item.id);
+                        return (
+                          <label
+                            key={item.id}
+                            className="flex cursor-pointer items-start gap-3 p-4 hover:bg-muted/30"
+                          >
+                            <Checkbox
+                              checked={checked}
+                              onCheckedChange={(value) =>
+                                toggleContractSelection(item.id, value === true)
+                              }
+                              className="mt-1"
+                              disabled={contractExporting || contractExcelExporting}
+                            />
+
+                            <div className="min-w-0 flex-1 space-y-2">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <p className="font-medium">{item.id}</p>
+                                <Badge variant="outline">{item.status}</Badge>
+                                {item.projectTitle ? (
+                                  <Badge variant="secondary" className="max-w-full truncate">
+                                    {item.projectTitle}
+                                  </Badge>
+                                ) : null}
+                              </div>
+
+                              <p className="text-sm text-muted-foreground">
+                                Investor: {item.investorName || "Unknown"}{" "}
+                                {item.investorEmail ? `(${item.investorEmail})` : ""}
+                              </p>
+
+                              <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                                <span>Investment: {item.investmentId || "-"}</span>
+                                <span>Project: {item.projectId || "-"}</span>
+                                <span>
+                                  Updated:{" "}
+                                  {formatDatabaseTimestamp(
+                                    item.updatedAt || item.signedAt || item.createdAt
+                                  )}
+                                </span>
+                              </div>
+                            </div>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="p-6 text-sm text-muted-foreground">
+                      No contracts match the current filters.
+                    </div>
+                  )}
+                </div>
+
+                <p className="text-xs leading-5 text-muted-foreground">
+                  Package contents: investors.csv, projects.csv, investments.csv,
+                  contracts.csv, interest_requests.csv, files.csv, attachments/, manifest.json,
+                  and README.md.
+                </p>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           {/* =========================
               Database
           ========================= */}
-          <TabsContent value="database">
+          <TabsContent value="database" className="space-y-6">
             <Card>
-              <CardHeader>
-                <CardTitle>قاعدة البيانات</CardTitle>
-                <CardDescription>
-                  النسخ الاحتياطي يتم عبر Firebase
-                </CardDescription>
+              <CardHeader className="gap-4">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Database className="h-4 w-4" />
+                      <span>Database / Storage</span>
+                    </div>
+                    <CardTitle className="text-2xl">
+                      قاعدة البيانات والتخزين
+                    </CardTitle>
+                    <CardDescription className="max-w-2xl leading-6">
+                      إدارة بنية الملفات الحالية عبر Cloudflare D1 وR2
+                      وWorkers
+                    </CardDescription>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant="outline">Cloudflare</Badge>
+                    <Badge variant="secondary">Production</Badge>
+                  </div>
+                </div>
               </CardHeader>
-              <CardContent className="space-y-2">
-                <p className="text-sm text-muted-foreground">
-                  النسخ الاحتياطي والإستعادة تتم عبر Firebase Console.
-                </p>
+
+              <CardContent>
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                  {databaseOverviewCards.map((card) => {
+                    const Icon = card.icon;
+
+                    return (
+                      <div
+                        key={card.title}
+                        className="rounded-2xl border bg-muted/20 p-4 shadow-sm"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="space-y-1">
+                            <p className="text-sm font-medium text-foreground">
+                              {card.title}
+                            </p>
+                            <p
+                              className="text-lg font-semibold tracking-tight"
+                              dir={card.valueDir}
+                            >
+                              {card.value}
+                            </p>
+                            <Badge
+                              variant="outline"
+                              className={cn("mt-2", getDatabaseStatusTone(card.status))}
+                            >
+                              {card.statusLabel}
+                            </Badge>
+                          </div>
+
+                          <div className="rounded-xl border bg-background p-2 text-muted-foreground">
+                            <Icon className="h-4 w-4" />
+                          </div>
+                        </div>
+
+                        <p
+                          className="mt-4 text-sm text-muted-foreground"
+                          dir={card.valueDir}
+                        >
+                          {card.subtitle}
+                        </p>
+
+                        {card.statusDetail ? (
+                          <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                            {card.statusDetail}
+                          </p>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
               </CardContent>
             </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>المعمارية الحالية</CardTitle>
+                <CardDescription>
+                  تدفق الملفات والبيانات من واجهة المنصة إلى طبقة الرفع ثم إلى
+                  Cloudflare D1 وR2.
+                </CardDescription>
+              </CardHeader>
+
+              <CardContent className="space-y-6">
+                <div className="rounded-2xl border bg-muted/20 p-4">
+                  <div
+                    className="flex flex-col gap-3 lg:flex-row lg:items-center"
+                    dir="ltr"
+                  >
+                    <div className="flex-1 rounded-xl border bg-background p-4 text-right">
+                      <div className="flex items-center gap-3">
+                        <div className="rounded-xl border bg-muted/30 p-2 text-muted-foreground">
+                          <Globe className="h-4 w-4" />
+                        </div>
+                        <div className="space-y-1">
+                          <div className="text-sm text-muted-foreground">
+                            الموقع
+                          </div>
+                          <div className="font-semibold">واجهة المنصة</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="shrink-0 px-2 text-center text-lg text-muted-foreground">
+                      →
+                    </div>
+
+                    <div className="flex-1 rounded-xl border bg-background p-4 text-right">
+                      <div className="flex items-center gap-3">
+                        <div className="rounded-xl border bg-muted/30 p-2 text-muted-foreground">
+                          <ServerCog className="h-4 w-4" />
+                        </div>
+                        <div className="space-y-1">
+                          <div className="text-sm text-muted-foreground">
+                            Cloudflare Worker
+                          </div>
+                          <div className="font-semibold" dir="ltr">
+                            {databaseWorkerUrl || "upload.maedin.workers.dev"}
+                          </div>
+                          <div className="pt-2">
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                getDatabaseStatusTone(
+                                  databaseRefreshing
+                                    ? "checking"
+                                    : databaseDashboard.services.worker.status
+                                )
+                              )}
+                            >
+                              Worker:{" "}
+                              {getDatabaseStatusLabel(
+                                databaseRefreshing
+                                  ? "checking"
+                                  : databaseDashboard.services.worker.status
+                              )}
+                            </Badge>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="shrink-0 px-2 text-center text-lg text-muted-foreground">
+                      →
+                    </div>
+
+                    <div className="flex-1 rounded-xl border bg-background p-4 text-right">
+                      <div className="flex items-center gap-3">
+                        <div className="rounded-xl border bg-muted/30 p-2 text-muted-foreground">
+                          <Database className="h-4 w-4" />
+                        </div>
+                        <div className="space-y-1">
+                          <div className="text-sm text-muted-foreground">
+                            طبقة التخزين
+                          </div>
+                          <div className="font-semibold" dir="ltr">
+                            D1 + R2
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 flex flex-wrap gap-2" dir="ltr">
+                        <Badge variant="outline">maedin-documents</Badge>
+                        <Badge variant="outline">maedin-storage</Badge>
+                      </div>
+
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            getDatabaseStatusTone(
+                              databaseRefreshing
+                                ? "checking"
+                                : databaseDashboard.services.d1.status
+                            )
+                          )}
+                        >
+                          D1:{" "}
+                          {getDatabaseStatusLabel(
+                            databaseRefreshing
+                              ? "checking"
+                              : databaseDashboard.services.d1.status
+                          )}
+                        </Badge>
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            getDatabaseStatusTone(
+                              databaseRefreshing
+                                ? "checking"
+                                : databaseDashboard.services.r2.status
+                            )
+                          )}
+                        >
+                          R2:{" "}
+                          {getDatabaseStatusLabel(
+                            databaseRefreshing
+                              ? "checking"
+                              : databaseDashboard.services.r2.status
+                          )}
+                        </Badge>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-3">
+                  <div className="rounded-2xl border bg-muted/20 p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="rounded-xl border bg-background p-2 text-muted-foreground">
+                        <Database className="h-4 w-4" />
+                      </div>
+                      <div className="font-medium">بيانات الملفات</div>
+                    </div>
+                    <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                      يتم حفظ بيانات الملفات وسجلاتها المرجعية داخل Cloudflare
+                      D1.
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl border bg-muted/20 p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="rounded-xl border bg-background p-2 text-muted-foreground">
+                        <HardDrive className="h-4 w-4" />
+                      </div>
+                      <div className="font-medium">الملفات الفعلية</div>
+                    </div>
+                    <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                      يتم حفظ الملفات الفعلية والأصول المرفوعة داخل Cloudflare
+                      R2.
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl border bg-muted/20 p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="rounded-xl border bg-background p-2 text-muted-foreground">
+                        <ServerCog className="h-4 w-4" />
+                      </div>
+                      <div className="font-medium">عمليات الرفع والتحقق</div>
+                    </div>
+                    <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                      تتم عمليات الرفع والتحقق والربط بين D1 وR2 عبر Cloudflare
+                      Workers.
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>إحصاءات تشغيلية</CardTitle>
+                <CardDescription>
+                  يتم تحديثها من بيانات التخزين الحالية عبر Cloudflare Worker.
+                </CardDescription>
+              </CardHeader>
+
+              <CardContent>
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                  {databaseMetricCards.map((metric) => {
+                    const Icon = metric.icon;
+
+                    return (
+                      <div
+                        key={metric.title}
+                        className="rounded-2xl border bg-muted/20 p-4"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="space-y-1">
+                            <p className="text-sm font-medium text-foreground">
+                              {metric.title}
+                            </p>
+                            <p
+                              className="text-3xl font-semibold tracking-tight"
+                              dir={metric.valueDir}
+                            >
+                              {metric.value}
+                            </p>
+                          </div>
+
+                          <div className="flex flex-col items-end gap-2">
+                            <Badge variant="secondary">{metric.helper}</Badge>
+                            <div className="rounded-xl border bg-background p-2 text-muted-foreground">
+                              <Icon className="h-4 w-4" />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>عمليات إدارية</CardTitle>
+                <CardDescription>
+                  المتاح حاليًا هو إعادة فحص الخدمات وتحديث القيم المعروضة فقط.
+                </CardDescription>
+              </CardHeader>
+
+              <CardContent>
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+                  {DATABASE_ACTION_CARDS.map((action) => {
+                    const Icon = action.icon;
+                    const isRefreshAction = action.key === "refreshStatus";
+                    const isBusy = isRefreshAction && databaseRefreshing;
+                    const status: DatabaseUiStatus = isRefreshAction
+                      ? databaseRefreshing
+                        ? "checking"
+                        : "success"
+                      : "not_ready";
+
+                    return (
+                      <div
+                        key={action.title}
+                        className="rounded-2xl border bg-muted/20 p-4"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="rounded-xl border bg-background p-2 text-muted-foreground">
+                            <Icon className={cn("h-4 w-4", isBusy && "animate-spin")} />
+                          </div>
+                          <Badge
+                            variant={isRefreshAction ? "outline" : "secondary"}
+                            className={
+                              isRefreshAction
+                                ? cn(getDatabaseStatusTone(status))
+                                : undefined
+                            }
+                          >
+                            {isRefreshAction
+                              ? databaseRefreshing
+                                ? "جارٍ الفحص"
+                                : "مفعل"
+                              : "قريبًا"}
+                          </Badge>
+                        </div>
+
+                        <div className="mt-4 space-y-2">
+                          <div className="font-medium">{action.title}</div>
+                          <p className="text-sm leading-6 text-muted-foreground">
+                            {action.description}
+                          </p>
+                        </div>
+
+                        <Button
+                          variant="outline"
+                          disabled={!isRefreshAction || databaseRefreshing}
+                          className="mt-4 w-full"
+                          onClick={
+                            isRefreshAction
+                              ? () => void refreshDatabaseDashboard({ manual: true })
+                              : undefined
+                          }
+                        >
+                          {isRefreshAction
+                            ? databaseRefreshing
+                              ? "جارٍ التحديث..."
+                              : "تحديث الآن"
+                            : "غير متاح حاليًا"}
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+
+            <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+              <Card>
+                <CardHeader>
+                  <CardTitle>تفاصيل تقنية</CardTitle>
+                  <CardDescription>
+                    معلومات read-only عن البنية الحالية المعتمدة لهذا القسم.
+                  </CardDescription>
+                </CardHeader>
+
+                <CardContent>
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+                    {databaseTechnicalDetails.map((item) => (
+                      <div
+                        key={item.label}
+                        className="rounded-2xl border bg-muted/20 p-4"
+                      >
+                        <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                          {item.label}
+                        </div>
+                        <div
+                          className="mt-3 font-mono text-sm font-medium text-foreground"
+                          dir={item.valueDir}
+                        >
+                          {item.value}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>ملاحظات</CardTitle>
+                  <CardDescription>
+                    توضيحات تشغيلية مهمة مرتبطة ببنية التخزين الحالية.
+                  </CardDescription>
+                </CardHeader>
+
+                <CardContent className="space-y-4">
+                  <Alert className="border-dashed bg-muted/20">
+                    <CircleAlert className="h-4 w-4" />
+                    <AlertTitle>Cloudflare Only</AlertTitle>
+                    <AlertDescription>
+                      {databaseNotes.map((note) => (
+                        <p key={note}>{note}</p>
+                      ))}
+                    </AlertDescription>
+                  </Alert>
+
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant="outline">No Firebase</Badge>
+                    <Badge variant="outline">D1 + R2 + Workers</Badge>
+                    <Badge variant="secondary">Advanced Backup Soon</Badge>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
           </TabsContent>
         </Tabs>
       </div>

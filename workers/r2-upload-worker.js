@@ -49,6 +49,10 @@ export default {
       return handleList(url, db, request.url);
     }
 
+    if (request.method === "GET" && url.pathname === "/stats") {
+      return handleStats(bucket, db);
+    }
+
     if (request.method === "POST" && (url.pathname === "/" || url.pathname === "/upload")) {
       if (!bucket) {
         return json(500, {
@@ -389,6 +393,173 @@ async function handleList(url, db, requestUrl) {
   });
 }
 
+async function handleStats(bucket, db) {
+  const checkedAt = new Date().toISOString();
+  const [d1Stats, r2Stats] = await Promise.all([collectD1Stats(db), collectR2Stats(bucket)]);
+
+  const totalFiles = r2Stats.ok ? r2Stats.totalFiles : d1Stats.ok ? d1Stats.totalFiles : null;
+  const totalFilesSource = r2Stats.ok ? "r2" : d1Stats.ok ? "d1" : null;
+  const totalBytes = r2Stats.ok ? r2Stats.totalBytes : d1Stats.ok ? d1Stats.totalBytes : null;
+  const totalBytesSource = r2Stats.ok ? "r2" : d1Stats.ok ? "d1" : null;
+  const latestUploadAt =
+    d1Stats.ok && d1Stats.latestUploadAt
+      ? d1Stats.latestUploadAt
+      : r2Stats.ok && r2Stats.latestUploadAt
+        ? r2Stats.latestUploadAt
+        : null;
+  const latestUploadAtSource =
+    d1Stats.ok && d1Stats.latestUploadAt
+      ? "d1"
+      : r2Stats.ok && r2Stats.latestUploadAt
+        ? "r2"
+        : null;
+
+  return json(200, {
+    ok: true,
+    success: true,
+    checkedAt,
+    services: {
+      worker: {
+        status: "success",
+        message: "worker_reachable",
+        detail: "stats_endpoint_responded",
+      },
+      d1: {
+        status: d1Stats.status,
+        message: d1Stats.message,
+        detail: d1Stats.detail,
+      },
+      r2: {
+        status: r2Stats.status,
+        message: r2Stats.message,
+        detail: r2Stats.detail,
+      },
+    },
+    metrics: {
+      totalFiles,
+      totalBytes,
+      latestUploadAt,
+      d1Records: d1Stats.ok ? d1Stats.totalFiles : null,
+    },
+    sources: {
+      totalFiles: totalFilesSource,
+      totalBytes: totalBytesSource,
+      latestUploadAt: latestUploadAtSource,
+      d1Records: d1Stats.ok ? "d1" : null,
+    },
+  });
+}
+
+async function collectD1Stats(db) {
+  if (!db) {
+    return {
+      ok: false,
+      status: "not_ready",
+      message: "missing_d1_binding",
+      detail: "d1_binding_unavailable",
+      totalFiles: null,
+      totalBytes: null,
+      latestUploadAt: null,
+    };
+  }
+
+  try {
+    const result = await db
+      .prepare(
+        `
+          SELECT
+            COUNT(*) AS total_files,
+            COALESCE(SUM(file_size), 0) AS total_bytes,
+            MAX(uploaded_at) AS latest_upload_at
+          FROM file_metadata
+        `
+      )
+      .all();
+
+    const row = Array.isArray(result?.results) ? result.results[0] : null;
+
+    return {
+      ok: true,
+      status: "success",
+      message: "d1_query_ok",
+      detail: "d1_metadata_aggregated",
+      totalFiles: normalizeNonNegativeNumber(row?.total_files, 0),
+      totalBytes: normalizeNonNegativeNumber(row?.total_bytes, 0),
+      latestUploadAt: normalizeIsoDate(row?.latest_upload_at),
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      status: "failed",
+      message: "d1_query_failed",
+      detail: errorToMessage(error),
+      totalFiles: null,
+      totalBytes: null,
+      latestUploadAt: null,
+    };
+  }
+}
+
+async function collectR2Stats(bucket) {
+  if (!bucket) {
+    return {
+      ok: false,
+      status: "not_ready",
+      message: "missing_r2_binding",
+      detail: "r2_binding_unavailable",
+      totalFiles: null,
+      totalBytes: null,
+      latestUploadAt: null,
+    };
+  }
+
+  try {
+    let totalFiles = 0;
+    let totalBytes = 0;
+    let latestUploadAt = null;
+    let cursor = undefined;
+    let truncated = false;
+
+    do {
+      const page = await bucket.list(cursor ? { limit: 1000, cursor } : { limit: 1000 });
+      const objects = Array.isArray(page?.objects) ? page.objects : [];
+
+      totalFiles += objects.length;
+
+      objects.forEach((object) => {
+        totalBytes += normalizeNonNegativeNumber(object?.size, 0);
+        const uploadedAt = normalizeIsoDate(object?.uploaded);
+        if (uploadedAt && (!latestUploadAt || uploadedAt > latestUploadAt)) {
+          latestUploadAt = uploadedAt;
+        }
+      });
+
+      truncated = Boolean(page?.truncated);
+      cursor = truncated ? normalizeNullableString(page?.cursor) || undefined : undefined;
+    } while (truncated && cursor);
+
+    return {
+      ok: true,
+      status: "success",
+      message: "r2_list_ok",
+      detail: "r2_objects_aggregated",
+      totalFiles,
+      totalBytes,
+      latestUploadAt,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      status: "failed",
+      message: "r2_list_failed",
+      detail: errorToMessage(error),
+      totalFiles: null,
+      totalBytes: null,
+      latestUploadAt: null,
+    };
+  }
+}
+
 async function handleDownload(url, bucket) {
   const path = normalizeObjectPath(url.searchParams.get("path"));
   const isProbe =
@@ -611,6 +782,18 @@ function normalizeNullableString(value) {
 function normalizeNullableInteger(value) {
   const normalized = Number(value);
   return Number.isInteger(normalized) ? normalized : null;
+}
+
+function normalizeNonNegativeNumber(value, fallback = null) {
+  const normalized = Number(value);
+  if (!Number.isFinite(normalized) || normalized < 0) return fallback;
+  return normalized;
+}
+
+function normalizeIsoDate(value) {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
 function normalizeStatus(value) {
