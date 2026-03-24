@@ -47,3 +47,12 @@ copilot-messages.log
 # System files
 .DS_Store
 .project/attachments/files/**
+
+# Build and deployment artifacts
+client/dist/
+.vercel/
+node_modules/
+functions/node_modules/
+
+.vercel
+.env*.local
