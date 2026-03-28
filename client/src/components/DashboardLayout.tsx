@@ -61,7 +61,7 @@ const menuItems: MenuItem[] = [
 
   { icon: Crown, label: "إدارة VIP", path: "/admin/vip", allow: ["owner", "admin"] },
 
-  { icon: MessageSquare, label: "الرسائل", path: "/admin/messages", allow: ["owner", "admin", "staff"] },
+  { icon: MessageSquare, label: "سجل طلبات الاستثمار", path: "/admin/messages", allow: ["owner", "admin", "staff"] },
 
   { icon: FileText, label: "سجل التعديلات", path: "/admin/audit-log", allow: ["owner", "admin"] },
 

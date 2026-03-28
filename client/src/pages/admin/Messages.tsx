@@ -45,14 +45,6 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 
 import {
   MessageSquare,
@@ -305,6 +297,26 @@ function lastTouchedBy(m: any) {
   }
 
   return "—";
+}
+
+function getRequestSummary(m: any) {
+  const candidates = [
+    m?.message,
+    m?.body,
+    m?.description,
+    m?.details,
+    m?.note,
+    m?.requestText,
+    m?.reason,
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && candidate.trim()) {
+      return candidate.trim();
+    }
+  }
+
+  return "";
 }
 
 function getFileNameFromPath(path: any): string {
@@ -699,12 +711,15 @@ export default function MessagesManagement() {
       needs_account: { label: "عند المحاسب", cls: "bg-yellow-600" },
       no_account: { label: "بدون حساب", cls: "bg-rose-700" },
       waiting_client_confirmation: { label: "بانتظار تعميد العميل", cls: "bg-indigo-700" },
-      completed: { label: "مقفل نهائيًا", cls: "bg-gray-800" },
+      completed: {
+        label: "مقفل نهائيًا",
+        cls: "border border-amber-300/70 bg-slate-950 text-amber-200 shadow-sm",
+      },
     };
 
-    map.pending = { label: "قيد الانتظار", cls: "bg-slate-600" };
+    map.pending = { label: "قيد الانتظار", cls: "bg-amber-500 text-white" };
     map.reviewing = { label: "قيد المراجعة", cls: "bg-blue-600" };
-    map.new = { label: "قيد الانتظار", cls: "bg-slate-600" };
+    map.new = { label: "قيد الانتظار", cls: "bg-amber-500 text-white" };
     map.in_progress = { label: "قيد المراجعة", cls: "bg-blue-600" };
     map.resolved = { label: "موافقة أولية", cls: "bg-emerald-700" };
     map.approved = { label: "موافقة أولية", cls: "bg-green-600" };
@@ -2801,9 +2816,9 @@ export default function MessagesManagement() {
     <DashboardLayout>
       <div className="space-y-6">
         <div>
-          <h1 className="text-4xl font-bold mb-2">صندوق الرسائل</h1>
+          <h1 className="text-4xl font-bold mb-2">سجل طلبات الاستثمار</h1>
           <p className="text-muted-foreground text-lg">
-            إدارة الرسائل والاستفسارات الواردة
+            إدارة ومتابعة طلبات الاستثمار الواردة
           </p>
 
           {/* ✅ تنبيه للحسابات القديمة (doc ناقص / role ناقص) */}
@@ -2855,328 +2870,185 @@ export default function MessagesManagement() {
           </CardContent>
         </Card>
 
-        {/* Table */}
-        <Card className="rsg-card">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <MessageSquare className="w-5 h-5" />
-              الرسائل
-            </CardTitle>
+        {/* Messages list */}
+        <Card className="rsg-card border-slate-200/80">
+          <CardHeader className="gap-4 border-b border-slate-200/70 pb-5">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <MessageSquare className="w-5 h-5" />
+                سجل طلبات الاستثمار
+              </CardTitle>
+
+              <div className="inline-flex w-fit items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm font-medium text-slate-600">
+                {filtered.length.toLocaleString("ar-SA")} سجل
+              </div>
+            </div>
+
+            <p className="text-sm text-muted-foreground">
+              عرض مرن وواضح للطلبات بدون أي تمرير أفقي داخل القسم.
+            </p>
           </CardHeader>
-          <CardContent>
+          <CardContent className="pt-6" dir="rtl">
             {loading ? (
               <div className="py-10 flex items-center justify-center gap-2 text-muted-foreground">
                 <Loader2 className="w-5 h-5 animate-spin" />
                 جاري التحميل...
               </div>
             ) : filtered.length ? (
-              <>
-                {/* Mobile cards (no horizontal scroll) */}
-                <div className="md:hidden space-y-3">
-                  {filtered.map((m) => {
-                    const badge = getStatusBadge(m.status);
+              <div className="space-y-4">
+                {filtered.map((m) => {
+                  const badge = getStatusBadge(m.status);
+                  const pid = pick(m?.projectId, m?.project_id, m?.project?.id);
+                  const projectTitle = getProjectTitle(pid);
+                  const amount =
+                    toNum(m?.approvedAmount) ||
+                    toNum(m?.amount) ||
+                    toNum(m?.requestedAmount) ||
+                    toNum(m?.estimatedAmount) ||
+                    0;
+                  const remaining = getProjectRemaining(pid);
+                  const exceeded = remaining != null ? amount > remaining : false;
+                  const invState = m?.investmentId
+                    ? { label: "تم الإنشاء", cls: "bg-emerald-700" }
+                    : { label: "بانتظار الإنشاء", cls: "bg-slate-600" };
+                  const touchedBy = lastTouchedBy(m);
+                  const requestDate = formatDateTimeAR(
+                    m.createdAt || m.created_at || m.submittedAt || m.timestamp
+                  );
+                  const summary = getRequestSummary(m);
+                  const clientName = getClientName(m) || "—";
+                  const clientEmail = getClientEmail(m);
+                  const clientPhone = getClientPhone(m);
 
-                    const pid = pick(m?.projectId, m?.project_id, m?.project?.id);
-                    const projectTitle = getProjectTitle(pid);
+                  return (
+                    <article
+                      key={m.id}
+                      className="rounded-2xl border border-slate-200 bg-gradient-to-br from-white via-white to-slate-50 p-4 shadow-sm ring-1 ring-slate-100/80 transition-shadow hover:shadow-md sm:p-5"
+                    >
+                      <div className="flex flex-col gap-5">
+                        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                          <div className="min-w-0 flex-1 space-y-4">
+                            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                              <div className="min-w-0 space-y-2">
+                                <div className="inline-flex w-fit items-center rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold tracking-[0.14em] text-slate-600">
+                                  سجل طلب
+                                </div>
 
-                    const amount =
-                      toNum(m?.approvedAmount) ||
-                      toNum(m?.amount) ||
-                      toNum(m?.requestedAmount) ||
-                      toNum(m?.estimatedAmount) ||
-                      0;
+                                <div className="space-y-1">
+                                  <h3 className="text-lg font-semibold text-slate-900 break-words">
+                                    {clientName}
+                                  </h3>
 
-                    const remaining = getProjectRemaining(pid);
-                    const exceeded = remaining != null ? amount > remaining : false;
+                                  <div className="flex items-start gap-2 text-sm text-slate-600">
+                                    <Building2 className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
+                                    <span className="min-w-0 break-words">{projectTitle}</span>
+                                  </div>
+                                </div>
 
-                    const invState = m?.investmentId
-                      ? { label: "تم الإنشاء", cls: "bg-emerald-700" }
-                      : { label: "بانتظار", cls: "bg-slate-600" };
-
-                    const touchedBy = lastTouchedBy(m);
-
-                    return (
-                      <div
-                        key={m.id}
-                        className="rounded-xl border bg-white/70 p-3 shadow-sm"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <div className="text-xs text-muted-foreground">
-                              العميل
-                            </div>
-                            <div className="font-semibold">
-                              {getClientName(m) || "—"}
-                            </div>
-                          </div>
-                          <Badge className={badge.cls}>{badge.label}</Badge>
-                        </div>
-
-                        <div className="mt-2">
-                          <div className="text-xs text-muted-foreground">
-                            اسم المشروع
-                          </div>
-                          <div className="font-medium">{projectTitle}</div>
-                        </div>
-
-                        <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
-                          <div>
-                            <div className="text-xs text-muted-foreground">
-                              رقم الطلب
-                            </div>
-                            <div className="font-mono">{requestNumber(m)}</div>
-                          </div>
-                          <div>
-                            <div className="text-xs text-muted-foreground">
-                              المبلغ
-                            </div>
-                            <div className="font-semibold">
-                              {moneySAR(amount)}
-                            </div>
-                          </div>
-                          <div>
-                            <div className="text-xs text-muted-foreground">
-                              المتبقي
-                            </div>
-                            <div>
-                              {remaining == null ? (
-                                <span className="text-muted-foreground">—</span>
-                              ) : exceeded ? (
-                                <Badge className="bg-red-700">
-                                  {moneySAR(remaining)} (تجاوز)
-                                </Badge>
-                              ) : (
-                                <Badge variant="outline">
-                                  {moneySAR(remaining)}
-                                </Badge>
-                              )}
-                            </div>
-                          </div>
-                          <div>
-                            <div className="text-xs text-muted-foreground">
-                              الاستثمار
-                            </div>
-                            <div>
-                              <Badge className={invState.cls}>
-                                {invState.label}
-                              </Badge>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="mt-2 flex flex-wrap items-center gap-2">
-                          <Badge variant="outline">
-                            {stageLabel(m.stageRole)}
-                          </Badge>
-                          <span className="text-xs text-muted-foreground">
-                            {touchedBy}
-                          </span>
-                        </div>
-
-                        <div className="mt-2 text-xs text-muted-foreground">
-                          {formatDateTimeAR(
-                            m.createdAt ||
-                              m.created_at ||
-                              m.submittedAt ||
-                              m.timestamp
-                          )}
-                        </div>
-
-                        <div className="mt-3 grid grid-cols-1 gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="w-full justify-center"
-                            onClick={() => {
-                              const clientId = pick(
-                                m?.createdByUid,
-                                m?.investorUid,
-                                m?.userId,
-                                m?.userSnapshot?.uid
-                              );
-                              if (!clientId) {
-                                toast.warning(
-                                  "لا يوجد حساب عميل مرتبط بهذا الطلب."
-                                );
-                                return;
-                              }
-                              window.location.href = `/admin/client-profile?id=${clientId}`;
-                            }}
-                          >
-                            <FileText className="w-4 h-4 ml-1" />
-                            ملف العميل
-                          </Button>
-
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="w-full justify-center"
-                            onClick={() => {
-                              if (!pid) {
-                                toast.warning("لا يوجد مشروع مرتبط بهذا الطلب.");
-                                return;
-                              }
-                              window.location.href = `/admin/projects/${pid}/edit`;
-                            }}
-                          >
-                            <ExternalLink className="w-4 h-4 ml-1" />
-                            المشروع
-                          </Button>
-
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="w-full justify-center"
-                            onClick={() => void openMessageDetails(m)}
-                          >
-                            <Eye className="w-4 h-4 ml-1" />
-                            عرض
-                          </Button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* Desktop table */}
-                <div className="hidden md:block">
-                  <div className="w-full overflow-x-auto" dir="rtl">
-                    <Table className="min-w-[1100px] md:min-w-full">
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="min-w-[140px] whitespace-nowrap">
-                            العميل
-                          </TableHead>
-                          <TableHead className="min-w-[180px] whitespace-nowrap">
-                            اسم المشروع
-                          </TableHead>
-                          <TableHead className="min-w-[130px] whitespace-nowrap">
-                            رقم الطلب
-                          </TableHead>
-                          <TableHead className="min-w-[120px] whitespace-nowrap">
-                            المبلغ
-                          </TableHead>
-                          <TableHead className="min-w-[120px] whitespace-nowrap">
-                            المتبقي
-                          </TableHead>
-                          <TableHead className="min-w-[120px] whitespace-nowrap">
-                            الاستثمار
-                          </TableHead>
-                          <TableHead className="min-w-[110px] whitespace-nowrap">
-                            الحالة
-                          </TableHead>
-                          <TableHead className="min-w-[110px] whitespace-nowrap">
-                            المرحلة
-                          </TableHead>
-                          <TableHead className="min-w-[120px] whitespace-nowrap">
-                            آخر تعديل
-                          </TableHead>
-                          <TableHead className="min-w-[140px] whitespace-nowrap">
-                            التاريخ
-                          </TableHead>
-                          <TableHead className="min-w-[220px] text-left">
-                            إجراء
-                          </TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {filtered.map((m) => {
-                          const badge = getStatusBadge(m.status);
-
-                          const pid = pick(
-                            m?.projectId,
-                            m?.project_id,
-                            m?.project?.id
-                          );
-                          const projectTitle = getProjectTitle(pid);
-
-                          const amount =
-                            toNum(m?.approvedAmount) ||
-                            toNum(m?.amount) ||
-                            toNum(m?.requestedAmount) ||
-                            toNum(m?.estimatedAmount) ||
-                            0;
-
-                          const remaining = getProjectRemaining(pid);
-                          const exceeded =
-                            remaining != null ? amount > remaining : false;
-
-                          const invState = m?.investmentId
-                            ? { label: "تم الإنشاء", cls: "bg-emerald-700" }
-                            : { label: "بانتظار", cls: "bg-slate-600" };
-
-                          const touchedBy = lastTouchedBy(m);
-
-                          return (
-                            <TableRow key={m.id}>
-                              <TableCell className="font-semibold whitespace-nowrap">
-                                {getClientName(m) || "—"}
-                              </TableCell>
-
-                              <TableCell className="font-medium whitespace-nowrap">
-                                {projectTitle}
-                              </TableCell>
-
-                              <TableCell className="font-mono whitespace-nowrap">
-                                {requestNumber(m)}
-                              </TableCell>
-
-                              <TableCell className="font-semibold whitespace-nowrap">
-                                {moneySAR(amount)}
-                              </TableCell>
-
-                              <TableCell className="whitespace-nowrap">
-                                {remaining == null ? (
-                                  <span className="text-muted-foreground">—</span>
-                                ) : exceeded ? (
-                                  <Badge className="bg-red-700 whitespace-nowrap">
-                                    {moneySAR(remaining)} (تجاوز)
-                                  </Badge>
-                                ) : (
-                                  <Badge
-                                    variant="outline"
-                                    className="whitespace-nowrap"
-                                  >
-                                    {moneySAR(remaining)}
-                                  </Badge>
+                                {(clientEmail || clientPhone) && (
+                                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-500">
+                                    {clientEmail ? (
+                                      <span className="break-all">{clientEmail}</span>
+                                    ) : null}
+                                    {clientPhone ? <span>{clientPhone}</span> : null}
+                                  </div>
                                 )}
-                              </TableCell>
+                              </div>
 
-                              <TableCell className="whitespace-nowrap">
-                                <Badge className={invState.cls}>
-                                  {invState.label}
-                                </Badge>
-                              </TableCell>
-
-                              <TableCell className="whitespace-nowrap">
+                              <div className="flex flex-wrap items-center gap-2 xl:justify-end">
                                 <Badge className={badge.cls}>{badge.label}</Badge>
-                              </TableCell>
-
-                              <TableCell className="whitespace-nowrap">
-                                <Badge variant="outline">
+                                <Badge
+                                  variant="outline"
+                                  className="border-slate-300 bg-white/90 text-slate-700"
+                                >
                                   {stageLabel(m.stageRole)}
                                 </Badge>
-                              </TableCell>
+                                <Badge
+                                  className={`${invState.cls} border-transparent shadow-none`}
+                                >
+                                  {invState.label}
+                                </Badge>
+                              </div>
+                            </div>
 
-                              <TableCell className="text-xs whitespace-nowrap">
-                                {touchedBy}
-                              </TableCell>
+                            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                              <div className="min-w-0 rounded-xl border border-slate-200 bg-white/90 p-3 shadow-sm">
+                                <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                                  رقم الطلب
+                                </div>
+                                <div className="mt-2 break-all font-mono text-xs font-semibold text-slate-900 sm:text-sm">
+                                  {requestNumber(m)}
+                                </div>
+                              </div>
 
-                              <TableCell className="whitespace-nowrap">
-                                {formatDateTimeAR(
-                                  m.createdAt ||
-                                    m.created_at ||
-                                    m.submittedAt ||
-                                    m.timestamp
-                                )}
-                              </TableCell>
+                              <div className="min-w-0 rounded-xl border border-slate-200 bg-white/90 p-3 shadow-sm">
+                                <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                                  المبلغ
+                                </div>
+                                <div className="mt-2 break-words text-sm font-semibold text-slate-900">
+                                  {moneySAR(amount)}
+                                </div>
+                              </div>
 
-                              <TableCell className="text-left">
-                                <div className="flex gap-2 justify-end">
-                                  {/* ✅ ملف العميل */}
+                              <div className="min-w-0 rounded-xl border border-slate-200 bg-white/90 p-3 shadow-sm">
+                                <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                                  المتبقي
+                                </div>
+                                <div className="mt-2 text-sm font-semibold text-slate-900">
+                                  {remaining == null ? (
+                                    <span className="text-slate-400">—</span>
+                                  ) : (
+                                    <span className={exceeded ? "text-rose-700" : ""}>
+                                      {moneySAR(remaining)}
+                                      {exceeded ? " (تجاوز)" : ""}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div className="min-w-0 rounded-xl border border-slate-200 bg-white/90 p-3 shadow-sm">
+                                <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                                  التاريخ
+                                </div>
+                                <div className="mt-2 break-words text-sm font-semibold leading-6 text-slate-900">
+                                  {requestDate}
+                                </div>
+                              </div>
+                            </div>
+
+                            {summary ? (
+                              <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50/80 p-4">
+                                <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                                  ملخص الرسالة
+                                </div>
+                                <p className="mt-2 break-words text-sm leading-7 text-slate-700">
+                                  {summary}
+                                </p>
+                              </div>
+                            ) : null}
+                          </div>
+
+                          <div className="min-w-0 xl:w-full xl:max-w-[320px]">
+                            <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+                              <div className="rounded-xl border border-slate-200 bg-white/90 p-3 shadow-sm">
+                                <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                                  آخر تعديل
+                                </div>
+                                <div className="mt-2 break-all text-sm font-semibold leading-6 text-slate-900">
+                                  {touchedBy}
+                                </div>
+                              </div>
+
+                              <div className="mt-4 border-t border-slate-200 pt-4">
+                                <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                                  الإجراءات
+                                </div>
+
+                                <div className="mt-3 flex flex-wrap gap-2">
                                   <Button
                                     size="sm"
                                     variant="outline"
+                                    className="h-auto min-h-9 w-full justify-center whitespace-normal text-center sm:w-auto"
                                     onClick={() => {
                                       const clientId = pick(
                                         m?.createdByUid,
@@ -3185,9 +3057,7 @@ export default function MessagesManagement() {
                                         m?.userSnapshot?.uid
                                       );
                                       if (!clientId) {
-                                        toast.warning(
-                                          "لا يوجد حساب عميل مرتبط بهذا الطلب."
-                                        );
+                                        toast.warning("لا يوجد حساب عميل مرتبط بهذا الطلب.");
                                         return;
                                       }
                                       window.location.href = `/admin/client-profile?id=${clientId}`;
@@ -3197,15 +3067,13 @@ export default function MessagesManagement() {
                                     ملف العميل
                                   </Button>
 
-                                  {/* ✅ فتح المشروع */}
                                   <Button
                                     size="sm"
                                     variant="outline"
+                                    className="h-auto min-h-9 w-full justify-center whitespace-normal text-center sm:w-auto"
                                     onClick={() => {
                                       if (!pid) {
-                                        toast.warning(
-                                          "لا يوجد مشروع مرتبط بهذا الطلب."
-                                        );
+                                        toast.warning("لا يوجد مشروع مرتبط بهذا الطلب.");
                                         return;
                                       }
                                       window.location.href = `/admin/projects/${pid}/edit`;
@@ -3215,28 +3083,28 @@ export default function MessagesManagement() {
                                     المشروع
                                   </Button>
 
-                                  {/* ✅ عرض */}
                                   <Button
                                     size="sm"
                                     variant="outline"
+                                    className="h-auto min-h-9 w-full justify-center whitespace-normal text-center sm:w-auto"
                                     onClick={() => void openMessageDetails(m)}
                                   >
                                     <Eye className="w-4 h-4 ml-1" />
-                                    عرض
+                                    عرض التفاصيل
                                   </Button>
                                 </div>
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </div>
-              </>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
             ) : (
-              <div className="py-12 text-center text-muted-foreground">
-                لا توجد رسائل
+              <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/80 py-12 text-center text-muted-foreground">
+                لا توجد رسائل مطابقة للفلاتر الحالية
               </div>
             )}
           </CardContent>

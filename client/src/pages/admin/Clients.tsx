@@ -17,21 +17,26 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Users, Crown, Search, Edit2, FileText } from "lucide-react";
+import {
+  Users,
+  Crown,
+  Search,
+  Edit2,
+  FileText,
+  Mail,
+  CalendarDays,
+  Wallet,
+  TrendingUp,
+  ShieldCheck,
+  CircleOff,
+  ArrowUpRight,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { collection, onSnapshot, doc, Timestamp } from "firebase/firestore";
@@ -62,6 +67,87 @@ type UserDoc = {
 function safeNum(x: any) {
   const n = Number(x);
   return Number.isFinite(n) ? n : 0;
+}
+
+function formatCurrencySAR(value: any) {
+  const amount = safeNum(value);
+  return `${amount.toLocaleString("ar-SA")} ر.س`;
+}
+
+function formatDateAR(value: any) {
+  const date =
+    value instanceof Timestamp ? value.toDate() : value ? new Date(value) : null;
+
+  if (!date || Number.isNaN(date.getTime())) return "—";
+
+  return date.toLocaleDateString("ar-SA", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function getRoleBadge(role?: string) {
+  const key = String(role || "client").trim().toLowerCase();
+  const map: Record<string, { label: string; className: string }> = {
+    owner: {
+      label: "المالك",
+      className: "border-amber-200 bg-amber-50 text-amber-700",
+    },
+    admin: {
+      label: "الإدارة",
+      className: "border-sky-200 bg-sky-50 text-sky-700",
+    },
+    accountant: {
+      label: "المحاسب",
+      className: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    },
+    staff: {
+      label: "الموظف",
+      className: "border-indigo-200 bg-indigo-50 text-indigo-700",
+    },
+    client: {
+      label: "العميل",
+      className: "border-slate-200 bg-slate-100 text-slate-700",
+    },
+  };
+
+  return map[key] || {
+    label: role || "—",
+    className: "border-slate-200 bg-slate-100 text-slate-700",
+  };
+}
+
+function getStatusBadge(active?: boolean) {
+  if (active) {
+    return {
+      label: "نشط",
+      className: "border-emerald-200 bg-emerald-50 text-emerald-700",
+      icon: ShieldCheck,
+    };
+  }
+
+  return {
+    label: "غير نشط",
+    className: "border-slate-200 bg-slate-100 text-slate-600",
+    icon: CircleOff,
+  };
+}
+
+function getVipBadge(user: UserDoc) {
+  if (user.vipStatus === "vip") {
+    return {
+      label: user.vipTier ? `VIP - ${user.vipTier}` : "VIP",
+      className: "border-amber-200 bg-amber-50 text-amber-700",
+      featured: true,
+    };
+  }
+
+  return {
+    label: "عادي",
+    className: "border-slate-200 bg-slate-50 text-slate-600",
+    featured: false,
+  };
 }
 
 export default function ClientsManagement() {
@@ -116,6 +202,10 @@ export default function ClientsManagement() {
 
   const vipUsers = users.filter((u) => u.vipStatus === "vip").length;
   const regularUsers = users.filter((u) => u.vipStatus !== "vip").length;
+
+  const openClientProfile = (userId: string) => {
+    setLocation(`/admin/client-profile?id=${userId}`);
+  };
 
   const handleUpdateVipStatus = async () => {
     if (!selectedUser) return;
@@ -187,180 +277,248 @@ export default function ClientsManagement() {
         <div>
           <h1 className="text-4xl font-bold mb-2">إدارة العملاء</h1>
           <p className="text-muted-foreground text-lg">
-            عرض وإدارة بيانات العملاء + فتح ملف العميل
+            عرض وإدارة بيانات العملاء مع واجهة أوضح للحالة والدور والبيانات المالية والإجراءات
           </p>
         </div>
 
         {/* Stats */}
         <div className="grid gap-4 md:grid-cols-3">
-          <Card>
+          <Card className="border-slate-200/80 bg-gradient-to-br from-white via-white to-slate-50 shadow-sm">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-2">
+              <CardTitle className="text-sm flex items-center gap-2 text-slate-600">
                 <Users className="w-4 h-4" />
                 إجمالي العملاء
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">{users.length}</div>
+              <div className="text-3xl font-bold text-slate-900">{users.length}</div>
+              <p className="mt-2 text-sm text-slate-500">إجمالي الحسابات المعروضة في القائمة</p>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="border-amber-200/70 bg-gradient-to-br from-amber-50 via-white to-white shadow-sm">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-2">
+              <CardTitle className="text-sm flex items-center gap-2 text-amber-700">
                 <Crown className="w-4 h-4" />
                 عملاء VIP
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-accent">{vipUsers}</div>
+              <div className="text-3xl font-bold text-amber-700">{vipUsers}</div>
+              <p className="mt-2 text-sm text-amber-600/80">الحسابات المصنفة ضمن الفئة المميزة</p>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="border-slate-200/80 bg-gradient-to-br from-white via-white to-slate-50 shadow-sm">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm">عملاء عاديون</CardTitle>
+              <CardTitle className="text-sm text-slate-600">عملاء عاديون</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">{regularUsers}</div>
+              <div className="text-3xl font-bold text-slate-900">{regularUsers}</div>
+              <p className="mt-2 text-sm text-slate-500">الحسابات غير المصنفة كعملاء VIP</p>
             </CardContent>
           </Card>
         </div>
 
         {/* Search */}
-        <Card>
+        <Card className="border-slate-200/80 shadow-sm">
           <CardContent className="pt-6">
-            <div className="relative">
-              <Search className="absolute right-3 top-3 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="البحث عن عميل..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pr-10"
-              />
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="relative w-full lg:max-w-xl">
+                <Search className="absolute right-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="البحث عن عميل بالاسم أو البريد..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="h-11 pr-10"
+                />
+              </div>
+
+              <div className="inline-flex w-fit items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm font-medium text-slate-600">
+                {filteredUsers.length.toLocaleString("ar-SA")} نتيجة
+              </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* Table */}
-        <Card>
-          <CardHeader>
-            <CardTitle>قائمة العملاء</CardTitle>
+        {/* Clients list */}
+        <Card className="border-slate-200/80 shadow-sm">
+          <CardHeader className="gap-4 border-b border-slate-200/70 pb-5">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <CardTitle>قائمة العملاء</CardTitle>
+
+              <div className="inline-flex w-fit items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm font-medium text-slate-600">
+                شبكة بطاقات responsive
+              </div>
+            </div>
+
+            <p className="text-sm text-muted-foreground">
+              عرض واضح لبيانات العميل الأساسية والمالية مع إجراءات مرتبة وبدون أي تمرير أفقي داخل القسم.
+            </p>
           </CardHeader>
 
-          <CardContent>
+          <CardContent className="pt-6">
             {loading ? (
-              <div className="text-center py-12">جاري التحميل...</div>
+              <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/80 py-12 text-center text-muted-foreground">
+                جاري التحميل...
+              </div>
             ) : filteredUsers.length ? (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>الاسم</TableHead>
-                    <TableHead>البريد</TableHead>
-                    <TableHead>الحالة</TableHead>
-                    <TableHead>VIP</TableHead>
-                    <TableHead>إجمالي الاستثمار</TableHead>
-                    <TableHead>الربح حتى اليوم</TableHead>
-                    <TableHead>التسجيل</TableHead>
-                    <TableHead>إجراءات</TableHead>
-                  </TableRow>
-                </TableHeader>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                {filteredUsers.map((user) => {
+                  const statusBadge = getStatusBadge(user.active);
+                  const roleBadge = getRoleBadge(user.role);
+                  const vipBadge = getVipBadge(user);
+                  const StatusIcon = statusBadge.icon;
+                  const displayName = user.name || "غير محدد";
+                  const email = user.email || "—";
+                  const totalInvested = formatCurrencySAR(user.totalInvested);
+                  const profitToDate = formatCurrencySAR(user.profitToDate);
+                  const registeredAt = formatDateAR(user.createdAt);
 
-                <TableBody>
-                  {filteredUsers.map((user) => {
-                    const date =
-                      user.createdAt instanceof Timestamp
-                        ? user.createdAt.toDate()
-                        : user.createdAt
-                        ? new Date(user.createdAt)
-                        : null;
-
-                    const totalInvested = safeNum(user.totalInvested);
-                    const profitToDate = safeNum(user.profitToDate);
-
-                    return (
-                      <TableRow key={user.id}>
-                        <TableCell className="font-medium flex items-center gap-2">
-                          {user.vipStatus === "vip" && <Crown className="w-4 h-4 text-accent" />}
-                          {user.name || "غير محدد"}
-                        </TableCell>
-
-                        <TableCell>{user.email || "-"}</TableCell>
-
-                        <TableCell>
-                          <div className="flex gap-2">
-                            <Badge variant="outline">{user.role || "—"}</Badge>
-                            <Badge variant="secondary">{user.active ? "نشط" : "غير نشط"}</Badge>
+                  return (
+                    <article
+                      key={user.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => openClientProfile(user.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          openClientProfile(user.id);
+                        }
+                      }}
+                      className="group flex h-full cursor-pointer flex-col rounded-2xl border border-slate-200 bg-gradient-to-br from-white via-white to-slate-50 p-5 shadow-sm ring-1 ring-slate-100/80 transition-all hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="text-lg font-semibold text-slate-900 break-words">
+                              {displayName}
+                            </h3>
+                            {vipBadge.featured ? (
+                              <div className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-amber-100 text-amber-700">
+                                <Crown className="h-4 w-4" />
+                              </div>
+                            ) : null}
                           </div>
-                        </TableCell>
 
-                        <TableCell>
-                          {user.vipStatus === "vip" ? (
-                            <Badge className="bg-accent">
-                              VIP {user.vipTier ? `- ${user.vipTier}` : ""}
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline">عادي</Badge>
-                          )}
-                        </TableCell>
-
-                        <TableCell className="font-bold">
-                          {totalInvested ? `${totalInvested.toLocaleString("ar-SA")} ر.س` : "—"}
-                        </TableCell>
-
-                        <TableCell className="font-bold text-green-700">
-                          {profitToDate ? `${profitToDate.toLocaleString("ar-SA")} ر.س` : "—"}
-                        </TableCell>
-
-                        <TableCell>{date ? date.toLocaleDateString("ar-SA") : "-"}</TableCell>
-
-                        <TableCell>
-                          <div className="flex gap-2 flex-wrap">
-                            {/* ✅ زر ملف العميل (بدون reload) */}
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => setLocation(`/admin/client-profile?id=${user.id}`)}
-                            >
-                              <FileText className="w-4 h-4 ml-1" />
-                              ملف العميل
-                            </Button>
-
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                setSelectedUser(user);
-                                setVipStatus(user.vipStatus ?? "regular");
-                                setVipTier(user.vipTier || "");
-                                setIsVipDialogOpen(true);
-                              }}
-                            >
-                              <Crown className="w-4 h-4 ml-1" />
-                              VIP
-                            </Button>
-
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                setSelectedUser(user);
-                                setNotes(user.internalNotes || "");
-                                setIsNotesDialogOpen(true);
-                              }}
-                            >
-                              <Edit2 className="w-4 h-4 ml-1" />
-                              ملاحظات
-                            </Button>
+                          <div className="mt-2 flex items-start gap-2 text-sm text-slate-500">
+                            <Mail className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
+                            <span className="min-w-0 break-all">{email}</span>
                           </div>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+                        </div>
+
+                        <div className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition-colors group-hover:border-slate-300 group-hover:text-slate-700">
+                          <ArrowUpRight className="h-4 w-4" />
+                        </div>
+                      </div>
+
+                      <div className="mt-4 flex flex-wrap items-center gap-2">
+                        <Badge variant="outline" className={statusBadge.className}>
+                          <StatusIcon className="ml-1 h-3.5 w-3.5" />
+                          {statusBadge.label}
+                        </Badge>
+
+                        <Badge variant="outline" className={roleBadge.className}>
+                          {roleBadge.label}
+                        </Badge>
+
+                        <Badge variant="outline" className={vipBadge.className}>
+                          {vipBadge.featured ? <Crown className="ml-1 h-3.5 w-3.5" /> : null}
+                          {vipBadge.label}
+                        </Badge>
+                      </div>
+
+                      <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                        <div className="rounded-xl border border-slate-200 bg-white/90 p-3 shadow-sm">
+                          <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                            <Wallet className="h-3.5 w-3.5" />
+                            إجمالي الاستثمار
+                          </div>
+                          <div className="mt-2 break-words text-base font-bold text-slate-900">
+                            {totalInvested}
+                          </div>
+                        </div>
+
+                        <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 p-3 shadow-sm">
+                          <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-emerald-700">
+                            <TrendingUp className="h-3.5 w-3.5" />
+                            الربح حتى اليوم
+                          </div>
+                          <div className="mt-2 break-words text-base font-bold text-emerald-700">
+                            {profitToDate}
+                          </div>
+                        </div>
+
+                        <div className="rounded-xl border border-slate-200 bg-white/90 p-3 shadow-sm">
+                          <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                            <CalendarDays className="h-3.5 w-3.5" />
+                            تاريخ التسجيل
+                          </div>
+                          <div className="mt-2 break-words text-base font-bold text-slate-900">
+                            {registeredAt}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-5 border-t border-slate-200 pt-4">
+                        <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                          الإجراءات
+                        </div>
+
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <Button
+                            size="sm"
+                            className="h-auto min-h-9 w-full justify-center whitespace-normal text-center sm:w-auto"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openClientProfile(user.id);
+                            }}
+                          >
+                            <FileText className="w-4 h-4 ml-1" />
+                            ملف العميل
+                          </Button>
+
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-auto min-h-9 w-full justify-center whitespace-normal text-center sm:w-auto"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedUser(user);
+                              setVipStatus(user.vipStatus ?? "regular");
+                              setVipTier(user.vipTier || "");
+                              setIsVipDialogOpen(true);
+                            }}
+                          >
+                            <Crown className="w-4 h-4 ml-1" />
+                            VIP
+                          </Button>
+
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-auto min-h-9 w-full justify-center whitespace-normal text-center sm:w-auto"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedUser(user);
+                              setNotes(user.internalNotes || "");
+                              setIsNotesDialogOpen(true);
+                            }}
+                          >
+                            <Edit2 className="w-4 h-4 ml-1" />
+                            ملاحظات
+                          </Button>
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
             ) : (
-              <div className="text-center py-12 text-muted-foreground">لا توجد نتائج</div>
+              <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/80 py-12 text-center text-muted-foreground">
+                لا توجد نتائج مطابقة للبحث الحالي
+              </div>
             )}
           </CardContent>
         </Card>
