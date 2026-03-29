@@ -2,6 +2,7 @@
 // client/src/pages/admin/MessagesManagement.tsx
 import { useEffect, useMemo, useState } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
+import AdminPanelStatCard from "@/components/AdminPanelStatCard";
 import ContractFilePicker from "@/components/ContractFilePicker";
 import {
   collection,
@@ -19,6 +20,12 @@ import {
   where,
 } from "firebase/firestore";
 import { db } from "@/_core/firebase";
+import {
+  formatCurrencyEN,
+  formatDateTimeEN,
+  formatNumberEN,
+} from "@/lib/formatters";
+import { getClientInvestmentStatusMeta } from "@/lib/workflowStatusMeta";
 import { resolveInvestmentActivationTerms } from "@shared/investmentActivation";
 import { useAuth } from "@/_core/hooks/useAuth";
 import {
@@ -64,6 +71,11 @@ import {
   Download,
 } from "lucide-react";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
+import {
+  CLIENT_WORKFLOW_COPY,
+  getClientContractStatusLabel,
+} from "@shared/investmentLifecycle";
 
 /* =========================
   ✅ Switch: Disable contracts/files now
@@ -71,6 +83,47 @@ import { toast } from "sonner";
   - False = يرجع نظام العقود القديم بالكامل
 ========================= */
 const CONTRACTS_DISABLED = false;
+
+const DETAIL_DIALOG_PANEL_CLASS =
+  "overflow-x-hidden rounded-[28px] border border-slate-800/70 bg-[radial-gradient(circle_at_top,_rgba(30,41,59,0.98)_0%,_rgba(15,23,42,0.98)_45%,_rgba(2,6,23,1)_100%)] text-slate-50 shadow-2xl shadow-slate-950/40";
+const DETAIL_SECTION_CARD_CLASS =
+  "overflow-hidden rounded-[26px] border border-white/10 bg-[linear-gradient(180deg,rgba(15,23,42,0.88),rgba(2,6,23,0.92))] shadow-lg shadow-slate-950/20 backdrop-blur-md";
+const DETAIL_SECTION_HEADER_CLASS = "border-b border-white/10 px-6 pb-4 pt-5";
+const DETAIL_SECTION_TITLE_CLASS =
+  "text-[1.02rem] font-semibold tracking-tight text-slate-50";
+const DETAIL_SECTION_CONTENT_CLASS = "space-y-5 px-6 pb-6 pt-5 text-slate-100";
+const DETAIL_INLINE_PANEL_CLASS =
+  "rounded-[20px] border border-slate-700/70 bg-slate-950/55 px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]";
+const DETAIL_INLINE_LABEL_CLASS =
+  "mb-3 text-[11px] font-medium tracking-[0.14em] text-slate-300";
+const DETAIL_INPUT_ROW_CLASS =
+  "grid grid-cols-[120px_1fr] items-start gap-4 rounded-[20px] border border-slate-700/70 bg-slate-950/55 px-4 py-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]";
+const DETAIL_INPUT_LABEL_CLASS =
+  "pt-1 text-right text-[11px] font-medium tracking-[0.14em] text-slate-300";
+const DETAIL_INPUT_VALUE_CLASS =
+  "break-words text-right text-[15px] font-semibold leading-7 text-slate-50";
+const DETAIL_SUBCARD_CLASS =
+  "space-y-3 rounded-[22px] border border-slate-700/70 bg-slate-950/60 px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]";
+const DETAIL_SUBCARD_TITLE_CLASS = "text-sm font-semibold text-slate-50";
+const DETAIL_SUBCARD_VALUE_CLASS =
+  "break-words text-sm font-medium leading-7 text-slate-100";
+const DETAIL_HELP_TEXT_CLASS = "text-sm leading-7 text-slate-300";
+const DETAIL_ALERT_CLASS =
+  "rounded-[18px] border border-amber-300/20 bg-amber-500/10 px-3.5 py-3 text-xs leading-6 text-amber-100";
+const DETAIL_PILL_BASE_CLASS =
+  "inline-flex h-8 items-center justify-center rounded-full border px-3.5 text-xs font-semibold leading-none tracking-[0.01em]";
+const DETAIL_COMPACT_PILL_BASE_CLASS =
+  "inline-flex h-7 items-center justify-center rounded-full border px-2.5 text-[11px] font-semibold leading-none tracking-[0.01em]";
+const DETAIL_STAGE_PILL_CLASS =
+  "inline-flex h-8 items-center justify-center rounded-full border border-slate-600/80 bg-slate-900/70 px-3.5 text-xs font-semibold leading-none tracking-[0.01em] text-slate-100";
+const DETAIL_TEXTAREA_CLASS =
+  "min-h-[120px] rounded-[20px] border-slate-700/70 bg-slate-950/60 px-4 py-3 text-sm leading-7 text-slate-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)] placeholder:text-slate-400";
+const DETAIL_BUTTON_BASE_CLASS =
+  "inline-flex items-center justify-center gap-2 rounded-2xl px-4 text-[13px] font-semibold transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-50";
+const DETAIL_OUTLINE_BUTTON_CLASS = `${DETAIL_BUTTON_BASE_CLASS} h-11 border-slate-700/70 bg-slate-900/70 text-slate-100 shadow-none hover:bg-slate-800/85 hover:text-white`;
+const DETAIL_LIGHT_SOLID_BUTTON_CLASS = `${DETAIL_BUTTON_BASE_CLASS} h-11 bg-white text-slate-950 shadow-lg shadow-slate-950/20 hover:bg-slate-100`;
+const DETAIL_SOLID_BUTTON_CLASS = `${DETAIL_BUTTON_BASE_CLASS} h-11 text-white shadow-lg shadow-slate-950/20`;
+const DETAIL_DANGER_BUTTON_CLASS = `${DETAIL_BUTTON_BASE_CLASS} h-11 bg-rose-600 text-white shadow-lg shadow-rose-950/20 hover:bg-rose-500`;
 
 /* =========================
   helpers
@@ -90,16 +143,7 @@ const toDateSafe = (v: any) => {
 };
 
 function formatDateTimeAR(v: any) {
-  const d = toDateSafe(v);
-  return d
-    ? d.toLocaleString("ar-SA", {
-        year: "numeric",
-        month: "short",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-      })
-    : "—";
+  return formatDateTimeEN(toDateSafe(v));
 }
 
 const pick = (...vals: any[]) => {
@@ -122,7 +166,7 @@ const pickFirstNonEmptyString = (...vals: any[]) => {
 function readNestedValue(source: any, path: string) {
   const keys = String(path || "")
     .split(".")
-    .map((v) => v.trim())
+    .map(v => v.trim())
     .filter(Boolean);
   let current = source;
   for (const key of keys) {
@@ -203,13 +247,14 @@ function toPositiveInt(v: any) {
 function toBooleanSafe(v: any) {
   if (v === true) return true;
   if (v === false) return false;
-  const raw = String(v || "").trim().toLowerCase();
+  const raw = String(v || "")
+    .trim()
+    .toLowerCase();
   return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
 }
 
 function moneySAR(v: any) {
-  const n = toNum(v);
-  return `${n.toLocaleString("ar-SA")} ر.س`;
+  return formatCurrencyEN(toNum(v));
 }
 
 function stageLabel(v: any) {
@@ -229,7 +274,9 @@ function stageLabel(v: any) {
 }
 
 function normalizeRequestStatus(raw: any): MessageStatus {
-  const s = String(raw || "").trim().toLowerCase();
+  const s = String(raw || "")
+    .trim()
+    .toLowerCase();
   const legacyMap: Record<string, MessageStatus> = {
     new: "pending",
     in_progress: "reviewing",
@@ -256,8 +303,14 @@ function normalizeRequestStatus(raw: any): MessageStatus {
   return "pending";
 }
 
-function normalizeStageRole(raw: any, status: MessageStatus, hasInvestment: boolean): StageRole {
-  const s = String(raw || "").trim().toLowerCase();
+function normalizeStageRole(
+  raw: any,
+  status: MessageStatus,
+  hasInvestment: boolean
+): StageRole {
+  const s = String(raw || "")
+    .trim()
+    .toLowerCase();
   if (
     [
       "reviewer",
@@ -273,7 +326,8 @@ function normalizeStageRole(raw: any, status: MessageStatus, hasInvestment: bool
   ) {
     return s as StageRole;
   }
-  if (status === "completed" || status === "rejected" || status === "closed") return "completed";
+  if (status === "completed" || status === "rejected" || status === "closed")
+    return "completed";
   if (hasInvestment || status === "approved") return "investment";
   return "review";
 }
@@ -287,7 +341,12 @@ function requestNumber(m: any) {
 
 function lastTouchedBy(m: any) {
   // ✅ أفضلية: آخر تحديث محفوظ
-  const v = pick(m?.updatedByEmail, m?.updatedByUid, m?.processedByName, m?.processedByUid);
+  const v = pick(
+    m?.updatedByEmail,
+    m?.updatedByUid,
+    m?.processedByName,
+    m?.processedByUid
+  );
   if (v) return v;
 
   // ✅ fallback: آخر حدث
@@ -331,8 +390,12 @@ function buildR2DownloadUrl(path: any, forceDownload = false) {
   const objectPath = String(path || "").trim();
   if (!objectPath) return "";
 
-  const explicitDownloadBase = String(import.meta.env.VITE_R2_DOWNLOAD_WORKER_URL || "").trim();
-  const uploadWorkerUrl = String(import.meta.env.VITE_R2_UPLOAD_WORKER_URL || "").trim();
+  const explicitDownloadBase = String(
+    import.meta.env.VITE_R2_DOWNLOAD_WORKER_URL || ""
+  ).trim();
+  const uploadWorkerUrl = String(
+    import.meta.env.VITE_R2_UPLOAD_WORKER_URL || ""
+  ).trim();
   const baseUrl = explicitDownloadBase || uploadWorkerUrl;
   if (!baseUrl) return "";
 
@@ -351,7 +414,10 @@ function buildR2DownloadUrl(path: any, forceDownload = false) {
   }
 }
 
-function expectedContractPath(investmentId: string, kind: "original" | "signed") {
+function expectedContractPath(
+  investmentId: string,
+  kind: "original" | "signed"
+) {
   const id = String(investmentId || "").trim();
   if (!id) return "";
   return kind === "original"
@@ -386,33 +452,52 @@ async function r2ObjectStatus(path: string): Promise<R2ProbeStatus> {
 }
 
 function getContractStatusLabel(status: any): string {
-  const s = String(status || "").trim().toLowerCase();
-  const map: Record<string, string> = {
-    draft: "مسودة",
-    sent: "مرسل",
-    pending_signature: "بانتظار توقيع المستثمر",
-    signed: "موقّع",
-    issued: "مرسل",
-    signed_uploaded: "موقّع",
-    under_review: "قيد المراجعة",
-    approved: "معتمد",
-  };
-  return map[s] || (s ? String(status) : "-");
+  return getClientContractStatusLabel(status);
 }
 
 function getContractStatusClass(status: any): string {
-  const s = String(status || "").trim().toLowerCase();
+  const s = String(status || "")
+    .trim()
+    .toLowerCase();
   const map: Record<string, string> = {
-    draft: "bg-slate-100 text-slate-700 border-slate-200",
-    sent: "bg-blue-100 text-blue-700 border-blue-200",
-    pending_signature: "bg-amber-100 text-amber-700 border-amber-200",
-    signed: "bg-emerald-100 text-emerald-700 border-emerald-200",
-    issued: "bg-blue-100 text-blue-700 border-blue-200",
-    signed_uploaded: "bg-emerald-100 text-emerald-700 border-emerald-200",
-    under_review: "bg-amber-100 text-amber-700 border-amber-200",
-    approved: "bg-green-100 text-green-700 border-green-200",
+    draft: "border-slate-600/70 bg-slate-800/70 text-slate-200",
+    sent: "border-sky-400/30 bg-sky-500/10 text-sky-200",
+    pending_signature: "border-amber-400/35 bg-amber-500/10 text-amber-200",
+    signed: "border-emerald-400/35 bg-emerald-500/10 text-emerald-200",
+    issued: "border-sky-400/30 bg-sky-500/10 text-sky-200",
+    signed_uploaded: "border-emerald-400/35 bg-emerald-500/10 text-emerald-200",
+    under_review: "border-violet-400/35 bg-violet-500/10 text-violet-200",
+    approved: "border-emerald-300/35 bg-emerald-500/12 text-emerald-100",
   };
-  return map[s] || "bg-slate-100 text-slate-700 border-slate-200";
+  return map[s] || "border-slate-600/70 bg-slate-800/70 text-slate-200";
+}
+
+function getDetailRequestStatusClass(status: any): string {
+  const normalizedStatus = normalizeRequestStatus(status);
+  const map: Record<string, string> = {
+    pending: "border-amber-400/35 bg-amber-500/10 text-amber-200",
+    reviewing: "border-sky-400/30 bg-sky-500/10 text-sky-200",
+    approved: "border-emerald-400/35 bg-emerald-500/10 text-emerald-200",
+    completed: "border-emerald-300/30 bg-emerald-500/12 text-emerald-100",
+    rejected: "border-rose-400/35 bg-rose-500/10 text-rose-200",
+    no_account: "border-rose-300/30 bg-rose-500/12 text-rose-200",
+    closed: "border-slate-600/70 bg-slate-800/70 text-slate-200",
+  };
+
+  return cn(
+    DETAIL_PILL_BASE_CLASS,
+    map[normalizedStatus] ||
+      "border-slate-600/70 bg-slate-800/70 text-slate-200"
+  );
+}
+
+function getDetailBinaryPillClass(active: boolean): string {
+  return cn(
+    DETAIL_COMPACT_PILL_BASE_CLASS,
+    active
+      ? "border-emerald-400/35 bg-emerald-500/10 text-emerald-200"
+      : "border-slate-500/40 bg-slate-800/70 text-slate-300"
+  );
 }
 
 type StageRole =
@@ -592,14 +677,20 @@ export default function MessagesManagement() {
   );
   const [requestedRequestId, setRequestedRequestId] = useState(() => {
     if (typeof window === "undefined") return "";
-    return new URLSearchParams(window.location.search).get("requestId")?.trim() || "";
+    return (
+      new URLSearchParams(window.location.search).get("requestId")?.trim() || ""
+    );
   });
 
   const clearRequestedRequestId = () => {
     if (typeof window === "undefined") return;
     const url = new URL(window.location.href);
     url.searchParams.delete("requestId");
-    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+    window.history.replaceState(
+      window.history.state,
+      "",
+      `${url.pathname}${url.search}${url.hash}`
+    );
   };
 
   /* =========================
@@ -612,7 +703,7 @@ export default function MessagesManagement() {
       try {
         const snap = await getDocs(collection(db, "projects"));
         const map: Record<string, any> = {};
-        snap.docs.forEach((d) => {
+        snap.docs.forEach(d => {
           map[d.id] = { id: d.id, ...(d.data() as any) };
         });
         setProjectsMap(map);
@@ -693,24 +784,30 @@ export default function MessagesManagement() {
     return normalizeRole(myRoleDb);
   }, [myRoleDb, user?.email]);
 
-  const canOwnerAccountantActions = myRole === "owner" || myRole === "accountant";
-  const canStaffActions = myRole === "staff" || myRole === "admin" || myRole === "owner";
+  const canOwnerAccountantActions =
+    myRole === "owner" || myRole === "accountant";
+  const canStaffActions =
+    myRole === "staff" || myRole === "admin" || myRole === "owner";
   const canAdmin = myRole === "admin" || myRole === "owner";
 
   /* =========================
     status badge
   ========================= */
   const getStatusBadge = (s: string) => {
+    const approvedMeta = getClientInvestmentStatusMeta("approved");
     const map: any = {
       new: { label: "جديد", cls: "bg-orange-500" },
       in_progress: { label: "قيد المعالجة", cls: "bg-blue-500" },
       resolved: { label: "تم تعميد العميل", cls: "bg-emerald-700" },
       closed: { label: "مغلق (قديم)", cls: "bg-gray-500" },
-      approved: { label: "مقبول", cls: "bg-green-600" },
+      approved: { label: approvedMeta.label, cls: approvedMeta.cls },
       rejected: { label: "مرفوض", cls: "bg-red-600" },
       needs_account: { label: "عند المحاسب", cls: "bg-yellow-600" },
       no_account: { label: "بدون حساب", cls: "bg-rose-700" },
-      waiting_client_confirmation: { label: "بانتظار تعميد العميل", cls: "bg-indigo-700" },
+      waiting_client_confirmation: {
+        label: "بانتظار تعميد العميل",
+        cls: "bg-indigo-700",
+      },
       completed: {
         label: "مقفل نهائيًا",
         cls: "border border-amber-300/70 bg-slate-950 text-amber-200 shadow-sm",
@@ -724,7 +821,10 @@ export default function MessagesManagement() {
     map.resolved = { label: "موافقة أولية", cls: "bg-emerald-700" };
     map.approved = { label: "موافقة أولية", cls: "bg-green-600" };
     map.needs_account = { label: "قيد المراجعة", cls: "bg-blue-600" };
-    map.waiting_client_confirmation = { label: "قيد المراجعة", cls: "bg-blue-600" };
+    map.waiting_client_confirmation = {
+      label: "قيد المراجعة",
+      cls: "bg-blue-600",
+    };
 
     const key = normalizeRequestStatus(s);
     return map[key] || { label: key, cls: "bg-gray-400" };
@@ -736,7 +836,11 @@ export default function MessagesManagement() {
   const normalizeForDisplay = (m: any) => {
     const hasInvestment = !!pick(m?.investmentId);
     const st = normalizeRequestStatus(pick(m?.status, "pending"));
-    const sr = normalizeStageRole(pick(m?.stageRole, m?.stage, ""), st, hasInvestment);
+    const sr = normalizeStageRole(
+      pick(m?.stageRole, m?.stage, ""),
+      st,
+      hasInvestment
+    );
 
     const fixed: any = {
       ...m,
@@ -758,10 +862,13 @@ export default function MessagesManagement() {
   const loadMessages = async () => {
     try {
       setLoading(true);
-      const q = query(collection(db, REQUESTS_COL), orderBy("createdAt", "desc"));
+      const q = query(
+        collection(db, REQUESTS_COL),
+        orderBy("createdAt", "desc")
+      );
       const snap = await getDocs(q);
 
-      const list = snap.docs.map((d) => ({
+      const list = snap.docs.map(d => ({
         id: d.id,
         ...d.data(),
       }));
@@ -779,15 +886,15 @@ export default function MessagesManagement() {
     const q = query(collection(db, REQUESTS_COL), orderBy("createdAt", "desc"));
     const unsub = onSnapshot(
       q,
-      (snap) => {
-        const list = snap.docs.map((d) => ({
+      snap => {
+        const list = snap.docs.map(d => ({
           id: d.id,
           ...d.data(),
         }));
         setMessages(list);
         setLoading(false);
       },
-      (e) => {
+      e => {
         console.error(e);
         toast.error("فشل تحميل الرسائل");
         setLoading(false);
@@ -833,7 +940,11 @@ export default function MessagesManagement() {
 
     const explicitInvestmentId = pick(requestData?.investmentId);
     const currentInvestmentId = pick(invData?.id);
-    if (explicitInvestmentId && currentInvestmentId && currentInvestmentId !== explicitInvestmentId) {
+    if (
+      explicitInvestmentId &&
+      currentInvestmentId &&
+      currentInvestmentId !== explicitInvestmentId
+    ) {
       return false;
     }
 
@@ -847,7 +958,10 @@ export default function MessagesManagement() {
     if (requestId) {
       if (investmentRequestId) {
         if (investmentRequestId !== requestId) return false;
-      } else if (!explicitInvestmentId || currentInvestmentId !== explicitInvestmentId) {
+      } else if (
+        !explicitInvestmentId ||
+        currentInvestmentId !== explicitInvestmentId
+      ) {
         return false;
       }
     }
@@ -859,7 +973,11 @@ export default function MessagesManagement() {
       requestData?.userSnapshot?.uid
     );
     const investmentInvestorUid = pick(invData?.investorUid, invData?.userId);
-    if (requestInvestorUid && investmentInvestorUid && investmentInvestorUid !== requestInvestorUid) {
+    if (
+      requestInvestorUid &&
+      investmentInvestorUid &&
+      investmentInvestorUid !== requestInvestorUid
+    ) {
       return false;
     }
 
@@ -869,26 +987,38 @@ export default function MessagesManagement() {
       requestData?.project?.id
     );
     const investmentProjectId = pick(invData?.projectId);
-    if (requestProjectId && investmentProjectId && investmentProjectId !== requestProjectId) {
+    if (
+      requestProjectId &&
+      investmentProjectId &&
+      investmentProjectId !== requestProjectId
+    ) {
       return false;
     }
 
     return true;
   };
 
-  const loadInvestmentDoc = async (investmentId: string | null, requestData?: any) => {
+  const loadInvestmentDoc = async (
+    investmentId: string | null,
+    requestData?: any
+  ) => {
     try {
       const requestedInvestmentId = String(investmentId || "").trim();
 
       if (requestedInvestmentId) {
-        const snap = await getDoc(doc(db, "investments", requestedInvestmentId));
+        const snap = await getDoc(
+          doc(db, "investments", requestedInvestmentId)
+        );
         if (snap.exists()) {
           const directDoc = {
             id: snap.id,
             ...(snap.data() as any),
           };
 
-          if (!requestData || isInvestmentLinkedToRequest(directDoc, requestData)) {
+          if (
+            !requestData ||
+            isInvestmentLinkedToRequest(directDoc, requestData)
+          ) {
             setInvestmentDoc(directDoc);
             return directDoc;
           }
@@ -898,11 +1028,14 @@ export default function MessagesManagement() {
       const requestId = pick(requestData?.id, requestData?.requestId);
       if (requestId) {
         const linkedSnap = await getDocs(
-          query(collection(db, "investments"), where("requestId", "==", requestId))
+          query(
+            collection(db, "investments"),
+            where("requestId", "==", requestId)
+          )
         );
         const linkedDoc = linkedSnap.docs
-          .map((row) => ({ id: row.id, ...(row.data() as any) }))
-          .find((row) => isInvestmentLinkedToRequest(row, requestData));
+          .map(row => ({ id: row.id, ...(row.data() as any) }))
+          .find(row => isInvestmentLinkedToRequest(row, requestData));
 
         if (linkedDoc) {
           setInvestmentDoc(linkedDoc);
@@ -947,8 +1080,8 @@ export default function MessagesManagement() {
       hydratedMessage?.approvedAmount != null
         ? String(hydratedMessage.approvedAmount)
         : hydratedMessage?.estimatedAmount != null
-        ? String(hydratedMessage.estimatedAmount)
-        : ""
+          ? String(hydratedMessage.estimatedAmount)
+          : ""
     );
 
     await loadContractDoc(
@@ -958,15 +1091,21 @@ export default function MessagesManagement() {
     setIsDetailDialogOpen(true);
   };
 
-  const activeInvestmentId = pick(investmentDoc?.id, selectedMessage?.investmentId);
-  const activeContractId = pick(investmentDoc?.contractId, selectedMessage?.contractId);
+  const activeInvestmentId = pick(
+    investmentDoc?.id,
+    selectedMessage?.investmentId
+  );
+  const activeContractId = pick(
+    investmentDoc?.contractId,
+    selectedMessage?.contractId
+  );
 
   useEffect(() => {
     if (!isDetailDialogOpen || !selectedMessage?.id) return;
 
     const unsub = onSnapshot(
       doc(db, REQUESTS_COL, selectedMessage.id),
-      (snap) => {
+      snap => {
         if (!snap.exists()) return;
         const liveMessage = normalizeForDisplay({
           id: snap.id,
@@ -976,7 +1115,7 @@ export default function MessagesManagement() {
           prev && prev.id === snap.id ? { ...prev, ...liveMessage } : prev
         );
       },
-      (e) => console.error(e)
+      e => console.error(e)
     );
 
     return () => {
@@ -985,7 +1124,12 @@ export default function MessagesManagement() {
   }, [isDetailDialogOpen, selectedMessage?.id]);
 
   useEffect(() => {
-    if (!isDetailDialogOpen || !selectedMessage?.id || selectedMessage?.adminSeenAt) return;
+    if (
+      !isDetailDialogOpen ||
+      !selectedMessage?.id ||
+      selectedMessage?.adminSeenAt
+    )
+      return;
 
     const run = async () => {
       try {
@@ -1025,7 +1169,7 @@ export default function MessagesManagement() {
 
     const unsub = onSnapshot(
       doc(db, "investments", activeInvestmentId),
-      (snap) => {
+      snap => {
         if (!snap.exists()) {
           setInvestmentDoc(null);
           return;
@@ -1035,7 +1179,7 @@ export default function MessagesManagement() {
           ...(snap.data() as any),
         });
       },
-      (e) => console.error(e)
+      e => console.error(e)
     );
 
     return () => {
@@ -1052,7 +1196,7 @@ export default function MessagesManagement() {
 
     const unsub = onSnapshot(
       doc(db, "contracts", activeContractId),
-      (snap) => {
+      snap => {
         if (!snap.exists()) {
           setContractDoc(null);
           return;
@@ -1062,7 +1206,7 @@ export default function MessagesManagement() {
           ...(snap.data() as any),
         });
       },
-      (e) => console.error(e)
+      e => console.error(e)
     );
 
     return () => {
@@ -1176,13 +1320,16 @@ export default function MessagesManagement() {
   /* =========================
     UI filters
   ========================= */
-  const normalized = useMemo(() => messages.map(normalizeForDisplay), [messages]);
+  const normalized = useMemo(
+    () => messages.map(normalizeForDisplay),
+    [messages]
+  );
 
   useEffect(() => {
     if (!requestedRequestId || !normalized.length || isDetailDialogOpen) return;
 
     const target = normalized.find(
-      (message) => String(message?.id || "").trim() === requestedRequestId
+      message => String(message?.id || "").trim() === requestedRequestId
     );
     if (!target) return;
 
@@ -1201,21 +1348,21 @@ export default function MessagesManagement() {
     if (view === "all") return normalized;
 
     if (view === "open") {
-      return normalized.filter((m) => {
+      return normalized.filter(m => {
         const st = String(m.status || "");
         return st !== "completed" && st !== "rejected" && st !== "closed";
       });
     }
 
     if (view === "completed") {
-      return normalized.filter((m) => {
+      return normalized.filter(m => {
         const st = String(m.status || "");
         return st === "completed" || st === "closed";
       });
     }
 
     if (view === "rejected") {
-      return normalized.filter((m) => String(m.status || "") === "rejected");
+      return normalized.filter(m => String(m.status || "") === "rejected");
     }
 
     return normalized;
@@ -1224,18 +1371,23 @@ export default function MessagesManagement() {
   const stats = useMemo(() => {
     const all = normalized;
     const open = all.filter(
-      (m) =>
+      m =>
         String(m.status || "") !== "completed" &&
         String(m.status || "") !== "rejected" &&
         String(m.status || "") !== "closed"
     );
-    const completed = all.filter((m) => {
+    const completed = all.filter(m => {
       const st = String(m.status || "");
       return st === "completed" || st === "closed";
     });
-    const rejected = all.filter((m) => String(m.status || "") === "rejected");
+    const rejected = all.filter(m => String(m.status || "") === "rejected");
 
-    return { all: all.length, open: open.length, completed: completed.length, rejected: rejected.length };
+    return {
+      all: all.length,
+      open: open.length,
+      completed: completed.length,
+      rejected: rejected.length,
+    };
   }, [normalized]);
 
   /* =========================
@@ -1393,7 +1545,8 @@ export default function MessagesManagement() {
 
   // 2) Accountant: تمت مراجعة الحساب -> للعميل
   const stepAccountantForwardToClient = async () => {
-    if (!canOwnerAccountantActions) return toast.error("هذا الإجراء للمحاسب/الأونر");
+    if (!canOwnerAccountantActions)
+      return toast.error("هذا الإجراء للمحاسب/الأونر");
     if (isLockedFinal) return toast.warning("الطلب مقفل.");
 
     await moveTo({
@@ -1413,7 +1566,8 @@ export default function MessagesManagement() {
       status: "resolved",
       stageRole: "owner",
       note: "تم تعميد العميل — تحويل للمالك للتعميد النهائي",
-      notifyClientText: "تم استلام تعميدك، وسيتم الإقفال النهائي بعد مراجعة المالك.",
+      notifyClientText:
+        "تم استلام تعميدك، وسيتم الإقفال النهائي بعد مراجعة المالك.",
     });
   };
 
@@ -1484,10 +1638,13 @@ export default function MessagesManagement() {
     if (!selectedMessage) return;
 
     if (myRole === "client") return toast.error("صلاحيتك عرض فقط.");
-    if (isLockedFinal && myRole !== "owner") return toast.warning("الطلب مقفل.");
+    if (isLockedFinal && myRole !== "owner")
+      return toast.warning("الطلب مقفل.");
 
     if (normalizeRequestStatus(selectedMessage?.status) !== "approved") {
-      return toast.warning("لا يمكن إنشاء الاستثمار قبل المراجعة والموافقة الأولية.");
+      return toast.warning(
+        "لا يمكن إنشاء الاستثمار قبل المراجعة والموافقة الأولية."
+      );
     }
 
     const requestId = String(selectedMessage?.id || "").trim();
@@ -1526,9 +1683,12 @@ export default function MessagesManagement() {
 
       const msgRef = doc(db, REQUESTS_COL, requestId);
       const existingInvSnap = await getDocs(
-        query(collection(db, "investments"), where("requestId", "==", requestId))
+        query(
+          collection(db, "investments"),
+          where("requestId", "==", requestId)
+        )
       );
-      const existingInvIds = existingInvSnap.docs.map((row) => row.id);
+      const existingInvIds = existingInvSnap.docs.map(row => row.id);
 
       let finalInvestmentId = "";
 
@@ -1549,143 +1709,174 @@ export default function MessagesManagement() {
         },
         targets: [{ ref: msgRef, entityType: "request" }],
         execute: async () =>
-          runTransaction(db, async (tx) => {
-        const msgSnap = await tx.get(msgRef);
-        if (!msgSnap.exists()) throw new Error("request_not_found");
+          runTransaction(db, async tx => {
+            const msgSnap = await tx.get(msgRef);
+            if (!msgSnap.exists()) throw new Error("request_not_found");
 
-        const msgData = msgSnap.data() as any;
-        if (normalizeRequestStatus(msgData?.status) !== "approved") {
-          throw new Error("request_not_initially_approved");
-        }
-        const candidateInvestmentIds = Array.from(
-          new Set([pick(msgData?.investmentId), ...existingInvIds].filter(Boolean))
-        );
-        let linkedInvId = "";
-        const explicitLinkedInvestmentId = pick(msgData?.investmentId);
+            const msgData = msgSnap.data() as any;
+            if (normalizeRequestStatus(msgData?.status) !== "approved") {
+              throw new Error("request_not_initially_approved");
+            }
+            const candidateInvestmentIds = Array.from(
+              new Set(
+                [pick(msgData?.investmentId), ...existingInvIds].filter(Boolean)
+              )
+            );
+            let linkedInvId = "";
+            const explicitLinkedInvestmentId = pick(msgData?.investmentId);
 
-        for (const candidateInvestmentId of candidateInvestmentIds) {
-          const candidateInvRef = doc(db, "investments", candidateInvestmentId);
-          const candidateInvSnap = await tx.get(candidateInvRef);
-          if (!candidateInvSnap.exists()) continue;
+            for (const candidateInvestmentId of candidateInvestmentIds) {
+              const candidateInvRef = doc(
+                db,
+                "investments",
+                candidateInvestmentId
+              );
+              const candidateInvSnap = await tx.get(candidateInvRef);
+              if (!candidateInvSnap.exists()) continue;
 
-          const candidateInvData = candidateInvSnap.data() as any;
-          const candidateRequestId = pick(
-            candidateInvData?.requestId,
-            candidateInvData?.sourceRequestId,
-            candidateInvData?.sourceMessageId,
-            candidateInvData?.messageId
-          );
-          const candidateInvestorUid = pick(
-            candidateInvData?.investorUid,
-            candidateInvData?.userId
-          );
-          const candidateProjectId = pick(candidateInvData?.projectId);
+              const candidateInvData = candidateInvSnap.data() as any;
+              const candidateRequestId = pick(
+                candidateInvData?.requestId,
+                candidateInvData?.sourceRequestId,
+                candidateInvData?.sourceMessageId,
+                candidateInvData?.messageId
+              );
+              const candidateInvestorUid = pick(
+                candidateInvData?.investorUid,
+                candidateInvData?.userId
+              );
+              const candidateProjectId = pick(candidateInvData?.projectId);
 
-          if (candidateRequestId) {
-            if (candidateRequestId !== requestId) continue;
-          } else if (!explicitLinkedInvestmentId || explicitLinkedInvestmentId !== candidateInvSnap.id) {
-            continue;
-          }
-          if (candidateInvestorUid && candidateInvestorUid !== investorUid) continue;
-          if (candidateProjectId && candidateProjectId !== projectId) continue;
+              if (candidateRequestId) {
+                if (candidateRequestId !== requestId) continue;
+              } else if (
+                !explicitLinkedInvestmentId ||
+                explicitLinkedInvestmentId !== candidateInvSnap.id
+              ) {
+                continue;
+              }
+              if (candidateInvestorUid && candidateInvestorUid !== investorUid)
+                continue;
+              if (candidateProjectId && candidateProjectId !== projectId)
+                continue;
 
-          linkedInvId = candidateInvSnap.id;
-          break;
-        }
+              linkedInvId = candidateInvSnap.id;
+              break;
+            }
 
-        if (linkedInvId) {
-          finalInvestmentId = linkedInvId;
-          const linkedInvRef = doc(db, "investments", linkedInvId);
-          tx.set(
-            linkedInvRef,
-            {
+            if (linkedInvId) {
+              finalInvestmentId = linkedInvId;
+              const linkedInvRef = doc(db, "investments", linkedInvId);
+              tx.set(
+                linkedInvRef,
+                {
+                  requestId,
+                  sourceRequestId: requestId,
+                  sourceMessageId: requestId,
+                  projectId,
+                  investorUid,
+                  userId: investorUid,
+                  investorName:
+                    pick(
+                      msgData?.investorName,
+                      msgData?.userSnapshot?.displayName,
+                      selectedMessage?.investorName
+                    ) || null,
+                  investorEmail:
+                    pick(
+                      msgData?.investorEmail,
+                      msgData?.userSnapshot?.email
+                    ) || null,
+                  investorPhone:
+                    pick(
+                      msgData?.investorPhone,
+                      msgData?.userSnapshot?.phone
+                    ) || null,
+                  amount,
+                  status: "pending_contract",
+                  contractStatus: "draft",
+                  projectTitle: projectTitle || null,
+                  projectSnapshot:
+                    msgData?.projectSnapshot ||
+                    selectedMessage?.projectSnapshot ||
+                    null,
+                  updatedAt: serverTimestamp(),
+                  updatedByUid: user?.uid || null,
+                  updatedByEmail: user?.email || null,
+                },
+                { merge: true }
+              );
+            } else {
+              const invRef = doc(collection(db, "investments"));
+              finalInvestmentId = invRef.id;
+              tx.set(invRef, {
+                requestId,
+                sourceRequestId: requestId,
+                sourceMessageId: requestId,
+                projectId,
+                investorUid,
+                userId: investorUid,
+                investorName:
+                  pick(
+                    msgData?.investorName,
+                    msgData?.userSnapshot?.displayName,
+                    selectedMessage?.investorName
+                  ) || null,
+                investorEmail:
+                  pick(msgData?.investorEmail, msgData?.userSnapshot?.email) ||
+                  null,
+                investorPhone:
+                  pick(msgData?.investorPhone, msgData?.userSnapshot?.phone) ||
+                  null,
+                amount,
+                status: "pending_contract",
+                contractStatus: "draft",
+                source: "interest_request",
+                projectTitle: projectTitle || null,
+                projectSnapshot:
+                  msgData?.projectSnapshot ||
+                  selectedMessage?.projectSnapshot ||
+                  null,
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp(),
+                createdByUid: user?.uid || null,
+                createdByEmail: user?.email || null,
+              });
+            }
+
+            const ev = makeEvent({
+              type: "investment_created",
+              title: "قبول الطلب وإنشاء الاستثمار",
+              note: "تم قبول طلب الاهتمام وإنشاء سجل استثمار، ويجري تجهيز العقد.",
+              ...myActor(user, myRole),
+              meta: {
+                requestId,
+                investmentId: finalInvestmentId,
+                projectId,
+                investorUid,
+                amount,
+                investmentStatus: "pending_contract",
+              },
+            });
+
+            tx.update(msgRef, {
               requestId,
-              sourceRequestId: requestId,
-              sourceMessageId: requestId,
-              projectId,
-              investorUid,
-              userId: investorUid,
-              investorName: pick(
-                msgData?.investorName,
-                msgData?.userSnapshot?.displayName,
-                selectedMessage?.investorName
-              ) || null,
-              investorEmail: pick(msgData?.investorEmail, msgData?.userSnapshot?.email) || null,
-              investorPhone: pick(msgData?.investorPhone, msgData?.userSnapshot?.phone) || null,
-              amount,
-              status: "pending_contract",
+              status: "approved",
+              stageRole: "investment" as StageRole,
+              stage: "investment",
+              approvedAmount: amount,
+              investmentId: finalInvestmentId,
+              investmentStatus: "pending_contract",
               contractStatus: "draft",
-              projectTitle: projectTitle || null,
-              projectSnapshot: msgData?.projectSnapshot || selectedMessage?.projectSnapshot || null,
+              investmentCreatedAt: serverTimestamp(),
+              investmentCreatedByUid: user?.uid || null,
+              investmentCreatedByEmail: user?.email || null,
               updatedAt: serverTimestamp(),
               updatedByUid: user?.uid || null,
               updatedByEmail: user?.email || null,
-            },
-            { merge: true }
-          );
-        } else {
-          const invRef = doc(collection(db, "investments"));
-          finalInvestmentId = invRef.id;
-          tx.set(invRef, {
-            requestId,
-            sourceRequestId: requestId,
-            sourceMessageId: requestId,
-            projectId,
-            investorUid,
-            userId: investorUid,
-            investorName: pick(
-              msgData?.investorName,
-              msgData?.userSnapshot?.displayName,
-              selectedMessage?.investorName
-            ) || null,
-            investorEmail: pick(msgData?.investorEmail, msgData?.userSnapshot?.email) || null,
-            investorPhone: pick(msgData?.investorPhone, msgData?.userSnapshot?.phone) || null,
-            amount,
-            status: "pending_contract",
-            contractStatus: "draft",
-            source: "interest_request",
-            projectTitle: projectTitle || null,
-            projectSnapshot: msgData?.projectSnapshot || selectedMessage?.projectSnapshot || null,
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-            createdByUid: user?.uid || null,
-            createdByEmail: user?.email || null,
-          });
-        }
-
-        const ev = makeEvent({
-          type: "investment_created",
-          title: "قبول الطلب وإنشاء الاستثمار",
-          note: "تم قبول طلب الاهتمام وإنشاء سجل استثمار بانتظار العقد.",
-          ...myActor(user, myRole),
-          meta: {
-            requestId,
-            investmentId: finalInvestmentId,
-            projectId,
-            investorUid,
-            amount,
-            investmentStatus: "pending_contract",
-          },
-        });
-
-        tx.update(msgRef, {
-          requestId,
-          status: "approved",
-          stageRole: "investment" as StageRole,
-          stage: "investment",
-          approvedAmount: amount,
-          investmentId: finalInvestmentId,
-          investmentStatus: "pending_contract",
-          contractStatus: "draft",
-          investmentCreatedAt: serverTimestamp(),
-          investmentCreatedByUid: user?.uid || null,
-          investmentCreatedByEmail: user?.email || null,
-          updatedAt: serverTimestamp(),
-          updatedByUid: user?.uid || null,
-          updatedByEmail: user?.email || null,
-          events: arrayUnion(ev),
-          ...actionMeta(user, myRole),
-        });
+              events: arrayUnion(ev),
+              ...actionMeta(user, myRole),
+            });
           }),
       });
 
@@ -1709,7 +1900,9 @@ export default function MessagesManagement() {
       console.error(e);
       const errorCode = String(e?.message || "");
       if (errorCode === "request_not_initially_approved") {
-        toast.error("يلزم إنهاء المراجعة والموافقة الأولية قبل إنشاء الاستثمار.");
+        toast.error(
+          "يلزم إنهاء المراجعة والموافقة الأولية قبل إنشاء الاستثمار."
+        );
       } else if (errorCode === "request_not_found") {
         toast.error("الطلب غير موجود أو تم حذفه.");
       } else {
@@ -1741,7 +1934,8 @@ export default function MessagesManagement() {
 
     const draftFileName = String(draftFile.name || "").toLowerCase();
     const draftFileMime = String(draftFile.type || "").toLowerCase();
-    const isPdf = draftFileMime === "application/pdf" || draftFileName.endsWith(".pdf");
+    const isPdf =
+      draftFileMime === "application/pdf" || draftFileName.endsWith(".pdf");
     if (!isPdf) {
       toast.warning("الرجاء اختيار ملف PDF");
       return;
@@ -1762,7 +1956,8 @@ export default function MessagesManagement() {
         entityId: investmentId,
         category: "contract_original",
         investmentId,
-        contractId: String(selectedMessage.contractId || "").trim() || undefined,
+        contractId:
+          String(selectedMessage.contractId || "").trim() || undefined,
         requestId: String(selectedMessage.id || "").trim() || undefined,
         uploadedBy: String(user?.uid || "").trim() || undefined,
         file: draftFile,
@@ -1792,66 +1987,76 @@ export default function MessagesManagement() {
           contractVersionSource: "cloudflare_upload",
         },
         targets: [
-          { ref: doc(db, REQUESTS_COL, selectedMessage.id), entityType: "request", label: "request" },
-          { ref: doc(db, "investments", investmentId), entityType: "investment" },
+          {
+            ref: doc(db, REQUESTS_COL, selectedMessage.id),
+            entityType: "request",
+            label: "request",
+          },
+          {
+            ref: doc(db, "investments", investmentId),
+            entityType: "investment",
+          },
         ],
         execute: async () =>
-          runTransaction(db, async (tx) => {
-        const msgRef = doc(db, REQUESTS_COL, selectedMessage.id);
-        const invRef = doc(db, "investments", investmentId);
-        const invSnap = await tx.get(invRef);
-        if (!invSnap.exists()) {
-          throw new Error("investment_not_found");
-        }
+          runTransaction(db, async tx => {
+            const msgRef = doc(db, REQUESTS_COL, selectedMessage.id);
+            const invRef = doc(db, "investments", investmentId);
+            const invSnap = await tx.get(invRef);
+            if (!invSnap.exists()) {
+              throw new Error("investment_not_found");
+            }
 
-        const inv = (invSnap.data() || {}) as Record<string, any>;
-        const now = serverTimestamp();
-        const currentVersion = toPositiveInt(
-          inv?.contractVersion ?? inv?.originalContract?.version ?? inv?.contractFile?.version
-        );
-        const nextContractVersion = currentVersion > 0 ? currentVersion + 1 : 1;
-        const hasSignedFromDoc = Boolean(
-          String(inv?.signedContract?.path || "").trim() ||
-            String(inv?.signedContractFile?.path || "").trim() ||
-            String(inv?.signedContract?.url || "").trim() ||
-            String(inv?.signedContractFile?.url || "").trim() ||
-            String(inv?.signedContractPath || "").trim() ||
-            String(inv?.signedPath || "").trim() ||
-            String(inv?.signedDocumentPath || "").trim() ||
-            String(inv?.signedContractUrl || "").trim()
-        );
-        const hasSigned = hadSignedBeforeRevision || hasSignedFromDoc;
+            const inv = (invSnap.data() || {}) as Record<string, any>;
+            const now = serverTimestamp();
+            const currentVersion = toPositiveInt(
+              inv?.contractVersion ??
+                inv?.originalContract?.version ??
+                inv?.contractFile?.version
+            );
+            const nextContractVersion =
+              currentVersion > 0 ? currentVersion + 1 : 1;
+            const hasSignedFromDoc = Boolean(
+              String(inv?.signedContract?.path || "").trim() ||
+              String(inv?.signedContractFile?.path || "").trim() ||
+              String(inv?.signedContract?.url || "").trim() ||
+              String(inv?.signedContractFile?.url || "").trim() ||
+              String(inv?.signedContractPath || "").trim() ||
+              String(inv?.signedPath || "").trim() ||
+              String(inv?.signedDocumentPath || "").trim() ||
+              String(inv?.signedContractUrl || "").trim()
+            );
+            const hasSigned = hadSignedBeforeRevision || hasSignedFromDoc;
 
-        tx.set(
-          invRef,
-          {
-            contractVersion: nextContractVersion,
-            signedAgainstContractVersion: deleteField(),
-            signedContractOutdated: false,
-            requiresResign: false,
-            signedContractOutdatedAt: null,
-            signedAt: null,
-            verifiedAt: deleteField(),
-            verifiedByUid: deleteField(),
-            verifiedByEmail: deleteField(),
-            contractStatus: hasSigned ? "pending_signature" : "sent",
-            status: "signing",
-            updatedAt: now,
-          },
-          { merge: true }
-        );
-        tx.set(
-          msgRef,
-          {
-            stageRole: "contract",
-            contractStatus: hasSigned ? "pending_signature" : "sent",
-            investmentStatus: "signing",
-            updatedAt: now,
-            updatedByUid: user?.uid || null,
-            updatedByEmail: user?.email || null,
-          },
-          { merge: true }
-        );
+            tx.set(
+              invRef,
+              {
+                contractVersion: nextContractVersion,
+                signedAgainstContractVersion: deleteField(),
+                signedContractOutdated: false,
+                requiresResign: false,
+                signedContractOutdatedAt: null,
+                signedAt: null,
+                verifiedAt: deleteField(),
+                verifiedByUid: deleteField(),
+                verifiedByEmail: deleteField(),
+                contractStatus: hasSigned ? "pending_signature" : "sent",
+                status: "signing",
+                updatedAt: now,
+              },
+              { merge: true }
+            );
+            tx.set(
+              msgRef,
+              {
+                stageRole: "contract",
+                contractStatus: hasSigned ? "pending_signature" : "sent",
+                investmentStatus: "signing",
+                updatedAt: now,
+                updatedByUid: user?.uid || null,
+                updatedByEmail: user?.email || null,
+              },
+              { merge: true }
+            );
           }),
       });
       console.log("[upload] workflow state updated in firestore", {
@@ -1904,31 +2109,36 @@ export default function MessagesManagement() {
         meta: {
           nextStatus: "completed",
         },
-        targets: [{ ref: doc(db, REQUESTS_COL, selectedMessage.id), entityType: "request" }],
+        targets: [
+          {
+            ref: doc(db, REQUESTS_COL, selectedMessage.id),
+            entityType: "request",
+          },
+        ],
         execute: async () =>
-          runTransaction(db, async (tx) => {
-        const msgRef = doc(db, REQUESTS_COL, selectedMessage.id);
+          runTransaction(db, async tx => {
+            const msgRef = doc(db, REQUESTS_COL, selectedMessage.id);
 
-        tx.update(msgRef, {
-          status: "completed",
-          stageRole: "completed" as StageRole,
-          finalizedAt: serverTimestamp(),
-          finalizedByUid: user?.uid || null,
-          finalizedByEmail: user?.email || null,
-          updatedAt: serverTimestamp(),
-          updatedByUid: user?.uid || null,
-          updatedByEmail: user?.email || null,
-          events: arrayUnion(
-            makeEvent({
-              type: "finalized",
-              title: "ترحيل نهائي للمشروع",
-              note: "تم الترحيل النهائي وقفل الطلب.",
-              ...myActor(user, myRole),
-              meta: { messageId: selectedMessage.id },
-            })
-          ),
-          ...actionMeta(user, myRole),
-        });
+            tx.update(msgRef, {
+              status: "completed",
+              stageRole: "completed" as StageRole,
+              finalizedAt: serverTimestamp(),
+              finalizedByUid: user?.uid || null,
+              finalizedByEmail: user?.email || null,
+              updatedAt: serverTimestamp(),
+              updatedByUid: user?.uid || null,
+              updatedByEmail: user?.email || null,
+              events: arrayUnion(
+                makeEvent({
+                  type: "finalized",
+                  title: "ترحيل نهائي للمشروع",
+                  note: "تم الترحيل النهائي وقفل الطلب.",
+                  ...myActor(user, myRole),
+                  meta: { messageId: selectedMessage.id },
+                })
+              ),
+              ...actionMeta(user, myRole),
+            });
           }),
       });
 
@@ -1975,203 +2185,250 @@ export default function MessagesManagement() {
         },
         message: `Verified signed contract for investment ${investmentId}`,
         targets: [
-          { ref: doc(db, REQUESTS_COL, selectedMessage.id), entityType: "request", label: "request" },
-          { ref: doc(db, "investments", investmentId), entityType: "investment" },
+          {
+            ref: doc(db, REQUESTS_COL, selectedMessage.id),
+            entityType: "request",
+            label: "request",
+          },
+          {
+            ref: doc(db, "investments", investmentId),
+            entityType: "investment",
+          },
         ],
         execute: async () =>
-          runTransaction(db, async (tx) => {
-        const msgRef = doc(db, REQUESTS_COL, selectedMessage.id);
-        const invRef = doc(db, "investments", investmentId);
+          runTransaction(db, async tx => {
+            const msgRef = doc(db, REQUESTS_COL, selectedMessage.id);
+            const invRef = doc(db, "investments", investmentId);
 
-        const [msgSnap, invSnap] = await Promise.all([tx.get(msgRef), tx.get(invRef)]);
-        if (!msgSnap.exists()) throw new Error("request_not_found");
-        if (!invSnap.exists()) throw new Error("investment_not_found");
+            const [msgSnap, invSnap] = await Promise.all([
+              tx.get(msgRef),
+              tx.get(invRef),
+            ]);
+            if (!msgSnap.exists()) throw new Error("request_not_found");
+            if (!invSnap.exists()) throw new Error("investment_not_found");
 
-        const msgData = (msgSnap.data() || {}) as Record<string, any>;
-        const invData = (invSnap.data() || {}) as Record<string, any>;
-        const currentInvestmentStatus = String(invData?.status || "")
-          .trim()
-          .toLowerCase();
-        if (["active", "completed", "closed"].includes(currentInvestmentStatus)) {
-          throw new Error("investment_already_activated");
-        }
-        const currentContractStatus = String(
-          pick(invData?.contractStatus, msgData?.contractStatus, selectedMessage?.contractStatus)
-        )
-          .trim()
-          .toLowerCase();
-        const fallbackSignedPath = pick(
-          invData?.signedContract?.path,
-          invData?.signedContractFile?.path,
-          invData?.signedContractPath,
-          invData?.signedPath,
-          invData?.signedDocumentPath,
-          invData?.signedContractUrl,
-          signedContractPath
-        );
-        const canVerifyLegacySignedUpload =
-          !!fallbackSignedPath &&
-          ["sent", "pending_signature", "draft"].includes(currentContractStatus);
-        if (!["under_review", "signed"].includes(currentContractStatus) && !canVerifyLegacySignedUpload) {
-          throw new Error("contract_not_ready_for_verification");
-        }
+            const msgData = (msgSnap.data() || {}) as Record<string, any>;
+            const invData = (invSnap.data() || {}) as Record<string, any>;
+            const currentInvestmentStatus = String(invData?.status || "")
+              .trim()
+              .toLowerCase();
+            if (
+              ["active", "completed", "closed"].includes(
+                currentInvestmentStatus
+              )
+            ) {
+              throw new Error("investment_already_activated");
+            }
+            const currentContractStatus = String(
+              pick(
+                invData?.contractStatus,
+                msgData?.contractStatus,
+                selectedMessage?.contractStatus
+              )
+            )
+              .trim()
+              .toLowerCase();
+            const fallbackSignedPath = pick(
+              invData?.signedContract?.path,
+              invData?.signedContractFile?.path,
+              invData?.signedContractPath,
+              invData?.signedPath,
+              invData?.signedDocumentPath,
+              invData?.signedContractUrl,
+              signedContractPath
+            );
+            const canVerifyLegacySignedUpload =
+              !!fallbackSignedPath &&
+              ["sent", "pending_signature", "draft"].includes(
+                currentContractStatus
+              );
+            if (
+              !["under_review", "signed"].includes(currentContractStatus) &&
+              !canVerifyLegacySignedUpload
+            ) {
+              throw new Error("contract_not_ready_for_verification");
+            }
 
-        const hasSignedPath = Boolean(fallbackSignedPath);
-        if (!hasSignedPath) {
-          throw new Error("signed_contract_missing");
-        }
+            const hasSignedPath = Boolean(fallbackSignedPath);
+            if (!hasSignedPath) {
+              throw new Error("signed_contract_missing");
+            }
 
-        const originalVersion = toPositiveInt(
-          invData?.contractVersion ?? invData?.originalContract?.version ?? invData?.contractFile?.version
-        );
-        const signedForVersion = toPositiveInt(
-          invData?.signedAgainstContractVersion ??
-            invData?.signedContract?.signedForVersion ??
-            invData?.signedContract?.originalVersion
-        );
-        const outdatedFlag = toBooleanSafe(
-          invData?.signedContractOutdated ?? invData?.requiresResign ?? invData?.signedContract?.isOutdated
-        );
-        const isSignedOutdated =
-          outdatedFlag ||
-          (originalVersion > 0 && signedForVersion > 0 && signedForVersion < originalVersion);
-        if (isSignedOutdated) {
-          throw new Error("signed_contract_outdated");
-        }
-        const shouldBackfillSignedDoc =
-          !pick(
-            invData?.signedContract?.path,
-            invData?.signedContractFile?.path,
-            invData?.signedContractPath,
-            invData?.signedPath,
-            invData?.signedDocumentPath,
-            invData?.signedContractUrl
-          ) &&
-          !!fallbackSignedPath;
-        const resolvedSignedForVersion = signedForVersion || originalVersion || 1;
-        const fallbackSignedFileName = fallbackSignedPath
-          ? getFileNameFromPath(fallbackSignedPath)
-          : "signed.pdf";
+            const originalVersion = toPositiveInt(
+              invData?.contractVersion ??
+                invData?.originalContract?.version ??
+                invData?.contractFile?.version
+            );
+            const signedForVersion = toPositiveInt(
+              invData?.signedAgainstContractVersion ??
+                invData?.signedContract?.signedForVersion ??
+                invData?.signedContract?.originalVersion
+            );
+            const outdatedFlag = toBooleanSafe(
+              invData?.signedContractOutdated ??
+                invData?.requiresResign ??
+                invData?.signedContract?.isOutdated
+            );
+            const isSignedOutdated =
+              outdatedFlag ||
+              (originalVersion > 0 &&
+                signedForVersion > 0 &&
+                signedForVersion < originalVersion);
+            if (isSignedOutdated) {
+              throw new Error("signed_contract_outdated");
+            }
+            const shouldBackfillSignedDoc =
+              !pick(
+                invData?.signedContract?.path,
+                invData?.signedContractFile?.path,
+                invData?.signedContractPath,
+                invData?.signedPath,
+                invData?.signedDocumentPath,
+                invData?.signedContractUrl
+              ) && !!fallbackSignedPath;
+            const resolvedSignedForVersion =
+              signedForVersion || originalVersion || 1;
+            const fallbackSignedFileName = fallbackSignedPath
+              ? getFileNameFromPath(fallbackSignedPath)
+              : "signed.pdf";
 
-        const contractId = String(
-          pick(invData?.contractId, msgData?.contractId, selectedMessage?.contractId)
-        ).trim();
-        const contractRef = contractId ? doc(db, "contracts", contractId) : null;
+            const contractId = String(
+              pick(
+                invData?.contractId,
+                msgData?.contractId,
+                selectedMessage?.contractId
+              )
+            ).trim();
+            const contractRef = contractId
+              ? doc(db, "contracts", contractId)
+              : null;
 
-        tx.set(
-          invRef,
-          {
-            ...(shouldBackfillSignedDoc
-              ? {
-                  signedContract: {
-                    fileName: fallbackSignedFileName,
-                    path: fallbackSignedPath,
-                    storagePath: fallbackSignedPath,
-                    uploadedAt: invData?.signedAt || verifiedAt,
-                    uploadedBy: invData?.lastDocumentUploadBy || invData?.investorUid || null,
-                    signedForVersion: resolvedSignedForVersion,
-                    originalVersion: resolvedSignedForVersion,
-                    isOutdated: false,
-                    outdatedAt: null,
-                    outdatedByOriginalVersion: null,
-                  },
-                  signedContractFile: {
-                    fileName: fallbackSignedFileName,
-                    path: fallbackSignedPath,
-                    storagePath: fallbackSignedPath,
-                    uploadedAt: invData?.signedAt || verifiedAt,
-                    uploadedBy: invData?.lastDocumentUploadBy || invData?.investorUid || null,
-                    signedForVersion: resolvedSignedForVersion,
-                  },
-                  signedAgainstContractVersion: resolvedSignedForVersion,
-                  signedContractOutdated: false,
-                  requiresResign: false,
-                  signedContractOutdatedAt: null,
-                }
-              : {}),
-            status: "signed",
-            contractStatus: "approved",
-            signedAt: invData?.signedAt || verifiedAt,
-            verifiedAt,
-            verifiedByUid: user?.uid || null,
-            verifiedByEmail: user?.email || null,
-            updatedAt: verifiedAt,
-            updatedByUid: user?.uid || null,
-            updatedByEmail: user?.email || null,
-          },
-          { merge: true }
-        );
+            tx.set(
+              invRef,
+              {
+                ...(shouldBackfillSignedDoc
+                  ? {
+                      signedContract: {
+                        fileName: fallbackSignedFileName,
+                        path: fallbackSignedPath,
+                        storagePath: fallbackSignedPath,
+                        uploadedAt: invData?.signedAt || verifiedAt,
+                        uploadedBy:
+                          invData?.lastDocumentUploadBy ||
+                          invData?.investorUid ||
+                          null,
+                        signedForVersion: resolvedSignedForVersion,
+                        originalVersion: resolvedSignedForVersion,
+                        isOutdated: false,
+                        outdatedAt: null,
+                        outdatedByOriginalVersion: null,
+                      },
+                      signedContractFile: {
+                        fileName: fallbackSignedFileName,
+                        path: fallbackSignedPath,
+                        storagePath: fallbackSignedPath,
+                        uploadedAt: invData?.signedAt || verifiedAt,
+                        uploadedBy:
+                          invData?.lastDocumentUploadBy ||
+                          invData?.investorUid ||
+                          null,
+                        signedForVersion: resolvedSignedForVersion,
+                      },
+                      signedAgainstContractVersion: resolvedSignedForVersion,
+                      signedContractOutdated: false,
+                      requiresResign: false,
+                      signedContractOutdatedAt: null,
+                    }
+                  : {}),
+                status: "signed",
+                contractStatus: "approved",
+                signedAt: invData?.signedAt || verifiedAt,
+                verifiedAt,
+                verifiedByUid: user?.uid || null,
+                verifiedByEmail: user?.email || null,
+                updatedAt: verifiedAt,
+                updatedByUid: user?.uid || null,
+                updatedByEmail: user?.email || null,
+              },
+              { merge: true }
+            );
 
-        if (contractRef) {
-          tx.set(
-            contractRef,
-            {
-              ...(shouldBackfillSignedDoc
-                ? {
-                    signedContract: {
-                      fileName: fallbackSignedFileName,
-                      path: fallbackSignedPath,
-                      storagePath: fallbackSignedPath,
-                      uploadedAt: invData?.signedAt || verifiedAt,
-                      uploadedBy: invData?.lastDocumentUploadBy || invData?.investorUid || null,
-                      signedForVersion: resolvedSignedForVersion,
-                      originalVersion: resolvedSignedForVersion,
-                      isOutdated: false,
-                      outdatedAt: null,
-                      outdatedByOriginalVersion: null,
-                    },
-                    signedContractFile: {
-                      fileName: fallbackSignedFileName,
-                      path: fallbackSignedPath,
-                      storagePath: fallbackSignedPath,
-                      uploadedAt: invData?.signedAt || verifiedAt,
-                      uploadedBy: invData?.lastDocumentUploadBy || invData?.investorUid || null,
-                      signedForVersion: resolvedSignedForVersion,
-                    },
-                    signedAgainstContractVersion: resolvedSignedForVersion,
-                    signedContractOutdated: false,
-                    requiresResign: false,
-                    signedContractOutdatedAt: null,
-                  }
-                : {}),
-              status: "approved",
+            if (contractRef) {
+              tx.set(
+                contractRef,
+                {
+                  ...(shouldBackfillSignedDoc
+                    ? {
+                        signedContract: {
+                          fileName: fallbackSignedFileName,
+                          path: fallbackSignedPath,
+                          storagePath: fallbackSignedPath,
+                          uploadedAt: invData?.signedAt || verifiedAt,
+                          uploadedBy:
+                            invData?.lastDocumentUploadBy ||
+                            invData?.investorUid ||
+                            null,
+                          signedForVersion: resolvedSignedForVersion,
+                          originalVersion: resolvedSignedForVersion,
+                          isOutdated: false,
+                          outdatedAt: null,
+                          outdatedByOriginalVersion: null,
+                        },
+                        signedContractFile: {
+                          fileName: fallbackSignedFileName,
+                          path: fallbackSignedPath,
+                          storagePath: fallbackSignedPath,
+                          uploadedAt: invData?.signedAt || verifiedAt,
+                          uploadedBy:
+                            invData?.lastDocumentUploadBy ||
+                            invData?.investorUid ||
+                            null,
+                          signedForVersion: resolvedSignedForVersion,
+                        },
+                        signedAgainstContractVersion: resolvedSignedForVersion,
+                        signedContractOutdated: false,
+                        requiresResign: false,
+                        signedContractOutdatedAt: null,
+                      }
+                    : {}),
+                  status: "approved",
+                  verifiedAt,
+                  verifiedByUid: user?.uid || null,
+                  verifiedByEmail: user?.email || null,
+                  updatedAt: verifiedAt,
+                  updatedByUid: user?.uid || null,
+                  updatedByEmail: user?.email || null,
+                },
+                { merge: true }
+              );
+            }
+
+            tx.update(msgRef, {
+              stageRole: "owner" as StageRole,
+              contractStatus: "approved",
+              investmentStatus: "signed",
               verifiedAt,
               verifiedByUid: user?.uid || null,
               verifiedByEmail: user?.email || null,
               updatedAt: verifiedAt,
               updatedByUid: user?.uid || null,
               updatedByEmail: user?.email || null,
-            },
-            { merge: true }
-          );
-        }
-
-        tx.update(msgRef, {
-          stageRole: "owner" as StageRole,
-          contractStatus: "approved",
-          investmentStatus: "signed",
-          verifiedAt,
-          verifiedByUid: user?.uid || null,
-          verifiedByEmail: user?.email || null,
-          updatedAt: verifiedAt,
-          updatedByUid: user?.uid || null,
-          updatedByEmail: user?.email || null,
-          events: arrayUnion(
-            makeEvent({
-              type: "contract_verified",
-              title: "تم التحقق من العقد الموقّع",
-              note: "تم اعتماد العقد الموقّع وأصبح الاستثمار جاهزًا للتفعيل النهائي.",
-              ...myActor(user, myRole),
-              meta: {
-                messageId: selectedMessage.id,
-                investmentId,
-                contractStatus: "approved",
-                investmentStatus: "signed",
-              },
-            })
-          ),
-          ...actionMeta(user, myRole),
-        });
+              events: arrayUnion(
+                makeEvent({
+                  type: "contract_verified",
+                  title: "تم التحقق من العقد الموقّع",
+                  note: "تم اعتماد العقد الموقّع، وأصبح الاستثمار جاهزًا للبدء.",
+                  ...myActor(user, myRole),
+                  meta: {
+                    messageId: selectedMessage.id,
+                    investmentId,
+                    contractStatus: "approved",
+                    investmentStatus: "signed",
+                  },
+                })
+              ),
+              ...actionMeta(user, myRole),
+            });
           }),
       });
 
@@ -2227,197 +2484,224 @@ export default function MessagesManagement() {
         },
         message: `Activated investment ${investmentId}`,
         targets: [
-          { ref: doc(db, REQUESTS_COL, selectedMessage.id), entityType: "request", label: "request" },
-          { ref: doc(db, "investments", investmentId), entityType: "investment" },
+          {
+            ref: doc(db, REQUESTS_COL, selectedMessage.id),
+            entityType: "request",
+            label: "request",
+          },
+          {
+            ref: doc(db, "investments", investmentId),
+            entityType: "investment",
+          },
         ],
         execute: async () =>
-          runTransaction(db, async (tx) => {
-        const msgRef = doc(db, REQUESTS_COL, selectedMessage.id);
-        const invRef = doc(db, "investments", investmentId);
+          runTransaction(db, async tx => {
+            const msgRef = doc(db, REQUESTS_COL, selectedMessage.id);
+            const invRef = doc(db, "investments", investmentId);
 
-        const [msgSnap, invSnap] = await Promise.all([tx.get(msgRef), tx.get(invRef)]);
-        if (!msgSnap.exists()) throw new Error("request_not_found");
-        if (!invSnap.exists()) throw new Error("investment_not_found");
+            const [msgSnap, invSnap] = await Promise.all([
+              tx.get(msgRef),
+              tx.get(invRef),
+            ]);
+            if (!msgSnap.exists()) throw new Error("request_not_found");
+            if (!invSnap.exists()) throw new Error("investment_not_found");
 
-        const msgData = (msgSnap.data() || {}) as Record<string, any>;
-        const invData = (invSnap.data() || {}) as Record<string, any>;
-        const currentInvestmentStatus = String(invData?.status || "")
-          .trim()
-          .toLowerCase();
-        if (["active", "completed", "closed"].includes(currentInvestmentStatus)) {
-          throw new Error("investment_already_activated");
-        }
-        if (currentInvestmentStatus !== "signed") {
-          throw new Error("investment_not_ready_for_activation");
-        }
+            const msgData = (msgSnap.data() || {}) as Record<string, any>;
+            const invData = (invSnap.data() || {}) as Record<string, any>;
+            const currentInvestmentStatus = String(invData?.status || "")
+              .trim()
+              .toLowerCase();
+            if (
+              ["active", "completed", "closed"].includes(
+                currentInvestmentStatus
+              )
+            ) {
+              throw new Error("investment_already_activated");
+            }
+            if (currentInvestmentStatus !== "signed") {
+              throw new Error("investment_not_ready_for_activation");
+            }
 
-        const contractId = String(
-          pick(invData?.contractId, msgData?.contractId, selectedMessage?.contractId)
-        ).trim();
-        const contractRef = contractId ? doc(db, "contracts", contractId) : null;
-        const contractSnap = contractRef ? await tx.get(contractRef) : null;
-        const contractData =
-          contractSnap && contractSnap.exists()
-            ? ((contractSnap.data() || {}) as Record<string, any>)
-            : null;
+            const contractId = String(
+              pick(
+                invData?.contractId,
+                msgData?.contractId,
+                selectedMessage?.contractId
+              )
+            ).trim();
+            const contractRef = contractId
+              ? doc(db, "contracts", contractId)
+              : null;
+            const contractSnap = contractRef ? await tx.get(contractRef) : null;
+            const contractData =
+              contractSnap && contractSnap.exists()
+                ? ((contractSnap.data() || {}) as Record<string, any>)
+                : null;
 
-        const currentContractStatus = String(
-          pick(contractData?.status, invData?.contractStatus, msgData?.contractStatus)
-        )
-          .trim()
-          .toLowerCase();
-        if (!CONTRACTS_DISABLED && currentContractStatus !== "approved") {
-          throw new Error("contract_not_ready_for_activation");
-        }
+            const currentContractStatus = String(
+              pick(
+                contractData?.status,
+                invData?.contractStatus,
+                msgData?.contractStatus
+              )
+            )
+              .trim()
+              .toLowerCase();
+            if (!CONTRACTS_DISABLED && currentContractStatus !== "approved") {
+              throw new Error("contract_not_ready_for_activation");
+            }
 
-        const projectId = String(
-          pick(
-            invData?.projectId,
-            msgData?.projectId,
-            msgData?.project_id,
-            selectedMessage?.projectId,
-            selectedMessage?.project_id
-          )
-        ).trim();
-        const projectRef = projectId ? doc(db, "projects", projectId) : null;
-        const projectSnap = projectRef ? await tx.get(projectRef) : null;
-        const projectData =
-          projectSnap && projectSnap.exists()
-            ? ((projectSnap.data() || {}) as Record<string, any>)
-            : null;
+            const projectId = String(
+              pick(
+                invData?.projectId,
+                msgData?.projectId,
+                msgData?.project_id,
+                selectedMessage?.projectId,
+                selectedMessage?.project_id
+              )
+            ).trim();
+            const projectRef = projectId
+              ? doc(db, "projects", projectId)
+              : null;
+            const projectSnap = projectRef ? await tx.get(projectRef) : null;
+            const projectData =
+              projectSnap && projectSnap.exists()
+                ? ((projectSnap.data() || {}) as Record<string, any>)
+                : null;
 
-        const settingsRef = doc(db, "settings", "app");
-        const settingsSnap = await tx.get(settingsRef);
-        const appSettings = settingsSnap.exists()
-          ? ((settingsSnap.data() || {}) as Record<string, any>)
-          : null;
+            const settingsRef = doc(db, "settings", "app");
+            const settingsSnap = await tx.get(settingsRef);
+            const appSettings = settingsSnap.exists()
+              ? ((settingsSnap.data() || {}) as Record<string, any>)
+              : null;
 
-        const amount =
-          toNum(invData?.approvedAmount) ||
-          toNum(invData?.amount) ||
-          toNum(msgData?.approvedAmount) ||
-          toNum(msgData?.amount);
-        if (!Number.isFinite(amount) || amount <= 0) {
-          throw new Error("missing_amount");
-        }
+            const amount =
+              toNum(invData?.approvedAmount) ||
+              toNum(invData?.amount) ||
+              toNum(msgData?.approvedAmount) ||
+              toNum(msgData?.amount);
+            if (!Number.isFinite(amount) || amount <= 0) {
+              throw new Error("missing_amount");
+            }
 
-        const activationTerms = resolveInvestmentActivationTerms({
-          amount,
-          investment: invData,
-          project: projectData,
-          appSettings,
-          startAt: activatedAtDate,
-        });
-        const plannedEndAt = Timestamp.fromDate(activationTerms.plannedEndAt);
-        const legalTermsSnapshot = {
-          version: 1,
-          approvedAt: activatedAt,
-          principalAmount: amount,
-          annualReturnPercent: activationTerms.annualReturn,
-          annualReturnSource: activationTerms.annualReturnSource,
-          durationMonths: activationTerms.durationMonths,
-          durationSource: activationTerms.durationSource,
-          startAt: activatedAt,
-          endAt: plannedEndAt,
-          expectedProfit: activationTerms.expectedProfit,
-          formula: activationTerms.legalTermsSnapshot.formula,
-          isFrozen: true,
-        };
-        const projectTitleAtSign =
-          pick(
-            projectData?.titleAr,
-            projectData?.title,
-            msgData?.projectTitle,
-            msgData?.projectSnapshot?.titleAr,
-            msgData?.projectSnapshot?.title,
-            invData?.projectTitle
-          ) || null;
-
-        tx.set(
-          invRef,
-          {
-            status: "active",
-            contractStatus: "approved",
-            approvedAmount: amount,
-            startAt: activatedAt,
-            plannedEndAt,
-            annualReturnAtSign: activationTerms.annualReturn,
-            durationMonthsAtSign: activationTerms.durationMonths,
-            expectedProfit: activationTerms.expectedProfit,
-            earnedProfit: null,
-            actualEndAt: null,
-            withdrawnAt: null,
-            exitType: null,
-            projectTitleAtSign,
-            termsLockedAt: activatedAt,
-            legalTermsSnapshot,
-            activatedAt,
-            activatedByUid: user?.uid || null,
-            activatedByEmail: user?.email || null,
-            finalizedAt: activatedAtServer,
-            updatedAt: activatedAtServer,
-            updatedByUid: user?.uid || null,
-            updatedByEmail: user?.email || null,
-          },
-          { merge: true }
-        );
-
-        if (contractRef) {
-          tx.set(
-            contractRef,
-            {
-              status: "approved",
+            const activationTerms = resolveInvestmentActivationTerms({
               amount,
-              projectId: projectId || null,
-              investmentId,
-              requestId: selectedMessage.id,
+              investment: invData,
+              project: projectData,
+              appSettings,
+              startAt: activatedAtDate,
+            });
+            const plannedEndAt = Timestamp.fromDate(
+              activationTerms.plannedEndAt
+            );
+            const legalTermsSnapshot = {
+              version: 1,
               approvedAt: activatedAt,
-              approvedByUid: user?.uid || null,
-              approvedByEmail: user?.email || null,
-              termsLockedAt: activatedAt,
-              legalTermsSnapshot,
-              legalReference: {
-                source: "investment.activation",
-                isFinal: true,
-                version: 1,
+              principalAmount: amount,
+              annualReturnPercent: activationTerms.annualReturn,
+              annualReturnSource: activationTerms.annualReturnSource,
+              durationMonths: activationTerms.durationMonths,
+              durationSource: activationTerms.durationSource,
+              startAt: activatedAt,
+              endAt: plannedEndAt,
+              expectedProfit: activationTerms.expectedProfit,
+              formula: activationTerms.legalTermsSnapshot.formula,
+              isFrozen: true,
+            };
+            const projectTitleAtSign =
+              pick(
+                projectData?.titleAr,
+                projectData?.title,
+                msgData?.projectTitle,
+                msgData?.projectSnapshot?.titleAr,
+                msgData?.projectSnapshot?.title,
+                invData?.projectTitle
+              ) || null;
+
+            tx.set(
+              invRef,
+              {
+                status: "active",
+                contractStatus: "approved",
+                approvedAmount: amount,
+                startAt: activatedAt,
+                plannedEndAt,
+                annualReturnAtSign: activationTerms.annualReturn,
+                durationMonthsAtSign: activationTerms.durationMonths,
+                expectedProfit: activationTerms.expectedProfit,
+                earnedProfit: null,
+                actualEndAt: null,
+                withdrawnAt: null,
+                exitType: null,
+                projectTitleAtSign,
+                termsLockedAt: activatedAt,
+                legalTermsSnapshot,
+                activatedAt,
+                activatedByUid: user?.uid || null,
+                activatedByEmail: user?.email || null,
+                finalizedAt: activatedAtServer,
+                updatedAt: activatedAtServer,
+                updatedByUid: user?.uid || null,
+                updatedByEmail: user?.email || null,
               },
+              { merge: true }
+            );
+
+            if (contractRef) {
+              tx.set(
+                contractRef,
+                {
+                  status: "approved",
+                  amount,
+                  projectId: projectId || null,
+                  investmentId,
+                  requestId: selectedMessage.id,
+                  approvedAt: activatedAt,
+                  approvedByUid: user?.uid || null,
+                  approvedByEmail: user?.email || null,
+                  termsLockedAt: activatedAt,
+                  legalTermsSnapshot,
+                  legalReference: {
+                    source: "investment.activation",
+                    isFinal: true,
+                    version: 1,
+                  },
+                  updatedAt: activatedAtServer,
+                  updatedByUid: user?.uid || null,
+                  updatedByEmail: user?.email || null,
+                },
+                { merge: true }
+              );
+            }
+
+            tx.update(msgRef, {
+              status: "completed",
+              stageRole: "completed" as StageRole,
+              contractStatus: "approved",
+              investmentStatus: "active",
+              finalizedAt: activatedAtServer,
+              finalizedByUid: user?.uid || null,
+              finalizedByEmail: user?.email || null,
               updatedAt: activatedAtServer,
               updatedByUid: user?.uid || null,
               updatedByEmail: user?.email || null,
-            },
-            { merge: true }
-          );
-        }
-
-        tx.update(msgRef, {
-          status: "completed",
-          stageRole: "completed" as StageRole,
-          contractStatus: "approved",
-          investmentStatus: "active",
-          finalizedAt: activatedAtServer,
-          finalizedByUid: user?.uid || null,
-          finalizedByEmail: user?.email || null,
-          updatedAt: activatedAtServer,
-          updatedByUid: user?.uid || null,
-          updatedByEmail: user?.email || null,
-          events: arrayUnion(
-            makeEvent({
-              type: "finalized",
-              title: "اعتماد العقد وتفعيل الاستثمار",
-              note:
-                "تم الاعتماد النهائي للعقد وتفعيل الاستثمار. تبدأ مدة الاستثمار وحساب الربح من وقت الاعتماد النهائي فقط.",
-              ...myActor(user, myRole),
-              meta: {
-                messageId: selectedMessage.id,
-                investmentId,
-                projectId: projectId || null,
-                contractStatus: "approved",
-                investmentStatus: "active",
-              },
-            })
-          ),
-          ...actionMeta(user, myRole),
-        });
+              events: arrayUnion(
+                makeEvent({
+                  type: "finalized",
+                  title: "اعتماد العقد وتفعيل الاستثمار",
+                  note: "تم الاعتماد النهائي للعقد وتفعيل الاستثمار. تبدأ مدة الاستثمار وحساب الربح من وقت الاعتماد النهائي فقط.",
+                  ...myActor(user, myRole),
+                  meta: {
+                    messageId: selectedMessage.id,
+                    investmentId,
+                    projectId: projectId || null,
+                    contractStatus: "approved",
+                    investmentStatus: "active",
+                  },
+                })
+              ),
+              ...actionMeta(user, myRole),
+            });
           }),
       });
 
@@ -2556,7 +2840,10 @@ export default function MessagesManagement() {
     !!selectedMessage?.investmentId &&
     !!selectedMessage?.contractId;
 
-  const originalExpectedPath = expectedContractPath(activeInvestmentId, "original");
+  const originalExpectedPath = expectedContractPath(
+    activeInvestmentId,
+    "original"
+  );
   const originalContractPath = pick(
     localUploadedByKind.original?.path,
     originalPathFromDocs,
@@ -2566,18 +2853,41 @@ export default function MessagesManagement() {
       : ""
   );
   const originalContractUrlFromDocs = pickFirstNonEmptyString(
-    resolveDocPath(investmentDoc, ["originalContract.url", "contractFile.url", "contractUrl"]),
-    resolveDocPath(contractDoc, ["originalContract.url", "contractFile.url", "contractUrl"]),
-    resolveDocPath(selectedMessage, ["originalContract.url", "contractFile.url", "contractUrl"])
+    resolveDocPath(investmentDoc, [
+      "originalContract.url",
+      "contractFile.url",
+      "contractUrl",
+    ]),
+    resolveDocPath(contractDoc, [
+      "originalContract.url",
+      "contractFile.url",
+      "contractUrl",
+    ]),
+    resolveDocPath(selectedMessage, [
+      "originalContract.url",
+      "contractFile.url",
+      "contractUrl",
+    ])
   );
   const originalContractFileName = pickFirstNonEmptyString(
     localUploadedByKind.original?.fileName,
-    resolveDocPath(investmentDoc, ["originalContract.fileName", "contractFile.fileName"]),
-    resolveDocPath(contractDoc, ["originalContract.fileName", "contractFile.fileName"]),
-    resolveDocPath(selectedMessage, ["originalContract.fileName", "contractFile.fileName"]),
+    resolveDocPath(investmentDoc, [
+      "originalContract.fileName",
+      "contractFile.fileName",
+    ]),
+    resolveDocPath(contractDoc, [
+      "originalContract.fileName",
+      "contractFile.fileName",
+    ]),
+    resolveDocPath(selectedMessage, [
+      "originalContract.fileName",
+      "contractFile.fileName",
+    ]),
     originalContractPath ? getFileNameFromPath(originalContractPath) : ""
   );
-  const hasOriginalContract = Boolean(originalContractPath || originalContractUrlFromDocs);
+  const hasOriginalContract = Boolean(
+    originalContractPath || originalContractUrlFromDocs
+  );
   const originalContractViewUrl = pick(
     localUploadedByKind.original?.fileUrl,
     buildR2DownloadUrl(originalContractPath, false),
@@ -2597,18 +2907,41 @@ export default function MessagesManagement() {
       : ""
   );
   const signedContractUrlFromDocs = pickFirstNonEmptyString(
-    resolveDocPath(investmentDoc, ["signedContract.url", "signedContractFile.url", "signedContractUrl"]),
-    resolveDocPath(contractDoc, ["signedContract.url", "signedContractFile.url", "signedContractUrl"]),
-    resolveDocPath(selectedMessage, ["signedContract.url", "signedContractFile.url", "signedContractUrl"])
+    resolveDocPath(investmentDoc, [
+      "signedContract.url",
+      "signedContractFile.url",
+      "signedContractUrl",
+    ]),
+    resolveDocPath(contractDoc, [
+      "signedContract.url",
+      "signedContractFile.url",
+      "signedContractUrl",
+    ]),
+    resolveDocPath(selectedMessage, [
+      "signedContract.url",
+      "signedContractFile.url",
+      "signedContractUrl",
+    ])
   );
   const signedContractFileName = pickFirstNonEmptyString(
     localUploadedByKind.signed?.fileName,
-    resolveDocPath(investmentDoc, ["signedContract.fileName", "signedContractFile.fileName"]),
-    resolveDocPath(contractDoc, ["signedContract.fileName", "signedContractFile.fileName"]),
-    resolveDocPath(selectedMessage, ["signedContract.fileName", "signedContractFile.fileName"]),
+    resolveDocPath(investmentDoc, [
+      "signedContract.fileName",
+      "signedContractFile.fileName",
+    ]),
+    resolveDocPath(contractDoc, [
+      "signedContract.fileName",
+      "signedContractFile.fileName",
+    ]),
+    resolveDocPath(selectedMessage, [
+      "signedContract.fileName",
+      "signedContractFile.fileName",
+    ]),
     signedContractPath ? getFileNameFromPath(signedContractPath) : ""
   );
-  const hasSignedContract = Boolean(signedContractPath || signedContractUrlFromDocs);
+  const hasSignedContract = Boolean(
+    signedContractPath || signedContractUrlFromDocs
+  );
   const signedContractViewUrl = pick(
     localUploadedByKind.signed?.fileUrl,
     buildR2DownloadUrl(signedContractPath, false),
@@ -2619,18 +2952,50 @@ export default function MessagesManagement() {
     signedContractUrlFromDocs
   );
 
-  const originalUploadedAt = resolveDocValue(investmentDoc, ["originalContract.uploadedAt", "contractFile.uploadedAt"]) ??
-    resolveDocValue(contractDoc, ["originalContract.uploadedAt", "contractFile.uploadedAt"]) ??
-    resolveDocValue(selectedMessage, ["originalContract.uploadedAt", "contractFile.uploadedAt"]);
-  const signedUploadedAt = resolveDocValue(investmentDoc, ["signedContract.uploadedAt", "signedContractFile.uploadedAt"]) ??
-    resolveDocValue(contractDoc, ["signedContract.uploadedAt", "signedContractFile.uploadedAt"]) ??
-    resolveDocValue(selectedMessage, ["signedContract.uploadedAt", "signedContractFile.uploadedAt"]);
+  const originalUploadedAt =
+    resolveDocValue(investmentDoc, [
+      "originalContract.uploadedAt",
+      "contractFile.uploadedAt",
+    ]) ??
+    resolveDocValue(contractDoc, [
+      "originalContract.uploadedAt",
+      "contractFile.uploadedAt",
+    ]) ??
+    resolveDocValue(selectedMessage, [
+      "originalContract.uploadedAt",
+      "contractFile.uploadedAt",
+    ]);
+  const signedUploadedAt =
+    resolveDocValue(investmentDoc, [
+      "signedContract.uploadedAt",
+      "signedContractFile.uploadedAt",
+    ]) ??
+    resolveDocValue(contractDoc, [
+      "signedContract.uploadedAt",
+      "signedContractFile.uploadedAt",
+    ]) ??
+    resolveDocValue(selectedMessage, [
+      "signedContract.uploadedAt",
+      "signedContractFile.uploadedAt",
+    ]);
 
   const originalVersion = Number(
     pick(
-      resolveDocValue(investmentDoc, ["contractVersion", "originalContract.version", "contractFile.version"]),
-      resolveDocValue(contractDoc, ["contractVersion", "originalContract.version", "contractFile.version"]),
-      resolveDocValue(selectedMessage, ["contractVersion", "originalContract.version", "contractFile.version"]),
+      resolveDocValue(investmentDoc, [
+        "contractVersion",
+        "originalContract.version",
+        "contractFile.version",
+      ]),
+      resolveDocValue(contractDoc, [
+        "contractVersion",
+        "originalContract.version",
+        "contractFile.version",
+      ]),
+      resolveDocValue(selectedMessage, [
+        "contractVersion",
+        "originalContract.version",
+        "contractFile.version",
+      ]),
       0
     )
   );
@@ -2656,9 +3021,21 @@ export default function MessagesManagement() {
   );
   const outdatedFlag = String(
     pick(
-      resolveDocValue(investmentDoc, ["signedContractOutdated", "requiresResign", "signedContract.isOutdated"]),
-      resolveDocValue(contractDoc, ["signedContractOutdated", "requiresResign", "signedContract.isOutdated"]),
-      resolveDocValue(selectedMessage, ["signedContractOutdated", "requiresResign", "signedContract.isOutdated"]),
+      resolveDocValue(investmentDoc, [
+        "signedContractOutdated",
+        "requiresResign",
+        "signedContract.isOutdated",
+      ]),
+      resolveDocValue(contractDoc, [
+        "signedContractOutdated",
+        "requiresResign",
+        "signedContract.isOutdated",
+      ]),
+      resolveDocValue(selectedMessage, [
+        "signedContractOutdated",
+        "requiresResign",
+        "signedContract.isOutdated",
+      ]),
       ""
     )
   )
@@ -2679,35 +3056,50 @@ export default function MessagesManagement() {
     !!signedUploadedAtDate &&
     originalUploadedAtDate.getTime() > signedUploadedAtDate.getTime();
   const isSignedOutdatedByFlag =
-    outdatedFlag === "true" || outdatedFlag === "1" || outdatedFlag === "yes" || outdatedFlag === "on";
+    outdatedFlag === "true" ||
+    outdatedFlag === "1" ||
+    outdatedFlag === "yes" ||
+    outdatedFlag === "on";
   const isSignedOutdated =
     hasSignedContract &&
-    (isSignedOutdatedByFlag || isSignedOutdatedByVersion || isSignedOutdatedByTime);
+    (isSignedOutdatedByFlag ||
+      isSignedOutdatedByVersion ||
+      isSignedOutdatedByTime);
 
   const storedContractStatus = String(
-    pick(investmentDoc?.contractStatus, contractDoc?.status, selectedMessage?.contractStatus)
+    pick(
+      investmentDoc?.contractStatus,
+      contractDoc?.status,
+      selectedMessage?.contractStatus
+    )
   )
     .trim()
     .toLowerCase();
-  const needsFreshSignedContract = storedContractStatus === "pending_signature" || isSignedOutdated;
-  const hasCurrentSignedContract = hasSignedContract && !needsFreshSignedContract;
+  const needsFreshSignedContract =
+    storedContractStatus === "pending_signature" || isSignedOutdated;
+  const hasCurrentSignedContract =
+    hasSignedContract && !needsFreshSignedContract;
   const contractStatusValue = needsFreshSignedContract
     ? "pending_signature"
     : hasCurrentSignedContract
-    ? ["approved", "under_review"].includes(storedContractStatus)
-      ? storedContractStatus
-      : "signed"
-    : hasOriginalContract
-    ? storedContractStatus && storedContractStatus !== "draft"
-      ? storedContractStatus
-      : "sent"
-    : storedContractStatus || "draft";
+      ? ["approved", "under_review"].includes(storedContractStatus)
+        ? storedContractStatus
+        : "signed"
+      : hasOriginalContract
+        ? storedContractStatus && storedContractStatus !== "draft"
+          ? storedContractStatus
+          : "sent"
+        : storedContractStatus || "draft";
 
-  const needsNewSignedContract = CONTRACTS_DISABLED ? false : !hasCurrentSignedContract;
+  const needsNewSignedContract = CONTRACTS_DISABLED
+    ? false
+    : !hasCurrentSignedContract;
   const contractFollowupChipLabel =
-    hasOriginalContract && !hasCurrentSignedContract && contractStatusValue !== "pending_signature"
-    ? "بانتظار توقيع المستثمر"
-    : "";
+    hasOriginalContract &&
+    !hasCurrentSignedContract &&
+    contractStatusValue !== "pending_signature"
+      ? CLIENT_WORKFLOW_COPY.awaitingContractSignature
+      : "";
 
   const canStartRequestReview =
     !!selectedMessage &&
@@ -2764,7 +3156,11 @@ export default function MessagesManagement() {
       title: "تمت الموافقة الأولية على الطلب",
       note: "اكتملت مراجعة الطلب وأصبح جاهزًا لإنشاء سجل الاستثمار.",
       ...myActor(user, myRole),
-      meta: { messageId: selectedMessage.id, status: "approved", stageRole: "investment" },
+      meta: {
+        messageId: selectedMessage.id,
+        status: "approved",
+        stageRole: "investment",
+      },
     });
 
     try {
@@ -2831,11 +3227,39 @@ export default function MessagesManagement() {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <StatCard title="الكل" value={stats.all} />
-          <StatCard title="المفتوحة" value={stats.open} color="text-blue-600" />
-          <StatCard title="المقفلة" value={stats.completed} color="text-gray-800" />
-          <StatCard title="المرفوضة" value={stats.rejected} color="text-red-600" />
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <AdminPanelStatCard
+            title="إجمالي الطلبات"
+            value={stats.all}
+            description="جميع طلبات الاستثمار المسجلة في السجل، بما فيها الطلبات المفتوحة والمقفلة والمرفوضة."
+            helper={`${formatNumberEN(filtered.length)} سجل ظاهر ضمن العرض الحالي`}
+            icon={<FileText className="h-5 w-5" />}
+            accent="amber"
+          />
+          <AdminPanelStatCard
+            title="الطلبات المفتوحة"
+            value={stats.open}
+            description="الطلبات التي ما زالت تحت المتابعة أو تنتظر إجراء من فريق التشغيل أو المستثمر."
+            helper="تشمل الحالات غير المقفلة وغير المرفوضة"
+            icon={<Clock3 className="h-5 w-5" />}
+            accent="blue"
+          />
+          <AdminPanelStatCard
+            title="الطلبات المقفلة"
+            value={stats.completed}
+            description="الطلبات التي أغلقت بعد اكتمال الرحلة أو إقفالها بشكل نهائي داخل النظام."
+            helper="تشمل الحالات completed و closed"
+            icon={<CheckCircle2 className="h-5 w-5" />}
+            accent="slate"
+          />
+          <AdminPanelStatCard
+            title="الطلبات المرفوضة"
+            value={stats.rejected}
+            description="الطلبات التي توقفت عند الرفض وتحتاج فقط إلى مرجعية أو مراجعة لاحقة عند الحاجة."
+            helper="تعكس الحالات الموسومة بالرفض فقط"
+            icon={<AlertTriangle className="h-5 w-5" />}
+            accent="rose"
+          />
         </div>
 
         {/* Filters */}
@@ -2880,7 +3304,7 @@ export default function MessagesManagement() {
               </CardTitle>
 
               <div className="inline-flex w-fit items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm font-medium text-slate-600">
-                {filtered.length.toLocaleString("ar-SA")} سجل
+                {formatNumberEN(filtered.length)} سجل
               </div>
             </div>
 
@@ -2896,7 +3320,7 @@ export default function MessagesManagement() {
               </div>
             ) : filtered.length ? (
               <div className="space-y-4">
-                {filtered.map((m) => {
+                {filtered.map(m => {
                   const badge = getStatusBadge(m.status);
                   const pid = pick(m?.projectId, m?.project_id, m?.project?.id);
                   const projectTitle = getProjectTitle(pid);
@@ -2907,7 +3331,8 @@ export default function MessagesManagement() {
                     toNum(m?.estimatedAmount) ||
                     0;
                   const remaining = getProjectRemaining(pid);
-                  const exceeded = remaining != null ? amount > remaining : false;
+                  const exceeded =
+                    remaining != null ? amount > remaining : false;
                   const invState = m?.investmentId
                     ? { label: "تم الإنشاء", cls: "bg-emerald-700" }
                     : { label: "بانتظار الإنشاء", cls: "bg-slate-600" };
@@ -2923,178 +3348,194 @@ export default function MessagesManagement() {
                   return (
                     <article
                       key={m.id}
-                      className="rounded-2xl border border-slate-200 bg-gradient-to-br from-white via-white to-slate-50 p-4 shadow-sm ring-1 ring-slate-100/80 transition-shadow hover:shadow-md sm:p-5"
+                      className="rounded-lg border border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-md/40"
                     >
-                      <div className="flex flex-col gap-5">
-                        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                          <div className="min-w-0 flex-1 space-y-4">
-                            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                              <div className="min-w-0 space-y-2">
-                                <div className="inline-flex w-fit items-center rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold tracking-[0.14em] text-slate-600">
-                                  سجل طلب
-                                </div>
+                      <div className="border-b border-slate-200 px-4 py-4 sm:px-5">
+                        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                          <div className="min-w-0 space-y-2">
+                            <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                              طلب استثمار
+                            </div>
 
-                                <div className="space-y-1">
-                                  <h3 className="text-lg font-semibold text-slate-900 break-words">
-                                    {clientName}
-                                  </h3>
+                            <div className="space-y-1">
+                              <h3 className="break-words text-lg font-semibold text-slate-950">
+                                {clientName}
+                              </h3>
 
-                                  <div className="flex items-start gap-2 text-sm text-slate-600">
-                                    <Building2 className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
-                                    <span className="min-w-0 break-words">{projectTitle}</span>
-                                  </div>
-                                </div>
-
-                                {(clientEmail || clientPhone) && (
-                                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-500">
-                                    {clientEmail ? (
-                                      <span className="break-all">{clientEmail}</span>
-                                    ) : null}
-                                    {clientPhone ? <span>{clientPhone}</span> : null}
-                                  </div>
-                                )}
-                              </div>
-
-                              <div className="flex flex-wrap items-center gap-2 xl:justify-end">
-                                <Badge className={badge.cls}>{badge.label}</Badge>
-                                <Badge
-                                  variant="outline"
-                                  className="border-slate-300 bg-white/90 text-slate-700"
-                                >
-                                  {stageLabel(m.stageRole)}
-                                </Badge>
-                                <Badge
-                                  className={`${invState.cls} border-transparent shadow-none`}
-                                >
-                                  {invState.label}
-                                </Badge>
+                              <div className="flex items-start gap-2 text-sm text-slate-600">
+                                <Building2 className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
+                                <span className="min-w-0 break-words">
+                                  {projectTitle}
+                                </span>
                               </div>
                             </div>
 
-                            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                              <div className="min-w-0 rounded-xl border border-slate-200 bg-white/90 p-3 shadow-sm">
-                                <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-500">
-                                  رقم الطلب
-                                </div>
-                                <div className="mt-2 break-all font-mono text-xs font-semibold text-slate-900 sm:text-sm">
-                                  {requestNumber(m)}
-                                </div>
+                            {(clientEmail || clientPhone) && (
+                              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-500">
+                                {clientEmail ? (
+                                  <span className="break-all">
+                                    {clientEmail}
+                                  </span>
+                                ) : null}
+                                {clientPhone ? (
+                                  <span>{clientPhone}</span>
+                                ) : null}
                               </div>
-
-                              <div className="min-w-0 rounded-xl border border-slate-200 bg-white/90 p-3 shadow-sm">
-                                <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-500">
-                                  المبلغ
-                                </div>
-                                <div className="mt-2 break-words text-sm font-semibold text-slate-900">
-                                  {moneySAR(amount)}
-                                </div>
-                              </div>
-
-                              <div className="min-w-0 rounded-xl border border-slate-200 bg-white/90 p-3 shadow-sm">
-                                <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-500">
-                                  المتبقي
-                                </div>
-                                <div className="mt-2 text-sm font-semibold text-slate-900">
-                                  {remaining == null ? (
-                                    <span className="text-slate-400">—</span>
-                                  ) : (
-                                    <span className={exceeded ? "text-rose-700" : ""}>
-                                      {moneySAR(remaining)}
-                                      {exceeded ? " (تجاوز)" : ""}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-
-                              <div className="min-w-0 rounded-xl border border-slate-200 bg-white/90 p-3 shadow-sm">
-                                <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-500">
-                                  التاريخ
-                                </div>
-                                <div className="mt-2 break-words text-sm font-semibold leading-6 text-slate-900">
-                                  {requestDate}
-                                </div>
-                              </div>
-                            </div>
-
-                            {summary ? (
-                              <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50/80 p-4">
-                                <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-500">
-                                  ملخص الرسالة
-                                </div>
-                                <p className="mt-2 break-words text-sm leading-7 text-slate-700">
-                                  {summary}
-                                </p>
-                              </div>
-                            ) : null}
+                            )}
                           </div>
 
-                          <div className="min-w-0 xl:w-full xl:max-w-[320px]">
-                            <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
-                              <div className="rounded-xl border border-slate-200 bg-white/90 p-3 shadow-sm">
-                                <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-500">
-                                  آخر تعديل
-                                </div>
-                                <div className="mt-2 break-all text-sm font-semibold leading-6 text-slate-900">
-                                  {touchedBy}
-                                </div>
-                              </div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Badge className={badge.cls}>{badge.label}</Badge>
+                            <Badge
+                              variant="outline"
+                              className="border-slate-300 bg-white text-slate-700"
+                            >
+                              {stageLabel(m.stageRole)}
+                            </Badge>
+                            <Badge
+                              className={`${invState.cls} border-transparent shadow-none`}
+                            >
+                              {invState.label}
+                            </Badge>
+                          </div>
+                        </div>
+                      </div>
 
-                              <div className="mt-4 border-t border-slate-200 pt-4">
-                                <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-500">
-                                  الإجراءات
-                                </div>
-
-                                <div className="mt-3 flex flex-wrap gap-2">
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="h-auto min-h-9 w-full justify-center whitespace-normal text-center sm:w-auto"
-                                    onClick={() => {
-                                      const clientId = pick(
-                                        m?.createdByUid,
-                                        m?.investorUid,
-                                        m?.userId,
-                                        m?.userSnapshot?.uid
-                                      );
-                                      if (!clientId) {
-                                        toast.warning("لا يوجد حساب عميل مرتبط بهذا الطلب.");
-                                        return;
-                                      }
-                                      window.location.href = `/admin/client-profile?id=${clientId}`;
-                                    }}
-                                  >
-                                    <FileText className="w-4 h-4 ml-1" />
-                                    ملف العميل
-                                  </Button>
-
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="h-auto min-h-9 w-full justify-center whitespace-normal text-center sm:w-auto"
-                                    onClick={() => {
-                                      if (!pid) {
-                                        toast.warning("لا يوجد مشروع مرتبط بهذا الطلب.");
-                                        return;
-                                      }
-                                      window.location.href = `/admin/projects/${pid}/edit`;
-                                    }}
-                                  >
-                                    <ExternalLink className="w-4 h-4 ml-1" />
-                                    المشروع
-                                  </Button>
-
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="h-auto min-h-9 w-full justify-center whitespace-normal text-center sm:w-auto"
-                                    onClick={() => void openMessageDetails(m)}
-                                  >
-                                    <Eye className="w-4 h-4 ml-1" />
-                                    عرض التفاصيل
-                                  </Button>
-                                </div>
-                              </div>
+                      <div className="space-y-4 px-4 py-4 sm:px-5">
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <div className="min-w-0 rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-3 shadow-sm">
+                            <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                              رقم الطلب
                             </div>
+                            <div className="mt-2 break-all font-mono text-xs font-semibold text-slate-900 sm:text-sm">
+                              {requestNumber(m)}
+                            </div>
+                          </div>
+
+                          <div className="min-w-0 rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-3 shadow-sm">
+                            <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                              المبلغ
+                            </div>
+                            <div className="mt-2 break-words text-sm font-semibold text-slate-900">
+                              {moneySAR(amount)}
+                            </div>
+                          </div>
+
+                          <div className="min-w-0 rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-3 shadow-sm">
+                            <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                              المتبقي
+                            </div>
+                            <div className="mt-2 text-sm font-semibold text-slate-900">
+                              {remaining == null ? (
+                                <span className="text-slate-400">—</span>
+                              ) : (
+                                <span
+                                  className={exceeded ? "text-rose-700" : ""}
+                                >
+                                  {moneySAR(remaining)}
+                                  {exceeded ? " (تجاوز)" : ""}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="min-w-0 rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-3 shadow-sm">
+                            <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                              التاريخ
+                            </div>
+                            <div className="mt-2 break-words text-sm font-semibold leading-6 text-slate-900">
+                              {requestDate}
+                            </div>
+                          </div>
+
+                          <div className="min-w-0 rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-3 shadow-sm">
+                            <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                              آخر تعديل
+                            </div>
+                            <div className="mt-2 break-all text-sm font-semibold leading-6 text-slate-900">
+                              {touchedBy}
+                            </div>
+                          </div>
+
+                          <div className="min-w-0 rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-3 shadow-sm">
+                            <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                              المشروع
+                            </div>
+                            <div className="mt-2 break-words text-sm font-semibold leading-6 text-slate-900">
+                              {projectTitle}
+                            </div>
+                          </div>
+                        </div>
+
+                        {summary ? (
+                          <div className="rounded-lg border border-slate-200 bg-slate-50/70 px-4 py-4">
+                            <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                              ملخص الرسالة
+                            </div>
+                            <p className="mt-2 break-words text-sm leading-7 text-slate-700">
+                              {summary}
+                            </p>
+                          </div>
+                        ) : null}
+                      </div>
+
+                      <div className="border-t border-slate-200 px-4 py-4 sm:px-5">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+                          <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                            الإجراءات
+                          </div>
+
+                          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                            <Button
+                              size="sm"
+                              className="h-9 justify-center gap-2"
+                              onClick={() => void openMessageDetails(m)}
+                            >
+                              <Eye className="h-4 w-4" />
+                              مراجعة الطلب
+                            </Button>
+
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-9 justify-center gap-2"
+                              onClick={() => {
+                                if (!pid) {
+                                  toast.warning(
+                                    "لا يوجد مشروع مرتبط بهذا الطلب."
+                                  );
+                                  return;
+                                }
+                                window.location.href = `/admin/projects/${pid}/edit`;
+                              }}
+                            >
+                              <ExternalLink className="h-4 w-4" />
+                              فتح المشروع
+                            </Button>
+
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-9 justify-center gap-2"
+                              onClick={() => {
+                                const clientId = pick(
+                                  m?.createdByUid,
+                                  m?.investorUid,
+                                  m?.userId,
+                                  m?.userSnapshot?.uid
+                                );
+                                if (!clientId) {
+                                  toast.warning(
+                                    "لا يوجد حساب عميل مرتبط بهذا الطلب."
+                                  );
+                                  return;
+                                }
+                                window.location.href = `/admin/client-profile?id=${clientId}`;
+                              }}
+                            >
+                              <FileText className="h-4 w-4" />
+                              ملف العميل
+                            </Button>
                           </div>
                         </div>
                       </div>
@@ -3113,549 +3554,692 @@ export default function MessagesManagement() {
         {/* Detail dialog */}
         <Dialog open={isDetailDialogOpen} onOpenChange={setIsDetailDialogOpen}>
           <DialogContent
-            className="w-[98vw] max-w-[1400px] 2xl:max-w-[1600px] p-0 max-h-[92vh] overflow-y-auto"
+            className={`flex w-[98vw] max-w-[1400px] flex-col gap-0 p-0 max-h-[92vh] overflow-hidden 2xl:max-w-[1600px] ${DETAIL_DIALOG_PANEL_CLASS}`}
             dir="rtl"
           >
-            <DialogHeader className="px-6 py-4 border-b bg-white/60 backdrop-blur">
-              <DialogTitle className="text-xl">تفاصيل الطلب</DialogTitle>
+            <DialogHeader className="shrink-0 border-b border-white/10 bg-white/[0.05] px-7 py-5 backdrop-blur-xl">
+              <DialogTitle className="text-2xl font-semibold tracking-tight text-slate-50">
+                تفاصيل الطلب
+              </DialogTitle>
             </DialogHeader>
 
             {selectedMessage ? (
-              <div className="p-6 space-y-6">
-                <div className="grid grid-cols-1 gap-4">
-                  <Card className="rsg-card">
-                    <CardHeader>
-                      <CardTitle>بيانات العميل</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      <InfoRow label="الاسم" value={getClientName(selectedMessage) || "—"} />
-                      <InfoRow label="البريد" value={getClientEmail(selectedMessage) || "—"} />
-                      <InfoRow label="الجوال" value={getClientPhone(selectedMessage) || "—"} />
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+                <div className="space-y-6 p-6 sm:p-7">
+                  <div className="grid grid-cols-1 gap-5">
+                    <Card className={`rsg-card ${DETAIL_SECTION_CARD_CLASS}`}>
+                      <CardHeader className={DETAIL_SECTION_HEADER_CLASS}>
+                        <CardTitle className={DETAIL_SECTION_TITLE_CLASS}>
+                          بيانات العميل
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className={DETAIL_SECTION_CONTENT_CLASS}>
+                        <InfoRow
+                          label="الاسم"
+                          value={getClientName(selectedMessage) || "—"}
+                        />
+                        <InfoRow
+                          label="البريد"
+                          value={getClientEmail(selectedMessage) || "—"}
+                        />
+                        <InfoRow
+                          label="الجوال"
+                          value={getClientPhone(selectedMessage) || "—"}
+                        />
 
-                      <div className="pt-2 flex flex-wrap gap-2">
+                        <div className="flex flex-wrap gap-3 border-t border-white/10 pt-5">
+                          {(() => {
+                            const clientId = pick(
+                              selectedMessage?.createdByUid,
+                              selectedMessage?.investorUid,
+                              selectedMessage?.userId,
+                              selectedMessage?.userSnapshot?.uid
+                            );
+
+                            const pid = pick(
+                              selectedMessage?.projectId,
+                              selectedMessage?.project_id,
+                              selectedMessage?.project?.id
+                            );
+
+                            return (
+                              <>
+                                <Button
+                                  variant="outline"
+                                  className={DETAIL_OUTLINE_BUTTON_CLASS}
+                                  onClick={() => {
+                                    if (!clientId) {
+                                      toast.warning(
+                                        "لا يوجد حساب عميل مرتبط بهذا الطلب."
+                                      );
+                                      return;
+                                    }
+                                    window.location.href = `/admin/client-profile?id=${clientId}`;
+                                  }}
+                                >
+                                  <FileText className="w-4 h-4" />
+                                  فتح ملف العميل
+                                </Button>
+
+                                <Button
+                                  variant="outline"
+                                  className={DETAIL_OUTLINE_BUTTON_CLASS}
+                                  onClick={() => {
+                                    if (!pid) {
+                                      toast.warning(
+                                        "لا يوجد مشروع مرتبط بهذا الطلب."
+                                      );
+                                      return;
+                                    }
+                                    window.location.href = `/admin/projects/${pid}/edit`;
+                                  }}
+                                >
+                                  <ExternalLink className="w-4 h-4" />
+                                  فتح المشروع
+                                </Button>
+                              </>
+                            );
+                          })()}
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-3 border-t border-white/10 pt-5">
+                          {(() => {
+                            const emailToUse = getClientEmail(selectedMessage);
+                            const phoneToUse = getClientPhone(selectedMessage);
+
+                            return (
+                              <>
+                                {emailToUse ? (
+                                  <a
+                                    className="inline-flex"
+                                    href={`mailto:${emailToUse}`}
+                                  >
+                                    <Button
+                                      variant="outline"
+                                      className={DETAIL_OUTLINE_BUTTON_CLASS}
+                                    >
+                                      <Mail className="w-4 h-4" />
+                                      إيميل
+                                    </Button>
+                                  </a>
+                                ) : null}
+
+                                {phoneToUse ? (
+                                  <a
+                                    className="inline-flex"
+                                    href={`tel:${phoneToUse}`}
+                                  >
+                                    <Button
+                                      variant="outline"
+                                      className={DETAIL_OUTLINE_BUTTON_CLASS}
+                                    >
+                                      <Phone className="w-4 h-4" />
+                                      اتصال
+                                    </Button>
+                                  </a>
+                                ) : null}
+                              </>
+                            );
+                          })()}
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <Card className={`rsg-card ${DETAIL_SECTION_CARD_CLASS}`}>
+                      <CardHeader className={DETAIL_SECTION_HEADER_CLASS}>
+                        <CardTitle className={DETAIL_SECTION_TITLE_CLASS}>
+                          ملخص الطلب
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className={DETAIL_SECTION_CONTENT_CLASS}>
                         {(() => {
-                          const clientId = pick(
-                            selectedMessage?.createdByUid,
-                            selectedMessage?.investorUid,
-                            selectedMessage?.userId,
-                            selectedMessage?.userSnapshot?.uid
-                          );
-
                           const pid = pick(
                             selectedMessage?.projectId,
                             selectedMessage?.project_id,
                             selectedMessage?.project?.id
                           );
 
-                          return (
-                            <>
-                              <Button
-                                variant="outline"
-                                onClick={() => {
-                                  if (!clientId) {
-                                    toast.warning("لا يوجد حساب عميل مرتبط بهذا الطلب.");
-                                    return;
-                                  }
-                                  window.location.href = `/admin/client-profile?id=${clientId}`;
-                                }}
-                              >
-                                <FileText className="w-4 h-4 ml-2" />
-                                فتح ملف العميل
-                              </Button>
+                          const projectTitle = getProjectTitle(pid);
 
-                              <Button
-                                variant="outline"
-                                onClick={() => {
-                                  if (!pid) {
-                                    toast.warning("لا يوجد مشروع مرتبط بهذا الطلب.");
-                                    return;
-                                  }
-                                  window.location.href = `/admin/projects/${pid}/edit`;
-                                }}
-                              >
-                                <ExternalLink className="w-4 h-4 ml-2" />
-                                فتح المشروع
-                              </Button>
-                            </>
-                          );
-                        })()}
-                      </div>
+                          const amount =
+                            toNum(selectedMessage?.approvedAmount) ||
+                            toNum(selectedMessage?.amount) ||
+                            toNum(selectedMessage?.requestedAmount) ||
+                            toNum(selectedMessage?.estimatedAmount) ||
+                            0;
 
-                      <div className="flex items-center gap-2 pt-2">
-                        {(() => {
-                          const emailToUse = getClientEmail(selectedMessage);
-                          const phoneToUse = getClientPhone(selectedMessage);
+                          const remaining = getProjectRemaining(pid);
+                          const exceeded =
+                            remaining != null ? amount > remaining : false;
+
+                          const invState = selectedMessage?.investmentId
+                            ? "تم إنشاء الاستثمار"
+                            : "بانتظار إنشاء الاستثمار";
 
                           return (
                             <>
-                              {emailToUse ? (
-                                <a className="inline-flex" href={`mailto:${emailToUse}`}>
-                                  <Button variant="outline">
-                                    <Mail className="w-4 h-4 ml-2" />
-                                    إيميل
-                                  </Button>
-                                </a>
-                              ) : null}
-
-                              {phoneToUse ? (
-                                <a className="inline-flex" href={`tel:${phoneToUse}`}>
-                                  <Button variant="outline">
-                                    <Phone className="w-4 h-4 ml-2" />
-                                    اتصال
-                                  </Button>
-                                </a>
-                              ) : null}
+                              <InfoRow
+                                label="رقم الطلب"
+                                value={requestNumber(selectedMessage)}
+                              />
+                              <InfoRow
+                                label="اسم المشروع"
+                                value={projectTitle}
+                              />
+                              <InfoRow
+                                label="المبلغ"
+                                value={moneySAR(amount)}
+                              />
+                              <InfoRow
+                                label="المتبقي"
+                                value={
+                                  remaining == null
+                                    ? "—"
+                                    : exceeded
+                                      ? `${moneySAR(remaining)} (تجاوز)`
+                                      : moneySAR(remaining)
+                                }
+                              />
+                              <InfoRow label="الاستثمار" value={invState} />
+                              <InfoRow
+                                label="التاريخ"
+                                value={formatDateTimeAR(
+                                  selectedMessage.createdAt ||
+                                    selectedMessage.created_at ||
+                                    selectedMessage.submittedAt ||
+                                    selectedMessage.timestamp
+                                )}
+                              />
                             </>
                           );
                         })()}
-                      </div>
-                    </CardContent>
-                  </Card>
+                      </CardContent>
+                    </Card>
 
-                  <Card className="rsg-card">
-                    <CardHeader>
-                      <CardTitle>ملخص الطلب</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      {(() => {
-                        const pid = pick(
-                          selectedMessage?.projectId,
-                          selectedMessage?.project_id,
-                          selectedMessage?.project?.id
-                        );
-
-                        const projectTitle = getProjectTitle(pid);
-
-                        const amount =
-                          toNum(selectedMessage?.approvedAmount) ||
-                          toNum(selectedMessage?.amount) ||
-                          toNum(selectedMessage?.requestedAmount) ||
-                          toNum(selectedMessage?.estimatedAmount) ||
-                          0;
-
-                        const remaining = getProjectRemaining(pid);
-                        const exceeded = remaining != null ? amount > remaining : false;
-
-                        const invState = selectedMessage?.investmentId
-                          ? "تم إنشاء الاستثمار"
-                          : "بانتظار إنشاء الاستثمار";
-
-                        return (
-                          <>
-                            <InfoRow label="رقم الطلب" value={requestNumber(selectedMessage)} />
-                            <InfoRow label="اسم المشروع" value={projectTitle} />
-                            <InfoRow label="المبلغ" value={moneySAR(amount)} />
-                            <InfoRow
-                              label="المتبقي"
-                              value={
-                                remaining == null
-                                  ? "—"
-                                  : exceeded
-                                  ? `${moneySAR(remaining)} (تجاوز)`
-                                  : moneySAR(remaining)
-                              }
-                            />
-                            <InfoRow label="الاستثمار" value={invState} />
-                            <InfoRow
-                              label="التاريخ"
-                              value={formatDateTimeAR(
-                                selectedMessage.createdAt ||
-                                  selectedMessage.created_at ||
-                                  selectedMessage.submittedAt ||
-                                  selectedMessage.timestamp
-                              )}
-                            />
-                          </>
-                        );
-                      })()}
-                    </CardContent>
-                  </Card>
-
-                  <Card className="rsg-card">
-                    <CardHeader>
-                      <CardTitle>الحالة</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="flex items-center gap-2">
-                        <Badge className={getStatusBadge(selectedMessage.status).cls}>
-                          {getStatusBadge(selectedMessage.status).label}
-                        </Badge>
-                        <Badge variant="outline">{stageLabel(selectedMessage.stageRole)}</Badge>
-                      </div>
-
-                      <div className="grid grid-cols-1 gap-3">
-                        <div className="space-y-2">
-                          <Label>ملاحظات داخلية</Label>
-                          <Textarea
-                            value={internalNotes}
-                            onChange={(e) => setInternalNotes(e.target.value)}
-                            placeholder="ملاحظات للإدارة فقط..."
-                            disabled={isLockedFinal || myRole === "client"}
-                            className="min-h-[96px]"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        <Button
-                          onClick={handleSaveNotesOnly}
-                          disabled={isLockedFinal || myRole === "client"}
-                        >
-                          <CheckCircle2 className="w-4 h-4 ml-2" />
-                          حفظ الملاحظات
-                        </Button>
-                        {canStartRequestReview ? (
-                          <Button
-                            className="bg-yellow-700 hover:bg-yellow-800"
-                            onClick={startRequestReview}
-                            disabled={isLockedFinal}
-                          >
-                            <Clock3 className="w-4 h-4 ml-2" />
-                            بدء المراجعة
-                          </Button>
-                        ) : null}
-
-                        {canInitialApproveRequest ? (
-                          <Button
-                            className="bg-indigo-700 hover:bg-indigo-800"
-                            onClick={initialApproveRequest}
-                            disabled={isLockedFinal}
-                          >
-                            <ShieldCheck className="w-4 h-4 ml-2" />
-                            موافقة أولية
-                          </Button>
-                        ) : null}
-
-                        {canCreateInvestmentFromRequest ? (
-                          <Button
-                            className="bg-blue-700 hover:bg-blue-800"
-                            onClick={approveRequestAndCreateInvestment}
-                            disabled={approveCreateBusy || isLockedFinal}
-                          >
-                            {approveCreateBusy ? (
-                              <Loader2 className="w-4 h-4 ml-2 animate-spin" />
-                            ) : (
-                              <CheckCircle2 className="w-4 h-4 ml-2" />
-                            )}
-                            إنشاء الاستثمار
-                          </Button>
-                        ) : null}
-
-                        {canVerifySignedContract ? (
-                          <Button
-                            className="bg-amber-700 hover:bg-amber-800"
-                            onClick={verifySignedContract}
-                            disabled={isLockedFinal || finalizeBusy}
-                          >
-                            {finalizeBusy ? (
-                              <Loader2 className="w-4 h-4 ml-2 animate-spin" />
-                            ) : (
-                              <ShieldCheck className="w-4 h-4 ml-2" />
-                            )}
-                            اعتماد العقد الموقّع
-                          </Button>
-                        ) : null}
-
-                        {/* ✅ Step Machine Buttons */}
-                        {selectedMessage ? (
-                          <>
-                            {/* 1) Staff -> Accountant */}
-                            {false && canStaffActions &&
-                            normalizeForDisplay(selectedMessage).status === "new" &&
-                            normalizeForDisplay(selectedMessage).stageRole === "staff" ? (
-                              <Button
-                                className="bg-yellow-700 hover:bg-yellow-800"
-                                onClick={stepStaffForwardToAccountant}
-                                disabled={isLockedFinal}
-                              >
-                                <Clock3 className="w-4 h-4 ml-2" />
-                                ترحيل للمحاسب
-                              </Button>
-                            ) : null}
-
-                            {/* 2) Accountant -> Client */}
-                            {false && canOwnerAccountantActions &&
-                            normalizeForDisplay(selectedMessage).status === "needs_account" &&
-                            normalizeForDisplay(selectedMessage).stageRole === "accountant" ? (
-                              <Button
-                                className="bg-indigo-700 hover:bg-indigo-800"
-                                onClick={stepAccountantForwardToClient}
-                                disabled={isLockedFinal}
-                              >
-                                <PenLine className="w-4 h-4 ml-2" />
-                                تمّت المراجعة — للعميل
-                              </Button>
-                            ) : null}
-
-                            {/* 3) Client -> Owner */}
-                            {false && myRole === "client" &&
-                            normalizeForDisplay(selectedMessage).status === "waiting_client_confirmation" &&
-                            normalizeForDisplay(selectedMessage).stageRole === "client" ? (
-                              <Button
-                                className="bg-emerald-700 hover:bg-emerald-800"
-                                onClick={stepClientApproveAndForwardToOwner}
-                                disabled={isLockedFinal}
-                              >
-                                <CheckCircle2 className="w-4 h-4 ml-2" />
-                                موافقة وتعميد
-                              </Button>
-                            ) : null}
-
-                            {/* 4) Owner -> Completed/Locked */}
-                            {false && myRole === "owner" &&
-                            normalizeForDisplay(selectedMessage).status === "resolved" &&
-                            normalizeForDisplay(selectedMessage).stageRole === "owner" ? (
-                              <Button
-                                className="bg-gray-800 hover:bg-gray-900"
-                                onClick={stepOwnerFinalizeAndClose}
-                                disabled={isLockedFinal}
-                              >
-                                <ShieldCheck className="w-4 h-4 ml-2" />
-                                تعميد نهائي وإقفال
-                              </Button>
-                            ) : null}
-                          </>
-                        ) : null}
-
-                        {/* ✅ Staff: Pre-investment */}
-                        {false && isInvestment ? (
-                          <Button
-                            variant="outline"
-                            onClick={createPreInvestment}
-                            disabled={isLockedFinal}
-                          >
-                            <PenLine className="w-4 h-4 ml-2" />
-                            إنشاء الاستثمار (قديم)
-                          </Button>
-                        ) : null}
-
-                        {/* ✅ Finalize */}
-                        {canFinalize ? (
-                          <Button
-                            className="bg-emerald-700 hover:bg-emerald-800"
-                            onClick={activateInvestmentAfterApproval}
-                            disabled={isLockedFinal || finalizeBusy}
-                          >
-                            {finalizeBusy ? (
-                              <Loader2 className="w-4 h-4 ml-2 animate-spin" />
-                            ) : (
-                              <Building2 className="w-4 h-4 ml-2" />
-                            )}
-                            إقفال نهائي
-                          </Button>
-                        ) : null}
-
-                        {false && canApproveAndCreateInvestment ? (
-                          <Button
-                            className="bg-blue-700 hover:bg-blue-800"
-                            onClick={approveRequestAndCreateInvestment}
-                            disabled={approveCreateBusy || isLockedFinal}
-                          >
-                            {approveCreateBusy ? (
-                              <Loader2 className="w-4 h-4 ml-2 animate-spin" />
-                            ) : (
-                              <CheckCircle2 className="w-4 h-4 ml-2" />
-                            )}
-                            قبول الطلب وإنشاء الاستثمار
-                          </Button>
-                        ) : null}
-
-                        {/* ✅ Reject */}
-                        <Button
-                          variant="destructive"
-                          onClick={rejectInvestmentRequest}
-                          disabled={isLockedFinal}
-                        >
-                          <AlertTriangle className="w-4 h-4 ml-2" />
-                          رفض الطلب
-                        </Button>
-
-                        {/* ✅ Owner only reopen */}
-                        <Button
-                          variant="outline"
-                          onClick={reopenMessage}
-                          disabled={reopenBusy || myRole !== "owner"}
-                        >
-                          {reopenBusy ? (
-                            <Loader2 className="w-4 h-4 ml-2 animate-spin" />
-                          ) : (
-                            <Clock3 className="w-4 h-4 ml-2" />
+                    <Card className={`rsg-card ${DETAIL_SECTION_CARD_CLASS}`}>
+                      <CardHeader className={DETAIL_SECTION_HEADER_CLASS}>
+                        <CardTitle className={DETAIL_SECTION_TITLE_CLASS}>
+                          الحالة
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent
+                        className={`${DETAIL_SECTION_CONTENT_CLASS} space-y-5`}
+                      >
+                        <div
+                          className={cn(
+                            DETAIL_INLINE_PANEL_CLASS,
+                            "flex flex-wrap items-center gap-2.5"
                           )}
-                          إعادة فتح (للمالك)
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  <Card className="rsg-card">
-                    <CardHeader>
-                      <CardTitle>مستندات الاستثمار (Cloudflare R2)</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-5">
-                      <InfoRow
-                        label="رقم الاستثمار"
-                        value={String(selectedMessage?.investmentId || "-")}
-                      />
-
-                      <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-3 sm:px-4">
-                        <div className="text-xs text-muted-foreground mb-2">حالة العقد</div>
-                        <div className="flex items-center flex-wrap gap-2">
-                          <span
-                            className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${getContractStatusClass(
-                              contractStatusValue
-                            )}`}
+                        >
+                          <Badge
+                            className={getDetailRequestStatusClass(
+                              selectedMessage.status
+                            )}
                           >
-                            {getContractStatusLabel(contractStatusValue)}
-                          </span>
-                          {contractFollowupChipLabel ? (
-                            <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
-                              {contractFollowupChipLabel}
-                            </span>
-                          ) : null}
+                            {getStatusBadge(selectedMessage.status).label}
+                          </Badge>
+                          <Badge className={DETAIL_STAGE_PILL_CLASS}>
+                            {stageLabel(selectedMessage.stageRole)}
+                          </Badge>
                         </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <div className="rounded-xl border border-slate-200 bg-white px-3 py-3 sm:px-4 space-y-2">
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="text-sm font-semibold">العقد الأصلي</div>
-                            <span
-                              className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${
-                                hasOriginalContract
-                                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                                  : "bg-slate-100 text-slate-600 border-slate-200"
-                              }`}
-                            >
-                              {hasOriginalContract ? "مرفوع" : "لا يوجد"}
-                            </span>
-                          </div>
-
-                          {hasOriginalContract ? (
-                            <>
-                              <div className="text-sm font-medium text-slate-900 break-words">
-                                {originalContractFileName}
-                              </div>
-                              <div className="flex flex-wrap gap-2 pt-1">
-                                {originalContractViewUrl ? (
-                                  <a href={originalContractViewUrl} target="_blank" rel="noreferrer">
-                                    <Button variant="outline" size="sm" className="gap-2">
-                                      <Eye className="w-4 h-4" />
-                                      عرض
-                                    </Button>
-                                  </a>
-                                ) : null}
-                                {originalContractDownloadUrl ? (
-                                  <a href={originalContractDownloadUrl} target="_blank" rel="noreferrer">
-                                    <Button variant="outline" size="sm" className="gap-2">
-                                      <Download className="w-4 h-4" />
-                                      تنزيل
-                                    </Button>
-                                  </a>
-                                ) : null}
-                              </div>
-                              {needsFreshSignedContract ? (
-                                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                                  تم تحديث العقد الأصلي، وسيحتاج المستثمر إلى توقيع النسخة الجديدة.
-                                </div>
-                              ) : null}
-                            </>
-                          ) : (
-                            <div className="text-sm text-muted-foreground">لا يوجد</div>
-                          )}
-                        </div>
-
-                        <div className="rounded-xl border border-slate-200 bg-white px-3 py-3 sm:px-4 space-y-2">
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="text-sm font-semibold">العقد الموقّع</div>
-                            <span
-                              className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${
-                                hasCurrentSignedContract
-                                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                                  : "bg-slate-100 text-slate-600 border-slate-200"
-                              }`}
-                            >
-                              {hasCurrentSignedContract ? "مرفوع" : "لا يوجد"}
-                            </span>
-                          </div>
-
-                          {hasCurrentSignedContract ? (
-                            <>
-                              <div className="text-sm font-medium text-slate-900 break-words">
-                                {signedContractFileName}
-                              </div>
-                              <div className="flex flex-wrap gap-2 pt-1">
-                                {signedContractViewUrl ? (
-                                  <a href={signedContractViewUrl} target="_blank" rel="noreferrer">
-                                    <Button variant="outline" size="sm" className="gap-2">
-                                      <Eye className="w-4 h-4" />
-                                      عرض
-                                    </Button>
-                                  </a>
-                                ) : null}
-                                {signedContractDownloadUrl ? (
-                                  <a href={signedContractDownloadUrl} target="_blank" rel="noreferrer">
-                                    <Button variant="outline" size="sm" className="gap-2">
-                                      <Download className="w-4 h-4" />
-                                      تنزيل
-                                    </Button>
-                                  </a>
-                                ) : null}
-                              </div>
-                            </>
-                          ) : (
-                            <div className="text-sm text-muted-foreground">
-                              {needsFreshSignedContract
-                                ? "لم يتم رفع عقد موقّع من المستثمر بعد."
-                                : "لم يتم رفع العقد الموقّع بعد"}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="border-t border-slate-200 pt-4">
-                        <div className="text-xs text-muted-foreground mb-3">رفع المستندات</div>
 
                         <div className="grid grid-cols-1 gap-4">
-                          <div className="rounded-xl border border-slate-200 bg-slate-50/40 px-3 py-3 sm:px-4 space-y-3">
-                            <ContractFilePicker
-                              buttonLabel="رفع العقد الأصلي (PDF)"
-                              file={draftFile}
-                              onFileChange={setDraftFile}
-                              disabled={contractBusy || !selectedMessage?.investmentId}
+                          <div className="space-y-2">
+                            <Label className={DETAIL_INLINE_LABEL_CLASS}>
+                              ملاحظات داخلية
+                            </Label>
+                            <Textarea
+                              value={internalNotes}
+                              onChange={e => setInternalNotes(e.target.value)}
+                              placeholder="ملاحظات للإدارة فقط..."
+                              disabled={isLockedFinal || myRole === "client"}
+                              className={DETAIL_TEXTAREA_CLASS}
                             />
-                            <Button
-                              className="w-full bg-blue-700 hover:bg-blue-800"
-                              onClick={createContractForInvestment}
-                              disabled={
-                                contractBusy ||
-                                !selectedMessage?.investmentId ||
-                                !draftFile ||
-                                !canAdmin
-                              }
-                            >
-                              {contractBusy ? (
-                                <Loader2 className="w-4 h-4 ml-2 animate-spin" />
-                              ) : (
-                                <Upload className="w-4 h-4 ml-2" />
-                              )}
-                              رفع العقد الأصلي
-                            </Button>
                           </div>
                         </div>
-                      </div>
-                    </CardContent>
-                  </Card>
+
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                          <Button
+                            className={cn(
+                              DETAIL_LIGHT_SOLID_BUTTON_CLASS,
+                              "w-full"
+                            )}
+                            onClick={handleSaveNotesOnly}
+                            disabled={isLockedFinal || myRole === "client"}
+                          >
+                            <CheckCircle2 className="w-4 h-4" />
+                            حفظ الملاحظات
+                          </Button>
+                          {canStartRequestReview ? (
+                            <Button
+                              className={`${DETAIL_SOLID_BUTTON_CLASS} w-full bg-yellow-700 hover:bg-yellow-800`}
+                              onClick={startRequestReview}
+                              disabled={isLockedFinal}
+                            >
+                              <Clock3 className="w-4 h-4" />
+                              بدء المراجعة
+                            </Button>
+                          ) : null}
+
+                          {canInitialApproveRequest ? (
+                            <Button
+                              className={`${DETAIL_SOLID_BUTTON_CLASS} w-full bg-indigo-700 hover:bg-indigo-800`}
+                              onClick={initialApproveRequest}
+                              disabled={isLockedFinal}
+                            >
+                              <ShieldCheck className="w-4 h-4" />
+                              موافقة أولية
+                            </Button>
+                          ) : null}
+
+                          {canCreateInvestmentFromRequest ? (
+                            <Button
+                              className={`${DETAIL_SOLID_BUTTON_CLASS} w-full bg-blue-700 hover:bg-blue-800`}
+                              onClick={approveRequestAndCreateInvestment}
+                              disabled={approveCreateBusy || isLockedFinal}
+                            >
+                              {approveCreateBusy ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <CheckCircle2 className="w-4 h-4" />
+                              )}
+                              إنشاء الاستثمار
+                            </Button>
+                          ) : null}
+
+                          {canVerifySignedContract ? (
+                            <Button
+                              className={`${DETAIL_SOLID_BUTTON_CLASS} w-full bg-amber-700 hover:bg-amber-800`}
+                              onClick={verifySignedContract}
+                              disabled={isLockedFinal || finalizeBusy}
+                            >
+                              {finalizeBusy ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <ShieldCheck className="w-4 h-4" />
+                              )}
+                              اعتماد العقد الموقّع
+                            </Button>
+                          ) : null}
+
+                          {/* ✅ Step Machine Buttons */}
+                          {selectedMessage ? (
+                            <>
+                              {/* 1) Staff -> Accountant */}
+                              {false &&
+                              canStaffActions &&
+                              normalizeForDisplay(selectedMessage).status ===
+                                "new" &&
+                              normalizeForDisplay(selectedMessage).stageRole ===
+                                "staff" ? (
+                                <Button
+                                  className={`${DETAIL_SOLID_BUTTON_CLASS} w-full bg-yellow-700 hover:bg-yellow-800`}
+                                  onClick={stepStaffForwardToAccountant}
+                                  disabled={isLockedFinal}
+                                >
+                                  <Clock3 className="w-4 h-4" />
+                                  ترحيل للمحاسب
+                                </Button>
+                              ) : null}
+
+                              {/* 2) Accountant -> Client */}
+                              {false &&
+                              canOwnerAccountantActions &&
+                              normalizeForDisplay(selectedMessage).status ===
+                                "needs_account" &&
+                              normalizeForDisplay(selectedMessage).stageRole ===
+                                "accountant" ? (
+                                <Button
+                                  className={`${DETAIL_SOLID_BUTTON_CLASS} w-full bg-indigo-700 hover:bg-indigo-800`}
+                                  onClick={stepAccountantForwardToClient}
+                                  disabled={isLockedFinal}
+                                >
+                                  <PenLine className="w-4 h-4" />
+                                  تمّت المراجعة — للعميل
+                                </Button>
+                              ) : null}
+
+                              {/* 3) Client -> Owner */}
+                              {false &&
+                              myRole === "client" &&
+                              normalizeForDisplay(selectedMessage).status ===
+                                "waiting_client_confirmation" &&
+                              normalizeForDisplay(selectedMessage).stageRole ===
+                                "client" ? (
+                                <Button
+                                  className={`${DETAIL_SOLID_BUTTON_CLASS} w-full bg-emerald-700 hover:bg-emerald-800`}
+                                  onClick={stepClientApproveAndForwardToOwner}
+                                  disabled={isLockedFinal}
+                                >
+                                  <CheckCircle2 className="w-4 h-4" />
+                                  موافقة وتعميد
+                                </Button>
+                              ) : null}
+
+                              {/* 4) Owner -> Completed/Locked */}
+                              {false &&
+                              myRole === "owner" &&
+                              normalizeForDisplay(selectedMessage).status ===
+                                "resolved" &&
+                              normalizeForDisplay(selectedMessage).stageRole ===
+                                "owner" ? (
+                                <Button
+                                  className={`${DETAIL_SOLID_BUTTON_CLASS} w-full bg-gray-800 hover:bg-gray-900`}
+                                  onClick={stepOwnerFinalizeAndClose}
+                                  disabled={isLockedFinal}
+                                >
+                                  <ShieldCheck className="w-4 h-4" />
+                                  تعميد نهائي وإقفال
+                                </Button>
+                              ) : null}
+                            </>
+                          ) : null}
+
+                          {/* ✅ Staff: Pre-investment */}
+                          {false && isInvestment ? (
+                            <Button
+                              variant="outline"
+                              className={cn(
+                                DETAIL_OUTLINE_BUTTON_CLASS,
+                                "w-full"
+                              )}
+                              onClick={createPreInvestment}
+                              disabled={isLockedFinal}
+                            >
+                              <PenLine className="w-4 h-4" />
+                              إنشاء الاستثمار (قديم)
+                            </Button>
+                          ) : null}
+
+                          {/* ✅ Finalize */}
+                          {canFinalize ? (
+                            <Button
+                              className={`${DETAIL_SOLID_BUTTON_CLASS} w-full bg-emerald-700 hover:bg-emerald-800`}
+                              onClick={activateInvestmentAfterApproval}
+                              disabled={isLockedFinal || finalizeBusy}
+                            >
+                              {finalizeBusy ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <Building2 className="w-4 h-4" />
+                              )}
+                              إقفال نهائي
+                            </Button>
+                          ) : null}
+
+                          {false && canApproveAndCreateInvestment ? (
+                            <Button
+                              className={`${DETAIL_SOLID_BUTTON_CLASS} w-full bg-blue-700 hover:bg-blue-800`}
+                              onClick={approveRequestAndCreateInvestment}
+                              disabled={approveCreateBusy || isLockedFinal}
+                            >
+                              {approveCreateBusy ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <CheckCircle2 className="w-4 h-4" />
+                              )}
+                              قبول الطلب وإنشاء الاستثمار
+                            </Button>
+                          ) : null}
+
+                          {/* ✅ Reject */}
+                          <Button
+                            className={cn(DETAIL_DANGER_BUTTON_CLASS, "w-full")}
+                            onClick={rejectInvestmentRequest}
+                            disabled={isLockedFinal}
+                          >
+                            <AlertTriangle className="w-4 h-4" />
+                            رفض الطلب
+                          </Button>
+
+                          {/* ✅ Owner only reopen */}
+                          <Button
+                            variant="outline"
+                            className={cn(
+                              DETAIL_OUTLINE_BUTTON_CLASS,
+                              "w-full"
+                            )}
+                            onClick={reopenMessage}
+                            disabled={reopenBusy || myRole !== "owner"}
+                          >
+                            {reopenBusy ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Clock3 className="w-4 h-4" />
+                            )}
+                            إعادة فتح (للمالك)
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <Card className={`rsg-card ${DETAIL_SECTION_CARD_CLASS}`}>
+                      <CardHeader className={DETAIL_SECTION_HEADER_CLASS}>
+                        <CardTitle className={DETAIL_SECTION_TITLE_CLASS}>
+                          مستندات الاستثمار (Cloudflare R2)
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent
+                        className={`${DETAIL_SECTION_CONTENT_CLASS} space-y-5`}
+                      >
+                        <InfoRow
+                          label="رقم الاستثمار"
+                          value={String(selectedMessage?.investmentId || "-")}
+                        />
+
+                        <div className={DETAIL_INLINE_PANEL_CLASS}>
+                          <div className={DETAIL_INLINE_LABEL_CLASS}>
+                            حالة العقد
+                          </div>
+                          <div className="flex items-center flex-wrap gap-2">
+                            <span
+                              className={`${DETAIL_PILL_BASE_CLASS} ${getContractStatusClass(
+                                contractStatusValue
+                              )}`}
+                            >
+                              {getContractStatusLabel(contractStatusValue)}
+                            </span>
+                            {contractFollowupChipLabel ? (
+                              <span
+                                className={`${DETAIL_PILL_BASE_CLASS} border-amber-300/35 bg-amber-500/10 text-amber-200`}
+                              >
+                                {contractFollowupChipLabel}
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                          <div className={DETAIL_SUBCARD_CLASS}>
+                            <div className="flex items-center justify-between gap-2">
+                              <div className={DETAIL_SUBCARD_TITLE_CLASS}>
+                                العقد الأصلي
+                              </div>
+                              <span
+                                className={getDetailBinaryPillClass(
+                                  hasOriginalContract
+                                )}
+                              >
+                                {hasOriginalContract ? "مرفوع" : "لا يوجد"}
+                              </span>
+                            </div>
+
+                            {hasOriginalContract ? (
+                              <>
+                                <div className={DETAIL_SUBCARD_VALUE_CLASS}>
+                                  {originalContractFileName}
+                                </div>
+                                <div className="flex flex-wrap gap-2 pt-1">
+                                  {originalContractViewUrl ? (
+                                    <a
+                                      href={originalContractViewUrl}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                    >
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className={DETAIL_OUTLINE_BUTTON_CLASS}
+                                      >
+                                        <Eye className="w-4 h-4" />
+                                        عرض
+                                      </Button>
+                                    </a>
+                                  ) : null}
+                                  {originalContractDownloadUrl ? (
+                                    <a
+                                      href={originalContractDownloadUrl}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                    >
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className={DETAIL_OUTLINE_BUTTON_CLASS}
+                                      >
+                                        <Download className="w-4 h-4" />
+                                        تنزيل
+                                      </Button>
+                                    </a>
+                                  ) : null}
+                                </div>
+                                {needsFreshSignedContract ? (
+                                  <div className={DETAIL_ALERT_CLASS}>
+                                    تم تحديث العقد الأصلي، وسيحتاج المستثمر إلى
+                                    توقيع النسخة الجديدة.
+                                  </div>
+                                ) : null}
+                              </>
+                            ) : (
+                              <div className={DETAIL_HELP_TEXT_CLASS}>
+                                لا يوجد
+                              </div>
+                            )}
+                          </div>
+
+                          <div className={DETAIL_SUBCARD_CLASS}>
+                            <div className="flex items-center justify-between gap-2">
+                              <div className={DETAIL_SUBCARD_TITLE_CLASS}>
+                                العقد الموقّع
+                              </div>
+                              <span
+                                className={getDetailBinaryPillClass(
+                                  hasCurrentSignedContract
+                                )}
+                              >
+                                {hasCurrentSignedContract ? "مرفوع" : "لا يوجد"}
+                              </span>
+                            </div>
+
+                            {hasCurrentSignedContract ? (
+                              <>
+                                <div className={DETAIL_SUBCARD_VALUE_CLASS}>
+                                  {signedContractFileName}
+                                </div>
+                                <div className="flex flex-wrap gap-2 pt-1">
+                                  {signedContractViewUrl ? (
+                                    <a
+                                      href={signedContractViewUrl}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                    >
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className={DETAIL_OUTLINE_BUTTON_CLASS}
+                                      >
+                                        <Eye className="w-4 h-4" />
+                                        عرض
+                                      </Button>
+                                    </a>
+                                  ) : null}
+                                  {signedContractDownloadUrl ? (
+                                    <a
+                                      href={signedContractDownloadUrl}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                    >
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className={DETAIL_OUTLINE_BUTTON_CLASS}
+                                      >
+                                        <Download className="w-4 h-4" />
+                                        تنزيل
+                                      </Button>
+                                    </a>
+                                  ) : null}
+                                </div>
+                              </>
+                            ) : (
+                              <div className={DETAIL_HELP_TEXT_CLASS}>
+                                {needsFreshSignedContract
+                                  ? "لم يتم رفع عقد موقّع من المستثمر بعد."
+                                  : "لم يتم رفع العقد الموقّع بعد"}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="border-t border-white/10 pt-5">
+                          <div className={DETAIL_INLINE_LABEL_CLASS}>
+                            رفع المستندات
+                          </div>
+
+                          <div className="grid grid-cols-1 gap-4">
+                            <div className="space-y-4 rounded-[22px] border border-dashed border-slate-700/70 bg-slate-950/35 px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]">
+                              <ContractFilePicker
+                                buttonLabel="رفع العقد الأصلي (PDF)"
+                                file={draftFile}
+                                onFileChange={setDraftFile}
+                                panelClassName="rounded-[18px] border-slate-700/70 bg-slate-950/55 px-4 py-4 sm:px-4"
+                                buttonClassName={DETAIL_OUTLINE_BUTTON_CLASS}
+                                fileNameClassName="text-sm font-semibold text-slate-50"
+                                helperTextClassName="text-xs leading-6 text-slate-300"
+                                disabled={
+                                  contractBusy || !selectedMessage?.investmentId
+                                }
+                              />
+                              <Button
+                                className={`w-full ${DETAIL_SOLID_BUTTON_CLASS} bg-blue-700 hover:bg-blue-800`}
+                                onClick={createContractForInvestment}
+                                disabled={
+                                  contractBusy ||
+                                  !selectedMessage?.investmentId ||
+                                  !draftFile ||
+                                  !canAdmin
+                                }
+                              >
+                                {contractBusy ? (
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <Upload className="w-4 h-4" />
+                                )}
+                                رفع العقد الأصلي
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
                 </div>
               </div>
             ) : null}
 
-            <DialogFooter className="px-6 py-4 border-t bg-white/60 backdrop-blur">
+            <DialogFooter className="shrink-0 border-t border-white/10 bg-white/[0.05] px-7 py-5 backdrop-blur-xl">
               <div className="flex items-center justify-between w-full gap-3">
-                <div className="text-xs text-muted-foreground">
-                  {isLockedFinal ? "هذا الطلب مقفل." : "تأكد من حفظ التغييرات بعد أي تعديل."}
+                <div className="text-xs text-slate-300">
+                  {isLockedFinal
+                    ? "هذا الطلب مقفل."
+                    : "تأكد من حفظ التغييرات بعد أي تعديل."}
                 </div>
 
-                <Button variant="outline" onClick={() => setIsDetailDialogOpen(false)}>
+                <Button
+                  variant="outline"
+                  className={DETAIL_OUTLINE_BUTTON_CLASS}
+                  onClick={() => setIsDetailDialogOpen(false)}
+                >
                   إغلاق
                 </Button>
               </div>
@@ -3674,17 +4258,23 @@ export default function MessagesManagement() {
               <Label>ملاحظة الإرجاع</Label>
               <Textarea
                 value={returnNote}
-                onChange={(e) => setReturnNote(e.target.value)}
+                onChange={e => setReturnNote(e.target.value)}
                 placeholder="اكتب سبب الإرجاع."
                 className="min-h-[120px]"
               />
             </div>
 
             <DialogFooter>
-              <Button variant="outline" onClick={() => setReturnDialogOpen(false)}>
+              <Button
+                variant="outline"
+                onClick={() => setReturnDialogOpen(false)}
+              >
                 إلغاء
               </Button>
-              <Button className="w-full sm:w-auto" onClick={returnContractWithNote}>
+              <Button
+                className="w-full sm:w-auto"
+                onClick={returnContractWithNote}
+              >
                 إرسال
               </Button>
             </DialogFooter>
@@ -3699,33 +4289,12 @@ export default function MessagesManagement() {
   Small components
 ========================= */
 
-function StatCard({
-  title,
-  value,
-  color,
-}: {
-  title: string;
-  value: number;
-  color?: string;
-}) {
-  return (
-    <Card className="rsg-card">
-      <CardContent className="py-5">
-        <div className="text-sm text-muted-foreground">{title}</div>
-        <div className={`text-3xl font-bold ${color || ""}`}>{value}</div>
-      </CardContent>
-    </Card>
-  );
-}
-
 function InfoRow({ label, value }: { label: string; value: any }) {
   return (
-    <div className="grid grid-cols-[110px_1fr] items-start gap-3">
-      <div className="text-xs text-muted-foreground text-right pt-1">{label}</div>
+    <div className={DETAIL_INPUT_ROW_CLASS}>
+      <div className={DETAIL_INPUT_LABEL_CLASS}>{label}</div>
 
-      <div className="text-sm font-semibold text-right break-words leading-7">
-        {value ?? "—"}
-      </div>
+      <div className={DETAIL_INPUT_VALUE_CLASS}>{value ?? "—"}</div>
     </div>
   );
 }

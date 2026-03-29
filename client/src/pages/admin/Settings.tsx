@@ -65,6 +65,7 @@ import {
 } from "lucide-react";
 
 import { db } from "@/_core/firebase";
+import { formatDateTimeEN, formatFileSizeEN, formatNumberEN } from "@/lib/formatters";
 import { cn } from "@/lib/utils";
 import {
   AUDIT_ACTIONS,
@@ -469,32 +470,18 @@ function formatDatabaseMetricSource(source: DocumentStorageMetricSource, hasValu
 
 function formatDatabaseCount(value: number | null) {
   if (value === null) return "—";
-  return value.toLocaleString("ar-SA");
+  return formatNumberEN(value);
 }
 
 function formatDatabaseBytes(value: number | null) {
-  if (value === null) return "—";
-  if (value === 0) return "0 B";
-
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  let size = value;
-  let unitIndex = 0;
-
-  while (size >= 1024 && unitIndex < units.length - 1) {
-    size /= 1024;
-    unitIndex += 1;
-  }
-
-  return `${size.toLocaleString("en-US", {
-    maximumFractionDigits: size >= 100 ? 0 : size >= 10 ? 1 : 2,
-  })} ${units[unitIndex]}`;
+  return formatFileSizeEN(value);
 }
 
 function formatDatabaseTimestamp(value: string | null) {
   if (!value) return "—";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleString("ar-SA", {
+  return formatDateTimeEN(date, {
     dateStyle: "medium",
     timeStyle: "short",
   });
@@ -2851,7 +2838,7 @@ export default function Settings() {
 
                   <div className="flex flex-wrap gap-2">
                     <Badge variant="outline">
-                      {selectedContractIds.length.toLocaleString("en-US")} selected
+                      {formatNumberEN(selectedContractIds.length)} selected
                     </Badge>
                     <Button
                       variant="outline"

@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { ArrowRight, Save } from "lucide-react";
+import { formatDateTimeEN } from "@/lib/formatters";
 
 type ProjectType = "sukuk" | "land_development" | "vip_exclusive";
 type ProjectStatus = "draft" | "published" | "closed" | "completed";
@@ -58,10 +59,10 @@ function splitLines(text: string) {
 function safeDateLabel(v: any) {
   try {
     if (!v) return "—";
-    if (typeof v?.toDate === "function") return v.toDate().toLocaleString("ar-SA");
-    if (v instanceof Date) return v.toLocaleString("ar-SA");
+    if (typeof v?.toDate === "function") return formatDateTimeEN(v.toDate());
+    if (v instanceof Date) return formatDateTimeEN(v);
     if (typeof v === "string" || typeof v === "number")
-      return new Date(v).toLocaleString("ar-SA");
+      return formatDateTimeEN(new Date(v));
     return "—";
   } catch {
     return "—";

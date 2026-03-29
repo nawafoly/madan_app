@@ -29,6 +29,7 @@ import {
   Minus,
 } from "lucide-react";
 import { toast } from "sonner";
+import { getClientInvestmentStatusLabel } from "@shared/investmentLifecycle";
 
 import {
   doc,
@@ -41,6 +42,13 @@ import {
 } from "firebase/firestore";
 import { db } from "@/_core/firebase";
 import { recomputeInvestorAggregates } from "@/_core/recomputeInvestorAggregates";
+import {
+  formatCurrencyEN,
+  formatDateEN,
+  formatDateTimeEN,
+  formatNumberEN,
+  formatPercentEN,
+} from "@/lib/formatters";
 
 const EMPTY_VALUE = "غير متوفر";
 const LIVE_UPDATE_INTERVAL_MS = 1000;
@@ -136,25 +144,11 @@ function fallbackText(...values: any[]) {
 }
 
 function formatDate(date: Date | null) {
-  return date
-    ? date.toLocaleDateString("ar-SA", {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-      })
-    : EMPTY_VALUE;
+  return date ? formatDateEN(date) : EMPTY_VALUE;
 }
 
 function formatDateTime(date: Date | null) {
-  return date
-    ? date.toLocaleString("ar-SA", {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      })
-    : EMPTY_VALUE;
+  return date ? formatDateTimeEN(date) : EMPTY_VALUE;
 }
 
 function money(
@@ -166,10 +160,10 @@ function money(
 ) {
   const amount = Number(value);
   const safeValue = Number.isFinite(amount) ? amount : 0;
-  return `${safeValue.toLocaleString("ar-SA", {
+  return formatCurrencyEN(safeValue, {
     minimumFractionDigits: options?.minimumFractionDigits ?? 0,
     maximumFractionDigits: options?.maximumFractionDigits ?? 0,
-  })} ر.س`;
+  });
 }
 
 function formatPercent(
@@ -180,10 +174,10 @@ function formatPercent(
   }
 ) {
   if (!Number.isFinite(value as number)) return EMPTY_VALUE;
-  return `${Number(value).toLocaleString("ar-SA", {
+  return formatPercentEN(Number(value), {
     minimumFractionDigits: options?.minimumFractionDigits ?? 0,
     maximumFractionDigits: options?.maximumFractionDigits ?? 2,
-  })}%`;
+  });
 }
 
 function liveMoney(value: number | null) {
@@ -212,7 +206,7 @@ function durationLabel(value: number | null) {
     Math.abs((value as number) - Math.round(value as number)) < 0.1
       ? Math.round(value as number)
       : Number((value as number).toFixed(1));
-  return `${rounded.toLocaleString("ar-SA")} شهر`;
+  return `${formatNumberEN(rounded)} شهر`;
 }
 
 function clampNumber(value: number, min: number, max: number) {
@@ -338,21 +332,7 @@ function isClosedInvestmentStatus(status: any) {
 function statusLabel(status: any) {
   const key = normalizeStatusKey(status);
   if (!key) return EMPTY_VALUE;
-
-  const map: Record<string, string> = {
-    active: "نشط",
-    completed: "منتهي",
-    closed: "مقفل",
-    pending: "قيد الانتظار",
-    approved: "مقبول",
-    rejected: "مرفوض",
-    signing: "قيد الإجراء",
-    signed: "تمت الموافقة",
-    pending_review: "بانتظار المراجعة",
-    pending_contract: "بانتظار العقد",
-  };
-
-  return map[key] || String(status || EMPTY_VALUE);
+  return getClientInvestmentStatusLabel(key) || String(status || EMPTY_VALUE);
 }
 
 function getInvestmentStatusBadge(status: any) {
@@ -1203,7 +1183,7 @@ export default function ClientProfile() {
                     hasAnyDynamicProfit
                       ? dynamicProfitCoverageCount === investmentRows.length
                         ? "محسوب حيًا حسب تقدم الاستثمارات الحالية ويتحدث تلقائيًا كل ثانية."
-                        : `محسوب حيًا لـ ${dynamicProfitCoverageCount.toLocaleString("ar-SA")} من أصل ${investmentRows.length.toLocaleString("ar-SA")} استثمار، ويتحدث تلقائيًا كل ثانية.`
+                        : `محسوب حيًا لـ ${formatNumberEN(dynamicProfitCoverageCount)} من أصل ${formatNumberEN(investmentRows.length)} استثمار، ويتحدث تلقائيًا كل ثانية.`
                       : "تعذر حساب الربح الحي لعدم اكتمال تواريخ البداية والاستحقاق."
                   }
                   icon={TrendingUp}
@@ -1220,20 +1200,20 @@ export default function ClientProfile() {
                 />
                 <MetricTile
                   label="عدد الاستثمارات"
-                  value={String(investmentRows.length)}
+                  value={formatNumberEN(investmentRows.length)}
                   helper="عدد السجلات الاستثمارية المرتبطة بهذا العميل."
                   icon={BriefcaseBusiness}
                 />
                 <MetricTile
                   label="المشاريع النشطة"
-                  value={String(activeProjectsCount)}
-                  helper={`${activeInvestmentsCount.toLocaleString("ar-SA")} استثمارًا مستمرًا`}
+                  value={formatNumberEN(activeProjectsCount)}
+                  helper={`${formatNumberEN(activeInvestmentsCount)} استثمارًا مستمرًا`}
                   icon={FolderKanban}
                 />
                 <MetricTile
                   label="المشاريع المكتملة"
-                  value={String(completedProjectsCount)}
-                  helper={`${completedInvestmentsCount.toLocaleString("ar-SA")} استثمارًا منتهيًا`}
+                  value={formatNumberEN(completedProjectsCount)}
+                  helper={`${formatNumberEN(completedInvestmentsCount)} استثمارًا منتهيًا`}
                   icon={History}
                   className="border-slate-200 bg-slate-50/90"
                 />
@@ -1252,7 +1232,7 @@ export default function ClientProfile() {
                   </div>
 
                   <div className="inline-flex w-fit items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm font-medium text-slate-600">
-                    {investmentRows.length.toLocaleString("ar-SA")} سجل استثماري
+                    {formatNumberEN(investmentRows.length)} سجل استثماري
                   </div>
                 </div>
               </CardHeader>
@@ -1294,7 +1274,7 @@ export default function ClientProfile() {
                         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                           <div className="min-w-0">
                             <div className="inline-flex w-fit items-center rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold tracking-[0.14em] text-slate-600">
-                              استثمار #{(index + 1).toLocaleString("ar-SA")}
+                              استثمار #{formatNumberEN(index + 1)}
                             </div>
 
                             <h3 className="mt-3 text-lg font-semibold text-slate-950 break-words">

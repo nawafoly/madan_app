@@ -30,6 +30,62 @@ export function isInvestmentPreActivationStatus(raw: unknown) {
   return PRE_ACTIVATION_STATUS_SET.has(normalizeWorkflowStatus(raw));
 }
 
+export const CLIENT_WORKFLOW_COPY = {
+  contractPreparing: "جاري تجهيز العقد",
+  contractSent: "تم إرسال العقد",
+  awaitingContractSignature: "بانتظار توقيعك على العقد",
+  awaitingFinalReview: "بانتظار المراجعة والاعتماد النهائي",
+  contractApproved: "تم اعتماد العقد",
+  investmentStarted: "بدأ الاستثمار",
+} as const;
+
+export function getClientInvestmentStatusLabel(raw: unknown) {
+  const status = normalizeWorkflowStatus(raw);
+
+  const map: Record<string, string> = {
+    reviewing: "قيد المراجعة",
+    pending: "قيد المراجعة",
+    pending_review: "قيد المراجعة",
+    new: "جديد",
+    in_progress: "قيد المعالجة",
+    needs_account: "يتطلب حساب",
+    pending_contract: CLIENT_WORKFLOW_COPY.contractPreparing,
+    signing: CLIENT_WORKFLOW_COPY.awaitingContractSignature,
+    signed: CLIENT_WORKFLOW_COPY.awaitingFinalReview,
+    approved: CLIENT_WORKFLOW_COPY.contractApproved,
+    active: CLIENT_WORKFLOW_COPY.investmentStarted,
+    completed: "اكتمل الاستثمار",
+    closed: "مغلق",
+    resolved: "تمت المعالجة",
+    rejected: "مرفوض",
+  };
+
+  return map[status] || String(raw || "—");
+}
+
+export function getClientContractStatusLabel(raw: unknown) {
+  const status = normalizeWorkflowStatus(raw);
+
+  const map: Record<string, string> = {
+    draft: CLIENT_WORKFLOW_COPY.contractPreparing,
+    generated: CLIENT_WORKFLOW_COPY.contractPreparing,
+    contract_ready: CLIENT_WORKFLOW_COPY.contractPreparing,
+    sent: CLIENT_WORKFLOW_COPY.contractSent,
+    issued: CLIENT_WORKFLOW_COPY.contractSent,
+    awaiting_signature: CLIENT_WORKFLOW_COPY.awaitingContractSignature,
+    pending_signature: CLIENT_WORKFLOW_COPY.awaitingContractSignature,
+    signed: CLIENT_WORKFLOW_COPY.awaitingFinalReview,
+    signed_uploaded: CLIENT_WORKFLOW_COPY.awaitingFinalReview,
+    under_review: CLIENT_WORKFLOW_COPY.awaitingFinalReview,
+    pending_approval: CLIENT_WORKFLOW_COPY.awaitingFinalReview,
+    submitted_for_review: CLIENT_WORKFLOW_COPY.awaitingFinalReview,
+    uploaded: CLIENT_WORKFLOW_COPY.awaitingFinalReview,
+    approved: CLIENT_WORKFLOW_COPY.contractApproved,
+  };
+
+  return map[status] || String(raw || "—");
+}
+
 export function getInvestorActivationMessage(
   investmentStatusRaw: unknown,
   contractStatusRaw?: unknown
@@ -39,7 +95,7 @@ export function getInvestorActivationMessage(
 
   if (isInvestmentActivatedStatus(investmentStatus)) {
     return {
-      title: "بدأ الاستثمار وهو الآن نشط",
+      title: CLIENT_WORKFLOW_COPY.investmentStarted,
       description:
         "تم التفعيل النهائي، وبدأت مدة الاستثمار واحتساب الربح من هذه المرحلة.",
     };
@@ -47,9 +103,9 @@ export function getInvestorActivationMessage(
 
   if (contractStatus === "approved") {
     return {
-      title: "تم اعتماد العقد",
+      title: CLIENT_WORKFLOW_COPY.contractApproved,
       description:
-        "تم اعتماد العقد، والاستثمار بانتظار التفعيل النهائي قبل البدء إن لم يكن قد بدأ بعد.",
+        "تم اعتماد العقد، وسيبدأ الاستثمار بعد اكتمال التفعيل النهائي إن لم يكن قد بدأ بعد.",
     };
   }
 
@@ -64,9 +120,9 @@ export function getInvestorActivationMessage(
     ].includes(contractStatus)
   ) {
     return {
-      title: "تم استلام العقد الموقّع",
+      title: CLIENT_WORKFLOW_COPY.awaitingFinalReview,
       description:
-        "تم توقيع العقد من المستثمر، والاستثمار بانتظار المراجعة والاعتماد النهائي قبل التفعيل.",
+        "تم استلام العقد الموقّع، وهو الآن بانتظار المراجعة والاعتماد النهائي قبل بدء الاستثمار.",
     };
   }
 
@@ -76,17 +132,17 @@ export function getInvestorActivationMessage(
     )
   ) {
     return {
-      title: "العقد لم يُوقّع بعد",
+      title: CLIENT_WORKFLOW_COPY.awaitingContractSignature,
       description:
-        "تم إرسال العقد، وما زال بانتظار توقيع المستثمر قبل المراجعة والاعتماد النهائي.",
+        "تم إرسال العقد الاستثماري، وهو الآن بانتظار توقيعك قبل المراجعة والاعتماد النهائي.",
     };
   }
 
   if (["draft", "generated", "contract_ready"].includes(contractStatus)) {
     return {
-      title: "العقد قيد الإعداد",
+      title: CLIENT_WORKFLOW_COPY.contractPreparing,
       description:
-        "يجري تجهيز العقد ومراجعته داخليًا قبل إرساله للتوقيع. الاستثمار لم يبدأ بعد.",
+        "يجري تجهيز العقد ومراجعته داخليًا قبل إرساله لك للتوقيع. الاستثمار لم يبدأ بعد.",
     };
   }
 

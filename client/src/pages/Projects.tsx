@@ -41,6 +41,7 @@ import {
 } from "firebase/firestore";
 import type { FirestoreError } from "firebase/firestore";
 import { db } from "@/_core/firebase";
+import { formatCurrencyEN } from "@/lib/formatters";
 
 type BiLabel = { ar?: string; en?: string };
 type LabelValue = string | BiLabel;
@@ -114,7 +115,7 @@ function safeNumber(n: any) {
 }
 
 function fmtSAR(n: any) {
-  return safeNumber(n).toLocaleString("ar-SA") + " ر.س";
+  return formatCurrencyEN(safeNumber(n));
 }
 
 function pickLabel(v: unknown, lang: "ar" | "en" = "ar", fallback = "") {

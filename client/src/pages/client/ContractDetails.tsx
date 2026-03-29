@@ -3,6 +3,15 @@ import { useEffect, useMemo, useState } from "react";
 import { useRoute, Link } from "wouter";
 
 import ClientLayout from "@/components/ClientLayout";
+import InvestmentRequestStepper, {
+  findTimelineDateByTypes,
+  resolveInvestmentRequestStepKey,
+  shouldShowInvestmentRequestStepper,
+} from "@/components/InvestmentRequestStepper";
+import {
+  getClientContractStatusMeta,
+  getClientInvestmentStatusMeta,
+} from "@/lib/workflowStatusMeta";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,6 +22,7 @@ import { Label } from "@/components/ui/label";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { db } from "@/_core/firebase";
 import { AUDIT_ACTIONS, auditedSetDoc, buildAuditSource } from "@/lib/auditLog";
+import { formatCurrencyEN, formatDateEN } from "@/lib/formatters";
 import {
   findInterestRequestForInvestor,
   findInvestmentForInvestor,
@@ -44,6 +54,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import {
+  CLIENT_WORKFLOW_COPY,
   getInvestorActivationMessage,
   isInvestmentActivatedStatus,
 } from "@shared/investmentLifecycle";
@@ -71,14 +82,8 @@ const toDateSafe = (v: any) => {
   }
 };
 
-function formatDateTimeAR(v: any) {
-  const d = toDateSafe(v);
-  return d ? d.toLocaleString("ar-SA") : "—";
-}
-
 function formatDateAR(v: any) {
-  const d = toDateSafe(v);
-  return d ? d.toLocaleDateString("ar-SA") : "—";
+  return formatDateEN(toDateSafe(v));
 }
 
 function safeStr(v: any) {
@@ -112,15 +117,15 @@ function statusBadge(status: string) {
     in_progress: { label: "قيد المعالجة", cls: "bg-blue-600" },
     needs_account: { label: "يتطلب حساب", cls: "bg-yellow-600" },
     pending_review: { label: "قيد المراجعة", cls: "bg-blue-600" },
-    pending_contract: { label: "العقد قيد التجهيز", cls: "bg-indigo-600" },
-    signing: { label: "بانتظار توقيعك", cls: "bg-indigo-700" },
-    signed: { label: "بانتظار الاعتماد", cls: "bg-amber-700" },
-    draft: { label: "مسودة عقد", cls: "bg-slate-600" },
-    sent: { label: "العقد مرسل", cls: "bg-blue-600" },
-    pending_signature: { label: "بانتظار التوقيع", cls: "bg-indigo-700" },
-    under_review: { label: "العقد قيد المراجعة", cls: "bg-amber-600" },
-    approved: { label: "تم اعتماد العقد", cls: "bg-green-700" },
-    active: { label: "نشط", cls: "bg-emerald-700" },
+    pending_contract: getClientInvestmentStatusMeta("pending_contract"),
+    signing: getClientInvestmentStatusMeta("signing"),
+    signed: getClientInvestmentStatusMeta("signed"),
+    draft: getClientContractStatusMeta("draft"),
+    sent: getClientContractStatusMeta("sent"),
+    pending_signature: getClientContractStatusMeta("pending_signature"),
+    under_review: getClientContractStatusMeta("under_review"),
+    approved: getClientContractStatusMeta("approved"),
+    active: getClientInvestmentStatusMeta("active"),
     resolved: { label: "مكتمل", cls: "bg-gray-700" },
     rejected: { label: "مرفوض", cls: "bg-red-700" },
     closed: { label: "مغلق", cls: "bg-gray-600" },
@@ -143,67 +148,6 @@ function stageBadge(stage: string) {
 
   const v = map[s] || { label: s || "—", cls: "bg-slate-600" };
   return <Badge className={v.cls}>{v.label}</Badge>;
-}
-
-function TimelineView({ events }: { events: TimelineEvent[] }) {
-  if (!events?.length) {
-    return (
-      <div className="text-sm text-muted-foreground">
-        لا يوجد خط سير للطلب بعد.
-      </div>
-    );
-  }
-
-  return (
-    <div className="relative space-y-3">
-      <div className="absolute right-[10px] top-2 bottom-2 w-px bg-border" />
-
-      {events.map((ev, idx) => {
-        const date = formatDateTimeAR(ev?.at);
-        const title = safeStr(ev?.title) || "تحديث";
-        const note = safeStr(ev?.note);
-
-        return (
-          <div key={ev?.id || `${idx}`} className="relative pr-7">
-            <div className="absolute right-[6px] top-[7px] w-2.5 h-2.5 rounded-full bg-primary" />
-            <div className="rounded-xl border bg-white p-3">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="font-semibold text-sm">{title}</div>
-                  {note ? (
-                    <div className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap">
-                      {note}
-                    </div>
-                  ) : null}
-                </div>
-                <div className="text-[11px] text-muted-foreground shrink-0">
-                  {date}
-                </div>
-              </div>
-
-              <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
-                {ev?.type ? (
-                  <span className="px-2 py-0.5 rounded-full bg-muted">
-                    {String(ev.type)}
-                  </span>
-                ) : null}
-                {ev?.byRole ? (
-                  <span className="px-2 py-0.5 rounded-full bg-muted">
-                    {String(ev.byRole)}
-                  </span>
-                ) : null}
-                {ev?.byEmail ? (
-                  <span className="px-2 py-0.5 rounded-full bg-muted break-all">
-                    {String(ev.byEmail)}
-                  </span>
-                ) : null}
-              </div>
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
 }
 
 /* =========================
@@ -578,6 +522,72 @@ export default function ClientContractDetails() {
 
     return sorted;
   }, [requestStateDoc, investmentDoc, contractDoc, current.createdAt]);
+  const showInvestmentRequestStepper = shouldShowInvestmentRequestStepper(current.status);
+  const investmentRequestCurrentStep = useMemo(
+    () =>
+      resolveInvestmentRequestStepKey({
+        status: current.status,
+        contractStatus: current.contractStatus,
+        hasInvestment: Boolean(investmentDoc?.id || investmentDoc?.createdAt),
+        hasContractUploaded:
+          Boolean(contractDoc?.createdAt) ||
+          Boolean(
+            findTimelineDateByTypes(
+              timeline,
+              "contract_uploaded",
+              "contract_prepared",
+              "original_contract_uploaded"
+            )
+          ),
+        hasContractSigned: Boolean(
+          findTimelineDateByTypes(timeline, "contract_signed", "signed_uploaded")
+        ),
+        hasContractVerified: Boolean(findTimelineDateByTypes(timeline, "contract_verified")),
+      }),
+    [
+      contractDoc?.createdAt,
+      current.contractStatus,
+      current.status,
+      investmentDoc?.createdAt,
+      investmentDoc?.id,
+      timeline,
+    ]
+  );
+  const investmentRequestStepDates = useMemo(
+    () => ({
+      request_created:
+        findTimelineDateByTypes(
+          timeline,
+          "interest_request_created",
+          "request_created",
+          "request_submitted"
+        ) ||
+        requestStateDoc?.createdAt ||
+        current.createdAt,
+      investment_created:
+        findTimelineDateByTypes(timeline, "investment_created") || investmentDoc?.createdAt,
+      contract_preparing:
+        findTimelineDateByTypes(timeline, "investment_created") || investmentDoc?.createdAt,
+      awaiting_signature:
+        findTimelineDateByTypes(
+          timeline,
+          "contract_uploaded",
+          "contract_prepared",
+          "original_contract_uploaded"
+        ) || contractDoc?.createdAt,
+      contract_under_review:
+        findTimelineDateByTypes(timeline, "contract_signed", "signed_uploaded"),
+      contract_verified:
+        findTimelineDateByTypes(timeline, "contract_verified"),
+    }),
+    [
+      contractDoc?.createdAt,
+      current.createdAt,
+      investmentDoc?.createdAt,
+      requestStateDoc?.createdAt,
+      timeline,
+    ]
+  );
 
   // ✅ “مساعد المرحلة”: نص إرشادي + زر تواصل مناسب
   const stageHelp = useMemo(() => {
@@ -593,7 +603,15 @@ export default function ClientContractDetails() {
       };
     }
 
-    if (s === "resolved" || stage === "completed" || s === "active") {
+    if (s === "active") {
+      return {
+        title: CLIENT_WORKFLOW_COPY.investmentStarted,
+        desc: "بدأ الاستثمار بالفعل، ويمكنك متابعة التفاصيل أو التواصل معنا عند الحاجة.",
+        cta: "استفسار",
+      };
+    }
+
+    if (s === "resolved" || stage === "completed") {
       return {
         title: "تم اعتماد الطلب",
         desc: "طلبك مكتمل. إذا عندك استفسار عن التفاصيل أو التقارير، تواصل معنا.",
@@ -819,7 +837,7 @@ export default function ClientContractDetails() {
                     <div className="text-xs text-muted-foreground">المبلغ</div>
                     <div className="font-semibold mt-1">
                       {current.amount != null
-                        ? `${Number(current.amount).toLocaleString()} SAR`
+                        ? formatCurrencyEN(current.amount, { currencyLabel: "SAR" })
                         : "—"}
                     </div>
                   </div>
@@ -938,25 +956,31 @@ export default function ClientContractDetails() {
           </CardContent>
         </Card>
 
-        {/* Timeline */}
-        <Card className="rsg-card">
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2">
-              <Clock3 className="w-5 h-5" />
-              خط سير الطلب
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <div className="py-8 text-center text-muted-foreground">
-                <Loader2 className="w-5 h-5 animate-spin inline-block ml-2" />
-                جاري التحميل...
+        {showInvestmentRequestStepper ? (
+          <Card className="rsg-card overflow-hidden border-slate-200/80 bg-gradient-to-br from-white via-slate-50/80 to-slate-100/70 shadow-sm">
+            <CardHeader className="border-b border-slate-200/70 bg-white/70 pb-5">
+              <div className="flex items-start gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700 shadow-sm">
+                  <Clock3 className="h-5 w-5" />
+                </div>
+                <div className="min-w-0 space-y-1.5">
+                  <CardTitle className="text-xl font-semibold tracking-tight text-slate-950">
+                    مراحل الطلب الاستثماري
+                  </CardTitle>
+                  <p className="text-sm leading-6 text-muted-foreground">
+                    يعرض هذا المسار المراحل الحالية قبل تفعيل الاستثمار بشكل أوضح وأسهل للمتابعة.
+                  </p>
+                </div>
               </div>
-            ) : (
-              <TimelineView events={timeline} />
-            )}
-          </CardContent>
-        </Card>
+            </CardHeader>
+            <CardContent className="pt-6">
+              <InvestmentRequestStepper
+                currentStep={investmentRequestCurrentStep}
+                dates={investmentRequestStepDates}
+              />
+            </CardContent>
+          </Card>
+        ) : null}
       </div>
     </ClientLayout>
   );

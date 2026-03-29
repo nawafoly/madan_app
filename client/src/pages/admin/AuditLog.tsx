@@ -28,6 +28,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  formatDateTimeEN,
+  formatNumberEN,
+  formatRelativeTimeFromNowEN,
+} from "@/lib/formatters";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { collection, limit, onSnapshot, orderBy, query, Timestamp } from "firebase/firestore";
@@ -94,7 +99,6 @@ type AuditLog = {
 type ViewMode = "feed" | "table";
 
 const FILTER_ALL = "all";
-const relativeTimeFormatter = new Intl.RelativeTimeFormat("ar", { numeric: "auto" });
 
 const ENTITY_LABELS: Record<string, string> = {
   project: "مشروع",
@@ -395,30 +399,11 @@ function extractChangedKeys(log: AuditLog) {
 }
 
 function formatDateTimeAR(value: Date | null) {
-  if (!value) return "بدون تاريخ";
-  return value.toLocaleString("ar-SA", {
-    year: "numeric",
-    month: "short",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return value ? formatDateTimeEN(value) : "بدون تاريخ";
 }
 
 function formatRelativeTime(value: Date | null) {
-  if (!value) return "بدون وقت";
-  const diffSeconds = Math.round((value.getTime() - Date.now()) / 1000);
-  const absSeconds = Math.abs(diffSeconds);
-  if (absSeconds < 60) return relativeTimeFormatter.format(diffSeconds, "second");
-  const diffMinutes = Math.round(diffSeconds / 60);
-  if (Math.abs(diffMinutes) < 60) return relativeTimeFormatter.format(diffMinutes, "minute");
-  const diffHours = Math.round(diffMinutes / 60);
-  if (Math.abs(diffHours) < 24) return relativeTimeFormatter.format(diffHours, "hour");
-  const diffDays = Math.round(diffHours / 24);
-  if (Math.abs(diffDays) < 30) return relativeTimeFormatter.format(diffDays, "day");
-  const diffMonths = Math.round(diffDays / 30);
-  if (Math.abs(diffMonths) < 12) return relativeTimeFormatter.format(diffMonths, "month");
-  return relativeTimeFormatter.format(Math.round(diffMonths / 12), "year");
+  return value ? formatRelativeTimeFromNowEN(value) : "بدون وقت";
 }
 
 function normalizeLog(raw: RawLog): AuditLog {
@@ -532,6 +517,8 @@ function MetricCard({
   hint: string;
   icon: typeof Activity;
 }) {
+  const displayValue = typeof value === "number" ? formatNumberEN(value) : value;
+
   return (
     <Card className="gap-4">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-0">
@@ -541,7 +528,7 @@ function MetricCard({
         </div>
       </CardHeader>
       <CardContent className="space-y-1 pt-0">
-        <div className="text-3xl font-semibold tracking-tight">{value}</div>
+        <div className="text-3xl font-semibold tracking-tight">{displayValue}</div>
         <p className="text-xs leading-6 text-muted-foreground">{hint}</p>
       </CardContent>
     </Card>
@@ -584,7 +571,7 @@ function DistributionList({
             <div key={item.label} className="space-y-1.5">
               <div className="flex items-center justify-between gap-3 text-sm">
                 <span className="text-white/80">{item.label}</span>
-                <span className="text-white/60">{item.count}</span>
+                <span className="text-white/60">{formatNumberEN(item.count)}</span>
               </div>
               <div className="h-2 overflow-hidden rounded-full bg-white/10">
                 <div
@@ -799,7 +786,7 @@ export default function AuditLogPage() {
                 </div>
                 <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2">
                   <ShieldAlert className="h-3.5 w-3.5 text-[#F2B705]" />
-                  {filteredRiskyCount} حدث حساس ضمن العرض الحالي
+                  {formatNumberEN(filteredRiskyCount)} حدث حساس ضمن العرض الحالي
                 </div>
               </div>
             </div>
@@ -825,14 +812,14 @@ export default function AuditLogPage() {
                         <div className="text-xs text-white/60">أكثر كيان نشاطاً</div>
                         <div className="mt-2 text-base font-semibold">{topEntity?.label ?? "لا يوجد"}</div>
                         <div className="mt-1 text-xs text-white/50">
-                          {topEntity ? `${topEntity.count} سجل` : "بانتظار البيانات"}
+                          {topEntity ? `${formatNumberEN(topEntity.count)} سجل` : "بانتظار البيانات"}
                         </div>
                       </div>
                       <div className="rounded-2xl border border-white/10 bg-black/10 p-4">
                         <div className="text-xs text-white/60">المصدر الأكثر استخداماً</div>
                         <div className="mt-2 text-base font-semibold">{topArea?.label ?? "لا يوجد"}</div>
                         <div className="mt-1 text-xs text-white/50">
-                          {topArea ? `${topArea.count} سجل` : "بانتظار البيانات"}
+                          {topArea ? `${formatNumberEN(topArea.count)} سجل` : "بانتظار البيانات"}
                         </div>
                       </div>
                     </div>
@@ -852,26 +839,26 @@ export default function AuditLogPage() {
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <MetricCard
             title="إجمالي السجلات"
-            value={auditLogs.length.toLocaleString("ar-SA")}
+            value={formatNumberEN(auditLogs.length)}
             hint="إجمالي السجلات المحملة حالياً من البث المباشر"
             icon={Activity}
           />
           <MetricCard
             title="النتائج الحالية"
-            value={filteredLogs.length.toLocaleString("ar-SA")}
+            value={formatNumberEN(filteredLogs.length)}
             hint={filteredLogs.length === auditLogs.length ? "بدون استبعاد إضافي" : "مطابقة للفلاتر والبحث الحالي"}
             icon={Filter}
           />
           <MetricCard
             title="الأحداث الحساسة"
-            value={filteredRiskyCount.toLocaleString("ar-SA")}
-            hint={`${filteredFailedCount.toLocaleString("ar-SA")} فشل مباشر ضمن النتائج`}
+            value={formatNumberEN(filteredRiskyCount)}
+            hint={`${formatNumberEN(filteredFailedCount)} فشل مباشر ضمن النتائج`}
             icon={ShieldAlert}
           />
           <MetricCard
             title="الجلسات المرصودة"
-            value={uniqueSessionsCount.toLocaleString("ar-SA")}
-            hint={`${uniqueActorsCount.toLocaleString("ar-SA")} منفذ أو مستخدم مميز`}
+            value={formatNumberEN(uniqueSessionsCount)}
+            hint={`${formatNumberEN(uniqueActorsCount)} منفذ أو مستخدم مميز`}
             icon={Fingerprint}
           />
         </div>
@@ -962,7 +949,7 @@ export default function AuditLogPage() {
                 </Button>
               </div>
               <div className="text-sm text-muted-foreground">
-                {filteredLogs.length.toLocaleString("ar-SA")} نتيجة مطابقة
+                {formatNumberEN(filteredLogs.length)} نتيجة مطابقة
               </div>
             </div>
           </CardContent>
@@ -997,7 +984,7 @@ export default function AuditLogPage() {
                 {topChangedFields.length ? (
                   topChangedFields.map((field) => (
                     <Badge key={field.label} variant="outline" className="bg-muted/40">
-                      {field.label} · {field.count}
+                      {field.label} · {formatNumberEN(field.count)}
                     </Badge>
                   ))
                 ) : (
@@ -1186,7 +1173,7 @@ export default function AuditLogPage() {
                                   #{log.entityId}
                                 </TableCell>
                                 <TableCell className="align-top">
-                                  {log.changes.length.toLocaleString("ar-SA")}
+                                  {formatNumberEN(log.changes.length)}
                                 </TableCell>
                               </TableRow>
                             );

@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 
 import DashboardLayout from "@/components/DashboardLayout";
+import AdminPanelStatCard from "@/components/AdminPanelStatCard";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -42,6 +43,7 @@ import { toast } from "sonner";
 import { collection, onSnapshot, doc, Timestamp } from "firebase/firestore";
 import { db } from "@/_core/firebase";
 import { AUDIT_ACTIONS, auditedUpdateDoc, buildAuditSource } from "@/lib/auditLog";
+import { formatCurrencyEN, formatDateEN, formatNumberEN } from "@/lib/formatters";
 
 type UserDoc = {
   id: string;
@@ -70,8 +72,7 @@ function safeNum(x: any) {
 }
 
 function formatCurrencySAR(value: any) {
-  const amount = safeNum(value);
-  return `${amount.toLocaleString("ar-SA")} ر.س`;
+  return formatCurrencyEN(safeNum(value));
 }
 
 function formatDateAR(value: any) {
@@ -80,11 +81,7 @@ function formatDateAR(value: any) {
 
   if (!date || Number.isNaN(date.getTime())) return "—";
 
-  return date.toLocaleDateString("ar-SA", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
+  return formatDateEN(date);
 }
 
 function getRoleBadge(role?: string) {
@@ -283,41 +280,34 @@ export default function ClientsManagement() {
 
         {/* Stats */}
         <div className="grid gap-4 md:grid-cols-3">
-          <Card className="border-slate-200/80 bg-gradient-to-br from-white via-white to-slate-50 shadow-sm">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-2 text-slate-600">
-                <Users className="w-4 h-4" />
-                إجمالي العملاء
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-slate-900">{users.length}</div>
-              <p className="mt-2 text-sm text-slate-500">إجمالي الحسابات المعروضة في القائمة</p>
-            </CardContent>
-          </Card>
+          <AdminPanelStatCard
+            title="إجمالي العملاء"
+            value={users.length}
+            description="إجمالي الحسابات المعروضة في صفحة إدارة العملاء ضمن هذا العرض الحالي."
+            helper={`${formatNumberEN(filteredUsers.length)} حساب مطابق للبحث الحالي`}
+            icon={<Users className="h-5 w-5" />}
+            accent="blue"
+          />
 
-          <Card className="border-amber-200/70 bg-gradient-to-br from-amber-50 via-white to-white shadow-sm">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-2 text-amber-700">
-                <Crown className="w-4 h-4" />
-                عملاء VIP
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-amber-700">{vipUsers}</div>
-              <p className="mt-2 text-sm text-amber-600/80">الحسابات المصنفة ضمن الفئة المميزة</p>
-            </CardContent>
-          </Card>
+          <AdminPanelStatCard
+            title="عملاء VIP"
+            value={vipUsers}
+            description="الحسابات المصنفة ضمن الفئة المميزة والتي تحمل حالة VIP داخل النظام."
+            helper="عملاء مميزون بمتابعة وحالة خاصة"
+            icon={<Crown className="h-5 w-5" />}
+            accent="amber"
+            className="border-amber-300/40 bg-[radial-gradient(circle_at_top_right,rgba(242,183,5,0.32),transparent_34%),linear-gradient(135deg,#3b2a03_0%,#7a5610_48%,#3a2500_100%)] shadow-xl shadow-amber-950/20"
+            valueClassName="text-[#FFF4C2]"
+          />
 
-          <Card className="border-slate-200/80 bg-gradient-to-br from-white via-white to-slate-50 shadow-sm">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm text-slate-600">عملاء عاديون</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-slate-900">{regularUsers}</div>
-              <p className="mt-2 text-sm text-slate-500">الحسابات غير المصنفة كعملاء VIP</p>
-            </CardContent>
-          </Card>
+          <AdminPanelStatCard
+            title="عملاء عاديون"
+            value={regularUsers}
+            description="الحسابات غير المصنفة ضمن فئة VIP وتظهر ضمن القاعدة التشغيلية العامة."
+            helper="يشمل كل العملاء غير المميزين"
+            icon={<Users className="h-5 w-5" />}
+            accent="slate"
+          />
         </div>
 
         {/* Search */}
@@ -335,7 +325,7 @@ export default function ClientsManagement() {
               </div>
 
               <div className="inline-flex w-fit items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm font-medium text-slate-600">
-                {filteredUsers.length.toLocaleString("ar-SA")} نتيجة
+                {formatNumberEN(filteredUsers.length)} نتيجة
               </div>
             </div>
           </CardContent>

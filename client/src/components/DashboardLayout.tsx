@@ -40,6 +40,7 @@ import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
 import { Button } from "./ui/button";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { cn } from "@/lib/utils";
 
 type RoleKey = "owner" | "admin" | "accountant" | "staff";
 
@@ -51,25 +52,69 @@ type MenuItem = {
 };
 
 const menuItems: MenuItem[] = [
-  { icon: LayoutDashboard, label: "لوحة التحكم", path: "/dashboard", allow: ["owner", "admin", "accountant", "staff"] },
+  {
+    icon: LayoutDashboard,
+    label: "لوحة التحكم",
+    path: "/dashboard",
+    allow: ["owner", "admin", "accountant", "staff"],
+  },
 
-  { icon: Building2, label: "المشاريع", path: "/admin/projects", allow: ["owner", "admin"] },
+  {
+    icon: Building2,
+    label: "المشاريع",
+    path: "/admin/projects",
+    allow: ["owner", "admin"],
+  },
 
-  { icon: DollarSign, label: "الشؤون المالية", path: "/admin/financial", allow: ["owner", "accountant"] },
+  {
+    icon: DollarSign,
+    label: "الشؤون المالية",
+    path: "/admin/financial",
+    allow: ["owner", "accountant"],
+  },
 
-  { icon: Users, label: "العملاء", path: "/admin/clients", allow: ["owner", "admin"] },
+  {
+    icon: Users,
+    label: "العملاء",
+    path: "/admin/clients",
+    allow: ["owner", "admin"],
+  },
 
-  { icon: Crown, label: "إدارة VIP", path: "/admin/vip", allow: ["owner", "admin"] },
+  {
+    icon: Crown,
+    label: "إدارة VIP",
+    path: "/admin/vip",
+    allow: ["owner", "admin"],
+  },
 
-  { icon: MessageSquare, label: "سجل طلبات الاستثمار", path: "/admin/messages", allow: ["owner", "admin", "staff"] },
+  {
+    icon: MessageSquare,
+    label: "سجل طلبات الاستثمار",
+    path: "/admin/messages",
+    allow: ["owner", "admin", "staff"],
+  },
 
-  { icon: FileText, label: "سجل التعديلات", path: "/admin/audit-log", allow: ["owner", "admin"] },
+  {
+    icon: FileText,
+    label: "سجل التعديلات",
+    path: "/admin/audit-log",
+    allow: ["owner", "admin"],
+  },
 
-  { icon: BarChart3, label: "التقارير", path: "/admin/reports", allow: ["owner", "admin", "accountant"] },
+  {
+    icon: BarChart3,
+    label: "التقارير",
+    path: "/admin/reports",
+    allow: ["owner", "admin", "accountant"],
+  },
 
-  { icon: Settings, label: "الإعدادات", path: "/admin/settings", allow: ["owner"] },
+  {
+    icon: Settings,
+    label: "الإعدادات",
+    path: "/admin/settings",
+    allow: ["owner"],
+  },
 ];
-
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";
 const DEFAULT_WIDTH = 280;
@@ -98,7 +143,7 @@ function splitLocalPart(local: string) {
 
   return camel
     .split(" ")
-    .map((w) => w.trim())
+    .map(w => w.trim())
     .filter(Boolean)
     .slice(0, 4); // لا نطوّل
 }
@@ -191,7 +236,7 @@ function nameFromEmail(email?: string) {
   if (!parts.length) return "مستخدم";
 
   // “تعريب” الاسم (تقريبي)
-  const arParts = parts.map((p) => latinToArabicApprox(p));
+  const arParts = parts.map(p => latinToArabicApprox(p));
   const arName = arParts.join(" ").trim();
 
   // إذا التعريب طلع غريب جداً، نعرض نسخة مرتبة إنجليزي كخطة بديلة
@@ -238,8 +283,8 @@ export default function DashboardLayout({
               Sign in to continue
             </h1>
             <p className="text-sm text-muted-foreground text-center max-w-sm">
-              Access to this dashboard requires authentication. Continue to launch
-              the login flow.
+              Access to this dashboard requires authentication. Continue to
+              launch the login flow.
             </p>
           </div>
           <Button
@@ -259,7 +304,7 @@ export default function DashboardLayout({
   return (
     <SidebarProvider
       dir={layoutDir}
-      className="flex-row"
+      className="min-h-screen flex-row items-stretch"
       style={
         {
           "--sidebar-width": `${sidebarWidth}px`,
@@ -287,7 +332,6 @@ function DashboardLayoutContent({
   setSidebarWidth,
   sidebarSide,
 }: DashboardLayoutContentProps) {
-
   const { user, logout } = useAuth();
   const [location, setLocation] = useLocation();
   const { state, toggleSidebar } = useSidebar();
@@ -307,15 +351,11 @@ function DashboardLayoutContent({
   // ✅ 2) العناصر المسموحة
   const visibleMenuItems = useMemo(() => {
     if (!role) return [];
-    return menuItems.filter((it) => it.allow.includes(role));
+    return menuItems.filter(it => it.allow.includes(role));
   }, [role]);
 
   // ✅ 3) العنصر النشط
-  const activeMenuItem = visibleMenuItems.find(
-    (item) => item.path === location
-  );
-
-
+  const activeMenuItem = visibleMenuItems.find(item => item.path === location);
 
   // ✅ اسم العرض: يفضّل user.name، وإلا من الإيميل (بالعربي)
   // ✅ اسم العرض: استخدم displayName من useAuth أولاً (مو name)
@@ -328,7 +368,6 @@ function DashboardLayoutContent({
 
     return nameFromEmail((user as any)?.email);
   }, [user]);
-
 
   const titleText = useMemo(() => {
     const t = String((user as any)?.title ?? "").trim();
@@ -381,21 +420,30 @@ function DashboardLayoutContent({
 
   return (
     <>
-      <div className="relative shrink-0" ref={sidebarRef}>
+      <div
+        className={cn(
+          "relative shrink-0",
+          !isMobile && "sticky top-0 h-screen self-start"
+        )}
+        ref={sidebarRef}
+      >
         <Sidebar
           side={sidebarSide}
           collapsible="icon"
-          className={`${isRight ? "border-l border-border/60" : "border-r border-border/60"}${isMobile ? " bg-white" : ""}`}
+          className={cn(
+            "bg-slate-950/95 text-slate-100 shadow-2xl shadow-slate-950/20 backdrop-blur-xl",
+            isRight ? "border-l border-white/10" : "border-r border-white/10"
+          )}
           disableTransition={isResizing}
         >
-          <SidebarHeader className="h-16 justify-center">
+          <SidebarHeader className="h-16 justify-center border-b border-white/10 bg-slate-950/90">
             <div className="flex items-center gap-2 px-2 transition-all w-full">
               <button
                 onClick={toggleSidebar}
-                className="h-8 w-8 flex items-center justify-center hover:bg-accent rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring shrink-0"
+                className="h-8 w-8 shrink-0 rounded-lg text-slate-400 transition-colors hover:bg-white/8 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
                 aria-label="Toggle navigation"
               >
-                <PanelLeft className="h-4 w-4 text-muted-foreground rtl:rotate-180" />
+                <PanelLeft className="h-4 w-4 rtl:rotate-180" />
               </button>
 
               {!isCollapsed ? (
@@ -413,7 +461,7 @@ function DashboardLayoutContent({
                     <Button
                       variant="outline"
                       size="sm"
-                      className="gap-2"
+                      className="gap-2 border-white/10 bg-white/[0.04] text-slate-100 hover:bg-white/[0.08] hover:text-white"
                       onClick={() => setLocation("/")}
                     >
                       <Home className="h-4 w-4" />
@@ -425,9 +473,9 @@ function DashboardLayoutContent({
             </div>
           </SidebarHeader>
 
-          <SidebarContent className="gap-0">
+          <SidebarContent className="gap-0 bg-transparent">
             <SidebarMenu className="px-2 py-1">
-              {visibleMenuItems.map((item) => {
+              {visibleMenuItems.map(item => {
                 const isActive = location === item.path;
                 return (
                   <SidebarMenuItem key={item.path}>
@@ -435,7 +483,7 @@ function DashboardLayoutContent({
                       isActive={isActive}
                       onClick={() => setLocation(item.path)}
                       tooltip={item.label}
-                      className="h-10 transition-all font-normal"
+                      className="h-10 rounded-xl font-normal text-slate-300 transition-all hover:text-white data-[active=true]:bg-white/10 data-[active=true]:text-white"
                     >
                       <item.icon
                         className={`h-4 w-4 ${isActive ? "text-primary" : ""}`}
@@ -448,20 +496,22 @@ function DashboardLayoutContent({
             </SidebarMenu>
           </SidebarContent>
 
-          <SidebarFooter className="p-3">
+          <SidebarFooter className="border-t border-white/10 bg-slate-950/90 p-3">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button className="flex items-center gap-3 rounded-lg px-1 py-1 hover:bg-accent/50 transition-colors w-full text-left group-data-[collapsible=icon]:justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                  <Avatar className="h-9 w-9 border shrink-0">
-                    <AvatarFallback className="text-xs font-medium">
-                      {String(displayName ?? "م").trim().charAt(0)}
+                <button className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition-colors hover:bg-white/6 group-data-[collapsible=icon]:justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-white/20">
+                  <Avatar className="h-9 w-9 shrink-0 border border-white/10">
+                    <AvatarFallback className="bg-white/[0.06] text-xs font-medium text-slate-100">
+                      {String(displayName ?? "م")
+                        .trim()
+                        .charAt(0)}
                     </AvatarFallback>
                   </Avatar>
                   <div className="flex-1 min-w-0 group-data-[collapsible=icon]:hidden">
-                    <p className="text-sm font-medium truncate leading-none">
+                    <p className="truncate text-sm font-medium leading-none text-slate-100">
                       {displayNameWithTitle}
                     </p>
-                    <p className="text-xs text-muted-foreground truncate mt-1.5">
+                    <p className="mt-1.5 truncate text-xs text-slate-400">
                       {(user as any)?.email || "-"}
                     </p>
                   </div>
@@ -482,8 +532,9 @@ function DashboardLayoutContent({
         </Sidebar>
 
         <div
-          className={`absolute top-0 ${isRight ? "left-0" : "right-0"} w-1 h-full cursor-col-resize hover:bg-primary/20 transition-colors ${isCollapsed ? "hidden" : ""
-            }`}
+          className={`absolute top-0 ${isRight ? "left-0" : "right-0"} w-1 h-full cursor-col-resize hover:bg-primary/20 transition-colors ${
+            isCollapsed ? "hidden" : ""
+          }`}
           onMouseDown={() => {
             if (isCollapsed) return;
             setIsResizing(true);

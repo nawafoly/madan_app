@@ -7,6 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { formatCurrencyShort, formatNumberEN } from "@/lib/formatters";
+import { getClientInvestmentStatusMeta } from "@/lib/workflowStatusMeta";
 
 import { useAuth } from "@/_core/hooks/useAuth";
 import { db } from "@/_core/firebase";
@@ -144,22 +146,8 @@ export default function MyDashboard() {
   );
 
   const statusBadge = (status: string) => {
-    const map: any = {
-      pending: ["معلق", "bg-orange-500"],
-      approved: ["معتمد", "bg-green-500"],
-      active: ["نشط", "bg-blue-500"],
-      rejected: ["مرفوض", "bg-red-500"],
-      completed: ["مكتمل", "bg-gray-500"],
-      pending_contract: ["بانتظار العقد", "bg-purple-600"],
-      signing: ["قيد التوقيع", "bg-indigo-600"],
-      signed: ["تم التوقيع", "bg-green-700"],
-    };
-    map.approved = ["بانتظار التفعيل", "bg-amber-500"];
-    map.pending_contract = ["العقد قيد التجهيز", "bg-purple-600"];
-    map.signing = ["بانتظار توقيعك", "bg-indigo-600"];
-    map.signed = ["بانتظار الاعتماد", "bg-amber-600"];
-    const [label, cls] = map[status] || map.pending;
-    return <Badge className={cls}>{label}</Badge>;
+    const meta = getClientInvestmentStatusMeta(status);
+    return <Badge className={meta.cls}>{meta.label}</Badge>;
   };
 
   /* =========================
@@ -230,18 +218,18 @@ export default function MyDashboard() {
           <Stat
             title="إجمالي الاستثمارات"
             icon={DollarSign}
-            value={`${totalInvested.toLocaleString()} ر.س`}
+            value={formatCurrencyShort(totalInvested)}
           />
           <Stat
             title="العائد المتوقع"
             icon={TrendingUp}
-            value={`${totalExpectedReturn.toLocaleString()} ر.س`}
+            value={formatCurrencyShort(totalExpectedReturn)}
             green
           />
           <Stat
             title="الأرباح حتى اليوم"
             icon={TrendingUp}
-            value={`${Math.round(profitToDate).toLocaleString()} ر.س`}
+            value={formatCurrencyShort(Math.round(profitToDate))}
             green
           />
           <Stat
@@ -264,6 +252,8 @@ export default function MyDashboard() {
 
 /* ========================= */
 function Stat({ title, icon: Icon, value, green }: any) {
+  const displayValue = typeof value === "number" ? formatNumberEN(value) : value;
+
   return (
     <Card>
       <CardHeader className="flex justify-between pb-2">
@@ -272,7 +262,7 @@ function Stat({ title, icon: Icon, value, green }: any) {
       </CardHeader>
       <CardContent>
         <div className={`text-3xl font-bold ${green ? "text-green-600" : ""}`}>
-          {value}
+          {displayValue}
         </div>
       </CardContent>
     </Card>

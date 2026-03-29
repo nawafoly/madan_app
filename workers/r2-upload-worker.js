@@ -224,7 +224,7 @@ async function handleUpload(request, bucket, db) {
   }
 
   try {
-    console.log("[worker] d1 insert start", {
+    console.log("[worker] d1 upsert start", {
       id: record.id,
       filePath: record.filePath,
       category: record.category,
@@ -232,7 +232,7 @@ async function handleUpload(request, bucket, db) {
       entityId: record.entityId,
     });
     await insertFileMetadata(db, record);
-    console.log("[worker] d1 insert success", {
+    console.log("[worker] d1 upsert success", {
       id: record.id,
       filePath: record.filePath,
     });
@@ -249,7 +249,7 @@ async function handleUpload(request, bucket, db) {
     }
 
     console.error("[worker] failed", {
-      stage: "d1_insert",
+      stage: "d1_upsert",
       message: errorToMessage(error),
       filePath,
       cleanupDeleted,
@@ -658,6 +658,25 @@ async function insertFileMetadata(db, record) {
           version,
           bucket
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(file_path) DO UPDATE SET
+          id = excluded.id,
+          kind = excluded.kind,
+          category = excluded.category,
+          entity_type = excluded.entity_type,
+          entity_id = excluded.entity_id,
+          project_id = excluded.project_id,
+          investment_id = excluded.investment_id,
+          contract_id = excluded.contract_id,
+          request_id = excluded.request_id,
+          file_name = excluded.file_name,
+          file_url = excluded.file_url,
+          content_type = excluded.content_type,
+          file_size = excluded.file_size,
+          uploaded_by = excluded.uploaded_by,
+          uploaded_at = excluded.uploaded_at,
+          status = excluded.status,
+          version = excluded.version,
+          bucket = excluded.bucket
       `
     )
     .bind(

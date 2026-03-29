@@ -7,6 +7,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { formatCurrencyShort, formatDateEN, formatNumberEN } from "@/lib/formatters";
+import { getClientInvestmentStatusMeta } from "@/lib/workflowStatusMeta";
+import { cn } from "@/lib/utils";
 
 import { useAuth } from "@/_core/hooks/useAuth";
 import { db } from "@/_core/firebase";
@@ -20,6 +23,7 @@ import {
   Building2,
   FileText,
   ArrowLeft,
+  type LucideIcon,
 } from "lucide-react";
 
 import {
@@ -36,6 +40,12 @@ type Investment = any;
 type Project = any;
 type InterestRequest = any;
 
+function formatStatValue(value: string | number, format: "plain" | "number" | "sar") {
+  if (format === "sar") return formatCurrencyShort(value);
+  if (format === "number" && typeof value === "number") return formatNumberEN(value);
+  return String(value ?? "—");
+}
+
 function toDateSafe(v: any) {
   try {
     if (!v) return null;
@@ -49,8 +59,7 @@ function toDateSafe(v: any) {
 }
 
 function formatDateAR(v: any) {
-  const d = toDateSafe(v);
-  return d ? d.toLocaleDateString("ar-SA") : "—";
+  return formatDateEN(toDateSafe(v));
 }
 
 function shouldIgnoreFirestoreError(error: unknown) {
@@ -262,28 +271,8 @@ export default function MyInvestments() {
   const pendingTotal = pendingInvestmentsOnly + pendingRequests;
 
   const statusBadge = (status: string) => {
-    const map: any = {
-      reviewing: ["قيد المراجعة", "bg-blue-600"],
-      pending: ["قيد المراجعة", "bg-blue-600"],
-      pending_review: ["قيد المراجعة", "bg-blue-600"],
-      approved: ["بانتظار التفعيل", "bg-amber-600"],
-      active: ["نشط", "bg-emerald-700"],
-      rejected: ["مرفوض", "bg-red-600"],
-      completed: ["مكتمل", "bg-gray-600"],
-
-      pending_contract: ["العقد قيد التجهيز", "bg-purple-600"],
-      signing: ["بانتظار توقيعك", "bg-indigo-600"],
-      signed: ["بانتظار الاعتماد", "bg-amber-600"],
-
-      // قد تظهر حالات أخرى في المستقبل
-      new: ["جديد", "bg-orange-500"],
-      in_progress: ["قيد المعالجة", "bg-blue-600"],
-      resolved: ["تمت المعالجة", "bg-green-600"],
-      closed: ["مغلق", "bg-gray-600"],
-      needs_account: ["يتطلب حساب", "bg-yellow-600"],
-    };
-    const [label, cls] = map[status] || ["قيد المراجعة", "bg-blue-600"];
-    return <Badge className={cls}>{label}</Badge>;
+    const meta = getClientInvestmentStatusMeta(status);
+    return <Badge className={meta.cls}>{meta.label}</Badge>;
   };
 
   // ✅ not logged in
@@ -392,16 +381,18 @@ export default function MyInvestments() {
           <Stat
             title="إجمالي الاستثمارات"
             icon={DollarSign}
-            value={`${totalInvested.toLocaleString()} ر.س`}
+            value={totalInvested}
+            format="sar"
           />
           <Stat
             title="العائد المتوقع"
             icon={TrendingUp}
-            value={`${totalExpectedReturn.toLocaleString()} ر.س`}
-            green
+            value={totalExpectedReturn}
+            format="sar"
+            tone="success"
           />
-          <Stat title="استثمارات نشطة" icon={CheckCircle} value={activeInvestments} />
-          <Stat title="قيد المراجعة" icon={Clock} value={pendingTotal} />
+          <Stat title="استثمارات نشطة" icon={CheckCircle} value={activeInvestments} format="number" />
+          <Stat title="قيد المراجعة" icon={Clock} value={pendingTotal} format="number" />
         </div>
 
         {/* ✅ Requests (interest_requests) */}
@@ -409,7 +400,7 @@ export default function MyInvestments() {
           <CardHeader className="flex items-center justify-between">
             <CardTitle>طلباتي الاستثمارية</CardTitle>
             <Link href="/projects">
-              <Button variant="outline">إرسال طلب جديد</Button>
+              <Button variant="outline">طلب استثمار جديد</Button>
             </Link>
           </CardHeader>
 
@@ -443,7 +434,7 @@ export default function MyInvestments() {
                             {amount != null && (
                               <p className="mt-2 text-sm">
                                 <span className="text-muted-foreground">المبلغ: </span>
-                                <b>{Number(amount).toLocaleString()} ر.س</b>
+                                <b>{formatCurrencyShort(amount)}</b>
                               </p>
                             )}
 
@@ -520,7 +511,7 @@ export default function MyInvestments() {
                             {inv?.amount != null && (
                               <p className="mt-2 text-sm">
                                 <span className="text-muted-foreground">المبلغ: </span>
-                                <b>{Number(inv.amount).toLocaleString()} ر.س</b>
+                                <b>{formatCurrencyShort(inv.amount)}</b>
                               </p>
                             )}
                           </div>
@@ -601,16 +592,61 @@ export default function MyInvestments() {
 /* =========================
    Small components
 ========================= */
-function Stat({ title, icon: Icon, value, green }: any) {
+type StatProps = {
+  title: string;
+  icon: LucideIcon;
+  value: string | number;
+  format?: "plain" | "number" | "sar";
+  tone?: "default" | "success";
+};
+
+function Stat({
+  title,
+  icon: Icon,
+  value,
+  format = "plain",
+  tone = "default",
+}: StatProps) {
+  const isSuccess = tone === "success";
+  const displayValue = formatStatValue(value, format);
+
   return (
-    <Card>
-      <CardHeader className="flex justify-between pb-2">
-        <CardTitle className="text-sm">{title}</CardTitle>
-        <Icon className={`w-5 h-5 ${green ? "text-green-600" : "text-primary"}`} />
+    <Card className="relative overflow-hidden border border-white/10 bg-gradient-to-br from-[#0D0D0D] via-[#1a1f2e] to-[#0a0f1f] text-white shadow-[0_22px_55px_rgba(2,6,23,0.34)]">
+      <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.08),transparent_38%,transparent_100%)]" />
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/35 to-transparent" />
+
+      <CardHeader className="relative flex flex-row items-start justify-between gap-3 space-y-0 pb-3">
+        <div className="min-w-0 space-y-2">
+          <CardTitle className="text-sm font-medium tracking-tight text-white/70">
+            {title}
+          </CardTitle>
+        </div>
+
+        <div
+          className={cn(
+            "shrink-0 rounded-2xl border p-2.5 backdrop-blur-sm",
+            isSuccess
+              ? "border-emerald-400/20 bg-emerald-400/10"
+              : "border-[#F2B705]/20 bg-[#F2B705]/10"
+          )}
+        >
+          <Icon
+            className={cn(
+              "h-5 w-5",
+              isSuccess ? "text-emerald-300" : "text-[#F2B705]"
+            )}
+          />
+        </div>
       </CardHeader>
-      <CardContent>
-        <div className={`text-3xl font-bold ${green ? "text-green-600" : ""}`}>
-          {value}
+
+      <CardContent className="relative pt-0">
+        <div
+          className={cn(
+            "min-w-0 whitespace-normal break-words [overflow-wrap:anywhere] text-[clamp(1.45rem,5vw,2.7rem)] font-semibold leading-[1.1] tracking-tight tabular-nums sm:text-[clamp(1.7rem,3.6vw,3rem)]",
+            isSuccess ? "text-emerald-300" : "text-white"
+          )}
+        >
+          {displayValue}
         </div>
       </CardContent>
     </Card>

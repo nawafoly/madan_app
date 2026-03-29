@@ -138,7 +138,7 @@ function SidebarProvider({
             } as React.CSSProperties
           }
           className={cn(
-            "group/sidebar-wrapper has-data-[variant=inset]:bg-sidebar flex min-h-svh w-full",
+            "group/sidebar-wrapper has-data-[variant=inset]:bg-sidebar flex min-h-screen w-full items-stretch",
             className
           )}
           {...props}
@@ -212,7 +212,7 @@ function Sidebar({
   return (
     <div
       className={cn(
-        "group peer text-sidebar-foreground hidden md:flex flex-col shrink-0 overflow-hidden",
+        "group peer text-sidebar-foreground hidden shrink-0 self-start overflow-hidden md:flex md:h-screen md:flex-col",
         disableTransition
           ? "transition-none"
           : "transition-[width] duration-200 ease-linear",
@@ -233,7 +233,7 @@ function Sidebar({
       <div
         data-slot="sidebar-container"
         className={cn(
-          "sticky top-0 z-10 flex h-svh w-full",
+          "sticky top-0 z-20 flex h-screen w-full",
           disableTransition
             ? "transition-none"
             : "transition-[width] duration-200 ease-linear",
@@ -311,7 +311,7 @@ function SidebarInset({ className, ...props }: React.ComponentProps<"main">) {
     <main
       data-slot="sidebar-inset"
       className={cn(
-        "bg-transparent relative flex min-w-0 w-full flex-1 flex-col",
+        "bg-transparent relative flex min-h-screen min-w-0 w-full flex-1 flex-col",
         "md:peer-data-[variant=inset]:m-2 md:peer-data-[variant=inset]:ml-0 md:peer-data-[variant=inset]:rounded-xl md:peer-data-[variant=inset]:shadow-sm md:peer-data-[variant=inset]:peer-data-[state=collapsed]:ml-2",
         className
       )}
@@ -724,5 +724,5 @@ export {
   SidebarRail,
   SidebarSeparator,
   SidebarTrigger,
-  useSidebar
+  useSidebar,
 };

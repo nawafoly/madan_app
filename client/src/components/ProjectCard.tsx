@@ -4,6 +4,12 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Link } from "wouter";
 import { TrendingUp, Clock, Users, MapPin } from "lucide-react";
+import {
+  formatCurrencyEN,
+  formatNumberEN,
+  formatPercentEN,
+  normalizeEnglishDigits,
+} from "@/lib/formatters";
 
 /**
  * ✅ Client-only Project type (NO DB / NO backend)
@@ -100,8 +106,8 @@ export default function ProjectCard({ project }: ProjectCardProps) {
         {project.issueNumber != null && (
           <div className="absolute top-3 right-3">
             <div className="bg-black/70 backdrop-blur-sm px-3 py-1 rounded-full">
-              <span className="text-white text-sm font-semibold">
-                #{project.issueNumber}
+                <span className="text-white text-sm font-semibold">
+                #{normalizeEnglishDigits(project.issueNumber)}
               </span>
             </div>
           </div>
@@ -128,7 +134,7 @@ export default function ProjectCard({ project }: ProjectCardProps) {
             <div className="flex items-center justify-center gap-1 text-primary mb-1">
               <TrendingUp className="w-4 h-4" />
               <span className="text-lg font-bold">
-                {project.annualReturn ?? 0}%
+                {formatPercentEN(project.annualReturn ?? 0, { maximumFractionDigits: 0 })}
               </span>
             </div>
             <span className="text-xs text-muted-foreground">عائد سنوي</span>
@@ -137,7 +143,7 @@ export default function ProjectCard({ project }: ProjectCardProps) {
           <div className="text-center">
             <div className="flex items-center justify-center gap-1 text-primary mb-1">
               <Clock className="w-4 h-4" />
-              <span className="text-lg font-bold">{project.duration ?? 0}</span>
+              <span className="text-lg font-bold">{formatNumberEN(project.duration ?? 0)}</span>
             </div>
             <span className="text-xs text-muted-foreground">شهر</span>
           </div>
@@ -146,7 +152,7 @@ export default function ProjectCard({ project }: ProjectCardProps) {
             <div className="flex items-center justify-center gap-1 text-primary mb-1">
               <Users className="w-4 h-4" />
               <span className="text-lg font-bold">
-                {project.investorsCount ?? 0}
+                {formatNumberEN(project.investorsCount ?? 0)}
               </span>
             </div>
             <span className="text-xs text-muted-foreground">مستثمر</span>
@@ -158,15 +164,18 @@ export default function ProjectCard({ project }: ProjectCardProps) {
           <div className="flex justify-between text-sm">
             <span className="text-muted-foreground">التقدم</span>
             <span className="font-semibold text-primary">
-              {Number.isFinite(progress) ? progress.toFixed(1) : "0.0"}%
+              {formatPercentEN(Number.isFinite(progress) ? progress : 0, {
+                minimumFractionDigits: 1,
+                maximumFractionDigits: 1,
+              })}
             </span>
           </div>
 
           <Progress value={Number.isFinite(progress) ? progress : 0} className="h-2" />
 
           <div className="flex justify-between text-xs text-muted-foreground">
-            <span>{Number(project.currentAmount || 0).toLocaleString()} ر.س</span>
-            <span>{Number(project.targetAmount || 0).toLocaleString()} ر.س</span>
+            <span>{formatCurrencyEN(Number(project.currentAmount || 0))}</span>
+            <span>{formatCurrencyEN(Number(project.targetAmount || 0))}</span>
           </div>
         </div>
       </CardContent>

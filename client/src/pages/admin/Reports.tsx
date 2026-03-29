@@ -1,8 +1,10 @@
 // client/src/pages/admin/Reports.tsx
 import { useEffect, useMemo, useState } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
+import AdminPanelStatCard from "@/components/AdminPanelStatCard";
 import { collection, onSnapshot, Timestamp } from "firebase/firestore";
 import { db } from "@/_core/firebase";
+import { formatCurrencyEN, formatNumberEN } from "@/lib/formatters";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -316,18 +318,40 @@ export default function Reports() {
         ) : null}
 
         {/* Summary */}
-        <div className="grid gap-4 md:grid-cols-4">
-          <Summary
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <AdminPanelStatCard
             title="إجمالي الاستثمارات"
-            value={`${totalInvestments.toLocaleString()} ر.س`}
-            icon={<DollarSign />}
+            value={formatCurrencyEN(totalInvestments)}
+            description="القيمة الإجمالية للاستثمارات المحتسبة ضمن بيانات التقارير المحملة حاليًا."
+            helper={`سنة التقرير: ${selectedYear}`}
+            icon={<DollarSign className="h-5 w-5" />}
+            accent="amber"
+            valueClassName="text-3xl sm:text-4xl"
           />
-          <Summary title="عدد المشاريع" value={totalProjects} icon={<Building2 />} />
-          <Summary title="عدد المستثمرين" value={totalInvestors} icon={<Users />} />
-          <Summary
+          <AdminPanelStatCard
+            title="عدد المشاريع"
+            value={totalProjects}
+            description="إجمالي المشاريع الداخلة في التقارير والتحليلات الحالية عبر النظام."
+            helper={`نوع العرض: ${reportType === "monthly" ? "شهري" : reportType === "quarterly" ? "ربع سنوي" : "سنوي"}`}
+            icon={<Building2 className="h-5 w-5" />}
+            accent="blue"
+          />
+          <AdminPanelStatCard
+            title="عدد المستثمرين"
+            value={totalInvestors}
+            description="عدد المستثمرين الذين ظهرت لهم بيانات فعلية داخل نطاق التقرير الحالي."
+            helper="مبني على السجلات المحملة من المستخدمين والاستثمارات"
+            icon={<Users className="h-5 w-5" />}
+            accent="emerald"
+          />
+          <AdminPanelStatCard
             title="متوسط الاستثمار"
-            value={`${Math.round(avgInvestment).toLocaleString()} ر.س`}
-            icon={<TrendingUp />}
+            value={formatCurrencyEN(Math.round(avgInvestment))}
+            description="متوسط قيمة الاستثمار الواحد وفق البيانات الحالية المستخدمة في هذا التقرير."
+            helper={`موزع على ${formatNumberEN(totalInvestors)} مستثمر`}
+            icon={<TrendingUp className="h-5 w-5" />}
+            accent="slate"
+            valueClassName="text-3xl sm:text-4xl"
           />
         </div>
 
@@ -373,20 +397,6 @@ export default function Reports() {
 /* =========================
    Small components
 ========================= */
-
-function Summary({ title, value, icon }: any) {
-  return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between pb-2">
-        <CardTitle className="text-sm">{title}</CardTitle>
-        {icon}
-      </CardHeader>
-      <CardContent>
-        <div className="text-2xl font-bold">{value}</div>
-      </CardContent>
-    </Card>
-  );
-}
 
 function ChartPie({ title, data }: any) {
   return (

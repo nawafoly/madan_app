@@ -1,6 +1,7 @@
 // client/src/pages/admin/Financial.tsx
 import { useEffect, useMemo, useState } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
+import AdminPanelStatCard from "@/components/AdminPanelStatCard";
 import {
   collection,
   doc,
@@ -17,6 +18,7 @@ import {
   buildAuditSource,
   runAuditedOperation,
 } from "@/lib/auditLog";
+import { getClientInvestmentStatusMeta } from "@/lib/workflowStatusMeta";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -43,6 +45,11 @@ import { CheckCircle, DollarSign, TrendingUp, Clock } from "lucide-react";
 import { toast } from "sonner";
 
 import { PDFDocument } from "pdf-lib";
+import {
+  formatCurrencyEN,
+  formatDateEN,
+  formatNumberEN,
+} from "@/lib/formatters";
 
 /* =========================
    helpers
@@ -92,8 +99,7 @@ const downloadBytes = (bytes: Uint8Array, filename: string) => {
 };
 
 const fmtMoney = (n: any) => {
-  const x = Number(n || 0);
-  return x.toLocaleString("en-US");
+  return formatNumberEN(Number(n || 0));
 };
 
 const safeFile = (s: string) => String(s || "file").replace(/[^\w\-]+/g, "_");
@@ -217,15 +223,8 @@ export default function Financial() {
     projects.find((p) => p.id === pid)?.titleAr || "غير معروف";
 
   const getStatusBadge = (status: string) => {
-    const map: any = {
-      pending: { label: "معلق", cls: "bg-orange-500" },
-      approved: { label: "بانتظار التفعيل", cls: "bg-amber-500" },
-      rejected: { label: "مرفوض", cls: "bg-red-500" },
-      active: { label: "نشط", cls: "bg-blue-500" },
-      completed: { label: "مكتمل", cls: "bg-gray-500" },
-    };
-    const c = map[status] || map.pending;
-    return <Badge className={c.cls}>{c.label}</Badge>;
+    const meta = getClientInvestmentStatusMeta(status);
+    return <Badge className={meta.cls}>{meta.label}</Badge>;
   };
 
   /* =========================
@@ -552,7 +551,11 @@ export default function Financial() {
 
       const startAt = inv.startAt instanceof Timestamp ? inv.startAt.toDate() : null;
       const plannedEndAt = inv.plannedEndAt instanceof Timestamp ? inv.plannedEndAt.toDate() : null;
-      const reportDate = new Date().toLocaleDateString("ar-SA");
+      const reportDate = formatDateEN(new Date(), {
+        year: "numeric",
+        month: "numeric",
+        day: "numeric",
+      });
 
       const reportContent = `
 منصة معدن الاستثمارية
@@ -577,8 +580,8 @@ export default function Financial() {
 -------------------
 المبلغ المستثمر: ${fmtMoney(inv.amount)} ر.س
 حالة الاستثمار: ${getStatusBadge(inv.status).props.children}
-تاريخ بدء الاستثمار: ${startAt ? startAt.toLocaleDateString("ar-SA") : "-"}
-تاريخ الانتهاء المخطط: ${plannedEndAt ? plannedEndAt.toLocaleDateString("ar-SA") : "-"}
+تاريخ بدء الاستثمار: ${startAt ? formatDateEN(startAt, { year: "numeric", month: "numeric", day: "numeric" }) : "-"}
+تاريخ الانتهاء المخطط: ${plannedEndAt ? formatDateEN(plannedEndAt, { year: "numeric", month: "numeric", day: "numeric" }) : "-"}
 الربح المتوقع: ${inv.expectedProfit == null ? "-" : fmtMoney(inv.expectedProfit)} ر.س
 الربح الفعلي: ${inv.earnedProfit == null ? "-" : fmtMoney(inv.earnedProfit)} ر.س
 
@@ -623,7 +626,11 @@ export default function Financial() {
   const exportAllInvestorsPDF = async () => {
     try {
       const pdf = await PDFDocument.create();
-      const reportDate = new Date().toLocaleDateString("ar-SA");
+      const reportDate = formatDateEN(new Date(), {
+        year: "numeric",
+        month: "numeric",
+        day: "numeric",
+      });
 
       for (const inv of investments) {
         const u = users.find((user) => user.id === inv.userId);
@@ -655,8 +662,8 @@ export default function Financial() {
 -------------------
 المبلغ المستثمر: ${fmtMoney(inv.amount)} ر.س
 حالة الاستثمار: ${getStatusBadge(inv.status).props.children}
-تاريخ بدء الاستثمار: ${startAt ? startAt.toLocaleDateString("ar-SA") : "-"}
-تاريخ الانتهاء المخطط: ${plannedEndAt ? plannedEndAt.toLocaleDateString("ar-SA") : "-"}
+تاريخ بدء الاستثمار: ${startAt ? formatDateEN(startAt, { year: "numeric", month: "numeric", day: "numeric" }) : "-"}
+تاريخ الانتهاء المخطط: ${plannedEndAt ? formatDateEN(plannedEndAt, { year: "numeric", month: "numeric", day: "numeric" }) : "-"}
 الربح المتوقع: ${inv.expectedProfit == null ? "-" : fmtMoney(inv.expectedProfit)} ر.س
 الربح الفعلي: ${inv.earnedProfit == null ? "-" : fmtMoney(inv.earnedProfit)} ر.س
 
@@ -701,7 +708,11 @@ export default function Financial() {
   // ✅ Improved PDF export for all investors (separate PDFs)
   const exportAllInvestorsSeparatePDFs = async () => {
     try {
-      const reportDate = new Date().toLocaleDateString("ar-SA");
+      const reportDate = formatDateEN(new Date(), {
+        year: "numeric",
+        month: "numeric",
+        day: "numeric",
+      });
 
       for (const inv of investments) {
         const pdf = await PDFDocument.create();
@@ -734,8 +745,8 @@ export default function Financial() {
 -------------------
 المبلغ المستثمر: ${fmtMoney(inv.amount)} ر.س
 حالة الاستثمار: ${getStatusBadge(inv.status).props.children}
-تاريخ بدء الاستثمار: ${startAt ? startAt.toLocaleDateString("ar-SA") : "-"}
-تاريخ الانتهاء المخطط: ${plannedEndAt ? plannedEndAt.toLocaleDateString("ar-SA") : "-"}
+تاريخ بدء الاستثمار: ${startAt ? formatDateEN(startAt, { year: "numeric", month: "numeric", day: "numeric" }) : "-"}
+تاريخ الانتهاء المخطط: ${plannedEndAt ? formatDateEN(plannedEndAt, { year: "numeric", month: "numeric", day: "numeric" }) : "-"}
 الربح المتوقع: ${inv.expectedProfit == null ? "-" : fmtMoney(inv.expectedProfit)} ر.س
 الربح الفعلي: ${inv.earnedProfit == null ? "-" : fmtMoney(inv.earnedProfit)} ر.س
 
@@ -798,41 +809,34 @@ export default function Financial() {
         </div>
 
         {/* Stats */}
-        <div className="grid gap-4 md:grid-cols-3">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-2">
-                <Clock className="w-4 h-4" /> معلقة
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-orange-600">{pendingInvestments.length}</div>
-              <p className="text-sm mt-1">{totalPendingAmount.toLocaleString()} ر.س</p>
-            </CardContent>
-          </Card>
+        <div className="grid gap-4 md:grid-cols-2">
+          <AdminPanelStatCard
+            title="الاستثمارات المعلقة"
+            value={pendingInvestments.length}
+            description="الطلبات التي ما زالت تنتظر اعتمادًا ماليًا أو قرارًا تشغيليًا قبل الإقفال."
+            helper={`إجمالي المبالغ المعلقة: ${formatCurrencyEN(totalPendingAmount)}`}
+            icon={<Clock className="h-5 w-5" />}
+            accent="amber"
+          />
 
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-2">
-                <CheckCircle className="w-4 h-4" /> معتمدة
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-green-600">{approvedInvestments.length}</div>
-              <p className="text-sm mt-1">{totalApprovedAmount.toLocaleString()} ر.س</p>
-            </CardContent>
-          </Card>
+          <AdminPanelStatCard
+            title="الاستثمارات المعتمدة"
+            value={approvedInvestments.length}
+            description="الاستثمارات التي اجتازت الاعتماد وأصبحت ضمن المسار المالي النشط أو المكتمل."
+            helper={`إجمالي المبالغ المعتمدة: ${formatCurrencyEN(totalApprovedAmount)}`}
+            icon={<CheckCircle className="h-5 w-5" />}
+            accent="emerald"
+          />
 
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-2">
-                <DollarSign className="w-4 h-4" /> الإجمالي
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold">{investments.length}</div>
-            </CardContent>
-          </Card>
+          <AdminPanelStatCard
+            title="الإجمالي المالي"
+            value={investments.length}
+            description="الصورة الكاملة لكل السجلات الاستثمارية المرتبطة بالشؤون المالية في النظام."
+            helper={`إجمالي المبالغ قيد المتابعة: ${formatCurrencyEN(totalPendingAmount + totalApprovedAmount)}`}
+            icon={<DollarSign className="h-5 w-5" />}
+            accent="blue"
+            className="md:col-span-2"
+          />
         </div>
 
         {/* Pending table */}
@@ -860,9 +864,13 @@ export default function Financial() {
                       <TableCell>{getUserName(inv.userId)}</TableCell>
                       <TableCell>{getProjectName(inv.projectId)}</TableCell>
                       <TableCell className="font-bold">
-                        {Number(inv.amount).toLocaleString()} ر.س
+                        {formatCurrencyEN(inv.amount)}
                       </TableCell>
-                      <TableCell>{toDate(inv.createdAt).toLocaleDateString("ar-SA")}</TableCell>
+                      <TableCell>{formatDateEN(toDate(inv.createdAt), {
+                        year: "numeric",
+                        month: "numeric",
+                        day: "numeric",
+                      })}</TableCell>
                       <TableCell>
                         <div className="flex gap-2">
                           <Button
@@ -934,7 +942,7 @@ export default function Financial() {
                       <TableCell>{getUserName(inv.userId)}</TableCell>
                       <TableCell>{getProjectName(inv.projectId)}</TableCell>
                       <TableCell className="font-bold">
-                        {Number(inv.amount).toLocaleString()} ر.س
+                        {formatCurrencyEN(inv.amount)}
                       </TableCell>
                       <TableCell>{getStatusBadge(inv.status)}</TableCell>
 

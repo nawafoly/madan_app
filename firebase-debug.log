@@ -276,3 +276,186 @@ https://console.firebase.google.com/project/index-599e8/usage/details
 [debug] [2026-03-11T21:24:38.053Z] Checked if tokens are valid: true, expires at: 1773267481368
 [debug] [2026-03-11T21:24:38.053Z] >>> [apiv2][query] GET https://firebaserules.googleapis.com/v1/projects/index-599e8/rulesets/6ad4f7a9-1c41-4c74-a0d3-b6d9a5870f43 [none]
 [debug] [2026-03-11T21:24:38.612Z] <<< [apiv2][status] GET https://firebaserules.googleapis.com/v1/projects/index-599e8/rulesets/6ad4f7a9-1c41-4c74-a0d3-b6d9a5870f43 200
+[debug] [2026-03-29T10:39:14.727Z] ----------------------------------------------------------------------
+[debug] [2026-03-29T10:39:14.730Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\nawaf\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js projects:list --json
+[debug] [2026-03-29T10:39:14.730Z] CLI Version:   15.10.0
+[debug] [2026-03-29T10:39:14.730Z] Platform:      win32
+[debug] [2026-03-29T10:39:14.730Z] Node Version:  v24.14.0
+[debug] [2026-03-29T10:39:14.730Z] Time:          Sun Mar 29 2026 13:39:14 GMT+0300 (التوقيت العربي الرسمي)
+[debug] [2026-03-29T10:39:14.730Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-03-29T10:39:14.732Z] >>> [apiv2][query] GET https://firebase-public.firebaseio.com/cli.json [none]
+[debug] [2026-03-29T10:39:14.918Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-03-29T10:39:14.918Z] > authorizing via signed-in user (nawafaaa0@gmail.com)
+[debug] [2026-03-29T10:39:14.921Z] Checked if tokens are valid: false, expires at: 1773621017083
+[debug] [2026-03-29T10:39:14.921Z] Checked if tokens are valid: false, expires at: 1773621017083
+[debug] [2026-03-29T10:39:14.921Z] > refreshing access token with scopes: []
+[debug] [2026-03-29T10:39:14.922Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2026-03-29T10:39:14.923Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-03-29T10:39:14.933Z] *** [apiv2] error from fetch(https://firebase-public.firebaseio.com/cli.json, {"headers":{},"method":"GET","agent":{"_events":{},"_eventsCount":2,"options":{"noDelay":true,"path":null},"requests":{},"sockets":{"firebase-public.firebaseio.com:443:::::::::::::::::::::":[]},"freeSockets":{},"keepAliveMsecs":1000,"keepAlive":false,"maxSockets":null,"maxFreeSockets":256,"scheduling":"lifo","maxTotalSockets":null,"totalSocketCount":0,"agentKeepAliveTimeoutBuffer":1000,"cache":{"max":20,"maxSize":0,"maxEntrySize":0,"fetchMethod":null,"keyMap":{},"keyList":["https:+http://127.0.0.1:9",null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null],"valList":[{"_events":{},"_eventsCount":2,"options":{},"requests":{},"sockets":{"firebase-public.firebaseio.com:443:::::::::::::::::::::":[]},"freeSockets":{},"keepAliveMsecs":1000,"keepAlive":false,"maxSockets":null,"maxFreeSockets":256,"scheduling":"lifo","maxTotalSockets":null,"totalSocketCount":0,"agentKeepAliveTimeoutBuffer":1000,"proxy":"http://127.0.0.1:9/","proxyHeaders":{},"connectOpts":{"ALPNProtocols":["http/1.1"],"host":"127.0.0.1","port":9}},null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null],"next":{"0":0,"1":0,"2":0,"3":0,"4":0,"5":0,"6":0,"7":0,"8":0,"9":0,"10":0,"11":0,"12":0,"13":0,"14":0,"15":0,"16":0,"17":0,"18":0,"19":0},"prev":{"0":0,"1":0,"2":0,"3":0,"4":0,"5":0,"6":0,"7":0,"8":0,"9":0,"10":0,"11":0,"12":0,"13":0,"14":0,"15":0,"16":0,"17":0,"18":0,"19":0},"head":0,"tail":0,"free":{"heap":{"0":0,"1":0,"2":0,"3":0,"4":0,"5":0,"6":0,"7":0,"8":0,"9":0,"10":0,"11":0,"12":0,"13":0,"14":0,"15":0,"16":0,"17":0,"18":0,"19":0},"length":0},"initialFill":1,"size":1,"disposeAfter":null,"disposed":null,"noDisposeOnSet":false,"noUpdateTTL":false,"noDeleteOnFetchRejection":false,"allowStaleOnFetchRejection":false,"allowStaleOnFetchAbort":false,"ignoreFetchAbort":false,"allowStale":false,"noDeleteOnStaleGet":false,"updateAgeOnGet":false,"updateAgeOnHas":false,"ttlResolution":1,"ttlAutopurge":false,"ttl":0},"httpAgent":{"_events":{},"_eventsCount":2,"options":{"noDelay":true,"path":null},"defaultPort":80,"protocol":"http:","requests":{},"sockets":{},"freeSockets":{},"keepAliveMsecs":1000,"keepAlive":false,"maxSockets":null,"maxFreeSockets":256,"scheduling":"lifo","maxTotalSockets":null,"totalSocketCount":0,"agentKeepAliveTimeoutBuffer":1000},"httpsAgent":{"_events":{},"_eventsCount":2,"options":{"defaultPort":443,"protocol":"https:","noDelay":true,"path":null},"defaultPort":443,"protocol":"https:","requests":{},"sockets":{},"freeSockets":{},"keepAliveMsecs":1000,"keepAlive":false,"maxSockets":null,"maxFreeSockets":256,"scheduling":"lifo","maxTotalSockets":null,"totalSocketCount":0,"agentKeepAliveTimeoutBuffer":1000,"maxCachedSessions":100,"_sessionCache":{"map":{},"list":[]}}}}): FetchError: request to https://firebase-public.firebaseio.com/cli.json failed, reason: connect ECONNREFUSED 127.0.0.1:9
+[warn] !  Unable to fetch the CLI MOTD and remote config. This is not a fatal error, but may indicate an issue with your network connection. 
+[debug] [2026-03-29T10:39:14.933Z] Failed to fetch MOTD FirebaseError: Failed to make request to https://firebase-public.firebaseio.com/cli.json
+[debug] [2026-03-29T10:39:14.934Z] *** [apiv2] error from fetch(https://www.googleapis.com/oauth2/v3/token, {"headers":{},"method":"POST","agent":{"_events":{},"_eventsCount":2,"options":{"noDelay":true,"path":null},"requests":{},"sockets":{"www.googleapis.com:443:::::::::::::::::::::":[]},"freeSockets":{},"keepAliveMsecs":1000,"keepAlive":false,"maxSockets":null,"maxFreeSockets":256,"scheduling":"lifo","maxTotalSockets":null,"totalSocketCount":0,"agentKeepAliveTimeoutBuffer":1000,"cache":{"max":20,"maxSize":0,"maxEntrySize":0,"fetchMethod":null,"keyMap":{},"keyList":["https:+http://127.0.0.1:9",null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null],"valList":[{"_events":{},"_eventsCount":2,"options":{},"requests":{},"sockets":{"www.googleapis.com:443:::::::::::::::::::::":[]},"freeSockets":{},"keepAliveMsecs":1000,"keepAlive":false,"maxSockets":null,"maxFreeSockets":256,"scheduling":"lifo","maxTotalSockets":null,"totalSocketCount":0,"agentKeepAliveTimeoutBuffer":1000,"proxy":"http://127.0.0.1:9/","proxyHeaders":{},"connectOpts":{"ALPNProtocols":["http/1.1"],"host":"127.0.0.1","port":9}},null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null],"next":{"0":0,"1":0,"2":0,"3":0,"4":0,"5":0,"6":0,"7":0,"8":0,"9":0,"10":0,"11":0,"12":0,"13":0,"14":0,"15":0,"16":0,"17":0,"18":0,"19":0},"prev":{"0":0,"1":0,"2":0,"3":0,"4":0,"5":0,"6":0,"7":0,"8":0,"9":0,"10":0,"11":0,"12":0,"13":0,"14":0,"15":0,"16":0,"17":0,"18":0,"19":0},"head":0,"tail":0,"free":{"heap":{"0":0,"1":0,"2":0,"3":0,"4":0,"5":0,"6":0,"7":0,"8":0,"9":0,"10":0,"11":0,"12":0,"13":0,"14":0,"15":0,"16":0,"17":0,"18":0,"19":0},"length":0},"initialFill":1,"size":1,"disposeAfter":null,"disposed":null,"noDisposeOnSet":false,"noUpdateTTL":false,"noDeleteOnFetchRejection":false,"allowStaleOnFetchRejection":false,"allowStaleOnFetchAbort":false,"ignoreFetchAbort":false,"allowStale":false,"noDeleteOnStaleGet":false,"updateAgeOnGet":false,"updateAgeOnHas":false,"ttlResolution":1,"ttlAutopurge":false,"ttl":0},"httpAgent":{"_events":{},"_eventsCount":2,"options":{"noDelay":true,"path":null},"defaultPort":80,"protocol":"http:","requests":{},"sockets":{},"freeSockets":{},"keepAliveMsecs":1000,"keepAlive":false,"maxSockets":null,"maxFreeSockets":256,"scheduling":"lifo","maxTotalSockets":null,"totalSocketCount":0,"agentKeepAliveTimeoutBuffer":1000},"httpsAgent":{"_events":{},"_eventsCount":2,"options":{"defaultPort":443,"protocol":"https:","noDelay":true,"path":null},"defaultPort":443,"protocol":"https:","requests":{},"sockets":{},"freeSockets":{},"keepAliveMsecs":1000,"keepAlive":false,"maxSockets":null,"maxFreeSockets":256,"scheduling":"lifo","maxTotalSockets":null,"totalSocketCount":0,"agentKeepAliveTimeoutBuffer":1000,"maxCachedSessions":100,"_sessionCache":{"map":{},"list":[]}}},"body":{"_overheadLength":545,"_valueLength":212,"_valuesToMeasure":[],"writable":false,"readable":true,"dataSize":0,"maxDataSize":2097152,"pauseStreams":true,"_released":true,"_streams":[],"_currentStream":null,"_insideLoop":false,"_pendingNext":false,"_boundary":"--------------------------5acafda81cc55c1c0ccf6d5c","_events":{},"_eventsCount":1}}): FetchError: request to https://www.googleapis.com/oauth2/v3/token failed, reason: connect ECONNREFUSED 127.0.0.1:9
+[error] Authentication Error: Your credentials are no longer valid. Please run firebase login --reauth
+
+For CI servers and headless environments, generate a new token with firebase login:ci
+[debug] [2026-03-29T10:39:14.934Z] Authentication Error: Your credentials are no longer valid. Please run firebase login --reauth
+
+For CI servers and headless environments, generate a new token with firebase login:ci
+[debug] [2026-03-29T10:39:14.936Z] FirebaseError: Authentication Error: Your credentials are no longer valid. Please run firebase login --reauth
+
+For CI servers and headless environments, generate a new token with firebase login:ci
+    at invalidCredentialError (C:\Users\nawaf\AppData\Roaming\npm\node_modules\firebase-tools\lib\auth.js:177:12)
+    at refreshTokens (C:\Users\nawaf\AppData\Roaming\npm\node_modules\firebase-tools\lib\auth.js:590:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async getAccessToken (C:\Users\nawaf\AppData\Roaming\npm\node_modules\firebase-tools\lib\apiv2.js:52:18)
+    at async Client.addAuthHeader (C:\Users\nawaf\AppData\Roaming\npm\node_modules\firebase-tools\lib\apiv2.js:182:21)
+    at async Client.request (C:\Users\nawaf\AppData\Roaming\npm\node_modules\firebase-tools\lib\apiv2.js:129:34)
+    at async getProjectPage (C:\Users\nawaf\AppData\Roaming\npm\node_modules\firebase-tools\lib\management\projects.js:287:17)
+    at async getFirebaseProjectPage (C:\Users\nawaf\AppData\Roaming\npm\node_modules\firebase-tools\lib\management\projects.js:304:23)
+    at async listFirebaseProjects (C:\Users\nawaf\AppData\Roaming\npm\node_modules\firebase-tools\lib\management\projects.js:333:29)
+    at async Command.actionFn (C:\Users\nawaf\AppData\Roaming\npm\node_modules\firebase-tools\lib\commands\projects-list.js:51:20)
+[error] 
+[error] Error: Failed to list Firebase projects. See firebase-debug.log for more info.
+[debug] [2026-03-29T10:39:14.731Z] ----------------------------------------------------------------------
+[debug] [2026-03-29T10:39:14.733Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\nawaf\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js apps:list web --project index-599e8 --json
+[debug] [2026-03-29T10:39:14.734Z] CLI Version:   15.10.0
+[debug] [2026-03-29T10:39:14.734Z] Platform:      win32
+[debug] [2026-03-29T10:39:14.734Z] Node Version:  v24.14.0
+[debug] [2026-03-29T10:39:14.734Z] Time:          Sun Mar 29 2026 13:39:14 GMT+0300 (التوقيت العربي الرسمي)
+[debug] [2026-03-29T10:39:14.734Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-03-29T10:39:14.736Z] >>> [apiv2][query] GET https://firebase-public.firebaseio.com/cli.json [none]
+[debug] [2026-03-29T10:39:14.939Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-03-29T10:39:14.939Z] > authorizing via signed-in user (nawafaaa0@gmail.com)
+[debug] [2026-03-29T10:39:14.941Z] Checked if tokens are valid: false, expires at: 1773621017083
+[debug] [2026-03-29T10:39:14.941Z] Checked if tokens are valid: false, expires at: 1773621017083
+[debug] [2026-03-29T10:39:14.942Z] > refreshing access token with scopes: []
+[debug] [2026-03-29T10:39:14.943Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2026-03-29T10:39:14.943Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-03-29T10:39:14.950Z] *** [apiv2] error from fetch(https://firebase-public.firebaseio.com/cli.json, {"headers":{},"method":"GET","agent":{"_events":{},"_eventsCount":2,"options":{"noDelay":true,"path":null},"requests":{},"sockets":{"firebase-public.firebaseio.com:443:::::::::::::::::::::":[]},"freeSockets":{},"keepAliveMsecs":1000,"keepAlive":false,"maxSockets":null,"maxFreeSockets":256,"scheduling":"lifo","maxTotalSockets":null,"totalSocketCount":0,"agentKeepAliveTimeoutBuffer":1000,"cache":{"max":20,"maxSize":0,"maxEntrySize":0,"fetchMethod":null,"keyMap":{},"keyList":["https:+http://127.0.0.1:9",null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null],"valList":[{"_events":{},"_eventsCount":2,"options":{},"requests":{},"sockets":{"firebase-public.firebaseio.com:443:::::::::::::::::::::":[]},"freeSockets":{},"keepAliveMsecs":1000,"keepAlive":false,"maxSockets":null,"maxFreeSockets":256,"scheduling":"lifo","maxTotalSockets":null,"totalSocketCount":0,"agentKeepAliveTimeoutBuffer":1000,"proxy":"http://127.0.0.1:9/","proxyHeaders":{},"connectOpts":{"ALPNProtocols":["http/1.1"],"host":"127.0.0.1","port":9}},null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null],"next":{"0":0,"1":0,"2":0,"3":0,"4":0,"5":0,"6":0,"7":0,"8":0,"9":0,"10":0,"11":0,"12":0,"13":0,"14":0,"15":0,"16":0,"17":0,"18":0,"19":0},"prev":{"0":0,"1":0,"2":0,"3":0,"4":0,"5":0,"6":0,"7":0,"8":0,"9":0,"10":0,"11":0,"12":0,"13":0,"14":0,"15":0,"16":0,"17":0,"18":0,"19":0},"head":0,"tail":0,"free":{"heap":{"0":0,"1":0,"2":0,"3":0,"4":0,"5":0,"6":0,"7":0,"8":0,"9":0,"10":0,"11":0,"12":0,"13":0,"14":0,"15":0,"16":0,"17":0,"18":0,"19":0},"length":0},"initialFill":1,"size":1,"disposeAfter":null,"disposed":null,"noDisposeOnSet":false,"noUpdateTTL":false,"noDeleteOnFetchRejection":false,"allowStaleOnFetchRejection":false,"allowStaleOnFetchAbort":false,"ignoreFetchAbort":false,"allowStale":false,"noDeleteOnStaleGet":false,"updateAgeOnGet":false,"updateAgeOnHas":false,"ttlResolution":1,"ttlAutopurge":false,"ttl":0},"httpAgent":{"_events":{},"_eventsCount":2,"options":{"noDelay":true,"path":null},"defaultPort":80,"protocol":"http:","requests":{},"sockets":{},"freeSockets":{},"keepAliveMsecs":1000,"keepAlive":false,"maxSockets":null,"maxFreeSockets":256,"scheduling":"lifo","maxTotalSockets":null,"totalSocketCount":0,"agentKeepAliveTimeoutBuffer":1000},"httpsAgent":{"_events":{},"_eventsCount":2,"options":{"defaultPort":443,"protocol":"https:","noDelay":true,"path":null},"defaultPort":443,"protocol":"https:","requests":{},"sockets":{},"freeSockets":{},"keepAliveMsecs":1000,"keepAlive":false,"maxSockets":null,"maxFreeSockets":256,"scheduling":"lifo","maxTotalSockets":null,"totalSocketCount":0,"agentKeepAliveTimeoutBuffer":1000,"maxCachedSessions":100,"_sessionCache":{"map":{},"list":[]}}}}): FetchError: request to https://firebase-public.firebaseio.com/cli.json failed, reason: connect ECONNREFUSED 127.0.0.1:9
+[warn] !  Unable to fetch the CLI MOTD and remote config. This is not a fatal error, but may indicate an issue with your network connection. 
+[debug] [2026-03-29T10:39:14.950Z] Failed to fetch MOTD FirebaseError: Failed to make request to https://firebase-public.firebaseio.com/cli.json
+[debug] [2026-03-29T10:39:14.950Z] *** [apiv2] error from fetch(https://www.googleapis.com/oauth2/v3/token, {"headers":{},"method":"POST","agent":{"_events":{},"_eventsCount":2,"options":{"noDelay":true,"path":null},"requests":{},"sockets":{"www.googleapis.com:443:::::::::::::::::::::":[]},"freeSockets":{},"keepAliveMsecs":1000,"keepAlive":false,"maxSockets":null,"maxFreeSockets":256,"scheduling":"lifo","maxTotalSockets":null,"totalSocketCount":0,"agentKeepAliveTimeoutBuffer":1000,"cache":{"max":20,"maxSize":0,"maxEntrySize":0,"fetchMethod":null,"keyMap":{},"keyList":["https:+http://127.0.0.1:9",null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null],"valList":[{"_events":{},"_eventsCount":2,"options":{},"requests":{},"sockets":{"www.googleapis.com:443:::::::::::::::::::::":[]},"freeSockets":{},"keepAliveMsecs":1000,"keepAlive":false,"maxSockets":null,"maxFreeSockets":256,"scheduling":"lifo","maxTotalSockets":null,"totalSocketCount":0,"agentKeepAliveTimeoutBuffer":1000,"proxy":"http://127.0.0.1:9/","proxyHeaders":{},"connectOpts":{"ALPNProtocols":["http/1.1"],"host":"127.0.0.1","port":9}},null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null],"next":{"0":0,"1":0,"2":0,"3":0,"4":0,"5":0,"6":0,"7":0,"8":0,"9":0,"10":0,"11":0,"12":0,"13":0,"14":0,"15":0,"16":0,"17":0,"18":0,"19":0},"prev":{"0":0,"1":0,"2":0,"3":0,"4":0,"5":0,"6":0,"7":0,"8":0,"9":0,"10":0,"11":0,"12":0,"13":0,"14":0,"15":0,"16":0,"17":0,"18":0,"19":0},"head":0,"tail":0,"free":{"heap":{"0":0,"1":0,"2":0,"3":0,"4":0,"5":0,"6":0,"7":0,"8":0,"9":0,"10":0,"11":0,"12":0,"13":0,"14":0,"15":0,"16":0,"17":0,"18":0,"19":0},"length":0},"initialFill":1,"size":1,"disposeAfter":null,"disposed":null,"noDisposeOnSet":false,"noUpdateTTL":false,"noDeleteOnFetchRejection":false,"allowStaleOnFetchRejection":false,"allowStaleOnFetchAbort":false,"ignoreFetchAbort":false,"allowStale":false,"noDeleteOnStaleGet":false,"updateAgeOnGet":false,"updateAgeOnHas":false,"ttlResolution":1,"ttlAutopurge":false,"ttl":0},"httpAgent":{"_events":{},"_eventsCount":2,"options":{"noDelay":true,"path":null},"defaultPort":80,"protocol":"http:","requests":{},"sockets":{},"freeSockets":{},"keepAliveMsecs":1000,"keepAlive":false,"maxSockets":null,"maxFreeSockets":256,"scheduling":"lifo","maxTotalSockets":null,"totalSocketCount":0,"agentKeepAliveTimeoutBuffer":1000},"httpsAgent":{"_events":{},"_eventsCount":2,"options":{"defaultPort":443,"protocol":"https:","noDelay":true,"path":null},"defaultPort":443,"protocol":"https:","requests":{},"sockets":{},"freeSockets":{},"keepAliveMsecs":1000,"keepAlive":false,"maxSockets":null,"maxFreeSockets":256,"scheduling":"lifo","maxTotalSockets":null,"totalSocketCount":0,"agentKeepAliveTimeoutBuffer":1000,"maxCachedSessions":100,"_sessionCache":{"map":{},"list":[]}}},"body":{"_overheadLength":545,"_valueLength":212,"_valuesToMeasure":[],"writable":false,"readable":true,"dataSize":0,"maxDataSize":2097152,"pauseStreams":true,"_released":true,"_streams":[],"_currentStream":null,"_insideLoop":false,"_pendingNext":false,"_boundary":"--------------------------b25b78a74cc4a66b42bb4cda","_events":{},"_eventsCount":1}}): FetchError: request to https://www.googleapis.com/oauth2/v3/token failed, reason: connect ECONNREFUSED 127.0.0.1:9
+[error] Authentication Error: Your credentials are no longer valid. Please run firebase login --reauth
+
+For CI servers and headless environments, generate a new token with firebase login:ci
+[debug] [2026-03-29T10:39:14.951Z] Authentication Error: Your credentials are no longer valid. Please run firebase login --reauth
+
+For CI servers and headless environments, generate a new token with firebase login:ci
+[debug] [2026-03-29T10:39:14.952Z] FirebaseError: Authentication Error: Your credentials are no longer valid. Please run firebase login --reauth
+
+For CI servers and headless environments, generate a new token with firebase login:ci
+    at invalidCredentialError (C:\Users\nawaf\AppData\Roaming\npm\node_modules\firebase-tools\lib\auth.js:177:12)
+    at refreshTokens (C:\Users\nawaf\AppData\Roaming\npm\node_modules\firebase-tools\lib\auth.js:590:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async getAccessToken (C:\Users\nawaf\AppData\Roaming\npm\node_modules\firebase-tools\lib\apiv2.js:52:18)
+    at async Client.addAuthHeader (C:\Users\nawaf\AppData\Roaming\npm\node_modules\firebase-tools\lib\apiv2.js:182:21)
+    at async Client.request (C:\Users\nawaf\AppData\Roaming\npm\node_modules\firebase-tools\lib\apiv2.js:129:34)
+    at async listFirebaseApps (C:\Users\nawaf\AppData\Roaming\npm\node_modules\firebase-tools\lib\management\apps.js:363:30)
+    at async Command.actionFn (C:\Users\nawaf\AppData\Roaming\npm\node_modules\firebase-tools\lib\commands\apps-list.js:43:16)
+[error] 
+[error] Error: Failed to list Firebase WEB apps. See firebase-debug.log for more info.
+[debug] [2026-03-29T10:39:15.216Z] Error: EPERM: operation not permitted, open 'C:\Users\nawaf\.config\configstore\firebase-tools.json.4057748701'
+    at Object.openSync (node:fs:560:18)
+    at writeFile.writeFileSync [as sync] (C:\Users\nawaf\AppData\Roaming\npm\node_modules\firebase-tools\node_modules\write-file-atomic\index.js:205:13)
+    at set all (C:\Users\nawaf\AppData\Roaming\npm\node_modules\firebase-tools\node_modules\configstore\index.js:61:20)
+    at Configstore.delete (C:\Users\nawaf\AppData\Roaming\npm\node_modules\firebase-tools\node_modules\configstore\index.js:101:12)
+    at process.<anonymous> (C:\Users\nawaf\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\cli.js:65:45)
+    at process.emit (node:events:520:35)
+    at process.exit (node:internal/process/per_thread:236:15)
+    at Timeout._onTimeout (C:\Users\nawaf\AppData\Roaming\npm\node_modules\firebase-tools\lib\errorOut.js:20:17)
+    at listOnTimeout (node:internal/timers:605:17)
+    at process.processTimers (node:internal/timers:541:7)
+[error] 
+[error] Error: An unexpected error has occurred.
+[debug] [2026-03-29T10:39:15.219Z] Error: EPERM: operation not permitted, open 'C:\Users\nawaf\.config\configstore\firebase-tools.json.1378117711'
+    at Object.openSync (node:fs:560:18)
+    at writeFile.writeFileSync [as sync] (C:\Users\nawaf\AppData\Roaming\npm\node_modules\firebase-tools\node_modules\write-file-atomic\index.js:205:13)
+    at set all (C:\Users\nawaf\AppData\Roaming\npm\node_modules\firebase-tools\node_modules\configstore\index.js:61:20)
+    at Configstore.delete (C:\Users\nawaf\AppData\Roaming\npm\node_modules\firebase-tools\node_modules\configstore\index.js:101:12)
+    at process.<anonymous> (C:\Users\nawaf\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\cli.js:65:45)
+    at process.emit (node:events:520:35)
+    at process.exit (node:internal/process/per_thread:236:15)
+    at Timeout._onTimeout (C:\Users\nawaf\AppData\Roaming\npm\node_modules\firebase-tools\lib\errorOut.js:20:17)
+    at listOnTimeout (node:internal/timers:605:17)
+    at process.processTimers (node:internal/timers:541:7)
+[error] 
+[error] Error: An unexpected error has occurred.
+[debug] [2026-03-29T10:42:02.569Z] ----------------------------------------------------------------------
+[debug] [2026-03-29T10:42:02.572Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\nawaf\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js projects:list --json
+[debug] [2026-03-29T10:42:02.572Z] CLI Version:   15.10.0
+[debug] [2026-03-29T10:42:02.572Z] Platform:      win32
+[debug] [2026-03-29T10:42:02.572Z] Node Version:  v24.14.0
+[debug] [2026-03-29T10:42:02.572Z] Time:          Sun Mar 29 2026 13:42:02 GMT+0300 (التوقيت العربي الرسمي)
+[debug] [2026-03-29T10:42:02.572Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-03-29T10:42:02.574Z] >>> [apiv2][query] GET https://firebase-public.firebaseio.com/cli.json [none]
+[debug] [2026-03-29T10:42:02.765Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-03-29T10:42:02.807Z] Error: Could not load the default credentials. Browse to https://cloud.google.com/docs/authentication/getting-started for more information.
+    at GoogleAuth.getApplicationDefaultAsync (C:\Users\nawaf\AppData\Roaming\npm\node_modules\firebase-tools\node_modules\google-auth-library\build\src\auth\googleauth.js:287:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async GoogleAuth._GoogleAuth_determineClient (C:\Users\nawaf\AppData\Roaming\npm\node_modules\firebase-tools\node_modules\google-auth-library\build\src\auth\googleauth.js:834:32)
+    at async GoogleAuth.getClient (C:\Users\nawaf\AppData\Roaming\npm\node_modules\firebase-tools\node_modules\google-auth-library\build\src\auth\googleauth.js:698:20)
+    at async GoogleAuth.getAccessToken (C:\Users\nawaf\AppData\Roaming\npm\node_modules\firebase-tools\node_modules\google-auth-library\build\src\auth\googleauth.js:722:24)
+    at async autoAuth (C:\Users\nawaf\AppData\Roaming\npm\node_modules\firebase-tools\lib\requireAuth.js:28:19)
+    at async Object.requireAuth [as fn] (C:\Users\nawaf\AppData\Roaming\npm\node_modules\firebase-tools\lib\requireAuth.js:90:20)
+    at async C:\Users\nawaf\AppData\Roaming\npm\node_modules\firebase-tools\lib\command.js:264:17
+[error] 
+[error] Error: Failed to authenticate, have you run firebase login?
+[debug] [2026-03-29T10:42:09.778Z] ----------------------------------------------------------------------
+[debug] [2026-03-29T10:42:09.781Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\nawaf\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js projects:list --json
+[debug] [2026-03-29T10:42:09.781Z] CLI Version:   15.10.0
+[debug] [2026-03-29T10:42:09.781Z] Platform:      win32
+[debug] [2026-03-29T10:42:09.781Z] Node Version:  v24.14.0
+[debug] [2026-03-29T10:42:09.781Z] Time:          Sun Mar 29 2026 13:42:09 GMT+0300 (التوقيت العربي الرسمي)
+[debug] [2026-03-29T10:42:09.781Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-03-29T10:42:09.783Z] >>> [apiv2][query] GET https://firebase-public.firebaseio.com/cli.json [none]
+[debug] [2026-03-29T10:42:09.945Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-03-29T10:42:09.945Z] > authorizing via signed-in user (nawafaaa0@gmail.com)
+[debug] [2026-03-29T10:42:09.947Z] Checked if tokens are valid: false, expires at: 1773621017083
+[debug] [2026-03-29T10:42:09.947Z] Checked if tokens are valid: false, expires at: 1773621017083
+[debug] [2026-03-29T10:42:09.947Z] > refreshing access token with scopes: []
+[debug] [2026-03-29T10:42:09.949Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2026-03-29T10:42:09.949Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-03-29T10:42:10.571Z] <<< [apiv2][status] GET https://firebase-public.firebaseio.com/cli.json 200
+[debug] [2026-03-29T10:42:10.571Z] <<< [apiv2][body] GET https://firebase-public.firebaseio.com/cli.json {"cloudBuildErrorAfter":1594252800000,"cloudBuildWarnAfter":1590019200000,"defaultNode10After":1594252800000,"minVersion":"3.0.5","node8DeploysDisabledAfter":1613390400000,"node8RuntimeDisabledAfter":1615809600000,"node8WarnAfter":1600128000000}
+[warn] !  Unable to fetch the CLI MOTD and remote config. This is not a fatal error, but may indicate an issue with your network connection. 
+[debug] [2026-03-29T10:42:10.574Z] Failed to fetch MOTD Error: EPERM: operation not permitted, open 'C:\Users\nawaf\.config\configstore\firebase-tools.json.3111411455'
+[debug] [2026-03-29T10:42:10.757Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 200
+[debug] [2026-03-29T10:42:10.757Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[error] Authentication Error: Your credentials are no longer valid. Please run firebase login --reauth
+
+For CI servers and headless environments, generate a new token with firebase login:ci
+[debug] [2026-03-29T10:42:10.761Z] Authentication Error: Your credentials are no longer valid. Please run firebase login --reauth
+
+For CI servers and headless environments, generate a new token with firebase login:ci
+[debug] [2026-03-29T10:42:10.762Z] FirebaseError: Authentication Error: Your credentials are no longer valid. Please run firebase login --reauth
+
+For CI servers and headless environments, generate a new token with firebase login:ci
+    at invalidCredentialError (C:\Users\nawaf\AppData\Roaming\npm\node_modules\firebase-tools\lib\auth.js:177:12)
+    at refreshTokens (C:\Users\nawaf\AppData\Roaming\npm\node_modules\firebase-tools\lib\auth.js:590:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async getAccessToken (C:\Users\nawaf\AppData\Roaming\npm\node_modules\firebase-tools\lib\apiv2.js:52:18)
+    at async Client.addAuthHeader (C:\Users\nawaf\AppData\Roaming\npm\node_modules\firebase-tools\lib\apiv2.js:182:21)
+    at async Client.request (C:\Users\nawaf\AppData\Roaming\npm\node_modules\firebase-tools\lib\apiv2.js:129:34)
+    at async getProjectPage (C:\Users\nawaf\AppData\Roaming\npm\node_modules\firebase-tools\lib\management\projects.js:287:17)
+    at async getFirebaseProjectPage (C:\Users\nawaf\AppData\Roaming\npm\node_modules\firebase-tools\lib\management\projects.js:304:23)
+    at async listFirebaseProjects (C:\Users\nawaf\AppData\Roaming\npm\node_modules\firebase-tools\lib\management\projects.js:333:29)
+    at async Command.actionFn (C:\Users\nawaf\AppData\Roaming\npm\node_modules\firebase-tools\lib\commands\projects-list.js:51:20)
+[error] 
+[error] Error: Failed to list Firebase projects. See firebase-debug.log for more info.
+[debug] [2026-03-29T10:42:11.021Z] Error: EPERM: operation not permitted, open 'C:\Users\nawaf\.config\configstore\firebase-tools.json.1899656789'
+    at Object.openSync (node:fs:560:18)
+    at writeFile.writeFileSync [as sync] (C:\Users\nawaf\AppData\Roaming\npm\node_modules\firebase-tools\node_modules\write-file-atomic\index.js:205:13)
+    at set all (C:\Users\nawaf\AppData\Roaming\npm\node_modules\firebase-tools\node_modules\configstore\index.js:61:20)
+    at Configstore.delete (C:\Users\nawaf\AppData\Roaming\npm\node_modules\firebase-tools\node_modules\configstore\index.js:101:12)
+    at process.<anonymous> (C:\Users\nawaf\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\cli.js:65:45)
+    at process.emit (node:events:508:28)
+    at process.exit (node:internal/process/per_thread:236:15)
+    at Timeout._onTimeout (C:\Users\nawaf\AppData\Roaming\npm\node_modules\firebase-tools\lib\errorOut.js:20:17)
+    at listOnTimeout (node:internal/timers:605:17)
+    at process.processTimers (node:internal/timers:541:7)
+[error] 
+[error] Error: An unexpected error has occurred.

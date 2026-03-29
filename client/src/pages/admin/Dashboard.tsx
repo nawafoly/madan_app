@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import DashboardLayout from "@/components/DashboardLayout";
+import AdminPanelStatCard from "@/components/AdminPanelStatCard";
 import {
   TrendingUp,
   Users,
@@ -30,6 +31,12 @@ import {
   Timestamp,
 } from "firebase/firestore";
 import { db } from "@/_core/firebase";
+import {
+  formatCurrencyEN,
+  formatDateTimeEN,
+  formatNumberEN,
+  formatPercentEN,
+} from "@/lib/formatters";
 import {
   LineChart,
   Line,
@@ -72,16 +79,7 @@ function toDateSafe(value: any): Date | null {
 }
 
 function formatDateTimeAR(value: any) {
-  const date = toDateSafe(value);
-  return date
-    ? date.toLocaleString("ar-SA", {
-        year: "numeric",
-        month: "short",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-      })
-    : "بدون تاريخ";
+  return formatDateTimeEN(toDateSafe(value)) || "بدون تاريخ";
 }
 
 function pickText(...values: unknown[]) {
@@ -434,40 +432,48 @@ export default function AdminDashboard() {
           </Card>
         ) : null}
 
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {canSeeProjects && (
-            <Stat
+            <AdminPanelStatCard
               title="إجمالي المشاريع"
               value={stats.totalProjects}
-              sub={`${stats.publishedProjects} منشور`}
-              icon={<Building2 />}
+              description="صورة سريعة لكل المشاريع المسجلة في المنصة والمستخدمة داخل لوحات التشغيل."
+              helper={`${formatNumberEN(stats.publishedProjects)} مشروع منشور وجاهز للعرض`}
+              icon={<Building2 className="h-5 w-5" />}
+              accent="amber"
             />
           )}
 
           {canSeeInvestments && (
-            <Stat
+            <AdminPanelStatCard
               title="إجمالي الاستثمارات"
               value={stats.totalInvestments}
-              sub={`${approvedInvestments} معتمد`}
-              icon={<DollarSign />}
+              description="كل سجلات الاستثمار المرتبطة بالمشاريع والعملاء عبر النظام حتى هذه اللحظة."
+              helper={`${formatNumberEN(approvedInvestments)} استثمار في الحالات المعتمدة أو النشطة`}
+              icon={<DollarSign className="h-5 w-5" />}
+              accent="emerald"
             />
           )}
 
           {canSeeUsers && (
-            <Stat
+            <AdminPanelStatCard
               title="إجمالي المستخدمين"
               value={stats.totalUsers}
-              sub={`${stats.vipUsers} VIP`}
-              icon={<Users />}
+              description="عدد الحسابات المسجلة التي يمكن متابعتها من خلال لوحة الإدارة."
+              helper={`${formatNumberEN(stats.vipUsers)} حسابات بعلامة VIP`}
+              icon={<Users className="h-5 w-5" />}
+              accent="blue"
             />
           )}
 
           {canSeeMessages && (
-            <Stat
+            <AdminPanelStatCard
               title="الرسائل"
               value={stats.totalMessages}
-              sub={`${stats.newMessages} غير مقروء`}
-              icon={<MessageSquare />}
+              description="طلبات ورسائل المستثمرين الواردة إلى فريق التشغيل والمراجعة."
+              helper={`${formatNumberEN(stats.newMessages)} رسائل غير مقروءة تحتاج متابعة`}
+              icon={<MessageSquare className="h-5 w-5" />}
+              accent="rose"
             />
           )}
         </div>
@@ -483,22 +489,25 @@ export default function AdminDashboard() {
               <div className="grid md:grid-cols-3 gap-6">
                 <Metric
                   label="إجمالي الاستثمارات"
-                  value={`${totalInvestedAmount.toLocaleString()} ر.س`}
+                  value={formatCurrencyEN(totalInvestedAmount)}
                 />
                 <Metric
                   label="متوسط الاستثمار"
                   value={
                     stats.totalInvestments
-                      ? `${(totalInvestedAmount / stats.totalInvestments).toFixed(0)} ر.س`
-                      : "0"
+                      ? formatCurrencyEN(totalInvestedAmount / stats.totalInvestments)
+                      : formatCurrencyEN(0)
                   }
                 />
                 <Metric
                   label="معدل الموافقة"
                   value={
                     stats.totalInvestments
-                      ? `${((approvedInvestments / stats.totalInvestments) * 100).toFixed(1)}%`
-                      : "0%"
+                      ? formatPercentEN((approvedInvestments / stats.totalInvestments) * 100, {
+                          minimumFractionDigits: 1,
+                          maximumFractionDigits: 1,
+                        })
+                      : formatPercentEN(0)
                   }
                 />
               </div>
@@ -653,7 +662,7 @@ export default function AdminDashboard() {
                       </div>
 
                       <div className="text-sm text-muted-foreground">
-                        المبلغ: {toNumberSafe(row.amount).toLocaleString("ar-SA")} ر.س
+                        المبلغ: {formatCurrencyEN(toNumberSafe(row.amount))}
                       </div>
 
                       <div className="text-sm leading-7 whitespace-pre-line">
@@ -672,31 +681,6 @@ export default function AdminDashboard() {
         </Dialog>
       </div>
     </DashboardLayout>
-  );
-}
-
-function Stat({
-  title,
-  value,
-  sub,
-  icon,
-}: {
-  title: string;
-  value: number;
-  sub: string;
-  icon: React.ReactNode;
-}) {
-  return (
-    <Card>
-      <CardHeader className="flex flex-row justify-between pb-2">
-        <CardTitle className="text-sm text-muted-foreground">{title}</CardTitle>
-        {icon}
-      </CardHeader>
-      <CardContent>
-        <div className="text-3xl font-bold">{value}</div>
-        <p className="text-xs text-muted-foreground">{sub}</p>
-      </CardContent>
-    </Card>
   );
 }
 
@@ -725,11 +709,12 @@ function AlertCard({
   onClick?: () => void;
 }) {
   const isInteractive = typeof onClick === "function" && count > 0;
+  const displayCount = formatNumberEN(count);
   const statusNode =
     count > 0 ? (
       <div className="flex items-center gap-2 text-orange-600">
         <AlertCircle className="w-5 h-5" />
-        {count} {warnText}
+        {displayCount} {warnText}
       </div>
     ) : (
       <div className="flex items-center gap-2 text-green-600">

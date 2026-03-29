@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "wouter";
 import DashboardLayout from "@/components/DashboardLayout";
+import AdminPanelStatCard from "@/components/AdminPanelStatCard";
 import {
   AUDIT_ACTIONS,
   auditedDeleteDoc,
@@ -49,6 +50,7 @@ import {
   Timestamp,
 } from "firebase/firestore";
 import { db } from "@/_core/firebase";
+import { formatCurrencyEN, formatNumberEN } from "@/lib/formatters";
 
 /* =========================
    Labels (support string OR {ar,en})
@@ -115,7 +117,7 @@ function safeNumber(n: any) {
 }
 
 function fmtSAR(n: any) {
-  return safeNumber(n).toLocaleString("ar-SA") + " ر.س";
+  return formatCurrencyEN(safeNumber(n));
 }
 
 // ✅ يمنع كراش React لما تكون القيمة {ar,en}
@@ -401,28 +403,38 @@ export default function ProjectsManagement() {
         )}
 
         {/* Filters */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-xl">فلترة وبحث</CardTitle>
+        <Card className="overflow-hidden border-slate-200/80 bg-gradient-to-br from-slate-50 via-white to-slate-100/80 shadow-sm">
+          <CardHeader className="gap-4 border-b border-slate-200/70 bg-white/70 pb-5 backdrop-blur">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <CardTitle className="text-xl text-slate-950">فلترة وبحث</CardTitle>
+
+              <div className="inline-flex w-fit items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm font-medium text-slate-600">
+                {formatNumberEN(filtered.length)} مشروع مطابق
+              </div>
+            </div>
+
+            <p className="text-sm text-muted-foreground">
+              ابحث بسرعة في العنوان والموقع ورقم الإصدار، ثم صفِّ النتائج حسب النوع والحالة.
+            </p>
           </CardHeader>
-          <CardContent className="grid lg:grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <div className="text-sm font-medium">بحث</div>
+          <CardContent className="grid gap-4 bg-slate-50/55 pt-6 lg:grid-cols-3">
+            <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50/70 p-4">
+              <div className="text-sm font-medium text-slate-700">بحث</div>
               <div className="relative">
-                <Search className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   value={qText}
                   onChange={(e) => setQText(e.target.value)}
                   placeholder="ابحث بالعنوان / الموقع / رقم الإصدار..."
-                  className="pr-9"
+                  className="h-11 border-slate-200 bg-white pr-10"
                 />
               </div>
             </div>
 
-            <div className="space-y-2">
-              <div className="text-sm font-medium">نوع المشروع</div>
+            <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50/70 p-4">
+              <div className="text-sm font-medium text-slate-700">نوع المشروع</div>
               <Select value={typeFilter} onValueChange={setTypeFilter}>
-                <SelectTrigger>
+                <SelectTrigger className="h-11 border-slate-200 bg-white">
                   <SelectValue placeholder="اختر النوع" />
                 </SelectTrigger>
                 <SelectContent>
@@ -436,10 +448,10 @@ export default function ProjectsManagement() {
               </Select>
             </div>
 
-            <div className="space-y-2">
-              <div className="text-sm font-medium">الحالة</div>
+            <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50/70 p-4">
+              <div className="text-sm font-medium text-slate-700">الحالة</div>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger>
+                <SelectTrigger className="h-11 border-slate-200 bg-white">
                   <SelectValue placeholder="اختر الحالة" />
                 </SelectTrigger>
                 <SelectContent>
@@ -456,42 +468,43 @@ export default function ProjectsManagement() {
         </Card>
 
         {/* Stats */}
-        <div className="grid md:grid-cols-4 gap-3">
-          <Card>
-            <CardContent className="py-5 space-y-1">
-              <div className="text-sm text-muted-foreground">الإجمالي</div>
-              <div className="text-2xl font-bold">{stats.total}</div>
-            </CardContent>
-          </Card>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <AdminPanelStatCard
+            title="إجمالي المشاريع"
+            value={stats.total}
+            description="عدد المشاريع المطابقة للبحث والفلاتر الحالية داخل لوحة الإدارة."
+            helper={`إجمالي المستهدف المالي: ${fmtSAR(stats.totalTarget)}`}
+            icon={<Layers className="h-5 w-5" />}
+            accent="amber"
+          />
 
-          <Card>
-            <CardContent className="py-5 space-y-1">
-              <div className="text-sm text-muted-foreground">المنشور</div>
-              <div className="text-2xl font-bold flex items-center gap-2">
-                <CheckCircle2 className="w-5 h-5" />
-                {stats.published}
-              </div>
-            </CardContent>
-          </Card>
+          <AdminPanelStatCard
+            title="المشاريع المنشورة"
+            value={stats.published}
+            description="المشاريع الظاهرة حاليًا للمستخدمين والتي أصبحت ضمن واجهة العرض العامة."
+            helper={`${stats.published} مشروع في حالة منشور`}
+            icon={<CheckCircle2 className="h-5 w-5" />}
+            accent="emerald"
+          />
 
-          <Card>
-            <CardContent className="py-5 space-y-1">
-              <div className="text-sm text-muted-foreground">قريبا</div>
-              <div className="text-2xl font-bold flex items-center gap-2">
-                <Clock className="w-5 h-5" />
-                {stats.draft}
-              </div>
-            </CardContent>
-          </Card>
+          <AdminPanelStatCard
+            title="قيد التجهيز"
+            value={stats.draft}
+            description="المشاريع التي ما زالت في المسودة أو بانتظار الإطلاق والنشر الرسمي."
+            helper={`${stats.draft} مشروع ضمن حالات ما قبل النشر`}
+            icon={<Clock className="h-5 w-5" />}
+            accent="blue"
+          />
 
-          <Card>
-            <CardContent className="py-5 space-y-1">
-              <div className="text-sm text-muted-foreground">إجمالي التقدم</div>
-              <div className="text-lg font-semibold">
-                {fmtSAR(stats.totalCurrent)} / {fmtSAR(stats.totalTarget)}
-              </div>
-            </CardContent>
-          </Card>
+          <AdminPanelStatCard
+            title="إجمالي التقدم"
+            value={fmtSAR(stats.totalCurrent)}
+            description="إجمالي التمويل الحالي عبر المشاريع المطابقة مقارنة بالمستهدف المالي الكلي."
+            helper={`المستهدف الكلي: ${fmtSAR(stats.totalTarget)}`}
+            icon={<RefreshCw className="h-5 w-5" />}
+            accent="slate"
+            valueClassName="text-3xl sm:text-4xl"
+          />
         </div>
 
         {/* Content states */}
