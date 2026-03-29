@@ -440,7 +440,7 @@ function DashboardLayoutContent({
             <div className="flex items-center gap-2 px-2 transition-all w-full">
               <button
                 onClick={toggleSidebar}
-                className="h-8 w-8 shrink-0 rounded-lg text-slate-400 transition-colors hover:bg-white/8 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+                className="h-8 w-8 shrink-0 rounded-lg text-[#F2B705] transition-colors hover:bg-white/8 hover:text-[#FFD24A] focus:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
                 aria-label="Toggle navigation"
               >
                 <PanelLeft className="h-4 w-4 rtl:rotate-180" />
@@ -464,7 +464,7 @@ function DashboardLayoutContent({
                       className="gap-2 border-white/10 bg-white/[0.04] text-slate-100 hover:bg-white/[0.08] hover:text-white"
                       onClick={() => setLocation("/")}
                     >
-                      <Home className="h-4 w-4" />
+                      <Home className="h-4 w-4 text-[#F2B705]" />
                       الرئيسية
                     </Button>
                   </div>
@@ -483,10 +483,13 @@ function DashboardLayoutContent({
                       isActive={isActive}
                       onClick={() => setLocation(item.path)}
                       tooltip={item.label}
-                      className="h-10 rounded-xl font-normal text-slate-300 transition-all hover:text-white data-[active=true]:bg-white/10 data-[active=true]:text-white"
+                      className="h-10 rounded-xl font-normal text-slate-300 transition-all hover:text-white data-[active=true]:bg-white/10 data-[active=true]:text-white [&>svg]:text-[#F2B705]"
                     >
                       <item.icon
-                        className={`h-4 w-4 ${isActive ? "text-primary" : ""}`}
+                        className={cn(
+                          "h-4 w-4 text-[#F2B705]",
+                          isActive && "text-[#FFD24A]"
+                        )}
                       />
                       <span>{item.label}</span>
                     </SidebarMenuButton>
