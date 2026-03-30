@@ -61,6 +61,7 @@ import {
 import { db } from "@/_core/firebase";
 import { recomputeInvestorAggregates } from "@/_core/recomputeInvestorAggregates";
 import {
+  formatCompactNumberEN,
   formatCurrencyEN,
   formatDateEN,
   formatDateTimeEN,
@@ -320,6 +321,61 @@ function money(
     minimumFractionDigits: options?.minimumFractionDigits ?? 0,
     maximumFractionDigits: options?.maximumFractionDigits ?? 0,
   });
+}
+
+function formatCompactNumber(
+  value: unknown,
+  options?: {
+    minimumFractionDigits?: number;
+    maximumFractionDigits?: number;
+    compactMinimumFractionDigits?: number;
+    compactMaximumFractionDigits?: number;
+  }
+) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) return "0";
+
+  if (Math.abs(amount) < 1000) {
+    return formatNumberEN(amount, {
+      minimumFractionDigits: options?.minimumFractionDigits ?? 0,
+      maximumFractionDigits: options?.maximumFractionDigits ?? 0,
+    });
+  }
+
+  return formatCompactNumberEN(amount, {
+    minimumFractionDigits: options?.compactMinimumFractionDigits ?? 0,
+    maximumFractionDigits: options?.compactMaximumFractionDigits ?? 1,
+  });
+}
+
+function formatCompactCurrency(
+  value: unknown,
+  options?: {
+    minimumFractionDigits?: number;
+    maximumFractionDigits?: number;
+    compactMinimumFractionDigits?: number;
+    compactMaximumFractionDigits?: number;
+  }
+) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) {
+    return money(0, {
+      minimumFractionDigits: options?.minimumFractionDigits,
+      maximumFractionDigits: options?.maximumFractionDigits,
+    });
+  }
+
+  if (Math.abs(amount) < 1000) {
+    return money(amount, {
+      minimumFractionDigits: options?.minimumFractionDigits,
+      maximumFractionDigits: options?.maximumFractionDigits,
+    });
+  }
+
+  return `${formatCompactNumberEN(amount, {
+    minimumFractionDigits: options?.compactMinimumFractionDigits ?? 0,
+    maximumFractionDigits: options?.compactMaximumFractionDigits ?? 1,
+  })} ر.س`;
 }
 
 function formatPercent(
@@ -968,7 +1024,10 @@ function MetricTile({
         {label}
       </div>
       <div
-        className={cn("mt-3 text-2xl font-bold text-slate-950", valueClassName)}
+        className={cn(
+          "mt-3 break-words text-2xl font-bold leading-tight text-slate-950",
+          valueClassName
+        )}
       >
         {value}
       </div>
@@ -1073,8 +1132,8 @@ function OverviewCategoryCard({
             <Icon className="ml-1 h-3.5 w-3.5" />
             {meta.shortTitle}
           </div>
-          <div className="text-3xl font-bold tracking-tight text-slate-950">
-            {formatNumberEN(count)}
+          <div className="break-words text-3xl font-bold tracking-tight text-slate-950">
+            {formatCompactNumber(count)}
           </div>
           <p className="text-sm leading-6 text-slate-500">{meta.description}</p>
         </div>
@@ -1162,8 +1221,8 @@ function InvestmentCardPanel({
             <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-500">
               المبلغ المستثمر
             </div>
-            <div className="mt-2 text-2xl font-bold tracking-tight text-slate-950">
-              {money(row.amount)}
+            <div className="mt-2 break-words text-2xl font-bold tracking-tight text-slate-950">
+              {formatCompactCurrency(row.amount)}
             </div>
             <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
               <div className="rounded-2xl bg-white px-3 py-2">
@@ -1172,7 +1231,7 @@ function InvestmentCardPanel({
                 </div>
                 <div className="mt-1 text-sm font-semibold text-slate-900">
                   {row.expectedProfitTotal != null
-                    ? money(row.expectedProfitTotal)
+                    ? formatCompactCurrency(row.expectedProfitTotal)
                     : EMPTY_VALUE}
                 </div>
               </div>
@@ -1181,7 +1240,12 @@ function InvestmentCardPanel({
                   الربح الحالي
                 </div>
                 <div className="mt-1 text-sm font-semibold text-emerald-700">
-                  {row.currentProfit != null ? liveMoney(row.currentProfit) : EMPTY_VALUE}
+                  {row.currentProfit != null
+                    ? formatCompactCurrency(row.currentProfit, {
+                        minimumFractionDigits: LIVE_PROFIT_FRACTION_DIGITS,
+                        maximumFractionDigits: LIVE_PROFIT_FRACTION_DIGITS,
+                      })
+                    : EMPTY_VALUE}
                 </div>
               </div>
             </div>
@@ -1708,7 +1772,7 @@ export default function ClientProfile() {
   const profitToDateHelper = hasAnyDynamicProfit
     ? dynamicProfitCoverageCount === investmentRows.length
       ? "محسوب حيًا من نفس الاستثمارات المرتبطة ويتحدث عند تغير البيانات."
-      : `محسوب حيًا لـ ${formatNumberEN(dynamicProfitCoverageCount)} من أصل ${formatNumberEN(investmentRows.length)} استثمار، والباقي لا يحتوي شروط ربح كافية للحساب الحي.`
+      : `محسوب حيًا لـ ${formatCompactNumber(dynamicProfitCoverageCount)} من أصل ${formatCompactNumber(investmentRows.length)} استثمار، والباقي لا يحتوي شروط ربح كافية للحساب الحي.`
     : hasLinkedInvestments && storedProfitToDate > 0
       ? "معروض من آخر تجميع محفوظ لأن بيانات الربح الحي غير مكتملة في السجلات الحالية."
       : hasLinkedInvestments
@@ -1891,7 +1955,7 @@ export default function ClientProfile() {
           </div>
 
           <div className="inline-flex w-fit items-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm">
-            {formatNumberEN(rows.length)} سجل
+            {formatCompactNumber(rows.length)} سجل
           </div>
         </div>
 
@@ -2073,40 +2137,40 @@ export default function ClientProfile() {
                         <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-300">
                           إجمالي الاستثمارات
                         </div>
-                        <div className="mt-2 text-2xl font-bold tracking-tight">
-                          {money(totalInvested)}
+                        <div className="mt-2 break-words text-2xl font-bold tracking-tight leading-tight">
+                          {formatCompactCurrency(totalInvested)}
                         </div>
                       </div>
                       <div className="rounded-[24px] border border-sky-200 bg-white/90 p-4 shadow-sm">
                         <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-500">
                           العائد المتوقع
                         </div>
-                        <div className="mt-2 text-2xl font-bold tracking-tight text-sky-700">
-                          {money(expectedProfitTotal)}
+                        <div className="mt-2 break-words text-2xl font-bold tracking-tight leading-tight text-sky-700">
+                          {formatCompactCurrency(expectedProfitTotal)}
                         </div>
                       </div>
                       <div className="rounded-[24px] border border-emerald-200 bg-white/90 p-4 shadow-sm">
                         <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-500">
                           الاستثمارات النشطة
                         </div>
-                        <div className="mt-2 text-2xl font-bold tracking-tight text-emerald-700">
-                          {formatNumberEN(activeInvestmentsCount)}
+                        <div className="mt-2 break-words text-2xl font-bold tracking-tight leading-tight text-emerald-700">
+                          {formatCompactNumber(activeInvestmentsCount)}
                         </div>
                       </div>
                       <div className="rounded-[24px] border border-amber-200 bg-white/90 p-4 shadow-sm">
                         <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-500">
                           الطلبات تحت المعالجة
                         </div>
-                        <div className="mt-2 text-2xl font-bold tracking-tight text-amber-700">
-                          {formatNumberEN(requestsInProgressCount)}
+                        <div className="mt-2 break-words text-2xl font-bold tracking-tight leading-tight text-amber-700">
+                          {formatCompactNumber(requestsInProgressCount)}
                         </div>
                       </div>
                       <div className="rounded-[24px] border border-slate-200 bg-white/90 p-4 shadow-sm">
                         <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-500">
                           الاستثمارات المكتملة
                         </div>
-                        <div className="mt-2 text-2xl font-bold tracking-tight text-slate-900">
-                          {formatNumberEN(completedInvestmentsCount)}
+                        <div className="mt-2 break-words text-2xl font-bold tracking-tight leading-tight text-slate-900">
+                          {formatCompactNumber(completedInvestmentsCount)}
                         </div>
                       </div>
                     </div>
@@ -2188,7 +2252,14 @@ export default function ClientProfile() {
             <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
               <MetricTile
                 label="الربح حتى اليوم"
-                value={hasAnyDynamicProfit ? liveMoney(displayProfitToDate) : money(displayProfitToDate)}
+                value={formatCompactCurrency(displayProfitToDate, {
+                  minimumFractionDigits: hasAnyDynamicProfit
+                    ? LIVE_PROFIT_FRACTION_DIGITS
+                    : 0,
+                  maximumFractionDigits: hasAnyDynamicProfit
+                    ? LIVE_PROFIT_FRACTION_DIGITS
+                    : 0,
+                })}
                 helper={profitToDateHelper}
                 icon={TrendingUp}
                 className="border-emerald-100 bg-emerald-50/70"
@@ -2196,27 +2267,27 @@ export default function ClientProfile() {
               />
               <MetricTile
                 label="عدد الاستثمارات"
-                value={formatNumberEN(investmentRows.length)}
+                value={formatCompactNumber(investmentRows.length)}
                 helper="إجمالي السجلات الاستثمارية المرتبطة بهذا العميل."
                 icon={BriefcaseBusiness}
               />
               <MetricTile
                 label="المشاريع النشطة"
-                value={formatNumberEN(activeProjectsCount)}
-                helper={`${formatNumberEN(activeInvestmentsCount)} استثماراً ضمن القسم النشط`}
+                value={formatCompactNumber(activeProjectsCount)}
+                helper={`${formatCompactNumber(activeInvestmentsCount)} استثماراً ضمن القسم النشط`}
                 icon={FolderKanban}
               />
               <MetricTile
                 label="المشاريع المكتملة"
-                value={formatNumberEN(completedProjectsCount)}
-                helper={`${formatNumberEN(completedInvestmentsCount)} استثماراً مكتملًا`}
+                value={formatCompactNumber(completedProjectsCount)}
+                helper={`${formatCompactNumber(completedInvestmentsCount)} استثماراً مكتملًا`}
                 icon={History}
                 className="border-slate-200 bg-slate-50/90"
               />
               <MetricTile
                 label="المستندات والعقود"
-                value={formatNumberEN(documentedInvestments.length)}
-                helper={`${formatNumberEN(originalContractCount)} أصلية • ${formatNumberEN(signedContractCount)} موقعة`}
+                value={formatCompactNumber(documentedInvestments.length)}
+                helper={`${formatCompactNumber(originalContractCount)} أصلية • ${formatCompactNumber(signedContractCount)} موقعة`}
                 icon={FileText}
               />
             </section>
@@ -2364,16 +2435,16 @@ export default function ClientProfile() {
                       <CardContent className="space-y-3 pt-6">
                         <DetailCell
                           label="طلبات تحت المعالجة"
-                          value={formatNumberEN(requestsInProgressCount)}
+                          value={formatCompactNumber(requestsInProgressCount)}
                           emphasized
                         />
                         <DetailCell
                           label="استثمارات ملغية أو مرفوضة"
-                          value={formatNumberEN(cancelledInvestmentsCount)}
+                          value={formatCompactNumber(cancelledInvestmentsCount)}
                         />
                         <DetailCell
                           label="توفر المستندات"
-                          value={`${formatNumberEN(documentedInvestments.length)} استثمار يحتوي على عقود أو ملفات`}
+                          value={`${formatCompactNumber(documentedInvestments.length)} استثمار يحتوي على عقود أو ملفات`}
                         />
                       </CardContent>
                     </Card>
@@ -2424,19 +2495,19 @@ export default function ClientProfile() {
                 <div className="grid gap-4 sm:grid-cols-3">
                   <MetricTile
                     label="الاستثمارات التي تحتوي على ملفات"
-                    value={formatNumberEN(documentedInvestments.length)}
+                    value={formatCompactNumber(documentedInvestments.length)}
                     helper="عدد السجلات التي تحتوي على عقد أصلي أو عقد موقّع أو كليهما."
                     icon={FileText}
                   />
                   <MetricTile
                     label="العقود الأصلية المتاحة"
-                    value={formatNumberEN(originalContractCount)}
+                    value={formatCompactNumber(originalContractCount)}
                     helper="تشمل الملفات الأصلية الجاهزة للعرض أو التنزيل."
                     icon={FileDown}
                   />
                   <MetricTile
                     label="العقود الموقعة المتاحة"
-                    value={formatNumberEN(signedContractCount)}
+                    value={formatCompactNumber(signedContractCount)}
                     helper="تشمل النسخ الموقعة المرفوعة من العميل أو المعتمدة."
                     icon={ShieldCheck}
                   />
@@ -2727,7 +2798,7 @@ export default function ClientProfile() {
                     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
                       <InfoTile
                         label="عدد الاستثمارات"
-                        value={String(investmentRows.length)}
+                        value={formatCompactNumber(investmentRows.length)}
                         icon={BriefcaseBusiness}
                       />
                       <InfoTile
