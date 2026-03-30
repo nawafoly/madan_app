@@ -80,6 +80,7 @@ import {
   getProjectDisplayTitleById,
 } from "@/lib/projectDisplay";
 import { getProjectProfitFallback } from "@/lib/projectProfitFallback";
+import { downloadCorporateClientProfilePdf } from "@/lib/clientProfilePdf";
 import { resolveUserAccountStatus } from "@/lib/userAccountStatus";
 import {
   getInvestmentProfitSnapshot,
@@ -899,15 +900,6 @@ function getUserPhone(user: UserDoc | null) {
       (user as any)?.profile?.phone
     ) || EMPTY_VALUE
   );
-}
-
-function escapeHtml(value: any) {
-  return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
 }
 
 function InfoTile({
@@ -1760,191 +1752,112 @@ export default function ClientProfile() {
     [investmentSections]
   );
 
-  const downloadClientReportPdf = () => {
+  const downloadClientReportPdf = async () => {
     if (!user) return;
 
-    const reportDate = new Date();
+    try {
+      const reportDate = new Date();
+      const sumAmounts = (rows: InvestmentRow[]) =>
+        roundMoney(
+          rows.reduce((sum, row) => sum + Number(row.amount || 0), 0)
+        );
 
-    const rowsHtml = investmentRows
-      .map((row, index) => {
-        return `
-          <tr>
-            <td>${index + 1}</td>
-            <td>${escapeHtml(row.projectTitle)}</td>
-            <td>${escapeHtml(row.statusLabel)}</td>
-            <td>${escapeHtml(money(row.amount))}</td>
-            <td>${escapeHtml(formatPercent(row.percent))}</td>
-            <td>${escapeHtml(row.expectedProfitTotal != null ? money(row.expectedProfitTotal) : EMPTY_VALUE)}</td>
-            <td><b>${escapeHtml(money(row.totalValue))}</b></td>
-            <td>${escapeHtml(formatDate(row.startDate))}</td>
-            <td>${escapeHtml(formatDate(row.maturityDate))}</td>
-            <td>${escapeHtml(row.summaryLabel)}</td>
-          </tr>
-        `;
-      })
-      .join("");
+      const reportNumber = [
+        "MCR",
+        String(user.id || "CLIENT")
+          .replace(/[^\w]+/g, "")
+          .toUpperCase()
+          .slice(0, 8) || "CLIENT",
+        reportDate.toISOString().slice(0, 10).replace(/-/g, ""),
+      ].join("-");
 
-    const html = `
-    <!doctype html>
-    <html lang="ar" dir="rtl">
-      <head>
-        <meta charset="utf-8" />
-        <title>ملف العميل</title>
-        <style>
-          body { font-family: Arial, "Tahoma", sans-serif; margin: 24px; color:#0f172a; background:#fff; }
-          .hdr { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; }
-          .box { border:1px solid #e2e8f0; border-radius:14px; padding:16px; background:#fff; }
-          h1 { margin:0 0 8px 0; font-size:24px; }
-          .muted { color:#64748b; font-size:12px; }
-          .grid { display:grid; grid-template-columns: 1.4fr 1fr; gap:12px; margin-top:14px; }
-          .grid-tiles { display:grid; grid-template-columns: repeat(2, 1fr); gap:12px; margin-top:12px; }
-          .sum { display:grid; grid-template-columns: repeat(3, 1fr); gap:12px; margin-top:14px; }
-          .k { color:#64748b; font-size:12px; margin-bottom:6px; }
-          .v { font-weight:700; line-height:1.7; }
-          table { width:100%; border-collapse:collapse; margin-top:14px; }
-          th, td { border:1px solid #e2e8f0; padding:10px; font-size:12px; vertical-align:top; text-align:right; }
-          th { background:#f8fafc; }
-          .notes { white-space:pre-wrap; line-height:1.8; }
-          @media print {
-            button { display:none; }
-            body { margin: 0; }
-          }
-        </style>
-      </head>
-      <body>
-        <div class="hdr">
-          <div>
-            <h1>ملف العميل</h1>
-            <div class="muted">تاريخ التقرير: ${escapeHtml(formatDateTime(reportDate))}</div>
-          </div>
-          <div>
-            <button onclick="window.print()" style="padding:10px 14px;border:0;border-radius:10px;background:#111827;color:#fff;cursor:pointer;">
-              طباعة / حفظ PDF
-            </button>
-          </div>
-        </div>
+      await downloadCorporateClientProfilePdf({
+        fileNameBase: pick(displayName, user.id, displayEmail) || "client-profile",
+        reportDate,
+        reportNumber,
+        client: {
+          id: fallbackText(user.id),
+          name: displayName,
+          email: displayEmail,
+          phone: userPhone,
+          accountStatus: accountBadge.label,
+          roleLabel: roleBadge.label,
+          vipLabel: vipBadge.label,
+          createdAt,
+          latestAggregatesUpdate,
+          internalNotes: pick(user.internalNotes),
+        },
+        summary: {
+          totalInvested,
+          expectedProfitTotal,
+          profitToDate: displayProfitToDate,
+          investmentCount: investmentRows.length,
+          activeInvestmentsCount,
+          inProgressCount: requestsInProgressCount,
+          completedInvestmentsCount,
+          cancelledInvestmentsCount,
+          activeProjectsCount,
+          completedProjectsCount,
+          documentedInvestmentsCount: documentedInvestments.length,
+          originalContractCount,
+          signedContractCount,
+          firstInvestmentDate,
+          lastInvestmentDate,
+        },
+        stages: [
+          {
+            label: "تحت المراجعة",
+            count: investmentSections.under_review.length,
+            amount: sumAmounts(investmentSections.under_review),
+            color: "#f59e0b",
+          },
+          {
+            label: "بانتظار التوقيع",
+            count: investmentSections.awaiting_signature.length,
+            amount: sumAmounts(investmentSections.awaiting_signature),
+            color: "#2563eb",
+          },
+          {
+            label: "نشط",
+            count: investmentSections.active.length,
+            amount: sumAmounts(investmentSections.active),
+            color: "#059669",
+          },
+          {
+            label: "مكتمل",
+            count: investmentSections.completed.length,
+            amount: sumAmounts(investmentSections.completed),
+            color: "#0f172a",
+          },
+          {
+            label: "ملغي",
+            count: investmentSections.cancelled.length,
+            amount: sumAmounts(investmentSections.cancelled),
+            color: "#e11d48",
+          },
+        ],
+        investments: investmentRows.map(row => ({
+          referenceLabel: row.referenceLabel,
+          projectTitle: row.projectTitle,
+          statusLabel: row.statusLabel,
+          summaryLabel: row.summaryLabel,
+          contractStatusLabel: row.contractStatusLabel,
+          amount: row.amount,
+          expectedProfitTotal: row.expectedProfitTotal,
+          currentProfit: row.currentProfit,
+          totalValue: row.totalValue,
+          progressPercent: row.progressPercent,
+          requestDate: row.requestDate,
+          maturityDate: row.maturityDate,
+          hasAnyDocuments: row.hasAnyDocuments,
+        })),
+      });
 
-        <div class="grid">
-          <div class="box">
-            <div class="k">الاسم</div>
-            <div class="v">${escapeHtml(displayName)}</div>
-            <div class="grid-tiles">
-              <div>
-                <div class="k">البريد الإلكتروني</div>
-                <div class="v">${escapeHtml(displayEmail)}</div>
-              </div>
-              <div>
-                <div class="k">رقم الجوال</div>
-                <div class="v">${escapeHtml(userPhone)}</div>
-              </div>
-              <div>
-                <div class="k">الحالة</div>
-                <div class="v">${escapeHtml(accountBadge.label)}</div>
-              </div>
-              <div>
-                <div class="k">الدور</div>
-                <div class="v">${escapeHtml(roleBadge.label)}</div>
-              </div>
-              <div>
-                <div class="k">نوع العميل</div>
-                <div class="v">${escapeHtml(vipBadge.label)}</div>
-              </div>
-              <div>
-                <div class="k">تاريخ التسجيل</div>
-                <div class="v">${escapeHtml(formatDate(createdAt))}</div>
-              </div>
-            </div>
-          </div>
-
-          <div class="box">
-            <div class="k">مؤشرات إضافية</div>
-            <div class="grid-tiles">
-              <div>
-                <div class="k">عدد الاستثمارات</div>
-                <div class="v">${escapeHtml(String(investmentRows.length))}</div>
-              </div>
-              <div>
-                <div class="k">المشاريع النشطة</div>
-                <div class="v">${escapeHtml(String(activeProjectsCount))}</div>
-              </div>
-              <div>
-                <div class="k">المشاريع المكتملة</div>
-                <div class="v">${escapeHtml(String(completedProjectsCount))}</div>
-              </div>
-              <div>
-                <div class="k">آخر تحديث للتجميعات</div>
-                <div class="v">${escapeHtml(formatDateTime(latestAggregatesUpdate))}</div>
-              </div>
-              <div>
-                <div class="k">أول دخول استثماري</div>
-                <div class="v">${escapeHtml(formatDate(firstInvestmentDate))}</div>
-              </div>
-              <div>
-                <div class="k">آخر استثمار</div>
-                <div class="v">${escapeHtml(formatDate(lastInvestmentDate))}</div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="sum">
-          <div class="box">
-            <div class="k">إجمالي الاستثمار</div>
-            <div class="v">${escapeHtml(money(totalInvested))}</div>
-          </div>
-          <div class="box">
-            <div class="k">الربح حتى اليوم</div>
-            <div class="v">${escapeHtml(money(displayProfitToDate))}</div>
-          </div>
-          <div class="box">
-            <div class="k">العائد المتوقع</div>
-            <div class="v">${escapeHtml(money(expectedProfitTotal))}</div>
-          </div>
-        </div>
-
-        <div class="box" style="margin-top:14px;">
-          <div class="k">ملاحظات داخلية</div>
-          <div class="v notes">${escapeHtml(fallbackText(user.internalNotes))}</div>
-        </div>
-
-        <div class="box" style="margin-top:14px;">
-          <div class="k" style="font-weight:700;">هيستوري الاستثمارات</div>
-          <table>
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>اسم المشروع</th>
-                <th>الحالة</th>
-                <th>المبلغ</th>
-                <th>النسبة</th>
-                <th>الربح</th>
-                <th>الإجمالي المتوقع</th>
-                <th>تاريخ الدخول</th>
-                <th>يوم الاستحقاق</th>
-                <th>الملخص</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${
-                rowsHtml ||
-                `<tr><td colspan="10" style="text-align:center;color:#64748b;">لا توجد استثمارات لهذا العميل</td></tr>`
-              }
-            </tbody>
-          </table>
-        </div>
-      </body>
-    </html>
-    `;
-
-    const reportWindow = window.open("", "_blank");
-    if (!reportWindow) {
-      toast.error("المتصفح منع فتح نافذة التقرير. فعّل popups للموقع.");
-      return;
+      toast.success("تم تنزيل تقرير العميل بصيغة PDF بنجاح");
+    } catch (error) {
+      console.error(error);
+      toast.error("فشل توليد تقرير العميل بصيغة PDF");
     }
-
-    reportWindow.document.open();
-    reportWindow.document.write(html);
-    reportWindow.document.close();
   };
 
   const renderBucketSection = (

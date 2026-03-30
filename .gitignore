@@ -56,3 +56,5 @@ functions/node_modules/
 
 .vercel
 .env*.local
+
+.tmp/

@@ -49,7 +49,6 @@ import { cn } from "@/lib/utils";
 
 type RoleKey = "owner" | "admin" | "accountant" | "staff";
 
-
 type MenuItem = {
   icon: any;
   label: string;
@@ -133,9 +132,19 @@ const menuItems: MenuItem[] = [
 ];
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";
+const SIDEBAR_OPEN_KEY = "dashboard_sidebar_open";
 const DEFAULT_WIDTH = 280;
 const MIN_WIDTH = 200;
 const MAX_WIDTH = 480;
+
+function readStoredSidebarOpen() {
+  try {
+    const saved = localStorage.getItem(SIDEBAR_OPEN_KEY);
+    return saved ? JSON.parse(saved) : true;
+  } catch {
+    return true;
+  }
+}
 
 /* =========================
    Name + Role helpers
@@ -268,6 +277,7 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const [isSidebarOpen, setIsSidebarOpen] = useState(readStoredSidebarOpen);
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     const saved = localStorage.getItem(SIDEBAR_WIDTH_KEY);
     return saved ? parseInt(saved, 10) : DEFAULT_WIDTH;
@@ -287,6 +297,10 @@ export default function DashboardLayout({
   useEffect(() => {
     localStorage.setItem(SIDEBAR_WIDTH_KEY, sidebarWidth.toString());
   }, [sidebarWidth]);
+
+  useEffect(() => {
+    localStorage.setItem(SIDEBAR_OPEN_KEY, JSON.stringify(isSidebarOpen));
+  }, [isSidebarOpen]);
 
   if (loading) return <DashboardLayoutSkeleton />;
 
@@ -319,6 +333,8 @@ export default function DashboardLayout({
 
   return (
     <SidebarProvider
+      open={isSidebarOpen}
+      onOpenChange={setIsSidebarOpen}
       dir={layoutDir}
       className="min-h-screen flex-row items-stretch"
       style={
@@ -350,7 +366,7 @@ function DashboardLayoutContent({
 }: DashboardLayoutContentProps) {
   const { user, logout } = useAuth();
   const [location, setLocation] = useLocation();
-  const { state, toggleSidebar } = useSidebar();
+  const { state, setOpen, setOpenMobile } = useSidebar();
 
   const isCollapsed = state === "collapsed";
   const [isResizing, setIsResizing] = useState(false);
@@ -360,6 +376,14 @@ function DashboardLayoutContent({
 
   const isMobile = useIsMobile();
   const isRight = sidebarSide === "right";
+  const handleSidebarToggle = () => {
+    if (isMobile) {
+      setOpenMobile(prev => !prev);
+      return;
+    }
+
+    setOpen(prev => !prev);
+  };
 
   // ✅ 1) الدور
   const role = user?.role;
@@ -367,7 +391,7 @@ function DashboardLayoutContent({
   // ✅ 2) العناصر المسموحة
   const visibleMenuItems = useMemo(() => {
     if (!role || !isOpsRole(role)) return [];
-    return menuItems.filter((item) => hasPermission(user, item.permission));
+    return menuItems.filter(item => hasPermission(user, item.permission));
   }, [role, user]);
 
   // ✅ 3) العنصر النشط
@@ -455,37 +479,46 @@ function DashboardLayoutContent({
           <SidebarHeader className="h-16 justify-center border-b border-white/10 bg-slate-950/90">
             <div className="flex items-center gap-2 px-2 transition-all w-full">
               <button
-                onClick={toggleSidebar}
+                onClick={handleSidebarToggle}
                 className="h-8 w-8 shrink-0 rounded-lg text-[#F2B705] transition-colors hover:bg-white/8 hover:text-[#FFD24A] focus:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
                 aria-label="Toggle navigation"
               >
                 <PanelLeft className="h-4 w-4 rtl:rotate-180" />
               </button>
 
-              {!isCollapsed ? (
-                <>
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="font-semibold tracking-tight truncate text-[#F2B705]">
-                      معدن
-                    </span>
-                  </div>
+              <div
+                className={cn(
+                  "flex min-w-0 items-center gap-2 overflow-hidden transition-[max-width,opacity,transform] duration-200",
+                  isCollapsed
+                    ? "max-w-0 -translate-x-2 opacity-0 pointer-events-none"
+                    : "max-w-32 translate-x-0 opacity-100"
+                )}
+              >
+                <span className="font-semibold tracking-tight truncate whitespace-nowrap text-[#F2B705]">
+                  معدن
+                </span>
+              </div>
 
-                  {/* ✅ زر الرئيسية */}
-                  <div
-                    className={`${isRight ? "mr-auto" : "ml-auto"} flex items-center gap-2`}
-                  >
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="gap-2 border-white/10 bg-white/[0.04] text-slate-100 hover:bg-white/[0.08] hover:text-white"
-                      onClick={() => setLocation("/")}
-                    >
-                      <Home className="h-4 w-4 text-[#F2B705]" />
-                      الرئيسية
-                    </Button>
-                  </div>
-                </>
-              ) : null}
+              {/* ✅ زر الرئيسية */}
+              <div
+                className={cn(
+                  isRight ? "mr-auto" : "ml-auto",
+                  "flex min-w-0 items-center gap-2 overflow-hidden whitespace-nowrap transition-[max-width,opacity,transform] duration-200",
+                  isCollapsed
+                    ? "max-w-0 translate-x-2 opacity-0 pointer-events-none"
+                    : "max-w-40 translate-x-0 opacity-100"
+                )}
+              >
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2 border-white/10 bg-white/[0.04] text-slate-100 hover:bg-white/[0.08] hover:text-white"
+                  onClick={() => setLocation("/")}
+                >
+                  <Home className="h-4 w-4 text-[#F2B705]" />
+                  الرئيسية
+                </Button>
+              </div>
             </div>
           </SidebarHeader>
 
@@ -507,7 +540,16 @@ function DashboardLayoutContent({
                           isActive && "text-[#FFD24A]"
                         )}
                       />
-                      <span>{item.label}</span>
+                      <span
+                        className={cn(
+                          "whitespace-nowrap transition-[max-width,opacity] duration-200",
+                          isCollapsed
+                            ? "max-w-0 opacity-0 pointer-events-none"
+                            : "max-w-40 opacity-100"
+                        )}
+                      >
+                        {item.label}
+                      </span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 );
@@ -526,7 +568,14 @@ function DashboardLayoutContent({
                         .charAt(0)}
                     </AvatarFallback>
                   </Avatar>
-                  <div className="flex-1 min-w-0 group-data-[collapsible=icon]:hidden">
+                  <div
+                    className={cn(
+                      "flex-1 min-w-0 overflow-hidden transition-[max-width,opacity] duration-200",
+                      isCollapsed
+                        ? "max-w-0 opacity-0 pointer-events-none"
+                        : "max-w-48 opacity-100"
+                    )}
+                  >
                     <p className="truncate text-sm font-medium leading-none text-slate-100">
                       {displayNameWithTitle}
                     </p>
@@ -551,9 +600,13 @@ function DashboardLayoutContent({
         </Sidebar>
 
         <div
-          className={`absolute top-0 ${isRight ? "left-0" : "right-0"} w-1 h-full cursor-col-resize hover:bg-primary/20 transition-colors ${
-            isCollapsed ? "hidden" : ""
-          }`}
+          className={cn(
+            "absolute top-0 h-full w-1 cursor-col-resize transition-[opacity,background-color] duration-200 hover:bg-primary/20",
+            isRight ? "left-0" : "right-0",
+            isCollapsed
+              ? "pointer-events-none opacity-0"
+              : "pointer-events-auto opacity-100"
+          )}
           onMouseDown={() => {
             if (isCollapsed) return;
             setIsResizing(true);

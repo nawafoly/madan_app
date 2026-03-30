@@ -1817,7 +1817,7 @@ export default function Financial() {
         </div>
 
         {/* Stats */}
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid items-stretch gap-2.5 md:grid-cols-2 lg:gap-3">
           <AdminPanelStatCard
             title="الاستثمارات المعلقة"
             value={pendingInvestments.length}
@@ -1825,6 +1825,16 @@ export default function Financial() {
             helper={`إجمالي المبالغ المعلقة: ${formatCurrencyEN(totalPendingAmount)}`}
             icon={<Clock className="h-5 w-5" />}
             accent="amber"
+            density="compact"
+            className="gap-0 rounded-[22px] py-0 shadow-[0_18px_48px_-36px_rgba(2,6,23,0.9)]"
+            contentClassName="min-h-[118px] gap-3 px-4 py-3.5 sm:min-h-[124px] sm:px-5 sm:py-4"
+            headerClassName="gap-2.5"
+            titleClassName="text-[12px] leading-4 text-white/72 sm:text-[12.5px]"
+            descriptionClassName="max-w-[28ch] text-[10.5px] leading-[1rem] text-white/54 sm:text-[11px]"
+            iconClassName="h-8 w-8 rounded-[14px] [&_svg]:h-4 [&_svg]:w-4"
+            bodyClassName="mt-0.5 space-y-1.5"
+            valueClassName="text-[1.5rem] leading-none sm:text-[1.72rem]"
+            helperClassName="rounded-[14px] px-3 py-1.5 text-[10.5px] leading-[1rem] text-white/64 sm:text-[11px]"
           />
 
           <AdminPanelStatCard
@@ -1834,6 +1844,16 @@ export default function Financial() {
             helper={`إجمالي المبالغ المعتمدة: ${formatCurrencyEN(totalApprovedAmount)}`}
             icon={<CheckCircle className="h-5 w-5" />}
             accent="emerald"
+            density="compact"
+            className="gap-0 rounded-[22px] py-0 shadow-[0_18px_48px_-36px_rgba(2,6,23,0.9)]"
+            contentClassName="min-h-[118px] gap-3 px-4 py-3.5 sm:min-h-[124px] sm:px-5 sm:py-4"
+            headerClassName="gap-2.5"
+            titleClassName="text-[12px] leading-4 text-white/72 sm:text-[12.5px]"
+            descriptionClassName="max-w-[28ch] text-[10.5px] leading-[1rem] text-white/54 sm:text-[11px]"
+            iconClassName="h-8 w-8 rounded-[14px] [&_svg]:h-4 [&_svg]:w-4"
+            bodyClassName="mt-0.5 space-y-1.5"
+            valueClassName="text-[1.5rem] leading-none sm:text-[1.72rem]"
+            helperClassName="rounded-[14px] px-3 py-1.5 text-[10.5px] leading-[1rem] text-white/64 sm:text-[11px]"
           />
 
           <AdminPanelStatCard
@@ -1843,7 +1863,16 @@ export default function Financial() {
             helper={`إجمالي المبالغ قيد المتابعة: ${formatCurrencyEN(totalPendingAmount + totalApprovedAmount)}`}
             icon={<DollarSign className="h-5 w-5" />}
             accent="blue"
-            className="md:col-span-2"
+            density="compact"
+            className="gap-0 rounded-[22px] py-0 shadow-[0_18px_48px_-36px_rgba(2,6,23,0.9)] md:col-span-2"
+            contentClassName="min-h-[104px] gap-3 px-4 py-3.5 sm:min-h-[110px] sm:px-5 sm:py-4"
+            headerClassName="gap-2.5"
+            titleClassName="text-[12px] leading-4 text-white/72 sm:text-[12.5px]"
+            descriptionClassName="max-w-[56ch] text-[10.5px] leading-[1rem] text-white/54 sm:text-[11px]"
+            iconClassName="h-8 w-8 rounded-[14px] [&_svg]:h-4 [&_svg]:w-4"
+            bodyClassName="mt-0.5 space-y-1.5"
+            valueClassName="text-[1.55rem] leading-none sm:text-[1.8rem]"
+            helperClassName="w-fit rounded-[14px] px-3 py-1.5 text-[10.5px] leading-[1rem] text-white/64 sm:text-[11px]"
           />
         </div>
 
