@@ -1,6 +1,12 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 // client/src/pages/admin/MessagesManagement.tsx
-import { useEffect, useMemo, useState } from "react";
+import {
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import AdminPanelStatCard from "@/components/AdminPanelStatCard";
 import ContractFilePicker from "@/components/ContractFilePicker";
@@ -25,9 +31,20 @@ import {
   formatDateTimeEN,
   formatNumberEN,
 } from "@/lib/formatters";
+import {
+  buildProjectsMap,
+  getProjectDisplayTitleById,
+} from "@/lib/projectDisplay";
+import {
+  buildUserIdentityIndex,
+  getLinkedUserDisplayName,
+  getLinkedUserEmail,
+  resolveLinkedUser,
+} from "@/lib/userDisplay";
+import { getOwnerRoleLabel } from "@/lib/ownerAccounts";
 import { getClientInvestmentStatusMeta } from "@/lib/workflowStatusMeta";
 import { resolveInvestmentActivationTerms } from "@shared/investmentActivation";
-import { useAuth } from "@/_core/hooks/useAuth";
+import { hasPermission, useAuth } from "@/_core/hooks/useAuth";
 import {
   AUDIT_ACTIONS,
   auditedUpdateDoc,
@@ -69,6 +86,10 @@ import {
   AlertTriangle,
   ExternalLink,
   Download,
+  Search,
+  CalendarDays,
+  Wallet,
+  RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -233,6 +254,42 @@ const getClientPhone = (m: any) =>
     m?.userSnapshot?.phone
   );
 
+function resolveRequestClient(source: any, userIdentityIndex: any) {
+  const linkedUser = resolveLinkedUser(source, userIdentityIndex);
+
+  return {
+    linkedUser,
+    clientId: pick(
+      linkedUser?.id,
+      linkedUser?.uid,
+      source?.createdByUid,
+      source?.investorUid,
+      source?.userId,
+      source?.userSnapshot?.uid
+    ),
+    clientName:
+      getLinkedUserDisplayName(
+        source,
+        userIdentityIndex,
+        getClientName(source),
+        "—"
+      ) || "—",
+    clientEmail: getLinkedUserEmail(
+      source,
+      userIdentityIndex,
+      getClientEmail(source)
+    ),
+    clientPhone: pick(
+      linkedUser?.phone,
+      linkedUser?.mobile,
+      linkedUser?.phoneNumber,
+      linkedUser?.profile?.phone,
+      linkedUser?.contact?.phone,
+      getClientPhone(source)
+    ),
+  };
+}
+
 function toNum(v: any) {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
@@ -267,7 +324,7 @@ function stageLabel(v: any) {
     client: "العميل",
     investment: "الاستثمار",
     contract: "العقد",
-    owner: "المالك",
+    owner: getOwnerRoleLabel(),
     completed: "مقفل",
   };
   return map[s] || (s ? s : "—");
@@ -356,6 +413,36 @@ function lastTouchedBy(m: any) {
   }
 
   return "—";
+}
+
+function getLastUpdatedAtValue(m: any) {
+  const lastEventAt =
+    Array.isArray(m?.events) && m.events.length
+      ? m.events[m.events.length - 1]?.at
+      : null;
+
+  return (
+    toDateSafe(
+      m?.updatedAt ||
+        m?.updated_at ||
+        m?.lastUpdatedAt ||
+        m?.lastActivityAt ||
+        m?.processedAt ||
+        lastEventAt
+    ) ||
+    toDateSafe(m?.createdAt || m?.created_at || m?.submittedAt || m?.timestamp)
+  );
+}
+
+function formatLastUpdatedAt(m: any) {
+  return formatDateTimeEN(getLastUpdatedAtValue(m));
+}
+
+function normalizeSearchValue(...values: any[]) {
+  return values
+    .map(value => String(value ?? "").trim().toLowerCase())
+    .filter(Boolean)
+    .join(" ");
 }
 
 function getRequestSummary(m: any) {
@@ -525,6 +612,86 @@ type MessageStatus =
   | "no_account"
   | "closed";
 
+function getRequestStatusMeta(status: any) {
+  const normalizedStatus = normalizeRequestStatus(status);
+  const approvedMeta = getClientInvestmentStatusMeta("approved");
+
+  const map: Record<
+    MessageStatus,
+    { label: string; tone: string; accent: string }
+  > = {
+    pending: {
+      label: "قيد الانتظار",
+      tone: "border-amber-200 bg-amber-50 text-amber-800",
+      accent: "bg-amber-500",
+    },
+    reviewing: {
+      label: "قيد المراجعة",
+      tone: "border-sky-200 bg-sky-50 text-sky-800",
+      accent: "bg-sky-500",
+    },
+    approved: {
+      label: approvedMeta.label,
+      tone: "border-emerald-200 bg-emerald-50 text-emerald-800",
+      accent: "bg-emerald-500",
+    },
+    new: {
+      label: "قيد الانتظار",
+      tone: "border-amber-200 bg-amber-50 text-amber-800",
+      accent: "bg-amber-500",
+    },
+    in_progress: {
+      label: "قيد المراجعة",
+      tone: "border-sky-200 bg-sky-50 text-sky-800",
+      accent: "bg-sky-500",
+    },
+    needs_account: {
+      label: "قيد المراجعة",
+      tone: "border-sky-200 bg-sky-50 text-sky-800",
+      accent: "bg-sky-500",
+    },
+    waiting_client_confirmation: {
+      label: "قيد المراجعة",
+      tone: "border-sky-200 bg-sky-50 text-sky-800",
+      accent: "bg-sky-500",
+    },
+    resolved: {
+      label: approvedMeta.label,
+      tone: "border-emerald-200 bg-emerald-50 text-emerald-800",
+      accent: "bg-emerald-500",
+    },
+    completed: {
+      label: "مكتمل",
+      tone: "border-slate-200 bg-slate-100 text-slate-800",
+      accent: "bg-slate-500",
+    },
+    rejected: {
+      label: "مرفوض",
+      tone: "border-rose-200 bg-rose-50 text-rose-800",
+      accent: "bg-rose-500",
+    },
+    no_account: {
+      label: "بدون حساب",
+      tone: "border-rose-200 bg-rose-50 text-rose-800",
+      accent: "bg-rose-500",
+    },
+    closed: {
+      label: "مغلق",
+      tone: "border-slate-200 bg-slate-100 text-slate-800",
+      accent: "bg-slate-500",
+    },
+  };
+
+  return map[normalizedStatus] || map.pending;
+}
+
+function getRequestStageMeta(stageRole: any) {
+  return {
+    label: stageLabel(stageRole),
+    tone: "border-slate-200 bg-slate-100 text-slate-700",
+  };
+}
+
 type ContractFileKind = "draft_pdf" | "signed_pdf" | "other";
 
 type ContractFile = {
@@ -641,6 +808,8 @@ export default function MessagesManagement() {
 
   const [loading, setLoading] = useState(true);
   const [messages, setMessages] = useState<any[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const [selectedMessage, setSelectedMessage] = useState<any>(null);
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
@@ -675,6 +844,7 @@ export default function MessagesManagement() {
   const [view, setView] = useState<"all" | "open" | "completed" | "rejected">(
     "open"
   );
+  const deferredSearchQuery = useDeferredValue(searchQuery.trim().toLowerCase());
   const [requestedRequestId, setRequestedRequestId] = useState(() => {
     if (typeof window === "undefined") return "";
     return (
@@ -715,13 +885,43 @@ export default function MessagesManagement() {
     loadProjects();
   }, []);
 
-  const getProjectTitle = (projectId: any) => {
-    const pid = String(projectId || "");
-    if (!pid) return "—";
-    const p = projectsMap[pid];
-    if (!p) return "—";
-    return pick(p?.titleAr, p?.nameAr, p?.title, p?.name) || "—";
-  };
+  useEffect(() => {
+    const unsub = onSnapshot(
+      collection(db, "projects"),
+      (snap) => {
+        setProjectsMap(
+          buildProjectsMap(snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })))
+        );
+      },
+      (error) => {
+        console.error(error);
+      }
+    );
+
+    return () => {
+      unsub();
+    };
+  }, []);
+
+  useEffect(() => {
+    const unsub = onSnapshot(
+      collection(db, "users"),
+      (snap) => {
+        setUsers(snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })));
+      },
+      (error) => {
+        console.error(error);
+        toast.error("تعذر مزامنة بيانات العملاء الحالية.");
+      }
+    );
+
+    return () => {
+      unsub();
+    };
+  }, []);
+
+  const getProjectTitle = (projectId: any) =>
+    getProjectDisplayTitleById(projectsMap, projectId, "—") || "—";
 
   const getProjectRemaining = (projectId: any) => {
     const pid = String(projectId || "");
@@ -738,7 +938,10 @@ export default function MessagesManagement() {
   /* =========================
     ✅ Role permissions (MAEDIN principle)
   ========================= */
-  const OWNER_EMAIL = "nawafaaa0@gmail.com";
+  const userIdentityIndex = useMemo(
+    () => buildUserIdentityIndex(users),
+    [users]
+  );
 
   const [myRoleDb, setMyRoleDb] = useState<string>("");
   const [roleDocMissing, setRoleDocMissing] = useState(false);
@@ -754,16 +957,10 @@ export default function MessagesManagement() {
         }
 
         // ✅ owner bootstrap by email (نجاة للحسابات القديمة)
-        const email = String(user?.email || "").toLowerCase();
-        if (email && email === OWNER_EMAIL) {
-          setMyRoleDb("owner");
-          return;
-        }
-
         const snap = await getDoc(doc(db, "users", user.uid));
         if (!snap.exists()) {
           setRoleDocMissing(true);
-          setMyRoleDb("");
+          setMyRoleDb(String(user?.role || ""));
           return;
         }
         const role = (snap.data() as any)?.role || "";
@@ -779,16 +976,16 @@ export default function MessagesManagement() {
 
   const myRole = useMemo<AppRole>(() => {
     // ✅ fallback
-    const email = String(user?.email || "").toLowerCase();
-    if (email && email === OWNER_EMAIL) return "owner";
-    return normalizeRole(myRoleDb);
-  }, [myRoleDb, user?.email]);
+    return normalizeRole(user?.role || myRoleDb);
+  }, [myRoleDb, user?.role]);
 
+  const canManageMessages = hasPermission(user as any, "messages.manage");
+  const canManageInvestments = hasPermission(user as any, "investments.manage");
   const canOwnerAccountantActions =
-    myRole === "owner" || myRole === "accountant";
+    canManageMessages && (myRole === "owner" || myRole === "accountant");
   const canStaffActions =
-    myRole === "staff" || myRole === "admin" || myRole === "owner";
-  const canAdmin = myRole === "admin" || myRole === "owner";
+    canManageMessages && (myRole === "staff" || myRole === "admin" || myRole === "owner");
+  const canAdmin = canManageMessages && (myRole === "admin" || myRole === "owner");
 
   /* =========================
     status badge
@@ -799,7 +996,7 @@ export default function MessagesManagement() {
       new: { label: "جديد", cls: "bg-orange-500" },
       in_progress: { label: "قيد المعالجة", cls: "bg-blue-500" },
       resolved: { label: "تم تعميد العميل", cls: "bg-emerald-700" },
-      closed: { label: "مغلق (قديم)", cls: "bg-gray-500" },
+      closed: { label: "مكتمل", cls: "bg-gray-500" },
       approved: { label: approvedMeta.label, cls: approvedMeta.cls },
       rejected: { label: "مرفوض", cls: "bg-red-600" },
       needs_account: { label: "عند المحاسب", cls: "bg-yellow-600" },
@@ -809,7 +1006,7 @@ export default function MessagesManagement() {
         cls: "bg-indigo-700",
       },
       completed: {
-        label: "مقفل نهائيًا",
+        label: "مكتمل",
         cls: "border border-amber-300/70 bg-slate-950 text-amber-200 shadow-sm",
       },
     };
@@ -1127,6 +1324,7 @@ export default function MessagesManagement() {
     if (
       !isDetailDialogOpen ||
       !selectedMessage?.id ||
+      !canManageMessages ||
       selectedMessage?.adminSeenAt
     )
       return;
@@ -1157,6 +1355,7 @@ export default function MessagesManagement() {
     void run();
   }, [
     REQUESTS_COL,
+    canManageMessages,
     isDetailDialogOpen,
     selectedMessage?.id,
     selectedMessage?.adminSeenAt,
@@ -1263,6 +1462,15 @@ export default function MessagesManagement() {
       "signedDocumentPath",
     ])
   );
+  const storedContractStatus = String(
+    pick(
+      investmentDoc?.contractStatus,
+      contractDoc?.status,
+      selectedMessage?.contractStatus
+    )
+  )
+    .trim()
+    .toLowerCase();
 
   useEffect(() => {
     setLocalUploadedByKind({});
@@ -1292,7 +1500,11 @@ export default function MessagesManagement() {
         if (candidate && status === "exists") next.original = candidate;
       }
 
-      if (!signedPathFromDocs && !localUploadedByKind.signed?.path) {
+      if (
+        !signedPathFromDocs &&
+        !localUploadedByKind.signed?.path &&
+        storedContractStatus !== "pending_signature"
+      ) {
         const candidate = expectedContractPath(activeInvestmentId, "signed");
         const status = candidate ? await r2ObjectStatus(candidate) : "unknown";
         probe.signed = status;
@@ -1315,6 +1527,7 @@ export default function MessagesManagement() {
     originalPathFromDocs,
     signedPathFromDocs,
     localUploadedByKind,
+    storedContractStatus,
   ]);
 
   /* =========================
@@ -1344,43 +1557,103 @@ export default function MessagesManagement() {
     openMessageDetails,
   ]);
 
+  const requestRows = useMemo(
+    () =>
+      normalized.map((message) => {
+        const client = resolveRequestClient(message, userIdentityIndex);
+        const projectId = pick(
+          message?.projectId,
+          message?.project_id,
+          message?.project?.id
+        );
+        const amount =
+          toNum(message?.approvedAmount) ||
+          toNum(message?.amount) ||
+          toNum(message?.requestedAmount) ||
+          toNum(message?.estimatedAmount) ||
+          0;
+        const remaining = getProjectRemaining(projectId);
+        const statusMeta = getRequestStatusMeta(message.status);
+        const stageMeta = getRequestStageMeta(message.stageRole);
+        const requestDateValue = toDateSafe(
+          message.createdAt ||
+            message.created_at ||
+            message.submittedAt ||
+            message.timestamp
+        );
+        const updatedAtValue = getLastUpdatedAtValue(message);
+        const projectTitle = getProjectTitle(projectId);
+
+        return {
+          ...message,
+          client,
+          projectId,
+          projectTitle,
+          amount,
+          remaining,
+          exceeded: remaining != null ? amount > remaining : false,
+          requestIdLabel: requestNumber(message),
+          requestDateValue,
+          requestDateLabel: formatDateTimeAR(requestDateValue),
+          updatedAtValue,
+          updatedAtLabel: formatDateTimeAR(updatedAtValue),
+          touchedBy: lastTouchedBy(message),
+          statusMeta,
+          stageMeta,
+          summary: getRequestSummary(message),
+          searchIndex: normalizeSearchValue(
+            client.clientName,
+            client.clientEmail,
+            client.clientPhone,
+            projectTitle,
+            requestNumber(message),
+            statusMeta.label,
+            stageMeta.label
+          ),
+        };
+      }),
+    [normalized, userIdentityIndex, projectsMap]
+  );
+
   const filtered = useMemo(() => {
-    if (view === "all") return normalized;
+    const matchesView = (message: any) => {
+      const st = String(message.status || "");
 
-    if (view === "open") {
-      return normalized.filter(m => {
-        const st = String(m.status || "");
+      if (view === "all") return true;
+      if (view === "open") {
         return st !== "completed" && st !== "rejected" && st !== "closed";
-      });
-    }
-
-    if (view === "completed") {
-      return normalized.filter(m => {
-        const st = String(m.status || "");
+      }
+      if (view === "completed") {
         return st === "completed" || st === "closed";
-      });
-    }
+      }
+      if (view === "rejected") {
+        return st === "rejected";
+      }
+      return true;
+    };
 
-    if (view === "rejected") {
-      return normalized.filter(m => String(m.status || "") === "rejected");
-    }
-
-    return normalized;
-  }, [normalized, view]);
+    return requestRows.filter((message) => {
+      if (!matchesView(message)) return false;
+      if (!deferredSearchQuery) return true;
+      return message.searchIndex.includes(deferredSearchQuery);
+    });
+  }, [deferredSearchQuery, requestRows, view]);
 
   const stats = useMemo(() => {
-    const all = normalized;
+    const all = requestRows;
     const open = all.filter(
-      m =>
-        String(m.status || "") !== "completed" &&
-        String(m.status || "") !== "rejected" &&
-        String(m.status || "") !== "closed"
+      (message) =>
+        String(message.status || "") !== "completed" &&
+        String(message.status || "") !== "rejected" &&
+        String(message.status || "") !== "closed"
     );
-    const completed = all.filter(m => {
-      const st = String(m.status || "");
+    const completed = all.filter((message) => {
+      const st = String(message.status || "");
       return st === "completed" || st === "closed";
     });
-    const rejected = all.filter(m => String(m.status || "") === "rejected");
+    const rejected = all.filter(
+      (message) => String(message.status || "") === "rejected"
+    );
 
     return {
       all: all.length,
@@ -1388,7 +1661,27 @@ export default function MessagesManagement() {
       completed: completed.length,
       rejected: rejected.length,
     };
-  }, [normalized]);
+  }, [requestRows]);
+
+  const statusCounters = useMemo(
+    () => ({
+      pending: requestRows.filter((message) => message.status === "pending").length,
+      reviewing: requestRows.filter((message) => message.status === "reviewing").length,
+      approved: requestRows.filter((message) => message.status === "approved").length,
+      completed: requestRows.filter((message) =>
+        ["completed", "closed"].includes(String(message.status || ""))
+      ).length,
+    }),
+    [requestRows]
+  );
+
+  const selectedClient = useMemo(
+    () =>
+      selectedMessage
+        ? resolveRequestClient(selectedMessage, userIdentityIndex)
+        : null,
+    [selectedMessage, userIdentityIndex]
+  );
 
   /* =========================
     flags
@@ -1411,6 +1704,7 @@ export default function MessagesManagement() {
   const handleSaveNotesOnly = async () => {
     if (!selectedMessage) return;
 
+    if (!canManageMessages) return toast.error("لا تملك صلاحية إدارة الطلبات.");
     if (myRole === "client") return toast.error("صلاحيتك عرض فقط.");
     if (isLockedFinal && myRole !== "owner")
       return toast.warning("الطلب مقفل ولا يمكن تعديل الملاحظات.");
@@ -1469,6 +1763,7 @@ export default function MessagesManagement() {
     note?: string;
     notifyClientText?: string;
   }) => {
+    if (!canManageMessages) return toast.error("لا تملك صلاحية إدارة الطلبات.");
     if (!selectedMessage) return;
 
     if (isLockedFinal && myRole !== "owner") {
@@ -1479,7 +1774,7 @@ export default function MessagesManagement() {
     if (myRole === "client") {
       const ok = next.status === "resolved" && next.stageRole === "owner";
       if (!ok) {
-        toast.error("العميل يقدر فقط يسوي: موافقة وتعميد (نقل للأونر).");
+        toast.error(`العميل يقدر فقط يسوي: موافقة وتعميد (نقل إلى ${getOwnerRoleLabel()}).`);
         return;
       }
     }
@@ -1487,7 +1782,7 @@ export default function MessagesManagement() {
     const ev = makeEvent({
       type: "status_changed",
       title: "تحديث خطوة الطلب",
-      note: next.note || `تم نقل الطلب إلى: ${next.status} / ${next.stageRole}`,
+      note: next.note || `تم نقل الطلب إلى: ${next.status} / ${stageLabel(next.stageRole)}`,
       ...myActor(user, myRole),
       meta: { status: next.status, stageRole: next.stageRole },
     });
@@ -1546,7 +1841,7 @@ export default function MessagesManagement() {
   // 2) Accountant: تمت مراجعة الحساب -> للعميل
   const stepAccountantForwardToClient = async () => {
     if (!canOwnerAccountantActions)
-      return toast.error("هذا الإجراء للمحاسب/الأونر");
+      return toast.error(`هذا الإجراء للمحاسب/${getOwnerRoleLabel()}`);
     if (isLockedFinal) return toast.warning("الطلب مقفل.");
 
     await moveTo({
@@ -1565,15 +1860,16 @@ export default function MessagesManagement() {
     await moveTo({
       status: "resolved",
       stageRole: "owner",
-      note: "تم تعميد العميل — تحويل للمالك للتعميد النهائي",
+      note: `تم تعميد العميل — تحويل إلى ${getOwnerRoleLabel()} للتعميد النهائي`,
       notifyClientText:
-        "تم استلام تعميدك، وسيتم الإقفال النهائي بعد مراجعة المالك.",
+        `تم استلام تعميدك، وسيتم الإقفال النهائي بعد مراجعة ${getOwnerRoleLabel()}.`,
     });
   };
 
   // 4) Owner: تعميد نهائي + قفل
   const stepOwnerFinalizeAndClose = async () => {
-    if (myRole !== "owner") return toast.error("هذا الإجراء للمالك فقط");
+    if (!canManageMessages) return toast.error("لا تملك صلاحية إدارة الطلبات.");
+    if (myRole !== "owner") return toast.error(`هذا الإجراء لـ ${getOwnerRoleLabel()} فقط`);
     if (isLockedFinal) return toast.warning("الطلب مقفل.");
 
     await moveTo({
@@ -1590,14 +1886,16 @@ export default function MessagesManagement() {
 
   const createPreInvestment = async () => {
     if (!selectedMessage) return;
+    if (!canManageInvestments)
+      return toast.error("لا تملك صلاحية إدارة الاستثمارات.");
 
     try {
       // ✅ إذا الطلب بدون حساب (createdByUid null) => حوّله لبدون حساب
-      if (!selectedMessage?.createdByUid) {
+      if (!selectedClient?.clientId) {
         const ev = makeEvent({
           type: "needs_account",
           title: "بدون حساب",
-          note: "الطلب لا يحتوي على حساب مرتبط (createdByUid فارغ).",
+          note: "الطلب غير مرتبط حاليًا بحساب عميل حي يمكن استخدامه.",
           ...myActor(user, myRole),
           meta: { messageId: selectedMessage.id },
         });
@@ -1635,6 +1933,10 @@ export default function MessagesManagement() {
   };
 
   const approveRequestAndCreateInvestment = async () => {
+    if (!canManageInvestments) {
+      toast.error("لا تملك صلاحية إدارة الاستثمارات.");
+      return;
+    }
     if (!selectedMessage) return;
 
     if (myRole === "client") return toast.error("صلاحيتك عرض فقط.");
@@ -1654,6 +1956,7 @@ export default function MessagesManagement() {
       selectedMessage?.project?.id
     );
     const investorUid = pick(
+      selectedClient?.clientId,
       selectedMessage?.investorUid,
       selectedMessage?.userId,
       selectedMessage?.createdByUid,
@@ -1665,12 +1968,15 @@ export default function MessagesManagement() {
       toNum(selectedMessage?.amount) ||
       toNum(selectedMessage?.requestedAmount) ||
       toNum(selectedMessage?.estimatedAmount);
-    const projectTitle = pick(
-      selectedMessage?.projectTitle,
-      selectedMessage?.projectSnapshot?.titleAr,
-      selectedMessage?.projectSnapshot?.title,
-      selectedMessage?.projectSnapshot?.name
-    );
+    const projectTitle =
+      getProjectDisplayTitleById(
+        projectsMap,
+        projectId,
+        selectedMessage?.projectTitle,
+        selectedMessage?.projectSnapshot?.titleAr,
+        selectedMessage?.projectSnapshot?.title,
+        selectedMessage?.projectSnapshot?.name
+      ) || null;
 
     if (!requestId) return toast.error("تعذر تحديد رقم الطلب.");
     if (!projectId) return toast.error("لا يوجد مشروع مرتبط بهذا الطلب.");
@@ -1914,10 +2220,14 @@ export default function MessagesManagement() {
   };
 
   const createContractForInvestment = async () => {
+    if (!canManageInvestments) {
+      toast.error("لا تملك صلاحية إدارة الاستثمارات.");
+      return;
+    }
     if (!selectedMessage) return;
 
     if (!canAdmin) {
-      toast.error("هذا الإجراء يتطلب صلاحية المدير أو المالك.");
+      toast.error(`هذا الإجراء يتطلب صلاحية المدير أو ${getOwnerRoleLabel()}.`);
       return;
     }
 
@@ -2026,22 +2336,37 @@ export default function MessagesManagement() {
               String(inv?.signedContractUrl || "").trim()
             );
             const hasSigned = hadSignedBeforeRevision || hasSignedFromDoc;
+            const resolvedContractId = String(
+              inv?.contractId || selectedMessage.contractId || ""
+            ).trim();
+            const contractRef = resolvedContractId
+              ? doc(db, "contracts", resolvedContractId)
+              : null;
+            const staleSignedPatch = {
+              signedContract: deleteField(),
+              signedContractFile: deleteField(),
+              signedContractPath: deleteField(),
+              signedPath: deleteField(),
+              signedDocumentPath: deleteField(),
+              signedContractUrl: deleteField(),
+              signedAgainstContractVersion: deleteField(),
+              signedContractOutdated: hasSigned,
+              requiresResign: hasSigned,
+              signedContractOutdatedAt: hasSigned ? now : deleteField(),
+              signedAt: deleteField(),
+              verifiedAt: deleteField(),
+              verifiedByUid: deleteField(),
+              verifiedByEmail: deleteField(),
+            };
 
             tx.set(
               invRef,
               {
                 contractVersion: nextContractVersion,
-                signedAgainstContractVersion: deleteField(),
-                signedContractOutdated: false,
-                requiresResign: false,
-                signedContractOutdatedAt: null,
-                signedAt: null,
-                verifiedAt: deleteField(),
-                verifiedByUid: deleteField(),
-                verifiedByEmail: deleteField(),
                 contractStatus: hasSigned ? "pending_signature" : "sent",
                 status: "signing",
                 updatedAt: now,
+                ...staleSignedPatch,
               },
               { merge: true }
             );
@@ -2054,9 +2379,25 @@ export default function MessagesManagement() {
                 updatedAt: now,
                 updatedByUid: user?.uid || null,
                 updatedByEmail: user?.email || null,
+                ...staleSignedPatch,
               },
               { merge: true }
             );
+            if (contractRef) {
+              tx.set(
+                contractRef,
+                {
+                  contractVersion: nextContractVersion,
+                  status: hasSigned ? "pending_signature" : "sent",
+                  contractStatus: hasSigned ? "pending_signature" : "sent",
+                  updatedAt: now,
+                  updatedByUid: user?.uid || null,
+                  updatedByEmail: user?.email || null,
+                  ...staleSignedPatch,
+                },
+                { merge: true }
+              );
+            }
           }),
       });
       console.log("[upload] workflow state updated in firestore", {
@@ -2154,10 +2495,14 @@ export default function MessagesManagement() {
   };
 
   const verifySignedContract = async () => {
+    if (!canManageInvestments) {
+      toast.error("لا تملك صلاحية إدارة الاستثمارات.");
+      return;
+    }
     if (!selectedMessage) return;
 
     if (!canAdmin) {
-      toast.error("هذا الإجراء يتطلب صلاحية المدير أو المالك.");
+      toast.error(`هذا الإجراء يتطلب صلاحية المدير أو ${getOwnerRoleLabel()}.`);
       return;
     }
 
@@ -2457,6 +2802,10 @@ export default function MessagesManagement() {
   };
 
   const activateInvestmentAfterApproval = async () => {
+    if (!canManageInvestments) {
+      toast.error("لا تملك صلاحية إدارة الاستثمارات.");
+      return;
+    }
     if (!selectedMessage) return;
 
     if (isLockedFinal) return toast.warning("الطلب مقفل.");
@@ -2736,6 +3085,10 @@ export default function MessagesManagement() {
   };
 
   const rejectInvestmentRequest = async () => {
+    if (!canManageMessages) {
+      toast.error("لا تملك صلاحية إدارة الطلبات.");
+      return;
+    }
     if (!selectedMessage) return;
 
     if (isLockedFinal) return toast.warning("الطلب مقفل.");
@@ -2778,11 +3131,12 @@ export default function MessagesManagement() {
   };
 
   /* =========================
-    طوارئ: إعادة فتح (للأونر فقط)
+    طوارئ: إعادة فتح (للمسؤول التقني فقط)
   ========================= */
   const reopenMessage = async () => {
     if (!selectedMessage) return;
-    if (myRole !== "owner") return toast.error("هذا الإجراء للمالك فقط");
+    if (!canManageMessages) return toast.error("لا تملك صلاحية إدارة الطلبات.");
+    if (myRole !== "owner") return toast.error(`هذا الإجراء لـ ${getOwnerRoleLabel()} فقط`);
 
     try {
       setReopenBusy(true);
@@ -2829,13 +3183,15 @@ export default function MessagesManagement() {
   ========================= */
   const canCreateContract =
     !CONTRACTS_DISABLED &&
+    canManageInvestments &&
     isInvestment &&
-    !!selectedMessage?.createdByUid &&
+    !!selectedClient?.clientId &&
     !!selectedMessage?.investmentId &&
     !selectedMessage?.contractId;
 
   const canSendForSigning =
     !CONTRACTS_DISABLED &&
+    canManageInvestments &&
     isInvestment &&
     !!selectedMessage?.investmentId &&
     !!selectedMessage?.contractId;
@@ -2902,7 +3258,8 @@ export default function MessagesManagement() {
     localUploadedByKind.signed?.path,
     signedPathFromDocs,
     r2DetectedPathByKind.signed,
-    !r2ProbeStatusByKind.signed || r2ProbeStatusByKind.signed === "unknown"
+    storedContractStatus !== "pending_signature" &&
+      (!r2ProbeStatusByKind.signed || r2ProbeStatusByKind.signed === "unknown")
       ? expectedContractPath(activeInvestmentId, "signed")
       : ""
   );
@@ -3066,15 +3423,6 @@ export default function MessagesManagement() {
       isSignedOutdatedByVersion ||
       isSignedOutdatedByTime);
 
-  const storedContractStatus = String(
-    pick(
-      investmentDoc?.contractStatus,
-      contractDoc?.status,
-      selectedMessage?.contractStatus
-    )
-  )
-    .trim()
-    .toLowerCase();
   const needsFreshSignedContract =
     storedContractStatus === "pending_signature" || isSignedOutdated;
   const hasCurrentSignedContract =
@@ -3103,18 +3451,21 @@ export default function MessagesManagement() {
 
   const canStartRequestReview =
     !!selectedMessage &&
+    canManageMessages &&
     myRole !== "client" &&
     !isLockedFinal &&
     !selectedMessage?.investmentId &&
     selectedRequestStatus === "pending";
   const canInitialApproveRequest =
     !!selectedMessage &&
+    canManageMessages &&
     myRole !== "client" &&
     !isLockedFinal &&
     !selectedMessage?.investmentId &&
     selectedRequestStatus === "reviewing";
   const canCreateInvestmentFromRequest =
     !!selectedMessage &&
+    canManageInvestments &&
     myRole !== "client" &&
     !isLockedFinal &&
     !selectedMessage?.investmentId &&
@@ -3122,6 +3473,7 @@ export default function MessagesManagement() {
   const canVerifySignedContract =
     !!selectedMessage &&
     canAdmin &&
+    canManageInvestments &&
     !isLockedFinal &&
     !!selectedMessage?.investmentId &&
     ["signing", "signed"].includes(selectedInvestmentStatus) &&
@@ -3129,8 +3481,11 @@ export default function MessagesManagement() {
     hasCurrentSignedContract &&
     !needsNewSignedContract;
   const canFinalize = CONTRACTS_DISABLED
-    ? !!selectedMessage?.investmentId && selectedInvestmentStatus === "signed"
+    ? canManageInvestments &&
+      !!selectedMessage?.investmentId &&
+      selectedInvestmentStatus === "signed"
     : isInvestment &&
+      canManageInvestments &&
       !!selectedMessage?.investmentId &&
       selectedInvestmentStatus === "signed" &&
       contractStatusValue === "approved" &&
@@ -3141,6 +3496,8 @@ export default function MessagesManagement() {
 
   const startRequestReview = async () => {
     if (!selectedMessage) return;
+    if (!canStartRequestReview)
+      return toast.error("لا تملك صلاحية بدء مراجعة الطلب.");
     await moveTo({
       status: "reviewing",
       stageRole: "review",
@@ -3150,6 +3507,8 @@ export default function MessagesManagement() {
 
   const initialApproveRequest = async () => {
     if (!selectedMessage) return;
+    if (!canInitialApproveRequest)
+      return toast.error("لا تملك صلاحية الموافقة الأولية على الطلب.");
 
     const ev = makeEvent({
       type: "request_initial_approved",
@@ -3211,6 +3570,62 @@ export default function MessagesManagement() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
+        <section className="relative overflow-hidden rounded-[30px] border border-slate-200/80 bg-[radial-gradient(circle_at_top_left,rgba(13,148,136,0.12),transparent_28%),radial-gradient(circle_at_top_right,rgba(245,158,11,0.12),transparent_30%),linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] p-6 shadow-[0_20px_70px_-42px_rgba(15,23,42,0.42)]">
+          <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.66),transparent_55%)]" />
+
+          <div className="relative flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
+            <div className="max-w-3xl space-y-3">
+              <div className="inline-flex w-fit items-center rounded-full border border-teal-200 bg-teal-50 px-3 py-1 text-[11px] font-semibold tracking-[0.16em] text-teal-700">
+                سجل تشغيلي مباشر
+              </div>
+
+              <div className="space-y-2">
+                <h1 className="text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
+                  سجل طلبات الاستثمار
+                </h1>
+                <p className="max-w-2xl text-sm leading-7 text-slate-600 sm:text-base">
+                  عرض مؤسسي سريع القراءة يعتمد على سجل الطلب الحالي وبيانات العميل
+                  المحدثة مباشرة من ملف المستخدم في Firestore.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2 xl:min-w-[360px]">
+              <div className="rounded-[22px] border border-slate-200 bg-white/85 p-4 shadow-sm shadow-slate-200/70 backdrop-blur">
+                <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.16em] text-slate-500">
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  محدث مباشرة
+                </div>
+                <p className="mt-2 text-sm font-semibold leading-6 text-slate-900">
+                  الاسم والبريد مرتبطان بملف العميل الحالي وليس بنسخة قديمة داخل
+                  الطلب.
+                </p>
+              </div>
+
+              <div className="rounded-[22px] border border-slate-200 bg-white/85 p-4 shadow-sm shadow-slate-200/70 backdrop-blur">
+                <div className="text-[11px] font-semibold tracking-[0.16em] text-slate-500">
+                  النتائج في العرض الحالي
+                </div>
+                <div className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">
+                  {formatNumberEN(filtered.length)}
+                </div>
+                <p className="mt-1 text-xs leading-6 text-slate-500">
+                  من أصل {formatNumberEN(stats.all)} طلب استثماري في السجل.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {roleDocMissing && myRole !== "owner" ? (
+            <div className="relative mt-5 rounded-2xl border border-amber-200 bg-amber-50/90 px-4 py-3 text-sm leading-7 text-amber-900">
+              ملاحظة: لم يتم العثور على ملف الصلاحيات للحساب داخل{" "}
+              <code>users/{user?.uid}</code> وقد تظهر بعض الإجراءات بصلاحية عرض فقط.
+            </div>
+          ) : null}
+        </section>
+
+        {false ? (
+          <>
         <div>
           <h1 className="text-4xl font-bold mb-2">سجل طلبات الاستثمار</h1>
           <p className="text-muted-foreground text-lg">
@@ -3225,6 +3640,9 @@ export default function MessagesManagement() {
             </div>
           ) : null}
         </div>
+
+          </>
+        ) : null}
 
         {/* Stats */}
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -3262,6 +3680,84 @@ export default function MessagesManagement() {
           />
         </div>
 
+        <Card className="rsg-card border-slate-200/80 bg-white/95 shadow-[0_18px_50px_-38px_rgba(15,23,42,0.38)]">
+          <CardContent className="space-y-4 px-4 py-4 sm:px-6">
+            <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+              <div className="relative w-full xl:max-w-md">
+                <Search className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <Input
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="ابحث باسم العميل أو البريد أو المشروع أو رقم الطلب"
+                  className="h-11 rounded-2xl border-slate-200 bg-slate-50/80 pr-11 text-sm shadow-none placeholder:text-slate-400"
+                />
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {[
+                  { key: "open", label: "مفتوح", count: stats.open },
+                  { key: "completed", label: "مقفل", count: stats.completed },
+                  { key: "rejected", label: "مرفوض", count: stats.rejected },
+                  { key: "all", label: "الكل", count: stats.all },
+                ].map((option) => (
+                  <Button
+                    key={option.key}
+                    variant={view === option.key ? "default" : "outline"}
+                    className="h-10 rounded-2xl px-4"
+                    onClick={() => setView(option.key as typeof view)}
+                  >
+                    {option.label} ({formatNumberEN(option.count)})
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {[
+                {
+                  key: "pending",
+                  label: "بانتظار المراجعة",
+                  count: statusCounters.pending,
+                  tone: "border-amber-200 bg-amber-50 text-amber-800",
+                },
+                {
+                  key: "reviewing",
+                  label: "قيد المراجعة",
+                  count: statusCounters.reviewing,
+                  tone: "border-sky-200 bg-sky-50 text-sky-800",
+                },
+                {
+                  key: "approved",
+                  label: "موافقة أولية",
+                  count: statusCounters.approved,
+                  tone: "border-emerald-200 bg-emerald-50 text-emerald-800",
+                },
+                {
+                  key: "completed",
+                  label: "مكتمل أو مغلق",
+                  count: statusCounters.completed,
+                  tone: "border-slate-200 bg-slate-100 text-slate-700",
+                },
+              ].map((item) => (
+                <div
+                  key={item.key}
+                  className={cn(
+                    "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold",
+                    item.tone
+                  )}
+                >
+                  <span>{item.label}</span>
+                  <span className="rounded-full bg-white/80 px-2 py-0.5 text-[11px] text-slate-700">
+                    {formatNumberEN(item.count)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        {false ? (
+          <>
         {/* Filters */}
         <Card className="rsg-card">
           <CardContent className="py-4">
@@ -3294,6 +3790,178 @@ export default function MessagesManagement() {
           </CardContent>
         </Card>
 
+          </>
+        ) : null}
+
+        <Card className="rsg-card border-slate-200/80 bg-white/95 shadow-[0_22px_70px_-46px_rgba(15,23,42,0.42)]">
+          <CardHeader className="gap-4 border-b border-slate-200/70 pb-5">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <CardTitle className="flex items-center gap-2 text-xl font-semibold text-slate-950">
+                <MessageSquare className="h-5 w-5" />
+                سجل طلبات الاستثمار
+              </CardTitle>
+
+              <div className="inline-flex w-fit items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm font-medium text-slate-600">
+                {formatNumberEN(filtered.length)} سجل
+              </div>
+            </div>
+
+            <p className="text-sm leading-7 text-slate-500">
+              الاسم والبريد في هذه البطاقات يتم تحديثهما من ملف المستخدم الحالي،
+              مع استخدام بيانات الطلب كبديل فقط عند غياب الربط.
+            </p>
+          </CardHeader>
+
+          <CardContent className="pt-6" dir="rtl">
+            {loading ? (
+              <div className="flex items-center justify-center gap-2 py-12 text-muted-foreground">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                جاري تحميل الطلبات...
+              </div>
+            ) : filtered.length ? (
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                {filtered.map((request) => {
+                  const hasLinkedInvestment = !!request.investmentId;
+
+                  return (
+                    <article
+                      key={request.id}
+                      className="group relative flex h-full flex-col overflow-hidden rounded-[24px] border border-slate-200 bg-white p-4 shadow-[0_18px_50px_-36px_rgba(15,23,42,0.45)] transition duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-[0_24px_60px_-30px_rgba(15,23,42,0.38)]"
+                    >
+                      <div
+                        className={cn(
+                          "absolute inset-x-0 top-0 h-1",
+                          request.statusMeta.accent
+                        )}
+                      />
+
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="text-[10px] font-semibold tracking-[0.22em] text-slate-400">
+                            طلب استثمار
+                          </div>
+                          <h3 className="mt-2 break-words text-[16px] font-semibold leading-6 text-slate-950">
+                            {request.client.clientName}
+                          </h3>
+
+                          <div className="mt-2 flex items-start gap-2 text-sm text-slate-500">
+                            <Mail className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
+                            <span className="min-w-0 break-all">
+                              {request.client.clientEmail || "—"}
+                            </span>
+                          </div>
+                        </div>
+
+                        <Badge
+                          className={cn(
+                            "border px-3 py-1 text-[11px] font-semibold shadow-none",
+                            request.statusMeta.tone
+                          )}
+                        >
+                          {request.statusMeta.label}
+                        </Badge>
+                      </div>
+
+                      <div className="mt-4 rounded-[20px] border border-slate-200/80 bg-slate-50/80 p-3">
+                        <div className="flex items-start gap-2 text-sm text-slate-700">
+                          <Building2 className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
+                          <span className="min-w-0 break-words font-medium">
+                            {request.projectTitle}
+                          </span>
+                        </div>
+
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                          <Badge
+                            className={cn(
+                              "border px-3 py-1 text-[11px] font-semibold shadow-none",
+                              request.stageMeta.tone
+                            )}
+                          >
+                            {request.stageMeta.label}
+                          </Badge>
+                          <Badge
+                            className={cn(
+                              "border px-3 py-1 text-[11px] font-semibold shadow-none",
+                              hasLinkedInvestment
+                                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                : "border-slate-200 bg-white text-slate-600"
+                            )}
+                          >
+                            {hasLinkedInvestment
+                              ? "تم إنشاء الاستثمار"
+                              : "بانتظار الإنشاء"}
+                          </Badge>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 grid grid-cols-2 gap-2.5">
+                        <RequestCardMetric
+                          label="المبلغ"
+                          value={moneySAR(request.amount)}
+                          icon={<Wallet className="h-3.5 w-3.5" />}
+                          strong
+                        />
+                        <RequestCardMetric
+                          label="تاريخ الطلب"
+                          value={request.requestDateLabel || "—"}
+                          icon={<CalendarDays className="h-3.5 w-3.5" />}
+                        />
+                        <RequestCardMetric
+                          label="آخر تحديث"
+                          value={request.updatedAtLabel || "—"}
+                          icon={<RefreshCw className="h-3.5 w-3.5" />}
+                        />
+                        <RequestCardMetric
+                          label="رقم الطلب"
+                          value={request.requestIdLabel}
+                          mono
+                        />
+                      </div>
+
+                      <div className="mt-3 rounded-[18px] border border-slate-200/70 bg-slate-50/60 px-3 py-3">
+                        <div className="text-[11px] font-semibold tracking-[0.16em] text-slate-400">
+                          آخر متابعة
+                        </div>
+                        <div className="mt-1 break-all text-sm font-medium text-slate-700">
+                          {request.touchedBy}
+                        </div>
+
+                        {request.client.clientPhone ? (
+                          <div className="mt-2 flex items-center gap-2 text-xs text-slate-500">
+                            <Phone className="h-3.5 w-3.5" />
+                            <span>{request.client.clientPhone}</span>
+                          </div>
+                        ) : null}
+                      </div>
+
+                      <div className="mt-auto pt-4">
+                        <Button
+                          className="h-10 w-full rounded-2xl gap-2"
+                          onClick={() => void openMessageDetails(request)}
+                        >
+                          <Eye className="h-4 w-4" />
+                          مراجعة الطلب
+                        </Button>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="rounded-[24px] border border-dashed border-slate-300 bg-slate-50/80 px-6 py-14 text-center">
+                <div className="text-base font-semibold text-slate-900">
+                  لا توجد طلبات مطابقة للبحث أو الفلتر الحالي
+                </div>
+                <p className="mt-2 text-sm leading-7 text-slate-500">
+                  جرّب تغيير الفلتر أو البحث باسم العميل أو البريد أو المشروع.
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {false ? (
+          <>
         {/* Messages list */}
         <Card className="rsg-card border-slate-200/80">
           <CardHeader className="gap-4 border-b border-slate-200/70 pb-5">
@@ -3551,6 +4219,9 @@ export default function MessagesManagement() {
           </CardContent>
         </Card>
 
+          </>
+        ) : null}
+
         {/* Detail dialog */}
         <Dialog open={isDetailDialogOpen} onOpenChange={setIsDetailDialogOpen}>
           <DialogContent
@@ -3574,6 +4245,18 @@ export default function MessagesManagement() {
                         </CardTitle>
                       </CardHeader>
                       <CardContent className={DETAIL_SECTION_CONTENT_CLASS}>
+                        <InfoRow label="الاسم" value={selectedClient?.clientName || "—"} />
+                        <InfoRow
+                          label="البريد"
+                          value={selectedClient?.clientEmail || "—"}
+                        />
+                        <InfoRow
+                          label="الجوال"
+                          value={selectedClient?.clientPhone || "—"}
+                        />
+
+                        {false ? (
+                          <>
                         <InfoRow
                           label="الاسم"
                           value={getClientName(selectedMessage) || "—"}
@@ -3587,9 +4270,13 @@ export default function MessagesManagement() {
                           value={getClientPhone(selectedMessage) || "—"}
                         />
 
+                          </>
+                        ) : null}
+
                         <div className="flex flex-wrap gap-3 border-t border-white/10 pt-5">
                           {(() => {
                             const clientId = pick(
+                              selectedClient?.clientId,
                               selectedMessage?.createdByUid,
                               selectedMessage?.investorUid,
                               selectedMessage?.userId,
@@ -3644,8 +4331,12 @@ export default function MessagesManagement() {
 
                         <div className="flex flex-wrap items-center gap-3 border-t border-white/10 pt-5">
                           {(() => {
-                            const emailToUse = getClientEmail(selectedMessage);
-                            const phoneToUse = getClientPhone(selectedMessage);
+                            const emailToUse =
+                              selectedClient?.clientEmail ||
+                              getClientEmail(selectedMessage);
+                            const phoneToUse =
+                              selectedClient?.clientPhone ||
+                              getClientPhone(selectedMessage);
 
                             return (
                               <>
@@ -3986,7 +4677,7 @@ export default function MessagesManagement() {
                           <Button
                             className={cn(DETAIL_DANGER_BUTTON_CLASS, "w-full")}
                             onClick={rejectInvestmentRequest}
-                            disabled={isLockedFinal}
+                            disabled={isLockedFinal || !canManageMessages}
                           >
                             <AlertTriangle className="w-4 h-4" />
                             رفض الطلب
@@ -4000,14 +4691,14 @@ export default function MessagesManagement() {
                               "w-full"
                             )}
                             onClick={reopenMessage}
-                            disabled={reopenBusy || myRole !== "owner"}
+                            disabled={reopenBusy || myRole !== "owner" || !canManageMessages}
                           >
                             {reopenBusy ? (
                               <Loader2 className="w-4 h-4 animate-spin" />
                             ) : (
                               <Clock3 className="w-4 h-4" />
                             )}
-                            إعادة فتح (للمالك)
+                            إعادة فتح (للمسؤول التقني)
                           </Button>
                         </div>
                       </CardContent>
@@ -4288,6 +4979,39 @@ export default function MessagesManagement() {
 /* =========================
   Small components
 ========================= */
+
+function RequestCardMetric({
+  label,
+  value,
+  icon,
+  strong = false,
+  mono = false,
+}: {
+  label: string;
+  value: any;
+  icon?: ReactNode;
+  strong?: boolean;
+  mono?: boolean;
+}) {
+  return (
+    <div className="min-w-0 rounded-[18px] border border-slate-200/80 bg-slate-50/80 px-3 py-3">
+      <div className="flex items-center gap-1.5 text-[11px] font-semibold tracking-[0.16em] text-slate-400">
+        {icon ? <span className="text-slate-400">{icon}</span> : null}
+        <span>{label}</span>
+      </div>
+
+      <div
+        className={cn(
+          "mt-2 min-h-[2.75rem] break-words text-sm leading-6 text-slate-800",
+          strong ? "font-semibold text-slate-950" : "font-medium",
+          mono ? "font-mono text-xs sm:text-sm" : ""
+        )}
+      >
+        {value ?? "—"}
+      </div>
+    </div>
+  );
+}
 
 function InfoRow({ label, value }: { label: string; value: any }) {
   return (

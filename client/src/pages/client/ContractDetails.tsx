@@ -23,6 +23,8 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { db } from "@/_core/firebase";
 import { AUDIT_ACTIONS, auditedSetDoc, buildAuditSource } from "@/lib/auditLog";
 import { formatCurrencyEN, formatDateEN } from "@/lib/formatters";
+import { getOwnerRoleLabel } from "@/lib/ownerAccounts";
+import { extractProjectId, getProjectDisplayTitle } from "@/lib/projectDisplay";
 import {
   findInterestRequestForInvestor,
   findInvestmentForInvestor,
@@ -128,7 +130,7 @@ function statusBadge(status: string) {
     active: getClientInvestmentStatusMeta("active"),
     resolved: { label: "مكتمل", cls: "bg-gray-700" },
     rejected: { label: "مرفوض", cls: "bg-red-700" },
-    closed: { label: "مغلق", cls: "bg-gray-600" },
+    closed: { label: "مكتمل", cls: "bg-gray-700" },
   };
 
   const v = map[s] || { label: s || "—", cls: "bg-slate-600" };
@@ -139,7 +141,7 @@ function stageBadge(stage: string) {
   const s = safeStr(stage);
   const map: Record<string, { label: string; cls: string }> = {
     staff: { label: "عند المراجع", cls: "bg-slate-600" },
-    owner: { label: "عند الأونر", cls: "bg-amber-700" },
+    owner: { label: `عند ${getOwnerRoleLabel()}`, cls: "bg-amber-700" },
     accountant: { label: "عند المحاسب", cls: "bg-emerald-700" },
     client: { label: "عندك", cls: "bg-indigo-700" },
     completed: { label: "مكتمل", cls: "bg-gray-700" },
@@ -165,6 +167,7 @@ export default function ClientContractDetails() {
   const [messageDoc, setMessageDoc] = useState<AnyDoc | null>(null);
   const [investmentDoc, setInvestmentDoc] = useState<AnyDoc | null>(null);
   const [contractDoc, setContractDoc] = useState<AnyDoc | null>(null);
+  const [projectDoc, setProjectDoc] = useState<AnyDoc | null>(null);
 
   const [followupText, setFollowupText] = useState("");
   const [sendingFollowup, setSendingFollowup] = useState(false);
@@ -239,6 +242,7 @@ export default function ClientContractDetails() {
       setMessageDoc(null);
       setInvestmentDoc(null);
       setContractDoc(null);
+      setProjectDoc(null);
 
       try {
         // 1) جرّب: contracts/{id}
@@ -440,6 +444,34 @@ export default function ClientContractDetails() {
     };
   }, [match, id, user?.uid]);
 
+  useEffect(() => {
+    const projectId =
+      extractProjectId(investmentDoc) ||
+      extractProjectId(requestDoc) ||
+      extractProjectId(messageDoc) ||
+      extractProjectId(contractDoc);
+
+    if (!projectId) {
+      setProjectDoc(null);
+      return;
+    }
+
+    const unsub = onSnapshot(
+      doc(db, "projects", projectId),
+      (snap) => {
+        setProjectDoc(snap.exists() ? { id: snap.id, ...(snap.data() as any) } : null);
+      },
+      (error) => {
+        logSnapshotError("project_snapshot", error);
+        setProjectDoc(null);
+      }
+    );
+
+    return () => {
+      unsub();
+    };
+  }, [investmentDoc, requestDoc, messageDoc, contractDoc]);
+
   // ✅ لقط الحالة والمرحلة “بأفضل مصدر”
   const requestStateDoc = requestDoc || messageDoc;
 
@@ -464,6 +496,11 @@ export default function ClientContractDetails() {
       safeStr(requestStateDoc?.projectTitle) ||
       "—";
 
+    const currentProjectTitle =
+      getProjectDisplayTitle(projectDoc, investmentDoc?.projectTitle, requestStateDoc?.projectTitle) ||
+      projectTitle ||
+      "—";
+
     const amount =
       investmentDoc?.amount ??
       requestStateDoc?.approvedAmount ??
@@ -475,11 +512,11 @@ export default function ClientContractDetails() {
       investmentStatus: invStatus,
       contractStatus: conStatus,
       stageRole,
-      projectTitle,
+      projectTitle: currentProjectTitle,
       amount,
       createdAt: investmentDoc?.createdAt || requestStateDoc?.createdAt || contractDoc?.createdAt,
     };
-  }, [requestStateDoc, requestDoc, messageDoc, investmentDoc, contractDoc]);
+  }, [requestStateDoc, requestDoc, messageDoc, investmentDoc, contractDoc, projectDoc]);
 
   // ✅ Timeline: دمج events من message + investment + contract
   const timeline = useMemo(() => {

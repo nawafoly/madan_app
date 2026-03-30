@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useLocation } from "wouter";
 import { useAuth } from "@/_core/hooks/useAuth";
+import { getRoleDisplayLabel } from "@/lib/ownerAccounts";
 
 export default function GuestPage() {
   const [, setLocation] = useLocation();
@@ -42,7 +43,7 @@ export default function GuestPage() {
               </div>
 
               <div className="text-xs text-muted-foreground">
-                الحالة: {user ? "مسجل" : "غير مسجل"} / الدور: {user?.role ?? "—"}
+                الحالة: {user ? "مسجل" : "غير مسجل"} / الدور: {getRoleDisplayLabel(user?.role) || "—"}
               </div>
             </CardContent>
           </Card>

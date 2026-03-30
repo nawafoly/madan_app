@@ -25,6 +25,7 @@ import {
   formatNumberEN,
   formatPercentEN,
 } from "@/lib/formatters";
+import { getProjectDisplayTitle } from "@/lib/projectDisplay";
 import { cn } from "@/lib/utils";
 import {
   uploadInvestmentDocument,
@@ -44,6 +45,9 @@ import {
   MessageSquare,
   ArrowLeft,
   CheckCircle2,
+  Download,
+  Eye,
+  FileText,
   Loader2,
   TrendingUp,
 } from "lucide-react";
@@ -287,6 +291,8 @@ export default function InvestmentDetails() {
     Partial<Record<"original" | "signed", R2ProbeStatus>>
   >({});
   const [profitNow, setProfitNow] = useState(() => new Date());
+
+  const storedContractStatus = String(investment?.contractStatus || "").trim().toLowerCase();
 
   useEffect(() => {
     if (!user?.uid || !id) return;
@@ -671,7 +677,7 @@ export default function InvestmentDetails() {
         }
       }
 
-      if (!resolvedSignedPathFromDocs) {
+      if (!resolvedSignedPathFromDocs && storedContractStatus !== "pending_signature") {
         const candidate = expectedContractPath(investmentId, "signed");
         const status = candidate ? await r2ObjectStatus(candidate) : "unknown";
         probe.signed = status;
@@ -691,7 +697,7 @@ export default function InvestmentDetails() {
     return () => {
       cancelled = true;
     };
-  }, [investment?.id, resolvedOriginalPathFromDocs, resolvedSignedPathFromDocs]);
+  }, [investment?.id, resolvedOriginalPathFromDocs, resolvedSignedPathFromDocs, storedContractStatus]);
 
   const originalExpectedPath = expectedContractPath(investmentId, "original");
 
@@ -707,6 +713,7 @@ export default function InvestmentDetails() {
     buildR2DownloadUrl(originalPath, false)
   );
   const originalDownloadUrl = buildR2DownloadUrl(originalPath, true);
+  const originalDownloadHref = originalDownloadUrl || originalViewUrl;
   const originalName = pickFirstNonEmptyString(
     localUploadedByKind.original?.fileName,
     resolveDocPath(investment, ["originalContract.fileName", "contractFile.fileName"]),
@@ -718,7 +725,8 @@ export default function InvestmentDetails() {
   const signedPath = pickFirstNonEmptyString(
     resolvedSignedPathFromDocs,
     r2DetectedPathByKind.signed,
-    !r2ProbeStatusByKind.signed || r2ProbeStatusByKind.signed === "unknown"
+    storedContractStatus !== "pending_signature" &&
+      (!r2ProbeStatusByKind.signed || r2ProbeStatusByKind.signed === "unknown")
       ? signedExpectedPath
       : ""
   );
@@ -727,6 +735,7 @@ export default function InvestmentDetails() {
     buildR2DownloadUrl(signedPath, false)
   );
   const signedDownloadUrl = buildR2DownloadUrl(signedPath, true);
+  const signedDownloadHref = signedDownloadUrl || signedViewUrl;
   const signedName = pickFirstNonEmptyString(
     localUploadedByKind.signed?.fileName,
     resolveDocPath(investment, ["signedContract.fileName", "signedContractFile.fileName"]),
@@ -783,7 +792,6 @@ export default function InvestmentDetails() {
     hasSignedContract &&
     (isSignedOutdatedByFlag || isSignedOutdatedByVersion || isSignedOutdatedByTime);
 
-  const storedContractStatus = String(investment?.contractStatus || "").trim().toLowerCase();
   const needsFreshSignedContract = storedContractStatus === "pending_signature" || isSignedOutdated;
   const hasCurrentSignedContract = hasSignedContract && !needsFreshSignedContract;
   const contractStatusValue = String(
@@ -1100,7 +1108,7 @@ export default function InvestmentDetails() {
             </div>
 
             <div className="mt-2 text-muted-foreground">
-              {project?.titleAr || investment?.projectTitle || "—"}
+              {getProjectDisplayTitle(project, investment?.projectTitle, "—") || "—"}
             </div>
           </div>
 
@@ -1385,8 +1393,79 @@ export default function InvestmentDetails() {
                   </Badge>
                 </div>
 
-                <div className="space-y-4">
-                  <div className="rounded-xl border bg-muted/20 p-4 space-y-3">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <InvestmentDocumentCard
+                    title="العقد الأصلي"
+                    description="نسخة معتمدة للمراجعة قبل التوقيع."
+                    fileLabel={
+                      hasOriginalContract
+                        ? originalDisplayName
+                        : "لا يوجد عقد أصلي مرفوع حالياً."
+                    }
+                    viewHref={originalViewUrl}
+                    downloadHref={originalDownloadHref}
+                    downloadFileName={originalDisplayName}
+                    sourceLabel="داخل المنصة"
+                    notice={
+                      needsFreshSignedContract
+                        ? "تم تحديث العقد الأصلي، وسيحتاج المستثمر إلى توقيع النسخة الجديدة."
+                        : null
+                    }
+                  />
+
+                  <InvestmentDocumentCard
+                    title="العقد الموقّع"
+                    description="نسخة العقد بعد التوقيع لمراجعتها واستكمال التفعيل."
+                    fileLabel={
+                      hasCurrentSignedContract
+                        ? signedDisplayName
+                        : "بانتظار رفع النسخة الموقّعة."
+                    }
+                    viewHref={signedViewUrl}
+                    downloadHref={signedDownloadHref}
+                    downloadFileName={signedDisplayName}
+                    sourceLabel="مرفوع من المستثمر"
+                    footerContent={
+                      hasCurrentSignedContract ? null : (
+                        <div className="space-y-3">
+                          <div className="text-xs text-slate-400">
+                            يرفعه المستثمر بعد التوقيع
+                          </div>
+                          <div className="text-xs leading-5 text-muted-foreground">
+                            {signedSectionEmptyMessage}
+                          </div>
+                          <ContractFilePicker
+                            buttonLabel="رفع العقد الموقّع (PDF)"
+                            file={signedUploadFile}
+                            onFileChange={setSignedUploadFile}
+                            disabled={signedUploadBusy || !canUploadSigned}
+                          />
+                          <Button
+                            className="w-full rounded-full"
+                            onClick={handleInvestorSignedUpload}
+                            disabled={signedUploadBusy || !canUploadSigned || !signedUploadFile}
+                          >
+                            {signedUploadBusy ? (
+                              <Loader2 className="w-4 h-4 ml-2 animate-spin" />
+                            ) : (
+                              <CheckCircle2 className="w-4 h-4 ml-2" />
+                            )}
+                            رفع العقد الموقّع
+                          </Button>
+                        </div>
+                      )
+                    }
+                  />
+                </div>
+
+                <div className="hidden">
+                  <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm transition-transform duration-200 hover:-translate-y-1 hover:shadow-lg">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-900 text-white">
+                      <FileText className="h-5 w-5" />
+                    </div>
+
+                    <div className="mt-5 flex items-start justify-between gap-3">
+                      <div className="space-y-2">
                     <div className="text-sm font-semibold">العقد الأصلي</div>
                     {hasOriginalContract ? (
                       <>
@@ -1416,6 +1495,8 @@ export default function InvestmentDetails() {
                     ) : (
                       <div className="text-xs text-muted-foreground">لا يوجد عقد أصلي مرفوع حالياً.</div>
                     )}
+                      </div>
+                    </div>
                   </div>
 
                   <div className="rounded-xl border bg-muted/20 p-4 space-y-3">
@@ -1487,6 +1568,92 @@ function InfoRow({ label, value }: { label: string; value: any }) {
       <div className="text-xs text-muted-foreground shrink-0">{label}</div>
       <div className="text-sm font-semibold text-right break-words">
         {value ?? "—"}
+      </div>
+    </div>
+  );
+}
+
+type InvestmentDocumentCardProps = {
+  title: string;
+  description: string;
+  fileLabel: string;
+  viewHref?: string;
+  downloadHref?: string;
+  downloadFileName?: string;
+  sourceLabel?: string;
+  notice?: ReactNode;
+  footerContent?: ReactNode | null;
+};
+
+function InvestmentDocumentCard({
+  title,
+  description,
+  fileLabel,
+  viewHref,
+  downloadHref,
+  downloadFileName,
+  sourceLabel = "داخل المنصة",
+  notice,
+  footerContent,
+}: InvestmentDocumentCardProps) {
+  const hasDocumentAction = Boolean(viewHref || downloadHref);
+  const defaultFooter = (
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="text-xs text-slate-400">
+        {hasDocumentAction ? sourceLabel : "لا يوجد ملف جاهز للعرض حالياً"}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        {viewHref ? (
+          <Button asChild variant="outline" size="sm" className="rounded-full px-4">
+            <a href={viewHref} target="_blank" rel="noreferrer">
+              <Eye className="h-4 w-4" />
+              عرض
+            </a>
+          </Button>
+        ) : null}
+
+        {downloadHref ? (
+          <Button asChild variant="outline" size="sm" className="rounded-full px-4">
+            <a href={downloadHref} rel="noreferrer" download={downloadFileName || true}>
+              <Download className="h-4 w-4" />
+              تنزيل
+            </a>
+          </Button>
+        ) : null}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm transition-transform duration-200 hover:-translate-y-1 hover:shadow-lg">
+      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-900 text-white">
+        <FileText className="h-5 w-5" />
+      </div>
+
+      <div className="mt-5 flex items-start justify-between gap-3">
+        <div className="min-w-0 space-y-2">
+          <div className="text-lg font-semibold text-slate-900">{title}</div>
+          <div className="text-sm leading-6 text-slate-500">{description}</div>
+          <div className="break-words text-sm font-medium text-slate-700">{fileLabel}</div>
+        </div>
+
+        <Badge
+          variant="outline"
+          className="shrink-0 border-slate-200 bg-slate-50 text-slate-600"
+        >
+          PDF
+        </Badge>
+      </div>
+
+      {notice ? (
+        <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">
+          {notice}
+        </div>
+      ) : null}
+
+      <div className="mt-6 border-t border-slate-100 pt-4">
+        {footerContent ?? defaultFooter}
       </div>
     </div>
   );

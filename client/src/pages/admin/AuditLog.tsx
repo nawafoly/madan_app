@@ -33,6 +33,7 @@ import {
   formatNumberEN,
   formatRelativeTimeFromNowEN,
 } from "@/lib/formatters";
+import { getOwnerRoleLabel } from "@/lib/ownerAccounts";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { collection, limit, onSnapshot, orderBy, query, Timestamp } from "firebase/firestore";
@@ -114,7 +115,7 @@ const ENTITY_LABELS: Record<string, string> = {
 };
 
 const ROLE_LABELS: Record<string, string> = {
-  owner: "مالك",
+  owner: getOwnerRoleLabel(),
   admin: "مدير",
   accountant: "محاسب",
   staff: "موظف",

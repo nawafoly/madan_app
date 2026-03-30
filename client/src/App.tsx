@@ -18,6 +18,7 @@ import ProjectDetails from "./pages/ProjectDetails";
 
 import LoginPage from "./pages/Login";
 import RequireRole from "./components/RequireRole";
+import RequireAdminPermission from "./components/RequireAdminPermission";
 
 // Admin pages
 import AdminDashboard from "./pages/admin/Dashboard";
@@ -88,92 +89,92 @@ function Router() {
 
         {/* ================= Admin Dashboard ================= */}
         <Route path="/dashboard">
-          <RequireRole allow={["owner", "admin", "accountant", "staff"]}>
+          <RequireAdminPermission permission="dashboard.view">
             <AdminDashboard />
-          </RequireRole>
+          </RequireAdminPermission>
         </Route>
 
         {/* ===== Admin: Projects ===== */}
         <Route path="/admin/projects">
-          <RequireRole allow={["owner", "admin"]}>
+          <RequireAdminPermission permission="projects.manage">
             <ProjectsManagement />
-          </RequireRole>
+          </RequireAdminPermission>
         </Route>
 
         <Route path="/admin/projects/create">
-          <RequireRole allow={["owner", "admin"]}>
+          <RequireAdminPermission permission="projects.manage">
             <CreateProject />
-          </RequireRole>
+          </RequireAdminPermission>
         </Route>
 
         <Route path="/admin/projects/:id/edit">
-          <RequireRole allow={["owner", "admin"]}>
+          <RequireAdminPermission permission="projects.manage">
             <EditProject />
-          </RequireRole>
+          </RequireAdminPermission>
         </Route>
 
         {/* ===== Admin: Reports ===== */}
         <Route path="/admin/reports">
-          <RequireRole allow={["owner", "admin", "accountant"]}>
+          <RequireAdminPermission permission="reports.view">
             <Reports />
-          </RequireRole>
+          </RequireAdminPermission>
         </Route>
 
         {/* ===== Admin: Financial ===== */}
         <Route path="/admin/financial">
-          <RequireRole allow={["owner", "admin", "accountant"]}>
+          <RequireAdminPermission permission="financial.view">
             <FinancialManagement />
-          </RequireRole>
+          </RequireAdminPermission>
         </Route>
 
         {/* ===== Admin: Clients ===== */}
         <Route path="/admin/clients">
-          <RequireRole allow={["owner", "admin"]}>
+          <RequireAdminPermission permission="users.view">
             <ClientsManagement />
-          </RequireRole>
+          </RequireAdminPermission>
         </Route>
 
         {/* ===== Admin: Client Profile ===== */}
         <Route path="/admin/client-profile">
-          <RequireRole allow={["owner", "admin"]}>
+          <RequireAdminPermission permission="users.view">
             <ClientProfile />
-          </RequireRole>
+          </RequireAdminPermission>
         </Route>
 
 
         {/* ===== Admin: VIP ===== */}
         <Route path="/admin/vip">
-          <RequireRole allow={["owner", "admin"]}>
+          <RequireAdminPermission permission="users.manage">
             <Vip />
-          </RequireRole>
+          </RequireAdminPermission>
         </Route>
 
         {/* ===== Admin: Messages ===== */}
         <Route path="/admin/messages">
-          <RequireRole allow={["owner", "admin", "staff"]}>
+          <RequireAdminPermission permission="messages.view">
             <MessagesManagement />
-          </RequireRole>
+          </RequireAdminPermission>
         </Route>
 
         {/* ===== Admin: Settings ===== */}
         <Route path="/admin/settings">
-          <RequireRole allow={["owner"]}>
+          <RequireAdminPermission permission="settings.manage">
             <Settings />
-          </RequireRole>
+          </RequireAdminPermission>
         </Route>
 
         {/* ===== Admin: Audit Log ===== */}
         <Route path="/admin/audit-log">
-          <RequireRole allow={["owner", "admin"]}>
+          <RequireAdminPermission permission="settings.manage">
             <AuditLogPage />
-          </RequireRole>
+          </RequireAdminPermission>
         </Route>
 
         {/* ===== Debug (اختياري) ===== */}
         <Route path="/admin/debug-auth">
-          <RequireRole allow={["owner"]}>
+          <RequireAdminPermission permission="settings.manage">
             <DebugAuthPage />
-          </RequireRole>
+          </RequireAdminPermission>
         </Route>
 
         {/* ================= Client Area ================= */}

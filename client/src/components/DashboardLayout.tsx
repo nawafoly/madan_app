@@ -1,4 +1,9 @@
-import { useAuth } from "@/_core/hooks/useAuth";
+import {
+  hasPermission,
+  isOpsRole,
+  useAuth,
+  type Permission,
+} from "@/_core/hooks/useAuth";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -44,11 +49,13 @@ import { cn } from "@/lib/utils";
 
 type RoleKey = "owner" | "admin" | "accountant" | "staff";
 
+
 type MenuItem = {
   icon: any;
   label: string;
   path: string;
   allow: RoleKey[]; // ✅ أدوار مسموحة
+  permission: Permission;
 };
 
 const menuItems: MenuItem[] = [
@@ -57,6 +64,7 @@ const menuItems: MenuItem[] = [
     label: "لوحة التحكم",
     path: "/dashboard",
     allow: ["owner", "admin", "accountant", "staff"],
+    permission: "dashboard.view",
   },
 
   {
@@ -64,6 +72,7 @@ const menuItems: MenuItem[] = [
     label: "المشاريع",
     path: "/admin/projects",
     allow: ["owner", "admin"],
+    permission: "projects.manage",
   },
 
   {
@@ -71,6 +80,7 @@ const menuItems: MenuItem[] = [
     label: "الشؤون المالية",
     path: "/admin/financial",
     allow: ["owner", "accountant"],
+    permission: "financial.view",
   },
 
   {
@@ -78,6 +88,7 @@ const menuItems: MenuItem[] = [
     label: "العملاء",
     path: "/admin/clients",
     allow: ["owner", "admin"],
+    permission: "users.view",
   },
 
   {
@@ -85,6 +96,7 @@ const menuItems: MenuItem[] = [
     label: "إدارة VIP",
     path: "/admin/vip",
     allow: ["owner", "admin"],
+    permission: "users.manage",
   },
 
   {
@@ -92,6 +104,7 @@ const menuItems: MenuItem[] = [
     label: "سجل طلبات الاستثمار",
     path: "/admin/messages",
     allow: ["owner", "admin", "staff"],
+    permission: "messages.view",
   },
 
   {
@@ -99,6 +112,7 @@ const menuItems: MenuItem[] = [
     label: "سجل التعديلات",
     path: "/admin/audit-log",
     allow: ["owner", "admin"],
+    permission: "settings.manage",
   },
 
   {
@@ -106,6 +120,7 @@ const menuItems: MenuItem[] = [
     label: "التقارير",
     path: "/admin/reports",
     allow: ["owner", "admin", "accountant"],
+    permission: "reports.view",
   },
 
   {
@@ -113,6 +128,7 @@ const menuItems: MenuItem[] = [
     label: "الإعدادات",
     path: "/admin/settings",
     allow: ["owner"],
+    permission: "settings.manage",
   },
 ];
 
@@ -346,13 +362,13 @@ function DashboardLayoutContent({
   const isRight = sidebarSide === "right";
 
   // ✅ 1) الدور
-  const role = (user as any)?.role as RoleKey | undefined;
+  const role = user?.role;
 
   // ✅ 2) العناصر المسموحة
   const visibleMenuItems = useMemo(() => {
-    if (!role) return [];
-    return menuItems.filter(it => it.allow.includes(role));
-  }, [role]);
+    if (!role || !isOpsRole(role)) return [];
+    return menuItems.filter((item) => hasPermission(user, item.permission));
+  }, [role, user]);
 
   // ✅ 3) العنصر النشط
   const activeMenuItem = visibleMenuItems.find(item => item.path === location);

@@ -55,6 +55,15 @@ import {
   formatNumberEN,
   formatPercentEN,
 } from "@/lib/formatters";
+import {
+  buildProjectsMap,
+  extractProjectId,
+  getProjectDisplayTitleById,
+} from "@/lib/projectDisplay";
+import {
+  buildUserIdentityIndex,
+  getLinkedUserDisplayName,
+} from "@/lib/userDisplay";
 import { normalizeWorkflowStatus } from "@shared/investmentLifecycle";
 import {
   Area,
@@ -395,6 +404,7 @@ export default function AdminDashboard() {
   const canSeeInvestments = hasPermission(user, "investments.view");
   const canSeeUsers = hasPermission(user, "users.view");
   const canSeeMessages = hasPermission(user, "messages.view");
+  const canManageMessages = hasPermission(user, "messages.manage");
   const canSeeRequests = canSeeMessages;
 
   const [projects, setProjects] = useState<AnyDoc[]>([]);
@@ -515,6 +525,28 @@ export default function AdminDashboard() {
     () => investments.reduce((sum, inv) => sum + toNumberSafe(inv.amount), 0),
     [investments]
   );
+  const projectsMap = useMemo(() => buildProjectsMap(projects), [projects]);
+  const userIdentityIndex = useMemo(
+    () => buildUserIdentityIndex(usersRows),
+    [usersRows]
+  );
+
+  const resolveProjectDisplayName = (row: AnyDoc) =>
+    getProjectDisplayTitleById(
+      projectsMap,
+      extractProjectId(row),
+      row?.projectTitle,
+      row?.projectSnapshot?.titleAr,
+      row?.projectSnapshot?.title,
+      "بدون مشروع مرتبط"
+    ) || "بدون مشروع مرتبط";
+
+  const resolveClientDisplayName = (row: AnyDoc) =>
+    getLinkedUserDisplayName(
+      row,
+      userIdentityIndex,
+      "ط¹ظ…ظٹظ„ ط؛ظٹط± ظ…ط­ط¯ط¯"
+    );
 
   const approvedInvestments = useMemo(
     () =>
@@ -707,6 +739,7 @@ export default function AdminDashboard() {
   }, [projects]);
 
   const markMessageAsRead = async (row: AnyDoc) => {
+    if (!canManageMessages) return;
     if (row.adminReadAt) return;
 
     await auditedUpdateDoc({
@@ -736,6 +769,7 @@ export default function AdminDashboard() {
   };
 
   const markRequestAsSeen = async (row: AnyDoc) => {
+    if (!canManageMessages) return;
     if (row.adminSeenAt) return;
 
     await auditedUpdateDoc({
@@ -1302,7 +1336,7 @@ export default function AdminDashboard() {
                         <div key={row.id} className="rounded-xl border p-4 space-y-3">
                           <div className="flex flex-wrap items-start justify-between gap-3">
                             <div className="space-y-1">
-                              <div className="font-semibold">{getClientDisplayName(row)}</div>
+                              <div className="font-semibold">{resolveClientDisplayName(row)}</div>
                               <div className="text-xs text-muted-foreground">
                                 {formatDateTimeAR(row.createdAt)}
                               </div>
@@ -1322,7 +1356,7 @@ export default function AdminDashboard() {
                           </div>
 
                           <div className="text-xs text-muted-foreground">
-                            المشروع: {getProjectDisplayName(row)}
+                            المشروع: {resolveProjectDisplayName(row)}
                           </div>
                         </div>
                       );
@@ -1341,7 +1375,7 @@ export default function AdminDashboard() {
                     <div key={row.id} className="rounded-xl border p-4 space-y-3">
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div className="space-y-1">
-                          <div className="font-semibold">{getClientDisplayName(row)}</div>
+                          <div className="font-semibold">{resolveClientDisplayName(row)}</div>
                           <div className="text-xs text-muted-foreground">
                             {formatDateTimeAR(row.createdAt)}
                           </div>
@@ -1357,7 +1391,7 @@ export default function AdminDashboard() {
                       </div>
 
                       <div className="text-sm text-muted-foreground">
-                        المشروع: {getProjectDisplayName(row)}
+                        المشروع: {resolveProjectDisplayName(row)}
                       </div>
 
                       <div className="text-sm text-muted-foreground">

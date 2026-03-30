@@ -116,6 +116,20 @@ export function roundMoney(value: number) {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
+export function hasReadableInvestmentProfit(
+  snapshot: InvestmentProfitSnapshot | null | undefined
+) {
+  if (!snapshot) return false;
+
+  return (
+    snapshot.hasPerformanceTerms ||
+    snapshot.currentProfit > 0 ||
+    snapshot.finalProfit > 0 ||
+    snapshot.freezeReason === "completed" ||
+    snapshot.freezeReason === "timeline_ended"
+  );
+}
+
 function toNumber(value: unknown): number | null {
   const normalized = Number(value);
   return Number.isFinite(normalized) ? normalized : null;
@@ -291,6 +305,33 @@ export function getInvestmentProfitSnapshot(
   }
 
   if (!hasPerformanceTerms) {
+    if (TERMINAL_FINAL_STATUSES.has(status)) {
+      return {
+        principalAmount,
+        expectedProfit,
+        currentProfit: finalProfit,
+        finalProfit,
+        returnPercent:
+          principalAmount > 0 ? roundMoney((expectedProfit / principalAmount) * 100) : null,
+        annualReturnPercent,
+        durationMonths,
+        startAt,
+        plannedEndAt,
+        actualEndAt,
+        displayEndAt: actualEndAt || displayEndAt,
+        elapsedMs: totalMs,
+        remainingMs: 0,
+        totalMs,
+        progressRatio: 1,
+        profitPerSecond,
+        isLive: false,
+        isFrozen: true,
+        hasPerformanceTerms,
+        status,
+        freezeReason: "completed",
+      };
+    }
+
     return {
       principalAmount,
       expectedProfit,

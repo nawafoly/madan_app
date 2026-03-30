@@ -4,6 +4,7 @@ import { useLocation } from "wouter";
 
 import DashboardLayout from "@/components/DashboardLayout";
 import AdminPanelStatCard from "@/components/AdminPanelStatCard";
+import { hasPermission, useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -42,16 +43,55 @@ import { toast } from "sonner";
 
 import { collection, onSnapshot, doc, Timestamp } from "firebase/firestore";
 import { db } from "@/_core/firebase";
-import { AUDIT_ACTIONS, auditedUpdateDoc, buildAuditSource } from "@/lib/auditLog";
-import { formatCurrencyEN, formatDateEN, formatNumberEN } from "@/lib/formatters";
+import {
+  AUDIT_ACTIONS,
+  auditedUpdateDoc,
+  buildAuditSource,
+} from "@/lib/auditLog";
+import {
+  formatCurrencyEN,
+  formatDateEN,
+  formatNumberEN,
+} from "@/lib/formatters";
+import { buildProjectsMap } from "@/lib/projectDisplay";
+import {
+  emailLocalPart,
+  getInvestmentIdentityBuckets,
+  getUserDisplayName,
+  getUserIdentityBuckets,
+  pickText,
+} from "@/lib/investorIdentity";
+import { getOwnerRoleLabel } from "@/lib/ownerAccounts";
+import { getProjectProfitFallback } from "@/lib/projectProfitFallback";
+import { resolveUserAccountStatus } from "@/lib/userAccountStatus";
+import {
+  getInvestmentProfitSnapshot,
+  hasReadableInvestmentProfit,
+  roundMoney,
+} from "@shared/investmentProfit";
 
 type UserDoc = {
   id: string;
   name?: string;
+  fullName?: string;
+  displayName?: string;
+  firstName?: string;
+  lastName?: string;
+  username?: string;
   email?: string;
+  uid?: string;
+  userId?: string;
+  authUid?: string;
+  phone?: string;
+  mobile?: string;
+  phoneNumber?: string;
+  profile?: Record<string, any>;
+  contact?: Record<string, any>;
 
   role?: string;
-  active?: boolean;
+  active?: boolean | string | number | null;
+  isActive?: boolean | string | number | null;
+  status?: string | boolean | number | null;
 
   vipStatus?: "regular" | "vip";
   vipTier?: string;
@@ -66,6 +106,9 @@ type UserDoc = {
   aggregatesUpdatedAt?: any;
 };
 
+type InvestmentDoc = Record<string, any> & { id: string };
+type ProjectDoc = Record<string, any> & { id: string };
+
 function safeNum(x: any) {
   const n = Number(x);
   return Number.isFinite(n) ? n : 0;
@@ -77,18 +120,24 @@ function formatCurrencySAR(value: any) {
 
 function formatDateAR(value: any) {
   const date =
-    value instanceof Timestamp ? value.toDate() : value ? new Date(value) : null;
+    value instanceof Timestamp
+      ? value.toDate()
+      : value
+        ? new Date(value)
+        : null;
 
   if (!date || Number.isNaN(date.getTime())) return "—";
 
   return formatDateEN(date);
 }
 
-function getRoleBadge(role?: string) {
-  const key = String(role || "client").trim().toLowerCase();
+function getRoleBadge(role?: string, email?: string) {
+  const key = String(role || "client")
+    .trim()
+    .toLowerCase();
   const map: Record<string, { label: string; className: string }> = {
     owner: {
-      label: "المالك",
+      label: getOwnerRoleLabel(email),
       className: "border-amber-200 bg-amber-50 text-amber-700",
     },
     admin: {
@@ -109,13 +158,16 @@ function getRoleBadge(role?: string) {
     },
   };
 
-  return map[key] || {
-    label: role || "—",
-    className: "border-slate-200 bg-slate-100 text-slate-700",
-  };
+  return (
+    map[key] || {
+      label: role || "—",
+      className: "border-slate-200 bg-slate-100 text-slate-700",
+    }
+  );
 }
 
-function getStatusBadge(active?: boolean) {
+function getStatusBadge(user: Pick<UserDoc, "active" | "isActive" | "status">) {
+  const { isActive: active } = resolveUserAccountStatus(user);
   if (active) {
     return {
       label: "نشط",
@@ -147,12 +199,73 @@ function getVipBadge(user: UserDoc) {
   };
 }
 
+type UserIdentityIndex = {
+  byUserId: Map<string, string>;
+  byEmail: Map<string, string>;
+  byPhone: Map<string, string>;
+};
+
+function buildUserIdentityIndex(users: UserDoc[]): UserIdentityIndex {
+  const byUserId = new Map<string, string>();
+  const byEmail = new Map<string, string>();
+  const byPhone = new Map<string, string>();
+
+  for (const user of users) {
+    const buckets = getUserIdentityBuckets(user);
+
+    for (const value of buckets.userIds) {
+      if (!byUserId.has(value)) byUserId.set(value, user.id);
+    }
+
+    for (const value of buckets.emails) {
+      if (!byEmail.has(value)) byEmail.set(value, user.id);
+    }
+
+    for (const value of buckets.phones) {
+      if (!byPhone.has(value)) byPhone.set(value, user.id);
+    }
+  }
+
+  return { byUserId, byEmail, byPhone };
+}
+
+function resolveInvestmentOwnerUserId(
+  investment: InvestmentDoc,
+  identityIndex: UserIdentityIndex
+) {
+  const buckets = getInvestmentIdentityBuckets(investment);
+
+  for (const value of buckets.userIds) {
+    const userId = identityIndex.byUserId.get(value);
+    if (userId) return userId;
+  }
+
+  for (const value of buckets.emails) {
+    const userId = identityIndex.byEmail.get(value);
+    if (userId) return userId;
+  }
+
+  for (const value of buckets.phones) {
+    const userId = identityIndex.byPhone.get(value);
+    if (userId) return userId;
+  }
+
+  return "";
+}
+
+const LIVE_CARD_PROFIT_REFRESH_MS = 60_000;
+
 export default function ClientsManagement() {
+  const { user } = useAuth();
+  const canManageUsers = hasPermission(user, "users.manage");
   const [, setLocation] = useLocation();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [users, setUsers] = useState<UserDoc[]>([]);
+  const [investments, setInvestments] = useState<InvestmentDoc[]>([]);
+  const [projects, setProjects] = useState<ProjectDoc[]>([]);
   const [loading, setLoading] = useState(true);
+  const [now, setNow] = useState(() => new Date());
 
   const [selectedUser, setSelectedUser] = useState<UserDoc | null>(null);
   const [isVipDialogOpen, setIsVipDialogOpen] = useState(false);
@@ -161,51 +274,251 @@ export default function ClientsManagement() {
   const [vipTier, setVipTier] = useState("");
   const [notes, setNotes] = useState("");
 
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setNow(new Date());
+    }, LIVE_CARD_PROFIT_REFRESH_MS);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, []);
+
   /* =========================
      USERS SNAPSHOT (خفيف ✅)
   ========================= */
   useEffect(() => {
-    const unsub = onSnapshot(
-      collection(db, "users"),
-      (snap) => {
-        const rows = snap.docs.map((d) => ({
-          id: d.id,
-          ...(d.data() as any),
-        })) as UserDoc[];
+    let usersLoaded = false;
+    let investmentsLoaded = false;
+    let projectsLoaded = false;
 
-        setUsers(rows);
+    const done = () => {
+      if (usersLoaded && investmentsLoaded && projectsLoaded) {
         setLoading(false);
+      }
+    };
+
+    setLoading(true);
+
+    const unsubUsers = onSnapshot(
+      collection(db, "users"),
+      snap => {
+        setUsers(
+          snap.docs.map(d => ({
+            id: d.id,
+            ...(d.data() as any),
+          })) as UserDoc[]
+        );
+        usersLoaded = true;
+        done();
       },
-      (err) => {
+      err => {
         console.error("users snapshot error:", err);
-        setLoading(false);
+        usersLoaded = true;
+        done();
         toast.error("تعذر تحميل العملاء");
       }
     );
 
-    return () => unsub();
+    const unsubInvestments = onSnapshot(
+      collection(db, "investments"),
+      snap => {
+        setInvestments(
+          snap.docs.map(d => ({
+            id: d.id,
+            ...(d.data() as any),
+          })) as InvestmentDoc[]
+        );
+        investmentsLoaded = true;
+        done();
+      },
+      err => {
+        console.error("investments snapshot error:", err);
+        setInvestments([]);
+        investmentsLoaded = true;
+        done();
+        toast.error("تعذر تحميل الاستثمارات المرتبطة");
+      }
+    );
+
+    const unsubProjects = onSnapshot(
+      collection(db, "projects"),
+      snap => {
+        setProjects(
+          snap.docs.map(d => ({
+            id: d.id,
+            ...(d.data() as any),
+          })) as ProjectDoc[]
+        );
+        projectsLoaded = true;
+        done();
+      },
+      err => {
+        console.error("projects snapshot error:", err);
+        setProjects([]);
+        projectsLoaded = true;
+        done();
+      }
+    );
+
+    return () => {
+      unsubUsers();
+      unsubInvestments();
+      unsubProjects();
+    };
   }, []);
+
+  const projectsMap = useMemo(() => buildProjectsMap(projects), [projects]);
+
+  const userIdentityIndex = useMemo(
+    () => buildUserIdentityIndex(users),
+    [users]
+  );
+
+  const linkedInvestmentsByUserId = useMemo(() => {
+    const grouped: Record<string, InvestmentDoc[]> = {};
+
+    for (const user of users) {
+      grouped[user.id] = [];
+    }
+
+    for (const investment of investments) {
+      const ownerUserId = resolveInvestmentOwnerUserId(
+        investment,
+        userIdentityIndex
+      );
+      if (!ownerUserId) continue;
+
+      (grouped[ownerUserId] ??= []).push(investment);
+    }
+
+    return grouped;
+  }, [investments, userIdentityIndex, users]);
+
+  const clientCards = useMemo(() => {
+    return users.map(user => {
+      const linkedInvestments = linkedInvestmentsByUserId[user.id] ?? [];
+      const linkedNameFallbacks = linkedInvestments.flatMap(investment => [
+        pickText(
+          investment?.investorName,
+          investment?.userSnapshot?.displayName,
+          investment?.userSnapshot?.name
+        ),
+        emailLocalPart(investment?.investorEmail),
+        emailLocalPart(investment?.userSnapshot?.email),
+      ]);
+      const displayName = getUserDisplayName(user, ...linkedNameFallbacks);
+      const email =
+        pickText(
+          user?.email,
+          user?.profile?.email,
+          user?.contact?.email,
+          ...linkedInvestments.map(investment => investment?.investorEmail)
+        ) || "—";
+      const liveSnapshots = linkedInvestments.map(investment =>
+        getInvestmentProfitSnapshot(investment, {
+          now,
+          projectFallback: getProjectProfitFallback(
+            projectsMap[String(investment?.projectId || "").trim()]
+          ),
+        })
+      );
+      const liveSnapshotCount = liveSnapshots.filter(snapshot =>
+        hasReadableInvestmentProfit(snapshot)
+      ).length;
+      const liveTotalInvested = roundMoney(
+        liveSnapshots.reduce(
+          (sum, snapshot) => sum + snapshot.principalAmount,
+          0
+        )
+      );
+      const liveProfitToDate = roundMoney(
+        liveSnapshots.reduce((sum, snapshot) => sum + snapshot.currentProfit, 0)
+      );
+      const storedTotalInvestedRaw = Number(user?.totalInvested);
+      const storedProfitToDateRaw = Number(user?.profitToDate);
+      const hasStoredTotalInvested = Number.isFinite(storedTotalInvestedRaw);
+      const hasStoredProfitToDate = Number.isFinite(storedProfitToDateRaw);
+      const totalInvestedValue =
+        linkedInvestments.length > 0
+          ? liveTotalInvested
+          : hasStoredTotalInvested
+            ? storedTotalInvestedRaw
+            : 0;
+      const profitToDateValue =
+        liveSnapshotCount > 0
+          ? liveProfitToDate
+          : hasStoredProfitToDate
+            ? storedProfitToDateRaw
+            : 0;
+
+      let profitHelper = "لا توجد استثمارات مرتبطة بعد";
+      if (liveSnapshotCount > 0) {
+        profitHelper =
+          liveSnapshotCount === linkedInvestments.length
+            ? `محدث حيًا من ${formatNumberEN(linkedInvestments.length)} استثمار`
+            : `محدث حيًا من ${formatNumberEN(liveSnapshotCount)} من أصل ${formatNumberEN(linkedInvestments.length)} استثمار`;
+      } else if (linkedInvestments.length > 0 && hasStoredProfitToDate) {
+        profitHelper = "معروض من آخر تجميع محفوظ لحين اكتمال بيانات الربح الحي";
+      } else if (linkedInvestments.length > 0) {
+        profitHelper = "البيانات الحالية لا تكفي لحساب الربح الحي";
+      } else if (hasStoredProfitToDate) {
+        profitHelper = "معروض من آخر تجميع محفوظ";
+      }
+
+      const totalInvestedHelper =
+        linkedInvestments.length > 0
+          ? `${formatNumberEN(linkedInvestments.length)} استثمار مرتبط`
+          : hasStoredTotalInvested
+            ? "معروض من آخر تجميع محفوظ"
+            : "لا توجد استثمارات مرتبطة";
+
+      const searchText = [
+        displayName,
+        email,
+        user?.username,
+        user?.phone,
+        user?.mobile,
+        user?.id,
+      ]
+        .map(value => String(value || "").toLowerCase())
+        .join(" ");
+
+      return {
+        user,
+        displayName,
+        email,
+        registeredAt: formatDateAR(user?.createdAt),
+        totalInvestedValue,
+        totalInvestedHelper,
+        profitToDateValue,
+        profitHelper,
+        hasLiveProfit: liveSnapshotCount > 0,
+        searchText,
+      };
+    });
+  }, [investments, linkedInvestmentsByUserId, now, projectsMap, users]);
 
   const filteredUsers = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    if (!q) return users;
+    if (!q) return clientCards;
+    return clientCards.filter(card => card.searchText.includes(q));
+  }, [clientCards, searchQuery]);
 
-    return users.filter((u) => {
-      const name = String(u.name || "").toLowerCase();
-      const email = String(u.email || "").toLowerCase();
-      return name.includes(q) || email.includes(q);
-    });
-  }, [users, searchQuery]);
-
-  const vipUsers = users.filter((u) => u.vipStatus === "vip").length;
-  const regularUsers = users.filter((u) => u.vipStatus !== "vip").length;
+  const vipUsers = users.filter(u => u.vipStatus === "vip").length;
+  const regularUsers = users.filter(u => u.vipStatus !== "vip").length;
 
   const openClientProfile = (userId: string) => {
     setLocation(`/admin/client-profile?id=${userId}`);
   };
 
   const handleUpdateVipStatus = async () => {
+    if (!canManageUsers) {
+      toast.error("لا تملك صلاحية إدارة العملاء.");
+      return;
+    }
     if (!selectedUser) return;
+    const selectedUserLabel = getUserDisplayName(selectedUser);
     try {
       await auditedUpdateDoc({
         ref: doc(db, "users", selectedUser.id),
@@ -222,10 +535,10 @@ export default function ClientsManagement() {
           method: "update_vip_status",
         }),
         relatedIds: { userId: selectedUser.id },
-        message: `Updated VIP status for ${selectedUser.name || selectedUser.email || selectedUser.id}`,
+        message: `Updated VIP status for ${selectedUserLabel}`,
         meta: {
           targetUserEmail: selectedUser.email || null,
-          targetUserName: selectedUser.name || null,
+          targetUserName: selectedUserLabel,
           vipStatus,
           vipTier: vipStatus === "vip" ? vipTier : "",
         },
@@ -238,7 +551,12 @@ export default function ClientsManagement() {
   };
 
   const handleUpdateNotes = async () => {
+    if (!canManageUsers) {
+      toast.error("لا تملك صلاحية إدارة العملاء.");
+      return;
+    }
     if (!selectedUser) return;
+    const selectedUserLabel = getUserDisplayName(selectedUser);
     try {
       await auditedUpdateDoc({
         ref: doc(db, "users", selectedUser.id),
@@ -254,10 +572,10 @@ export default function ClientsManagement() {
           method: "update_notes",
         }),
         relatedIds: { userId: selectedUser.id },
-        message: `Updated internal notes for ${selectedUser.name || selectedUser.email || selectedUser.id}`,
+        message: `Updated internal notes for ${selectedUserLabel}`,
         meta: {
           targetUserEmail: selectedUser.email || null,
-          targetUserName: selectedUser.name || null,
+          targetUserName: selectedUserLabel,
           noteLength: notes.trim().length,
         },
       });
@@ -274,7 +592,8 @@ export default function ClientsManagement() {
         <div>
           <h1 className="text-4xl font-bold mb-2">إدارة العملاء</h1>
           <p className="text-muted-foreground text-lg">
-            عرض وإدارة بيانات العملاء مع واجهة أوضح للحالة والدور والبيانات المالية والإجراءات
+            عرض وإدارة بيانات العملاء مع واجهة أوضح للحالة والدور والبيانات
+            المالية والإجراءات
           </p>
         </div>
 
@@ -319,7 +638,7 @@ export default function ClientsManagement() {
                 <Input
                   placeholder="البحث عن عميل بالاسم أو البريد..."
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onChange={e => setSearchQuery(e.target.value)}
                   className="h-11 pr-10"
                 />
               </div>
@@ -343,7 +662,8 @@ export default function ClientsManagement() {
             </div>
 
             <p className="text-sm text-muted-foreground">
-              عرض واضح لبيانات العميل الأساسية والمالية مع إجراءات مرتبة وبدون أي تمرير أفقي داخل القسم.
+              عرض واضح لبيانات العميل الأساسية والمالية مع إجراءات مرتبة وبدون
+              أي تمرير أفقي داخل القسم.
             </p>
           </CardHeader>
 
@@ -354,16 +674,18 @@ export default function ClientsManagement() {
               </div>
             ) : filteredUsers.length ? (
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-                {filteredUsers.map((user) => {
-                  const statusBadge = getStatusBadge(user.active);
-                  const roleBadge = getRoleBadge(user.role);
+                {filteredUsers.map(card => {
+                  const { user } = card;
+                  const statusBadge = getStatusBadge(user);
+                  const roleBadge = getRoleBadge(user.role, card.email);
                   const vipBadge = getVipBadge(user);
                   const StatusIcon = statusBadge.icon;
-                  const displayName = user.name || "غير محدد";
-                  const email = user.email || "—";
-                  const totalInvested = formatCurrencySAR(user.totalInvested);
-                  const profitToDate = formatCurrencySAR(user.profitToDate);
-                  const registeredAt = formatDateAR(user.createdAt);
+                  const totalInvested = formatCurrencySAR(
+                    card.totalInvestedValue
+                  );
+                  const profitToDate = formatCurrencySAR(
+                    card.profitToDateValue
+                  );
 
                   return (
                     <article
@@ -371,7 +693,7 @@ export default function ClientsManagement() {
                       role="button"
                       tabIndex={0}
                       onClick={() => openClientProfile(user.id)}
-                      onKeyDown={(e) => {
+                      onKeyDown={e => {
                         if (e.key === "Enter" || e.key === " ") {
                           e.preventDefault();
                           openClientProfile(user.id);
@@ -383,7 +705,7 @@ export default function ClientsManagement() {
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
                             <h3 className="text-lg font-semibold text-slate-900 break-words">
-                              {displayName}
+                              {card.displayName}
                             </h3>
                             {vipBadge.featured ? (
                               <div className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-amber-100 text-amber-700">
@@ -394,7 +716,9 @@ export default function ClientsManagement() {
 
                           <div className="mt-2 flex items-start gap-2 text-sm text-slate-500">
                             <Mail className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
-                            <span className="min-w-0 break-all">{email}</span>
+                            <span className="min-w-0 break-all">
+                              {card.email}
+                            </span>
                           </div>
                         </div>
 
@@ -404,17 +728,25 @@ export default function ClientsManagement() {
                       </div>
 
                       <div className="mt-4 flex flex-wrap items-center gap-2">
-                        <Badge variant="outline" className={statusBadge.className}>
+                        <Badge
+                          variant="outline"
+                          className={statusBadge.className}
+                        >
                           <StatusIcon className="ml-1 h-3.5 w-3.5" />
                           {statusBadge.label}
                         </Badge>
 
-                        <Badge variant="outline" className={roleBadge.className}>
+                        <Badge
+                          variant="outline"
+                          className={roleBadge.className}
+                        >
                           {roleBadge.label}
                         </Badge>
 
                         <Badge variant="outline" className={vipBadge.className}>
-                          {vipBadge.featured ? <Crown className="ml-1 h-3.5 w-3.5" /> : null}
+                          {vipBadge.featured ? (
+                            <Crown className="ml-1 h-3.5 w-3.5" />
+                          ) : null}
                           {vipBadge.label}
                         </Badge>
                       </div>
@@ -428,6 +760,9 @@ export default function ClientsManagement() {
                           <div className="mt-2 break-words text-base font-bold text-slate-900">
                             {totalInvested}
                           </div>
+                          <div className="mt-1 text-xs leading-5 text-slate-500">
+                            {card.totalInvestedHelper}
+                          </div>
                         </div>
 
                         <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 p-3 shadow-sm">
@@ -438,6 +773,9 @@ export default function ClientsManagement() {
                           <div className="mt-2 break-words text-base font-bold text-emerald-700">
                             {profitToDate}
                           </div>
+                          <div className="mt-1 text-xs leading-5 text-emerald-700/80">
+                            {card.profitHelper}
+                          </div>
                         </div>
 
                         <div className="rounded-xl border border-slate-200 bg-white/90 p-3 shadow-sm">
@@ -446,7 +784,7 @@ export default function ClientsManagement() {
                             تاريخ التسجيل
                           </div>
                           <div className="mt-2 break-words text-base font-bold text-slate-900">
-                            {registeredAt}
+                            {card.registeredAt}
                           </div>
                         </div>
                       </div>
@@ -460,7 +798,7 @@ export default function ClientsManagement() {
                           <Button
                             size="sm"
                             className="h-auto min-h-9 w-full justify-center whitespace-normal text-center sm:w-auto"
-                            onClick={(e) => {
+                            onClick={e => {
                               e.stopPropagation();
                               openClientProfile(user.id);
                             }}
@@ -473,7 +811,8 @@ export default function ClientsManagement() {
                             size="sm"
                             variant="outline"
                             className="h-auto min-h-9 w-full justify-center whitespace-normal text-center sm:w-auto"
-                            onClick={(e) => {
+                            disabled={!canManageUsers}
+                            onClick={e => {
                               e.stopPropagation();
                               setSelectedUser(user);
                               setVipStatus(user.vipStatus ?? "regular");
@@ -489,7 +828,8 @@ export default function ClientsManagement() {
                             size="sm"
                             variant="outline"
                             className="h-auto min-h-9 w-full justify-center whitespace-normal text-center sm:w-auto"
-                            onClick={(e) => {
+                            disabled={!canManageUsers}
+                            onClick={e => {
                               e.stopPropagation();
                               setSelectedUser(user);
                               setNotes(user.internalNotes || "");
@@ -524,7 +864,10 @@ export default function ClientsManagement() {
           <div className="space-y-4">
             <div>
               <Label>الحالة</Label>
-              <Select value={vipStatus} onValueChange={(v: "regular" | "vip") => setVipStatus(v)}>
+              <Select
+                value={vipStatus}
+                onValueChange={(v: "regular" | "vip") => setVipStatus(v)}
+              >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -538,7 +881,10 @@ export default function ClientsManagement() {
             {vipStatus === "vip" && (
               <div>
                 <Label>مستوى VIP</Label>
-                <Input value={vipTier} onChange={(e) => setVipTier(e.target.value)} />
+                <Input
+                  value={vipTier}
+                  onChange={e => setVipTier(e.target.value)}
+                />
               </div>
             )}
           </div>
@@ -547,7 +893,9 @@ export default function ClientsManagement() {
             <Button variant="outline" onClick={() => setIsVipDialogOpen(false)}>
               إلغاء
             </Button>
-            <Button onClick={handleUpdateVipStatus}>حفظ</Button>
+            <Button disabled={!canManageUsers} onClick={handleUpdateVipStatus}>
+              حفظ
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -559,13 +907,22 @@ export default function ClientsManagement() {
             <DialogTitle>ملاحظات داخلية</DialogTitle>
           </DialogHeader>
 
-          <Textarea rows={6} value={notes} onChange={(e) => setNotes(e.target.value)} />
+          <Textarea
+            rows={6}
+            value={notes}
+            onChange={e => setNotes(e.target.value)}
+          />
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsNotesDialogOpen(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setIsNotesDialogOpen(false)}
+            >
               إلغاء
             </Button>
-            <Button onClick={handleUpdateNotes}>حفظ</Button>
+            <Button disabled={!canManageUsers} onClick={handleUpdateNotes}>
+              حفظ
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

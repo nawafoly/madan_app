@@ -176,7 +176,6 @@ export default function LoginPage() {
 
       // ✅ اكتب/ادمج مباشرة — بدون updateDoc ولا race
       const payload: Record<string, any> = {
-        role: "client",
         email: e,
         displayName: name,
         phone: phoneStr, // نخليه string دائمًا

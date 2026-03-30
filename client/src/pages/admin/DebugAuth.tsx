@@ -1,8 +1,21 @@
 // client/src/pages/admin/DebugAuth.tsx
 import { useAuth } from "@/_core/hooks/useAuth";
+import {
+  getRoleDisplayLabel,
+  getUserFacingDisplayName,
+  getUserFacingTitle,
+} from "@/lib/ownerAccounts";
 
 export default function DebugAuthPage() {
   const { user, loading } = useAuth();
+  const debugUser = user
+    ? {
+        ...user,
+        displayName: getUserFacingDisplayName(user.role, user.displayName),
+        title: getUserFacingTitle(user.role, user.title),
+        role: getRoleDisplayLabel(user.role) || user.role,
+      }
+    : null;
 
   return (
     <div style={{ padding: 16 }}>
@@ -37,7 +50,7 @@ export default function DebugAuthPage() {
               opacity: 0.9,
             }}
           >
-{JSON.stringify(user, null, 2)}
+{JSON.stringify(debugUser, null, 2)}
           </pre>
         ) : (
           <div style={{ fontSize: 13 }}>

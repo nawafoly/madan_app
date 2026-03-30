@@ -2,10 +2,12 @@
 import { useEffect, useMemo, useState } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import AdminPanelStatCard from "@/components/AdminPanelStatCard";
+import { hasPermission, useAuth } from "@/_core/hooks/useAuth";
 import {
   collection,
   doc,
   getDocs,
+  onSnapshot,
   Timestamp,
   runTransaction,
   serverTimestamp,
@@ -57,6 +59,16 @@ import {
   formatDateEN,
   formatNumberEN,
 } from "@/lib/formatters";
+import {
+  buildProjectsMap,
+  getProjectDisplayTitle,
+  getProjectDisplayTitleById,
+} from "@/lib/projectDisplay";
+import {
+  buildUserIdentityIndex,
+  getLinkedUserDisplayName,
+  resolveLinkedUser,
+} from "@/lib/userDisplay";
 
 /* =========================
    helpers
@@ -991,6 +1003,8 @@ const appendInvestmentReportToPdf = async (
 };
 
 export default function Financial() {
+  const { user } = useAuth();
+  const canEditFinancial = hasPermission(user, "financial.edit");
   const [loading, setLoading] = useState(true);
 
   const [investments, setInvestments] = useState<any[]>([]);
@@ -1011,6 +1025,8 @@ export default function Financial() {
   const [rejectionReason, setRejectionReason] = useState("");
   const [customRate, setCustomRate] = useState("");
   const [customDuration, setCustomDuration] = useState("");
+  const projectsMap = useMemo(() => buildProjectsMap(projects), [projects]);
+  const userIdentityIndex = useMemo(() => buildUserIdentityIndex(users), [users]);
 
   /* =========================
      Load data
@@ -1038,6 +1054,58 @@ export default function Financial() {
 
   useEffect(() => {
     loadAll();
+  }, []);
+
+  useEffect(() => {
+    const unsub = onSnapshot(
+      collection(db, "projects"),
+      snap => {
+        setProjects(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      },
+      error => {
+        console.error(error);
+        toast.error("تعذر مزامنة أسماء المشاريع الحالية.");
+      }
+    );
+
+    return () => {
+      unsub();
+    };
+  }, []);
+
+  useEffect(() => {
+    const unsubs: Array<() => void> = [];
+
+    const subscribeToCollection = (
+      collectionName: "investments" | "users" | "projects",
+      setter: (rows: any[]) => void,
+      errorMessage: string
+    ) => {
+      const unsub = onSnapshot(
+        collection(db, collectionName),
+        (snap) => {
+          setter(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        },
+        (error) => {
+          console.error(`${collectionName} snapshot error`, error);
+          toast.error(errorMessage);
+        }
+      );
+
+      unsubs.push(unsub);
+    };
+
+    subscribeToCollection(
+      "investments",
+      setInvestments,
+      "تعذر مزامنة الاستثمارات الحالية."
+    );
+    subscribeToCollection("users", setUsers, "تعذر مزامنة بيانات المستثمرين.");
+    subscribeToCollection("projects", setProjects, "تعذر مزامنة أسماء المشاريع الحالية.");
+
+    return () => {
+      unsubs.forEach((unsub) => unsub());
+    };
   }, []);
 
   /* =========================
@@ -1070,22 +1138,10 @@ export default function Financial() {
     users.find(u => u.id === uid)?.name || "غير معروف";
 
   const getProjectName = (pid: string) =>
-    projects.find(p => p.id === pid)?.titleAr || "غير معروف";
+    getProjectDisplayTitleById(projectsMap, pid, "غير معروف") || "غير معروف";
 
   const getInvestorUserRecord = (investment: any) => {
-    const uid = String(
-      investment?.investorUid ||
-        investment?.userId ||
-        investment?.createdByUid ||
-        ""
-    ).trim();
-
-    return users.find(u => {
-      const candidates = [u?.id, u?.uid, u?.userId, u?.authUid].map(value =>
-        String(value || "").trim()
-      );
-      return uid ? candidates.includes(uid) : false;
-    });
+    return resolveLinkedUser(investment, userIdentityIndex);
   };
 
   const getStatusBadge = (status: string) => {
@@ -1144,6 +1200,9 @@ export default function Financial() {
     return "غير معروف";
   };
 
+  const getInvestorDisplayNameLive = (investment: any) =>
+    getLinkedUserDisplayName(investment, userIdentityIndex, "غير معروف");
+
   const buildInvestmentReportData = (investment: any): InvestmentReportData => {
     const userRecord = getInvestorUserRecord(investment);
     const projectRecord = projects.find(
@@ -1156,9 +1215,10 @@ export default function Financial() {
         ? investment.plannedEndAt.toDate()
         : null;
 
-    const investorName = getInvestorDisplayName(investment);
+    const investorName = getInvestorDisplayNameLive(investment);
     const projectName =
-      projectRecord?.titleAr || projectRecord?.title || "غير معروف";
+      getProjectDisplayTitle(projectRecord, investment?.projectTitle, "غير معروف") ||
+      "غير معروف";
     const statusLabel = getClientInvestmentStatusMeta(investment.status).label;
     const reportDate = formatDateEN(new Date(), {
       year: "numeric",
@@ -1231,20 +1291,20 @@ export default function Financial() {
               label: "تاريخ بدء الاستثمار",
               value: startAt
                 ? formatDateEN(startAt, {
-                    year: "numeric",
-                    month: "numeric",
-                    day: "numeric",
-                  })
+                  year: "numeric",
+                  month: "numeric",
+                  day: "numeric",
+                })
                 : "-",
             },
             {
               label: "تاريخ الانتهاء المخطط",
               value: plannedEndAt
                 ? formatDateEN(plannedEndAt, {
-                    year: "numeric",
-                    month: "numeric",
-                    day: "numeric",
-                  })
+                  year: "numeric",
+                  month: "numeric",
+                  day: "numeric",
+                })
                 : "-",
             },
           ],
@@ -1302,8 +1362,8 @@ export default function Financial() {
       signing: "بانتظار التوقيع",
       signed: "بانتظار الاعتماد النهائي",
       approved: "جاهز للتفعيل",
-      completed: "تم الإغلاق",
-      closed: "تم الإغلاق",
+      completed: "مكتمل",
+      closed: "مكتمل",
       rejected: "مرفوض",
       cancelled: "ملغي",
     };
@@ -1315,6 +1375,10 @@ export default function Financial() {
      Actions
   ========================= */
   const approveInvestmentTx = async () => {
+    if (!canEditFinancial) {
+      toast.error("لا تملك صلاحية تعديل الشؤون المالية.");
+      return;
+    }
     if (!selectedInvestment) return;
     const generatedContractRef = doc(collection(db, "contracts"));
 
@@ -1444,6 +1508,10 @@ export default function Financial() {
   };
 
   const closeInvestmentEarlyTx = async () => {
+    if (!canEditFinancial) {
+      toast.error("لا تملك صلاحية تعديل الشؤون المالية.");
+      return;
+    }
     if (!selectedInvestment) return;
 
     try {
@@ -1549,16 +1617,20 @@ export default function Financial() {
           }),
       });
 
-      toast.success("تم إنهاء الاستثمار بنجاح");
+      toast.success("تم إكمال الاستثمار بنجاح");
       setIsCloseDialogOpen(false);
       loadAll();
     } catch (e) {
       console.error(e);
-      toast.error("فشل إنهاء الاستثمار");
+      toast.error("فشل إكمال الاستثمار");
     }
   };
 
   const updateFinancials = async () => {
+    if (!canEditFinancial) {
+      toast.error("لا تملك صلاحية تعديل الشؤون المالية.");
+      return;
+    }
     if (!selectedInvestment) return;
     const status = String(selectedInvestment.status || "").toLowerCase();
     if (status !== "pending") {
@@ -1607,6 +1679,10 @@ export default function Financial() {
   };
 
   const updateStatus = async (status: string, data: any = {}) => {
+    if (!canEditFinancial) {
+      toast.error("لا تملك صلاحية تعديل الشؤون المالية.");
+      return;
+    }
     if (!selectedInvestment) return;
     const currentStatus = String(selectedInvestment.status || "").toLowerCase();
     if (currentStatus === "completed" || currentStatus === "closed") {
@@ -1666,7 +1742,7 @@ export default function Financial() {
       const bytes = await pdf.save();
       downloadBytes(
         bytes,
-        `Maaden_Investment_Report_${safeFile(getInvestorDisplayName(inv) || inv.id)}.pdf`
+        `Maaden_Investment_Report_${safeFile(getInvestorDisplayNameLive(inv) || inv.id)}.pdf`
       );
       toast.success("تم تنزيل تقرير الاستثمار بنجاح");
     } catch (e) {
@@ -1708,7 +1784,7 @@ export default function Financial() {
         const bytes = await pdf.save();
         downloadBytes(
           bytes,
-          `Maaden_Investment_Report_${safeFile(getInvestorDisplayName(inv) || inv.id)}.pdf`
+          `Maaden_Investment_Report_${safeFile(getInvestorDisplayNameLive(inv) || inv.id)}.pdf`
         );
       }
       toast.success("تم تنزيل تقارير المستثمرين الفردية بنجاح");
@@ -1798,7 +1874,7 @@ export default function Financial() {
                     >
                       <TableCell className={INVESTMENTS_TABLE_CELL_CLASS}>
                         <span className="font-medium text-slate-800">
-                          {getInvestorDisplayName(inv)}
+                          {getInvestorDisplayNameLive(inv)}
                         </span>
                       </TableCell>
                       <TableCell className={INVESTMENTS_TABLE_CELL_CLASS}>
@@ -1825,6 +1901,7 @@ export default function Financial() {
                         <div className="flex gap-2">
                           <Button
                             size="sm"
+                            disabled={!canEditFinancial}
                             onClick={() => {
                               setSelectedInvestment(inv);
                               setIsApproveDialogOpen(true);
@@ -1836,6 +1913,7 @@ export default function Financial() {
                             size="sm"
                             variant="outline"
                             className={INVESTMENTS_TABLE_DANGER_BUTTON_CLASS}
+                            disabled={!canEditFinancial}
                             onClick={() => {
                               setSelectedInvestment(inv);
                               setIsRejectDialogOpen(true);
@@ -1846,6 +1924,7 @@ export default function Financial() {
                           <Button
                             size="sm"
                             variant="outline"
+                            disabled={!canEditFinancial}
                             onClick={() => {
                               setSelectedInvestment(inv);
                               setCustomRate(inv.customRate || "");
@@ -1911,7 +1990,7 @@ export default function Financial() {
                         >
                           <TableCell className={INVESTMENTS_TABLE_CELL_CLASS}>
                             <span className="font-medium text-slate-800">
-                              {getInvestorDisplayName(inv)}
+                              {getInvestorDisplayNameLive(inv)}
                             </span>
                           </TableCell>
                           <TableCell className={INVESTMENTS_TABLE_CELL_CLASS}>
@@ -1939,12 +2018,13 @@ export default function Financial() {
                                 className={
                                   INVESTMENTS_TABLE_DANGER_BUTTON_CLASS
                                 }
+                                disabled={!canEditFinancial}
                                 onClick={() => {
                                   setSelectedInvestment(inv);
                                   setIsCloseDialogOpen(true);
                                 }}
                               >
-                                إنهاء
+                                مكتمل
                               </Button>
                             ) : (
                               <span
@@ -1995,7 +2075,9 @@ export default function Financial() {
             >
               إلغاء
             </Button>
-            <Button onClick={approveInvestmentTx}>اعتماد</Button>
+            <Button disabled={!canEditFinancial} onClick={approveInvestmentTx}>
+              اعتماد
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -2020,7 +2102,7 @@ export default function Financial() {
             </Button>
             <Button
               variant="destructive"
-              disabled={!rejectionReason}
+              disabled={!rejectionReason || !canEditFinancial}
               onClick={() => updateStatus("rejected", { rejectionReason })}
             >
               رفض
@@ -2058,7 +2140,9 @@ export default function Financial() {
             >
               إلغاء
             </Button>
-            <Button onClick={updateFinancials}>حفظ</Button>
+            <Button disabled={!canEditFinancial} onClick={updateFinancials}>
+              حفظ
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -2067,17 +2151,17 @@ export default function Financial() {
       <Dialog open={isCloseDialogOpen} onOpenChange={setIsCloseDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>إنهاء الاستثمار</DialogTitle>
+            <DialogTitle>إكمال الاستثمار</DialogTitle>
           </DialogHeader>
 
           <div className="space-y-3">
             <div className="text-sm text-muted-foreground">
               سيتم احتساب الربح النسبي حسب المدة من تاريخ الاعتماد إلى تاريخ
-              الإنهاء.
+              الإكمال.
             </div>
 
             <div className="space-y-2">
-              <Label>تاريخ الإنهاء</Label>
+              <Label>تاريخ الإكمال</Label>
               <Input
                 type="date"
                 value={closeDate}
@@ -2093,8 +2177,12 @@ export default function Financial() {
             >
               إلغاء
             </Button>
-            <Button variant="destructive" onClick={closeInvestmentEarlyTx}>
-              إنهاء
+            <Button
+              variant="destructive"
+              disabled={!canEditFinancial}
+              onClick={closeInvestmentEarlyTx}
+            >
+              إكمال
             </Button>
           </DialogFooter>
         </DialogContent>

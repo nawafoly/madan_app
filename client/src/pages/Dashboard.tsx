@@ -14,6 +14,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { db } from "@/_core/firebase";
 import { getInvestmentProfitSnapshot, roundMoney } from "@shared/investmentProfit";
 import { isInvestmentActivatedStatus } from "@shared/investmentLifecycle";
+import { getRoleDisplayLabel } from "@/lib/ownerAccounts";
 
 import {
   TrendingUp,
@@ -180,7 +181,7 @@ export default function MyDashboard() {
           </CardHeader>
           <CardContent className="space-y-5">
             <div className="flex gap-2 flex-wrap">
-              <Badge variant="outline">{user.role}</Badge>
+              <Badge variant="outline">{getRoleDisplayLabel(user.role) || user.role}</Badge>
               <Badge variant="secondary">{user.email}</Badge>
             </div>
             <p className="text-muted-foreground leading-relaxed">

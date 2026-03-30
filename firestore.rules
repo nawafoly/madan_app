@@ -13,6 +13,12 @@ service cloud.firestore {
       return signedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
     }
 
+    function myUserData() {
+      return userDocExists()
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data
+        : {};
+    }
+
     // ✅ FIX: ترجع string دائمًا (بدون null) عشان يختفي تحذير الـ ternary
     function lower(v) {
       return (v is string) ? v.lower() : "";
@@ -20,20 +26,156 @@ service cloud.firestore {
 
     // ✅ FIX: ترجع "guest" بدل null + تتحقق أن role string
     function myRole() {
-      return (userDocExists()
-        && (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role is string))
-        ? lower(get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role)
+      return (("role" in myUserData()) && (myUserData().role is string))
+        ? lower(myUserData().role)
         : "guest";
     }
 
-    function isOwner() { return signedIn() && myRole() == "owner"; }
-    function isAdmin() { return signedIn() && (myRole() == "admin" || isOwner()); }
-    function isStaff() { return signedIn() && myRole() == "staff"; }
-    function isAccountant() { return signedIn() && myRole() == "accountant"; }
-    function isClient() { return signedIn() && myRole() == "client"; }
+    function myIsActive() {
+      return !userDocExists()
+        ? false
+        : (("active" in myUserData()) && (myUserData().active is bool))
+          ? myUserData().active
+          : (("isActive" in myUserData()) && (myUserData().isActive is bool))
+            ? myUserData().isActive
+            : true;
+    }
+
+    function isOwner() { return signedIn() && myIsActive() && myRole() == "owner"; }
+    function isAdmin() { return signedIn() && myIsActive() && (myRole() == "admin" || isOwner()); }
+    function isStaff() { return signedIn() && myIsActive() && myRole() == "staff"; }
+    function isAccountant() { return signedIn() && myIsActive() && myRole() == "accountant"; }
+    function isClient() { return signedIn() && myIsActive() && myRole() == "client"; }
 
     function isOps() {
       return signedIn() && (isOwner() || isAdmin() || isStaff() || isAccountant());
+    }
+
+    function myAllowPermissions() {
+      return (("permissionsAllow" in myUserData()) && (myUserData().permissionsAllow is list))
+        ? myUserData().permissionsAllow
+        : [];
+    }
+
+    function myDenyPermissions() {
+      return (("permissionsDeny" in myUserData()) && (myUserData().permissionsDeny is list))
+        ? myUserData().permissionsDeny
+        : [];
+    }
+
+    function roleDefaultPermissions() {
+      return myRole() == "owner"
+        ? [
+            "dashboard.view",
+            "projects.view",
+            "projects.manage",
+            "projects.publish",
+            "investments.view",
+            "investments.manage",
+            "users.view",
+            "users.manage",
+            "messages.view",
+            "messages.manage",
+            "reports.view",
+            "financial.view",
+            "financial.edit",
+            "settings.manage"
+          ]
+        : myRole() == "admin"
+          ? [
+              "dashboard.view",
+              "projects.view",
+              "projects.manage",
+              "projects.publish",
+              "investments.view",
+              "investments.manage",
+              "users.view",
+              "users.manage",
+              "messages.view",
+              "messages.manage",
+              "reports.view",
+              "settings.manage"
+            ]
+          : myRole() == "accountant"
+            ? [
+                "dashboard.view",
+                "projects.view",
+                "investments.view",
+                "financial.view",
+                "financial.edit",
+                "reports.view"
+              ]
+            : myRole() == "staff"
+              ? ["dashboard.view", "projects.view", "messages.view"]
+              : myRole() == "client"
+                ? ["projects.view"]
+                : ["projects.view"];
+    }
+
+    function hasEffectivePermission(permission) {
+      return signedIn()
+        && myIsActive()
+        && !(permission in myDenyPermissions())
+        && ((permission in myAllowPermissions()) || (permission in roleDefaultPermissions()));
+    }
+
+    function hasAdminPermission(permission) {
+      return isOps() && hasEffectivePermission(permission);
+    }
+
+    function canReadUsersAdmin() {
+      return hasAdminPermission("users.view")
+        || hasAdminPermission("users.manage")
+        || hasAdminPermission("settings.manage")
+        || hasAdminPermission("reports.view")
+        || hasAdminPermission("financial.view")
+        || hasAdminPermission("financial.edit");
+    }
+
+    function canManageUsersAdmin() {
+      return hasAdminPermission("users.manage")
+        || hasAdminPermission("settings.manage");
+    }
+
+    function canReadMessagesAdmin() {
+      return hasAdminPermission("messages.view")
+        || hasAdminPermission("messages.manage");
+    }
+
+    function canManageMessagesAdmin() {
+      return hasAdminPermission("messages.manage");
+    }
+
+    function canReadInvestmentsAdmin() {
+      return hasAdminPermission("investments.view")
+        || hasAdminPermission("investments.manage")
+        || hasAdminPermission("financial.view")
+        || hasAdminPermission("financial.edit")
+        || hasAdminPermission("reports.view")
+        || hasAdminPermission("projects.manage")
+        || canReadMessagesAdmin();
+    }
+
+    function canManageInvestmentsAdmin() {
+      return hasAdminPermission("investments.manage")
+        || hasAdminPermission("financial.edit");
+    }
+
+    function canReadContractsAdmin() {
+      return canReadMessagesAdmin()
+        || hasAdminPermission("investments.view")
+        || canManageInvestmentsAdmin()
+        || hasAdminPermission("financial.view")
+        || hasAdminPermission("reports.view");
+    }
+
+    function canManageContractsAdmin() {
+      return canManageInvestmentsAdmin();
+    }
+
+    function canReadInterestRequestsAdmin() {
+      return canReadMessagesAdmin()
+        || canManageInvestmentsAdmin();
     }
 
     function isInvestmentClosedData(d) {
@@ -276,7 +418,7 @@ service cloud.firestore {
     ========================= */
     match /settings/{docId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if hasAdminPermission("settings.manage");
     }
 
     /* =========================
@@ -284,10 +426,11 @@ service cloud.firestore {
     ========================= */
 match /projects/{projectId} {
   allow read: if true;
-  allow create, delete: if isAdmin();
+  allow create, delete: if hasAdminPermission("projects.manage");
 
   // ✅ المحاسب + الأدمن يقدرون يحدثون status + aggregates
-  allow update: if isAdmin() || isAccountant();
+  allow update: if hasAdminPermission("projects.manage")
+    || hasAdminPermission("projects.publish");
 }
 
 
@@ -298,7 +441,7 @@ match /projects/{projectId} {
        - ops يقرأ الجميع (للوحات الإدارة)
     ========================= */
     match /users/{userId} {
-      allow read: if (signedIn() && request.auth.uid == userId) || isOps();
+      allow read: if (signedIn() && request.auth.uid == userId) || canReadUsersAdmin();
 
       // ✅ create: أقل شروط ممكنة (عشان ما ينهار ensureUserDoc)
       allow create: if signedIn()
@@ -306,31 +449,39 @@ match /projects/{projectId} {
         && request.resource.data.email == request.auth.token.email
         && isValidRoleOnCreate();
 
-      allow update: if isAdmin() || (
+      allow update: if canManageUsersAdmin() || (
         signedIn()
         && request.auth.uid == userId
         && isValidRoleOnUpdate()
       );
 
-      allow delete: if isAdmin();
-
-      function isBootstrapOwnerEmail() {
-        return lower(request.auth.token.email) == "nawafaaa0@gmail.com";
-      }
+      allow delete: if canManageUsersAdmin();
 
       function isValidRoleOnCreate() {
         // يسمح guest/client افتراضياً
         // ويسمح owner فقط لحسابك (bootstrap)
-        return !("role" in request.resource.data) ||
-          request.resource.data.role in ["guest","client"] ||
-          (request.resource.data.role == "owner" && isBootstrapOwnerEmail());
+        return (!("role" in request.resource.data)
+          || request.resource.data.role in ["guest","client"]
+          || (request.resource.data.role == "owner" && isBootstrapOwnerEmail()))
+          && (!("permissionsAllow" in request.resource.data) || request.resource.data.permissionsAllow.size() == 0)
+          && (!("permissionsDeny" in request.resource.data) || request.resource.data.permissionsDeny.size() == 0)
+          && (!("active" in request.resource.data) || request.resource.data.active == true);
       }
 
       function isValidRoleOnUpdate() {
         // المستخدم ما يغير role بنفسه (إلا admin)
         // نسمح له بتعديل بياناته فقط
         let keys = request.resource.data.diff(resource.data).changedKeys();
-        return !keys.hasAny(["role"]) // المستخدم ممنوع يغيّر role
+        return !keys.hasAny([
+            "role",
+            "permissionsAllow",
+            "permissionsDeny",
+            "active",
+            "isActive",
+            "isInvestor",
+            "vipStatus",
+            "linkedUserUid"
+          ]) // المستخدم ممنوع يغيّر صلاحياته/حالة الحساب
           && (!keys.hasAny(["email"]) || request.resource.data.email == request.auth.token.email)
           && (!keys.hasAny(["uid"]) || request.resource.data.uid == request.auth.uid);
       }
@@ -345,24 +496,24 @@ match /projects/{projectId} {
     match /messages/{messageId} {
       allow create: if true;
 
-      allow get, list: if isOps();
+      allow get, list: if canReadMessagesAdmin();
 
       allow get: if isClient() && resource.data.createdByUid == request.auth.uid;
 
       // ✅ مؤقت لتشغيل الواجهة (احذف شرط request.query.where الغير مدعوم)
       allow list: if isClient();
 
-      allow update: if isOps();
-      allow delete: if isAdmin() || isOwner();
+      allow update: if canManageMessagesAdmin();
+      allow delete: if canManageMessagesAdmin();
     }
 
     /* =========================
        investments
     ========================= */
     match /investments/{investmentId} {
-      allow read: if (signedIn() && request.auth.uid == resource.data.investorUid) || isAdmin() || isOps();
+      allow read: if (signedIn() && request.auth.uid == resource.data.investorUid) || canReadInvestmentsAdmin();
 
-      allow create: if (isAdmin() && isValidInvestmentWorkflowState(request.resource.data)
+      allow create: if (canManageInvestmentsAdmin() && isValidInvestmentWorkflowState(request.resource.data)
         && investmentStatusValue(request.resource.data) != "active") || (
         signedIn()
         && request.resource.data.investorUid == request.auth.uid
@@ -375,13 +526,13 @@ match /projects/{projectId} {
       );
 
       allow update: if (
-        (isAdmin() || isAccountant())
+        canManageInvestmentsAdmin()
           && !isInvestmentClosedData(resource.data)
           && (!isInvestmentTermsLocked() || !investmentTermsChanged())
           && isValidInvestmentWorkflowTransition()
       ) || clientSignedContractUpdateOnly();
 
-      allow delete: if isAdmin()
+      allow delete: if canManageInvestmentsAdmin()
         && !isInvestmentClosedData(resource.data);
     }
 
@@ -389,10 +540,10 @@ match /projects/{projectId} {
        contracts
     ========================= */
     match /contracts/{contractId} {
-      allow get: if isOps() || currentUserCanReadContract();
-      allow list: if isOps();
-      allow create, update: if isOps();
-      allow delete: if isAdmin();
+      allow get: if canReadContractsAdmin() || currentUserCanReadContract();
+      allow list: if canReadContractsAdmin();
+      allow create, update: if canManageContractsAdmin();
+      allow delete: if canManageContractsAdmin();
     }
 
     /* =========================
@@ -401,24 +552,42 @@ match /projects/{projectId} {
     ========================= */
     match /notifications/{id} {
       allow read: if signedIn() && resource.data.uid == request.auth.uid;
-      allow create: if isOps();
-allow update, delete: if isAdmin() || isAccountant();
+      allow create: if canManageMessagesAdmin()
+        || canManageInvestmentsAdmin()
+        || canManageUsersAdmin()
+        || hasAdminPermission("settings.manage");
+      allow update: if (
+        signedIn()
+        && resource.data.uid == request.auth.uid
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly(["isRead", "updatedAt"])
+      ) || canManageMessagesAdmin()
+        || canManageInvestmentsAdmin()
+        || canManageUsersAdmin()
+        || hasAdminPermission("settings.manage");
+      allow delete: if canManageMessagesAdmin()
+        || canManageInvestmentsAdmin()
+        || canManageUsersAdmin()
+        || hasAdminPermission("settings.manage");
     }
 
 match /admin_users/{docId} {
   // ✅ أي شخص يقرأ وثيقته فقط (docId = email lower)
   allow read: if signedIn()
-    && lower(request.auth.token.email) != ""
-    && docId == lower(request.auth.token.email);
+    && (
+      hasAdminPermission("settings.manage")
+      || (
+        lower(request.auth.token.email) != ""
+        && docId == lower(request.auth.token.email)
+      )
+    );
 
   // ✅ التعديل/الإنشاء/الحذف للإدارة فقط
-  allow create, update, delete: if isAdmin();
+  allow create, update, delete: if hasAdminPermission("settings.manage");
 }
 
 
  match /role_invites/{docId} {
-  allow read: if true; // أو نفس منطق الإيميل إذا docId = email
-  allow write: if isAdmin();
+  allow read, write: if hasAdminPermission("settings.manage");
 }
 
 
@@ -430,12 +599,13 @@ match /admin_users/{docId} {
       allow create: if isValidInterestRequestCreate();
 
       // العميل يشوف طلباته فقط + ops يشوف الكل
-      allow read: if isOps()
+      allow read: if canReadInterestRequestsAdmin()
         || (signedIn() && resource.data.investorUid == request.auth.uid);
 
       // التعديل/الحذف للإدارة فقط
-      allow update: if isOps() && isValidInterestRequestUpdateByOps();
-      allow delete: if isOps();
+      allow update: if (canManageMessagesAdmin() || canManageInvestmentsAdmin())
+        && isValidInterestRequestUpdateByOps();
+      allow delete: if canManageMessagesAdmin() || canManageInvestmentsAdmin();
     }
 
     /* =========================
@@ -445,12 +615,12 @@ match /admin_users/{docId} {
        - Append-only from the application's point of view
     ========================= */
     match /audit_logs/{id} {
-      allow read: if isAdmin();
+      allow read: if hasAdminPermission("settings.manage");
       allow create, update, delete: if false;
     }
 
     match /{document=**} {
-      allow read, write: if isAdmin();
+      allow read, write: if false;
     }
   }
 }

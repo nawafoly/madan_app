@@ -165,15 +165,15 @@ export const investmentStageUiMap: Record<InvestmentStage, InvestmentStageUi> =
       timelineStepKey: null,
     },
     completed: {
-      title: "اكتمل الاستثمار",
+      title: "مكتمل",
       description:
         "انتهت مدة الاستثمار وأغلق العائد النهائي وفق الحالة النهائية المسجلة.",
       badge: {
-        label: "استثمار مكتمل",
+        label: "مكتمل",
         className: slateBadge,
       },
       investmentStatus: {
-        label: "اكتمل الاستثمار",
+        label: "مكتمل",
         className: slateBadge,
       },
       contractStatus: {

@@ -19,7 +19,13 @@ const PRE_ACTIVATION_STATUS_SET = new Set<string>(
 );
 
 export function normalizeWorkflowStatus(raw: unknown) {
-  return String(raw || "").trim().toLowerCase();
+  const normalized = String(raw || "").trim().toLowerCase();
+  const aliases: Record<string, string> = {
+    ended: "completed",
+    finished: "completed",
+  };
+
+  return aliases[normalized] || normalized;
 }
 
 export function isInvestmentActivatedStatus(raw: unknown) {
@@ -54,8 +60,10 @@ export function getClientInvestmentStatusLabel(raw: unknown) {
     signed: CLIENT_WORKFLOW_COPY.awaitingFinalReview,
     approved: CLIENT_WORKFLOW_COPY.contractApproved,
     active: CLIENT_WORKFLOW_COPY.investmentStarted,
-    completed: "اكتمل الاستثمار",
-    closed: "مغلق",
+    completed: "مكتمل",
+    closed: "مكتمل",
+    ended: "مكتمل",
+    finished: "مكتمل",
     resolved: "تمت المعالجة",
     rejected: "مرفوض",
   };

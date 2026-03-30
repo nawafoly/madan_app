@@ -1,11 +1,7 @@
 // client/src/pages/admin/Settings.tsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
-import {
-  Alert,
-  AlertDescription,
-  AlertTitle,
-} from "@/components/ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -65,7 +61,12 @@ import {
 } from "lucide-react";
 
 import { db } from "@/_core/firebase";
-import { formatDateTimeEN, formatFileSizeEN, formatNumberEN } from "@/lib/formatters";
+import {
+  formatDateTimeEN,
+  formatFileSizeEN,
+  formatNumberEN,
+} from "@/lib/formatters";
+import { getRoleDisplayLabel } from "@/lib/ownerAccounts";
 import { cn } from "@/lib/utils";
 import {
   AUDIT_ACTIONS,
@@ -109,7 +110,11 @@ import {
   updateDoc,
   where,
 } from "firebase/firestore";
-
+import {
+  getEffectivePermissions,
+  ROLE_DEFAULT_PERMS,
+  type Permission,
+} from "@/_core/hooks/useAuth";
 
 /* =========================
    Types
@@ -156,6 +161,7 @@ type AdminUserDoc = {
   roleKey: string;
   title?: string;
   isActive: boolean;
+  linkedUserUid?: string;
   notes?: string;
 
   // ✅ Flexible per-user overrides
@@ -170,7 +176,7 @@ type AdminUserDoc = {
 type RoleInviteDoc = {
   id: string; // doc id = email lower
   email: string;
-  roleKey: string; // owner/admin/accountant/staff/client
+  roleKey: string; // owner/admin/accountant/staff
   isActive: boolean;
   notes?: string;
   createdAt?: any;
@@ -208,7 +214,11 @@ type ContentSettings = {
 
 type DatabaseServiceKey = "worker" | "d1" | "r2";
 type DatabaseUiStatus = "success" | "failed" | "not_ready" | "checking";
-type DatabaseMetricKey = "totalFiles" | "totalBytes" | "latestUploadAt" | "d1Records";
+type DatabaseMetricKey =
+  | "totalFiles"
+  | "totalBytes"
+  | "latestUploadAt"
+  | "d1Records";
 type DatabaseActionKey =
   | "browseFiles"
   | "refreshStatus"
@@ -461,7 +471,10 @@ function getDatabaseStatusTone(status: DatabaseUiStatus) {
   }
 }
 
-function formatDatabaseMetricSource(source: DocumentStorageMetricSource, hasValue: boolean) {
+function formatDatabaseMetricSource(
+  source: DocumentStorageMetricSource,
+  hasValue: boolean
+) {
   if (!hasValue) return "غير متاح";
   if (source === "r2") return "من R2";
   if (source === "d1") return "من D1";
@@ -487,7 +500,10 @@ function formatDatabaseTimestamp(value: string | null) {
   });
 }
 
-function formatDatabaseServiceDetail(detail: string | null | undefined, fallback: string) {
+function formatDatabaseServiceDetail(
+  detail: string | null | undefined,
+  fallback: string
+) {
   const normalized = String(detail || "").trim();
   if (!normalized) return fallback;
 
@@ -560,6 +576,113 @@ type AppRoleKey =
   | "client"
   | "guest";
 
+const ADMIN_ROLE_KEYS = ["owner", "admin", "accountant", "staff"] as const;
+type AdminRoleKey = (typeof ADMIN_ROLE_KEYS)[number];
+
+const ADMIN_ROLE_LABELS: Record<AdminRoleKey, string> = {
+  owner: "المالك",
+  admin: "أدمن",
+  accountant: "محاسب",
+  staff: "موظف",
+};
+
+const ALL_PERMISSION_KEYS = DEFAULT_PERMISSIONS.map(
+  ({ key }) => key as Permission
+);
+
+function isSystemRoleKey(roleKey: string): roleKey is AppRoleKey {
+  return SYSTEM_ROLE_KEYS.includes(roleKey);
+}
+
+function isAdminRoleKey(roleKey: unknown): roleKey is AdminRoleKey {
+  return ADMIN_ROLE_KEYS.includes(String(roleKey || "") as AdminRoleKey);
+}
+
+function normalizeAdminRoleKey(roleKey: unknown): AdminRoleKey {
+  return isAdminRoleKey(roleKey) ? roleKey : "staff";
+}
+
+function isKnownPermission(
+  permissionKey: unknown
+): permissionKey is Permission {
+  return ALL_PERMISSION_KEYS.includes(permissionKey as Permission);
+}
+
+function normalizePermissionOverrides(
+  allow: string[] = [],
+  deny: string[] = []
+): { permissionsAllow: Permission[]; permissionsDeny: Permission[] } {
+  const allowSet = new Set<Permission>(
+    (allow || []).filter(isKnownPermission) as Permission[]
+  );
+  const denySet = new Set<Permission>(
+    (deny || []).filter(isKnownPermission) as Permission[]
+  );
+
+  denySet.forEach(deniedPermission => {
+    allowSet.delete(deniedPermission);
+  });
+
+  return {
+    permissionsAllow: Array.from(allowSet),
+    permissionsDeny: Array.from(denySet),
+  };
+}
+
+function getRoleDefaultPermissionKeys(roleKey: string): Permission[] {
+  if (!isSystemRoleKey(roleKey)) return [];
+  return ROLE_DEFAULT_PERMS[roleKey];
+}
+
+function getEffectivePermissionKeys(
+  roleKey: string,
+  allow: string[] = [],
+  deny: string[] = []
+): Permission[] {
+  const { permissionsAllow, permissionsDeny } = normalizePermissionOverrides(
+    allow,
+    deny
+  );
+  return getEffectivePermissions({
+    role: isSystemRoleKey(roleKey) ? roleKey : "guest",
+    permissionsAllow,
+    permissionsDeny,
+  });
+}
+
+function buildOverridesFromEffectiveSelection(
+  roleKey: string,
+  selectedPermissions: Iterable<unknown>
+): { permissionsAllow: Permission[]; permissionsDeny: Permission[] } {
+  const defaults = new Set(getRoleDefaultPermissionKeys(roleKey));
+  const selected = new Set<Permission>();
+
+  for (const permissionKey of Array.from(selectedPermissions)) {
+    if (isKnownPermission(permissionKey)) {
+      selected.add(permissionKey);
+    }
+  }
+
+  const permissionsAllow: Permission[] = [];
+  const permissionsDeny: Permission[] = [];
+
+  for (const permissionKey of ALL_PERMISSION_KEYS) {
+    const isSelected = selected.has(permissionKey);
+    const isDefault = defaults.has(permissionKey);
+
+    if (isSelected && !isDefault) {
+      permissionsAllow.push(permissionKey);
+    } else if (!isSelected && isDefault) {
+      permissionsDeny.push(permissionKey);
+    }
+  }
+
+  return {
+    permissionsAllow,
+    permissionsDeny,
+  };
+}
+
 /* =========================
    JSON Export Shape
 ========================= */
@@ -608,12 +731,13 @@ export default function Settings() {
 
   // ✅ NEW: role invites
   const [promoteEmail, setPromoteEmail] = useState("");
-  const [promoteRoleKey, setPromoteRoleKey] = useState<AppRoleKey>("accountant");
+  const [promoteRoleKey, setPromoteRoleKey] =
+    useState<AdminRoleKey>("accountant");
   const [promoting, setPromoting] = useState(false);
   const [roleInvites, setRoleInvites] = useState<RoleInviteDoc[]>([]);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRoleKey, setInviteRoleKey] =
-    useState<AppRoleKey>("accountant");
+    useState<AdminRoleKey>("accountant");
   const [inviteNotes, setInviteNotes] = useState("");
 
   const [labels, setLabels] = useState<LabelsSettings>({
@@ -636,7 +760,7 @@ export default function Settings() {
       rejected: { ar: "مرفوض", en: "Rejected" },
     },
     uiRoles: {
-      owner: { ar: "أونر", en: "Owner" },
+      owner: { ar: "المالك", en: "Owner" },
       admin: { ar: "أدمن", en: "Admin" },
       accountant: { ar: "محاسب", en: "Accountant" },
       staff: { ar: "موظف", en: "Staff" },
@@ -666,13 +790,19 @@ export default function Settings() {
 
   const [error, setError] = useState<string>("");
   const databaseWorkerUrl = useMemo(() => getDocumentWorkerBaseUrl(), []);
-  const [databaseDashboard, setDatabaseDashboard] = useState<DocumentStorageDashboardSnapshot>(() =>
-    databaseWorkerUrl
-      ? EMPTY_DATABASE_DASHBOARD
-      : createUnavailableDatabaseDashboard("not_ready", "Missing VITE_R2_UPLOAD_WORKER_URL")
-  );
+  const [databaseDashboard, setDatabaseDashboard] =
+    useState<DocumentStorageDashboardSnapshot>(() =>
+      databaseWorkerUrl
+        ? EMPTY_DATABASE_DASHBOARD
+        : createUnavailableDatabaseDashboard(
+            "not_ready",
+            "Missing VITE_R2_UPLOAD_WORKER_URL"
+          )
+    );
   const [databaseRefreshing, setDatabaseRefreshing] = useState(false);
-  const [databaseLoaded, setDatabaseLoaded] = useState(Boolean(!databaseWorkerUrl));
+  const [databaseLoaded, setDatabaseLoaded] = useState(
+    Boolean(!databaseWorkerUrl)
+  );
 
   /* =========================
      Dialogs state
@@ -700,6 +830,7 @@ export default function Settings() {
     roleKey: "staff",
     title: "",
     isActive: true,
+    linkedUserUid: "",
     notes: "",
     permissionsAllow: [],
     permissionsDeny: [],
@@ -708,7 +839,9 @@ export default function Settings() {
   // Import JSON
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [importing, setImporting] = useState(false);
-  const [contractExportItems, setContractExportItems] = useState<ContractExportCandidate[]>([]);
+  const [contractExportItems, setContractExportItems] = useState<
+    ContractExportCandidate[]
+  >([]);
   const [contractExportLoading, setContractExportLoading] = useState(false);
   const [contractExporting, setContractExporting] = useState(false);
   const [contractExcelExporting, setContractExcelExporting] = useState(false);
@@ -748,14 +881,14 @@ export default function Settings() {
 
       if (appSnap.exists()) {
         const d = appSnap.data() as any;
-        setApp((prev) => ({ ...prev, ...(d || {}) }));
+        setApp(prev => ({ ...prev, ...(d || {}) }));
       }
       if (notifSnap.exists()) setNotifications(notifSnap.data() as any);
       if (secSnap.exists()) setSecurity(secSnap.data() as any);
 
       if (labelsSnap.exists()) {
         const d = labelsSnap.data() as any;
-        setLabels((prev) => ({
+        setLabels(prev => ({
           ...prev,
           ...(d || {}),
           projectTypes: d?.projectTypes ?? prev.projectTypes,
@@ -772,7 +905,7 @@ export default function Settings() {
 
       if (flagsSnap.exists()) {
         const d = flagsSnap.data() as any;
-        setFlags((prev) => ({
+        setFlags(prev => ({
           ...prev,
           ...d,
         }));
@@ -780,7 +913,7 @@ export default function Settings() {
 
       if (contentSnap.exists()) {
         const d = contentSnap.data() as any;
-        setContent((prev) => ({
+        setContent(prev => ({
           ...prev,
           ...d,
         }));
@@ -794,7 +927,10 @@ export default function Settings() {
   const refreshDatabaseDashboard = async ({ manual = false } = {}) => {
     if (!databaseWorkerUrl) {
       setDatabaseDashboard(
-        createUnavailableDatabaseDashboard("not_ready", "Missing VITE_R2_UPLOAD_WORKER_URL")
+        createUnavailableDatabaseDashboard(
+          "not_ready",
+          "Missing VITE_R2_UPLOAD_WORKER_URL"
+        )
       );
       setDatabaseLoaded(true);
       if (manual) {
@@ -811,9 +947,12 @@ export default function Settings() {
         toast.success("تم تحديث حالة الخدمات والبيانات");
       }
     } catch (e) {
-      const reason = e instanceof Error ? e.message : "document_storage_snapshot_failed";
+      const reason =
+        e instanceof Error ? e.message : "document_storage_snapshot_failed";
       console.error("database dashboard refresh failed:", e);
-      setDatabaseDashboard(createUnavailableDatabaseDashboard("failed", reason));
+      setDatabaseDashboard(
+        createUnavailableDatabaseDashboard("failed", reason)
+      );
       if (manual) {
         toast.error("فشل تحديث حالة خدمات التخزين");
       }
@@ -839,15 +978,16 @@ export default function Settings() {
     try {
       const rows = await listContractExportCandidates();
       setContractExportItems(rows);
-      setSelectedContractIds((previous) =>
-        previous.filter((contractId) => rows.some((row) => row.id === contractId))
+      setSelectedContractIds(previous =>
+        previous.filter(contractId => rows.some(row => row.id === contractId))
       );
       if (manual) {
         toast.success("Contract list refreshed.");
       }
     } catch (error) {
       console.error("contract export candidates failed:", error);
-      const message = error instanceof Error ? error.message : "Failed to load contracts.";
+      const message =
+        error instanceof Error ? error.message : "Failed to load contracts.";
       setContractExportError(message);
       if (manual) {
         toast.error("Failed to refresh contract list.");
@@ -871,14 +1011,14 @@ export default function Settings() {
     // Realtime: admin_users
     const unsubAdmins = onSnapshot(
       collection(db, "admin_users"),
-      (snap) => {
-        const rows = snap.docs.map((d) => ({
+      snap => {
+        const rows = snap.docs.map(d => ({
           id: d.id,
           ...(d.data() as any),
         })) as AdminUserDoc[];
         setAdminUsers(rows);
       },
-      (err) => {
+      err => {
         console.error("admin_users snapshot error:", err);
         setError("تعذر تحميل بيانات حسابات الإدارة (صلاحيات/اتصال).");
       }
@@ -887,8 +1027,8 @@ export default function Settings() {
     // Realtime: role_invites
     const unsubInvites = onSnapshot(
       collection(db, "role_invites"),
-      (snap) => {
-        const rows = snap.docs.map((d) => ({
+      snap => {
+        const rows = snap.docs.map(d => ({
           id: d.id,
           ...(d.data() as any),
         })) as RoleInviteDoc[];
@@ -897,7 +1037,7 @@ export default function Settings() {
         );
         setRoleInvites(rows);
       },
-      (err) => {
+      err => {
         console.error("role_invites snapshot error:", err);
       }
     );
@@ -944,7 +1084,11 @@ export default function Settings() {
 
   const saveApp = async () => {
     try {
-      await persistSettingsDoc("app", app as unknown as Record<string, unknown>, "Updated app settings");
+      await persistSettingsDoc(
+        "app",
+        app as unknown as Record<string, unknown>,
+        "Updated app settings"
+      );
       toast.success("تم حفظ الإعدادات العامة");
     } catch (e) {
       console.error(e);
@@ -1067,12 +1211,12 @@ export default function Settings() {
   };
 
   const togglePermission = (perm: string) => {
-    setRoleForm((p) => {
+    setRoleForm(p => {
       const exists = p.permissions.includes(perm);
       return {
         ...p,
         permissions: exists
-          ? p.permissions.filter((x) => x !== perm)
+          ? p.permissions.filter(x => x !== perm)
           : [...p.permissions, perm],
       };
     });
@@ -1088,8 +1232,9 @@ export default function Settings() {
     if (!nameAr) return toast.error("اسم الدور (عربي) مطلوب");
 
     try {
-      const exists = roles.some((r) => r.key === key);
-      if (!editingRoleKey && exists) return toast.error("Role Key موجود مسبقًا");
+      const exists = roles.some(r => r.key === key);
+      if (!editingRoleKey && exists)
+        return toast.error("Role Key موجود مسبقًا");
 
       const nowRole: RoleDoc = {
         ...roleForm,
@@ -1103,8 +1248,8 @@ export default function Settings() {
 
       const next =
         editingRoleKey && editingRoleKey !== key
-          ? roles.filter((r) => r.key !== editingRoleKey).concat(nowRole)
-          : roles.filter((r) => r.key !== key).concat(nowRole);
+          ? roles.filter(r => r.key !== editingRoleKey).concat(nowRole)
+          : roles.filter(r => r.key !== key).concat(nowRole);
 
       next.sort((a, b) => a.key.localeCompare(b.key));
 
@@ -1112,7 +1257,7 @@ export default function Settings() {
       setRoles(next);
 
       // Optional: keep uiRoles labels in sync
-      setLabels((prev) => ({
+      setLabels(prev => ({
         ...prev,
         uiRoles: {
           ...prev.uiRoles,
@@ -1136,7 +1281,7 @@ export default function Settings() {
       return toast.error("لا يمكن حذف Role أساسي");
     }
     try {
-      const next = roles.filter((r) => r.key !== roleKey);
+      const next = roles.filter(r => r.key !== roleKey);
       await saveRolesDoc(next);
       setRoles(next);
       toast.success("تم حذف الدور");
@@ -1150,18 +1295,153 @@ export default function Settings() {
      Admin Users (Firestore only)
   ========================= */
 
-  const roleOptions = useMemo(() => {
-    const active = roles.filter((r) => r.isActive);
-    if (active.length) return active;
-    return [
-      { key: "owner", nameAr: "أونر" },
-      { key: "admin", nameAr: "أدمن" },
-      { key: "accountant", nameAr: "محاسب" },
-      { key: "staff", nameAr: "موظف" },
-      { key: "client", nameAr: "عميل" },
-      { key: "guest", nameAr: "زائر" },
-    ] as any[];
-  }, [roles]);
+  const roleOptions = ADMIN_ROLE_KEYS.map(key => ({
+    key,
+    nameAr: ADMIN_ROLE_LABELS[key],
+  }));
+
+  const adminFormEffectivePermissions = useMemo(
+    () =>
+      getEffectivePermissionKeys(
+        adminForm.roleKey,
+        adminForm.permissionsAllow || [],
+        adminForm.permissionsDeny || []
+      ),
+    [adminForm.permissionsAllow, adminForm.permissionsDeny, adminForm.roleKey]
+  );
+
+  const adminFormPermissionOverrides = useMemo(
+    () =>
+      normalizePermissionOverrides(
+        adminForm.permissionsAllow || [],
+        adminForm.permissionsDeny || []
+      ),
+    [adminForm.permissionsAllow, adminForm.permissionsDeny]
+  );
+
+  const findUserDocsByEmail = async (email: string) => {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail) return [];
+
+    const userQuery = query(
+      collection(db, "users"),
+      where("email", "==", normalizedEmail),
+      limit(10)
+    );
+    const snapshot = await getDocs(userQuery);
+    return snapshot.docs;
+  };
+
+  const resolveLinkedUserDocs = async (
+    email: string,
+    linkedUserUid?: string | null
+  ) => {
+    const linkedDocs = new Map<string, any>();
+    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedUid = String(linkedUserUid || "").trim();
+
+    if (normalizedUid) {
+      const linkedUserSnap = await getDoc(doc(db, "users", normalizedUid));
+      if (linkedUserSnap.exists()) {
+        linkedDocs.set(linkedUserSnap.id, linkedUserSnap);
+      }
+    }
+
+    const matchedUserDocs = await findUserDocsByEmail(normalizedEmail);
+    for (const matchedUserDoc of matchedUserDocs) {
+      linkedDocs.set(matchedUserDoc.id, matchedUserDoc);
+    }
+
+    return Array.from(linkedDocs.values());
+  };
+
+  const buildAdminUserPayload = ({
+    displayName,
+    email,
+    roleKey,
+    title,
+    isActive,
+    notes,
+    permissionsAllow,
+    permissionsDeny,
+  }: {
+    displayName: string;
+    email: string;
+    roleKey: AdminRoleKey;
+    title: string;
+    isActive: boolean;
+    notes: string;
+    permissionsAllow: Permission[];
+    permissionsDeny: Permission[];
+  }) => ({
+    displayName,
+    email,
+    roleKey,
+    title: title || "",
+    isActive,
+    notes,
+    permissionsAllow,
+    permissionsDeny,
+  });
+
+  const buildUserSyncPayload = ({
+    displayName,
+    email,
+    roleKey,
+    title,
+    isActive,
+    permissionsAllow,
+    permissionsDeny,
+  }: {
+    displayName: string;
+    email: string;
+    roleKey: AdminRoleKey;
+    title: string;
+    isActive: boolean;
+    permissionsAllow: Permission[];
+    permissionsDeny: Permission[];
+  }) => ({
+    email,
+    role: roleKey,
+    displayName: displayName || null,
+    name: displayName || null,
+    title: title || null,
+    permissionsAllow,
+    permissionsDeny,
+    active: isActive,
+    updatedAt: serverTimestamp(),
+  });
+
+  const toggleAdminEffectivePermission = (permissionKey: Permission) => {
+    setAdminForm(previous => {
+      const effective = new Set(
+        getEffectivePermissionKeys(
+          previous.roleKey,
+          previous.permissionsAllow || [],
+          previous.permissionsDeny || []
+        )
+      );
+
+      if (effective.has(permissionKey)) {
+        effective.delete(permissionKey);
+      } else {
+        effective.add(permissionKey);
+      }
+
+      return {
+        ...previous,
+        ...buildOverridesFromEffectiveSelection(previous.roleKey, effective),
+      };
+    });
+  };
+
+  const resetAdminPermissionOverrides = () => {
+    setAdminForm(previous => ({
+      ...previous,
+      permissionsAllow: [],
+      permissionsDeny: [],
+    }));
+  };
 
   const openCreateAdmin = () => {
     setEditingAdminId(null);
@@ -1171,6 +1451,7 @@ export default function Settings() {
       roleKey: "staff",
       title: "",
       isActive: true,
+      linkedUserUid: "",
       notes: "",
       permissionsAllow: [],
       permissionsDeny: [],
@@ -1181,11 +1462,12 @@ export default function Settings() {
   const openEditAdmin = (u: AdminUserDoc) => {
     setEditingAdminId((u.email || "").trim().toLowerCase());
     setAdminForm({
-      displayName: u.displayName || "",
+      displayName: String(u.displayName || "").trim(),
       email: u.email || "",
-      roleKey: u.roleKey || "staff",
-      title: u.title || "",
+      roleKey: normalizeAdminRoleKey(u.roleKey),
+      title: String(u.title || "").trim(),
       isActive: !!u.isActive,
+      linkedUserUid: String(u.linkedUserUid || "").trim(),
       notes: u.notes || "",
       permissionsAllow: u.permissionsAllow || [],
       permissionsDeny: u.permissionsDeny || [],
@@ -1194,47 +1476,71 @@ export default function Settings() {
   };
 
   const handleSaveAdminUser = async () => {
-    const displayName = adminForm.displayName.trim();
+    const roleKey = normalizeAdminRoleKey(adminForm.roleKey);
+    const displayName = String(adminForm.displayName || "").trim();
+    const title = String(adminForm.title || "").trim();
     const email = adminForm.email.trim().toLowerCase();
-    const roleKey = adminForm.roleKey;
 
     if (!displayName) return toast.error("اسم الحساب مطلوب");
     if (!email || !email.includes("@")) return toast.error("البريد غير صحيح");
-    if (!roleKey) return toast.error("اختر Role");
+    if (!roleKey) return toast.error("اختر الدور");
 
     // ✅ sanitize arrays
-    const permissionsAllow = Array.from(
-      new Set(adminForm.permissionsAllow || [])
+    const { permissionsAllow, permissionsDeny } = normalizePermissionOverrides(
+      adminForm.permissionsAllow || [],
+      adminForm.permissionsDeny || []
     );
-    const permissionsDeny = Array.from(new Set(adminForm.permissionsDeny || []));
+    const effectivePermissions = getEffectivePermissionKeys(
+      roleKey,
+      permissionsAllow,
+      permissionsDeny
+    );
 
     try {
       // ✅ ALWAYS upsert by emailLower (docId = email)
+      const linkedUserDocs = await resolveLinkedUserDocs(
+        email,
+        adminForm.linkedUserUid
+      );
+      const linkedUserDoc = linkedUserDocs[0] || null;
+      const linkedUserUid = linkedUserDoc?.id || null;
       await auditedSetDoc({
         ref: doc(db, "admin_users", email),
         data: {
-          ...adminForm,
-          displayName,
-          email,
-          roleKey,
-          permissionsAllow,
-          permissionsDeny,
+          ...buildAdminUserPayload({
+            displayName,
+            email,
+            roleKey,
+            title,
+            isActive: adminForm.isActive,
+            notes: String(adminForm.notes || "").trim(),
+            permissionsAllow,
+            permissionsDeny,
+          }),
+          linkedUserUid,
 
           // ✅ حافظ على createdAt إذا موجود (لا تعيد تصفيره)
           createdAt: (adminForm as any).createdAt ?? serverTimestamp(),
           updatedAt: serverTimestamp(),
         },
         options: { merge: true },
-        action: editingAdminId ? AUDIT_ACTIONS.USER_UPDATED : AUDIT_ACTIONS.USER_CREATED,
+        action: editingAdminId
+          ? AUDIT_ACTIONS.USER_UPDATED
+          : AUDIT_ACTIONS.USER_CREATED,
         category: "user",
         entityType: "user",
-        source: settingsSource(editingAdminId ? "update_admin_user" : "create_admin_user"),
-        relatedIds: { userId: email },
+        source: settingsSource(
+          editingAdminId ? "update_admin_user" : "create_admin_user"
+        ),
+        relatedIds: { userId: linkedUserUid || email },
         message: `${editingAdminId ? "Updated" : "Created"} admin user ${email}`,
         meta: {
           roleKey,
           permissionsAllow,
           permissionsDeny,
+          effectivePermissions,
+          linkedUserUid,
+          matchedUserCount: linkedUserDocs.length,
           targetUserEmail: email,
         },
         ignoreFields: ["updatedAt"],
@@ -1242,6 +1548,43 @@ export default function Settings() {
 
       // ✅ تنظيف تلقائي: لو كنت تعدّل سجل قديم (random id) أو تغير الإيميل
       // احذف الوثيقة القديمة إذا كانت مختلفة عن email الحالي
+      for (const matchedUserDoc of linkedUserDocs) {
+        await auditedSetDoc({
+          ref: doc(db, "users", matchedUserDoc.id),
+          data: {
+            uid: matchedUserDoc.id,
+            ...buildUserSyncPayload({
+              displayName,
+              email,
+              roleKey,
+              title,
+              isActive: adminForm.isActive,
+              permissionsAllow,
+              permissionsDeny,
+            }),
+          },
+          options: { merge: true },
+          action: AUDIT_ACTIONS.USER_UPDATED,
+          category: "user",
+          entityType: "user",
+          entityId: matchedUserDoc.id,
+          source: settingsSource("sync_admin_user_to_users"),
+          relatedIds: {
+            userId: matchedUserDoc.id,
+          },
+          message: `Synced admin user ${email} to users/${matchedUserDoc.id}`,
+          meta: {
+            roleKey,
+            permissionsAllow,
+            permissionsDeny,
+            effectivePermissions,
+            active: adminForm.isActive,
+            targetUserEmail: email,
+          },
+          ignoreFields: ["updatedAt"],
+        });
+      }
+
       if (editingAdminId && editingAdminId !== email) {
         try {
           await auditedDeleteDoc({
@@ -1261,34 +1604,75 @@ export default function Settings() {
         }
       }
 
-      toast.success(editingAdminId ? "تم تحديث حساب الإدارة" : "تم إنشاء حساب إدارة جديد");
+      toast.success(
+        linkedUserDoc
+          ? editingAdminId
+            ? "تم تحديث الحساب الإداري ومزامنته مع users"
+            : "تم إنشاء الحساب الإداري ومزامنته مع users"
+          : editingAdminId
+            ? "تم تحديث الحساب الإداري. ستتم مزامنته مع users عند وجود الحساب"
+            : "تم إنشاء الحساب الإداري. ستتم مزامنته مع users عند وجود الحساب"
+      );
       setIsAdminDialogOpen(false);
     } catch (e) {
       console.error(e);
       toast.error("فشل حفظ حساب الإدارة");
     }
-
   };
 
   const handleToggleAdminActive = async (u: AdminUserDoc) => {
     try {
       const id = (u.email || u.id || "").trim().toLowerCase(); // ✅ canonical
+      const nextIsActive = !u.isActive;
       await auditedUpdateDoc({
         ref: doc(db, "admin_users", id),
         data: {
-          isActive: !u.isActive,
+          isActive: nextIsActive,
           updatedAt: serverTimestamp(),
         },
-        action: u.isActive ? AUDIT_ACTIONS.USER_DISABLED : AUDIT_ACTIONS.USER_ENABLED,
+        action: u.isActive
+          ? AUDIT_ACTIONS.USER_DISABLED
+          : AUDIT_ACTIONS.USER_ENABLED,
         category: "user",
         entityType: "user",
-        source: settingsSource(u.isActive ? "disable_admin_user" : "enable_admin_user"),
+        source: settingsSource(
+          u.isActive ? "disable_admin_user" : "enable_admin_user"
+        ),
         relatedIds: { userId: id },
         message: `${u.isActive ? "Disabled" : "Enabled"} admin user ${id}`,
         meta: {
           targetUserEmail: id,
         },
       });
+      const linkedUserDocs = await resolveLinkedUserDocs(id, u.linkedUserUid);
+      for (const linkedUserDoc of linkedUserDocs) {
+        await auditedSetDoc({
+          ref: doc(db, "users", linkedUserDoc.id),
+          data: {
+            uid: linkedUserDoc.id,
+            active: nextIsActive,
+            updatedAt: serverTimestamp(),
+          },
+          options: { merge: true },
+          action: u.isActive
+            ? AUDIT_ACTIONS.USER_DISABLED
+            : AUDIT_ACTIONS.USER_ENABLED,
+          category: "user",
+          entityType: "user",
+          entityId: linkedUserDoc.id,
+          source: settingsSource(
+            u.isActive
+              ? "disable_admin_user_users_sync"
+              : "enable_admin_user_users_sync"
+          ),
+          relatedIds: { userId: linkedUserDoc.id },
+          message: `${u.isActive ? "Disabled" : "Enabled"} primary user ${linkedUserDoc.id}`,
+          meta: {
+            targetUserEmail: id,
+          },
+          ignoreFields: ["updatedAt"],
+        });
+      }
       toast.success(u.isActive ? "تم تعطيل الحساب" : "تم تفعيل الحساب");
     } catch (e) {
       console.error(e);
@@ -1296,10 +1680,10 @@ export default function Settings() {
     }
   };
 
-
   const handleDeleteAdmin = async (u: AdminUserDoc) => {
     try {
       const id = (u.email || u.id || "").trim().toLowerCase(); // ✅ canonical
+      const linkedUserDocs = await resolveLinkedUserDocs(id, u.linkedUserUid);
       await auditedDeleteDoc({
         ref: doc(db, "admin_users", id),
         action: AUDIT_ACTIONS.USER_UPDATED,
@@ -1312,13 +1696,45 @@ export default function Settings() {
           targetUserEmail: id,
         },
       });
-      toast.success("تم حذف الحساب");
+
+      for (const linkedUserDoc of linkedUserDocs) {
+        await auditedSetDoc({
+          ref: doc(db, "users", linkedUserDoc.id),
+          data: {
+            uid: linkedUserDoc.id,
+            role: "client",
+            permissionsAllow: [],
+            permissionsDeny: [],
+            active: true,
+            title: null,
+            updatedAt: serverTimestamp(),
+          },
+          options: { merge: true },
+          action: AUDIT_ACTIONS.USER_ROLE_UPDATED,
+          category: "user",
+          entityType: "user",
+          entityId: linkedUserDoc.id,
+          source: settingsSource("delete_admin_user_users_sync"),
+          relatedIds: { userId: linkedUserDoc.id },
+          message: `Demoted primary user ${linkedUserDoc.id} to client after removing admin record`,
+          meta: {
+            targetUserEmail: id,
+            roleKey: "client",
+          },
+          ignoreFields: ["updatedAt"],
+        });
+      }
+
+      toast.success(
+        linkedUserDocs.length
+          ? "تم حذف الحساب الإداري وإرجاع المستخدم إلى عميل"
+          : "تم حذف الحساب الإداري"
+      );
     } catch (e) {
       console.error(e);
       toast.error("فشل حذف الحساب");
     }
   };
-  
 
   /* =========================
      Role Invites (Promote by Email)
@@ -1329,27 +1745,59 @@ export default function Settings() {
     const roleKey = promoteRoleKey;
 
     if (!email || !email.includes("@")) return toast.error("البريد غير صحيح");
-    if (!roleKey) return toast.error("اختر Role");
+    if (!roleKey) return toast.error("اختر الدور");
 
     setPromoting(true);
     try {
       // ✅ ابحث عن المستخدم في users حسب email
-      const q = query(collection(db, "users"), where("email", "==", email), limit(1));
+      const q = query(
+        collection(db, "users"),
+        where("email", "==", email),
+        limit(1)
+      );
       const snap = await getDocs(q);
 
       if (snap.empty) {
-        toast.error("هذا الإيميل ما له حساب مسجل (لا يوجد users doc). خليّه يسوي تسجيل مرة واحدة ثم رقّيه.");
+        toast.error(
+          "هذا الإيميل ما له حساب مسجل (لا يوجد users doc). خليّه يسوي تسجيل مرة واحدة ثم رقّيه."
+        );
         return;
       }
 
       const userDoc = snap.docs[0];
       const userData = userDoc.data() as any;
       const beforeAdminSnap = await getDoc(doc(db, "admin_users", email));
-      const beforeAdminData = beforeAdminSnap.exists() ? beforeAdminSnap.data() : null;
+      const beforeAdminData = beforeAdminSnap.exists()
+        ? beforeAdminSnap.data()
+        : null;
+      const { permissionsAllow, permissionsDeny } = normalizePermissionOverrides(
+        beforeAdminData?.permissionsAllow || [],
+        beforeAdminData?.permissionsDeny || []
+      );
+      const effectivePermissions = getEffectivePermissionKeys(
+        roleKey,
+        permissionsAllow,
+        permissionsDeny
+      );
 
       // ✅ (1) تحديث role داخل users
+      const displayName = String(
+        beforeAdminData?.displayName ||
+          userData?.displayName ||
+          userData?.name ||
+          email.split("@")[0]
+      ).trim();
+      const title = String(beforeAdminData?.title || userData?.title || "").trim();
+      const notes = String(beforeAdminData?.notes || "").trim();
+      const isActive = beforeAdminData?.isActive !== false;
       await updateDoc(doc(db, "users", userDoc.id), {
         role: roleKey,
+        active: isActive,
+        displayName: displayName || null,
+        name: displayName || null,
+        title: title || null,
+        permissionsAllow,
+        permissionsDeny,
         updatedAt: serverTimestamp(),
       });
 
@@ -1358,14 +1806,15 @@ export default function Settings() {
       await setDoc(
         doc(db, "admin_users", email),
         {
-          displayName: userData?.displayName || userData?.name || email.split("@")[0],
+          displayName: displayName || "",
           email,
-          roleKey,          // نفس المفتاح اللي تستخدمه في الواجهة
-          title: "",
-          isActive: true,
-          notes: "",
-          permissionsAllow: [],
-          permissionsDeny: [],
+          roleKey, // نفس المفتاح اللي تستخدمه في الواجهة
+          title,
+          isActive,
+          linkedUserUid: userDoc.id,
+          notes,
+          permissionsAllow,
+          permissionsDeny,
           updatedAt: serverTimestamp(),
           createdAt: userData?.createdAt ?? serverTimestamp(),
         },
@@ -1382,7 +1831,7 @@ export default function Settings() {
         entityPath: `users/${userDoc.id}`,
         source: settingsSource("promote_existing_user"),
         relatedIds: { userId: userDoc.id },
-        message: `Promoted user ${email} to ${roleKey}`,
+        message: `Promoted user ${email} to ${getRoleDisplayLabel(roleKey) || roleKey}`,
         changes: diffAuditTargets([
           {
             label: "user",
@@ -1392,16 +1841,23 @@ export default function Settings() {
           {
             label: "admin_user",
             before: beforeAdminData,
-            after: refreshedAdminSnap.exists() ? refreshedAdminSnap.data() : null,
+            after: refreshedAdminSnap.exists()
+              ? refreshedAdminSnap.data()
+              : null,
           },
         ]),
         meta: {
           roleKey,
+          permissionsAllow,
+          permissionsDeny,
+          effectivePermissions,
           targetUserEmail: email,
         },
       });
 
-      toast.success(`تمت الترقية + إضافته لحسابات الإدارة: ${email} → ${roleKey}`);
+      toast.success(
+        `تمت الترقية + إضافته لحسابات الإدارة: ${email} → ${getRoleDisplayLabel(roleKey) || roleKey}`
+      );
       setPromoteEmail("");
       setPromoteRoleKey("accountant");
     } catch (e) {
@@ -1412,15 +1868,12 @@ export default function Settings() {
     }
   };
 
-
-
-
   const upsertRoleInvite = async () => {
     const email = inviteEmail.trim().toLowerCase();
     const roleKey = inviteRoleKey;
 
     if (!email || !email.includes("@")) return toast.error("البريد غير صحيح");
-    if (!roleKey) return toast.error("اختر Role");
+    if (!roleKey) return toast.error("اختر الدور");
 
     try {
       await auditedSetDoc({
@@ -1545,17 +1998,53 @@ export default function Settings() {
       source: settingsSource("import"),
       message: "Imported settings payload",
       meta: {
-        sections: ["app", "notifications", "security", "roles", "labels", "flags", "content"],
+        sections: [
+          "app",
+          "notifications",
+          "security",
+          "roles",
+          "labels",
+          "flags",
+          "content",
+        ],
         roleCount: s.roles.length,
       },
       targets: [
-        { ref: doc(db, "settings", "app"), entityType: "settings", label: "app" },
-        { ref: doc(db, "settings", "notifications"), entityType: "settings", label: "notifications" },
-        { ref: doc(db, "settings", "security"), entityType: "settings", label: "security" },
-        { ref: doc(db, "settings", "roles"), entityType: "settings", label: "roles" },
-        { ref: doc(db, "settings", "labels"), entityType: "settings", label: "labels" },
-        { ref: doc(db, "settings", "flags"), entityType: "settings", label: "flags" },
-        { ref: doc(db, "settings", "content"), entityType: "settings", label: "content" },
+        {
+          ref: doc(db, "settings", "app"),
+          entityType: "settings",
+          label: "app",
+        },
+        {
+          ref: doc(db, "settings", "notifications"),
+          entityType: "settings",
+          label: "notifications",
+        },
+        {
+          ref: doc(db, "settings", "security"),
+          entityType: "settings",
+          label: "security",
+        },
+        {
+          ref: doc(db, "settings", "roles"),
+          entityType: "settings",
+          label: "roles",
+        },
+        {
+          ref: doc(db, "settings", "labels"),
+          entityType: "settings",
+          label: "labels",
+        },
+        {
+          ref: doc(db, "settings", "flags"),
+          entityType: "settings",
+          label: "flags",
+        },
+        {
+          ref: doc(db, "settings", "content"),
+          entityType: "settings",
+          label: "content",
+        },
       ],
       execute: async () => {
         await Promise.all([
@@ -1638,15 +2127,20 @@ export default function Settings() {
 
   const contractStatusOptions = useMemo(() => {
     return Array.from(
-      new Set(contractExportItems.map((item) => String(item.status || "").trim()).filter(Boolean))
+      new Set(
+        contractExportItems
+          .map(item => String(item.status || "").trim())
+          .filter(Boolean)
+      )
     ).sort((left, right) => left.localeCompare(right));
   }, [contractExportItems]);
 
   const filteredContractExportItems = useMemo(() => {
     const normalizedSearch = contractSearch.trim().toLowerCase();
-    return contractExportItems.filter((item) => {
+    return contractExportItems.filter(item => {
       const matchesStatus =
-        contractStatusFilter === "all" || String(item.status || "") === contractStatusFilter;
+        contractStatusFilter === "all" ||
+        String(item.status || "") === contractStatusFilter;
 
       if (!matchesStatus) return false;
       if (!normalizedSearch) return true;
@@ -1674,25 +2168,32 @@ export default function Settings() {
 
   const allFilteredSelected =
     filteredContractExportItems.length > 0 &&
-    filteredContractExportItems.every((item) => selectedContractIdSet.has(item.id));
+    filteredContractExportItems.every(item =>
+      selectedContractIdSet.has(item.id)
+    );
 
   const toggleContractSelection = (contractId: string, checked: boolean) => {
-    setSelectedContractIds((previous) => {
+    setSelectedContractIds(previous => {
       if (checked) {
         return Array.from(new Set([...previous, contractId]));
       }
-      return previous.filter((value) => value !== contractId);
+      return previous.filter(value => value !== contractId);
     });
   };
 
   const toggleSelectAllFilteredContracts = (checked: boolean) => {
-    setSelectedContractIds((previous) => {
+    setSelectedContractIds(previous => {
       if (!checked) {
-        const filteredIds = new Set(filteredContractExportItems.map((item) => item.id));
-        return previous.filter((value) => !filteredIds.has(value));
+        const filteredIds = new Set(
+          filteredContractExportItems.map(item => item.id)
+        );
+        return previous.filter(value => !filteredIds.has(value));
       }
       return Array.from(
-        new Set([...previous, ...filteredContractExportItems.map((item) => item.id)])
+        new Set([
+          ...previous,
+          ...filteredContractExportItems.map(item => item.id),
+        ])
       );
     });
   };
@@ -1718,7 +2219,10 @@ export default function Settings() {
         action: "contract_export_generated",
         category: "contract",
         entityType: "contract_export",
-        entityId: result.summary.exportedContractCount === 1 ? selectedContractIds[0] : "multi",
+        entityId:
+          result.summary.exportedContractCount === 1
+            ? selectedContractIds[0]
+            : "multi",
         source: settingsSource("contract_export"),
         relatedIds:
           result.summary.exportedContractCount === 1
@@ -1741,7 +2245,8 @@ export default function Settings() {
       );
     } catch (error) {
       console.error("contract export failed:", error);
-      const message = error instanceof Error ? error.message : "Contract export failed.";
+      const message =
+        error instanceof Error ? error.message : "Contract export failed.";
       setContractExportError(message);
       toast.error(message);
     } finally {
@@ -1770,7 +2275,10 @@ export default function Settings() {
         action: "contract_excel_export_generated",
         category: "contract",
         entityType: "contract_export_excel",
-        entityId: result.summary.exportedContractCount === 1 ? selectedContractIds[0] : "multi",
+        entityId:
+          result.summary.exportedContractCount === 1
+            ? selectedContractIds[0]
+            : "multi",
         source: settingsSource("contract_export_excel"),
         relatedIds:
           result.summary.exportedContractCount === 1
@@ -1793,7 +2301,8 @@ export default function Settings() {
       );
     } catch (error) {
       console.error("business excel export failed:", error);
-      const message = error instanceof Error ? error.message : "Excel export failed.";
+      const message =
+        error instanceof Error ? error.message : "Excel export failed.";
       setContractExcelExportError(message);
       toast.error(message);
     } finally {
@@ -1806,7 +2315,7 @@ export default function Settings() {
       ? "checking"
       : getOverallDatabaseStatus(databaseDashboard);
 
-    return DATABASE_OVERVIEW_CARDS.map((card) => {
+    return DATABASE_OVERVIEW_CARDS.map(card => {
       if (card.key === "overall") {
         return {
           ...card,
@@ -1835,7 +2344,9 @@ export default function Settings() {
       }
 
       const service = databaseDashboard.services[card.key];
-      const status: DatabaseUiStatus = databaseRefreshing ? "checking" : service.status;
+      const status: DatabaseUiStatus = databaseRefreshing
+        ? "checking"
+        : service.status;
       const fallbackDetail =
         card.key === "d1"
           ? "المرجع: maedin-documents"
@@ -1856,10 +2367,15 @@ export default function Settings() {
           : formatDatabaseServiceDetail(service.detail, fallbackDetail),
       };
     });
-  }, [databaseDashboard, databaseLoaded, databaseRefreshing, databaseWorkerUrl]);
+  }, [
+    databaseDashboard,
+    databaseLoaded,
+    databaseRefreshing,
+    databaseWorkerUrl,
+  ]);
 
   const databaseMetricCards = useMemo(() => {
-    return DATABASE_METRIC_CARDS.map((metric) => {
+    return DATABASE_METRIC_CARDS.map(metric => {
       switch (metric.key) {
         case "totalFiles":
           return {
@@ -1890,7 +2406,9 @@ export default function Settings() {
         case "latestUploadAt":
           return {
             ...metric,
-            value: formatDatabaseTimestamp(databaseDashboard.metrics.latestUploadAt),
+            value: formatDatabaseTimestamp(
+              databaseDashboard.metrics.latestUploadAt
+            ),
             helper: databaseRefreshing
               ? "جارٍ التحديث"
               : !databaseLoaded
@@ -1919,7 +2437,7 @@ export default function Settings() {
   }, [databaseDashboard, databaseLoaded, databaseRefreshing]);
 
   const databaseTechnicalDetails = useMemo(() => {
-    return DATABASE_TECHNICAL_DETAILS.map((item) => {
+    return DATABASE_TECHNICAL_DETAILS.map(item => {
       if (item.label !== "Worker" || !databaseWorkerUrl) return item;
       return {
         ...item,
@@ -1970,11 +2488,17 @@ export default function Settings() {
               <SettingsIcon className="w-4 h-4 ml-2" /> عام
             </TabsTrigger>
 
-            <TabsTrigger value="notifications" className="shrink-0 whitespace-nowrap">
+            <TabsTrigger
+              value="notifications"
+              className="shrink-0 whitespace-nowrap"
+            >
               <Bell className="w-4 h-4 ml-2" /> الإشعارات
             </TabsTrigger>
 
-            <TabsTrigger value="security" className="shrink-0 whitespace-nowrap">
+            <TabsTrigger
+              value="security"
+              className="shrink-0 whitespace-nowrap"
+            >
               <Shield className="w-4 h-4 ml-2" /> الأمان
             </TabsTrigger>
 
@@ -2002,7 +2526,10 @@ export default function Settings() {
               <FileDown className="w-4 h-4 ml-2" /> Backup
             </TabsTrigger>
 
-            <TabsTrigger value="database" className="shrink-0 whitespace-nowrap">
+            <TabsTrigger
+              value="database"
+              className="shrink-0 whitespace-nowrap"
+            >
               <Database className="w-4 h-4 ml-2" /> قاعدة البيانات
             </TabsTrigger>
           </TabsList>
@@ -2168,14 +2695,16 @@ export default function Settings() {
                     {roles
                       .slice()
                       .sort((a, b) => a.key.localeCompare(b.key))
-                      .map((r) => (
+                      .map(r => (
                         <div
                           key={r.key}
                           className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 border rounded-lg p-4"
                         >
                           <div className="space-y-1">
                             <div className="flex items-center gap-2 flex-wrap">
-                              <Badge variant="outline">{r.key}</Badge>
+                              <Badge variant="outline">
+                                {getRoleDisplayLabel(r.key) || r.key}
+                              </Badge>
                               <span className="font-bold">{r.nameAr}</span>
                               {!r.isActive ? (
                                 <Badge variant="secondary">موقوف</Badge>
@@ -2193,7 +2722,7 @@ export default function Settings() {
 
                             <div className="flex flex-wrap gap-2 mt-2">
                               {r.permissions?.length ? (
-                                r.permissions.slice(0, 10).map((p) => (
+                                r.permissions.slice(0, 10).map(p => (
                                   <Badge key={p} variant="secondary">
                                     {p}
                                   </Badge>
@@ -2221,7 +2750,7 @@ export default function Settings() {
                             <Button
                               variant="outline"
                               onClick={async () => {
-                                const next = roles.map((x) =>
+                                const next = roles.map(x =>
                                   x.key === r.key
                                     ? { ...x, isActive: !x.isActive }
                                     : x
@@ -2266,12 +2795,12 @@ export default function Settings() {
               Admin Accounts
           ========================= */}
           <TabsContent value="admins">
-
             <Card className="mb-4">
               <CardHeader>
                 <CardTitle>ترقية مباشرة (بدون دعوة)</CardTitle>
                 <CardDescription>
-                  يرقّي مستخدم موجود بالفعل في users حسب الإيميل (لا ينشئ حساب جديد).
+                  يرقّي مستخدم موجود بالفعل في users حسب الإيميل (لا ينشئ حساب
+                  جديد).
                 </CardDescription>
               </CardHeader>
 
@@ -2281,7 +2810,7 @@ export default function Settings() {
                     <Label>الإيميل</Label>
                     <Input
                       value={promoteEmail}
-                      onChange={(e) => setPromoteEmail(e.target.value)}
+                      onChange={e => setPromoteEmail(e.target.value)}
                       placeholder="info@madanalbena.com"
                     />
                   </div>
@@ -2290,55 +2819,8 @@ export default function Settings() {
                     <Label>الدور</Label>
                     <Select
                       value={promoteRoleKey}
-                      onValueChange={(v: any) => setPromoteRoleKey(v as AppRoleKey)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="accountant">محاسب (accountant)</SelectItem>
-                        <SelectItem value="staff">موظف (staff)</SelectItem>
-                        <SelectItem value="admin">أدمن (admin)</SelectItem>
-                        <SelectItem value="owner">أونر (owner)</SelectItem>
-                        <SelectItem value="client">عميل (client)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <Button className="bg-[#F2B705]" onClick={promoteExistingUserByEmail} disabled={promoting}>
-                  {promoting ? "جاري الترقية..." : "ترقية الآن"}
-                </Button>
-              </CardContent>
-            </Card>
-
-
-            {/* ✅ NEW: Promote by email (no UID needed) */}
-            <Card className="mb-4">
-              <CardHeader>
-                <CardTitle>ترقية دور حسب الإيميل (بدون UID)</CardTitle>
-                <CardDescription>
-                  اكتب الإيميل وحدد الدور — أول ما يسوي Login/Signup يتم تعيين role
-                  تلقائيًا في users/{"{uid}"}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid md:grid-cols-3 gap-4">
-                  <div className="space-y-1 md:col-span-2">
-                    <Label>الإيميل</Label>
-                    <Input
-                      value={inviteEmail}
-                      onChange={(e) => setInviteEmail(e.target.value)}
-                      placeholder="accountant@example.com"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <Label>الدور</Label>
-                    <Select
-                      value={inviteRoleKey}
                       onValueChange={(v: any) =>
-                        setInviteRoleKey(v as AppRoleKey)
+                        setPromoteRoleKey(normalizeAdminRoleKey(v))
                       }
                     >
                       <SelectTrigger>
@@ -2350,8 +2832,60 @@ export default function Settings() {
                         </SelectItem>
                         <SelectItem value="staff">موظف (staff)</SelectItem>
                         <SelectItem value="admin">أدمن (admin)</SelectItem>
-                        <SelectItem value="owner">أونر (owner)</SelectItem>
-                        <SelectItem value="client">عميل (client)</SelectItem>
+                        <SelectItem value="owner">المالك (owner)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <Button
+                  className="bg-[#F2B705]"
+                  onClick={promoteExistingUserByEmail}
+                  disabled={promoting}
+                >
+                  {promoting ? "جاري الترقية..." : "ترقية الآن"}
+                </Button>
+              </CardContent>
+            </Card>
+
+            {/* ✅ NEW: Promote by email (no UID needed) */}
+            <Card className="mb-4">
+              <CardHeader>
+                <CardTitle>ترقية دور حسب الإيميل (بدون UID)</CardTitle>
+                <CardDescription>
+                  اكتب الإيميل وحدد الدور — أول ما يسوي Login/Signup يتم تعيين
+                  role تلقائيًا في users/{"{uid}"}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid md:grid-cols-3 gap-4">
+                  <div className="space-y-1 md:col-span-2">
+                    <Label>الإيميل</Label>
+                    <Input
+                      value={inviteEmail}
+                      onChange={e => setInviteEmail(e.target.value)}
+                      placeholder="accountant@example.com"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label>الدور</Label>
+                    <Select
+                      value={inviteRoleKey}
+                      onValueChange={(v: any) =>
+                        setInviteRoleKey(normalizeAdminRoleKey(v))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="accountant">
+                          محاسب (accountant)
+                        </SelectItem>
+                        <SelectItem value="staff">موظف (staff)</SelectItem>
+                        <SelectItem value="admin">أدمن (admin)</SelectItem>
+                        <SelectItem value="owner">المالك (owner)</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -2362,7 +2896,7 @@ export default function Settings() {
                   <Textarea
                     rows={2}
                     value={inviteNotes}
-                    onChange={(e) => setInviteNotes(e.target.value)}
+                    onChange={e => setInviteNotes(e.target.value)}
                     placeholder="مثال: محاسب رسمي"
                   />
                 </div>
@@ -2381,7 +2915,7 @@ export default function Settings() {
 
                   {roleInvites.length ? (
                     <div className="grid gap-3">
-                      {roleInvites.map((inv) => (
+                      {roleInvites.map(inv => (
                         <div
                           key={inv.id}
                           className="border rounded-lg p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3"
@@ -2390,7 +2924,9 @@ export default function Settings() {
                             <div className="flex items-center gap-2 flex-wrap">
                               <Badge variant="outline">{inv.email}</Badge>
                               <Badge variant="secondary">
-                                Role: {inv.roleKey}
+                                Role:{" "}
+                                {getRoleDisplayLabel(inv.roleKey) ||
+                                  inv.roleKey}
                               </Badge>
                               {inv.isActive ? (
                                 <Badge>مفعّلة</Badge>
@@ -2455,7 +2991,7 @@ export default function Settings() {
                           String(b.email || "")
                         )
                       )
-                      .map((u) => (
+                      .map(u => (
                         <div
                           key={u.id}
                           className="border rounded-lg p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3"
@@ -2463,29 +2999,57 @@ export default function Settings() {
                           <div className="space-y-1">
                             <div className="flex flex-wrap items-center gap-2">
                               <Badge variant="outline">ID: {u.id}</Badge>
-                              <span className="font-bold">{u.displayName}</span>
+                              <span className="font-bold">
+                                {u.displayName || "بدون اسم"}
+                              </span>
                               {u.isActive ? (
                                 <Badge>مفعّل</Badge>
                               ) : (
                                 <Badge variant="secondary">معطّل</Badge>
                               )}
                               <Badge variant="secondary">
-                                Role: {u.roleKey}
+                                Role:{" "}
+                                {getRoleDisplayLabel(u.roleKey) || u.roleKey}
                               </Badge>
                               {u.title ? (
-                                <Badge variant="outline">{u.title}</Badge>
+                                <Badge variant="outline">
+                                  {u.title}
+                                </Badge>
                               ) : null}
                             </div>
                             <div className="text-sm text-muted-foreground">
                               {u.email}
                             </div>
 
+                            {getEffectivePermissionKeys(
+                              u.roleKey,
+                              u.permissionsAllow || [],
+                              u.permissionsDeny || []
+                            ).length ? (
+                              <div className="flex flex-wrap gap-2 mt-2">
+                                {getEffectivePermissionKeys(
+                                  u.roleKey,
+                                  u.permissionsAllow || [],
+                                  u.permissionsDeny || []
+                                )
+                                  .slice(0, 6)
+                                  .map(p => (
+                                    <Badge
+                                      key={`effective-${u.id}-${p}`}
+                                      variant="secondary"
+                                    >
+                                      {p}
+                                    </Badge>
+                                  ))}
+                              </div>
+                            ) : null}
+
                             {u.permissionsAllow?.length ||
-                              u.permissionsDeny?.length ? (
+                            u.permissionsDeny?.length ? (
                               <div className="flex flex-wrap gap-2 mt-2">
                                 {(u.permissionsAllow || [])
                                   .slice(0, 6)
-                                  .map((p) => (
+                                  .map(p => (
                                     <Badge
                                       key={`a-${u.id}-${p}`}
                                       variant="secondary"
@@ -2495,7 +3059,7 @@ export default function Settings() {
                                   ))}
                                 {(u.permissionsDeny || [])
                                   .slice(0, 6)
-                                  .map((p) => (
+                                  .map(p => (
                                     <Badge
                                       key={`d-${u.id}-${p}`}
                                       variant="outline"
@@ -2529,7 +3093,7 @@ export default function Settings() {
                             <Button
                               variant="destructive"
                               onClick={() => handleDeleteAdmin(u)}
-                              >
+                            >
                               <Trash2 className="w-4 h-4 ml-2" /> حذف
                             </Button>
                           </div>
@@ -2562,33 +3126,31 @@ export default function Settings() {
                 <LabelsEditor
                   title="مسميات أنواع المشاريع (Project Types)"
                   data={labels.projectTypes}
-                  onChange={(next) =>
-                    setLabels((p) => ({ ...p, projectTypes: next }))
+                  onChange={next =>
+                    setLabels(p => ({ ...p, projectTypes: next }))
                   }
                 />
 
                 <LabelsEditor
                   title="مسميات حالات المشاريع (Project Statuses)"
                   data={labels.projectStatuses}
-                  onChange={(next) =>
-                    setLabels((p) => ({ ...p, projectStatuses: next }))
+                  onChange={next =>
+                    setLabels(p => ({ ...p, projectStatuses: next }))
                   }
                 />
 
                 <LabelsEditor
                   title="مسميات حالات الاستثمارات (Investment Statuses)"
                   data={labels.investmentStatuses}
-                  onChange={(next) =>
-                    setLabels((p) => ({ ...p, investmentStatuses: next }))
+                  onChange={next =>
+                    setLabels(p => ({ ...p, investmentStatuses: next }))
                   }
                 />
 
                 <LabelsEditor
                   title="مسميات الأدوار للعرض (UI Roles Labels)"
                   data={labels.uiRoles}
-                  onChange={(next) =>
-                    setLabels((p) => ({ ...p, uiRoles: next }))
-                  }
+                  onChange={next => setLabels(p => ({ ...p, uiRoles: next }))}
                 />
 
                 <Button className="bg-[#F2B705]" onClick={saveLabels}>
@@ -2596,8 +3158,8 @@ export default function Settings() {
                 </Button>
 
                 <p className="text-sm text-muted-foreground">
-                  * لاحقًا نربط صفحات العرض بحيث تستخدم المسميات من settings/labels
-                  بدل النصوص الثابتة.
+                  * لاحقًا نربط صفحات العرض بحيث تستخدم المسميات من
+                  settings/labels بدل النصوص الثابتة.
                 </p>
               </CardContent>
             </Card>
@@ -2619,35 +3181,35 @@ export default function Settings() {
                   label="Maintenance Mode (إيقاف الموقع/وضع صيانة)"
                   value={flags.maintenanceMode}
                   onChange={(v: boolean) =>
-                    setFlags((p) => ({ ...p, maintenanceMode: v }))
+                    setFlags(p => ({ ...p, maintenanceMode: v }))
                   }
                 />
                 <Toggle
                   label="تعطيل الاستثمارات (منع إنشاء استثمار جديد)"
                   value={flags.disableInvestments}
                   onChange={(v: boolean) =>
-                    setFlags((p) => ({ ...p, disableInvestments: v }))
+                    setFlags(p => ({ ...p, disableInvestments: v }))
                   }
                 />
                 <Toggle
                   label="تعطيل الرسائل (إخفاء نموذج/صفحة الرسائل)"
                   value={flags.disableMessages}
                   onChange={(v: boolean) =>
-                    setFlags((p) => ({ ...p, disableMessages: v }))
+                    setFlags(p => ({ ...p, disableMessages: v }))
                   }
                 />
                 <Toggle
                   label="VIP Only Mode (عرض محتوى VIP فقط)"
                   value={flags.vipOnlyMode}
                   onChange={(v: boolean) =>
-                    setFlags((p) => ({ ...p, vipOnlyMode: v }))
+                    setFlags(p => ({ ...p, vipOnlyMode: v }))
                   }
                 />
                 <Toggle
                   label="إخفاء مشاريع VIP من العامة"
                   value={flags.hideVipProjects}
                   onChange={(v: boolean) =>
-                    setFlags((p) => ({ ...p, hideVipProjects: v }))
+                    setFlags(p => ({ ...p, hideVipProjects: v }))
                   }
                 />
 
@@ -2673,8 +3235,8 @@ export default function Settings() {
                     <Label>Hero Title (عربي)</Label>
                     <Input
                       value={content.heroTitleAr}
-                      onChange={(e) =>
-                        setContent((p) => ({
+                      onChange={e =>
+                        setContent(p => ({
                           ...p,
                           heroTitleAr: e.target.value,
                         }))
@@ -2685,8 +3247,8 @@ export default function Settings() {
                     <Label>Hero Title (English)</Label>
                     <Input
                       value={content.heroTitleEn}
-                      onChange={(e) =>
-                        setContent((p) => ({
+                      onChange={e =>
+                        setContent(p => ({
                           ...p,
                           heroTitleEn: e.target.value,
                         }))
@@ -2701,8 +3263,8 @@ export default function Settings() {
                     <Textarea
                       rows={3}
                       value={content.heroSubtitleAr}
-                      onChange={(e) =>
-                        setContent((p) => ({
+                      onChange={e =>
+                        setContent(p => ({
                           ...p,
                           heroSubtitleAr: e.target.value,
                         }))
@@ -2714,8 +3276,8 @@ export default function Settings() {
                     <Textarea
                       rows={3}
                       value={content.heroSubtitleEn}
-                      onChange={(e) =>
-                        setContent((p) => ({
+                      onChange={e =>
+                        setContent(p => ({
                           ...p,
                           heroSubtitleEn: e.target.value,
                         }))
@@ -2730,8 +3292,8 @@ export default function Settings() {
                     <Textarea
                       rows={3}
                       value={content.footerAboutAr}
-                      onChange={(e) =>
-                        setContent((p) => ({
+                      onChange={e =>
+                        setContent(p => ({
                           ...p,
                           footerAboutAr: e.target.value,
                         }))
@@ -2743,8 +3305,8 @@ export default function Settings() {
                     <Textarea
                       rows={3}
                       value={content.footerAboutEn}
-                      onChange={(e) =>
-                        setContent((p) => ({
+                      onChange={e =>
+                        setContent(p => ({
                           ...p,
                           footerAboutEn: e.target.value,
                         }))
@@ -2758,8 +3320,8 @@ export default function Settings() {
                     <Label>Contact Email</Label>
                     <Input
                       value={content.contactEmail}
-                      onChange={(e) =>
-                        setContent((p) => ({
+                      onChange={e =>
+                        setContent(p => ({
                           ...p,
                           contactEmail: e.target.value,
                         }))
@@ -2770,8 +3332,8 @@ export default function Settings() {
                     <Label>Contact Phone</Label>
                     <Input
                       value={content.contactPhone}
-                      onChange={(e) =>
-                        setContent((p) => ({
+                      onChange={e =>
+                        setContent(p => ({
                           ...p,
                           contactPhone: e.target.value,
                         }))
@@ -2830,9 +3392,9 @@ export default function Settings() {
                   <div className="space-y-2">
                     <CardTitle>Contract Export</CardTitle>
                     <CardDescription className="max-w-2xl leading-6">
-                      Generate either the system package or the human-readable Excel bundle from
-                      the current live sources: Firestore business data, D1 file metadata, and R2
-                      file references.
+                      Generate either the system package or the human-readable
+                      Excel bundle from the current live sources: Firestore
+                      business data, D1 file metadata, and R2 file references.
                     </CardDescription>
                   </div>
 
@@ -2843,13 +3405,20 @@ export default function Settings() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => void loadContractExportItems({ manual: true })}
+                      onClick={() =>
+                        void loadContractExportItems({ manual: true })
+                      }
                       disabled={
-                        contractExportLoading || contractExporting || contractExcelExporting
+                        contractExportLoading ||
+                        contractExporting ||
+                        contractExcelExporting
                       }
                     >
                       <RefreshCw
-                        className={cn("mr-2 h-4 w-4", contractExportLoading && "animate-spin")}
+                        className={cn(
+                          "mr-2 h-4 w-4",
+                          contractExportLoading && "animate-spin"
+                        )}
                       />
                       Refresh Contracts
                     </Button>
@@ -2870,7 +3439,9 @@ export default function Settings() {
                   <Alert className="border-red-500/40 bg-red-500/5 text-red-700">
                     <CircleAlert className="h-4 w-4" />
                     <AlertTitle>Excel Export Error</AlertTitle>
-                    <AlertDescription>{contractExcelExportError}</AlertDescription>
+                    <AlertDescription>
+                      {contractExcelExportError}
+                    </AlertDescription>
                   </Alert>
                 ) : null}
 
@@ -2881,13 +3452,17 @@ export default function Settings() {
                     <AlertDescription className="space-y-1">
                       <p>
                         {contractExportSummary.fileName} generated at{" "}
-                        {formatDatabaseTimestamp(contractExportSummary.generatedAt)}.
+                        {formatDatabaseTimestamp(
+                          contractExportSummary.generatedAt
+                        )}
+                        .
                       </p>
                       <p>
-                        Contracts: {contractExportSummary.rowCounts.contracts} | Investments:{" "}
-                        {contractExportSummary.rowCounts.investments} | Attachments:{" "}
-                        {contractExportSummary.attachmentCount} | Warnings:{" "}
-                        {contractExportSummary.warningCount}
+                        Contracts: {contractExportSummary.rowCounts.contracts} |
+                        Investments:{" "}
+                        {contractExportSummary.rowCounts.investments} |
+                        Attachments: {contractExportSummary.attachmentCount} |
+                        Warnings: {contractExportSummary.warningCount}
                       </p>
                     </AlertDescription>
                   </Alert>
@@ -2900,13 +3475,17 @@ export default function Settings() {
                     <AlertDescription className="space-y-1">
                       <p>
                         {contractExcelExportSummary.fileName} generated at{" "}
-                        {formatDatabaseTimestamp(contractExcelExportSummary.generatedAt)}.
+                        {formatDatabaseTimestamp(
+                          contractExcelExportSummary.generatedAt
+                        )}
+                        .
                       </p>
                       <p>
-                        Workbooks: {contractExcelExportSummary.workbookCount} | Contracts:{" "}
-                        {contractExcelExportSummary.rowCounts.contracts} | Files:{" "}
-                        {contractExcelExportSummary.rowCounts.files} | Warnings:{" "}
-                        {contractExcelExportSummary.warningCount}
+                        Workbooks: {contractExcelExportSummary.workbookCount} |
+                        Contracts:{" "}
+                        {contractExcelExportSummary.rowCounts.contracts} |
+                        Files: {contractExcelExportSummary.rowCounts.files} |
+                        Warnings: {contractExcelExportSummary.warningCount}
                       </p>
                     </AlertDescription>
                   </Alert>
@@ -2914,11 +3493,13 @@ export default function Settings() {
 
                 <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_220px]">
                   <div className="space-y-2">
-                    <Label htmlFor="contract-export-search">Search contracts</Label>
+                    <Label htmlFor="contract-export-search">
+                      Search contracts
+                    </Label>
                     <Input
                       id="contract-export-search"
                       value={contractSearch}
-                      onChange={(event) => setContractSearch(event.target.value)}
+                      onChange={event => setContractSearch(event.target.value)}
                       placeholder="Search by contract, project, investor, or investment ID"
                       disabled={contractExporting || contractExcelExporting}
                     />
@@ -2926,13 +3507,18 @@ export default function Settings() {
 
                   <div className="space-y-2">
                     <Label>Status filter</Label>
-                    <Select value={contractStatusFilter} onValueChange={setContractStatusFilter}>
-                      <SelectTrigger disabled={contractExporting || contractExcelExporting}>
+                    <Select
+                      value={contractStatusFilter}
+                      onValueChange={setContractStatusFilter}
+                    >
+                      <SelectTrigger
+                        disabled={contractExporting || contractExcelExporting}
+                      >
                         <SelectValue placeholder="All statuses" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">All statuses</SelectItem>
-                        {contractStatusOptions.map((status) => (
+                        {contractStatusOptions.map(status => (
                           <SelectItem key={status} value={status}>
                             {status}
                           </SelectItem>
@@ -2945,7 +3531,9 @@ export default function Settings() {
                 <div className="flex flex-wrap gap-2">
                   <Button
                     variant="outline"
-                    onClick={() => toggleSelectAllFilteredContracts(!allFilteredSelected)}
+                    onClick={() =>
+                      toggleSelectAllFilteredContracts(!allFilteredSelected)
+                    }
                     disabled={
                       !filteredContractExportItems.length ||
                       contractExportLoading ||
@@ -2953,14 +3541,18 @@ export default function Settings() {
                       contractExcelExporting
                     }
                   >
-                    {allFilteredSelected ? "Deselect Filtered" : "Select Filtered"}
+                    {allFilteredSelected
+                      ? "Deselect Filtered"
+                      : "Select Filtered"}
                   </Button>
 
                   <Button
                     variant="outline"
                     onClick={() => setSelectedContractIds([])}
                     disabled={
-                      !selectedContractIds.length || contractExporting || contractExcelExporting
+                      !selectedContractIds.length ||
+                      contractExporting ||
+                      contractExcelExporting
                     }
                   >
                     Clear Selection
@@ -3007,7 +3599,7 @@ export default function Settings() {
                     </div>
                   ) : filteredContractExportItems.length ? (
                     <div className="max-h-[420px] divide-y overflow-y-auto">
-                      {filteredContractExportItems.map((item) => {
+                      {filteredContractExportItems.map(item => {
                         const checked = selectedContractIdSet.has(item.id);
                         return (
                           <label
@@ -3016,11 +3608,13 @@ export default function Settings() {
                           >
                             <Checkbox
                               checked={checked}
-                              onCheckedChange={(value) =>
+                              onCheckedChange={value =>
                                 toggleContractSelection(item.id, value === true)
                               }
                               className="mt-1"
-                              disabled={contractExporting || contractExcelExporting}
+                              disabled={
+                                contractExporting || contractExcelExporting
+                              }
                             />
 
                             <div className="min-w-0 flex-1 space-y-2">
@@ -3028,7 +3622,10 @@ export default function Settings() {
                                 <p className="font-medium">{item.id}</p>
                                 <Badge variant="outline">{item.status}</Badge>
                                 {item.projectTitle ? (
-                                  <Badge variant="secondary" className="max-w-full truncate">
+                                  <Badge
+                                    variant="secondary"
+                                    className="max-w-full truncate"
+                                  >
                                     {item.projectTitle}
                                   </Badge>
                                 ) : null}
@@ -3036,16 +3633,22 @@ export default function Settings() {
 
                               <p className="text-sm text-muted-foreground">
                                 Investor: {item.investorName || "Unknown"}{" "}
-                                {item.investorEmail ? `(${item.investorEmail})` : ""}
+                                {item.investorEmail
+                                  ? `(${item.investorEmail})`
+                                  : ""}
                               </p>
 
                               <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                                <span>Investment: {item.investmentId || "-"}</span>
+                                <span>
+                                  Investment: {item.investmentId || "-"}
+                                </span>
                                 <span>Project: {item.projectId || "-"}</span>
                                 <span>
                                   Updated:{" "}
                                   {formatDatabaseTimestamp(
-                                    item.updatedAt || item.signedAt || item.createdAt
+                                    item.updatedAt ||
+                                      item.signedAt ||
+                                      item.createdAt
                                   )}
                                 </span>
                               </div>
@@ -3062,9 +3665,9 @@ export default function Settings() {
                 </div>
 
                 <p className="text-xs leading-5 text-muted-foreground">
-                  Package contents: investors.csv, projects.csv, investments.csv,
-                  contracts.csv, interest_requests.csv, files.csv, attachments/, manifest.json,
-                  and README.md.
+                  Package contents: investors.csv, projects.csv,
+                  investments.csv, contracts.csv, interest_requests.csv,
+                  files.csv, attachments/, manifest.json, and README.md.
                 </p>
               </CardContent>
             </Card>
@@ -3086,8 +3689,7 @@ export default function Settings() {
                       قاعدة البيانات والتخزين
                     </CardTitle>
                     <CardDescription className="max-w-2xl leading-6">
-                      إدارة بنية الملفات الحالية عبر Cloudflare D1 وR2
-                      وWorkers
+                      إدارة بنية الملفات الحالية عبر Cloudflare D1 وR2 وWorkers
                     </CardDescription>
                   </div>
 
@@ -3100,7 +3702,7 @@ export default function Settings() {
 
               <CardContent>
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                  {databaseOverviewCards.map((card) => {
+                  {databaseOverviewCards.map(card => {
                     const Icon = card.icon;
 
                     return (
@@ -3121,7 +3723,10 @@ export default function Settings() {
                             </p>
                             <Badge
                               variant="outline"
-                              className={cn("mt-2", getDatabaseStatusTone(card.status))}
+                              className={cn(
+                                "mt-2",
+                                getDatabaseStatusTone(card.status)
+                              )}
                             >
                               {card.statusLabel}
                             </Badge>
@@ -3336,7 +3941,7 @@ export default function Settings() {
 
               <CardContent>
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                  {databaseMetricCards.map((metric) => {
+                  {databaseMetricCards.map(metric => {
                     const Icon = metric.icon;
 
                     return (
@@ -3381,7 +3986,7 @@ export default function Settings() {
 
               <CardContent>
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-                  {DATABASE_ACTION_CARDS.map((action) => {
+                  {DATABASE_ACTION_CARDS.map(action => {
                     const Icon = action.icon;
                     const isRefreshAction = action.key === "refreshStatus";
                     const isBusy = isRefreshAction && databaseRefreshing;
@@ -3398,7 +4003,12 @@ export default function Settings() {
                       >
                         <div className="flex items-center justify-between gap-3">
                           <div className="rounded-xl border bg-background p-2 text-muted-foreground">
-                            <Icon className={cn("h-4 w-4", isBusy && "animate-spin")} />
+                            <Icon
+                              className={cn(
+                                "h-4 w-4",
+                                isBusy && "animate-spin"
+                              )}
+                            />
                           </div>
                           <Badge
                             variant={isRefreshAction ? "outline" : "secondary"}
@@ -3429,7 +4039,10 @@ export default function Settings() {
                           className="mt-4 w-full"
                           onClick={
                             isRefreshAction
-                              ? () => void refreshDatabaseDashboard({ manual: true })
+                              ? () =>
+                                  void refreshDatabaseDashboard({
+                                    manual: true,
+                                  })
                               : undefined
                           }
                         >
@@ -3457,7 +4070,7 @@ export default function Settings() {
 
                 <CardContent>
                   <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-                    {databaseTechnicalDetails.map((item) => (
+                    {databaseTechnicalDetails.map(item => (
                       <div
                         key={item.label}
                         className="rounded-2xl border bg-muted/20 p-4"
@@ -3490,7 +4103,7 @@ export default function Settings() {
                     <CircleAlert className="h-4 w-4" />
                     <AlertTitle>Cloudflare Only</AlertTitle>
                     <AlertDescription>
-                      {databaseNotes.map((note) => (
+                      {databaseNotes.map(note => (
                         <p key={note}>{note}</p>
                       ))}
                     </AlertDescription>
@@ -3504,7 +4117,6 @@ export default function Settings() {
                 </CardContent>
               </Card>
             </div>
-
           </TabsContent>
         </Tabs>
       </div>
@@ -3526,12 +4138,13 @@ export default function Settings() {
                 <Label>Role Key (unique)</Label>
                 <Input
                   value={roleForm.key}
-                  onChange={(e) =>
-                    setRoleForm((p) => ({ ...p, key: e.target.value }))
+                  onChange={e =>
+                    setRoleForm(p => ({ ...p, key: e.target.value }))
                   }
                   placeholder="مثال: manager / support / auditor"
                   disabled={
-                    !!editingRoleKey && SYSTEM_ROLE_KEYS.includes(editingRoleKey)
+                    !!editingRoleKey &&
+                    SYSTEM_ROLE_KEYS.includes(editingRoleKey)
                   }
                 />
                 <p className="text-xs text-muted-foreground">
@@ -3543,8 +4156,8 @@ export default function Settings() {
                 <Label>اسم الدور (عربي)</Label>
                 <Input
                   value={roleForm.nameAr}
-                  onChange={(e) =>
-                    setRoleForm((p) => ({ ...p, nameAr: e.target.value }))
+                  onChange={e =>
+                    setRoleForm(p => ({ ...p, nameAr: e.target.value }))
                   }
                 />
               </div>
@@ -3555,8 +4168,8 @@ export default function Settings() {
                 <Label>اسم الدور (إنجليزي)</Label>
                 <Input
                   value={roleForm.nameEn || ""}
-                  onChange={(e) =>
-                    setRoleForm((p) => ({ ...p, nameEn: e.target.value }))
+                  onChange={e =>
+                    setRoleForm(p => ({ ...p, nameEn: e.target.value }))
                   }
                 />
               </div>
@@ -3569,8 +4182,8 @@ export default function Settings() {
                   </span>
                   <Switch
                     checked={roleForm.isActive}
-                    onCheckedChange={(v) =>
-                      setRoleForm((p) => ({ ...p, isActive: v }))
+                    onCheckedChange={v =>
+                      setRoleForm(p => ({ ...p, isActive: v }))
                     }
                   />
                 </div>
@@ -3582,8 +4195,8 @@ export default function Settings() {
               <Textarea
                 rows={3}
                 value={roleForm.description || ""}
-                onChange={(e) =>
-                  setRoleForm((p) => ({ ...p, description: e.target.value }))
+                onChange={e =>
+                  setRoleForm(p => ({ ...p, description: e.target.value }))
                 }
               />
             </div>
@@ -3591,7 +4204,7 @@ export default function Settings() {
             <div className="space-y-2">
               <Label>الصلاحيات</Label>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                {DEFAULT_PERMISSIONS.map((perm) => {
+                {DEFAULT_PERMISSIONS.map(perm => {
                   const checked = roleForm.permissions.includes(perm.key);
                   return (
                     <div
@@ -3647,8 +4260,8 @@ export default function Settings() {
                 <Label>الاسم</Label>
                 <Input
                   value={adminForm.displayName}
-                  onChange={(e) =>
-                    setAdminForm((p) => ({ ...p, displayName: e.target.value }))
+                  onChange={e =>
+                    setAdminForm(p => ({ ...p, displayName: e.target.value }))
                   }
                 />
               </div>
@@ -3657,8 +4270,8 @@ export default function Settings() {
                 <Label>البريد</Label>
                 <Input
                   value={adminForm.email}
-                  onChange={(e) =>
-                    setAdminForm((p) => ({ ...p, email: e.target.value }))
+                  onChange={e =>
+                    setAdminForm(p => ({ ...p, email: e.target.value }))
                   }
                 />
               </div>
@@ -3669,17 +4282,20 @@ export default function Settings() {
                 <Label>الدور</Label>
                 <Select
                   value={adminForm.roleKey}
-                  onValueChange={(v: any) =>
-                    setAdminForm((p) => ({ ...p, roleKey: v }))
+                  onValueChange={(v: AdminRoleKey) =>
+                    setAdminForm(p => ({
+                      ...p,
+                      roleKey: v,
+                    }))
                   }
                 >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {roleOptions.map((r) => (
+                    {roleOptions.map(r => (
                       <SelectItem key={r.key} value={r.key}>
-                        {r.nameAr} ({r.key})
+                        {`${r.nameAr} (${r.key})`}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -3690,8 +4306,8 @@ export default function Settings() {
                 <Label>المنصب/العنوان (اختياري)</Label>
                 <Input
                   value={adminForm.title || ""}
-                  onChange={(e) =>
-                    setAdminForm((p) => ({ ...p, title: e.target.value }))
+                  onChange={e =>
+                    setAdminForm(p => ({ ...p, title: e.target.value }))
                   }
                   placeholder="مثال: مدير مالي"
                 />
@@ -3705,8 +4321,8 @@ export default function Settings() {
                   </span>
                   <Switch
                     checked={adminForm.isActive}
-                    onCheckedChange={(v) =>
-                      setAdminForm((p) => ({ ...p, isActive: v }))
+                    onCheckedChange={v =>
+                      setAdminForm(p => ({ ...p, isActive: v }))
                     }
                   />
                 </div>
@@ -3718,89 +4334,97 @@ export default function Settings() {
               <Textarea
                 rows={3}
                 value={adminForm.notes || ""}
-                onChange={(e) =>
-                  setAdminForm((p) => ({ ...p, notes: e.target.value }))
+                onChange={e =>
+                  setAdminForm(p => ({ ...p, notes: e.target.value }))
                 }
               />
             </div>
 
-            {/* Permissions overrides */}
             <div className="grid md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Permissions Allow (اختياري)</Label>
+                <Label>الصلاحيات الفعلية</Label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {DEFAULT_PERMISSIONS.map((perm) => {
-                    const checked = (adminForm.permissionsAllow || []).includes(
-                      perm.key
+                  {DEFAULT_PERMISSIONS.map(perm => {
+                    const checked = adminFormEffectivePermissions.includes(
+                      perm.key as Permission
                     );
                     return (
                       <Button
-                        key={`allow-${perm.key}`}
+                        key={`effective-${perm.key}`}
                         type="button"
                         variant={checked ? "default" : "outline"}
                         className={checked ? "bg-[#F2B705] text-black" : ""}
-                        onClick={() => {
-                          setAdminForm((p) => {
-                            const cur = new Set(p.permissionsAllow || []);
-                            if (cur.has(perm.key)) cur.delete(perm.key);
-                            else cur.add(perm.key);
-                            return {
-                              ...p,
-                              permissionsAllow: Array.from(cur),
-                            };
-                          });
-                        }}
+                        onClick={() =>
+                          toggleAdminEffectivePermission(perm.key as Permission)
+                        }
                       >
                         <div className="flex flex-col items-start leading-tight">
-                          <span className="text-sm font-medium">سماح: {perm.label}</span>
-                          <span className="text-[11px] opacity-70">{perm.key}</span>
+                          <span className="text-sm font-medium">{perm.label}</span>
+                          <span className="text-[11px] opacity-70">
+                            {perm.key}
+                          </span>
                         </div>
                       </Button>
-
                     );
                   })}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  هذه الصلاحيات تُضاف فوق صلاحيات الـ Role.
+                  يتم العرض هنا بناءً على الصلاحيات الفعلية: صلاحيات الدور الأساسية مع أي overrides محفوظة للحساب.
                 </p>
+                <div className="flex flex-wrap gap-2">
+                  <Badge variant="secondary">
+                    Defaults: {getRoleDefaultPermissionKeys(adminForm.roleKey).length}
+                  </Badge>
+                  <Badge variant="secondary">
+                    Effective: {adminFormEffectivePermissions.length}
+                  </Badge>
+                  <Badge variant="outline">
+                    Overrides: +
+                    {adminFormPermissionOverrides.permissionsAllow.length} / -
+                    {adminFormPermissionOverrides.permissionsDeny.length}
+                  </Badge>
+                </div>
               </div>
 
               <div className="space-y-2">
-                <Label>Permissions Deny (اختياري)</Label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {DEFAULT_PERMISSIONS.map((perm) => {
-                    const checked = (adminForm.permissionsDeny || []).includes(
-                      perm.key
-                    );
-                    return (
-                      <Button
-                        key={`deny-${perm.key}`}
-                        type="button"
-                        variant={checked ? "destructive" : "outline"}
-                        onClick={() => {
-                          setAdminForm((p) => {
-                            const cur = new Set(p.permissionsDeny || []);
-                            if (cur.has(perm.key)) cur.delete(perm.key);
-                            else cur.add(perm.key);
-                            return {
-                              ...p,
-                              permissionsDeny: Array.from(cur),
-                            };
-                          });
-                        }}
-                      >
-                        <div className="flex flex-col items-start leading-tight">
-                          <span className="text-sm font-medium">منع: {perm.label}</span>
-                          <span className="text-[11px] opacity-70">{perm.key}</span>
-                        </div>
-                      </Button>
-
-                    );
-                  })}
+                <Label>ملخص الـ Overrides</Label>
+                <div className="flex flex-wrap gap-2 rounded-lg border border-dashed p-3 min-h-16">
+                  {adminFormPermissionOverrides.permissionsAllow.map(permissionKey => (
+                    <Badge
+                      key={`override-allow-${permissionKey}`}
+                      variant="secondary"
+                    >
+                      + {permissionKey}
+                    </Badge>
+                  ))}
+                  {adminFormPermissionOverrides.permissionsDeny.map(permissionKey => (
+                    <Badge
+                      key={`override-deny-${permissionKey}`}
+                      variant="outline"
+                    >
+                      - {permissionKey}
+                    </Badge>
+                  ))}
+                  {adminFormPermissionOverrides.permissionsAllow.length === 0 &&
+                  adminFormPermissionOverrides.permissionsDeny.length === 0 ? (
+                    <span className="text-sm text-muted-foreground">
+                      لا توجد تعديلات يدوية حالياً. الحساب يستخدم صلاحيات الدور الافتراضية فقط.
+                    </span>
+                  ) : null}
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  هذه الصلاحيات تمنع المستخدم حتى لو كانت موجودة في الـ Role.
-                </p>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={resetAdminPermissionOverrides}
+                    disabled={
+                      adminFormPermissionOverrides.permissionsAllow.length === 0 &&
+                      adminFormPermissionOverrides.permissionsDeny.length === 0
+                    }
+                  >
+                    إعادة ضبط الـ Overrides
+                  </Button>
+                </div>
               </div>
             </div>
 
@@ -3838,7 +4462,7 @@ function Field({
   return (
     <div className="space-y-1">
       <Label>{label}</Label>
-      <Input value={value} onChange={(e) => onChange(e.target.value)} />
+      <Input value={value} onChange={e => onChange(e.target.value)} />
     </div>
   );
 }
@@ -3920,14 +4544,14 @@ function LabelsEditor({
                 <Label>عربي</Label>
                 <Input
                   value={val.ar || ""}
-                  onChange={(e) => updateRow(k, "ar", e.target.value)}
+                  onChange={e => updateRow(k, "ar", e.target.value)}
                 />
               </div>
               <div className="space-y-1">
                 <Label>English</Label>
                 <Input
                   value={val.en || ""}
-                  onChange={(e) => updateRow(k, "en", e.target.value)}
+                  onChange={e => updateRow(k, "en", e.target.value)}
                 />
               </div>
             </div>

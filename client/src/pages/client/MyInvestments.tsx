@@ -13,7 +13,12 @@ import { cn } from "@/lib/utils";
 
 import { useAuth } from "@/_core/hooks/useAuth";
 import { db } from "@/_core/firebase";
+import { getRoleDisplayLabel } from "@/lib/ownerAccounts";
 import { normalizeLinkId } from "@/lib/requestInvestmentLink";
+import {
+  buildProjectsMap,
+  getProjectDisplayTitle,
+} from "@/lib/projectDisplay";
 
 import {
   TrendingUp,
@@ -28,7 +33,6 @@ import {
 
 import {
   collection,
-  getDocs,
   onSnapshot,
   query,
   where,
@@ -80,6 +84,7 @@ export default function MyInvestments() {
   const [requests, setRequests] = useState<InterestRequest[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
+  const projectsMap = useMemo(() => buildProjectsMap(projects), [projects]);
 
   const role = String((user as any)?.role || "").toLowerCase();
   const isClient = role === "client" || role === "investor";
@@ -89,11 +94,13 @@ export default function MyInvestments() {
   useEffect(() => {
     let unsubInv: null | (() => void) = null;
     let unsubReq: null | (() => void) = null;
+    let unsubProjects: null | (() => void) = null;
 
     let invLoaded = false;
     let reqLoaded = false;
+    let projectsLoaded = false;
     const done = () => {
-      if (invLoaded && reqLoaded) setLoading(false);
+      if (invLoaded && reqLoaded && projectsLoaded) setLoading(false);
     };
 
     const run = async () => {
@@ -101,6 +108,7 @@ export default function MyInvestments() {
         setLoading(true);
         invLoaded = false;
         reqLoaded = false;
+        projectsLoaded = false;
 
         // ✅ مو مسجل دخول
         if (!user?.uid) {
@@ -115,13 +123,28 @@ export default function MyInvestments() {
         if (!isClient) {
           setInvestments([]);
           setRequests([]);
+          invLoaded = true;
+          reqLoaded = true;
 
-          const projSnap = await getDocs(
-            query(collection(db, "projects"), where("status", "==", "published"))
+          const projectsQuery = query(
+            collection(db, "projects"),
+            where("status", "==", "published")
           );
-          setProjects(projSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
 
-          setLoading(false);
+          unsubProjects = onSnapshot(
+            projectsQuery,
+            (snap) => {
+              setProjects(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+              projectsLoaded = true;
+              done();
+            },
+            (err) => {
+              logFirestoreBackgroundError("projects_permission_or_error", err);
+              setProjects([]);
+              projectsLoaded = true;
+              done();
+            }
+          );
           return;
         }
 
@@ -181,10 +204,24 @@ export default function MyInvestments() {
         );
 
         // ✅ مشاريع منشورة
-        const projSnap = await getDocs(
-          query(collection(db, "projects"), where("status", "==", "published"))
+        const projectsQuery = query(
+          collection(db, "projects"),
+          where("status", "==", "published")
         );
-        setProjects(projSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        unsubProjects = onSnapshot(
+          projectsQuery,
+          (snap) => {
+            setProjects(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+            projectsLoaded = true;
+            done();
+          },
+          (err) => {
+            logFirestoreBackgroundError("projects_permission_or_error", err);
+            setProjects([]);
+            projectsLoaded = true;
+            done();
+          }
+        );
       } catch (e) {
         logFirestoreBackgroundError("my_investments_load_error", e);
         setLoading(false);
@@ -196,6 +233,7 @@ export default function MyInvestments() {
     return () => {
       if (unsubInv) unsubInv();
       if (unsubReq) unsubReq();
+      if (unsubProjects) unsubProjects();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.uid, isClient]);
@@ -304,7 +342,7 @@ export default function MyInvestments() {
           </CardHeader>
           <CardContent className="space-y-5">
             <div className="flex gap-2 flex-wrap">
-              <Badge variant="outline">{role || "—"}</Badge>
+              <Badge variant="outline">{getRoleDisplayLabel(role) || role || "—"}</Badge>
               <Badge variant="secondary">{user.email}</Badge>
             </div>
 
@@ -412,7 +450,7 @@ export default function MyInvestments() {
             ) : (
               <div className="space-y-4">
                 {visibleRequests.map((m: any) => {
-                  const project = projects.find((p) => p.id === m.projectId);
+                  const project = projectsMap[String(m.projectId || "").trim()];
                   const createdAt = m.createdAt ? formatDateAR(m.createdAt) : "—";
                   const status = String(m.status || "pending");
                   const amount = m.amount != null ? Number(m.amount) : null;
@@ -424,7 +462,11 @@ export default function MyInvestments() {
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
                             <h3 className="font-bold truncate">
-                              {project?.titleAr || m?.projectTitle || "مشروع غير معروف"}
+                              {getProjectDisplayTitle(
+                                project,
+                                m?.projectTitle,
+                                "مشروع غير معروف"
+                              ) || "مشروع غير معروف"}
                             </h3>
 
                             <div className="mt-1 text-xs text-muted-foreground">
@@ -487,7 +529,7 @@ export default function MyInvestments() {
             ) : (
               <div className="space-y-4">
                 {investments.map((inv) => {
-                  const project = projects.find((p) => p.id === inv.projectId);
+                  const project = projectsMap[String(inv.projectId || "").trim()];
 
                   const status = String(inv.status || "pending_review");
                   const createdAt = inv.createdAt ? formatDateAR(inv.createdAt) : "—";
@@ -501,7 +543,11 @@ export default function MyInvestments() {
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
                             <h3 className="font-bold truncate">
-                              {project?.titleAr || inv?.projectTitle || "مشروع غير معروف"}
+                              {getProjectDisplayTitle(
+                                project,
+                                inv?.projectTitle,
+                                "مشروع غير معروف"
+                              ) || "مشروع غير معروف"}
                             </h3>
 
                             <div className="mt-1 text-xs text-muted-foreground">

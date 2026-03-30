@@ -13,19 +13,13 @@ import { toast } from "sonner";
 import { LogOut, User } from "lucide-react";
 import { useState } from "react";
 import { Link } from "wouter";
+import { getRoleDisplayLabel } from "@/lib/ownerAccounts";
 
 export default function AccountSwitcher() {
   const [open, setOpen] = useState(false);
   const { user, loading, logout } = useAuth();
 
-  const roleLabel =
-    user?.role === "owner"
-      ? "مالك"
-      : user?.role === "accountant"
-      ? "محاسب"
-      : user?.role === "staff"
-      ? "موظف"
-      : "مستخدم";
+  const roleLabel = getRoleDisplayLabel(user?.role) || "مستخدم";
 
   const handleLogout = async () => {
     try {
