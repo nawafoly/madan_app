@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { useDragScroll } from "@/hooks/useDragScroll";
+import { cn } from "@/lib/utils";
 
 import {
   Select,
@@ -18,11 +19,22 @@ import {
 
 import {
   AlertTriangle,
+  ArrowLeft,
+  ArrowUpRight,
+  Building2,
+  CheckCircle2,
+  Clock3,
+  Hourglass,
+  Landmark,
+  Layers3,
   Search,
   MapPin,
   TrendingUp,
   Shield,
   Sparkles,
+  Target,
+  Users,
+  Wallet,
 } from "lucide-react";
 
 import {
@@ -41,7 +53,11 @@ import {
 } from "firebase/firestore";
 import type { FirestoreError } from "firebase/firestore";
 import { db } from "@/_core/firebase";
-import { formatCurrencyEN } from "@/lib/formatters";
+import {
+  formatCurrencyEN,
+  formatNumberEN,
+  formatPercentEN,
+} from "@/lib/formatters";
 
 type BiLabel = { ar?: string; en?: string };
 type LabelValue = string | BiLabel;
@@ -101,6 +117,12 @@ type ProjectDoc = {
   minInvestment?: number;
   annualReturn?: number;
   duration?: number;
+  investorsCount?: number;
+  featured?: boolean;
+  isVip?: boolean;
+  vipOnly?: boolean;
+  vipTier?: string;
+  highlights?: string[];
 
   risksAr?: string;
 
@@ -240,7 +262,7 @@ function usePagedProjects(opts: {
         const qy = buildBaseQuery();
         const snap = await getDocs(qy);
 
-        const list: ProjectDoc[] = snap.docs.map((d) => ({
+        const list: ProjectDoc[] = snap.docs.map(d => ({
           id: d.id,
           ...(d.data() as any),
         }));
@@ -270,12 +292,12 @@ function usePagedProjects(opts: {
       const qy = buildMoreQuery(lastDoc);
       const snap = await getDocs(qy);
 
-      const more: ProjectDoc[] = snap.docs.map((d) => ({
+      const more: ProjectDoc[] = snap.docs.map(d => ({
         id: d.id,
         ...(d.data() as any),
       }));
 
-      setItems((prev) => [...prev, ...more]);
+      setItems(prev => [...prev, ...more]);
       setLastDoc(snap.docs[snap.docs.length - 1] ?? lastDoc);
       setHasMore(snap.docs.length === pageSize);
     } catch (err) {
@@ -302,60 +324,61 @@ function CurvedProjectsHero({
   children: ReactNode;
 }) {
   return (
-    <section className="relative overflow-hidden">
+    <section className="relative z-0 bg-[#050b14] text-white">
       {/* الغطاء الداكن */}
-      <div className="relative h-[420px] md:h-[460px]">
-        <div className="absolute inset-0 bg-zinc-950" />
+      <div className="pointer-events-none absolute inset-0 bg-zinc-950" />
 
-        {/* لمعة */}
-        <div className="absolute inset-0 opacity-40 bg-[radial-gradient(60%_60%_at_50%_20%,rgba(255,255,255,0.18),transparent_60%)]" />
+      {/* لمعة */}
+      <div className="pointer-events-none absolute inset-0 opacity-40 bg-[radial-gradient(60%_60%_at_50%_18%,rgba(255,255,255,0.18),transparent_60%)]" />
 
-        {/* نقط خفيفة */}
-        <div className="absolute inset-0 opacity-[0.08] bg-[radial-gradient(circle_at_1px_1px,#ffffff_1px,transparent_1px)] [background-size:18px_18px]" />
+      {/* نقط خفيفة */}
+      <div className="pointer-events-none absolute inset-0 opacity-[0.08] bg-[radial-gradient(circle_at_1px_1px,#ffffff_1px,transparent_1px)] [background-size:18px_18px]" />
 
-        {/* محتوى */}
-        {/*  270 px + env ( safe - area - inset - top)  كود ثابت ما يتغير  */}
-        <div className="container relative z-10 h-full flex items-center pt-[calc(270px+env(safe-area-inset-top))] md:pt-[140px]">
-          <div className="w-full">
-            <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-              {/* ✅ توسيط الكلام فقط */}
-              <div className="space-y-2 text-center md:text-right md:space-y-2">
-                <h1 className="text-4xl md:text-5xl font-bold text-white flex items-center justify-center md:justify-start gap-2">
-                  {title}
-                </h1>
-                <p className="text-white/75 text-lg">{desc}</p>
-              </div>
-
-              <div className="hidden md:flex">
-                <Button
-                  variant="outline"
-                  onClick={onRefresh}
-                  disabled={refreshDisabled}
-                  className="bg-white/10 border-white/25 text-white hover:bg-white hover:text-black"
-                >
-                  تحديث
-                </Button>
-              </div>
+      {/* محتوى */}
+      {/*  270 px + env ( safe - area - inset - top)  كود ثابت ما يتغير  */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-black/35 to-transparent" />
+      <div className="container relative z-10 flex min-h-[clamp(720px,92svh,980px)] items-start pt-[calc(var(--site-header-offset)+2rem)] pb-28 sm:pb-32 md:pt-[calc(var(--site-header-offset)+3rem)]">
+        <div className="w-full space-y-10 md:space-y-12">
+          <div className="flex flex-col gap-4 text-center md:flex-row md:items-end md:justify-between md:text-right">
+            {/* ✅ توسيط الكلام فقط */}
+            <div className="space-y-3">
+              <h1 className="flex items-center justify-center gap-2 text-4xl font-bold text-white md:justify-start md:text-5xl">
+                {title}
+              </h1>
+              <p className="mx-auto max-w-3xl text-lg text-white/75 md:mx-0">
+                {desc}
+              </p>
             </div>
 
-            {/* كرت الفلاتر */}
-            <div className="mt-10">{children}</div>
+            <div className="hidden md:flex md:shrink-0">
+              <Button
+                variant="outline"
+                onClick={onRefresh}
+                disabled={refreshDisabled}
+                className="h-11 rounded-2xl border-white/20 bg-white/8 px-5 text-white hover:bg-white hover:text-slate-950"
+              >
+                تحديث
+              </Button>
+            </div>
           </div>
-        </div>
 
-        {/* تقويسة تحت */}
-        <svg
-          className="absolute bottom-[-1px] left-0 w-full h-24 md:h-28 text-white"
-          viewBox="0 0 1440 120"
-          preserveAspectRatio="none"
-          aria-hidden="true"
-        >
-          <path
-            fill="currentColor"
-            d="M0,64 C240,120 480,120 720,88 C960,56 1200,8 1440,40 L1440,120 L0,120 Z"
-          />
-        </svg>
+          {/* كرت الفلاتر */}
+          <div>{children}</div>
+        </div>
       </div>
+
+      {/* تقويسة تحت */}
+      <svg
+        className="pointer-events-none absolute bottom-0 left-0 h-20 w-full text-[#f8fafc] sm:h-24 md:h-28"
+        viewBox="0 0 1440 120"
+        preserveAspectRatio="none"
+        aria-hidden="true"
+      >
+        <path
+          fill="currentColor"
+          d="M0,64 C240,120 480,120 720,88 C960,56 1200,8 1440,40 L1440,120 L0,120 Z"
+        />
+      </svg>
     </section>
   );
 }
@@ -430,19 +453,19 @@ export default function ProjectsPage() {
     let list = [...published.items];
 
     if (flags.hideVipProjects) {
-      list = list.filter((p) => p.projectType !== "vip_exclusive");
+      list = list.filter(p => p.projectType !== "vip_exclusive");
     }
     if (flags.vipOnlyMode) {
-      list = list.filter((p) => p.projectType === "vip_exclusive");
+      list = list.filter(p => p.projectType === "vip_exclusive");
     }
 
     if (typeFilter !== "all") {
-      list = list.filter((p) => p.projectType === typeFilter);
+      list = list.filter(p => p.projectType === typeFilter);
     }
 
     const q = qText.trim().toLowerCase();
     if (q) {
-      list = list.filter((p) => {
+      list = list.filter(p => {
         const t = (p.titleAr || p.titleEn || "").toLowerCase();
         const l = (p.locationAr || p.locationEn || "").toLowerCase();
         const i = (p.issueNumber || "").toLowerCase();
@@ -470,28 +493,558 @@ export default function ProjectsPage() {
     flags.vipOnlyMode,
   ]);
 
+  const publishedFundingCurrent = useMemo(
+    () =>
+      filteredPublished.reduce(
+        (sum, project) => sum + safeNumber(project.currentAmount),
+        0
+      ),
+    [filteredPublished]
+  );
+
+  const publishedFundingTarget = useMemo(
+    () =>
+      filteredPublished.reduce(
+        (sum, project) => sum + safeNumber(project.targetAmount),
+        0
+      ),
+    [filteredPublished]
+  );
+
+  const totalInvestorsAcrossProjects = useMemo(
+    () =>
+      [...published.items, ...upcoming.items, ...done.items].reduce(
+        (sum, project) => sum + safeNumber(project.investorsCount),
+        0
+      ),
+    [done.items, published.items, upcoming.items]
+  );
+
+  const bestPublishedReturn = useMemo(
+    () =>
+      filteredPublished.reduce(
+        (best, project) => Math.max(best, safeNumber(project.annualReturn)),
+        0
+      ),
+    [filteredPublished]
+  );
+
+  const publishedFundingProgress = useMemo(() => {
+    if (!publishedFundingTarget) return 0;
+    return Math.min(
+      100,
+      (publishedFundingCurrent / publishedFundingTarget) * 100
+    );
+  }, [publishedFundingCurrent, publishedFundingTarget]);
+
+  const upcomingFundingTarget = useMemo(
+    () =>
+      upcoming.items.reduce(
+        (sum, project) => sum + safeNumber(project.targetAmount),
+        0
+      ),
+    [upcoming.items]
+  );
+
+  const upcomingBestReturn = useMemo(
+    () =>
+      upcoming.items.reduce(
+        (best, project) => Math.max(best, safeNumber(project.annualReturn)),
+        0
+      ),
+    [upcoming.items]
+  );
+
+  const completedCapital = useMemo(
+    () =>
+      done.items.reduce(
+        (sum, project) =>
+          sum +
+          safeNumber(
+            safeNumber(project.currentAmount) ||
+              safeNumber(project.targetAmount)
+          ),
+        0
+      ),
+    [done.items]
+  );
+
+  const completedProjectsRate = useMemo(() => {
+    const totalCount =
+      safeNumber(published.items.length) +
+      safeNumber(upcoming.items.length) +
+      safeNumber(done.items.length);
+    if (!totalCount) return 0;
+    return (done.items.length / totalCount) * 100;
+  }, [done.items.length, published.items.length, upcoming.items.length]);
+
   const SectionHeaderBlock = (props: {
     kicker?: string;
     title: string;
     desc?: string;
-  }) => (
-    <div className="text-center max-w-3xl mx-auto">
-      {props.kicker ? (
-        <p className="text-xs sm:text-sm text-muted-foreground tracking-wide">
-          {props.kicker}
-        </p>
-      ) : null}
-      <h2 className="mt-3 text-3xl sm:text-4xl md:text-5xl font-bold">
-        {props.title}
-      </h2>
-      <div className="mx-auto mt-4 h-[2px] w-16 rounded-full bg-primary/60" />
-      {props.desc ? (
-        <p className="mt-4 text-sm sm:text-base text-muted-foreground leading-relaxed">
-          {props.desc}
-        </p>
-      ) : null}
-    </div>
-  );
+    badge?: string;
+    inverted?: boolean;
+    metrics?: Array<{ label: string; value: string }>;
+  }) => {
+    const inverted = props.inverted;
+
+    return (
+      <div className="mx-auto flex max-w-6xl flex-col gap-6">
+        <div className="mx-auto max-w-3xl text-center">
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            {props.kicker ? (
+              <Badge
+                className={cn(
+                  "rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em]",
+                  inverted
+                    ? "border-white/12 bg-white/8 text-white/80"
+                    : "border-slate-200 bg-white text-slate-700"
+                )}
+              >
+                {props.kicker}
+              </Badge>
+            ) : null}
+            {props.badge ? (
+              <Badge
+                className={cn(
+                  "rounded-full border px-3 py-1 text-xs font-semibold",
+                  inverted
+                    ? "border-amber-300/20 bg-amber-300/12 text-amber-200"
+                    : "border-amber-200 bg-amber-50 text-amber-800"
+                )}
+              >
+                {props.badge}
+              </Badge>
+            ) : null}
+          </div>
+
+          <h2
+            className={cn(
+              "mt-4 text-3xl font-semibold tracking-tight sm:text-4xl md:text-5xl",
+              inverted ? "text-white" : "text-slate-950"
+            )}
+          >
+            {props.title}
+          </h2>
+
+          {props.desc ? (
+            <p
+              className={cn(
+                "mx-auto mt-4 max-w-2xl text-sm leading-8 sm:text-base",
+                inverted ? "text-white/72" : "text-slate-600"
+              )}
+            >
+              {props.desc}
+            </p>
+          ) : null}
+        </div>
+
+        {props.metrics?.length ? (
+          <div className="grid gap-3 md:grid-cols-3">
+            {props.metrics.map(metric => (
+              <div
+                key={metric.label}
+                className={cn(
+                  "rounded-[24px] border px-5 py-4 shadow-sm",
+                  inverted
+                    ? "border-white/10 bg-white/6 text-white backdrop-blur"
+                    : "border-slate-200/80 bg-white/90 text-slate-950"
+                )}
+              >
+                <div
+                  className={cn(
+                    "text-[11px] font-semibold uppercase tracking-[0.18em]",
+                    inverted ? "text-white/55" : "text-slate-500"
+                  )}
+                >
+                  {metric.label}
+                </div>
+                <div className="mt-2 text-xl font-semibold">{metric.value}</div>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    );
+  };
+
+  const InvestmentCard = (
+    p: ProjectDoc,
+    mode: "published" | "draft" | "done"
+  ) => {
+    const target = safeNumber(p.targetAmount);
+    const current = safeNumber(p.currentAmount);
+    const displayCurrent =
+      mode === "done" && !current && target ? target : current;
+    const progress = mode === "done" ? 100 : progressPercent(p);
+    const rawCover =
+      (p.coverImage && String(p.coverImage).trim()) ||
+      (p.image && String(p.image).trim()) ||
+      "";
+    const cover = rawCover ? normalizePublicImage(rawCover) : FALLBACK_COVER;
+    const title = p.titleAr || p.titleEn || "بدون عنوان";
+    const location = p.locationAr || p.locationEn || "—";
+    const description = (
+      p.overviewAr ||
+      p.descriptionAr ||
+      p.descriptionEn ||
+      ""
+    ).trim();
+    const leadingHighlight = Array.isArray(p.highlights)
+      ? p.highlights.map(item => String(item || "").trim()).find(Boolean) || ""
+      : "";
+    const annualReturn = safeNumber(p.annualReturn);
+    const duration = safeNumber(p.duration);
+    const investors = safeNumber(p.investorsCount);
+    const minInvestment = safeNumber(p.minInvestment);
+    const isVip =
+      Boolean(p.vipOnly) ||
+      Boolean(p.isVip) ||
+      p.projectType === "vip_exclusive";
+    const isFeatured = Boolean(p.featured);
+
+    const modeMeta =
+      mode === "published"
+        ? {
+            badgeLabel: "مفتوح الآن",
+            badgeClass: "border-emerald-200 bg-emerald-50 text-emerald-700",
+            subline: "فرصة استثمارية نشطة",
+            heroCaption:
+              "العائد الظاهر هنا هو أول عنصر يجب أن يلتقط عين المستثمر عند تقييم الفرصة.",
+            ctaLabel: "ابدأ بالأستثمار",
+            ctaClass:
+              "bg-slate-900 text-white shadow-[0_18px_40px_-24px_rgba(15,23,42,0.55)] hover:bg-slate-800",
+            noteLabel: "جاهز للاستثمار",
+            noteCopy:
+              "الفرصة مفتوحة الآن ويمكن الانتقال من صفحة المشروع مباشرة إلى طلب الاستثمار.",
+            trustCopy:
+              investors > 0
+                ? `انضم ${formatNumberEN(investors)} مستثمرًا حتى الآن`
+                : "فرصة جاهزة للمراجعة والاستثمار",
+          }
+        : mode === "draft"
+          ? {
+              badgeLabel: "قريبًا",
+              badgeClass: "border-amber-200 bg-amber-50 text-amber-800",
+              subline: "فرصة قيد الإطلاق",
+              heroCaption:
+                "بطاقة استثمار أولية تمنح نظرة مبكرة على العائد والمدة وهيكل الفرصة القادمة.",
+              ctaLabel: "عرض الخطة والتسجيل",
+              ctaClass:
+                "bg-amber-50 text-amber-900 ring-1 ring-amber-200 hover:bg-amber-100",
+              noteLabel: "مرحلة تمهيد",
+              noteCopy:
+                "لا يوجد اكتتاب مفتوح بعد، لكن يمكنك متابعة الخطة والتسجيل للاهتمام عند الإطلاق.",
+              trustCopy: "تحت التحضير والإتاحة قريبًا",
+            }
+          : {
+              badgeLabel: "مكتمل",
+              badgeClass: "border-slate-300 bg-slate-100 text-slate-700",
+              subline: "أداء مشروع منجز",
+              heroCaption:
+                "المشروع وصل إلى مرحلته النهائية ويمكن مراجعته كمرجع أداء واستثمار مكتمل.",
+              ctaLabel: "عرض النتائج",
+              ctaClass:
+                "bg-slate-100 text-slate-800 ring-1 ring-slate-200 hover:bg-slate-200",
+              noteLabel: "عرض معلوماتي",
+              noteCopy:
+                "الاكتتاب مغلق لهذا المشروع، وتبقى البطاقة مدخلًا لمراجعة الأداء والنتائج النهائية.",
+              trustCopy: "سجل إنجاز مكتمل داخل المنصة",
+            };
+
+    return (
+      <Card
+        key={p.id}
+        className={cn(
+          "group gap-0 overflow-hidden rounded-[30px] border border-slate-200/80 bg-white/96 py-0 shadow-[0_28px_80px_-40px_rgba(15,23,42,0.42)] transition-all duration-300 hover:-translate-y-1.5 hover:scale-[1.01] hover:shadow-[0_38px_90px_-42px_rgba(15,23,42,0.5)]",
+          mode === "done" && "border-slate-300/90"
+        )}
+      >
+        <div className="relative h-60 w-full bg-muted">
+          <img
+            src={cover}
+            alt={title}
+            className={cn(
+              "h-full w-full object-cover transition-transform duration-500 group-hover:scale-105",
+              mode === "done" && "grayscale-[0.1]"
+            )}
+            loading="lazy"
+            draggable={false}
+            onError={e => {
+              const img = e.currentTarget;
+              if (img.src.includes(FALLBACK_COVER)) return;
+              img.src = FALLBACK_COVER;
+            }}
+          />
+
+          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(4,12,24,0.08),rgba(4,12,24,0.16)_34%,rgba(4,12,24,0.34)_100%)]" />
+          <div className="absolute inset-x-0 top-0 h-24 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.18),transparent_60%)]" />
+
+          <div className="absolute left-4 right-4 top-4 flex flex-wrap items-start justify-between gap-3">
+            <div className="flex flex-wrap gap-2">
+              <Badge
+                className={cn(
+                  "rounded-full border px-3 py-1",
+                  modeMeta.badgeClass
+                )}
+              >
+                {modeMeta.badgeLabel}
+              </Badge>
+              <Badge className="rounded-full border border-white/15 bg-black/25 px-3 py-1 text-white backdrop-blur-md">
+                {typeLabel(p.projectType)}
+              </Badge>
+              {isVip ? (
+                <Badge className="rounded-full border border-amber-300/25 bg-amber-300/14 px-3 py-1 text-amber-100 backdrop-blur-md">
+                  VIP
+                </Badge>
+              ) : null}
+              {isFeatured ? (
+                <Badge className="rounded-full border border-sky-300/20 bg-sky-300/14 px-3 py-1 text-sky-100 backdrop-blur-md">
+                  مميز
+                </Badge>
+              ) : null}
+            </div>
+
+            {p.issueNumber ? (
+              <Badge className="rounded-full border border-white/15 bg-black/25 px-3 py-1 text-white backdrop-blur-md">
+                #{p.issueNumber}
+              </Badge>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="space-y-5 p-5 sm:p-6">
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="min-w-0">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  Investment Unit
+                </div>
+                <div className="mt-2 text-2xl font-semibold leading-tight tracking-tight text-slate-950 line-clamp-2">
+                  {title}
+                </div>
+              </div>
+
+              <div className="rounded-[20px] bg-slate-50/90 px-4 py-3 text-right shadow-[inset_0_1px_0_rgba(255,255,255,0.75)] sm:min-w-[180px]">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                  الثقة
+                </div>
+                <div className="mt-1.5 text-sm font-semibold leading-6 text-slate-800">
+                  {modeMeta.trustCopy}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3 text-sm text-slate-600">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-50 px-3 py-1.5">
+                <MapPin className="h-4 w-4 text-slate-500" />
+                <span className="line-clamp-1">{location}</span>
+              </span>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-50 px-3 py-1.5">
+                <Building2 className="h-4 w-4 text-slate-500" />
+                <span>{modeMeta.subline}</span>
+              </span>
+            </div>
+          </div>
+
+          <div className="rounded-[28px] bg-[linear-gradient(135deg,#0b1726_0%,#13243b_68%,#1a304a_100%)] p-5 text-white shadow-[0_24px_60px_-34px_rgba(11,23,38,0.85)]">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/56">
+                  العائد السنوي المتوقع
+                </div>
+                <div className="mt-3 flex items-end gap-2">
+                  <div className="text-5xl font-bold tracking-tight">
+                    {formatPercentEN(annualReturn, {
+                      maximumFractionDigits: 0,
+                    })}
+                  </div>
+                  <div className="pb-2 text-sm text-white/66">سنوياً</div>
+                </div>
+                <p className="mt-2 max-w-md text-sm leading-7 text-white/72">
+                  {modeMeta.heroCaption}
+                </p>
+              </div>
+
+              <div className="min-w-[124px] rounded-[22px] border border-white/12 bg-white/10 p-4 text-right shadow-inner backdrop-blur">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/56">
+                  المدة
+                </div>
+                <div className="mt-2 text-2xl font-semibold">
+                  {duration ? formatNumberEN(duration) : "—"}
+                </div>
+                <div className="mt-1 flex items-center justify-end gap-1 text-xs text-white/66">
+                  <Clock3 className="h-3.5 w-3.5" />
+                  <span>شهر</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/85 p-4 shadow-sm">
+              <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                <Target className="h-4 w-4 text-slate-500" />
+                <span>المبلغ المستهدف</span>
+              </div>
+              <div className="mt-3 text-lg font-semibold text-slate-950">
+                {fmtSAR(target)}
+              </div>
+            </div>
+
+            <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/85 p-4 shadow-sm">
+              <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                <Wallet className="h-4 w-4 text-slate-500" />
+                <span>
+                  {mode === "done" ? "المبلغ النهائي" : "المبلغ الحالي"}
+                </span>
+              </div>
+              <div className="mt-3 text-lg font-semibold text-slate-950">
+                {fmtSAR(displayCurrent)}
+              </div>
+            </div>
+
+            <div className="rounded-[22px] border border-slate-200/80 bg-white p-4 shadow-sm">
+              <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                <Landmark className="h-4 w-4 text-slate-500" />
+                <span>الحد الأدنى</span>
+              </div>
+              <div className="mt-3 text-lg font-semibold text-slate-950">
+                {fmtSAR(minInvestment)}
+              </div>
+            </div>
+
+            <div className="rounded-[22px] border border-slate-200/80 bg-white p-4 shadow-sm">
+              <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                <Users className="h-4 w-4 text-slate-500" />
+                <span>عدد المستثمرين</span>
+              </div>
+              <div className="mt-3 text-lg font-semibold text-slate-950">
+                {formatNumberEN(investors)}
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-[24px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(248,250,252,0.98),rgba(255,255,255,1))] p-4 shadow-sm">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  نسبة التمويل
+                </div>
+                <div className="mt-1 text-2xl font-semibold text-slate-950">
+                  {formatPercentEN(progress, {
+                    minimumFractionDigits: 0,
+                    maximumFractionDigits: 1,
+                  })}
+                </div>
+              </div>
+
+              <div className="text-right">
+                <div className="text-xs text-slate-500">
+                  {mode === "done"
+                    ? "تم الوصول إلى الهدف"
+                    : mode === "draft"
+                      ? "جاهز للإطلاق"
+                      : "الممول حاليًا"}
+                </div>
+                <div className="mt-1 text-sm font-semibold text-slate-950">
+                  {fmtSAR(displayCurrent)}
+                </div>
+              </div>
+            </div>
+
+            <div
+              className="relative mt-4 h-4 overflow-hidden rounded-full border border-slate-200 bg-white shadow-inner"
+              aria-label="progress"
+              role="progressbar"
+              aria-valuenow={Math.round(progress)}
+              aria-valuemin={0}
+              aria-valuemax={100}
+            >
+              <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(15,23,42,0.03),rgba(15,23,42,0.06),rgba(242,174,48,0.08))]" />
+              <div
+                className="absolute inset-y-0 right-0 rounded-full transition-[width] duration-500"
+                style={{
+                  width: `${progress > 0 ? Math.max(progress, 6) : 0}%`,
+                  background:
+                    "linear-gradient(90deg, color-mix(in oklab, var(--gold) 88%, white 12%) 0%, color-mix(in oklab, var(--gold) 58%, var(--primary) 42%) 45%, var(--primary) 100%)",
+                  boxShadow:
+                    "0 14px 30px rgba(242,174,48,0.28), 0 0 0 1px rgba(255,255,255,0.25) inset",
+                }}
+              />
+              <div
+                className="absolute inset-y-0 right-0 opacity-55"
+                style={{
+                  width: `${progress}%`,
+                  background:
+                    "linear-gradient(90deg, transparent, rgba(255,255,255,0.45), transparent)",
+                }}
+              />
+            </div>
+
+            <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
+              <span>{fmtSAR(displayCurrent)}</span>
+              <span className="font-medium text-slate-700">
+                {fmtSAR(target)}
+              </span>
+            </div>
+          </div>
+
+          <div className="rounded-[22px] border border-slate-200/80 bg-white p-4 shadow-sm">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-700">
+                {modeMeta.noteLabel}
+              </Badge>
+              {isVip ? (
+                <Badge className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-amber-700">
+                  وصول خاص
+                </Badge>
+              ) : null}
+            </div>
+            <p className="mt-3 text-sm leading-7 text-slate-600 line-clamp-3">
+              {leadingHighlight ||
+                description ||
+                (mode === "done"
+                  ? "مشروع مكتمل يوضح شكل الإنجاز النهائي داخل المنصة."
+                  : mode === "draft"
+                    ? "فرصة قادمة قيد الإعداد، ويمكن استعراض هيكلها المالي من الآن."
+                    : "فرصة استثمارية معروضة ببيانات مالية واضحة تسهّل قراءة القرار.")}
+            </p>
+            <div className="mt-3 rounded-[18px] bg-slate-50/90 px-4 py-3 text-sm leading-7 text-slate-700">
+              {modeMeta.noteCopy}
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-3 border-t border-slate-200/80 pt-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
+              <span className="inline-flex items-center gap-1.5">
+                {mode === "done" ? (
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                ) : mode === "draft" ? (
+                  <Hourglass className="h-4 w-4 text-amber-600" />
+                ) : (
+                  <Layers3 className="h-4 w-4 text-slate-700" />
+                )}
+                <span>{modeMeta.trustCopy}</span>
+              </span>
+            </div>
+
+            <Link href={`/projects/${p.id}`}>
+              <Button
+                className={cn(
+                  "h-12 w-full rounded-2xl px-5 transition-all sm:w-auto",
+                  modeMeta.ctaClass
+                )}
+              >
+                <span>{modeMeta.ctaLabel}</span>
+                <ArrowLeft className="mr-2 h-4 w-4" />
+              </Button>
+            </Link>
+          </div>
+        </div>
+      </Card>
+    );
+  };
 
   /**
    * FIX: Removed nested <a> inside <Link> to fix Hydration error.
@@ -515,16 +1068,20 @@ export default function ProjectsPage() {
     const isDraft = mode === "draft";
 
     return (
-      <Card key={p.id} className={`overflow-hidden ${isDone ? "opacity-90" : ""}`}>
+      <Card
+        key={p.id}
+        className={`overflow-hidden ${isDone ? "opacity-90" : ""}`}
+      >
         <div className="relative h-44 w-full bg-muted">
           <img
             src={cover}
             alt={title}
-            className={`h-full w-full object-cover ${isDone ? "grayscale-[0.15]" : ""
-              }`}
+            className={`h-full w-full object-cover ${
+              isDone ? "grayscale-[0.15]" : ""
+            }`}
             loading="lazy"
             draggable={false}
-            onError={(e) => {
+            onError={e => {
               const img = e.currentTarget;
               if (img.src.includes(FALLBACK_COVER)) return;
               img.src = FALLBACK_COVER;
@@ -678,27 +1235,666 @@ export default function ProjectsPage() {
   const SectionShell = (props: {
     id?: string;
     className?: string;
+    innerClassName?: string;
     children: ReactNode;
     variant?: "light" | "dark";
+    bottomDecoration?: ReactNode;
   }) => (
     <section
       id={props.id}
-      className={[
-        "min-h-[100vh] snap-start relative overflow-hidden",
-        "py-16 sm:py-20",
+      className={cn(
+        "relative py-20 sm:py-24",
         props.variant === "dark"
-          ? "bg-zinc-950 text-white"
-          : "bg-transparent text-foreground",
-        props.className ?? "",
-      ].join(" ")}
+          ? "overflow-hidden bg-[linear-gradient(180deg,#0b1726_0%,#102137_100%)] text-white"
+          : "overflow-visible bg-[#f8fafc] text-foreground",
+        props.className
+      )}
     >
-      <div className="container w-full">{props.children}</div>
+      <div
+        className={cn(
+          "pointer-events-none absolute inset-0",
+          props.variant === "dark"
+            ? "bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.08),transparent_45%)]"
+            : "bg-[radial-gradient(circle_at_top,rgba(15,23,42,0.04),transparent_48%)]"
+        )}
+      />
+      <div
+        className={cn("container relative z-10 w-full", props.innerClassName)}
+      >
+        {props.children}
+      </div>
+      {props.bottomDecoration}
     </section>
   );
 
+  const premiumView = (
+    <div className="rsg-page w-full bg-[linear-gradient(180deg,#f8fafc_0%,#eef2f7_42%,#ffffff_100%)] text-foreground">
+      <div className="pt-0">
+        <CurvedProjectsHero
+          title={
+            <>
+              <Sparkles className="h-7 w-7" />
+              مشاريعنا الاستثمارية
+            </>
+          }
+          desc="واجهة استثمارية مبنية حول العائد والتمويل والتغطية الفعلية للفرص المتاحة داخل المنصة."
+          onRefresh={() => setRefreshKey(x => x + 1)}
+          refreshDisabled={
+            published.loading ||
+            published.loadingMore ||
+            upcoming.loading ||
+            upcoming.loadingMore ||
+            done.loading ||
+            done.loadingMore
+          }
+        >
+          <div className="space-y-5">
+            {blockedReason === "maintenance" && (
+              <Card className="border-amber-300/30 bg-white/95 shadow-[0_24px_60px_-36px_rgba(15,23,42,0.45)] backdrop-blur">
+                <CardContent className="flex items-start gap-3 py-5">
+                  <AlertTriangle className="mt-0.5 h-5 w-5 text-amber-600" />
+                  <div className="space-y-1">
+                    <div className="font-semibold text-slate-950">
+                      المنصة تحت الصيانة
+                    </div>
+                    <div className="text-sm leading-7 text-slate-600">
+                      بعض الإجراءات الاستثمارية متوقفة مؤقتًا، لكن بإمكانك
+                      مراجعة المشروعات المتاحة والبيانات الحالية.
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {blockedReason === "vip_only_mode" && (
+              <Card className="border-sky-300/25 bg-white/95 shadow-[0_24px_60px_-36px_rgba(15,23,42,0.45)] backdrop-blur">
+                <CardContent className="flex items-start gap-3 py-5">
+                  <Shield className="mt-0.5 h-5 w-5 text-sky-600" />
+                  <div className="space-y-1">
+                    <div className="font-semibold text-slate-950">
+                      وضع الوصول الاستثماري الخاص
+                    </div>
+                    <div className="text-sm leading-7 text-slate-600">
+                      القائمة الحالية تركز على الفرص الحصرية فقط، مع استمرار نفس
+                      البيانات والمنطق التشغيلي بدون تغيير.
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            <Card className="overflow-hidden border-white/12 bg-[linear-gradient(145deg,rgba(8,19,34,0.94),rgba(13,29,49,0.92))] text-white shadow-[0_40px_120px_-58px_rgba(3,6,18,0.95)] backdrop-blur-xl">
+              <CardContent className="p-5 sm:p-6">
+                <div className="flex flex-col gap-6">
+                  <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+                    <div className="max-w-3xl">
+                      <div className="flex flex-wrap items-center gap-3">
+                        <Badge className="rounded-full border border-white/12 bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/85">
+                          Investment Desk
+                        </Badge>
+                        <Badge className="rounded-full border border-emerald-300/20 bg-emerald-300/12 px-3 py-1 text-xs font-semibold text-emerald-200">
+                          فرص جارية
+                        </Badge>
+                      </div>
+
+                      <h2 className="mt-4 text-2xl font-semibold tracking-tight text-white sm:text-3xl">
+                        سوق استثماري يضع العائد والتغطية في مقدمة القرار
+                      </h2>
+                      <p className="mt-3 max-w-2xl text-sm leading-8 text-white/72 sm:text-base">
+                        ابحث في الفرص المفتوحة، صفّ النتائج حسب نوع المنتج أو
+                        قوة العائد، وراقب حجم التمويل الجاري لحظة بلحظة من نفس
+                        الواجهة.
+                      </p>
+                    </div>
+
+                    <div className="hidden rounded-[24px] border border-white/12 bg-white/8 px-4 py-3 text-right shadow-inner backdrop-blur xl:flex xl:min-w-[250px] xl:items-center xl:gap-3">
+                      <div className="rounded-2xl bg-white/10 p-2">
+                        <ArrowUpRight className="h-4 w-4 text-white" />
+                      </div>
+                      <div>
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/55">
+                          Live Allocation
+                        </div>
+                        <div className="mt-1 text-sm font-semibold text-white">
+                          {fmtSAR(publishedFundingCurrent)} تم جمعها عبر الفرص
+                          المفتوحة
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                    <div className="rounded-[26px] border border-white/10 bg-slate-950/45 p-4 backdrop-blur">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/55">
+                        بحث سريع
+                      </div>
+                      <div className="relative mt-3">
+                        <Search className="absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/45" />
+                        <Input
+                          value={qText}
+                          onChange={e => setQText(e.target.value)}
+                          placeholder="ابحث بالعنوان أو الموقع أو رقم الإصدار"
+                          className="h-12 rounded-2xl border-white/10 bg-white/5 pr-11 text-white placeholder:text-white/35 focus-visible:ring-1 focus-visible:ring-white/30"
+                          disabled={flags.maintenanceMode}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="rounded-[26px] border border-white/10 bg-slate-950/45 p-4 backdrop-blur">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/55">
+                        نوع الفرصة
+                      </div>
+                      <Select
+                        value={typeFilter}
+                        onValueChange={setTypeFilter}
+                        disabled={flags.maintenanceMode}
+                      >
+                        <SelectTrigger className="mt-3 h-12 rounded-2xl border-white/10 bg-white/5 text-white">
+                          <SelectValue placeholder="كل الأنواع" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">كل الأنواع</SelectItem>
+                          {Object.entries(labels.projectTypes).map(
+                            ([key, value]) => (
+                              <SelectItem key={key} value={key}>
+                                {pickLabel(value, "ar", key)}
+                              </SelectItem>
+                            )
+                          )}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="rounded-[26px] border border-white/10 bg-slate-950/45 p-4 backdrop-blur">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/55">
+                        ترتيب العرض
+                      </div>
+                      <Select
+                        value={sortBy}
+                        onValueChange={setSortBy}
+                        disabled={flags.maintenanceMode}
+                      >
+                        <SelectTrigger className="mt-3 h-12 rounded-2xl border-white/10 bg-white/5 text-white">
+                          <SelectValue placeholder="اختر الترتيب" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="newest">الأحدث</SelectItem>
+                          <SelectItem value="progress">
+                            الأعلى تمويلاً
+                          </SelectItem>
+                          <SelectItem value="return">الأعلى عائدًا</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <div className="rounded-[24px] border border-white/10 bg-white/8 p-4 shadow-inner backdrop-blur">
+                      <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/55">
+                        <Layers3 className="h-4 w-4" />
+                        <span>الفرص المفتوحة</span>
+                      </div>
+                      <div className="mt-3 text-2xl font-semibold text-white">
+                        {formatNumberEN(filteredPublished.length)}
+                      </div>
+                    </div>
+
+                    <div className="rounded-[24px] border border-white/10 bg-white/8 p-4 shadow-inner backdrop-blur">
+                      <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/55">
+                        <Wallet className="h-4 w-4" />
+                        <span>التمويل الجاري</span>
+                      </div>
+                      <div className="mt-3 text-2xl font-semibold text-white">
+                        {fmtSAR(publishedFundingCurrent)}
+                      </div>
+                    </div>
+
+                    <div className="rounded-[24px] border border-white/10 bg-white/8 p-4 shadow-inner backdrop-blur">
+                      <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/55">
+                        <Target className="h-4 w-4" />
+                        <span>الرأسمال المستهدف</span>
+                      </div>
+                      <div className="mt-3 text-2xl font-semibold text-white">
+                        {fmtSAR(publishedFundingTarget)}
+                      </div>
+                    </div>
+
+                    <div className="rounded-[24px] border border-white/10 bg-[linear-gradient(145deg,rgba(242,174,48,0.18),rgba(255,255,255,0.08))] p-4 shadow-inner backdrop-blur">
+                      <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/60">
+                        <TrendingUp className="h-4 w-4" />
+                        <span>أعلى عائد معلن</span>
+                      </div>
+                      <div className="mt-3 text-3xl font-bold tracking-tight text-white">
+                        {formatPercentEN(bestPublishedReturn, {
+                          minimumFractionDigits: 0,
+                          maximumFractionDigits: 0,
+                        })}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-[28px] border border-white/10 bg-white/6 p-4 shadow-inner backdrop-blur">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                      <div className="min-w-0">
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/55">
+                          تغطية التمويل الحالية
+                        </div>
+                        <div className="mt-2 flex flex-wrap items-end gap-3">
+                          <div className="text-3xl font-semibold text-white">
+                            {formatPercentEN(publishedFundingProgress, {
+                              minimumFractionDigits: 0,
+                              maximumFractionDigits: 1,
+                            })}
+                          </div>
+                          <div className="inline-flex items-center gap-2 pb-1 text-sm text-white/65">
+                            <Users className="h-4 w-4" />
+                            <span>
+                              {formatNumberEN(totalInvestorsAcrossProjects)}{" "}
+                              مستثمرًا عبر المنصة
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="lg:hidden">
+                        <Button
+                          variant="outline"
+                          onClick={() => setRefreshKey(x => x + 1)}
+                          disabled={
+                            published.loading ||
+                            upcoming.loading ||
+                            done.loading ||
+                            published.loadingMore ||
+                            upcoming.loadingMore ||
+                            done.loadingMore
+                          }
+                          className="h-11 rounded-2xl border-white/15 bg-white/5 px-5 text-white hover:bg-white hover:text-slate-950"
+                        >
+                          تحديث البيانات
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div
+                      className="relative mt-4 h-4 overflow-hidden rounded-full border border-white/10 bg-white/10 shadow-inner"
+                      aria-label="aggregate progress"
+                      role="progressbar"
+                      aria-valuenow={Math.round(publishedFundingProgress)}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                    >
+                      <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.04),rgba(255,255,255,0.02),rgba(242,174,48,0.1))]" />
+                      <div
+                        className="absolute inset-y-0 right-0 rounded-full transition-[width] duration-700"
+                        style={{
+                          width: `${publishedFundingProgress > 0 ? Math.max(publishedFundingProgress, 6) : 0}%`,
+                          background:
+                            "linear-gradient(90deg, color-mix(in oklab, var(--gold) 88%, white 12%) 0%, color-mix(in oklab, var(--gold) 62%, var(--primary) 38%) 48%, var(--primary) 100%)",
+                          boxShadow:
+                            "0 16px 38px rgba(242,174,48,0.26), 0 0 0 1px rgba(255,255,255,0.12) inset",
+                        }}
+                      />
+                      <div
+                        className="absolute inset-y-0 right-0 opacity-55"
+                        style={{
+                          width: `${publishedFundingProgress}%`,
+                          background:
+                            "linear-gradient(90deg, transparent, rgba(255,255,255,0.45), transparent)",
+                        }}
+                      />
+                    </div>
+
+                    <div className="mt-3 flex items-center justify-between text-xs text-white/60">
+                      <span>{fmtSAR(publishedFundingCurrent)}</span>
+                      <span>{fmtSAR(publishedFundingTarget)}</span>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </CurvedProjectsHero>
+      </div>
+
+      <main className="relative flex-1">
+        <SectionShell className="pt-12 pb-28 sm:pt-16" variant="light">
+          <div className="space-y-10">
+            <SectionHeaderBlock
+              kicker="Live Opportunities"
+              badge={flags.vipOnlyMode ? "VIP فقط" : "السوق المفتوح"}
+              title="فرص استثمارية متاحة الآن"
+              desc="وحدات استثمارية مصممة لإبراز العائد والمدد ونِسب التغطية، مع قراءة أسرع للقرار المالي داخل كل بطاقة."
+              metrics={[
+                {
+                  label: "التمويل الجاري",
+                  value: fmtSAR(publishedFundingCurrent),
+                },
+                {
+                  label: "الرأسمال المستهدف",
+                  value: fmtSAR(publishedFundingTarget),
+                },
+                {
+                  label: "أعلى عائد",
+                  value: formatPercentEN(bestPublishedReturn, {
+                    minimumFractionDigits: 0,
+                    maximumFractionDigits: 0,
+                  }),
+                },
+              ]}
+            />
+
+            <div className="rounded-[34px] border border-slate-200/70 bg-white/85 p-4 shadow-[0_34px_90px_-56px_rgba(15,23,42,0.42)] backdrop-blur sm:p-6">
+              {flags.maintenanceMode ? (
+                <div className="py-16 text-center text-muted-foreground">
+                  المشاريع غير متاحة حاليًا بسبب الصيانة.
+                </div>
+              ) : (
+                <>
+                  {published.loading && (
+                    <div className="py-16 text-center text-muted-foreground">
+                      جاري تحميل المشروعات...
+                    </div>
+                  )}
+
+                  {published.loadError && !published.loading && (
+                    <Card className="mt-2 border-destructive/25 shadow-sm">
+                      <CardContent className="space-y-3 py-10 text-center">
+                        <div className="font-semibold">
+                          {published.loadError}
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                          ملاحظة: هذه الصفحة تحتاج مشروعات تحتوي على
+                          <span className="px-1 font-semibold">createdAt</span>
+                          بصيغة Timestamp.
+                        </div>
+                        <Button
+                          variant="outline"
+                          onClick={() => setRefreshKey(x => x + 1)}
+                          className="h-11 rounded-2xl px-5"
+                        >
+                          إعادة المحاولة
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {!published.loading &&
+                    !published.loadError &&
+                    filteredPublished.length === 0 && (
+                      <Card className="mt-2 border-slate-200/80 shadow-sm">
+                        <CardContent className="space-y-3 py-12 text-center text-muted-foreground">
+                          <div>
+                            لا توجد مشروعات مطابقة لنتائج البحث أو الفلترة
+                            الحالية.
+                          </div>
+                          {published.hasMore && published.items.length > 0 && (
+                            <Button
+                              variant="outline"
+                              onClick={published.loadMore}
+                              disabled={published.loadingMore}
+                              className="h-11 rounded-2xl px-5"
+                            >
+                              {published.loadingMore
+                                ? "جاري التحميل..."
+                                : "تحميل المزيد"}
+                            </Button>
+                          )}
+                        </CardContent>
+                      </Card>
+                    )}
+
+                  {!published.loading &&
+                    !published.loadError &&
+                    filteredPublished.length > 0 && (
+                      <>
+                        <div
+                          ref={publishedSlider.ref}
+                          {...publishedSlider.bind}
+                          dir="ltr"
+                          className="
+                            md:hidden
+                            flex gap-5 overflow-x-auto overflow-y-hidden pb-4
+                            snap-x snap-mandatory
+                            scroll-smooth
+                            [-ms-overflow-style:none] [scrollbar-width:none]
+                            [&::-webkit-scrollbar]:hidden
+                            select-none
+                            cursor-grab active:cursor-grabbing
+                          "
+                          style={{ WebkitOverflowScrolling: "touch" }}
+                        >
+                          {filteredPublished.map(p => (
+                            <div
+                              key={p.id}
+                              dir="rtl"
+                              className="w-[88%] shrink-0 snap-start sm:w-[420px]"
+                            >
+                              {InvestmentCard(p, "published")}
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="hidden gap-5 md:grid md:grid-cols-2 xl:grid-cols-3">
+                          {filteredPublished.map(p =>
+                            InvestmentCard(p, "published")
+                          )}
+                        </div>
+
+                        <div className="mt-10 flex justify-center">
+                          {published.hasMore ? (
+                            <Button
+                              variant="outline"
+                              onClick={published.loadMore}
+                              disabled={published.loadingMore}
+                              className="h-12 rounded-2xl border-slate-300/80 px-6"
+                            >
+                              {published.loadingMore
+                                ? "جاري التحميل..."
+                                : "تحميل المزيد"}
+                            </Button>
+                          ) : (
+                            <div className="text-sm text-muted-foreground" />
+                          )}
+                        </div>
+                      </>
+                    )}
+                </>
+              )}
+            </div>
+          </div>
+        </SectionShell>
+
+        <SectionShell
+          variant="dark"
+          className="pb-0"
+          innerClassName="pb-24 sm:pb-28"
+          bottomDecoration={
+            <svg
+              className="pointer-events-none absolute inset-x-0 bottom-0 h-24 w-full text-[#f8fafc] md:h-28"
+              viewBox="0 0 1440 120"
+              preserveAspectRatio="none"
+              aria-hidden="true"
+            >
+              <path
+                fill="currentColor"
+                d="M0,64 C240,120 480,120 720,88 C960,56 1200,8 1440,40 L1440,120 L0,120 Z"
+              />
+            </svg>
+          }
+        >
+          <div className="space-y-10">
+            <SectionHeaderBlock
+              kicker="Pipeline"
+              badge="قريبًا"
+              inverted
+              title="فرص استثمارية قيد الإطلاق"
+              desc="نفس نموذج البطاقة الاستثمارية، لكن بحالة قادمة حتى تبقى الرؤية متسقة بين السوق الحالي وخط الفرص القادم."
+              metrics={[
+                {
+                  label: "عدد الفرص",
+                  value: formatNumberEN(upcoming.items.length),
+                },
+                { label: "رأسمال متوقع", value: fmtSAR(upcomingFundingTarget) },
+                {
+                  label: "أعلى عائد معلن",
+                  value: formatPercentEN(upcomingBestReturn, {
+                    minimumFractionDigits: 0,
+                    maximumFractionDigits: 0,
+                  }),
+                },
+              ]}
+            />
+
+            <div className="rounded-[34px] border border-white/10 bg-white/6 p-4 shadow-[0_34px_90px_-56px_rgba(0,0,0,0.68)] backdrop-blur sm:p-6">
+              {upcoming.loading ? (
+                <div className="py-16 text-center text-white/70">
+                  جاري تحميل المشروعات...
+                </div>
+              ) : upcoming.loadError ? (
+                <Card className="mt-2 border-white/10 bg-white/5 backdrop-blur">
+                  <CardContent className="space-y-3 py-10 text-center text-white">
+                    <div className="font-semibold">{upcoming.loadError}</div>
+                    <Button
+                      variant="outline"
+                      onClick={() => setRefreshKey(x => x + 1)}
+                      className="h-11 rounded-2xl border-white/15 bg-white/5 px-5 text-white hover:bg-white hover:text-slate-950"
+                    >
+                      إعادة المحاولة
+                    </Button>
+                  </CardContent>
+                </Card>
+              ) : upcoming.items.length === 0 ? (
+                <div className="py-16 text-center text-white/70">
+                  لا توجد مشروعات مستقبلية حالياً.
+                </div>
+              ) : (
+                <>
+                  <div
+                    ref={upcomingSlider.ref}
+                    {...upcomingSlider.bind}
+                    dir="ltr"
+                    className="
+                      flex gap-5 overflow-x-auto overflow-y-hidden pb-4
+                      snap-x snap-mandatory
+                      scroll-smooth
+                      [-ms-overflow-style:none] [scrollbar-width:none]
+                      [&::-webkit-scrollbar]:hidden
+                      select-none
+                      cursor-grab active:cursor-grabbing
+                    "
+                    style={{ WebkitOverflowScrolling: "touch" }}
+                  >
+                    {upcoming.items.map(p => (
+                      <div
+                        key={p.id}
+                        dir="rtl"
+                        className="w-[88%] shrink-0 snap-start sm:w-[420px] md:w-[460px]"
+                      >
+                        {InvestmentCard(p, "draft")}
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="mt-10 flex justify-center">
+                    {upcoming.hasMore ? (
+                      <Button
+                        variant="outline"
+                        onClick={upcoming.loadMore}
+                        disabled={upcoming.loadingMore}
+                        className="h-12 rounded-2xl border-white/15 bg-white/5 px-6 text-white hover:bg-white hover:text-slate-950"
+                      >
+                        {upcoming.loadingMore
+                          ? "جاري التحميل..."
+                          : "تحميل المزيد"}
+                      </Button>
+                    ) : (
+                      <div className="text-sm text-white/65" />
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </SectionShell>
+
+        <SectionShell variant="light">
+          <div className="space-y-10">
+            <SectionHeaderBlock
+              kicker="Track Record"
+              badge="منجزة"
+              title="سجل المشاريع المكتملة"
+              desc="الواجهة نفسها تُستخدم هنا لعرض الأداء النهائي والتمويل المكتمل، بما يعزز طبقة الثقة ويحوّل القسم إلى سجل إنجاز استثماري حقيقي."
+              metrics={[
+                {
+                  label: "عدد المشاريع",
+                  value: formatNumberEN(done.items.length),
+                },
+                { label: "الرأسمال المكتمل", value: fmtSAR(completedCapital) },
+                {
+                  label: "معدل الإنجاز",
+                  value: formatPercentEN(completedProjectsRate, {
+                    minimumFractionDigits: 0,
+                    maximumFractionDigits: 0,
+                  }),
+                },
+              ]}
+            />
+
+            <div className="rounded-[34px] border border-slate-200/70 bg-white/85 p-4 shadow-[0_34px_90px_-56px_rgba(15,23,42,0.42)] backdrop-blur sm:p-6">
+              {done.loading ? (
+                <div className="py-16 text-center text-muted-foreground">
+                  جاري تحميل المشروعات...
+                </div>
+              ) : done.loadError ? (
+                <Card className="mt-2 border-destructive/25 shadow-sm">
+                  <CardContent className="space-y-3 py-10 text-center">
+                    <div className="font-semibold">{done.loadError}</div>
+                    <Button
+                      variant="outline"
+                      onClick={() => setRefreshKey(x => x + 1)}
+                      className="h-11 rounded-2xl px-5"
+                    >
+                      إعادة المحاولة
+                    </Button>
+                  </CardContent>
+                </Card>
+              ) : done.items.length === 0 ? (
+                <div className="py-16 text-center text-muted-foreground">
+                  لا توجد مشروعات مكتملة حالياً.
+                </div>
+              ) : (
+                <>
+                  <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+                    {done.items.map(p => InvestmentCard(p, "done"))}
+                  </div>
+
+                  <div className="mt-10 flex justify-center">
+                    {done.hasMore ? (
+                      <Button
+                        variant="outline"
+                        onClick={done.loadMore}
+                        disabled={done.loadingMore}
+                        className="h-12 rounded-2xl border-slate-300/80 px-6"
+                      >
+                        {done.loadingMore ? "جاري التحميل..." : "تحميل المزيد"}
+                      </Button>
+                    ) : (
+                      <div className="text-sm text-muted-foreground" />
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </SectionShell>
+      </main>
+    </div>
+  );
+
+  return premiumView;
+
   return (
     <div className="rsg-page w-full bg-transparent text-foreground">
-
       <div className="pt-0">
         <CurvedProjectsHero
           title={
@@ -708,7 +1904,7 @@ export default function ProjectsPage() {
             </>
           }
           desc="استعرض الفرص المتاحة، تفاصيل العوائد، وقدم اهتمامك بسهولة."
-          onRefresh={() => setRefreshKey((x) => x + 1)}
+          onRefresh={() => setRefreshKey(x => x + 1)}
           refreshDisabled={
             published.loading ||
             published.loadingMore ||
@@ -731,8 +1927,7 @@ export default function ProjectsPage() {
                   <AlertTriangle
                     className="w-5 h-5 mt-0.5"
                     style={{
-                      color:
-                        "color-mix(in oklab, var(--gold) 82%, white 18%)",
+                      color: "color-mix(in oklab, var(--gold) 82%, white 18%)",
                     }}
                   />
                   <div className="space-y-1">
@@ -767,7 +1962,7 @@ export default function ProjectsPage() {
                     <Search className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                     <Input
                       value={qText}
-                      onChange={(e) => setQText(e.target.value)}
+                      onChange={e => setQText(e.target.value)}
                       placeholder="ابحث بالعنوان / الموقع / رقم الإصدار..."
                       className="pr-9"
                       disabled={flags.maintenanceMode}
@@ -796,7 +1991,7 @@ export default function ProjectsPage() {
                 <div className="lg:hidden flex justify-center pt-2">
                   <Button
                     variant="outline"
-                    onClick={() => setRefreshKey((x) => x + 1)}
+                    onClick={() => setRefreshKey(x => x + 1)}
                     disabled={
                       published.loading ||
                       upcoming.loading ||
@@ -856,7 +2051,7 @@ export default function ProjectsPage() {
 
                       <Button
                         variant="outline"
-                        onClick={() => setRefreshKey((x) => x + 1)}
+                        onClick={() => setRefreshKey(x => x + 1)}
                       >
                         إعادة المحاولة
                       </Button>
@@ -906,21 +2101,21 @@ export default function ProjectsPage() {
                         "
                         style={{ WebkitOverflowScrolling: "touch" }}
                       >
-                        {filteredPublished.map((p) => (
+                        {filteredPublished.map(p => (
                           <div
                             key={p.id}
                             dir="rtl"
                             className="snap-start shrink-0 w-[86%] sm:w-[420px]"
                           >
-                            {ProjectCard(p, "published")}
+                            {InvestmentCard(p, "published")}
                           </div>
                         ))}
                       </div>
 
                       {/* ✅ Desktop: Grid */}
                       <div className="hidden md:grid mt-10 md:grid-cols-2 xl:grid-cols-3 gap-5">
-                        {filteredPublished.map((p) =>
-                          ProjectCard(p, "published")
+                        {filteredPublished.map(p =>
+                          InvestmentCard(p, "published")
                         )}
                       </div>
 
@@ -975,7 +2170,10 @@ export default function ProjectsPage() {
                 <Card className="border-white/10 bg-white/5 backdrop-blur mt-6">
                   <CardContent className="py-10 text-center space-y-3 text-white">
                     <div className="font-semibold">{upcoming.loadError}</div>
-                    <Button variant="outline" onClick={() => setRefreshKey((x) => x + 1)}>
+                    <Button
+                      variant="outline"
+                      onClick={() => setRefreshKey(x => x + 1)}
+                    >
                       إعادة المحاولة
                     </Button>
                   </CardContent>
@@ -1002,13 +2200,13 @@ export default function ProjectsPage() {
               "
                       style={{ WebkitOverflowScrolling: "touch" }}
                     >
-                      {upcoming.items.map((p) => (
+                      {upcoming.items.map(p => (
                         <div
                           key={p.id}
                           dir="rtl"
                           className="snap-start shrink-0 w-[86%] sm:w-[420px] md:w-[460px]"
                         >
-                          {ProjectCard(p, "draft")}
+                          {InvestmentCard(p, "draft")}
                         </div>
                       ))}
                     </div>
@@ -1021,7 +2219,9 @@ export default function ProjectsPage() {
                         onClick={upcoming.loadMore}
                         disabled={upcoming.loadingMore}
                       >
-                        {upcoming.loadingMore ? "جاري التحميل..." : "تحميل المزيد"}
+                        {upcoming.loadingMore
+                          ? "جاري التحميل..."
+                          : "تحميل المزيد"}
                       </Button>
                     ) : (
                       <div className="text-sm text-white/65" />
@@ -1071,7 +2271,7 @@ export default function ProjectsPage() {
                     <div className="font-semibold">{done.loadError}</div>
                     <Button
                       variant="outline"
-                      onClick={() => setRefreshKey((x) => x + 1)}
+                      onClick={() => setRefreshKey(x => x + 1)}
                     >
                       إعادة المحاولة
                     </Button>
@@ -1084,7 +2284,7 @@ export default function ProjectsPage() {
               ) : (
                 <>
                   <div className="mt-10 grid md:grid-cols-2 xl:grid-cols-3 gap-5">
-                    {done.items.map((p) => ProjectCard(p, "done"))}
+                    {done.items.map(p => InvestmentCard(p, "done"))}
                   </div>
 
                   <div className="mt-10 flex justify-center">

@@ -125,6 +125,10 @@
   --sidebar-accent-foreground: #ffffff;
   --sidebar-border: rgba(148, 163, 184, 0.18);
   --sidebar-ring: var(--ring);
+
+  /* Shared site header spacing */
+  --site-header-shell-top: max(12px, env(safe-area-inset-top));
+  --site-header-offset: calc(var(--site-header-shell-top) + 84px);
 }
 
 /* =========================
@@ -810,15 +814,19 @@
   ========================= */
   .rsg-nav {
     position: fixed;
-    top: 14px;
+    top: 0;
     left: 0;
     right: 0;
-    z-index: 60;
+    z-index: 90;
+    isolation: isolate;
+    padding-top: var(--site-header-shell-top);
     pointer-events: none;
   }
 
   .rsg-nav .container {
     pointer-events: auto;
+    position: relative;
+    z-index: 1;
   }
 
   .rsg-nav__inner {
@@ -986,7 +994,7 @@
 @media (max-width: 767px) {
   .rsg-nav__inner {
     position: relative;
-    overflow: hidden;
+    overflow: visible;
     min-height: 64px;
   }
 

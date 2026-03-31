@@ -87,7 +87,7 @@ export default function Header() {
       return path === href || path.startsWith(href + "/");
     };
 
-    const found = navLinks.find((l) => isActive(l.href));
+    const found = navLinks.find(l => isActive(l.href));
     return found?.href ?? "";
   }, [location, navLinks]);
 
@@ -95,44 +95,41 @@ export default function Header() {
   const innerRef = useRef<HTMLDivElement | null>(null);
   const linkRefs = useRef<Record<string, HTMLSpanElement | null>>({});
 
-// ✅ move the bulge above the active link + mark hasActive
-useEffect(() => {
-  const inner = innerRef.current;
-  if (!inner) return;
+  // ✅ move the bulge above the active link + mark hasActive
+  useEffect(() => {
+    const inner = innerRef.current;
+    if (!inner) return;
 
-  const update = () => {
-    const el = activeHref ? linkRefs.current[activeHref] : null;
+    const update = () => {
+      const el = activeHref ? linkRefs.current[activeHref] : null;
 
-    if (!el) {
-      inner.dataset.hasActive = "false";
-      inner.style.setProperty("--active-x", `50%`);
-      return;
-    }
+      if (!el) {
+        inner.dataset.hasActive = "false";
+        inner.style.setProperty("--active-x", `50%`);
+        return;
+      }
 
-    const innerRect = inner.getBoundingClientRect();
-    const elRect = el.getBoundingClientRect();
-    const centerX = elRect.left + elRect.width / 2 - innerRect.left;
+      const innerRect = inner.getBoundingClientRect();
+      const elRect = el.getBoundingClientRect();
+      const centerX = elRect.left + elRect.width / 2 - innerRect.left;
 
-    inner.style.setProperty("--active-x", `${centerX}px`);
-    inner.dataset.hasActive = "true";
-  };
+      inner.style.setProperty("--active-x", `${centerX}px`);
+      inner.dataset.hasActive = "true";
+    };
 
-  const raf = requestAnimationFrame(update);
-  window.addEventListener("resize", update);
+    const raf = requestAnimationFrame(update);
+    window.addEventListener("resize", update);
 
-  return () => {
-    cancelAnimationFrame(raf);
-    window.removeEventListener("resize", update);
-  };
-}, [activeHref, language]);
-
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", update);
+    };
+  }, [activeHref, language]);
 
   return (
     <>
       {/* ✅ Floating Navbar (always fixed via .rsg-nav CSS) */}
-      <header
-        className={`rsg-nav ${isScrolled ? "is-scrolled" : ""}`}
-      >
+      <header className={`rsg-nav ${isScrolled ? "is-scrolled" : ""}`}>
         <div className="container">
           <div ref={innerRef} className="rsg-nav__inner rsg-nav__inner--bulge">
             {/* Left (Icons) */}
@@ -142,7 +139,7 @@ useEffect(() => {
                 className="rsg-burger lg:hidden"
                 aria-label="Open menu"
                 aria-expanded={isMobileMenuOpen}
-                onClick={() => setIsMobileMenuOpen((v) => !v)}
+                onClick={() => setIsMobileMenuOpen(v => !v)}
               >
                 <span />
                 <span />
@@ -175,12 +172,12 @@ useEffect(() => {
             {/* Center (Links + Logo) */}
             <nav className="rsg-nav__links rsg-nav__slot rsg-nav__slot--center">
               <div className="flex items-center justify-center gap-5">
-                {linksLeft.map((link) => {
+                {linksLeft.map(link => {
                   const isActive = activeHref === link.href;
                   return (
                     <Link key={link.href} href={link.href}>
                       <span
-                        ref={(el) => {
+                        ref={el => {
                           linkRefs.current[link.href] = el;
                         }}
                         className={`rsg-nav__link ${isActive ? "is-active" : ""}`}
@@ -199,12 +196,12 @@ useEffect(() => {
                   />
                 </Link>
 
-                {linksRight.map((link) => {
+                {linksRight.map(link => {
                   const isActive = activeHref === link.href;
                   return (
                     <Link key={link.href} href={link.href}>
                       <span
-                        ref={(el) => {
+                        ref={el => {
                           linkRefs.current[link.href] = el;
                         }}
                         className={`rsg-nav__link ${isActive ? "is-active" : ""}`}
@@ -221,7 +218,9 @@ useEffect(() => {
             <div className="rsg-nav__slot rsg-nav__slot--right flex items-center gap-2">
               {!isAuthenticated ? (
                 <Link href="/login">
-                  <Button className={`hidden md:inline-flex rsg-cta ${navBtnClass}`}>
+                  <Button
+                    className={`hidden md:inline-flex rsg-cta ${navBtnClass}`}
+                  >
                     {language === "ar" ? "تسجيل الدخول" : "Login"}
                   </Button>
                 </Link>
@@ -250,7 +249,7 @@ useEffect(() => {
           {isMobileMenuOpen && (
             <div className="mt-3 rsg-card rsg-card--tight p-4 lg:hidden animate-slide-up">
               <nav className="flex flex-col gap-2">
-                {navLinks.map((link) => {
+                {navLinks.map(link => {
                   const isActive = activeHref === link.href;
                   return (
                     <Link key={link.href} href={link.href}>
@@ -314,7 +313,9 @@ useEffect(() => {
       </header>
 
       {/* ✅ Spacer */}
-      {shouldReserveSpace && <div aria-hidden className="h-[92px]" />}
+      {shouldReserveSpace && (
+        <div aria-hidden className="h-[var(--site-header-offset)]" />
+      )}
     </>
   );
 }

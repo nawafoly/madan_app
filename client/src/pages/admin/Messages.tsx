@@ -36,11 +36,10 @@ import {
 } from "@/lib/projectDisplay";
 import {
   buildUserIdentityIndex,
-  getLinkedUserDisplayName,
   getLinkedUserEmail,
   resolveLinkedUser,
 } from "@/lib/userDisplay";
-import { getOwnerRoleLabel } from "@/lib/ownerAccounts";
+import { getOwnerRoleLabel, getRoleDisplayLabel } from "@/lib/ownerAccounts";
 import { getClientInvestmentStatusMeta } from "@/lib/workflowStatusMeta";
 import { resolveInvestmentActivationTerms } from "@shared/investmentActivation";
 import { hasPermission, useAuth } from "@/_core/hooks/useAuth";
@@ -166,6 +165,49 @@ function formatDateTimeAR(v: any) {
   return formatDateTimeEN(toDateSafe(v));
 }
 
+function formatRequestTimeLabel(value: any) {
+  const date = toDateSafe(value);
+  if (!date) return "—";
+
+  const diffMs = Date.now() - date.getTime();
+  const absMs = Math.abs(diffMs);
+
+  if (absMs < 60 * 1000) return "الآن";
+
+  if (absMs < 6 * 60 * 60 * 1000) {
+    const rtf = new Intl.RelativeTimeFormat("ar", { numeric: "auto" });
+
+    if (absMs < 60 * 60 * 1000) {
+      return rtf.format(
+        -Math.max(1, Math.round(absMs / (60 * 1000))),
+        "minute"
+      );
+    }
+
+    return rtf.format(
+      -Math.max(1, Math.round(absMs / (60 * 60 * 1000))),
+      "hour"
+    );
+  }
+
+  return new Intl.DateTimeFormat("ar-SA", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  }).format(date);
+}
+
+function formatRequestDateLabel(value: any) {
+  const date = toDateSafe(value);
+  if (!date) return "—";
+
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(date);
+}
+
 const pick = (...vals: any[]) => {
   for (const v of vals) {
     if (v == null) continue;
@@ -253,14 +295,113 @@ const getClientPhone = (m: any) =>
     m?.userSnapshot?.phone
   );
 
+const getLinkedClientName = (linkedUser: any) =>
+  pick(
+    linkedUser?.displayName,
+    linkedUser?.fullName,
+    linkedUser?.full_name,
+    linkedUser?.name,
+    linkedUser?.profile?.name,
+    linkedUser?.profile?.displayName,
+    linkedUser?.contact?.name
+  );
+
+const getIndexedUserName = (user: any) =>
+  pick(
+    user?.displayName,
+    user?.fullName,
+    user?.full_name,
+    user?.name,
+    user?.profile?.name,
+    user?.profile?.displayName,
+    user?.contact?.name
+  );
+
+function resolveLastActorMeta(
+  source: any,
+  userIdentityIndex: any,
+  client: ReturnType<typeof resolveRequestClient>
+) {
+  const lastEvent =
+    Array.isArray(source?.events) && source.events.length
+      ? source.events[source.events.length - 1]
+      : null;
+
+  const actorUid = pick(
+    lastEvent?.byUid,
+    source?.updatedByUid,
+    source?.actionByUid,
+    source?.processedByUid
+  );
+  const actorEmail = pick(
+    lastEvent?.byEmail,
+    source?.updatedByEmail,
+    source?.actionByEmail,
+    source?.processedByEmail
+  )
+    .trim()
+    .toLowerCase();
+  const actorRole = pick(
+    lastEvent?.byRole,
+    source?.actionByRole,
+    source?.updatedByRole,
+    source?.processedByRole
+  );
+  const actorAt =
+    toDateSafe(lastEvent?.at) ||
+    toDateSafe(source?.updatedAt) ||
+    toDateSafe(source?.lastActivityAt) ||
+    toDateSafe(source?.processedAt) ||
+    toDateSafe(source?.createdAt);
+
+  const linkedActor =
+    (actorUid && userIdentityIndex?.byId?.[actorUid]) ||
+    (actorEmail && userIdentityIndex?.byEmail?.[actorEmail]) ||
+    null;
+
+  const actorMatchesClient =
+    (actorUid && actorUid === client.clientId) ||
+    (actorEmail &&
+      client.clientEmail &&
+      actorEmail === String(client.clientEmail || "").trim().toLowerCase()) ||
+    normalizeRole(actorRole) === "client";
+
+  const actorName =
+    getIndexedUserName(linkedActor) ||
+    (actorMatchesClient ? client.clientName : "") ||
+    "لم يتم تحديد آخر معدّل";
+  const resolvedRole =
+    pick(
+      linkedActor?.role,
+      linkedActor?.userRole,
+      linkedActor?.profile?.role,
+      actorRole
+    ) ||
+    (actorMatchesClient ? "client" : "");
+
+  return {
+    name: actorName,
+    roleLabel: getRoleDisplayLabel(resolvedRole) || "منصب غير محدد",
+    relativeTimeLabel: actorAt ? `عدّل ${formatRequestTimeLabel(actorAt)}` : "الوقت غير متاح",
+    dateLabel: formatRequestDateLabel(actorAt),
+  };
+}
+
 function resolveRequestClient(source: any, userIdentityIndex: any) {
   const linkedUser = resolveLinkedUser(source, userIdentityIndex);
   const requestName = getClientName(source);
   const requestEmail = getClientEmail(source);
   const requestPhone = getClientPhone(source);
-  const liveName = linkedUser
-    ? getLinkedUserDisplayName(source, userIdentityIndex, requestName, "—")
-    : "";
+  const requestRole = pick(
+    linkedUser?.role,
+    linkedUser?.userRole,
+    linkedUser?.profile?.role,
+    source?.role,
+    source?.userRole,
+    source?.userSnapshot?.role,
+    source?.profile?.role
+  );
+  const liveName = linkedUser ? getLinkedClientName(linkedUser) : "";
   const liveEmail = linkedUser
     ? getLinkedUserEmail(source, userIdentityIndex, requestEmail)
     : "";
@@ -309,12 +450,16 @@ function resolveRequestClient(source: any, userIdentityIndex: any) {
     ),
     clientName:
       sourceKey === "live_user"
-        ? liveName || requestName || "—"
-        : requestName || "—",
+        ? liveName || requestName || "مستخدم غير معروف"
+        : requestName || "مستخدم غير معروف",
     clientEmail:
       sourceKey === "live_user" ? liveEmail || requestEmail : requestEmail,
     clientPhone:
       sourceKey === "live_user" ? livePhone || requestPhone : requestPhone,
+    clientRole: requestRole,
+    clientRoleLabel:
+      getRoleDisplayLabel(requestRole) ||
+      (sourceKey === "live_user" ? "عميل" : "مستخدم"),
     sourceKey,
     sourceLabel: sourceMeta.label,
     sourceTone: sourceMeta.tone,
@@ -721,11 +866,173 @@ function getRequestStatusMeta(status: any) {
   return map[normalizedStatus] || map.pending;
 }
 
+function getRequestCardStatusClass(status: any) {
+  const normalizedStatus = normalizeRequestStatus(status);
+  const map: Record<MessageStatus, string> = {
+    pending:
+      "border-amber-300/80 bg-[linear-gradient(180deg,rgba(255,251,235,0.96)_0%,#ffffff_42%,#ffffff_100%)]",
+    reviewing:
+      "border-sky-300/80 bg-[linear-gradient(180deg,rgba(240,249,255,0.96)_0%,#ffffff_42%,#ffffff_100%)]",
+    approved:
+      "border-emerald-300/80 bg-[linear-gradient(180deg,rgba(236,253,245,0.96)_0%,#ffffff_42%,#ffffff_100%)]",
+    new:
+      "border-amber-300/80 bg-[linear-gradient(180deg,rgba(255,251,235,0.96)_0%,#ffffff_42%,#ffffff_100%)]",
+    in_progress:
+      "border-sky-300/80 bg-[linear-gradient(180deg,rgba(240,249,255,0.96)_0%,#ffffff_42%,#ffffff_100%)]",
+    needs_account:
+      "border-sky-300/80 bg-[linear-gradient(180deg,rgba(240,249,255,0.96)_0%,#ffffff_42%,#ffffff_100%)]",
+    waiting_client_confirmation:
+      "border-sky-300/80 bg-[linear-gradient(180deg,rgba(240,249,255,0.96)_0%,#ffffff_42%,#ffffff_100%)]",
+    resolved:
+      "border-emerald-300/80 bg-[linear-gradient(180deg,rgba(236,253,245,0.96)_0%,#ffffff_42%,#ffffff_100%)]",
+    completed:
+      "border-slate-300/80 bg-[linear-gradient(180deg,rgba(248,250,252,0.98)_0%,#ffffff_44%,#ffffff_100%)]",
+    rejected:
+      "border-rose-300/80 bg-[linear-gradient(180deg,rgba(255,241,242,0.96)_0%,#ffffff_42%,#ffffff_100%)]",
+    no_account:
+      "border-rose-300/80 bg-[linear-gradient(180deg,rgba(255,241,242,0.96)_0%,#ffffff_42%,#ffffff_100%)]",
+    closed:
+      "border-slate-300/80 bg-[linear-gradient(180deg,rgba(248,250,252,0.98)_0%,#ffffff_44%,#ffffff_100%)]",
+  };
+
+  return map[normalizedStatus] || map.pending;
+}
+
 function getRequestStageMeta(stageRole: any) {
   return {
     label: stageLabel(stageRole),
     tone: "border-slate-200 bg-slate-100 text-slate-700",
   };
+}
+
+type RequestKindKey = "investment" | "interest";
+
+function normalizeProjectLifecycleForRequest(status: any) {
+  const value = String(status || "")
+    .trim()
+    .toLowerCase();
+
+  if (["draft", "upcoming", "comingsoon", "coming_soon"].includes(value)) {
+    return "upcoming";
+  }
+  if (["published", "active", "available", "open"].includes(value)) {
+    return "active";
+  }
+  if (["closed", "completed", "done"].includes(value)) {
+    return "closed";
+  }
+  return "";
+}
+
+function getRequestKindMeta(input: {
+  type?: any;
+  source?: any;
+  projectStatus?: any;
+  amount?: number;
+}) {
+  const normalizedType = String(input.type || "")
+    .trim()
+    .toLowerCase();
+  const normalizedSource = String(input.source || "")
+    .trim()
+    .toLowerCase();
+  const projectLifecycle = normalizeProjectLifecycleForRequest(
+    input.projectStatus
+  );
+
+  const isInterest =
+    normalizedType === "launch_interest" ||
+    normalizedType === "interest_request" ||
+    normalizedType === "prelaunch_interest" ||
+    normalizedSource.includes("prelaunch") ||
+    projectLifecycle === "upcoming";
+
+  const key: RequestKindKey = isInterest ? "interest" : "investment";
+
+  if (key === "interest") {
+    return {
+      key,
+      label: "طلب اهتمام",
+      shortLabel: "اهتمام",
+      badgeTone: "border-amber-200 bg-amber-50 text-amber-800",
+      accent: "bg-[linear-gradient(90deg,#f2ae30_0%,#f8c862_55%,#cbd5e1_100%)]",
+      cardClass:
+        "border-slate-200/90 bg-[linear-gradient(180deg,#ffffff_0%,#fbfdff_100%)]",
+      projectPanelClass: "border-slate-200/80 bg-slate-50/80",
+      helperClass:
+        "border border-amber-200/80 bg-amber-50/70 text-amber-900",
+      helperText:
+        "إشارة متابعة غير ملزمة لمشروع قادم، وتحتاج متابعة إطلاق أكثر من قرار مالي فوري.",
+      metricLabel: "النوع",
+      metricValue: "اهتمام غير ملزم",
+      ctaClass:
+        "border border-slate-200 bg-white text-slate-700 shadow-none hover:bg-slate-50",
+      ctaLabel: "مراجعة الاهتمام",
+    };
+  }
+
+  return {
+    key,
+    label: "طلب استثمار",
+    shortLabel: "استثمار",
+    badgeTone: "border-emerald-200 bg-emerald-50 text-emerald-800",
+    accent: "bg-[linear-gradient(90deg,#0f172a_0%,#0f766e_100%)]",
+    cardClass:
+      "border-emerald-200/70 bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)]",
+    projectPanelClass: "border-emerald-200/70 bg-emerald-50/45",
+    helperClass:
+      "border border-emerald-200/80 bg-emerald-50/80 text-emerald-900",
+    helperText:
+      "طلب مالي فعلي يحتاج مراجعة أسرع وإبرازًا أوضح للمبلغ والمرحلة الحالية.",
+    metricLabel: "المبلغ",
+    metricValue: null,
+    ctaClass:
+      "bg-slate-950 text-white shadow-[0_18px_40px_-24px_rgba(15,23,42,0.55)] hover:bg-slate-900",
+    ctaLabel: "مراجعة الطلب المالي",
+  };
+}
+
+type InterestReviewState = "new" | "seen";
+
+function getInterestReviewMeta(request: any) {
+  const reviewState: InterestReviewState = request?.adminSeenAt ? "seen" : "new";
+
+  if (reviewState === "seen") {
+    return {
+      key: reviewState,
+      label: "تم الاطلاع",
+      tone: "border-slate-200 bg-slate-100 text-slate-700",
+      accent: "bg-slate-500",
+      cardClass:
+        "border-slate-300/80 bg-[linear-gradient(180deg,rgba(248,250,252,0.98)_0%,#ffffff_44%,#ffffff_100%)]",
+      helperText:
+        "تم تسجيل هذا الاهتمام كمطّلع عليه ونقله تلقائيًا إلى السجل القديم.",
+    };
+  }
+
+  return {
+    key: reviewState,
+    label: "جديد",
+    tone: "border-amber-200 bg-amber-50 text-amber-800",
+    accent: "bg-amber-500",
+    cardClass:
+      "border-amber-300/80 bg-[linear-gradient(180deg,rgba(255,251,235,0.96)_0%,#ffffff_42%,#ffffff_100%)]",
+    helperText:
+      "هذا اهتمام جديد بانتظار الاطلاع الأول فقط، بدون دورة إجراءات استثمارية.",
+  };
+}
+
+function isArchivedRequestRecord(request: any) {
+  const normalizedStatus = normalizeRequestStatus(request?.status);
+  if (normalizedStatus === "completed" || normalizedStatus === "rejected") {
+    return true;
+  }
+
+  return request?.requestKind?.key === "interest" && Boolean(request?.adminSeenAt);
+}
+
+function isNewRequestRecord(request: any) {
+  return !isArchivedRequestRecord(request);
 }
 
 type ContractFileKind = "draft_pdf" | "signed_pdf" | "other";
@@ -877,9 +1184,14 @@ export default function MessagesManagement() {
   const [returnDialogOpen, setReturnDialogOpen] = useState(false);
   const [returnNote, setReturnNote] = useState("");
 
-  const [view, setView] = useState<"all" | "open" | "completed" | "rejected">(
+  const [view, setView] = useState<
+    "all" | "new" | "archived" | "open" | "completed" | "rejected"
+  >(
     "all"
   );
+  const [requestKindView, setRequestKindView] = useState<
+    "all" | RequestKindKey
+  >("all");
   const deferredSearchQuery = useDeferredValue(
     searchQuery.trim().toLowerCase()
   );
@@ -1590,6 +1902,12 @@ export default function MessagesManagement() {
         message?.project_id,
         message?.project?.id
       );
+      const projectStatus = pick(
+        message?.projectStatus,
+        message?.projectSnapshot?.status,
+        message?.project?.status,
+        projectsMap[String(projectId || "")]?.status
+      );
       const amount =
         toNum(message?.approvedAmount) ||
         toNum(message?.amount) ||
@@ -1599,6 +1917,14 @@ export default function MessagesManagement() {
       const remaining = getProjectRemaining(projectId);
       const statusMeta = getRequestStatusMeta(message.status);
       const stageMeta = getRequestStageMeta(message.stageRole);
+      const requestKind = getRequestKindMeta({
+        type: pick(message?.type, message?.requestType),
+        source: message?.source,
+        projectStatus,
+        amount,
+      });
+      const interestReviewMeta =
+        requestKind.key === "interest" ? getInterestReviewMeta(message) : null;
       const requestDateValue = toDateSafe(
         message.createdAt ||
           message.created_at ||
@@ -1619,11 +1945,17 @@ export default function MessagesManagement() {
         requestIdLabel: requestNumber(message),
         requestDateValue,
         requestDateLabel: formatDateTimeAR(requestDateValue),
+        requestTimeLabel: formatRequestTimeLabel(requestDateValue),
         updatedAtValue,
         updatedAtLabel: formatDateTimeAR(updatedAtValue),
+        updatedTimeLabel: formatRequestTimeLabel(
+          updatedAtValue || requestDateValue
+        ),
         touchedBy: lastTouchedBy(message),
         statusMeta,
         stageMeta,
+        requestKind,
+        interestReviewMeta,
         summary: getRequestSummary(message),
         searchIndex: normalizeSearchValue(
           client.clientName,
@@ -1633,7 +1965,10 @@ export default function MessagesManagement() {
           requestNumber(message),
           statusMeta.label,
           stageMeta.label,
-          client.sourceLabel
+          client.sourceLabel,
+          requestKind.label,
+          requestKind.shortLabel,
+          interestReviewMeta?.label
         ),
       };
     });
@@ -1655,49 +1990,63 @@ export default function MessagesManagement() {
 
   const filtered = useMemo(() => {
     const matchesView = (message: any) => {
-      const st = String(message.status || "");
-
       if (view === "all") return true;
-      if (view === "open") {
-        return st !== "completed" && st !== "rejected" && st !== "closed";
+      if (view === "new" || view === "open") {
+        return isNewRequestRecord(message);
       }
-      if (view === "completed") {
-        return st === "completed" || st === "closed";
+      if (view === "archived" || view === "completed") {
+        return isArchivedRequestRecord(message);
       }
       if (view === "rejected") {
-        return st === "rejected";
+        return normalizeRequestStatus(message.status) === "rejected";
       }
       return true;
     };
 
     return requestRows.filter(message => {
       if (!matchesView(message)) return false;
+      if (
+        requestKindView !== "all" &&
+        message.requestKind?.key !== requestKindView
+      ) {
+        return false;
+      }
       if (!deferredSearchQuery) return true;
       return message.searchIndex.includes(deferredSearchQuery);
     });
-  }, [deferredSearchQuery, requestRows, view]);
+  }, [deferredSearchQuery, requestKindView, requestRows, view]);
+
+  const newRequests = useMemo(
+    () => filtered.filter(message => isNewRequestRecord(message)),
+    [filtered]
+  );
+
+  const archivedRequests = useMemo(
+    () => filtered.filter(message => isArchivedRequestRecord(message)),
+    [filtered]
+  );
 
   const stats = useMemo(() => {
     const all = requestRows;
-    const open = all.filter(
-      message =>
-        String(message.status || "") !== "completed" &&
-        String(message.status || "") !== "rejected" &&
-        String(message.status || "") !== "closed"
-    );
-    const completed = all.filter(message => {
-      const st = String(message.status || "");
-      return st === "completed" || st === "closed";
-    });
+    const nextNew = all.filter(message => isNewRequestRecord(message));
+    const archived = all.filter(message => isArchivedRequestRecord(message));
     const rejected = all.filter(
-      message => String(message.status || "") === "rejected"
+      message => normalizeRequestStatus(message.status) === "rejected"
     );
 
     return {
       all: all.length,
-      open: open.length,
-      completed: completed.length,
+      new: nextNew.length,
+      archived: archived.length,
+      open: nextNew.length,
+      completed: archived.length,
       rejected: rejected.length,
+      newInvestment: nextNew.filter(
+        message => message.requestKind?.key === "investment"
+      ).length,
+      newInterest: nextNew.filter(
+        message => message.requestKind?.key === "interest"
+      ).length,
     };
   }, [requestRows]);
 
@@ -1731,6 +2080,365 @@ export default function MessagesManagement() {
     [requestRows]
   );
 
+  const requestKindCounters = useMemo(
+    () => ({
+      investment: requestRows.filter(
+        message => message.requestKind?.key === "investment"
+      ).length,
+      interest: requestRows.filter(
+        message => message.requestKind?.key === "interest"
+      ).length,
+    }),
+    [requestRows]
+  );
+
+  const getRequestViewLabel = (viewKey: string) => {
+    if (viewKey === "all") return "الكل";
+    if (viewKey === "new" || viewKey === "open") return "الجديدة";
+    if (viewKey === "archived" || viewKey === "completed") {
+      return "القديمة / المنتهية";
+    }
+    if (viewKey === "rejected") return "المرفوضة";
+    return viewKey;
+  };
+
+  const renderRequestCard = (request: any) => {
+    if (request.requestKind?.key === "interest") {
+      const reviewMeta =
+        request.interestReviewMeta || getInterestReviewMeta(request);
+      const narrative = request.summary || reviewMeta.helperText;
+      const projectTitle =
+        request.projectTitle && request.projectTitle !== "—"
+          ? request.projectTitle
+          : "لا يوجد مشروع مرتبط";
+
+      return (
+        <article
+          key={request.id}
+          className={cn(
+            "group relative flex h-full flex-col overflow-hidden rounded-[22px] border p-4 shadow-[0_18px_48px_-38px_rgba(15,23,42,0.32)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_24px_60px_-32px_rgba(15,23,42,0.26)]",
+            reviewMeta.cardClass
+          )}
+        >
+          <div
+            className={cn(
+              "absolute inset-x-0 top-0 h-1.5",
+              reviewMeta.accent
+            )}
+          />
+
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 space-y-2">
+              <div className="flex flex-wrap items-center gap-2 text-[10px] font-semibold tracking-[0.18em] text-slate-400">
+                <span>إشارة اهتمام #{request.requestIdLabel}</span>
+                <Badge
+                  className={cn(
+                    "border px-2.5 py-0.5 text-[10px] font-semibold shadow-none",
+                    request.requestKind.badgeTone
+                  )}
+                >
+                  {request.requestKind.label}
+                </Badge>
+                {request.client.sourceKey !== "live_user" ? (
+                  <Badge
+                    className={cn(
+                      "border px-2 py-0.5 text-[10px] font-semibold shadow-none",
+                      request.client.sourceTone
+                    )}
+                  >
+                    {request.client.sourceLabel}
+                  </Badge>
+                ) : null}
+              </div>
+
+              <div>
+                <h3 className="break-words text-[15px] font-semibold leading-6 text-slate-950">
+                  {request.client.clientName}
+                </h3>
+
+                <div className="mt-1 flex items-center gap-2 text-[13px] text-slate-500">
+                  <span className="inline-flex items-center rounded-full bg-amber-100/80 px-2.5 py-1 text-[11px] font-semibold text-amber-900">
+                    طلب اهتمام
+                  </span>
+                  <span className="text-slate-300">•</span>
+                  <span className="leading-6 text-slate-500">
+                    {request.requestTimeLabel}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <Badge
+              className={cn(
+                "border px-3 py-1 text-[11px] font-semibold shadow-none",
+                reviewMeta.tone
+              )}
+            >
+              {reviewMeta.label}
+            </Badge>
+          </div>
+
+          <div className="mt-4 rounded-[18px] border border-amber-200/80 bg-white/80 p-3">
+            <div className="flex items-start gap-2 text-[13px] text-slate-700">
+              <Building2 className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+              <span className="min-w-0 break-words font-medium leading-6">
+                {projectTitle}
+              </span>
+            </div>
+
+            <div className="mt-3 rounded-[16px] border border-amber-200/70 bg-amber-50/70 px-3 py-3 text-sm leading-7 text-amber-950">
+              {narrative}
+            </div>
+          </div>
+
+          <div className="mt-3 grid grid-cols-2 gap-2.5">
+            <RequestCardMetric
+              label="البريد أو الجوال"
+              value={
+                request.client.clientEmail ||
+                request.client.clientPhone ||
+                "—"
+              }
+              icon={<Mail className="h-3.5 w-3.5" />}
+            />
+            <RequestCardMetric
+              label="وقت الإرسال"
+              value={request.requestDateLabel || "—"}
+              icon={<CalendarDays className="h-3.5 w-3.5" />}
+            />
+            <RequestCardMetric
+              label="الحالة"
+              value={reviewMeta.label}
+              icon={<Eye className="h-3.5 w-3.5" />}
+              strong
+            />
+            <RequestCardMetric
+              label="رقم الطلب"
+              value={request.requestIdLabel}
+              mono
+            />
+          </div>
+
+          <div className="mt-3 rounded-[18px] border border-amber-200/70 bg-amber-50/45 px-3 py-3 text-sm leading-7 text-slate-700">
+            {reviewMeta.helperText}
+          </div>
+
+          <div className="mt-auto pt-4">
+            <Button
+              className={cn(
+                "h-10 w-full gap-2 rounded-2xl",
+                request.requestKind.ctaClass
+              )}
+              onClick={() => void openMessageDetails(request)}
+            >
+              <Eye className="h-4 w-4" />
+              {request.requestKind.ctaLabel}
+            </Button>
+          </div>
+        </article>
+      );
+    }
+
+    const hasLinkedInvestment = !!request.investmentId;
+    const isInvestmentRequest = request.requestKind?.key === "investment";
+    const progressBadgeLabel = isInvestmentRequest
+      ? hasLinkedInvestment
+        ? "تم إنشاء الاستثمار"
+        : "بانتظار الإنشاء"
+      : "متابعة تمهيدية";
+    const progressBadgeTone = isInvestmentRequest
+      ? hasLinkedInvestment
+        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+        : "border-slate-200 bg-slate-100 text-slate-600"
+      : "border-amber-200 bg-amber-50 text-amber-800";
+    const narrative = request.summary || request.requestKind.helperText;
+    const lastActor = resolveLastActorMeta(
+      request,
+      userIdentityIndex,
+      request.client
+    );
+
+    return (
+      <article
+        key={request.id}
+        className={cn(
+          "group relative flex h-full flex-col overflow-hidden rounded-[22px] border p-4 shadow-[0_18px_48px_-38px_rgba(15,23,42,0.38)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_24px_60px_-32px_rgba(15,23,42,0.36)]",
+          getRequestCardStatusClass(request.status)
+        )}
+      >
+        <div
+          className={cn(
+            "absolute inset-x-0 top-0 h-1.5",
+            request.statusMeta.accent
+          )}
+        />
+
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 space-y-2">
+            <div className="flex flex-wrap items-center gap-2 text-[10px] font-semibold tracking-[0.18em] text-slate-400">
+              <span>طلب #{request.requestIdLabel}</span>
+              <Badge
+                className={cn(
+                  "border px-2.5 py-0.5 text-[10px] font-semibold shadow-none",
+                  request.requestKind.badgeTone
+                )}
+              >
+                {request.requestKind.label}
+              </Badge>
+              {request.client.sourceKey !== "live_user" ? (
+                <Badge
+                  className={cn(
+                    "border px-2 py-0.5 text-[10px] font-semibold shadow-none",
+                    request.client.sourceTone
+                  )}
+                >
+                  {request.client.sourceLabel}
+                </Badge>
+              ) : null}
+            </div>
+
+            <div>
+              <h3 className="break-words text-[15px] font-semibold leading-6 text-slate-950">
+                {request.client.clientName}
+              </h3>
+
+              <div className="mt-1 flex items-center gap-2 text-[13px] text-slate-500">
+                <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-700">
+                  {request.client.clientRoleLabel}
+                </span>
+                <span className="text-slate-300">•</span>
+                <span className="leading-6 text-slate-500">
+                  {request.requestTimeLabel}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <Badge
+            className={cn(
+              "border px-3 py-1 text-[11px] font-semibold shadow-none",
+              request.statusMeta.tone
+            )}
+          >
+            {request.statusMeta.label}
+          </Badge>
+        </div>
+
+        <div
+          className={cn(
+            "mt-4 rounded-[18px] border p-3",
+            request.requestKind.projectPanelClass
+          )}
+        >
+          <div className="flex items-start gap-2 text-[13px] text-slate-700">
+            <Building2 className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
+            <span className="min-w-0 break-words font-medium leading-6">
+              {request.projectTitle}
+            </span>
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <Badge
+              className={cn(
+                "border px-3 py-1 text-[11px] font-semibold shadow-none",
+                request.stageMeta.tone
+              )}
+            >
+              {request.stageMeta.label}
+            </Badge>
+            <Badge
+              className={cn(
+                "border px-3 py-1 text-[11px] font-semibold shadow-none",
+                progressBadgeTone
+              )}
+            >
+              {progressBadgeLabel}
+            </Badge>
+          </div>
+
+          <div
+            className={cn(
+              "mt-3 rounded-[16px] px-3 py-3 text-sm leading-7",
+              request.requestKind.helperClass
+            )}
+          >
+            {narrative}
+          </div>
+        </div>
+
+        <div className="mt-3 grid grid-cols-2 gap-2.5">
+          <RequestCardMetric
+            label={request.requestKind.metricLabel}
+            value={
+              isInvestmentRequest
+                ? moneySAR(request.amount)
+                : request.requestKind.metricValue
+            }
+            icon={
+              isInvestmentRequest ? (
+                <Wallet className="h-3.5 w-3.5" />
+              ) : (
+                <MessageSquare className="h-3.5 w-3.5" />
+              )
+            }
+            strong={isInvestmentRequest}
+          />
+          <RequestCardMetric
+            label="تاريخ الطلب"
+            value={request.requestDateLabel || "—"}
+            icon={<CalendarDays className="h-3.5 w-3.5" />}
+          />
+          <RequestCardMetric
+            label="آخر تحديث"
+            value={request.updatedAtLabel || "—"}
+            icon={<RefreshCw className="h-3.5 w-3.5" />}
+          />
+          <RequestCardMetric
+            label="رقم الطلب"
+            value={request.requestIdLabel}
+            mono
+          />
+        </div>
+
+        <div className="mt-3 rounded-[18px] border border-slate-200/70 bg-slate-50/60 px-3 py-3">
+          <div className="text-[11px] font-semibold tracking-[0.16em] text-slate-400">
+            آخر من عدّل
+          </div>
+
+          <div className="mt-1 text-sm font-semibold text-slate-900">
+            {lastActor.name}
+          </div>
+
+          <div className="mt-1 text-xs font-medium text-slate-500">
+            {lastActor.roleLabel}
+          </div>
+
+          <div className="mt-2 flex items-center gap-2 text-xs text-slate-500">
+            <Clock3 className="h-3.5 w-3.5" />
+            <span>{lastActor.relativeTimeLabel}</span>
+          </div>
+
+          <div className="mt-1 text-xs text-slate-500">
+            التاريخ {lastActor.dateLabel}
+          </div>
+        </div>
+
+        <div className="mt-auto pt-4">
+          <Button
+            className={cn(
+              "h-10 w-full gap-2 rounded-2xl",
+              request.requestKind.ctaClass
+            )}
+            onClick={() => void openMessageDetails(request)}
+          >
+            <Eye className="h-4 w-4" />
+            {request.requestKind.ctaLabel}
+          </Button>
+        </div>
+      </article>
+    );
+  };
+
   const selectedClient = useMemo(
     () =>
       selectedMessage
@@ -1739,10 +2447,50 @@ export default function MessagesManagement() {
     [selectedMessage, userIdentityIndex]
   );
 
+  const selectedRequestKind = useMemo(() => {
+    if (!selectedMessage) return null;
+
+    const selectedProjectStatus = pick(
+      selectedMessage?.projectStatus,
+      selectedMessage?.projectSnapshot?.status,
+      selectedMessage?.project?.status,
+      projectsMap[String(
+        pick(
+          selectedMessage?.projectId,
+          selectedMessage?.project_id,
+          selectedMessage?.project?.id
+        ) || ""
+      )]?.status
+    );
+    const selectedAmount =
+      toNum(selectedMessage?.approvedAmount) ||
+      toNum(selectedMessage?.amount) ||
+      toNum(selectedMessage?.requestedAmount) ||
+      toNum(selectedMessage?.estimatedAmount) ||
+      0;
+
+    return getRequestKindMeta({
+      type: pick(selectedMessage?.type, selectedMessage?.requestType),
+      source: selectedMessage?.source,
+      projectStatus: selectedProjectStatus,
+      amount: selectedAmount,
+    });
+  }, [projectsMap, selectedMessage]);
+
+  const selectedInterestReviewMeta = useMemo(
+    () =>
+      selectedRequestKind?.key === "interest" && selectedMessage
+        ? getInterestReviewMeta(selectedMessage)
+        : null,
+    [selectedMessage, selectedRequestKind]
+  );
+
   /* =========================
     flags
   ========================= */
-  const isInvestment = !!selectedMessage;
+  const isSelectedInvestmentRequest = selectedRequestKind?.key === "investment";
+  const isSelectedInterestRequest = selectedRequestKind?.key === "interest";
+  const isInvestment = !!selectedMessage && isSelectedInvestmentRequest;
   const selectedRequestStatus = normalizeRequestStatus(selectedMessage?.status);
   const selectedInvestmentStatus = String(
     pick(investmentDoc?.status, selectedMessage?.investmentStatus)
@@ -3512,6 +4260,7 @@ export default function MessagesManagement() {
 
   const canStartRequestReview =
     !!selectedMessage &&
+    isSelectedInvestmentRequest &&
     canManageMessages &&
     myRole !== "client" &&
     !isLockedFinal &&
@@ -3519,6 +4268,7 @@ export default function MessagesManagement() {
     selectedRequestStatus === "pending";
   const canInitialApproveRequest =
     !!selectedMessage &&
+    isSelectedInvestmentRequest &&
     canManageMessages &&
     myRole !== "client" &&
     !isLockedFinal &&
@@ -3526,6 +4276,7 @@ export default function MessagesManagement() {
     selectedRequestStatus === "reviewing";
   const canCreateInvestmentFromRequest =
     !!selectedMessage &&
+    isSelectedInvestmentRequest &&
     canManageInvestments &&
     myRole !== "client" &&
     !isLockedFinal &&
@@ -3533,6 +4284,7 @@ export default function MessagesManagement() {
     selectedRequestStatus === "approved";
   const canVerifySignedContract =
     !!selectedMessage &&
+    isSelectedInvestmentRequest &&
     canAdmin &&
     canManageInvestments &&
     !isLockedFinal &&
@@ -3543,6 +4295,7 @@ export default function MessagesManagement() {
     !needsNewSignedContract;
   const canFinalize = CONTRACTS_DISABLED
     ? canManageInvestments &&
+      isSelectedInvestmentRequest &&
       !!selectedMessage?.investmentId &&
       selectedInvestmentStatus === "signed"
     : isInvestment &&
@@ -3660,7 +4413,7 @@ export default function MessagesManagement() {
                   {formatNumberEN(filtered.length)}
                 </div>
                 <p className="mt-1 text-xs leading-6 text-slate-500">
-                  من أصل {formatNumberEN(stats.all)} طلب استثماري في السجل.
+                  من أصل {formatNumberEN(stats.all)} سجل طلب في السجل.
                 </p>
               </div>
             </div>
@@ -3737,11 +4490,6 @@ export default function MessagesManagement() {
                   <h2 className="text-xl font-semibold tracking-tight text-slate-950 sm:text-2xl">
                     عرض مؤسسي سريع القراءة
                   </h2>
-                  <p className="mt-2 text-sm leading-7 text-slate-500">
-                    البطاقات أدناه تعتمد أولًا على مستند المستخدم الحالي في
-                    Firestore، وتُظهر تنبيهًا واضحًا فقط عندما يتعذر ربط الطلب
-                    بملف عميل حي.
-                  </p>
                 </div>
 
                 <div className="relative w-full xl:max-w-xl">
@@ -3772,12 +4520,63 @@ export default function MessagesManagement() {
                       )}
                       onClick={() => setView(option.key as typeof view)}
                     >
-                      {option.label}
+                      {getRequestViewLabel(String(option.key))}
                       <span
                         className={cn(
                           "mr-2 rounded-full px-2 py-0.5 text-[11px] font-semibold",
                           view === option.key
                             ? "bg-white/15 text-white"
+                            : "bg-black/5 text-slate-700"
+                        )}
+                      >
+                        {formatNumberEN(option.count)}
+                      </span>
+                    </Button>
+                  ))}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-semibold tracking-[0.14em] text-slate-400">
+                    نوع الطلب
+                  </span>
+                  {[
+                    { key: "all", label: "الكل", count: stats.all },
+                    {
+                      key: "investment",
+                      label: "طلبات استثمار",
+                      count: requestKindCounters.investment,
+                    },
+                    {
+                      key: "interest",
+                      label: "طلبات اهتمام",
+                      count: requestKindCounters.interest,
+                    },
+                  ].map(option => (
+                    <Button
+                      key={option.key}
+                      variant="outline"
+                      className={cn(
+                        "h-9 rounded-2xl border px-4 text-xs shadow-none",
+                        requestKindView === option.key
+                          ? option.key === "interest"
+                            ? "border-amber-200 bg-amber-50 text-amber-900 hover:bg-amber-100"
+                            : "border-slate-950 bg-slate-950 text-white hover:bg-slate-900"
+                          : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                      )}
+                      onClick={() =>
+                        setRequestKindView(
+                          option.key as typeof requestKindView
+                        )
+                      }
+                    >
+                      {option.label}
+                      <span
+                        className={cn(
+                          "mr-2 rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                          requestKindView === option.key
+                            ? option.key === "interest"
+                              ? "bg-amber-900/10 text-amber-900"
+                              : "bg-white/15 text-white"
                             : "bg-black/5 text-slate-700"
                         )}
                       >
@@ -3797,7 +4596,7 @@ export default function MessagesManagement() {
                     {formatNumberEN(filtered.length)}
                   </div>
                   <p className="mt-1 text-xs leading-6 text-slate-500">
-                    من أصل {formatNumberEN(stats.all)} طلب استثماري.
+                    من أصل {formatNumberEN(stats.all)} سجل طلب.
                   </p>
                 </div>
 
@@ -3883,8 +4682,9 @@ export default function MessagesManagement() {
                   </h3>
                 </div>
                 <p className="mt-2 text-sm leading-7 text-slate-500">
-                  بطاقات مختصرة تعرض العميل، البريد، المشروع، الحالة، المبلغ،
-                  تاريخ الطلب، آخر تحديث، والإجراء الأساسي دون ازدحام بصري.
+                  بطاقات مختصرة تعرض العميل، البريد، المشروع، الحالة، نوع
+                  الطلب، تاريخ الطلب، آخر تحديث، والإجراء الأساسي دون ازدحام
+                  بصري.
                 </p>
               </div>
 
@@ -3899,137 +4699,32 @@ export default function MessagesManagement() {
                 جاري تحميل الطلبات...
               </div>
             ) : filtered.length ? (
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                {filtered.map(request => {
-                  const hasLinkedInvestment = !!request.investmentId;
+              <div className="space-y-6">
+                <RequestCollectionSection
+                  title="الطلبات الجديدة"
+                  description="طلبات تحتاج متابعة مباشرة الآن. طلبات الاستثمار تبقى هنا حتى تُرفض أو تكتمل، وطلبات الاهتمام تبقى هنا حتى يتم الاطلاع عليها."
+                  count={newRequests.length}
+                  tone="new"
+                >
+                  {newRequests.length ? (
+                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                      {newRequests.map(request => renderRequestCard(request))}
+                    </div>
+                  ) : null}
+                </RequestCollectionSection>
 
-                  return (
-                    <article
-                      key={request.id}
-                      className="group relative flex h-full flex-col overflow-hidden rounded-[22px] border border-slate-200/90 bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] p-4 shadow-[0_18px_48px_-38px_rgba(15,23,42,0.38)] transition duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-[0_24px_60px_-32px_rgba(15,23,42,0.36)]"
-                    >
-                      <div
-                        className={cn(
-                          "absolute inset-x-0 top-0 h-1",
-                          request.statusMeta.accent
-                        )}
-                      />
-
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0 space-y-2">
-                          <div className="flex flex-wrap items-center gap-2 text-[10px] font-semibold tracking-[0.18em] text-slate-400">
-                            <span>طلب #{request.requestIdLabel}</span>
-                            {request.client.sourceKey !== "live_user" ? (
-                              <Badge
-                                className={cn(
-                                  "border px-2 py-0.5 text-[10px] font-semibold shadow-none",
-                                  request.client.sourceTone
-                                )}
-                              >
-                                {request.client.sourceLabel}
-                              </Badge>
-                            ) : null}
-                          </div>
-
-                          <div>
-                            <h3 className="break-words text-[15px] font-semibold leading-6 text-slate-950">
-                              {request.client.clientName}
-                            </h3>
-
-                            <div className="mt-1 flex items-start gap-2 text-[13px] text-slate-500">
-                              <Mail className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
-                              <span className="min-w-0 break-all leading-6">
-                                {request.client.clientEmail || "—"}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-
-                        <Badge
-                          className={cn(
-                            "border px-3 py-1 text-[11px] font-semibold shadow-none",
-                            request.statusMeta.tone
-                          )}
-                        >
-                          {request.statusMeta.label}
-                        </Badge>
-                      </div>
-
-                      <div className="mt-4 rounded-[18px] border border-slate-200/80 bg-white/90 p-3">
-                        <div className="flex items-start gap-2 text-[13px] text-slate-700">
-                          <Building2 className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
-                          <span className="min-w-0 break-words font-medium leading-6">
-                            {request.projectTitle}
-                          </span>
-                        </div>
-
-                        <div className="mt-3 flex flex-wrap items-center gap-2">
-                          <Badge
-                            className={cn(
-                              "border px-3 py-1 text-[11px] font-semibold shadow-none",
-                              request.stageMeta.tone
-                            )}
-                          >
-                            {request.stageMeta.label}
-                          </Badge>
-                          <Badge
-                            className={cn(
-                              "border px-3 py-1 text-[11px] font-semibold shadow-none",
-                              hasLinkedInvestment
-                                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                                : "border-slate-200 bg-slate-100 text-slate-600"
-                            )}
-                          >
-                            {hasLinkedInvestment
-                              ? "مرتبط باستثمار"
-                              : "بانتظار الإنشاء"}
-                          </Badge>
-                        </div>
-                      </div>
-
-                      <div className="mt-3 grid grid-cols-2 gap-2">
-                        <RequestCardMetric
-                          label="المبلغ"
-                          value={moneySAR(request.amount)}
-                          icon={<Wallet className="h-3.5 w-3.5" />}
-                          strong
-                        />
-                        <RequestCardMetric
-                          label="تاريخ الطلب"
-                          value={request.requestDateLabel || "—"}
-                          icon={<CalendarDays className="h-3.5 w-3.5" />}
-                        />
-                        <RequestCardMetric
-                          label="آخر تحديث"
-                          value={request.updatedAtLabel || "—"}
-                          icon={<RefreshCw className="h-3.5 w-3.5" />}
-                        />
-                        <RequestCardMetric
-                          label="آخر متابعة"
-                          value={request.touchedBy || "—"}
-                          mono
-                        />
-                      </div>
-
-                      {request.client.clientPhone ? (
-                        <div className="mt-3 flex items-center gap-2 text-xs text-slate-500">
-                          <Phone className="h-3.5 w-3.5 text-slate-400" />
-                          <span>{request.client.clientPhone}</span>
-                        </div>
-                      ) : null}
-
-                      <div className="mt-auto pt-4">
-                        <Button
-                          className="h-9 w-full gap-2 rounded-xl bg-slate-950 text-white hover:bg-slate-900"
-                          onClick={() => void openMessageDetails(request)}
-                        >
-                          <Eye className="h-4 w-4" />
-                          مراجعة الطلب
-                        </Button>
-                      </div>
-                    </article>
-                  );
-                })}
+                <RequestCollectionSection
+                  title="الطلبات القديمة / المنتهية"
+                  description="يشمل الطلبات التي خرجت من دائرة المتابعة الفورية: الاستثمارات المرفوضة أو المكتملة، وطلبات الاهتمام التي تم الاطلاع عليها."
+                  count={archivedRequests.length}
+                  tone="archived"
+                >
+                  {archivedRequests.length ? (
+                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                      {archivedRequests.map(request => renderRequestCard(request))}
+                    </div>
+                  ) : null}
+                </RequestCollectionSection>
               </div>
             ) : (
               <div className="rounded-[24px] border border-dashed border-slate-300 bg-slate-50/80 px-6 py-14 text-center">
@@ -4080,7 +4775,7 @@ export default function MessagesManagement() {
           </>
         ) : null}
 
-        <Card className="rsg-card border-slate-200/80 bg-white/95 shadow-[0_22px_70px_-46px_rgba(15,23,42,0.42)]">
+        <Card className="hidden rsg-card border-slate-200/80 bg-white/95 shadow-[0_22px_70px_-46px_rgba(15,23,42,0.42)]">
           <CardHeader className="gap-4 border-b border-slate-200/70 pb-5">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <CardTitle className="flex items-center gap-2 text-xl font-semibold text-slate-950">
@@ -4095,7 +4790,8 @@ export default function MessagesManagement() {
 
             <p className="text-sm leading-7 text-slate-500">
               الاسم والبريد في هذه البطاقات يتم تحديثهما من ملف المستخدم الحالي،
-              مع استخدام بيانات الطلب كبديل فقط عند غياب الربط.
+              مع استخدام بيانات الطلب كبديل فقط عند غياب الربط، ومع تمييز بصري
+              واضح بين الاستثمار الفعلي والاهتمام التمهيدي.
             </p>
           </CardHeader>
 
@@ -4107,132 +4803,7 @@ export default function MessagesManagement() {
               </div>
             ) : filtered.length ? (
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                {filtered.map(request => {
-                  const hasLinkedInvestment = !!request.investmentId;
-
-                  return (
-                    <article
-                      key={request.id}
-                      className="group relative flex h-full flex-col overflow-hidden rounded-[24px] border border-slate-200 bg-white p-4 shadow-[0_18px_50px_-36px_rgba(15,23,42,0.45)] transition duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-[0_24px_60px_-30px_rgba(15,23,42,0.38)]"
-                    >
-                      <div
-                        className={cn(
-                          "absolute inset-x-0 top-0 h-1",
-                          request.statusMeta.accent
-                        )}
-                      />
-
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="text-[10px] font-semibold tracking-[0.22em] text-slate-400">
-                            طلب استثمار
-                          </div>
-                          <h3 className="mt-2 break-words text-[16px] font-semibold leading-6 text-slate-950">
-                            {request.client.clientName}
-                          </h3>
-
-                          <div className="mt-2 flex items-start gap-2 text-sm text-slate-500">
-                            <Mail className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
-                            <span className="min-w-0 break-all">
-                              {request.client.clientEmail || "—"}
-                            </span>
-                          </div>
-                        </div>
-
-                        <Badge
-                          className={cn(
-                            "border px-3 py-1 text-[11px] font-semibold shadow-none",
-                            request.statusMeta.tone
-                          )}
-                        >
-                          {request.statusMeta.label}
-                        </Badge>
-                      </div>
-
-                      <div className="mt-4 rounded-[20px] border border-slate-200/80 bg-slate-50/80 p-3">
-                        <div className="flex items-start gap-2 text-sm text-slate-700">
-                          <Building2 className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
-                          <span className="min-w-0 break-words font-medium">
-                            {request.projectTitle}
-                          </span>
-                        </div>
-
-                        <div className="mt-3 flex flex-wrap items-center gap-2">
-                          <Badge
-                            className={cn(
-                              "border px-3 py-1 text-[11px] font-semibold shadow-none",
-                              request.stageMeta.tone
-                            )}
-                          >
-                            {request.stageMeta.label}
-                          </Badge>
-                          <Badge
-                            className={cn(
-                              "border px-3 py-1 text-[11px] font-semibold shadow-none",
-                              hasLinkedInvestment
-                                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                                : "border-slate-200 bg-white text-slate-600"
-                            )}
-                          >
-                            {hasLinkedInvestment
-                              ? "تم إنشاء الاستثمار"
-                              : "بانتظار الإنشاء"}
-                          </Badge>
-                        </div>
-                      </div>
-
-                      <div className="mt-4 grid grid-cols-2 gap-2.5">
-                        <RequestCardMetric
-                          label="المبلغ"
-                          value={moneySAR(request.amount)}
-                          icon={<Wallet className="h-3.5 w-3.5" />}
-                          strong
-                        />
-                        <RequestCardMetric
-                          label="تاريخ الطلب"
-                          value={request.requestDateLabel || "—"}
-                          icon={<CalendarDays className="h-3.5 w-3.5" />}
-                        />
-                        <RequestCardMetric
-                          label="آخر تحديث"
-                          value={request.updatedAtLabel || "—"}
-                          icon={<RefreshCw className="h-3.5 w-3.5" />}
-                        />
-                        <RequestCardMetric
-                          label="رقم الطلب"
-                          value={request.requestIdLabel}
-                          mono
-                        />
-                      </div>
-
-                      <div className="mt-3 rounded-[18px] border border-slate-200/70 bg-slate-50/60 px-3 py-3">
-                        <div className="text-[11px] font-semibold tracking-[0.16em] text-slate-400">
-                          آخر متابعة
-                        </div>
-                        <div className="mt-1 break-all text-sm font-medium text-slate-700">
-                          {request.touchedBy}
-                        </div>
-
-                        {request.client.clientPhone ? (
-                          <div className="mt-2 flex items-center gap-2 text-xs text-slate-500">
-                            <Phone className="h-3.5 w-3.5" />
-                            <span>{request.client.clientPhone}</span>
-                          </div>
-                        ) : null}
-                      </div>
-
-                      <div className="mt-auto pt-4">
-                        <Button
-                          className="h-10 w-full rounded-2xl gap-2"
-                          onClick={() => void openMessageDetails(request)}
-                        >
-                          <Eye className="h-4 w-4" />
-                          مراجعة الطلب
-                        </Button>
-                      </div>
-                    </article>
-                  );
-                })}
+                {filtered.map(request => renderRequestCard(request))}
               </div>
             ) : (
               <div className="rounded-[24px] border border-dashed border-slate-300 bg-slate-50/80 px-6 py-14 text-center">
@@ -4773,6 +5344,52 @@ export default function MessagesManagement() {
                             ? "تم إنشاء الاستثمار"
                             : "بانتظار إنشاء الاستثمار";
 
+                          if (isSelectedInterestRequest) {
+                            return (
+                              <>
+                                <InfoRow
+                                  label="رقم الطلب"
+                                  value={requestNumber(selectedMessage)}
+                                />
+                                <InfoRow
+                                  label="اسم المشروع"
+                                  value={projectTitle}
+                                />
+                                <InfoRow
+                                  label="نوع الطلب"
+                                  value="طلب اهتمام"
+                                />
+                                <InfoRow
+                                  label="حالة الاهتمام"
+                                  value={
+                                    selectedInterestReviewMeta?.label || "جديد"
+                                  }
+                                />
+                                <InfoRow
+                                  label="رسالة الاهتمام"
+                                  value={
+                                    selectedMessage?.message ||
+                                    selectedMessage?.body ||
+                                    selectedMessage?.description ||
+                                    selectedMessage?.details ||
+                                    selectedMessage?.note ||
+                                    selectedMessage?.requestText ||
+                                    "لا توجد رسالة مرفقة"
+                                  }
+                                />
+                                <InfoRow
+                                  label="التاريخ"
+                                  value={formatDateTimeAR(
+                                    selectedMessage.createdAt ||
+                                      selectedMessage.created_at ||
+                                      selectedMessage.submittedAt ||
+                                      selectedMessage.timestamp
+                                  )}
+                                />
+                              </>
+                            );
+                          }
+
                           return (
                             <>
                               <InfoRow
@@ -4829,15 +5446,26 @@ export default function MessagesManagement() {
                           )}
                         >
                           <Badge
-                            className={getDetailRequestStatusClass(
-                              selectedMessage.status
-                            )}
+                            className={
+                              isSelectedInterestRequest
+                                ? cn(
+                                    DETAIL_PILL_BASE_CLASS,
+                                    selectedInterestReviewMeta?.tone
+                                  )
+                                : getDetailRequestStatusClass(
+                                    selectedMessage.status
+                                  )
+                            }
                           >
-                            {getStatusBadge(selectedMessage.status).label}
+                            {isSelectedInterestRequest
+                              ? selectedInterestReviewMeta?.label || "جديد"
+                              : getStatusBadge(selectedMessage.status).label}
                           </Badge>
-                          <Badge className={DETAIL_STAGE_PILL_CLASS}>
-                            {stageLabel(selectedMessage.stageRole)}
-                          </Badge>
+                          {isSelectedInterestRequest ? null : (
+                            <Badge className={DETAIL_STAGE_PILL_CLASS}>
+                              {stageLabel(selectedMessage.stageRole)}
+                            </Badge>
+                          )}
                         </div>
 
                         <div className="grid grid-cols-1 gap-4">
@@ -4854,6 +5482,13 @@ export default function MessagesManagement() {
                             />
                           </div>
                         </div>
+
+                        {isSelectedInterestRequest ? (
+                          <div className={DETAIL_ALERT_CLASS}>
+                            {selectedInterestReviewMeta?.helperText ||
+                              "يتم نقل الاهتمام إلى السجل القديم مباشرة بعد الاطلاع عليه، بدون دورة إجراءات استثمارية."}
+                          </div>
+                        ) : null}
 
                         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                           <Button
@@ -5041,7 +5676,11 @@ export default function MessagesManagement() {
 
                           {/* ✅ Reject */}
                           <Button
-                            className={cn(DETAIL_DANGER_BUTTON_CLASS, "w-full")}
+                            className={cn(
+                              DETAIL_DANGER_BUTTON_CLASS,
+                              "w-full",
+                              !isSelectedInvestmentRequest && "hidden"
+                            )}
                             onClick={rejectInvestmentRequest}
                             disabled={isLockedFinal || !canManageMessages}
                           >
@@ -5054,7 +5693,8 @@ export default function MessagesManagement() {
                             variant="outline"
                             className={cn(
                               DETAIL_OUTLINE_BUTTON_CLASS,
-                              "w-full"
+                              "w-full",
+                              !isSelectedInvestmentRequest && "hidden"
                             )}
                             onClick={reopenMessage}
                             disabled={
@@ -5396,6 +6036,77 @@ function RequestSummaryTile({
 
       <p className="mt-3 text-xs leading-6 text-slate-500">{helper}</p>
     </div>
+  );
+}
+
+function RequestCollectionSection({
+  title,
+  description,
+  count,
+  tone,
+  children,
+}: {
+  title: string;
+  description: string;
+  count: number;
+  tone: "new" | "archived";
+  children?: ReactNode;
+}) {
+  const toneMap = {
+    new: {
+      shell:
+        "border-sky-200/80 bg-[linear-gradient(180deg,rgba(239,246,255,0.88)_0%,rgba(255,255,255,0.98)_22%,#ffffff_100%)]",
+      badge: "border-sky-200 bg-sky-50 text-sky-800",
+      empty: "border-sky-200/70 bg-sky-50/60 text-sky-900",
+    },
+    archived: {
+      shell:
+        "border-slate-200/80 bg-[linear-gradient(180deg,rgba(248,250,252,0.92)_0%,rgba(255,255,255,0.98)_24%,#ffffff_100%)]",
+      badge: "border-slate-200 bg-slate-100 text-slate-700",
+      empty: "border-slate-200/80 bg-slate-50/70 text-slate-800",
+    },
+  } as const;
+
+  return (
+    <section
+      className={cn(
+        "rounded-[26px] border px-4 py-5 sm:px-5",
+        toneMap[tone].shell
+      )}
+    >
+      <div className="mb-4 flex flex-col gap-3 border-b border-slate-200/70 pb-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <h4 className="text-lg font-semibold tracking-tight text-slate-950">
+            {title}
+          </h4>
+          <p className="mt-1 text-sm leading-7 text-slate-500">
+            {description}
+          </p>
+        </div>
+
+        <div
+          className={cn(
+            "inline-flex w-fit items-center rounded-full border px-3 py-1 text-sm font-semibold",
+            toneMap[tone].badge
+          )}
+        >
+          {formatNumberEN(count)} سجل
+        </div>
+      </div>
+
+      {count ? (
+        children
+      ) : (
+        <div
+          className={cn(
+            "rounded-[20px] border border-dashed px-4 py-8 text-center text-sm leading-7",
+            toneMap[tone].empty
+          )}
+        >
+          لا توجد عناصر في هذا القسم ضمن نتائج البحث الحالية.
+        </div>
+      )}
+    </section>
   );
 }
 
