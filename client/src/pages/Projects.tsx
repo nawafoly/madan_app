@@ -23,6 +23,8 @@ import {
   ArrowUpRight,
   Building2,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Clock3,
   Hourglass,
   Landmark,
@@ -130,6 +132,225 @@ type ProjectDoc = {
 
   createdAt?: Timestamp | any;
 };
+
+function MobileProjectCarousel({
+  items,
+  renderCard,
+  sectionLabel,
+  hint,
+  tone = "light",
+}: {
+  items: ProjectDoc[];
+  renderCard: (project: ProjectDoc, index: number) => ReactNode;
+  sectionLabel: string;
+  hint: string;
+  tone?: "light" | "dark";
+}) {
+  const slider = useDragScroll<HTMLDivElement>();
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  const canNavigate = items.length > 1;
+  const toneMap =
+    tone === "dark"
+      ? {
+          shell:
+            "border-white/12 bg-[linear-gradient(180deg,rgba(255,255,255,0.08)_0%,rgba(255,255,255,0.03)_100%)] text-white shadow-[0_22px_50px_-36px_rgba(0,0,0,0.45)]",
+          kicker: "text-white/55",
+          title: "text-white",
+          helper: "text-white/72",
+          dotIdle: "bg-white/25",
+          dotActive: "bg-white",
+          arrow:
+            "border-white/15 bg-white/8 text-white hover:bg-white hover:text-slate-950 disabled:opacity-35",
+          fadeFrom: "from-[#102137]",
+          fadeTo: "to-transparent",
+        }
+      : {
+          shell:
+            "border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98)_0%,rgba(248,250,252,0.96)_100%)] text-slate-950 shadow-[0_22px_50px_-38px_rgba(15,23,42,0.18)]",
+          kicker: "text-slate-400",
+          title: "text-slate-950",
+          helper: "text-slate-500",
+          dotIdle: "bg-slate-300",
+          dotActive: "bg-slate-900",
+          arrow:
+            "border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-35",
+          fadeFrom: "from-[#f8fafc]",
+          fadeTo: "to-transparent",
+        };
+
+  useEffect(() => {
+    const el = slider.ref.current;
+    if (!el || items.length <= 1) {
+      setActiveIndex(0);
+      return;
+    }
+
+    const getStep = () => {
+      const item = el.querySelector<HTMLElement>("[data-mobile-project-card]");
+      if (!item) return el.clientWidth || 1;
+      const styles = window.getComputedStyle(el);
+      const gap = parseFloat(styles.columnGap || styles.gap || "0");
+      return item.offsetWidth + gap || 1;
+    };
+
+    let raf = 0;
+    const updateIndex = () => {
+      const step = getStep();
+      const nextIndex = Math.max(
+        0,
+        Math.min(items.length - 1, Math.round(el.scrollLeft / step))
+      );
+      setActiveIndex(nextIndex);
+    };
+
+    const handleScroll = () => {
+      cancelAnimationFrame(raf);
+      raf = window.requestAnimationFrame(updateIndex);
+    };
+
+    updateIndex();
+    el.addEventListener("scroll", handleScroll, { passive: true });
+    window.addEventListener("resize", handleScroll);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      el.removeEventListener("scroll", handleScroll);
+      window.removeEventListener("resize", handleScroll);
+    };
+  }, [items.length, slider.ref]);
+
+  const scrollToIndex = (targetIndex: number) => {
+    const el = slider.ref.current;
+    if (!el) return;
+
+    const item = el.querySelector<HTMLElement>("[data-mobile-project-card]");
+    const styles = window.getComputedStyle(el);
+    const gap = parseFloat(styles.columnGap || styles.gap || "0");
+    const step = (item?.offsetWidth || el.clientWidth || 1) + gap;
+    const nextIndex = Math.max(0, Math.min(items.length - 1, targetIndex));
+
+    el.scrollTo({
+      left: step * nextIndex,
+      behavior: "smooth",
+    });
+    setActiveIndex(nextIndex);
+  };
+
+  return (
+    <div className="md:hidden">
+      <div
+        className={cn(
+          "mb-4 rounded-[24px] border px-4 py-4 backdrop-blur",
+          toneMap.shell
+        )}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div
+              className={cn(
+                "text-[11px] font-semibold tracking-[0.16em]",
+                toneMap.kicker
+              )}
+            >
+              {sectionLabel}
+            </div>
+            <div className={cn("mt-1 text-sm font-semibold", toneMap.title)}>
+              الفرصة {formatNumberEN(activeIndex + 1)} من{" "}
+              {formatNumberEN(items.length)}
+            </div>
+            <p className={cn("mt-1 text-xs leading-6", toneMap.helper)}>
+              {hint}
+            </p>
+          </div>
+
+          {canNavigate ? (
+            <div className="flex shrink-0 items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className={cn("h-9 w-9 rounded-full", toneMap.arrow)}
+                onClick={() => scrollToIndex(activeIndex - 1)}
+                disabled={activeIndex === 0}
+                aria-label="المشروع السابق"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className={cn("h-9 w-9 rounded-full", toneMap.arrow)}
+                onClick={() => scrollToIndex(activeIndex + 1)}
+                disabled={activeIndex >= items.length - 1}
+                aria-label="المشروع التالي"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+            </div>
+          ) : null}
+        </div>
+
+        {canNavigate ? (
+          <div className="mt-3 flex items-center gap-1.5">
+            {items.map((item, index) => (
+              <button
+                key={item.id}
+                type="button"
+                className={cn(
+                  "h-2 rounded-full transition-all duration-200",
+                  index === activeIndex
+                    ? cn("w-6", toneMap.dotActive)
+                    : cn("w-2", toneMap.dotIdle)
+                )}
+                onClick={() => scrollToIndex(index)}
+                aria-label={`الانتقال إلى المشروع ${index + 1}`}
+                aria-current={index === activeIndex ? "true" : undefined}
+              />
+            ))}
+          </div>
+        ) : null}
+      </div>
+
+      <div className="relative">
+        <div
+          className={cn(
+            "pointer-events-none absolute inset-y-0 left-0 z-10 w-8 bg-gradient-to-r",
+            toneMap.fadeFrom,
+            toneMap.fadeTo
+          )}
+        />
+        <div
+          className={cn(
+            "pointer-events-none absolute inset-y-0 right-0 z-10 w-10 bg-gradient-to-l",
+            toneMap.fadeFrom,
+            toneMap.fadeTo
+          )}
+        />
+
+        <div
+          ref={slider.ref}
+          {...slider.bind}
+          dir="ltr"
+          className="flex gap-3 overflow-x-auto overflow-y-hidden px-1 pr-10 pb-4 snap-x snap-mandatory scroll-smooth overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden select-none cursor-grab active:cursor-grabbing"
+          style={{ WebkitOverflowScrolling: "touch" }}
+        >
+          {items.map((project, index) => (
+            <div
+              key={project.id}
+              dir="rtl"
+              data-mobile-project-card
+              className="w-[calc(100vw-72px)] max-w-[320px] shrink-0 snap-start"
+            >
+              {renderCard(project, index)}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function safeNumber(n: any) {
   const x = Number(n);
@@ -711,7 +932,7 @@ export default function ProjectsPage() {
             subline: "فرصة استثمارية نشطة",
             heroCaption:
               "العائد الظاهر هنا هو أول عنصر يجب أن يلتقط عين المستثمر عند تقييم الفرصة.",
-            ctaLabel: "ابدأ بالأستثمار",
+            ctaLabel: "ابدأ بالاستثمار",
             ctaClass:
               "bg-slate-900 text-white shadow-[0_18px_40px_-24px_rgba(15,23,42,0.55)] hover:bg-slate-800",
             noteLabel: "جاهز للاستثمار",
@@ -756,11 +977,11 @@ export default function ProjectsPage() {
       <Card
         key={p.id}
         className={cn(
-          "group gap-0 overflow-hidden rounded-[30px] border border-slate-200/80 bg-white/96 py-0 shadow-[0_28px_80px_-40px_rgba(15,23,42,0.42)] transition-all duration-300 hover:-translate-y-1.5 hover:scale-[1.01] hover:shadow-[0_38px_90px_-42px_rgba(15,23,42,0.5)]",
+          "group gap-0 overflow-hidden rounded-[24px] border border-slate-200/80 bg-white/96 py-0 shadow-[0_24px_64px_-42px_rgba(15,23,42,0.28)] transition-all duration-300 hover:-translate-y-1 hover:scale-[1.01] hover:shadow-[0_34px_84px_-40px_rgba(15,23,42,0.42)] md:rounded-[30px]",
           mode === "done" && "border-slate-300/90"
         )}
       >
-        <div className="relative h-60 w-full bg-muted">
+        <div className="relative h-40 w-full bg-muted sm:h-48 md:h-60">
           <img
             src={cover}
             alt={title}
@@ -780,40 +1001,189 @@ export default function ProjectsPage() {
           <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(4,12,24,0.08),rgba(4,12,24,0.16)_34%,rgba(4,12,24,0.34)_100%)]" />
           <div className="absolute inset-x-0 top-0 h-24 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.18),transparent_60%)]" />
 
-          <div className="absolute left-4 right-4 top-4 flex flex-wrap items-start justify-between gap-3">
+          <div className="absolute left-3 right-3 top-3 flex flex-wrap items-start justify-between gap-2.5 md:left-4 md:right-4 md:top-4 md:gap-3">
             <div className="flex flex-wrap gap-2">
               <Badge
                 className={cn(
-                  "rounded-full border px-3 py-1",
+                  "rounded-full border px-2.5 py-0.5 text-[10px] md:px-3 md:py-1 md:text-xs",
                   modeMeta.badgeClass
                 )}
               >
                 {modeMeta.badgeLabel}
               </Badge>
-              <Badge className="rounded-full border border-white/15 bg-black/25 px-3 py-1 text-white backdrop-blur-md">
+              <Badge className="rounded-full border border-white/15 bg-black/25 px-2.5 py-0.5 text-[10px] text-white backdrop-blur-md md:px-3 md:py-1 md:text-xs">
                 {typeLabel(p.projectType)}
               </Badge>
               {isVip ? (
-                <Badge className="rounded-full border border-amber-300/25 bg-amber-300/14 px-3 py-1 text-amber-100 backdrop-blur-md">
+                <Badge className="rounded-full border border-amber-300/25 bg-amber-300/14 px-2.5 py-0.5 text-[10px] text-amber-100 backdrop-blur-md md:px-3 md:py-1 md:text-xs">
                   VIP
                 </Badge>
               ) : null}
               {isFeatured ? (
-                <Badge className="rounded-full border border-sky-300/20 bg-sky-300/14 px-3 py-1 text-sky-100 backdrop-blur-md">
+                <Badge className="rounded-full border border-sky-300/20 bg-sky-300/14 px-2.5 py-0.5 text-[10px] text-sky-100 backdrop-blur-md md:px-3 md:py-1 md:text-xs">
                   مميز
                 </Badge>
               ) : null}
             </div>
 
             {p.issueNumber ? (
-              <Badge className="rounded-full border border-white/15 bg-black/25 px-3 py-1 text-white backdrop-blur-md">
+              <Badge className="rounded-full border border-white/15 bg-black/25 px-2.5 py-0.5 text-[10px] text-white backdrop-blur-md md:px-3 md:py-1 md:text-xs">
                 #{p.issueNumber}
               </Badge>
             ) : null}
           </div>
+
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-14 bg-[linear-gradient(180deg,transparent_0%,rgba(4,12,24,0.22)_48%,rgba(4,12,24,0.42)_100%)] md:hidden" />
+
+          <div className="absolute bottom-3 right-3 left-3 md:hidden">
+            <div className="text-lg font-semibold leading-tight tracking-tight text-white line-clamp-2">
+              {title}
+            </div>
+            <div className="mt-1 flex items-center gap-1.5 text-xs text-white/88">
+              <MapPin className="h-3.5 w-3.5" />
+              <span className="line-clamp-1">{location}</span>
+            </div>
+          </div>
         </div>
 
-        <div className="space-y-5 p-5 sm:p-6">
+        <div className="space-y-4 p-4 md:hidden">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-[11px] font-semibold tracking-[0.16em] text-slate-400">
+                {modeMeta.subline}
+              </div>
+              <div className="mt-1 text-sm leading-6 text-slate-600 line-clamp-1">
+                {modeMeta.trustCopy}
+              </div>
+            </div>
+
+            <div className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">
+              {formatPercentEN(progress, {
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 0,
+              })}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2">
+            <div className="rounded-[18px] border border-slate-200/80 bg-slate-50/85 px-3 py-2.5">
+              <div className="text-[10px] font-semibold tracking-[0.12em] text-slate-400">
+                العائد
+              </div>
+              <div className="mt-1 flex items-center gap-1 text-sm font-semibold text-slate-950">
+                <TrendingUp className="h-3.5 w-3.5 text-emerald-600" />
+                {formatPercentEN(annualReturn, {
+                  maximumFractionDigits: 0,
+                })}
+              </div>
+            </div>
+
+            <div className="rounded-[18px] border border-slate-200/80 bg-slate-50/85 px-3 py-2.5">
+              <div className="text-[10px] font-semibold tracking-[0.12em] text-slate-400">
+                المدة
+              </div>
+              <div className="mt-1 flex items-center gap-1 text-sm font-semibold text-slate-950">
+                <Clock3 className="h-3.5 w-3.5 text-slate-500" />
+                {duration ? formatNumberEN(duration) : "—"} شهر
+              </div>
+            </div>
+
+            <div className="rounded-[18px] border border-slate-200/80 bg-slate-50/85 px-3 py-2.5">
+              <div className="text-[10px] font-semibold tracking-[0.12em] text-slate-400">
+                النوع
+              </div>
+              <div className="mt-1 text-sm font-semibold text-slate-950 line-clamp-1">
+                {typeLabel(p.projectType)}
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-[20px] border border-slate-200/80 bg-[linear-gradient(180deg,#ffffff_0%,rgba(248,250,252,0.95)_100%)] px-4 py-3.5 shadow-[0_18px_34px_-34px_rgba(15,23,42,0.18)]">
+            <div className="flex items-center justify-between gap-3 text-xs">
+              <span className="font-semibold text-slate-500">نسبة التمويل</span>
+              <span className="font-semibold text-slate-950">
+                {formatPercentEN(progress, {
+                  minimumFractionDigits: 0,
+                  maximumFractionDigits: 1,
+                })}
+              </span>
+            </div>
+
+            <div className="relative mt-3 h-2.5 overflow-hidden rounded-full bg-slate-100">
+              <div
+                className="absolute inset-y-0 right-0 rounded-full"
+                style={{
+                  width: `${progress > 0 ? Math.max(progress, 6) : 0}%`,
+                  background:
+                    "linear-gradient(90deg, color-mix(in oklab, var(--gold) 88%, white 12%) 0%, color-mix(in oklab, var(--gold) 58%, var(--primary) 42%) 45%, var(--primary) 100%)",
+                }}
+              />
+            </div>
+
+            <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-slate-500">
+              <div>
+                المبلغ الحالي
+                <div className="mt-1 text-sm font-semibold text-slate-950">
+                  {fmtSAR(displayCurrent)}
+                </div>
+              </div>
+              <div className="text-left">
+                المبلغ المستهدف
+                <div className="mt-1 text-sm font-semibold text-slate-950">
+                  {fmtSAR(target)}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div className="rounded-[18px] border border-slate-200/80 bg-white px-3 py-2.5">
+              <div className="text-[10px] font-semibold tracking-[0.12em] text-slate-400">
+                الحد الأدنى
+              </div>
+              <div className="mt-1 text-sm font-semibold text-slate-950">
+                {fmtSAR(minInvestment)}
+              </div>
+            </div>
+
+            <div className="rounded-[18px] border border-slate-200/80 bg-white px-3 py-2.5">
+              <div className="text-[10px] font-semibold tracking-[0.12em] text-slate-400">
+                المستثمرون
+              </div>
+              <div className="mt-1 text-sm font-semibold text-slate-950">
+                {formatNumberEN(investors)}
+              </div>
+            </div>
+          </div>
+
+          <p className="text-sm leading-6 text-slate-600 line-clamp-2">
+            {leadingHighlight ||
+              description ||
+              (mode === "done"
+                ? "مشروع مكتمل يوضح شكل الإنجاز النهائي داخل المنصة."
+                : mode === "draft"
+                  ? "فرصة قادمة قيد الإعداد مع مؤشرات أولية واضحة للمستثمر."
+                  : "فرصة استثمارية معروضة ببيانات مالية واضحة تسهّل قراءة القرار.")}
+          </p>
+
+          <div className="rounded-[18px] border border-slate-200/80 bg-slate-50/90 px-3.5 py-3 text-xs leading-6 text-slate-600 line-clamp-2">
+            {modeMeta.noteCopy}
+          </div>
+
+          <Link href={`/projects/${p.id}`}>
+            <Button
+              className={cn(
+                "h-11 w-full rounded-2xl px-4 transition-all",
+                modeMeta.ctaClass
+              )}
+            >
+              <span>{modeMeta.ctaLabel}</span>
+              <ArrowLeft className="mr-2 h-4 w-4" />
+            </Button>
+          </Link>
+        </div>
+
+        <div className="hidden space-y-5 p-5 sm:p-6 md:block">
           <div className="space-y-4">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="min-w-0">
@@ -1647,32 +2017,14 @@ export default function ProjectsPage() {
                     !published.loadError &&
                     filteredPublished.length > 0 && (
                       <>
-                        <div
-                          ref={publishedSlider.ref}
-                          {...publishedSlider.bind}
-                          dir="ltr"
-                          className="
-                            md:hidden
-                            flex gap-5 overflow-x-auto overflow-y-hidden pb-4
-                            snap-x snap-mandatory
-                            scroll-smooth
-                            [-ms-overflow-style:none] [scrollbar-width:none]
-                            [&::-webkit-scrollbar]:hidden
-                            select-none
-                            cursor-grab active:cursor-grabbing
-                          "
-                          style={{ WebkitOverflowScrolling: "touch" }}
-                        >
-                          {filteredPublished.map(p => (
-                            <div
-                              key={p.id}
-                              dir="rtl"
-                              className="w-[88%] shrink-0 snap-start sm:w-[420px]"
-                            >
-                              {InvestmentCard(p, "published")}
-                            </div>
-                          ))}
-                        </div>
+                        <MobileProjectCarousel
+                          items={filteredPublished}
+                          sectionLabel="الفرص الحالية"
+                          hint="اسحب لتصفح المشاريع أو استخدم الأسهم والتنقل السريع بين الفرص."
+                          renderCard={project =>
+                            InvestmentCard(project, "published")
+                          }
+                        />
 
                         <div className="hidden gap-5 md:grid md:grid-cols-2 xl:grid-cols-3">
                           {filteredPublished.map(p =>
@@ -1769,12 +2121,20 @@ export default function ProjectsPage() {
                 </div>
               ) : (
                 <>
+                  <MobileProjectCarousel
+                    items={upcoming.items}
+                    sectionLabel="الفرص القادمة"
+                    hint="هناك أكثر من فرصة قادمة. تنقّل بالسحب أو بالأسهم لمراجعة الخطط المقبلة."
+                    tone="dark"
+                    renderCard={project => InvestmentCard(project, "draft")}
+                  />
+
                   <div
                     ref={upcomingSlider.ref}
                     {...upcomingSlider.bind}
                     dir="ltr"
                     className="
-                      flex gap-5 overflow-x-auto overflow-y-hidden pb-4
+                      hidden md:flex gap-5 overflow-x-auto overflow-y-hidden pb-4
                       snap-x snap-mandatory
                       scroll-smooth
                       [-ms-overflow-style:none] [scrollbar-width:none]

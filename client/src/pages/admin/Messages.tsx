@@ -73,6 +73,7 @@ import {
   Mail,
   Phone,
   Eye,
+  Copy,
   Upload,
   FileText,
   Loader2,
@@ -104,45 +105,45 @@ import {
 const CONTRACTS_DISABLED = false;
 
 const DETAIL_DIALOG_PANEL_CLASS =
-  "overflow-x-hidden rounded-[28px] border border-slate-800/70 bg-[radial-gradient(circle_at_top,_rgba(30,41,59,0.98)_0%,_rgba(15,23,42,0.98)_45%,_rgba(2,6,23,1)_100%)] text-slate-50 shadow-2xl shadow-slate-950/40";
+  "overflow-x-hidden rounded-[32px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(248,250,252,0.98)_0%,rgba(255,255,255,0.985)_14%,rgba(248,250,252,0.98)_100%)] text-slate-950 shadow-[0_32px_90px_-34px_rgba(15,23,42,0.42)]";
 const DETAIL_SECTION_CARD_CLASS =
-  "overflow-hidden rounded-[26px] border border-white/10 bg-[linear-gradient(180deg,rgba(15,23,42,0.88),rgba(2,6,23,0.92))] shadow-lg shadow-slate-950/20 backdrop-blur-md";
-const DETAIL_SECTION_HEADER_CLASS = "border-b border-white/10 px-6 pb-4 pt-5";
+  "overflow-hidden rounded-[28px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98)_0%,rgba(248,250,252,0.94)_100%)] shadow-[0_24px_60px_-42px_rgba(15,23,42,0.28)]";
+const DETAIL_SECTION_HEADER_CLASS = "border-b border-slate-200/80 px-6 pb-4 pt-5";
 const DETAIL_SECTION_TITLE_CLASS =
-  "text-[1.02rem] font-semibold tracking-tight text-slate-50";
-const DETAIL_SECTION_CONTENT_CLASS = "space-y-5 px-6 pb-6 pt-5 text-slate-100";
+  "text-[1.02rem] font-semibold tracking-tight text-slate-950";
+const DETAIL_SECTION_CONTENT_CLASS = "space-y-5 px-6 pb-6 pt-5 text-slate-700";
 const DETAIL_INLINE_PANEL_CLASS =
-  "rounded-[20px] border border-slate-700/70 bg-slate-950/55 px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]";
+  "rounded-[22px] border border-slate-200/80 bg-[linear-gradient(180deg,#ffffff_0%,rgba(248,250,252,0.96)_100%)] px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.88)]";
 const DETAIL_INLINE_LABEL_CLASS =
-  "mb-3 text-[11px] font-medium tracking-[0.14em] text-slate-300";
+  "mb-3 text-[11px] font-semibold tracking-[0.14em] text-slate-400";
 const DETAIL_INPUT_ROW_CLASS =
-  "grid grid-cols-[120px_1fr] items-start gap-4 rounded-[20px] border border-slate-700/70 bg-slate-950/55 px-4 py-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]";
+  "grid grid-cols-1 items-start gap-3 rounded-[20px] border border-slate-200/80 bg-slate-50/85 px-4 py-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.88)] md:grid-cols-[120px_1fr] md:gap-4";
 const DETAIL_INPUT_LABEL_CLASS =
-  "pt-1 text-right text-[11px] font-medium tracking-[0.14em] text-slate-300";
+  "pt-1 text-right text-[11px] font-semibold tracking-[0.14em] text-slate-400";
 const DETAIL_INPUT_VALUE_CLASS =
-  "break-words text-right text-[15px] font-semibold leading-7 text-slate-50";
+  "break-words text-right text-[15px] font-semibold leading-7 text-slate-950";
 const DETAIL_SUBCARD_CLASS =
-  "space-y-3 rounded-[22px] border border-slate-700/70 bg-slate-950/60 px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]";
-const DETAIL_SUBCARD_TITLE_CLASS = "text-sm font-semibold text-slate-50";
+  "space-y-3 rounded-[22px] border border-slate-200/80 bg-slate-50/75 px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.88)]";
+const DETAIL_SUBCARD_TITLE_CLASS = "text-sm font-semibold text-slate-950";
 const DETAIL_SUBCARD_VALUE_CLASS =
-  "break-words text-sm font-medium leading-7 text-slate-100";
-const DETAIL_HELP_TEXT_CLASS = "text-sm leading-7 text-slate-300";
+  "break-words text-sm font-medium leading-7 text-slate-700";
+const DETAIL_HELP_TEXT_CLASS = "text-sm leading-7 text-slate-500";
 const DETAIL_ALERT_CLASS =
-  "rounded-[18px] border border-amber-300/20 bg-amber-500/10 px-3.5 py-3 text-xs leading-6 text-amber-100";
+  "rounded-[20px] border border-amber-200/80 bg-[linear-gradient(180deg,rgba(255,251,235,0.96)_0%,rgba(255,255,255,0.98)_100%)] px-4 py-3.5 text-sm leading-7 text-amber-950";
 const DETAIL_PILL_BASE_CLASS =
   "inline-flex h-8 items-center justify-center rounded-full border px-3.5 text-xs font-semibold leading-none tracking-[0.01em]";
 const DETAIL_COMPACT_PILL_BASE_CLASS =
   "inline-flex h-7 items-center justify-center rounded-full border px-2.5 text-[11px] font-semibold leading-none tracking-[0.01em]";
 const DETAIL_STAGE_PILL_CLASS =
-  "inline-flex h-8 items-center justify-center rounded-full border border-slate-600/80 bg-slate-900/70 px-3.5 text-xs font-semibold leading-none tracking-[0.01em] text-slate-100";
+  "inline-flex h-8 items-center justify-center rounded-full border border-slate-200 bg-slate-100 px-3.5 text-xs font-semibold leading-none tracking-[0.01em] text-slate-700";
 const DETAIL_TEXTAREA_CLASS =
-  "min-h-[120px] rounded-[20px] border-slate-700/70 bg-slate-950/60 px-4 py-3 text-sm leading-7 text-slate-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)] placeholder:text-slate-400";
+  "min-h-[132px] rounded-[20px] border-slate-200 bg-white px-4 py-3 text-sm leading-7 text-slate-950 shadow-[0_16px_34px_-28px_rgba(15,23,42,0.36)] placeholder:text-slate-400";
 const DETAIL_BUTTON_BASE_CLASS =
-  "inline-flex items-center justify-center gap-2 rounded-2xl px-4 text-[13px] font-semibold transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-50";
-const DETAIL_OUTLINE_BUTTON_CLASS = `${DETAIL_BUTTON_BASE_CLASS} h-11 border-slate-700/70 bg-slate-900/70 text-slate-100 shadow-none hover:bg-slate-800/85 hover:text-white`;
-const DETAIL_LIGHT_SOLID_BUTTON_CLASS = `${DETAIL_BUTTON_BASE_CLASS} h-11 bg-white text-slate-950 shadow-lg shadow-slate-950/20 hover:bg-slate-100`;
-const DETAIL_SOLID_BUTTON_CLASS = `${DETAIL_BUTTON_BASE_CLASS} h-11 text-white shadow-lg shadow-slate-950/20`;
-const DETAIL_DANGER_BUTTON_CLASS = `${DETAIL_BUTTON_BASE_CLASS} h-11 bg-rose-600 text-white shadow-lg shadow-rose-950/20 hover:bg-rose-500`;
+  "inline-flex items-center justify-center gap-2 rounded-2xl px-4 text-[13px] font-semibold transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-50";
+const DETAIL_OUTLINE_BUTTON_CLASS = `${DETAIL_BUTTON_BASE_CLASS} h-11 border border-slate-200 bg-white text-slate-700 shadow-[0_14px_34px_-28px_rgba(15,23,42,0.35)] hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950`;
+const DETAIL_LIGHT_SOLID_BUTTON_CLASS = `${DETAIL_BUTTON_BASE_CLASS} h-11 bg-slate-950 text-white shadow-[0_18px_38px_-26px_rgba(15,23,42,0.48)] hover:bg-[#10203a]`;
+const DETAIL_SOLID_BUTTON_CLASS = `${DETAIL_BUTTON_BASE_CLASS} h-11 text-white shadow-[0_18px_38px_-24px_rgba(15,23,42,0.3)]`;
+const DETAIL_DANGER_BUTTON_CLASS = `${DETAIL_BUTTON_BASE_CLASS} h-11 bg-rose-600 text-white shadow-[0_18px_38px_-24px_rgba(225,29,72,0.38)] hover:bg-rose-500`;
 
 /* =========================
   helpers
@@ -385,6 +386,120 @@ function resolveLastActorMeta(
     relativeTimeLabel: actorAt ? `عدّل ${formatRequestTimeLabel(actorAt)}` : "الوقت غير متاح",
     dateLabel: formatRequestDateLabel(actorAt),
   };
+}
+
+function resolveActivityActorMeta(
+  source: any,
+  userIdentityIndex: any,
+  client: ReturnType<typeof resolveRequestClient>
+) {
+  const actorUid = pick(source?.byUid, source?.actionByUid, source?.processedByUid);
+  const actorEmail = String(
+    pick(source?.byEmail, source?.actionByEmail, source?.processedByEmail)
+  )
+    .trim()
+    .toLowerCase();
+  const actorRole = pick(source?.byRole, source?.actionByRole, source?.processedByRole);
+  const linkedActor =
+    (actorUid && userIdentityIndex?.byId?.[actorUid]) ||
+    (actorEmail && userIdentityIndex?.byEmail?.[actorEmail]) ||
+    null;
+
+  const actorMatchesClient =
+    (actorUid && actorUid === client.clientId) ||
+    (actorEmail &&
+      client.clientEmail &&
+      actorEmail === String(client.clientEmail || "").trim().toLowerCase()) ||
+    normalizeRole(actorRole) === "client";
+
+  const resolvedRole =
+    pick(
+      linkedActor?.role,
+      linkedActor?.userRole,
+      linkedActor?.profile?.role,
+      actorRole
+    ) || (actorMatchesClient ? "client" : "");
+  const actorName =
+    getIndexedUserName(linkedActor) ||
+    (actorMatchesClient ? client.clientName : "") ||
+    getRoleDisplayLabel(resolvedRole) ||
+    actorEmail ||
+    actorUid ||
+    "مستخدم النظام";
+
+  return {
+    name: actorName,
+    roleLabel: getRoleDisplayLabel(resolvedRole) || "دون توصيف",
+    secondaryLabel: actorEmail || actorUid || "",
+  };
+}
+
+function buildRequestTimelineEvents(input: {
+  request: any;
+  userIdentityIndex: any;
+  client: ReturnType<typeof resolveRequestClient>;
+  requestKind: RequestKindKey;
+}) {
+  const { request, userIdentityIndex, client, requestKind } = input;
+  const requestSummary = getRequestSummary(request);
+  const requestCreatedAt = toDateSafe(
+    request?.createdAt ||
+      request?.created_at ||
+      request?.submittedAt ||
+      request?.timestamp
+  );
+
+  const baseEvents = Array.isArray(request?.events) ? request.events : [];
+  const hasCreatedEvent = baseEvents.some(event =>
+    ["request_created", "request_submitted"].includes(String(event?.type || ""))
+  );
+
+  const timelineSource = [...baseEvents];
+  if (requestCreatedAt && !hasCreatedEvent) {
+    timelineSource.push({
+      type: "request_created",
+      title:
+        requestKind === "interest"
+          ? "تم استلام طلب الاهتمام"
+          : "تم استلام طلب الاستثمار",
+      note: requestSummary || null,
+      byUid: pick(
+        request?.createdByUid,
+        request?.investorUid,
+        request?.userId,
+        request?.userSnapshot?.uid
+      ),
+      byEmail: pick(
+        request?.email,
+        request?.investorEmail,
+        request?.userSnapshot?.email
+      ),
+      byRole: pick(request?.userSnapshot?.role, request?.role, "client"),
+      at: requestCreatedAt,
+    });
+  }
+
+  return timelineSource
+    .map((event, index) => {
+      const atValue = toDateSafe(event?.at);
+      return {
+        id: `${String(event?.type || "activity")}-${index}`,
+        title: String(event?.title || "تم تحديث الطلب").trim() || "تم تحديث الطلب",
+        note:
+          typeof event?.note === "string" && event.note.trim()
+            ? event.note.trim()
+            : null,
+        atValue,
+        atLabel: formatDateTimeAR(atValue),
+        timeLabel: formatRequestTimeLabel(atValue),
+        actor: resolveActivityActorMeta(event, userIdentityIndex, client),
+      };
+    })
+    .sort((a, b) => {
+      const aTime = a.atValue instanceof Date ? a.atValue.getTime() : 0;
+      const bTime = b.atValue instanceof Date ? b.atValue.getTime() : 0;
+      return bTime - aTime;
+    });
 }
 
 function resolveRequestClient(source: any, userIdentityIndex: any) {
@@ -728,34 +843,33 @@ function getContractStatusClass(status: any): string {
     .trim()
     .toLowerCase();
   const map: Record<string, string> = {
-    draft: "border-slate-600/70 bg-slate-800/70 text-slate-200",
-    sent: "border-sky-400/30 bg-sky-500/10 text-sky-200",
-    pending_signature: "border-amber-400/35 bg-amber-500/10 text-amber-200",
-    signed: "border-emerald-400/35 bg-emerald-500/10 text-emerald-200",
-    issued: "border-sky-400/30 bg-sky-500/10 text-sky-200",
-    signed_uploaded: "border-emerald-400/35 bg-emerald-500/10 text-emerald-200",
-    under_review: "border-violet-400/35 bg-violet-500/10 text-violet-200",
-    approved: "border-emerald-300/35 bg-emerald-500/12 text-emerald-100",
+    draft: "border-slate-200 bg-slate-100 text-slate-700",
+    sent: "border-sky-200 bg-sky-50 text-sky-800",
+    pending_signature: "border-amber-200 bg-amber-50 text-amber-800",
+    signed: "border-emerald-200 bg-emerald-50 text-emerald-800",
+    issued: "border-sky-200 bg-sky-50 text-sky-800",
+    signed_uploaded: "border-emerald-200 bg-emerald-50 text-emerald-800",
+    under_review: "border-violet-200 bg-violet-50 text-violet-800",
+    approved: "border-emerald-200 bg-emerald-50 text-emerald-800",
   };
-  return map[s] || "border-slate-600/70 bg-slate-800/70 text-slate-200";
+  return map[s] || "border-slate-200 bg-slate-100 text-slate-700";
 }
 
 function getDetailRequestStatusClass(status: any): string {
   const normalizedStatus = normalizeRequestStatus(status);
   const map: Record<string, string> = {
-    pending: "border-amber-400/35 bg-amber-500/10 text-amber-200",
-    reviewing: "border-sky-400/30 bg-sky-500/10 text-sky-200",
-    approved: "border-emerald-400/35 bg-emerald-500/10 text-emerald-200",
-    completed: "border-emerald-300/30 bg-emerald-500/12 text-emerald-100",
-    rejected: "border-rose-400/35 bg-rose-500/10 text-rose-200",
-    no_account: "border-rose-300/30 bg-rose-500/12 text-rose-200",
-    closed: "border-slate-600/70 bg-slate-800/70 text-slate-200",
+    pending: "border-amber-200 bg-amber-50 text-amber-800",
+    reviewing: "border-sky-200 bg-sky-50 text-sky-800",
+    approved: "border-emerald-200 bg-emerald-50 text-emerald-800",
+    completed: "border-slate-200 bg-slate-100 text-slate-800",
+    rejected: "border-rose-200 bg-rose-50 text-rose-800",
+    no_account: "border-rose-200 bg-rose-50 text-rose-800",
+    closed: "border-slate-200 bg-slate-100 text-slate-800",
   };
 
   return cn(
     DETAIL_PILL_BASE_CLASS,
-    map[normalizedStatus] ||
-      "border-slate-600/70 bg-slate-800/70 text-slate-200"
+    map[normalizedStatus] || "border-slate-200 bg-slate-100 text-slate-700"
   );
 }
 
@@ -763,8 +877,8 @@ function getDetailBinaryPillClass(active: boolean): string {
   return cn(
     DETAIL_COMPACT_PILL_BASE_CLASS,
     active
-      ? "border-emerald-400/35 bg-emerald-500/10 text-emerald-200"
-      : "border-slate-500/40 bg-slate-800/70 text-slate-300"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+      : "border-slate-200 bg-slate-100 text-slate-600"
   );
 }
 
@@ -2483,6 +2597,75 @@ export default function MessagesManagement() {
         ? getInterestReviewMeta(selectedMessage)
         : null,
     [selectedMessage, selectedRequestKind]
+  );
+
+  const selectedProjectId = pick(
+    selectedMessage?.projectId,
+    selectedMessage?.project_id,
+    selectedMessage?.project?.id
+  );
+  const selectedProjectTitle = getProjectTitle(selectedProjectId);
+  const selectedAmount =
+    toNum(selectedMessage?.approvedAmount) ||
+    toNum(selectedMessage?.amount) ||
+    toNum(selectedMessage?.requestedAmount) ||
+    toNum(selectedMessage?.estimatedAmount) ||
+    0;
+  const selectedRemaining = getProjectRemaining(selectedProjectId);
+  const selectedAmountExceeded =
+    selectedRemaining != null ? selectedAmount > selectedRemaining : false;
+  const selectedRequestSummary = getRequestSummary(selectedMessage);
+  const selectedContactEmail =
+    selectedClient?.clientEmail || getClientEmail(selectedMessage);
+  const selectedContactPhone =
+    selectedClient?.clientPhone || getClientPhone(selectedMessage);
+  const selectedCreatedAtValue = toDateSafe(
+    selectedMessage?.createdAt ||
+      selectedMessage?.created_at ||
+      selectedMessage?.submittedAt ||
+      selectedMessage?.timestamp
+  );
+  const selectedUpdatedAtValue = getLastUpdatedAtValue(selectedMessage);
+
+  const selectedStatusMeta = useMemo(() => {
+    if (!selectedMessage) return null;
+    if (selectedRequestKind?.key === "interest") {
+      return {
+        label: selectedInterestReviewMeta?.label || "جديد",
+        tone:
+          selectedInterestReviewMeta?.tone ||
+          "border-amber-200 bg-amber-50 text-amber-800",
+        accent: selectedInterestReviewMeta?.accent || "bg-amber-500",
+      };
+    }
+    return getRequestStatusMeta(selectedMessage.status);
+  }, [selectedInterestReviewMeta, selectedMessage, selectedRequestKind]);
+
+  const selectedStageMeta = useMemo(
+    () =>
+      selectedMessage ? getRequestStageMeta(selectedMessage.stageRole) : null,
+    [selectedMessage]
+  );
+
+  const selectedLastActor = useMemo(
+    () =>
+      selectedMessage && selectedClient
+        ? resolveLastActorMeta(selectedMessage, userIdentityIndex, selectedClient)
+        : null,
+    [selectedClient, selectedMessage, userIdentityIndex]
+  );
+
+  const selectedTimelineEvents = useMemo(
+    () =>
+      selectedMessage && selectedClient && selectedRequestKind
+        ? buildRequestTimelineEvents({
+            request: selectedMessage,
+            userIdentityIndex,
+            client: selectedClient,
+            requestKind: selectedRequestKind.key,
+          })
+        : [],
+    [selectedClient, selectedMessage, selectedRequestKind, userIdentityIndex]
   );
 
   /* =========================
@@ -4308,6 +4491,163 @@ export default function MessagesManagement() {
 
   const canApproveAndCreateInvestment = canCreateInvestmentFromRequest;
 
+  const selectedNextActionSummary = useMemo(() => {
+    if (!selectedMessage || !selectedRequestKind) {
+      return {
+        label: "لا توجد بيانات متاحة",
+        helper: "تعذر تحديد الإجراء التالي لهذا الطلب.",
+        needsAction: false,
+      };
+    }
+
+    if (isLockedFinal) {
+      return {
+        label: "لا يوجد إجراء مطلوب",
+        helper: "الطلب مقفل بعد اكتمال الدورة الحالية.",
+        needsAction: false,
+      };
+    }
+
+    if (selectedRequestStatus === "rejected") {
+      return {
+        label: "تم رفض الطلب",
+        helper: "يمكن مراجعة السجل أو إعادة فتحه من المسؤول التقني عند الحاجة.",
+        needsAction: false,
+      };
+    }
+
+    if (isSelectedInterestRequest) {
+      if (!selectedMessage?.adminSeenAt) {
+        return {
+          label: "يلزم الاطلاع الأول",
+          helper:
+            "هذا طلب اهتمام تمهيدي، ويكفي الاطلاع عليه وتوثيق ملاحظات أو بدء تواصل مناسب مع العميل.",
+          needsAction: true,
+        };
+      }
+
+      return {
+        label: "متابعة اهتمام خفيفة",
+        helper:
+          "تم تسجيل الاطلاع على الطلب. يمكن الآن فتح ملف العميل أو المشروع ومتابعة التواصل عند الحاجة.",
+        needsAction: false,
+      };
+    }
+
+    if (canFinalize) {
+      return {
+        label: "جاهز للإقفال النهائي",
+        helper:
+          "جميع متطلبات الاستثمار المكتملة ظاهرة في السجل، ويمكن تنفيذ الإقفال النهائي من الإجراءات المتاحة.",
+        needsAction: true,
+      };
+    }
+
+    if (canVerifySignedContract) {
+      return {
+        label: "اعتماد العقد الموقّع",
+        helper:
+          "العقد الموقّع مرفوع وجاهز للاعتماد قبل الانتقال إلى الإقفال النهائي.",
+        needsAction: true,
+      };
+    }
+
+    if (canCreateInvestmentFromRequest) {
+      return {
+        label: "إنشاء سجل الاستثمار",
+        helper:
+          "اكتملت الموافقة الأولية، ويمكن الآن تحويل الطلب إلى سجل استثمار فعلي داخل النظام.",
+        needsAction: true,
+      };
+    }
+
+    if (canInitialApproveRequest) {
+      return {
+        label: "موافقة أولية مطلوبة",
+        helper:
+          "الطلب في مرحلة المراجعة ويمكن ترحيله إلى الموافقة الأولية تمهيدًا لإنشاء الاستثمار.",
+        needsAction: true,
+      };
+    }
+
+    if (canStartRequestReview) {
+      return {
+        label: "بدء المراجعة",
+        helper:
+          "هذا طلب استثمار جديد وبانتظار بدء المعالجة الداخلية من الفريق المختص.",
+        needsAction: true,
+      };
+    }
+
+    if (selectedMessage?.investmentId) {
+      return {
+        label: "متابعة دورة الاستثمار",
+        helper:
+          "تم إنشاء سجل الاستثمار لهذا الطلب، ويمكن متابعة المستندات والحالة من القسم المخصص.",
+        needsAction: false,
+      };
+    }
+
+    return {
+      label: "متابعة داخلية",
+      helper:
+        "لا توجد خطوة تلقائية مباشرة الآن، لكن ما زال الطلب ضمن الدورة النشطة ويتطلب مراجعة الفريق.",
+      needsAction: false,
+    };
+  }, [
+    canCreateInvestmentFromRequest,
+    canFinalize,
+    canInitialApproveRequest,
+    canStartRequestReview,
+    canVerifySignedContract,
+    isLockedFinal,
+    isSelectedInterestRequest,
+    selectedMessage,
+    selectedRequestKind,
+    selectedRequestStatus,
+  ]);
+
+  const openSelectedProject = () => {
+    if (!selectedProjectId) {
+      toast.warning("لا يوجد مشروع مرتبط بهذا الطلب.");
+      return;
+    }
+    window.location.href = `/admin/projects/${selectedProjectId}/edit`;
+  };
+
+  const openSelectedClientProfile = () => {
+    const clientId = pick(
+      selectedClient?.clientId,
+      selectedMessage?.createdByUid,
+      selectedMessage?.investorUid,
+      selectedMessage?.userId,
+      selectedMessage?.userSnapshot?.uid
+    );
+
+    if (!clientId) {
+      toast.warning("لا يوجد حساب عميل مرتبط بهذا الطلب.");
+      return;
+    }
+
+    window.location.href = `/admin/client-profile?id=${clientId}`;
+  };
+
+  const copySelectedRequestNumber = async () => {
+    const value = requestNumber(selectedMessage);
+    if (!value || value === "—") {
+      toast.warning("لا يوجد رقم طلب متاح للنسخ.");
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(String(value));
+      toast.success("تم نسخ رقم الطلب.");
+    } catch (error) {
+      console.error(error);
+      toast.error("تعذر نسخ رقم الطلب.");
+    }
+  };
+
   const startRequestReview = async () => {
     if (!selectedMessage) return;
     if (!canStartRequestReview)
@@ -5093,631 +5433,823 @@ export default function MessagesManagement() {
         {/* Detail dialog */}
         <Dialog open={isDetailDialogOpen} onOpenChange={setIsDetailDialogOpen}>
           <DialogContent
-            className={`flex w-[98vw] max-w-[1400px] flex-col gap-0 p-0 max-h-[92vh] overflow-hidden 2xl:max-w-[1600px] ${DETAIL_DIALOG_PANEL_CLASS}`}
+            className={`flex max-h-[94vh] w-[98vw] max-w-[1480px] flex-col gap-0 overflow-hidden p-0 2xl:max-w-[1640px] ${DETAIL_DIALOG_PANEL_CLASS}`}
             dir="rtl"
           >
-            <DialogHeader className="shrink-0 border-b border-white/10 bg-white/[0.05] px-7 py-5 backdrop-blur-xl">
-              <DialogTitle className="text-2xl font-semibold tracking-tight text-slate-50">
-                تفاصيل الطلب
-              </DialogTitle>
+            <DialogHeader className="relative shrink-0 overflow-hidden border-b border-slate-200/80 px-6 py-6 sm:px-8 sm:py-7">
+              <div
+                className={cn(
+                  "absolute inset-x-0 top-0 h-1.5",
+                  selectedStatusMeta?.accent ||
+                    (isSelectedInterestRequest
+                      ? "bg-amber-500"
+                      : "bg-emerald-500")
+                )}
+              />
+              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(242,174,48,0.16),transparent_32%),radial-gradient(circle_at_top_left,rgba(20,35,58,0.08),transparent_35%)]" />
+
+              <div className="relative space-y-6">
+                <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+                  <div className="min-w-0 space-y-4">
+                    <div className="flex flex-wrap items-center gap-2.5">
+                      {selectedRequestKind ? (
+                        <Badge
+                          className={cn(
+                            DETAIL_PILL_BASE_CLASS,
+                            selectedRequestKind.badgeTone
+                          )}
+                        >
+                          {selectedRequestKind.label}
+                        </Badge>
+                      ) : null}
+
+                      {selectedStatusMeta ? (
+                        <Badge
+                          className={cn(
+                            DETAIL_PILL_BASE_CLASS,
+                            selectedStatusMeta.tone
+                          )}
+                        >
+                          {selectedStatusMeta.label}
+                        </Badge>
+                      ) : null}
+
+                      {isSelectedInterestRequest ? null : (
+                        <Badge className={DETAIL_STAGE_PILL_CLASS}>
+                          {selectedStageMeta?.label || "—"}
+                        </Badge>
+                      )}
+
+                      {selectedClient?.sourceKey === "live_user" ? (
+                        <Badge
+                          className={cn(
+                            DETAIL_PILL_BASE_CLASS,
+                            "border-emerald-200 bg-emerald-50 text-emerald-700"
+                          )}
+                        >
+                          عميل مرتبط بالنظام
+                        </Badge>
+                      ) : null}
+                    </div>
+
+                    <div className="space-y-2">
+                      <DialogTitle className="text-[2rem] font-semibold tracking-tight text-slate-950 sm:text-[2.25rem]">
+                        تفاصيل الطلب
+                      </DialogTitle>
+                      <p className="max-w-3xl text-sm leading-8 text-slate-600 sm:text-[15px]">
+                        {isSelectedInterestRequest
+                          ? "واجهة متابعة أوضح لطلبات الاهتمام، تركز على العميل والمشروع وحالة المتابعة بدون عناصر استثمارية ثقيلة غير مطلوبة."
+                          : "واجهة تشغيلية أوضح لطلبات الاستثمار، مع قراءة سريعة للمبلغ والحالة والمسار التنفيذي المطلوب داخل النظام."}
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap gap-3">
+                      <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/95 px-3.5 py-2 text-sm font-medium text-slate-700 shadow-[0_14px_32px_-28px_rgba(15,23,42,0.28)]">
+                        <FileText className="h-4 w-4 text-slate-400" />
+                        <span className="text-slate-500">رقم الطلب</span>
+                        <span className="font-mono text-[13px] font-semibold text-slate-950">
+                          {requestNumber(selectedMessage)}
+                        </span>
+                      </div>
+
+                      <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/95 px-3.5 py-2 text-sm font-medium text-slate-700 shadow-[0_14px_32px_-28px_rgba(15,23,42,0.28)]">
+                        <CalendarDays className="h-4 w-4 text-slate-400" />
+                        <span>{formatDateTimeAR(selectedCreatedAtValue)}</span>
+                      </div>
+
+                      <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/95 px-3.5 py-2 text-sm font-medium text-slate-700 shadow-[0_14px_32px_-28px_rgba(15,23,42,0.28)]">
+                        <RefreshCw className="h-4 w-4 text-slate-400" />
+                        <span>{formatDateTimeAR(selectedUpdatedAtValue)}</span>
+                      </div>
+
+                      {selectedProjectTitle && selectedProjectTitle !== "—" ? (
+                        <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/95 px-3.5 py-2 text-sm font-medium text-slate-700 shadow-[0_14px_32px_-28px_rgba(15,23,42,0.28)]">
+                          <Building2 className="h-4 w-4 text-slate-400" />
+                          <span className="max-w-[360px] truncate">
+                            {selectedProjectTitle}
+                          </span>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2 xl:w-[430px] xl:grid-cols-2">
+                    <div
+                      className={cn(
+                        "rounded-[26px] border px-5 py-4 shadow-[0_22px_46px_-32px_rgba(15,23,42,0.28)]",
+                        isSelectedInterestRequest
+                          ? "border-amber-200/80 bg-[linear-gradient(135deg,rgba(255,251,235,0.98)_0%,rgba(255,255,255,0.98)_58%,rgba(248,250,252,0.96)_100%)] text-slate-950"
+                          : "border-slate-900/10 bg-[linear-gradient(135deg,rgba(11,23,38,0.98)_0%,rgba(20,35,58,0.96)_58%,rgba(242,174,48,0.24)_145%)] text-white"
+                      )}
+                    >
+                      <div className="text-[11px] font-semibold tracking-[0.14em] text-current/70">
+                        {isSelectedInterestRequest
+                          ? "ملف المتابعة"
+                          : "المشهد الاستثماري"}
+                      </div>
+                      <div className="mt-3 text-[1.8rem] font-semibold leading-none">
+                        {isSelectedInterestRequest
+                          ? selectedStatusMeta?.label || "—"
+                          : moneySAR(selectedAmount)}
+                      </div>
+                      <p className="mt-3 text-sm leading-7 text-current/80">
+                        {isSelectedInterestRequest
+                          ? "هذا السجل يعكس lead أو اهتمامًا أوليًا، لذلك يظهر كحالة متابعة تمهيدية لا كطلب استثماري مكتمل."
+                          : selectedMessage?.investmentId
+                            ? `سجل الاستثمار مرتبط بالطلب برقم ${selectedMessage.investmentId}.`
+                            : "لا يوجد سجل استثمار فعلي حتى الآن، والطلب ما زال داخل مسار المراجعة والتحويل."}
+                      </p>
+                    </div>
+
+                    <div className="rounded-[26px] border border-slate-200/80 bg-white/95 px-5 py-4 shadow-[0_22px_46px_-34px_rgba(15,23,42,0.22)]">
+                      <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-400">
+                        الإجراء التالي
+                      </div>
+                      <div className="mt-3 text-lg font-semibold leading-7 text-slate-950">
+                        {selectedNextActionSummary.label}
+                      </div>
+                      <p className="mt-2 text-sm leading-7 text-slate-600">
+                        {selectedNextActionSummary.helper}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-[28px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98)_0%,rgba(248,250,252,0.95)_100%)] p-4 shadow-[0_22px_56px_-42px_rgba(15,23,42,0.18)] sm:p-5">
+                  <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <div className="text-sm font-semibold text-slate-950">
+                        ملخص تنفيذي سريع
+                      </div>
+                      <p className="mt-1 text-sm leading-7 text-slate-500">
+                        قراءة فورية للحالة الحالية والمشروع وآخر تعديل وهل يوجد
+                        إجراء مطلوب الآن.
+                      </p>
+                    </div>
+
+                    <div
+                      className={cn(
+                        "inline-flex w-fit items-center rounded-full border px-3 py-1 text-sm font-semibold",
+                        selectedNextActionSummary.needsAction
+                          ? "border-amber-200 bg-amber-50 text-amber-800"
+                          : "border-slate-200 bg-white text-slate-700"
+                      )}
+                    >
+                      {selectedNextActionSummary.needsAction
+                        ? "يتطلب إجراء"
+                        : "وضع مستقر"}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-6">
+                    <DetailSummaryMetric
+                      label="نوع الطلب"
+                      value={selectedRequestKind?.label || "—"}
+                      icon={<MessageSquare className="h-3.5 w-3.5" />}
+                      strong
+                    />
+                    <DetailSummaryMetric
+                      label="الحالة الحالية"
+                      value={selectedStatusMeta?.label || "—"}
+                      icon={<Eye className="h-3.5 w-3.5" />}
+                      strong
+                    />
+                    <DetailSummaryMetric
+                      label="المشروع"
+                      value={selectedProjectTitle}
+                      icon={<Building2 className="h-3.5 w-3.5" />}
+                      strong
+                    />
+                    <DetailSummaryMetric
+                      label="الإجراء"
+                      value={selectedNextActionSummary.label}
+                      icon={<ShieldCheck className="h-3.5 w-3.5" />}
+                      strong
+                    />
+                    <DetailSummaryMetric
+                      label="آخر من عدّل"
+                      value={selectedLastActor?.name || "—"}
+                      helper={selectedLastActor?.roleLabel || undefined}
+                      icon={<RefreshCw className="h-3.5 w-3.5" />}
+                    />
+                    <DetailSummaryMetric
+                      label="آخر تحديث"
+                      value={formatDateTimeAR(selectedUpdatedAtValue)}
+                      helper={formatRequestTimeLabel(selectedUpdatedAtValue)}
+                      icon={<CalendarDays className="h-3.5 w-3.5" />}
+                    />
+                  </div>
+                </div>
+              </div>
             </DialogHeader>
 
             {selectedMessage ? (
               <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
                 <div className="space-y-6 p-6 sm:p-7">
-                  <div className="grid grid-cols-1 gap-5">
-                    <Card className={`rsg-card ${DETAIL_SECTION_CARD_CLASS}`}>
-                      <CardHeader className={DETAIL_SECTION_HEADER_CLASS}>
-                        <CardTitle className={DETAIL_SECTION_TITLE_CLASS}>
-                          بيانات العميل
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className={DETAIL_SECTION_CONTENT_CLASS}>
-                        {(() => {
-                          const emailValue = selectedClient?.clientEmail;
-                          const phoneValue = selectedClient?.clientPhone;
-
-                          const contactValue =
-                            emailValue && phoneValue ? (
-                              <span dir="ltr" className="break-all">
-                                {emailValue} • {phoneValue}
-                              </span>
-                            ) : emailValue ? (
-                              <span dir="ltr" className="break-all">
-                                {emailValue}
-                              </span>
-                            ) : phoneValue ? (
-                              <span dir="ltr">{phoneValue}</span>
-                            ) : (
-                              "â€”"
-                            );
-
-                          const contactDisplayValue =
-                            emailValue && phoneValue ? (
-                              <span dir="ltr" className="break-all">
-                                {emailValue} / {phoneValue}
-                              </span>
-                            ) : emailValue ? (
-                              <span dir="ltr" className="break-all">
-                                {emailValue}
-                              </span>
-                            ) : phoneValue ? (
-                              <span dir="ltr">{phoneValue}</span>
-                            ) : (
-                              "-"
-                            );
-
-                          return (
-                            <>
-                              <InfoRow
-                                label="الاسم"
-                                value={selectedClient?.clientName || "—"}
-                              />
-                              <InfoRow
-                                label="البريد / الجوال"
-                                value={contactDisplayValue}
-                              />
-                              {false ? (
-                                <>
-                                  <InfoRow
-                                    label="الاسم"
-                                    value={selectedClient?.clientName || "—"}
-                                  />
-                                  <InfoRow
-                                    label="البريد"
-                                    value={selectedClient?.clientEmail || "—"}
-                                  />
-                                  <InfoRow
-                                    label="الجوال"
-                                    value={selectedClient?.clientPhone || "—"}
-                                  />
-                                </>
-                              ) : null}
-
-                              {selectedClient ? (
-                                <div className={DETAIL_ALERT_CLASS}>
-                                  {selectedClient.sourceHelper}
-                                </div>
-                              ) : null}
-
-                              {false ? (
-                                <>
-                                  <InfoRow
-                                    label="الاسم"
-                                    value={
-                                      getClientName(selectedMessage) || "—"
-                                    }
-                                  />
-                                  <InfoRow
-                                    label="البريد"
-                                    value={
-                                      getClientEmail(selectedMessage) || "—"
-                                    }
-                                  />
-                                  <InfoRow
-                                    label="الجوال"
-                                    value={
-                                      getClientPhone(selectedMessage) || "—"
-                                    }
-                                  />
-                                </>
-                              ) : null}
-
-                              <div className="flex flex-wrap gap-3 border-t border-white/10 pt-5">
-                                {(() => {
-                                  const clientId = pick(
-                                    selectedClient?.clientId,
-                                    selectedMessage?.createdByUid,
-                                    selectedMessage?.investorUid,
-                                    selectedMessage?.userId,
-                                    selectedMessage?.userSnapshot?.uid
-                                  );
-
-                                  const pid = pick(
-                                    selectedMessage?.projectId,
-                                    selectedMessage?.project_id,
-                                    selectedMessage?.project?.id
-                                  );
-
-                                  return (
-                                    <>
-                                      <Button
-                                        variant="outline"
-                                        className={DETAIL_OUTLINE_BUTTON_CLASS}
-                                        onClick={() => {
-                                          if (!clientId) {
-                                            toast.warning(
-                                              "لا يوجد حساب عميل مرتبط بهذا الطلب."
-                                            );
-                                            return;
-                                          }
-                                          window.location.href = `/admin/client-profile?id=${clientId}`;
-                                        }}
-                                      >
-                                        <FileText className="w-4 h-4" />
-                                        فتح ملف العميل
-                                      </Button>
-
-                                      <Button
-                                        variant="outline"
-                                        className={DETAIL_OUTLINE_BUTTON_CLASS}
-                                        onClick={() => {
-                                          if (!pid) {
-                                            toast.warning(
-                                              "لا يوجد مشروع مرتبط بهذا الطلب."
-                                            );
-                                            return;
-                                          }
-                                          window.location.href = `/admin/projects/${pid}/edit`;
-                                        }}
-                                      >
-                                        <ExternalLink className="w-4 h-4" />
-                                        فتح المشروع
-                                      </Button>
-                                    </>
-                                  );
-                                })()}
-                              </div>
-
-                              <div className="flex flex-wrap items-center gap-3 border-t border-white/10 pt-5">
-                                {(() => {
-                                  const emailToUse =
-                                    selectedClient?.clientEmail ||
-                                    getClientEmail(selectedMessage);
-                                  const phoneToUse =
-                                    selectedClient?.clientPhone ||
-                                    getClientPhone(selectedMessage);
-
-                                  return (
-                                    <>
-                                      {emailToUse ? (
-                                        <a
-                                          className="inline-flex"
-                                          href={`mailto:${emailToUse}`}
-                                        >
-                                          <Button
-                                            variant="outline"
-                                            className={
-                                              DETAIL_OUTLINE_BUTTON_CLASS
-                                            }
-                                          >
-                                            <Mail className="w-4 h-4" />
-                                            إيميل
-                                          </Button>
-                                        </a>
-                                      ) : null}
-
-                                      {phoneToUse ? (
-                                        <a
-                                          className="inline-flex"
-                                          href={`tel:${phoneToUse}`}
-                                        >
-                                          <Button
-                                            variant="outline"
-                                            className={
-                                              DETAIL_OUTLINE_BUTTON_CLASS
-                                            }
-                                          >
-                                            <Phone className="w-4 h-4" />
-                                            اتصال
-                                          </Button>
-                                        </a>
-                                      ) : null}
-                                    </>
-                                  );
-                                })()}
-                              </div>
-                            </>
-                          );
-                        })()}
-                      </CardContent>
-                    </Card>
-
-                    <Card className={`rsg-card ${DETAIL_SECTION_CARD_CLASS}`}>
-                      <CardHeader className={DETAIL_SECTION_HEADER_CLASS}>
-                        <CardTitle className={DETAIL_SECTION_TITLE_CLASS}>
-                          ملخص الطلب
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className={DETAIL_SECTION_CONTENT_CLASS}>
-                        {(() => {
-                          const pid = pick(
-                            selectedMessage?.projectId,
-                            selectedMessage?.project_id,
-                            selectedMessage?.project?.id
-                          );
-
-                          const projectTitle = getProjectTitle(pid);
-
-                          const amount =
-                            toNum(selectedMessage?.approvedAmount) ||
-                            toNum(selectedMessage?.amount) ||
-                            toNum(selectedMessage?.requestedAmount) ||
-                            toNum(selectedMessage?.estimatedAmount) ||
-                            0;
-
-                          const remaining = getProjectRemaining(pid);
-                          const exceeded =
-                            remaining != null ? amount > remaining : false;
-
-                          const invState = selectedMessage?.investmentId
-                            ? "تم إنشاء الاستثمار"
-                            : "بانتظار إنشاء الاستثمار";
-
-                          if (isSelectedInterestRequest) {
-                            return (
-                              <>
-                                <InfoRow
-                                  label="رقم الطلب"
-                                  value={requestNumber(selectedMessage)}
-                                />
-                                <InfoRow
-                                  label="اسم المشروع"
-                                  value={projectTitle}
-                                />
-                                <InfoRow
-                                  label="نوع الطلب"
-                                  value="طلب اهتمام"
-                                />
-                                <InfoRow
-                                  label="حالة الاهتمام"
-                                  value={
-                                    selectedInterestReviewMeta?.label || "جديد"
-                                  }
-                                />
-                                <InfoRow
-                                  label="رسالة الاهتمام"
-                                  value={
-                                    selectedMessage?.message ||
-                                    selectedMessage?.body ||
-                                    selectedMessage?.description ||
-                                    selectedMessage?.details ||
-                                    selectedMessage?.note ||
-                                    selectedMessage?.requestText ||
-                                    "لا توجد رسالة مرفقة"
-                                  }
-                                />
-                                <InfoRow
-                                  label="التاريخ"
-                                  value={formatDateTimeAR(
-                                    selectedMessage.createdAt ||
-                                      selectedMessage.created_at ||
-                                      selectedMessage.submittedAt ||
-                                      selectedMessage.timestamp
-                                  )}
-                                />
-                              </>
-                            );
-                          }
-
-                          return (
-                            <>
-                              <InfoRow
-                                label="رقم الطلب"
-                                value={requestNumber(selectedMessage)}
-                              />
-                              <InfoRow
-                                label="اسم المشروع"
-                                value={projectTitle}
-                              />
-                              <InfoRow
-                                label="المبلغ"
-                                value={moneySAR(amount)}
-                              />
-                              <InfoRow
-                                label="المتبقي"
-                                value={
-                                  remaining == null
-                                    ? "—"
-                                    : exceeded
-                                      ? `${moneySAR(remaining)} (تجاوز)`
-                                      : moneySAR(remaining)
-                                }
-                              />
-                              <InfoRow label="الاستثمار" value={invState} />
-                              <InfoRow
-                                label="التاريخ"
-                                value={formatDateTimeAR(
-                                  selectedMessage.createdAt ||
-                                    selectedMessage.created_at ||
-                                    selectedMessage.submittedAt ||
-                                    selectedMessage.timestamp
-                                )}
-                              />
-                            </>
-                          );
-                        })()}
-                      </CardContent>
-                    </Card>
-
-                    <Card className={`rsg-card ${DETAIL_SECTION_CARD_CLASS}`}>
-                      <CardHeader className={DETAIL_SECTION_HEADER_CLASS}>
-                        <CardTitle className={DETAIL_SECTION_TITLE_CLASS}>
-                          الحالة
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent
-                        className={`${DETAIL_SECTION_CONTENT_CLASS} space-y-5`}
-                      >
-                        <div
+                  <div className="grid grid-cols-1 gap-6">
+                    <DetailSection
+                      title="بيانات العميل"
+                      description="عرض مرتب لبيانات العميل وجهة الربط وقنوات التواصل المتاحة داخل النظام."
+                      badge={
+                        <Badge
                           className={cn(
-                            DETAIL_INLINE_PANEL_CLASS,
-                            "flex flex-wrap items-center gap-2.5"
+                            DETAIL_PILL_BASE_CLASS,
+                            selectedClient?.sourceTone
                           )}
                         >
-                          <Badge
-                            className={
+                          {selectedClient?.sourceLabel || "بيانات الطلب"}
+                        </Badge>
+                      }
+                    >
+                      <div className="flex flex-col gap-5 rounded-[24px] border border-slate-200/80 bg-[linear-gradient(135deg,rgba(255,255,255,0.98)_0%,rgba(248,250,252,0.96)_100%)] p-5 shadow-[0_20px_40px_-34px_rgba(15,23,42,0.2)] lg:flex-row lg:items-start lg:justify-between">
+                        <div className="flex min-w-0 items-start gap-4">
+                          <div
+                            className={cn(
+                              "flex h-16 w-16 shrink-0 items-center justify-center rounded-[22px] text-2xl font-semibold shadow-[0_18px_34px_-24px_rgba(15,23,42,0.2)]",
                               isSelectedInterestRequest
-                                ? cn(
-                                    DETAIL_PILL_BASE_CLASS,
-                                    selectedInterestReviewMeta?.tone
-                                  )
-                                : getDetailRequestStatusClass(
-                                    selectedMessage.status
-                                  )
-                            }
+                                ? "border border-amber-200 bg-amber-50 text-amber-900"
+                                : "bg-slate-950 text-white"
+                            )}
                           >
-                            {isSelectedInterestRequest
-                              ? selectedInterestReviewMeta?.label || "جديد"
-                              : getStatusBadge(selectedMessage.status).label}
-                          </Badge>
-                          {isSelectedInterestRequest ? null : (
-                            <Badge className={DETAIL_STAGE_PILL_CLASS}>
-                              {stageLabel(selectedMessage.stageRole)}
-                            </Badge>
+                            {String(selectedClient?.clientName || "ع")
+                              .trim()
+                              .charAt(0) || "ع"}
+                          </div>
+
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <h3 className="break-words text-xl font-semibold text-slate-950">
+                                {selectedClient?.clientName ||
+                                  "مستخدم غير معروف"}
+                              </h3>
+                              <Badge
+                                className={cn(
+                                  DETAIL_COMPACT_PILL_BASE_CLASS,
+                                  "border-slate-200 bg-slate-100 text-slate-700"
+                                )}
+                              >
+                                {selectedClient?.clientRoleLabel || "عميل"}
+                              </Badge>
+                              {selectedClient?.sourceKey === "live_user" ? (
+                                <Badge
+                                  className={cn(
+                                    DETAIL_COMPACT_PILL_BASE_CLASS,
+                                    "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                  )}
+                                >
+                                  موثق بالنظام
+                                </Badge>
+                              ) : null}
+                            </div>
+
+                            <p className="mt-2 max-w-3xl text-sm leading-7 text-slate-600">
+                              {selectedClient?.sourceHelper}
+                            </p>
+
+                            {selectedClient?.clientId ? (
+                              <div className="mt-3 inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-500">
+                                معرّف العميل:
+                                <span className="mr-1 font-mono text-slate-700">
+                                  {selectedClient.clientId}
+                                </span>
+                              </div>
+                            ) : null}
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            variant="outline"
+                            className={DETAIL_OUTLINE_BUTTON_CLASS}
+                            onClick={openSelectedClientProfile}
+                          >
+                            <FileText className="h-4 w-4" />
+                            فتح ملف العميل
+                          </Button>
+                          <Button
+                            variant="outline"
+                            className={DETAIL_OUTLINE_BUTTON_CLASS}
+                            onClick={openSelectedProject}
+                          >
+                            <ExternalLink className="h-4 w-4" />
+                            فتح المشروع
+                          </Button>
+                          <Button
+                            variant="outline"
+                            className={DETAIL_OUTLINE_BUTTON_CLASS}
+                            onClick={copySelectedRequestNumber}
+                          >
+                            <Copy className="h-4 w-4" />
+                            نسخ رقم الطلب
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+                        <DetailSummaryMetric
+                          label="البريد الإلكتروني"
+                          value={
+                            selectedContactEmail ? (
+                              <span dir="ltr" className="break-all">
+                                {selectedContactEmail}
+                              </span>
+                            ) : (
+                              "—"
+                            )
+                          }
+                          icon={<Mail className="h-3.5 w-3.5" />}
+                        />
+                        <DetailSummaryMetric
+                          label="رقم الجوال"
+                          value={
+                            selectedContactPhone ? (
+                              <span dir="ltr">{selectedContactPhone}</span>
+                            ) : (
+                              "—"
+                            )
+                          }
+                          icon={<Phone className="h-3.5 w-3.5" />}
+                        />
+                        <DetailSummaryMetric
+                          label="مصدر البيانات"
+                          value={selectedClient?.sourceLabel || "—"}
+                          helper={selectedClient?.sourceHelper || undefined}
+                          icon={<MessageSquare className="h-3.5 w-3.5" />}
+                        />
+                        <DetailSummaryMetric
+                          label="حالة الملف"
+                          value={
+                            selectedClient?.sourceKey === "live_user"
+                              ? "ملف مرتبط وموثق"
+                              : "بيانات محفوظة داخل الطلب"
+                          }
+                          icon={<ShieldCheck className="h-3.5 w-3.5" />}
+                          strong
+                        />
+                      </div>
+                    </DetailSection>
+
+                    <DetailSection
+                      title="بيانات الطلب"
+                      description="ملخص منظم للطلب مع الرسالة أو الوصف والمشروع المرتبط وطبيعة المسار الحالي."
+                      badge={
+                        <Badge
+                          className={cn(
+                            DETAIL_PILL_BASE_CLASS,
+                            "border-slate-200 bg-slate-100 text-slate-700"
                           )}
+                        >
+                          {selectedRequestKind?.shortLabel || "طلب"}
+                        </Badge>
+                      }
+                    >
+                      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                        <DetailSummaryMetric
+                          label="رقم الطلب"
+                          value={requestNumber(selectedMessage)}
+                          icon={<FileText className="h-3.5 w-3.5" />}
+                          mono
+                          strong
+                        />
+                        <DetailSummaryMetric
+                          label="نوع الطلب"
+                          value={selectedRequestKind?.label || "—"}
+                          icon={<MessageSquare className="h-3.5 w-3.5" />}
+                        />
+                        <DetailSummaryMetric
+                          label="الحالة"
+                          value={selectedStatusMeta?.label || "—"}
+                          icon={<Eye className="h-3.5 w-3.5" />}
+                          strong
+                        />
+                        <DetailSummaryMetric
+                          label="تاريخ الإنشاء"
+                          value={formatDateTimeAR(selectedCreatedAtValue)}
+                          icon={<CalendarDays className="h-3.5 w-3.5" />}
+                        />
+                        <DetailSummaryMetric
+                          label="آخر تحديث"
+                          value={formatDateTimeAR(selectedUpdatedAtValue)}
+                          helper={formatRequestTimeLabel(selectedUpdatedAtValue)}
+                          icon={<RefreshCw className="h-3.5 w-3.5" />}
+                        />
+                        <DetailSummaryMetric
+                          label="مصدر الطلب"
+                          value={pick(
+                            selectedMessage?.source,
+                            selectedClient?.sourceLabel,
+                            "—"
+                          )}
+                          icon={<MessageSquare className="h-3.5 w-3.5" />}
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.08fr)_minmax(0,0.92fr)]">
+                        <div className="rounded-[24px] border border-slate-200/80 bg-[linear-gradient(180deg,#ffffff_0%,rgba(248,250,252,0.96)_100%)] p-5 shadow-[0_18px_40px_-36px_rgba(15,23,42,0.18)]">
+                          <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-400">
+                            رسالة العميل / الوصف
+                          </div>
+                          <p className="mt-3 text-sm leading-8 text-slate-700">
+                            {selectedRequestSummary ||
+                              "لا توجد رسالة مفصلة مرفقة مع هذا الطلب."}
+                          </p>
                         </div>
 
-                        <div className="grid grid-cols-1 gap-4">
-                          <div className="space-y-2">
-                            <Label className={DETAIL_INLINE_LABEL_CLASS}>
-                              ملاحظات داخلية
-                            </Label>
-                            <Textarea
-                              value={internalNotes}
-                              onChange={e => setInternalNotes(e.target.value)}
-                              placeholder="ملاحظات للإدارة فقط..."
-                              disabled={isLockedFinal || myRole === "client"}
-                              className={DETAIL_TEXTAREA_CLASS}
+                        <div
+                          className={cn(
+                            "rounded-[24px] border px-5 py-5 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.22)]",
+                            isSelectedInterestRequest
+                              ? "border-amber-200/80 bg-[linear-gradient(180deg,rgba(255,251,235,0.98)_0%,rgba(255,255,255,0.98)_100%)]"
+                              : "border-emerald-200/80 bg-[linear-gradient(180deg,rgba(236,253,245,0.98)_0%,rgba(255,255,255,0.98)_100%)]"
+                          )}
+                        >
+                          <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-400">
+                            {isSelectedInterestRequest
+                              ? "قراءة الاهتمام"
+                              : "قراءة الاستثمار"}
+                          </div>
+                          <div className="mt-3 space-y-3">
+                            <DetailSummaryMetric
+                              label="المشروع"
+                              value={selectedProjectTitle}
+                              icon={<Building2 className="h-3.5 w-3.5" />}
+                              strong
+                              className="border-transparent bg-white/85 shadow-none"
                             />
+                            {isSelectedInterestRequest ? (
+                              <DetailSummaryMetric
+                                label="وضع المتابعة"
+                                value={selectedInterestReviewMeta?.label || "جديد"}
+                                helper={selectedInterestReviewMeta?.helperText}
+                                icon={<Eye className="h-3.5 w-3.5" />}
+                                className="border-transparent bg-white/85 shadow-none"
+                              />
+                            ) : (
+                              <>
+                                <DetailSummaryMetric
+                                  label="المبلغ"
+                                  value={moneySAR(selectedAmount)}
+                                  icon={<Wallet className="h-3.5 w-3.5" />}
+                                  strong
+                                  className="border-transparent bg-white/85 shadow-none"
+                                />
+                                <DetailSummaryMetric
+                                  label="المتبقي بالمشروع"
+                                  value={
+                                    selectedRemaining == null
+                                      ? "—"
+                                      : selectedAmountExceeded
+                                        ? `${moneySAR(selectedRemaining)} (تجاوز)`
+                                        : moneySAR(selectedRemaining)
+                                  }
+                                  icon={<Building2 className="h-3.5 w-3.5" />}
+                                  className="border-transparent bg-white/85 shadow-none"
+                                />
+                                <DetailSummaryMetric
+                                  label="سجل الاستثمار"
+                                  value={
+                                    selectedMessage?.investmentId
+                                      ? "تم إنشاء سجل الاستثمار"
+                                      : "بانتظار إنشاء السجل"
+                                  }
+                                  helper={
+                                    selectedMessage?.investmentId
+                                      ? `رقم السجل ${selectedMessage.investmentId}`
+                                      : undefined
+                                  }
+                                  icon={<ShieldCheck className="h-3.5 w-3.5" />}
+                                  className="border-transparent bg-white/85 shadow-none"
+                                />
+                              </>
+                            )}
                           </div>
                         </div>
+                      </div>
 
-                        {isSelectedInterestRequest ? (
-                          <div className={DETAIL_ALERT_CLASS}>
-                            {selectedInterestReviewMeta?.helperText ||
-                              "يتم نقل الاهتمام إلى السجل القديم مباشرة بعد الاطلاع عليه، بدون دورة إجراءات استثمارية."}
+                      <div
+                        className={cn(
+                          "rounded-[24px] border px-5 py-4 text-sm leading-8 shadow-[0_18px_36px_-34px_rgba(15,23,42,0.2)]",
+                          isSelectedInterestRequest
+                            ? "border-amber-200/80 bg-[linear-gradient(180deg,rgba(255,251,235,0.98)_0%,rgba(255,255,255,0.98)_100%)] text-amber-950"
+                            : "border-emerald-200/80 bg-[linear-gradient(180deg,rgba(236,253,245,0.98)_0%,rgba(255,255,255,0.98)_100%)] text-emerald-950"
+                        )}
+                      >
+                        {isSelectedInterestRequest
+                          ? selectedInterestReviewMeta?.helperText ||
+                            selectedRequestKind?.helperText
+                          : selectedMessage?.investmentId
+                            ? "تم ربط هذا الطلب بسجل استثمار فعلي، لذلك يظهر هنا كطلب استثماري تشغيلي بمرحلة أوضح ومستندات مرتبطة."
+                            : "هذا الطلب ما زال في المرحلة السابقة لإنشاء الاستثمار، لذلك يتم التركيز على المشروع والمبلغ والقرار المطلوب من الفريق."}
+                      </div>
+                    </DetailSection>
+
+                    <DetailSection
+                      title="ملخص القرار والنشاط والإجراءات"
+                      description="لوحة تشغيلية تجمع القرار الحالي، سجل الحركة، والملاحظات الداخلية مع الإجراءات المناسبة حسب نوع الطلب."
+                      badge={
+                        <Badge
+                          className={cn(
+                            DETAIL_PILL_BASE_CLASS,
+                            selectedNextActionSummary.needsAction
+                              ? "border-amber-200 bg-amber-50 text-amber-800"
+                              : "border-slate-200 bg-slate-100 text-slate-700"
+                          )}
+                        >
+                          {selectedNextActionSummary.needsAction
+                            ? "أولوية تنفيذ"
+                            : "متابعة هادئة"}
+                        </Badge>
+                      }
+                    >
+                      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.08fr)_minmax(0,0.92fr)]">
+                        <div
+                          className={cn(
+                            "rounded-[24px] border px-5 py-5 shadow-[0_20px_40px_-34px_rgba(15,23,42,0.22)]",
+                            isSelectedInterestRequest
+                              ? "border-amber-200/80 bg-[linear-gradient(180deg,rgba(255,251,235,0.98)_0%,rgba(255,255,255,0.98)_100%)] text-amber-950"
+                              : "border-slate-900/10 bg-[linear-gradient(135deg,rgba(11,23,38,0.98)_0%,rgba(16,32,58,0.96)_70%,rgba(255,255,255,0.06)_135%)] text-white"
+                          )}
+                        >
+                          <div className="flex flex-wrap items-center gap-2.5">
+                            {selectedStatusMeta ? (
+                              <Badge
+                                className={cn(
+                                  DETAIL_PILL_BASE_CLASS,
+                                  selectedStatusMeta.tone
+                                )}
+                              >
+                                {selectedStatusMeta.label}
+                              </Badge>
+                            ) : null}
+
+                            {isSelectedInterestRequest ? null : (
+                              <Badge className={DETAIL_STAGE_PILL_CLASS}>
+                                {selectedStageMeta?.label || "—"}
+                              </Badge>
+                            )}
                           </div>
+
+                          <div className="mt-4 text-xl font-semibold leading-8 text-current">
+                            {selectedNextActionSummary.label}
+                          </div>
+                          <p className="mt-2 text-sm leading-8 text-current/80">
+                            {selectedNextActionSummary.helper}
+                          </p>
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-3">
+                          <DetailSummaryMetric
+                            label="آخر من عدّل"
+                            value={selectedLastActor?.name || "—"}
+                            helper={selectedLastActor?.roleLabel || undefined}
+                            icon={<RefreshCw className="h-3.5 w-3.5" />}
+                            strong
+                          />
+                          <DetailSummaryMetric
+                            label="آخر تحديث"
+                            value={formatDateTimeAR(selectedUpdatedAtValue)}
+                            helper={formatRequestTimeLabel(selectedUpdatedAtValue)}
+                            icon={<CalendarDays className="h-3.5 w-3.5" />}
+                          />
+                        </div>
+                      </div>
+
+                      <div className={DETAIL_INLINE_PANEL_CLASS}>
+                        <Label className={DETAIL_INLINE_LABEL_CLASS}>
+                          ملاحظات داخلية
+                        </Label>
+                        <Textarea
+                          value={internalNotes}
+                          onChange={e => setInternalNotes(e.target.value)}
+                          placeholder="ملاحظات للإدارة فقط..."
+                          disabled={isLockedFinal || myRole === "client"}
+                          className={DETAIL_TEXTAREA_CLASS}
+                        />
+                        <p className="mt-3 text-xs leading-6 text-slate-500">
+                          هذا الحقل مخصص للملاحظات الداخلية والتنظيمية فقط.
+                        </p>
+                      </div>
+
+                      {isSelectedInterestRequest ? (
+                        <div className={DETAIL_ALERT_CLASS}>
+                          {selectedInterestReviewMeta?.helperText ||
+                            "يتم التعامل مع هذا السجل كطلب اهتمام تمهيدي، لذلك تكفي القراءة والتوثيق والتواصل دون دورة استثمار كاملة."}
+                        </div>
+                      ) : null}
+
+                      <div className="space-y-3">
+                        <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-400">
+                          السجل الزمني / آخر التحديثات
+                        </div>
+                        {selectedTimelineEvents.length ? (
+                          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                            {selectedTimelineEvents.slice(0, 4).map(item => (
+                              <DetailTimelineItem
+                                key={item.id}
+                                title={item.title}
+                                note={item.note}
+                                actorName={item.actor.name}
+                                actorRole={item.actor.roleLabel}
+                                timeLabel={item.timeLabel}
+                                dateLabel={item.atLabel}
+                              />
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50/80 px-4 py-8 text-center text-sm leading-7 text-slate-500">
+                            لا توجد أنشطة إضافية مسجلة على هذا الطلب حتى الآن.
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <Button
+                          className={cn(
+                            DETAIL_LIGHT_SOLID_BUTTON_CLASS,
+                            "w-full"
+                          )}
+                          onClick={handleSaveNotesOnly}
+                          disabled={isLockedFinal || myRole === "client"}
+                        >
+                          <CheckCircle2 className="w-4 h-4" />
+                          حفظ الملاحظات
+                        </Button>
+                        {canStartRequestReview ? (
+                          <Button
+                            className={`${DETAIL_SOLID_BUTTON_CLASS} w-full bg-yellow-700 hover:bg-yellow-800`}
+                            onClick={startRequestReview}
+                            disabled={isLockedFinal}
+                          >
+                            <Clock3 className="w-4 h-4" />
+                            بدء المراجعة
+                          </Button>
                         ) : null}
 
-                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        {canInitialApproveRequest ? (
                           <Button
-                            className={cn(
-                              DETAIL_LIGHT_SOLID_BUTTON_CLASS,
-                              "w-full"
-                            )}
-                            onClick={handleSaveNotesOnly}
-                            disabled={isLockedFinal || myRole === "client"}
+                            className={`${DETAIL_SOLID_BUTTON_CLASS} w-full bg-indigo-700 hover:bg-indigo-800`}
+                            onClick={initialApproveRequest}
+                            disabled={isLockedFinal}
                           >
-                            <CheckCircle2 className="w-4 h-4" />
-                            حفظ الملاحظات
+                            <ShieldCheck className="w-4 h-4" />
+                            موافقة أولية
                           </Button>
-                          {canStartRequestReview ? (
-                            <Button
-                              className={`${DETAIL_SOLID_BUTTON_CLASS} w-full bg-yellow-700 hover:bg-yellow-800`}
-                              onClick={startRequestReview}
-                              disabled={isLockedFinal}
-                            >
-                              <Clock3 className="w-4 h-4" />
-                              بدء المراجعة
-                            </Button>
-                          ) : null}
+                        ) : null}
 
-                          {canInitialApproveRequest ? (
-                            <Button
-                              className={`${DETAIL_SOLID_BUTTON_CLASS} w-full bg-indigo-700 hover:bg-indigo-800`}
-                              onClick={initialApproveRequest}
-                              disabled={isLockedFinal}
-                            >
+                        {canCreateInvestmentFromRequest ? (
+                          <Button
+                            className={`${DETAIL_SOLID_BUTTON_CLASS} w-full bg-blue-700 hover:bg-blue-800`}
+                            onClick={approveRequestAndCreateInvestment}
+                            disabled={approveCreateBusy || isLockedFinal}
+                          >
+                            {approveCreateBusy ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <CheckCircle2 className="w-4 h-4" />
+                            )}
+                            إنشاء الاستثمار
+                          </Button>
+                        ) : null}
+
+                        {canVerifySignedContract ? (
+                          <Button
+                            className={`${DETAIL_SOLID_BUTTON_CLASS} w-full bg-amber-700 hover:bg-amber-800`}
+                            onClick={verifySignedContract}
+                            disabled={isLockedFinal || finalizeBusy}
+                          >
+                            {finalizeBusy ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
                               <ShieldCheck className="w-4 h-4" />
-                              موافقة أولية
-                            </Button>
-                          ) : null}
+                            )}
+                            اعتماد العقد الموقّع
+                          </Button>
+                        ) : null}
 
-                          {canCreateInvestmentFromRequest ? (
+                        {canFinalize ? (
+                          <Button
+                            className={`${DETAIL_SOLID_BUTTON_CLASS} w-full bg-emerald-700 hover:bg-emerald-800`}
+                            onClick={activateInvestmentAfterApproval}
+                            disabled={isLockedFinal || finalizeBusy}
+                          >
+                            {finalizeBusy ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Building2 className="w-4 h-4" />
+                            )}
+                            إقفال نهائي
+                          </Button>
+                        ) : null}
+
+                        {isSelectedInvestmentRequest ? (
+                          <>
                             <Button
-                              className={`${DETAIL_SOLID_BUTTON_CLASS} w-full bg-blue-700 hover:bg-blue-800`}
-                              onClick={approveRequestAndCreateInvestment}
-                              disabled={approveCreateBusy || isLockedFinal}
-                            >
-                              {approveCreateBusy ? (
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                              ) : (
-                                <CheckCircle2 className="w-4 h-4" />
+                              className={cn(
+                                DETAIL_DANGER_BUTTON_CLASS,
+                                "w-full"
                               )}
-                              إنشاء الاستثمار
-                            </Button>
-                          ) : null}
-
-                          {canVerifySignedContract ? (
-                            <Button
-                              className={`${DETAIL_SOLID_BUTTON_CLASS} w-full bg-amber-700 hover:bg-amber-800`}
-                              onClick={verifySignedContract}
-                              disabled={isLockedFinal || finalizeBusy}
+                              onClick={rejectInvestmentRequest}
+                              disabled={isLockedFinal || !canManageMessages}
                             >
-                              {finalizeBusy ? (
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                              ) : (
-                                <ShieldCheck className="w-4 h-4" />
-                              )}
-                              اعتماد العقد الموقّع
+                              <AlertTriangle className="w-4 h-4" />
+                              رفض الطلب
                             </Button>
-                          ) : null}
 
-                          {/* ✅ Step Machine Buttons */}
-                          {selectedMessage ? (
-                            <>
-                              {/* 1) Staff -> Accountant */}
-                              {false &&
-                              canStaffActions &&
-                              normalizeForDisplay(selectedMessage).status ===
-                                "new" &&
-                              normalizeForDisplay(selectedMessage).stageRole ===
-                                "staff" ? (
-                                <Button
-                                  className={`${DETAIL_SOLID_BUTTON_CLASS} w-full bg-yellow-700 hover:bg-yellow-800`}
-                                  onClick={stepStaffForwardToAccountant}
-                                  disabled={isLockedFinal}
-                                >
-                                  <Clock3 className="w-4 h-4" />
-                                  ترحيل للمحاسب
-                                </Button>
-                              ) : null}
-
-                              {/* 2) Accountant -> Client */}
-                              {false &&
-                              canOwnerAccountantActions &&
-                              normalizeForDisplay(selectedMessage).status ===
-                                "needs_account" &&
-                              normalizeForDisplay(selectedMessage).stageRole ===
-                                "accountant" ? (
-                                <Button
-                                  className={`${DETAIL_SOLID_BUTTON_CLASS} w-full bg-indigo-700 hover:bg-indigo-800`}
-                                  onClick={stepAccountantForwardToClient}
-                                  disabled={isLockedFinal}
-                                >
-                                  <PenLine className="w-4 h-4" />
-                                  تمّت المراجعة — للعميل
-                                </Button>
-                              ) : null}
-
-                              {/* 3) Client -> Owner */}
-                              {false &&
-                              myRole === "client" &&
-                              normalizeForDisplay(selectedMessage).status ===
-                                "waiting_client_confirmation" &&
-                              normalizeForDisplay(selectedMessage).stageRole ===
-                                "client" ? (
-                                <Button
-                                  className={`${DETAIL_SOLID_BUTTON_CLASS} w-full bg-emerald-700 hover:bg-emerald-800`}
-                                  onClick={stepClientApproveAndForwardToOwner}
-                                  disabled={isLockedFinal}
-                                >
-                                  <CheckCircle2 className="w-4 h-4" />
-                                  موافقة وتعميد
-                                </Button>
-                              ) : null}
-
-                              {/* 4) Owner -> Completed/Locked */}
-                              {false &&
-                              myRole === "owner" &&
-                              normalizeForDisplay(selectedMessage).status ===
-                                "resolved" &&
-                              normalizeForDisplay(selectedMessage).stageRole ===
-                                "owner" ? (
-                                <Button
-                                  className={`${DETAIL_SOLID_BUTTON_CLASS} w-full bg-gray-800 hover:bg-gray-900`}
-                                  onClick={stepOwnerFinalizeAndClose}
-                                  disabled={isLockedFinal}
-                                >
-                                  <ShieldCheck className="w-4 h-4" />
-                                  تعميد نهائي وإقفال
-                                </Button>
-                              ) : null}
-                            </>
-                          ) : null}
-
-                          {/* ✅ Staff: Pre-investment */}
-                          {false && isInvestment ? (
                             <Button
                               variant="outline"
                               className={cn(
                                 DETAIL_OUTLINE_BUTTON_CLASS,
                                 "w-full"
                               )}
-                              onClick={createPreInvestment}
-                              disabled={isLockedFinal}
+                              onClick={reopenMessage}
+                              disabled={
+                                reopenBusy ||
+                                myRole !== "owner" ||
+                                !canManageMessages
+                              }
                             >
-                              <PenLine className="w-4 h-4" />
-                              إنشاء الاستثمار (قديم)
-                            </Button>
-                          ) : null}
-
-                          {/* ✅ Finalize */}
-                          {canFinalize ? (
-                            <Button
-                              className={`${DETAIL_SOLID_BUTTON_CLASS} w-full bg-emerald-700 hover:bg-emerald-800`}
-                              onClick={activateInvestmentAfterApproval}
-                              disabled={isLockedFinal || finalizeBusy}
-                            >
-                              {finalizeBusy ? (
+                              {reopenBusy ? (
                                 <Loader2 className="w-4 h-4 animate-spin" />
                               ) : (
-                                <Building2 className="w-4 h-4" />
+                                <Clock3 className="w-4 h-4" />
                               )}
-                              إقفال نهائي
+                              إعادة فتح (للمسؤول التقني)
                             </Button>
-                          ) : null}
+                          </>
+                        ) : null}
+                      </div>
 
-                          {false && canApproveAndCreateInvestment ? (
-                            <Button
-                              className={`${DETAIL_SOLID_BUTTON_CLASS} w-full bg-blue-700 hover:bg-blue-800`}
-                              onClick={approveRequestAndCreateInvestment}
-                              disabled={approveCreateBusy || isLockedFinal}
-                            >
-                              {approveCreateBusy ? (
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                              ) : (
-                                <CheckCircle2 className="w-4 h-4" />
-                              )}
-                              قبول الطلب وإنشاء الاستثمار
-                            </Button>
-                          ) : null}
+                      <div className="border-t border-slate-200/80 pt-4">
+                        <div className="mb-3 text-[11px] font-semibold tracking-[0.14em] text-slate-400">
+                          أدوات سريعة
+                        </div>
 
-                          {/* ✅ Reject */}
-                          <Button
-                            className={cn(
-                              DETAIL_DANGER_BUTTON_CLASS,
-                              "w-full",
-                              !isSelectedInvestmentRequest && "hidden"
-                            )}
-                            onClick={rejectInvestmentRequest}
-                            disabled={isLockedFinal || !canManageMessages}
-                          >
-                            <AlertTriangle className="w-4 h-4" />
-                            رفض الطلب
-                          </Button>
-
-                          {/* ✅ Owner only reopen */}
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                           <Button
                             variant="outline"
-                            className={cn(
-                              DETAIL_OUTLINE_BUTTON_CLASS,
-                              "w-full",
-                              !isSelectedInvestmentRequest && "hidden"
-                            )}
-                            onClick={reopenMessage}
-                            disabled={
-                              reopenBusy ||
-                              myRole !== "owner" ||
-                              !canManageMessages
-                            }
+                            className={DETAIL_OUTLINE_BUTTON_CLASS}
+                            onClick={openSelectedClientProfile}
                           >
-                            {reopenBusy ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                              <Clock3 className="w-4 h-4" />
-                            )}
-                            إعادة فتح (للمسؤول التقني)
+                            <FileText className="h-4 w-4" />
+                            فتح ملف العميل
+                          </Button>
+
+                          <Button
+                            variant="outline"
+                            className={DETAIL_OUTLINE_BUTTON_CLASS}
+                            onClick={openSelectedProject}
+                          >
+                            <ExternalLink className="h-4 w-4" />
+                            فتح المشروع
+                          </Button>
+
+                          {selectedContactEmail ? (
+                            <a
+                              className="inline-flex"
+                              href={`mailto:${selectedContactEmail}`}
+                            >
+                              <Button
+                                variant="outline"
+                                className={`${DETAIL_OUTLINE_BUTTON_CLASS} w-full`}
+                              >
+                                <Mail className="h-4 w-4" />
+                                إرسال بريد
+                              </Button>
+                            </a>
+                          ) : null}
+
+                          {selectedContactPhone ? (
+                            <a
+                              className="inline-flex"
+                              href={`tel:${selectedContactPhone}`}
+                            >
+                              <Button
+                                variant="outline"
+                                className={`${DETAIL_OUTLINE_BUTTON_CLASS} w-full`}
+                              >
+                                <Phone className="h-4 w-4" />
+                                اتصال مباشر
+                              </Button>
+                            </a>
+                          ) : null}
+
+                          <Button
+                            variant="outline"
+                            className={DETAIL_OUTLINE_BUTTON_CLASS}
+                            onClick={copySelectedRequestNumber}
+                          >
+                            <Copy className="h-4 w-4" />
+                            نسخ رقم الطلب
                           </Button>
                         </div>
-                      </CardContent>
-                    </Card>
+                      </div>
+                    </DetailSection>
 
-                    <Card className={`rsg-card ${DETAIL_SECTION_CARD_CLASS}`}>
+                    {isSelectedInvestmentRequest ? (
+                      <Card className={`rsg-card ${DETAIL_SECTION_CARD_CLASS}`}>
                       <CardHeader className={DETAIL_SECTION_HEADER_CLASS}>
                         <CardTitle className={DETAIL_SECTION_TITLE_CLASS}>
-                          مستندات الاستثمار (Cloudflare R2)
+                          مستندات الاستثمار
                         </CardTitle>
                       </CardHeader>
                       <CardContent
@@ -5742,7 +6274,7 @@ export default function MessagesManagement() {
                             </span>
                             {contractFollowupChipLabel ? (
                               <span
-                                className={`${DETAIL_PILL_BASE_CLASS} border-amber-300/35 bg-amber-500/10 text-amber-200`}
+                                className={`${DETAIL_PILL_BASE_CLASS} border-amber-200 bg-amber-50 text-amber-800`}
                               >
                                 {contractFollowupChipLabel}
                               </span>
@@ -5882,21 +6414,21 @@ export default function MessagesManagement() {
                           </div>
                         </div>
 
-                        <div className="border-t border-white/10 pt-5">
+                        <div className="border-t border-slate-200/80 pt-5">
                           <div className={DETAIL_INLINE_LABEL_CLASS}>
                             رفع المستندات
                           </div>
 
                           <div className="grid grid-cols-1 gap-4">
-                            <div className="space-y-4 rounded-[22px] border border-dashed border-slate-700/70 bg-slate-950/35 px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]">
+                            <div className="space-y-4 rounded-[22px] border border-dashed border-slate-200/80 bg-slate-50/70 px-4 py-4">
                               <ContractFilePicker
                                 buttonLabel="رفع العقد الأصلي (PDF)"
                                 file={draftFile}
                                 onFileChange={setDraftFile}
-                                panelClassName="rounded-[18px] border-slate-700/70 bg-slate-950/55 px-4 py-4 sm:px-4"
+                                panelClassName="rounded-[18px] border border-slate-200 bg-white px-4 py-4 sm:px-4"
                                 buttonClassName={DETAIL_OUTLINE_BUTTON_CLASS}
-                                fileNameClassName="text-sm font-semibold text-slate-50"
-                                helperTextClassName="text-xs leading-6 text-slate-300"
+                                fileNameClassName="text-sm font-semibold text-slate-950"
+                                helperTextClassName="text-xs leading-6 text-slate-500"
                                 disabled={
                                   contractBusy || !selectedMessage?.investmentId
                                 }
@@ -5922,27 +6454,39 @@ export default function MessagesManagement() {
                           </div>
                         </div>
                       </CardContent>
-                    </Card>
+                      </Card>
+                    ) : null}
                   </div>
                 </div>
               </div>
             ) : null}
 
-            <DialogFooter className="shrink-0 border-t border-white/10 bg-white/[0.05] px-7 py-5 backdrop-blur-xl">
-              <div className="flex items-center justify-between w-full gap-3">
-                <div className="text-xs text-slate-300">
+            <DialogFooter className="shrink-0 border-t border-slate-200/80 bg-white/90 px-6 py-5 backdrop-blur sm:px-8">
+              <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="text-sm leading-7 text-slate-500">
                   {isLockedFinal
-                    ? "هذا الطلب مقفل."
-                    : "تأكد من حفظ التغييرات بعد أي تعديل."}
+                    ? "هذا الطلب مقفل بعد اكتمال الدورة الحالية."
+                    : selectedNextActionSummary.helper}
                 </div>
 
-                <Button
-                  variant="outline"
-                  className={DETAIL_OUTLINE_BUTTON_CLASS}
-                  onClick={() => setIsDetailDialogOpen(false)}
-                >
-                  إغلاق
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    className={DETAIL_OUTLINE_BUTTON_CLASS}
+                    onClick={copySelectedRequestNumber}
+                  >
+                    <Copy className="h-4 w-4" />
+                    نسخ رقم الطلب
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    className={DETAIL_OUTLINE_BUTTON_CLASS}
+                    onClick={() => setIsDetailDialogOpen(false)}
+                  >
+                    إغلاق
+                  </Button>
+                </div>
               </div>
             </DialogFooter>
           </DialogContent>
@@ -6107,6 +6651,133 @@ function RequestCollectionSection({
         </div>
       )}
     </section>
+  );
+}
+
+function DetailSection({
+  title,
+  description,
+  badge,
+  children,
+  className,
+}: {
+  title: string;
+  description?: string;
+  badge?: ReactNode;
+  children?: ReactNode;
+  className?: string;
+}) {
+  return (
+    <Card className={cn("rsg-card", DETAIL_SECTION_CARD_CLASS, className)}>
+      <CardHeader className={DETAIL_SECTION_HEADER_CLASS}>
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div className="space-y-1">
+            <CardTitle className={DETAIL_SECTION_TITLE_CLASS}>{title}</CardTitle>
+            {description ? (
+              <p className="text-sm leading-7 text-slate-500">{description}</p>
+            ) : null}
+          </div>
+
+          {badge ? <div className="shrink-0">{badge}</div> : null}
+        </div>
+      </CardHeader>
+
+      <CardContent className={DETAIL_SECTION_CONTENT_CLASS}>{children}</CardContent>
+    </Card>
+  );
+}
+
+function DetailSummaryMetric({
+  label,
+  value,
+  helper,
+  icon,
+  strong = false,
+  mono = false,
+  className,
+}: {
+  label: string;
+  value: any;
+  helper?: string;
+  icon?: ReactNode;
+  strong?: boolean;
+  mono?: boolean;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "min-w-0 rounded-[20px] border border-slate-200/80 bg-[linear-gradient(180deg,#ffffff_0%,rgba(248,250,252,0.95)_100%)] px-4 py-3.5 shadow-[0_18px_36px_-34px_rgba(15,23,42,0.34)]",
+        className
+      )}
+    >
+      <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-400">
+        {icon ? (
+          <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-slate-100 text-slate-500">
+            {icon}
+          </span>
+        ) : null}
+        <span>{label}</span>
+      </div>
+
+      <div
+        className={cn(
+          "mt-3 break-words text-[14px] leading-6 text-slate-700",
+          strong ? "text-[15px] font-semibold text-slate-950" : "font-medium",
+          mono ? "font-mono text-[12px] sm:text-[13px]" : ""
+        )}
+      >
+        {value ?? "—"}
+      </div>
+
+      {helper ? (
+        <p className="mt-2 text-xs leading-6 text-slate-500">{helper}</p>
+      ) : null}
+    </div>
+  );
+}
+
+function DetailTimelineItem({
+  title,
+  note,
+  actorName,
+  actorRole,
+  timeLabel,
+  dateLabel,
+}: {
+  title: string;
+  note?: string | null;
+  actorName: string;
+  actorRole: string;
+  timeLabel: string;
+  dateLabel: string;
+}) {
+  return (
+    <div className="relative rounded-[22px] border border-slate-200/80 bg-[linear-gradient(180deg,#ffffff_0%,rgba(248,250,252,0.96)_100%)] px-4 py-4 shadow-[0_18px_36px_-34px_rgba(15,23,42,0.24)]">
+      <div className="absolute right-4 top-4 h-2.5 w-2.5 rounded-full bg-slate-900" />
+
+      <div className="pr-5">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <h4 className="text-sm font-semibold leading-6 text-slate-950">
+              {title}
+            </h4>
+            <div className="mt-1 text-xs leading-6 text-slate-500">
+              {actorName} • {actorRole}
+            </div>
+          </div>
+
+          <div className="text-xs leading-6 text-slate-500 sm:text-left">
+            <div>{timeLabel}</div>
+            <div>{dateLabel}</div>
+          </div>
+        </div>
+
+        {note ? (
+          <p className="mt-3 text-sm leading-7 text-slate-600">{note}</p>
+        ) : null}
+      </div>
+    </div>
   );
 }
 
