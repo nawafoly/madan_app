@@ -157,6 +157,48 @@ function normalizeCover(src?: string) {
   return `/${s}`;
 }
 
+function formatProjectDate(value: any) {
+  const date = toDateSafe(value);
+  if (!date) return "غير محدد";
+
+  return new Intl.DateTimeFormat("ar-SA", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(date);
+}
+
+function toPastTenseNarrative(value: unknown) {
+  const text = String(value ?? "")
+    .replace(/\r/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!text) return "";
+
+  return text
+    .replace(/فرصة استثمارية/g, "مشروع تم تنفيذه")
+    .replace(/فرصة استثمار/g, "مشروع منجز")
+    .replace(/فرصة/g, "مشروع")
+    .replace(/قراءة سريعة للفرصة/g, "نظرة عامة على المشروع")
+    .replace(/الخلاصة التنفيذية للاستثمار/g, "ملخص تنفيذي للمشروع")
+    .replace(/يهدف إلى/g, "كان يهدف إلى")
+    .replace(/تهدف إلى/g, "كانت تهدف إلى")
+    .replace(/يهدف\b/g, "كان يهدف")
+    .replace(/تهدف\b/g, "كانت تهدف")
+    .replace(/يقدّم/g, "قدّم")
+    .replace(/تقدّم/g, "قدّمت")
+    .replace(/يوفّر/g, "وفّر")
+    .replace(/توفر/g, "وفّرت")
+    .replace(/يتيح/g, "أتاح")
+    .replace(/تتيح/g, "أتاحت")
+    .replace(/يعرض/g, "عرض")
+    .replace(/يوضح/g, "أوضح")
+    .replace(/يشرح/g, "شرح")
+    .replace(/سيتم/g, "تم")
+    .trim();
+}
+
 /** ✅ NEW: milestone status helpers */
 function normStatus(s: any) {
   return String(s ?? "")
@@ -694,6 +736,247 @@ export default function ProjectDetails() {
   const isUpcomingProject = projectStatusKey === "draft";
   const isClosedProject =
     projectStatusKey === "closed" || projectStatusKey === "completed";
+  const projectTitle = project?.titleAr || project?.title || "—";
+  const projectLocation = project?.locationAr || project?.location || "";
+  const completedStatusLabel = "مكتمل";
+  const hasVipTag =
+    Boolean(project?.vipOnly) ||
+    Boolean(project?.isVip) ||
+    project?.projectType === "vip_exclusive";
+
+  const completedMedia = useMemo(() => {
+    const seen = new Set<string>();
+    const media = [coverImage, ...gallery].filter(Boolean);
+
+    return media.filter(src => {
+      if (seen.has(src)) return false;
+      seen.add(src);
+      return true;
+    });
+  }, [coverImage, gallery]);
+
+  const completedOverviewLead = useMemo(() => {
+    const normalized = toPastTenseNarrative(overviewContent.lead || overviewSource);
+    return (
+      normalized ||
+      "كان هذا المشروع ضمن المشاريع التي تم تنفيذها وإغلاقها، وتعرض هذه الصفحة خلاصته النهائية ومخرجاته الموثقة."
+    );
+  }, [overviewContent.lead, overviewSource]);
+
+  const completedOverviewPoints = useMemo(
+    () =>
+      [
+        typeLabel ? `اندرج المشروع ضمن فئة ${typeLabel}.` : "",
+        projectLocation ? `تم تنفيذ المشروع في ${projectLocation}.` : "",
+        project?.issueNumber ? `حمل المشروع الرقم #${project.issueNumber}.` : "",
+        projectEndDate ? `اكتمل المشروع في ${formatProjectDate(projectEndDate)}.` : "",
+      ].filter(Boolean),
+    [project?.issueNumber, projectEndDate, projectLocation, typeLabel]
+  );
+
+  const completedResults = useMemo(() => {
+    const fromHighlights = highlights
+      .map(item => toPastTenseNarrative(item))
+      .filter(Boolean);
+
+    if (fromHighlights.length) return fromHighlights.slice(0, 6);
+
+    const fromMilestones = milestones
+      .map(milestone => {
+        const title = String(milestone?.title || "").trim();
+        const description = toPastTenseNarrative(milestone?.description);
+
+        if (description) return description;
+        if (title) return `تم إنجاز ${title}.`;
+        return "";
+      })
+      .filter(Boolean);
+
+    if (fromMilestones.length) return fromMilestones.slice(0, 6);
+
+    return [
+      projectEndDate
+        ? `تم الوصول إلى المرحلة النهائية للمشروع بتاريخ ${formatProjectDate(projectEndDate)}.`
+        : "تم الوصول إلى المرحلة النهائية للمشروع ضمن سجل المشاريع المكتملة.",
+      projectLocation ? `اكتمل تنفيذ المشروع في ${projectLocation}.` : "",
+      "أصبحت الصفحة مرجعًا بصريًا ومعلوماتيًا لنتائج المشروع بعد إقفاله.",
+    ].filter(Boolean);
+  }, [highlights, milestones, projectEndDate, projectLocation]);
+
+  const completedOutputs = useMemo(() => {
+    const outputs: Array<{ title: string; description: string; meta: string }> = [];
+
+    milestones.slice(0, 2).forEach((milestone, index) => {
+      const title = String(milestone?.title || "").trim();
+      const description = toPastTenseNarrative(milestone?.description);
+
+      if (!title && !description) return;
+
+      outputs.push({
+        title: title || `مخرج ${index + 1}`,
+        description:
+          description || "تم إنجاز هذه المرحلة ضمن المسار التنفيذي للمشروع.",
+        meta: milestone?.date ? formatProjectDate(milestone.date) : "مرحلة منجزة",
+      });
+    });
+
+    if (attachments.length > 0) {
+      outputs.push({
+        title: "توثيق المشروع",
+        description: `تم إرفاق ${formatNumberEN(attachments.length)} ملفات مرتبطة بنتائج المشروع ومخرجاته النهائية.`,
+        meta: "مستندات ومرفقات",
+      });
+    }
+
+    if (completedMedia.length > 0) {
+      outputs.push({
+        title: "معرض بصري",
+        description: `تم توثيق المشروع عبر ${formatNumberEN(completedMedia.length)} صورة أو أصل بصري يعرض الحالة النهائية.`,
+        meta: "صور المشروع",
+      });
+    }
+
+    if (!outputs.length) {
+      outputs.push({
+        title: "سجل المشروع",
+        description:
+          "تم حفظ هذا المشروع ضمن المشاريع المكتملة لعرض خلاصته النهائية ومخرجاته بعد التنفيذ.",
+        meta: completedStatusLabel,
+      });
+    }
+
+    return outputs.slice(0, 4);
+  }, [attachments.length, completedMedia.length, milestones]);
+
+  const completedFinalNotes = useMemo(() => {
+    const notes = [
+      project?.paymentScheduleAr
+        ? toPastTenseNarrative(project.paymentScheduleAr)
+        : "",
+      project?.risksAr ? toPastTenseNarrative(project.risksAr) : "",
+      project?.issueNumber
+        ? `تم حفظ المشروع تحت الرقم المرجعي #${project.issueNumber} ضمن سجل المشاريع المكتملة.`
+        : "",
+    ].filter(Boolean);
+
+    return notes.slice(0, 3);
+  }, [project?.issueNumber, project?.paymentScheduleAr, project?.risksAr]);
+
+  const completionContent = useMemo(() => {
+    const raw = project?.completionContent;
+    if (!raw || typeof raw !== "object") return null;
+
+    return {
+      overviewAr: String((raw as any).overviewAr || "").trim(),
+      summaryAr: String((raw as any).summaryAr || "").trim(),
+      resultsAr: Array.isArray((raw as any).resultsAr)
+        ? (raw as any).resultsAr.map((item: unknown) => String(item || "").trim()).filter(Boolean)
+        : [],
+      outputs: Array.isArray((raw as any).outputs)
+        ? (raw as any).outputs
+            .map((item: any) => ({
+              title: String(item?.titleAr || "").trim(),
+              description: String(item?.descriptionAr || "").trim(),
+              meta: String(item?.metaAr || "").trim(),
+            }))
+            .filter((item: { title: string; description: string; meta: string }) =>
+              item.title || item.description || item.meta
+            )
+        : [],
+      finalNotesAr: Array.isArray((raw as any).finalNotesAr)
+        ? (raw as any).finalNotesAr
+            .map((item: unknown) => String(item || "").trim())
+            .filter(Boolean)
+        : [],
+      gallery: Array.isArray((raw as any).gallery)
+        ? (raw as any).gallery
+            .map((item: unknown) => normalizeCover(String(item || "")))
+            .filter(Boolean)
+        : [],
+    };
+  }, [project?.completionContent]);
+
+  const hasExplicitCompletionContent = useMemo(
+    () =>
+      Boolean(
+        completionContent &&
+          (completionContent.overviewAr ||
+            completionContent.summaryAr ||
+            completionContent.resultsAr.length > 0 ||
+            completionContent.outputs.length > 0 ||
+            completionContent.finalNotesAr.length > 0 ||
+            completionContent.gallery.length > 0)
+      ),
+    [completionContent]
+  );
+
+  const completionMediaData = useMemo(() => {
+    const seen = new Set<string>();
+    const media =
+      completionContent?.gallery && completionContent.gallery.length > 0
+        ? completionContent.gallery
+        : completedMedia;
+
+    return media.filter((src) => {
+      if (!src || seen.has(src)) return false;
+      seen.add(src);
+      return true;
+    });
+  }, [completedMedia, completionContent?.gallery]);
+
+  const completionSummaryText = useMemo(() => {
+    if (completionContent?.summaryAr) return completionContent.summaryAr;
+    if (completionContent?.overviewAr) {
+      const parsed = parseOverviewContent(completionContent.overviewAr);
+      return parsed.lead || completionContent.overviewAr;
+    }
+    return completedOverviewLead;
+  }, [completedOverviewLead, completionContent?.overviewAr, completionContent?.summaryAr]);
+
+  const completionOverviewItems = useMemo(() => {
+    if (completionContent?.overviewAr) {
+      const parsed = parseOverviewContent(completionContent.overviewAr);
+      const items = [parsed.lead, ...parsed.bullets].filter(Boolean);
+      if (items.length > 0) return items.slice(0, 4);
+    }
+
+    return completedOverviewPoints;
+  }, [completedOverviewPoints, completionContent?.overviewAr]);
+
+  const completionResultsData = useMemo(() => {
+    if (completionContent?.resultsAr && completionContent.resultsAr.length > 0) {
+      return completionContent.resultsAr.slice(0, 6);
+    }
+    return completedResults;
+  }, [completedResults, completionContent?.resultsAr]);
+
+  const completionOutputsData = useMemo(() => {
+    if (completionContent?.outputs && completionContent.outputs.length > 0) {
+      return completionContent.outputs.slice(0, 4);
+    }
+
+    const fallbackOutputs = [...completedOutputs];
+    if (
+      completionContent?.gallery &&
+      completionContent.gallery.length > 0 &&
+      !fallbackOutputs.some((item) => item.meta === "صور المشروع")
+    ) {
+      fallbackOutputs.unshift({
+        title: "معرض بصري",
+        description: `تم توثيق المشروع عبر ${formatNumberEN(completionContent.gallery.length)} صور تعرض الحالة النهائية.`,
+        meta: "صور المشروع",
+      });
+    }
+
+    return fallbackOutputs.slice(0, 4);
+  }, [completedOutputs, completionContent?.gallery, completionContent?.outputs]);
+
+  const completionFinalNotesData = useMemo(() => {
+    if (completionContent?.finalNotesAr && completionContent.finalNotesAr.length > 0) {
+      return completionContent.finalNotesAr.slice(0, 4);
+    }
+    return completedFinalNotes;
+  }, [completedFinalNotes, completionContent?.finalNotesAr]);
 
   const stagedUpcomingItems = useMemo(() => {
     const fallbackTitles = ["دراسة", "ترخيص", "تجهيز"] as const;
@@ -973,6 +1256,334 @@ export default function ProjectDetails() {
             </Link>
           </Card>
         </div>
+      </div>
+    );
+  }
+
+  if (isClosedProject) {
+    return (
+      <div className="w-full bg-[#f4f7fb]">
+        <section className="relative overflow-hidden bg-[#07111f] text-white">
+          <div className="absolute inset-0">
+            {completionMediaData[0] ? (
+              <img
+                src={completionMediaData[0]}
+                alt={projectTitle}
+                className="h-full w-full object-cover opacity-28"
+              />
+            ) : (
+              <video
+                autoPlay
+                muted
+                loop
+                playsInline
+                className="h-full w-full object-cover opacity-20"
+                src={heroVideo}
+              />
+            )}
+          </div>
+
+          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(7,17,31,0.52)_0%,rgba(7,17,31,0.66)_24%,rgba(7,17,31,0.88)_72%,rgba(7,17,31,0.96)_100%)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(242,174,48,0.18),transparent_28%),radial-gradient(circle_at_bottom_left,rgba(56,189,248,0.12),transparent_25%)]" />
+
+          <div className="container relative py-24 md:py-28">
+            <div className="max-w-5xl space-y-8">
+              <div className="flex flex-wrap gap-2">
+                <Badge className="rounded-full border border-emerald-300/24 bg-emerald-300/14 px-4 py-2 text-white">
+                  {completedStatusLabel}
+                </Badge>
+
+                {typeLabel ? (
+                  <Badge className="rounded-full border border-white/15 bg-white/10 px-4 py-2 text-white/92 backdrop-blur-sm">
+                    {typeLabel}
+                  </Badge>
+                ) : null}
+
+                {hasVipTag ? (
+                  <Badge className="rounded-full border border-amber-300/24 bg-amber-300/14 px-4 py-2 text-amber-100 backdrop-blur-sm">
+                    VIP
+                  </Badge>
+                ) : null}
+
+                {project?.issueNumber ? (
+                  <Badge className="rounded-full border border-white/15 bg-black/20 px-4 py-2 text-white/90 backdrop-blur-sm">
+                    #{project.issueNumber}
+                  </Badge>
+                ) : null}
+              </div>
+
+              <div className="space-y-4">
+                <div className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/72 backdrop-blur">
+                  <CheckCircle2 className="h-4 w-4" />
+                  <span>Project Results</span>
+                </div>
+
+                <h1 className="max-w-4xl text-4xl font-semibold leading-tight tracking-tight md:text-6xl">
+                  {projectTitle}
+                </h1>
+
+                {projectLocation ? (
+                  <div className="flex items-center gap-2 text-base text-white/78 md:text-lg">
+                    <MapPin className="h-5 w-5" />
+                    <span>{projectLocation}</span>
+                  </div>
+                ) : null}
+
+                <p className="max-w-3xl text-base leading-8 text-white/74 md:text-lg">
+                  {completionSummaryText}
+                </p>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="rounded-[28px] border border-white/12 bg-white/10 p-5 backdrop-blur">
+                  <div className="text-sm text-white/58">الحالة</div>
+                  <div className="mt-3 text-2xl font-semibold text-white">
+                    {completedStatusLabel}
+                  </div>
+                </div>
+
+                <div className="rounded-[28px] border border-white/12 bg-white/10 p-5 backdrop-blur">
+                  <div className="text-sm text-white/58">الموقع</div>
+                  <div className="mt-3 text-2xl font-semibold text-white">
+                    {projectLocation || "—"}
+                  </div>
+                </div>
+
+                <div className="rounded-[28px] border border-white/12 bg-white/10 p-5 backdrop-blur">
+                  <div className="text-sm text-white/58">رقم المشروع</div>
+                  <div className="mt-3 text-2xl font-semibold text-white">
+                    {project?.issueNumber ? `#${project.issueNumber}` : "—"}
+                  </div>
+                </div>
+
+                <div className="rounded-[28px] border border-white/12 bg-white/10 p-5 backdrop-blur">
+                  <div className="text-sm text-white/58">تاريخ الإقفال</div>
+                  <div className="mt-3 text-2xl font-semibold text-white">
+                    {projectEndDate ? formatProjectDate(projectEndDate) : "غير محدد"}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="pb-20 pt-10">
+          <div className="mx-auto grid w-full max-w-[1480px] gap-8 px-4 sm:px-6 lg:grid-cols-[minmax(0,1.35fr)_420px] lg:px-8">
+            <div className="space-y-8">
+              <Card className="overflow-hidden border-0 bg-white shadow-[0_20px_60px_rgba(15,23,42,0.08)]">
+                <CardHeader className="border-b border-slate-100 pb-6">
+                  <div className="space-y-3">
+                    <Badge
+                      variant="outline"
+                      className="w-fit border-slate-200 bg-slate-50 text-slate-600"
+                    >
+                      نظرة عامة
+                    </Badge>
+                    <CardTitle className="text-3xl font-semibold tracking-tight">
+                      نظرة عامة على المشروع
+                    </CardTitle>
+                    <CardDescription className="max-w-2xl">
+                      قراءة موجزة للمشروع بعد اكتماله، تركّز على ما تم تنفيذه وكيف ظهر بصيغته النهائية.
+                    </CardDescription>
+                  </div>
+                </CardHeader>
+                <CardContent className="grid gap-6 pt-6 lg:grid-cols-[1.1fr_0.9fr]">
+                  {!hasExplicitCompletionContent ? (
+                    <div className="rounded-[22px] border border-amber-200 bg-amber-50/80 p-4 text-sm leading-7 text-amber-800 lg:col-span-2">
+                      لا توجد بيانات ختامية مخصصة لهذا المشروع بعد، لذلك يتم عرض ملخص بديل من
+                      البيانات العامة المتوفرة.
+                    </div>
+                  ) : null}
+                  <div className="rounded-[28px] bg-[#0f172a] p-6 text-white">
+                    <div className="text-sm text-white/55">ملخص المشروع</div>
+                    <p className="mt-4 text-lg leading-8 text-white/88">
+                      {completionSummaryText}
+                    </p>
+                  </div>
+
+                  <div className="grid gap-3">
+                    {completionOverviewItems.map((item, idx) => (
+                      <div
+                        key={`${item}-${idx}`}
+                        className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50/80 p-4"
+                      >
+                        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-900 text-white">
+                          <CheckCircle2 className="h-4 w-4" />
+                        </div>
+                        <div className="text-sm leading-7 text-slate-700">
+                          {item}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="overflow-hidden border border-slate-200/70 bg-white">
+                <CardHeader className="border-b border-slate-100 pb-6">
+                  <CardTitle className="text-3xl flex items-center gap-2">
+                    <CheckCircle2 className="w-7 h-7 text-primary" />
+                    نتائج المشروع
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-6">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {completionResultsData.map((item, index) => (
+                      <div
+                        key={`${item}-${index}`}
+                        className="rounded-[26px] border border-slate-200 bg-slate-50/70 p-5 shadow-sm"
+                      >
+                        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
+                          <CheckCircle2 className="h-5 w-5" />
+                        </div>
+                        <div className="mt-4 text-sm leading-7 text-slate-700">
+                          {item}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="overflow-hidden border border-slate-200/70 bg-white">
+                <CardHeader className="border-b border-slate-100 pb-6">
+                  <CardTitle className="text-3xl flex items-center gap-2">
+                    <FileText className="w-7 h-7 text-primary" />
+                    مخرجات المشروع
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-6">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {completionOutputsData.map(output => (
+                      <div
+                        key={output.title}
+                        className="rounded-[28px] border border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] p-5 shadow-sm"
+                      >
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                          {output.meta}
+                        </div>
+                        <div className="mt-3 text-xl font-semibold tracking-tight text-slate-950">
+                          {output.title}
+                        </div>
+                        <div className="mt-3 text-sm leading-7 text-slate-600">
+                          {output.description}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {completionFinalNotesData.length > 0 && (
+                <Card className="overflow-hidden border border-slate-200/70 bg-white">
+                  <CardHeader className="border-b border-slate-100 pb-6">
+                    <CardTitle className="text-3xl flex items-center gap-2">
+                      <Shield className="w-7 h-7 text-primary" />
+                      ملخص نهائي
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3 pt-6">
+                    {completionFinalNotesData.map((note, index) => (
+                      <div
+                        key={`${note}-${index}`}
+                        className="rounded-[22px] border border-slate-200 bg-slate-50/80 p-4 text-sm leading-7 text-slate-700"
+                      >
+                        {note}
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+
+            <aside className="mx-auto w-full max-w-[760px] space-y-6 lg:sticky lg:top-28 lg:max-w-none lg:self-start">
+              {completionMediaData.length > 0 && (
+                <Card className="overflow-hidden border border-slate-200/80 bg-white shadow-[0_24px_70px_-46px_rgba(15,23,42,0.32)]">
+                  <CardHeader className="border-b border-slate-100">
+                    <CardTitle className="text-2xl flex items-center gap-2">
+                      <Images className="h-6 w-6 text-primary" />
+                      صور المشروع
+                    </CardTitle>
+                    <CardDescription>
+                      عرض بصري للحالة النهائية للمشروع بعد اكتماله.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3 pt-6">
+                    <div className="overflow-hidden rounded-[26px] border border-slate-200 aspect-[4/3]">
+                      <img
+                        src={completionMediaData[0]}
+                        alt={projectTitle}
+                        className="h-full w-full object-cover"
+                      />
+                    </div>
+
+                    {completionMediaData.length > 1 ? (
+                      <div className="grid grid-cols-3 gap-3">
+                        {completionMediaData.slice(1, 4).map((src, index) => (
+                          <div
+                            key={`${src}-${index}`}
+                            className="overflow-hidden rounded-[20px] border border-slate-200 aspect-square"
+                          >
+                            <img
+                              src={src}
+                              alt={`${projectTitle}-${index + 2}`}
+                              className="h-full w-full object-cover"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                  </CardContent>
+                </Card>
+              )}
+
+              {attachments.length > 0 && (
+                <Card className="overflow-hidden border border-slate-200/80 bg-white shadow-[0_24px_70px_-46px_rgba(15,23,42,0.32)]">
+                  <CardHeader className="border-b border-slate-100">
+                    <CardTitle className="text-2xl flex items-center gap-2">
+                      <FileText className="h-6 w-6 text-primary" />
+                      وثائق ومرفقات
+                    </CardTitle>
+                    <CardDescription>
+                      ملفات مرتبطة بنتائج المشروع ومخرجاته النهائية.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3 pt-6">
+                    {attachments.slice(0, 4).map((attachment, index) => {
+                      const href = attachment?.url || attachment?.externalUrl || "";
+
+                      return (
+                        <div
+                          key={`${getAttachmentName(attachment)}-${index}`}
+                          className="rounded-[22px] border border-slate-200 bg-slate-50/80 p-4"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="text-sm font-semibold text-slate-900">
+                                {getAttachmentName(attachment)}
+                              </div>
+                              <div className="mt-1 text-xs text-slate-500">
+                                {getAttachmentKind(attachment)}
+                              </div>
+                            </div>
+
+                            {href ? (
+                              <Button asChild variant="outline" size="sm" className="rounded-full px-4">
+                                <a href={href} target="_blank" rel="noreferrer">
+                                  عرض
+                                </a>
+                              </Button>
+                            ) : null}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </CardContent>
+                </Card>
+              )}
+            </aside>
+          </div>
+        </section>
       </div>
     );
   }

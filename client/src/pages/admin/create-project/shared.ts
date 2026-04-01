@@ -1,6 +1,7 @@
 import type {
   ChangeEvent,
   Dispatch,
+  FormEvent,
   ReactNode,
   SetStateAction,
 } from "react";
@@ -9,6 +10,7 @@ import {
   BarChart3,
   BriefcaseBusiness,
   Building2,
+  CheckCircle2,
   CircleHelp,
   Crown,
   Gauge,
@@ -46,6 +48,24 @@ export type MilestoneRow = {
   description: string;
 };
 export type FaqRow = { q: string; a: string };
+export type CompletionOutput = {
+  titleAr: string;
+  descriptionAr: string;
+  metaAr?: string;
+};
+export type CompletionOutputRow = {
+  titleAr: string;
+  descriptionAr: string;
+  metaAr: string;
+};
+export type CompletionContent = {
+  overviewAr: string;
+  summaryAr: string;
+  resultsAr: string[];
+  outputs: CompletionOutput[];
+  finalNotesAr: string[];
+  gallery: string[];
+};
 
 export type SectionConfig = {
   id: string;
@@ -54,6 +74,13 @@ export type SectionConfig = {
   description: string;
   icon: LucideIconType;
 };
+
+export const FINAL_SETTINGS_SECTION_ID = "final_settings";
+export const LEGACY_FINAL_SETTINGS_SECTION_IDS = [
+  "completion",
+  "progress",
+  "options",
+] as const;
 
 export type FormDataState = {
   titleAr: string;
@@ -79,6 +106,9 @@ export type FormDataState = {
   featured: "true" | "false";
   isVip: "true" | "false";
   vipTier: VipTier;
+  completionOverviewAr: string;
+  completionSummaryAr: string;
+  completionGalleryText: string;
 };
 
 export type StateSetter<T> = Dispatch<SetStateAction<T>>;
@@ -101,6 +131,7 @@ export type SectionCardProps = {
   icon: LucideIcon;
   children: ReactNode;
   headerAside?: ReactNode;
+  status?: SectionCompletionStatus;
   toneClassName?: string;
 };
 
@@ -117,10 +148,31 @@ export type MetricCardProps = {
   label: string;
   value: ReactNode;
   tone?: "default" | "dark";
+  status?: SectionCompletionStatus;
   className?: string;
 };
 
-export const SECTION_DEFINITIONS: SectionConfig[] = [
+export type SummaryMetric = {
+  icon: LucideIcon;
+  label: string;
+  value: ReactNode;
+};
+
+export type SectionCompletionStatus = "complete" | "incomplete";
+
+type BuildSectionStatusMapArgs = {
+  formData: FormDataState;
+  highlightRows: string[];
+  attachmentRows: AttachmentRow[];
+  milestoneRows: MilestoneRow[];
+  faqRows: FaqRow[];
+  completionResultRows: string[];
+  completionOutputRows: CompletionOutputRow[];
+  completionFinalNoteRows: string[];
+  completionGalleryUrls: string[];
+};
+
+const LEGACY_SECTION_DEFINITIONS: SectionConfig[] = [
   {
     id: "basic",
     title: "المعلومات الأساسية",
@@ -171,6 +223,14 @@ export const SECTION_DEFINITIONS: SectionConfig[] = [
     icon: CircleHelp,
   },
   {
+    id: "completion",
+    title: "محتوى الإقفال",
+    shortTitle: "الإقفال",
+    description:
+      "بيانات ما بعد التنفيذ للمشاريع المغلقة والمكتملة، مع نتائج ومخرجات وصور ختامية قابلة للإدارة من لوحة التحكم.",
+    icon: CheckCircle2,
+  },
+  {
     id: "finance",
     title: "البيانات المالية",
     shortTitle: "المالية",
@@ -193,6 +253,20 @@ export const SECTION_DEFINITIONS: SectionConfig[] = [
   },
 ];
 
+export const SECTION_DEFINITIONS: SectionConfig[] = [
+  ...LEGACY_SECTION_DEFINITIONS.filter(
+    (section) => !LEGACY_FINAL_SETTINGS_SECTION_IDS.includes(section.id as any)
+  ),
+  {
+    id: FINAL_SETTINGS_SECTION_ID,
+    title: "الإعدادات الختامية",
+    shortTitle: "الختامية",
+    description:
+      "تجميع مصدر التقدم والخيارات الإضافية والمحتوى الختامي ضمن مرحلة نهائية واحدة قبل الحفظ أو الإغلاق.",
+    icon: CheckCircle2,
+  },
+];
+
 export const projectTypeLabels: Record<ProjectType, string> = {
   sukuk: "استثمار بالصكوك",
   land_development: "تطوير أراضٍ",
@@ -200,7 +274,7 @@ export const projectTypeLabels: Record<ProjectType, string> = {
 };
 
 export const statusLabels: Record<ProjectStatus, string> = {
-  draft: "مسودة",
+  draft: "قريباً",
   published: "منشور",
   closed: "مغلق",
   completed: "مكتمل",
@@ -228,6 +302,51 @@ export const vipTierLabels: Record<VipTier, string> = {
   platinum: "Platinum",
 };
 
+export function normalizeProjectBuilderSectionId(sectionId: string | null | undefined) {
+  if (!sectionId) return "";
+  return LEGACY_FINAL_SETTINGS_SECTION_IDS.includes(
+    sectionId as (typeof LEGACY_FINAL_SETTINGS_SECTION_IDS)[number]
+  )
+    ? FINAL_SETTINGS_SECTION_ID
+    : sectionId;
+}
+
+export function buildFinalSettingsMeta({
+  formData,
+  filledCompletionResults,
+  filledCompletionOutputs,
+  filledCompletionFinalNotes,
+}: {
+  formData: Pick<
+    FormDataState,
+    "featured" | "isVip" | "projectType" | "progressMode" | "status" | "vipTier"
+  >;
+  filledCompletionResults: number;
+  filledCompletionOutputs: number;
+  filledCompletionFinalNotes: number;
+}) {
+  const optionsSummary =
+    formData.isVip === "true" || formData.projectType === "vip_exclusive"
+      ? `VIP ${vipTierLabels[formData.vipTier]}`
+      : formData.featured === "true"
+        ? "مشروع مميز"
+        : "إعدادات افتراضية";
+
+  const completionSummary = !isCompletionStatus(formData.status)
+    ? "المحتوى الختامي بعد الإغلاق"
+    : [
+        filledCompletionResults ? `${filledCompletionResults} نتائج` : "",
+        filledCompletionOutputs ? `${filledCompletionOutputs} مخرجات` : "",
+        filledCompletionFinalNotes ? `${filledCompletionFinalNotes} ملاحظات` : "",
+      ]
+        .filter(Boolean)
+        .join(" · ") || "أضف المحتوى الختامي";
+
+  return [progressModeLabels[formData.progressMode], optionsSummary, completionSummary]
+    .filter(Boolean)
+    .join(" · ");
+}
+
 export const inputClassName =
   "h-12 rounded-2xl border-slate-200 bg-white px-4 text-sm text-slate-900 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-all focus-visible:border-slate-400 focus-visible:ring-4 focus-visible:ring-slate-900/5";
 
@@ -251,6 +370,11 @@ export const newMilestoneRow = (): MilestoneRow => ({
 });
 
 export const newFaqRow = (): FaqRow => ({ q: "", a: "" });
+export const newCompletionOutputRow = (): CompletionOutputRow => ({
+  titleAr: "",
+  descriptionAr: "",
+  metaAr: "",
+});
 
 export function cleanStr(v: unknown) {
   return String(v ?? "").trim();
@@ -266,6 +390,10 @@ export function splitLines(text: string) {
     .split("\n")
     .map((x) => x.trim())
     .filter(Boolean);
+}
+
+export function isCompletionStatus(status: ProjectStatus) {
+  return status === "closed" || status === "completed";
 }
 
 export function formatDisplayValue(value: string, suffix?: string) {
@@ -346,13 +474,254 @@ export function parseFaqRows(rows: FaqRow[]) {
   return { items, errors };
 }
 
+export function parseCompletionOutputRows(rows: CompletionOutputRow[]) {
+  const items: CompletionOutput[] = [];
+  const errors: string[] = [];
+
+  rows.forEach((row, idx) => {
+    const titleAr = cleanStr(row.titleAr);
+    const descriptionAr = cleanStr(row.descriptionAr);
+    const metaAr = cleanStr(row.metaAr);
+
+    if (!titleAr && !descriptionAr && !metaAr) return;
+    if (!titleAr) {
+      errors.push(`مخرج المشروع ${idx + 1}: العنوان مطلوب.`);
+      return;
+    }
+    if (!descriptionAr) {
+      errors.push(`مخرج المشروع ${idx + 1}: الوصف مطلوب.`);
+      return;
+    }
+
+    items.push({
+      titleAr,
+      descriptionAr,
+      ...(metaAr ? { metaAr } : {}),
+    });
+  });
+
+  return { items, errors };
+}
+
+export function buildCompletionContentPayload({
+  overviewAr,
+  summaryAr,
+  resultsAr,
+  outputRows,
+  finalNotesAr,
+  gallery,
+}: {
+  overviewAr: string;
+  summaryAr: string;
+  resultsAr: string[];
+  outputRows: CompletionOutputRow[];
+  finalNotesAr: string[];
+  gallery: string[];
+}): { value: CompletionContent | null; errors: string[] } {
+  const normalizedOverview = cleanStr(overviewAr);
+  const normalizedSummary = cleanStr(summaryAr);
+  const normalizedResults = resultsAr.map((item) => cleanStr(item)).filter(Boolean);
+  const normalizedFinalNotes = finalNotesAr.map((item) => cleanStr(item)).filter(Boolean);
+  const normalizedGallery = gallery.map((item) => cleanStr(item)).filter(Boolean);
+  const parsedOutputs = parseCompletionOutputRows(outputRows);
+
+  if (parsedOutputs.errors.length > 0) {
+    return { value: null, errors: parsedOutputs.errors };
+  }
+
+  const hasAnyValue =
+    Boolean(normalizedOverview) ||
+    Boolean(normalizedSummary) ||
+    normalizedResults.length > 0 ||
+    parsedOutputs.items.length > 0 ||
+    normalizedFinalNotes.length > 0 ||
+    normalizedGallery.length > 0;
+
+  if (!hasAnyValue) {
+    return { value: null, errors: [] };
+  }
+
+  return {
+    value: {
+      overviewAr: normalizedOverview,
+      summaryAr: normalizedSummary,
+      resultsAr: normalizedResults,
+      outputs: parsedOutputs.items,
+      finalNotesAr: normalizedFinalNotes,
+      gallery: normalizedGallery,
+    },
+    errors: [],
+  };
+}
+
+function isProgressSectionComplete(formData: FormDataState) {
+  const hasValue = (value: unknown) => Boolean(cleanStr(value));
+  const progressWeightsTotal =
+    toNumOrZero(formData.progressFundingWeight) + toNumOrZero(formData.progressMilestonesWeight);
+
+  return (
+    formData.progressMode !== "hybrid" ||
+    (hasValue(formData.progressFundingWeight) &&
+      hasValue(formData.progressMilestonesWeight) &&
+      progressWeightsTotal === 100)
+  );
+}
+
+function isOptionsSectionComplete(formData: FormDataState) {
+  const requiresVipTier =
+    formData.isVip === "true" || formData.projectType === "vip_exclusive";
+
+  return !requiresVipTier || formData.vipTier !== "none";
+}
+
+function isCompletionSectionComplete({
+  formData,
+  completionResultRows,
+  completionOutputRows,
+  completionFinalNoteRows,
+  completionGalleryUrls,
+}: Pick<
+  BuildSectionStatusMapArgs,
+  | "formData"
+  | "completionResultRows"
+  | "completionOutputRows"
+  | "completionFinalNoteRows"
+  | "completionGalleryUrls"
+>) {
+  const completionPayload = buildCompletionContentPayload({
+    overviewAr: formData.completionOverviewAr,
+    summaryAr: formData.completionSummaryAr,
+    resultsAr: completionResultRows,
+    outputRows: completionOutputRows,
+    finalNotesAr: completionFinalNoteRows,
+    gallery: completionGalleryUrls,
+  });
+
+  return (
+    isCompletionStatus(formData.status) &&
+    completionPayload.errors.length === 0 &&
+    Boolean(completionPayload.value)
+  );
+}
+
+export function isSectionComplete(
+  sectionId: string,
+  {
+    formData,
+    highlightRows,
+    attachmentRows,
+    milestoneRows,
+    faqRows,
+    completionResultRows,
+    completionOutputRows,
+    completionFinalNoteRows,
+    completionGalleryUrls,
+  }: BuildSectionStatusMapArgs
+) {
+  const hasValue = (value: unknown) => Boolean(cleanStr(value));
+
+  switch (sectionId) {
+    case "basic":
+      return hasValue(formData.titleAr) && hasValue(formData.descriptionAr);
+    case "details":
+      return hasValue(formData.issueNumber) && hasValue(formData.locationAr);
+    case "media":
+      return hasValue(formData.coverImage);
+    case "highlights":
+      return highlightRows.some((item) => hasValue(item));
+    case "attachments": {
+      const parsedAttachments = parseAttachmentRows(attachmentRows);
+      return parsedAttachments.errors.length === 0 && parsedAttachments.items.length > 0;
+    }
+    case "milestones": {
+      const parsedMilestones = parseMilestoneRows(milestoneRows);
+      return parsedMilestones.errors.length === 0 && parsedMilestones.items.length > 0;
+    }
+    case "faq": {
+      const parsedFaq = parseFaqRows(faqRows);
+      return parsedFaq.errors.length === 0 && parsedFaq.items.length > 0;
+    }
+    case "completion": {
+      return isCompletionSectionComplete({
+        formData,
+        completionResultRows,
+        completionOutputRows,
+        completionFinalNoteRows,
+        completionGalleryUrls,
+      });
+    }
+    case "finance":
+      return [
+        formData.targetAmount,
+        formData.minInvestment,
+        formData.annualReturn,
+        formData.duration,
+      ].every((value) => hasValue(value));
+    case "progress":
+      return isProgressSectionComplete(formData);
+    case "options":
+      return isOptionsSectionComplete(formData);
+    case FINAL_SETTINGS_SECTION_ID:
+      return (
+        isProgressSectionComplete(formData) &&
+        isOptionsSectionComplete(formData) &&
+        isCompletionSectionComplete({
+          formData,
+          completionResultRows,
+          completionOutputRows,
+          completionFinalNoteRows,
+          completionGalleryUrls,
+        })
+      );
+    default:
+      return false;
+  }
+}
+
+export function buildSectionStatusMap({
+  formData,
+  highlightRows,
+  attachmentRows,
+  milestoneRows,
+  faqRows,
+  completionResultRows,
+  completionOutputRows,
+  completionFinalNoteRows,
+  completionGalleryUrls,
+}: BuildSectionStatusMapArgs): Record<string, SectionCompletionStatus> {
+  return SECTION_DEFINITIONS.reduce<Record<string, SectionCompletionStatus>>((acc, section) => {
+    acc[section.id] = isSectionComplete(section.id, {
+      formData,
+      highlightRows,
+      attachmentRows,
+      milestoneRows,
+      faqRows,
+      completionResultRows,
+      completionOutputRows,
+      completionFinalNoteRows,
+      completionGalleryUrls,
+    })
+      ? "complete"
+      : "incomplete";
+    return acc;
+  }, {});
+}
+
 export type CreateProjectUiProps = {
   activeSection: string;
   setActiveSection: StateSetter<string>;
   attachmentRows: AttachmentRow[];
+  completionFinalNoteRows: string[];
+  completionGalleryUploading: boolean;
+  completionGalleryUrls: string[];
+  completionOutputRows: CompletionOutputRow[];
+  completionResultRows: string[];
   coverUploading: boolean;
   draftProjectId: string;
   faqRows: FaqRow[];
+  filledCompletionFinalNotes: number;
+  filledCompletionOutputs: number;
+  filledCompletionResults: number;
   filledAttachments: number;
   filledFaq: number;
   filledHighlights: number;
@@ -361,6 +730,7 @@ export type CreateProjectUiProps = {
   galleryUploading: boolean;
   galleryUrls: string[];
   handleAttachmentFileUpload: (index: number, file?: File | null) => Promise<void>;
+  handleCompletionGalleryImageUpload: (files?: FileList | null) => Promise<void>;
   handleCoverImageUpload: (file?: File | null) => Promise<void>;
   handleGalleryImageUpload: (files?: FileList | null) => Promise<void>;
   handleSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
@@ -372,7 +742,11 @@ export type CreateProjectUiProps = {
   requiredChecklist: Array<{ label: string; ready: boolean }>;
   requiredReady: number;
   sectionMeta: Record<string, string>;
+  sectionStatuses: Record<string, SectionCompletionStatus>;
   setAttachmentRows: StateSetter<AttachmentRow[]>;
+  setCompletionFinalNoteRows: StateSetter<string[]>;
+  setCompletionOutputRows: StateSetter<CompletionOutputRow[]>;
+  setCompletionResultRows: StateSetter<string[]>;
   setFaqRows: StateSetter<FaqRow[]>;
   setFormData: StateSetter<FormDataState>;
   setHighlightRows: StateSetter<string[]>;
@@ -380,4 +754,24 @@ export type CreateProjectUiProps = {
   setMilestoneRows: StateSetter<MilestoneRow[]>;
   saving: boolean;
   totalAssets: number;
+  backPath?: string;
+  backLabel?: string;
+  footerDescription?: ReactNode;
+  footerTitle?: string;
+  formId?: string;
+  headerActions?: ReactNode;
+  headerBadgeText?: string;
+  headerContext?: ReactNode;
+  headerDescription?: ReactNode;
+  headerMetrics?: SummaryMetric[];
+  headerTitle?: ReactNode;
+  primaryActionLabel?: string;
+  primaryActionLoadingLabel?: string;
+  sidebarChecklistDescription?: ReactNode;
+  sidebarChecklistTitle?: ReactNode;
+  sidebarMetrics?: SummaryMetric[];
+  sidebarTitle?: string;
+  sidebarDescription?: string;
+  workspaceIdLabel?: ReactNode;
+  workspaceIdValue?: ReactNode;
 };

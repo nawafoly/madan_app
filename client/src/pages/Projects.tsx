@@ -20,6 +20,7 @@ import {
 import {
   AlertTriangle,
   ArrowLeft,
+  ArrowRight,
   ArrowUpRight,
   Building2,
   CheckCircle2,
@@ -63,6 +64,7 @@ import {
 
 type BiLabel = { ar?: string; en?: string };
 type LabelValue = string | BiLabel;
+type AttachmentLink = { name?: string; url?: string; externalUrl?: string };
 
 type LabelsDoc = {
   projectTypes?: Record<string, LabelValue>;
@@ -108,6 +110,8 @@ type ProjectDoc = {
 
   coverImage?: string;
   image?: string;
+  gallery?: string[];
+  attachments?: AttachmentLink[];
 
   overviewAr?: string;
   descriptionAr?: string;
@@ -701,6 +705,11 @@ export default function ProjectsPage() {
   const typeLabel = (key: any) =>
     pickLabel(labels.projectTypes[String(key)], "ar", String(key || ""));
 
+  const isVipProject = (project: ProjectDoc) =>
+    Boolean(project.vipOnly) ||
+    Boolean(project.isVip) ||
+    project.projectType === "vip_exclusive";
+
   const progressPercent = (p: ProjectDoc) => {
     const t = safeNumber(p.targetAmount);
     if (!t) return 0;
@@ -819,28 +828,21 @@ export default function ProjectsPage() {
     [upcoming.items]
   );
 
-  const completedCapital = useMemo(
+  const completedDocumentedCount = useMemo(
     () =>
-      done.items.reduce(
-        (sum, project) =>
-          sum +
-          safeNumber(
-            safeNumber(project.currentAmount) ||
-              safeNumber(project.targetAmount)
-          ),
-        0
-      ),
+      done.items.filter(project => {
+        const hasGallery = Array.isArray(project.gallery) && project.gallery.length > 0;
+        const hasAttachments =
+          Array.isArray(project.attachments) && project.attachments.length > 0;
+        return hasGallery || hasAttachments;
+      }).length,
     [done.items]
   );
 
-  const completedProjectsRate = useMemo(() => {
-    const totalCount =
-      safeNumber(published.items.length) +
-      safeNumber(upcoming.items.length) +
-      safeNumber(done.items.length);
-    if (!totalCount) return 0;
-    return (done.items.length / totalCount) * 100;
-  }, [done.items.length, published.items.length, upcoming.items.length]);
+  const completedVipCount = useMemo(
+    () => done.items.filter(isVipProject).length,
+    [done.items]
+  );
 
   const SectionHeaderBlock = (props: {
     kicker?: string;
@@ -929,6 +931,92 @@ export default function ProjectsPage() {
           </div>
         ) : null}
       </div>
+    );
+  };
+
+  const CompletedProjectCard = (project: ProjectDoc) => {
+    const rawCover =
+      (project.coverImage && String(project.coverImage).trim()) ||
+      (project.image && String(project.image).trim()) ||
+      "";
+    const cover = rawCover ? normalizePublicImage(rawCover) : FALLBACK_COVER;
+    const title = project.titleAr || project.titleEn || "بدون عنوان";
+    const location = project.locationAr || project.locationEn || "—";
+    const projectTypeLabel = typeLabel(project.projectType);
+    const isVip = isVipProject(project);
+    const auxiliaryTag = isVip
+      ? "VIP"
+      : project.featured
+        ? "مميز"
+        : "سجل منجز";
+
+    return (
+      <Card
+        key={project.id}
+        className="group overflow-hidden rounded-[30px] border border-slate-200/80 bg-slate-950 py-0 text-white shadow-[0_34px_90px_-48px_rgba(15,23,42,0.45)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_42px_110px_-46px_rgba(15,23,42,0.52)]"
+      >
+        <div className="relative min-h-[360px] w-full overflow-hidden">
+          <img
+            src={cover}
+            alt={title}
+            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+            loading="lazy"
+            draggable={false}
+            onError={e => {
+              const img = e.currentTarget;
+              if (img.src.includes(FALLBACK_COVER)) return;
+              img.src = FALLBACK_COVER;
+            }}
+          />
+
+          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(2,6,23,0.10)_0%,rgba(2,6,23,0.16)_26%,rgba(2,6,23,0.58)_72%,rgba(2,6,23,0.88)_100%)]" />
+          <div className="absolute inset-x-0 top-0 h-28 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.20),transparent_60%)]" />
+
+          <div className="absolute left-4 right-4 top-4 flex items-start justify-between gap-3">
+            <div className="flex flex-wrap gap-2">
+              <Badge className="rounded-full border border-emerald-300/24 bg-emerald-300/14 px-3 py-1 text-[11px] font-semibold text-emerald-50 backdrop-blur">
+                مكتمل
+              </Badge>
+              {projectTypeLabel ? (
+                <Badge className="rounded-full border border-white/16 bg-black/25 px-3 py-1 text-[11px] font-semibold text-white/92 backdrop-blur">
+                  {projectTypeLabel}
+                </Badge>
+              ) : null}
+              <Badge className="rounded-full border border-amber-300/24 bg-amber-300/14 px-3 py-1 text-[11px] font-semibold text-amber-50 backdrop-blur">
+                {auxiliaryTag}
+              </Badge>
+            </div>
+
+            {project.issueNumber ? (
+              <Badge className="rounded-full border border-white/16 bg-black/25 px-3 py-1 text-[11px] font-semibold text-white/88 backdrop-blur">
+                #{project.issueNumber}
+              </Badge>
+            ) : null}
+          </div>
+
+          <div className="absolute inset-x-0 bottom-0 p-5 sm:p-6">
+            <div className="rounded-[28px] border border-white/12 bg-black/20 p-5 shadow-[0_18px_42px_-26px_rgba(2,6,23,0.9)] backdrop-blur-md">
+              <div className="space-y-3">
+                <h3 className="text-2xl font-semibold leading-tight tracking-tight text-white">
+                  {title}
+                </h3>
+
+                <div className="flex items-center gap-2 text-sm text-white/78">
+                  <MapPin className="h-4 w-4 text-white/68" />
+                  <span className="line-clamp-1">{location}</span>
+                </div>
+
+                <Link href={`/projects/${project.id}`}>
+                  <Button className="mt-2 h-11 rounded-2xl border border-white/14 bg-white/12 px-4 text-sm font-semibold text-white shadow-none hover:bg-white hover:text-slate-950">
+                    <span>عرض النتائج</span>
+                    <ArrowRight className="h-4 w-4" />
+                  </Button>
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Card>
     );
   };
 
@@ -2225,20 +2313,17 @@ export default function ProjectsPage() {
               kicker="Track Record"
               badge="منجزة"
               title="سجل المشاريع المكتملة"
-              desc="الواجهة نفسها تُستخدم هنا لعرض الأداء النهائي والتمويل المكتمل، بما يعزز طبقة الثقة ويحوّل القسم إلى سجل إنجاز استثماري حقيقي."
+              desc="واجهة مستقلة للمشاريع التي تم تنفيذها وإقفالها، تركّز على الصورة والنتائج والمخرجات النهائية بدل مؤشرات الاستثمار النشط."
               metrics={[
                 {
-                  label: "عدد المشاريع",
+                  label: "مشاريع مكتملة",
                   value: formatNumberEN(done.items.length),
                 },
-                { label: "الرأسمال المكتمل", value: fmtSAR(completedCapital) },
                 {
-                  label: "معدل الإنجاز",
-                  value: formatPercentEN(completedProjectsRate, {
-                    minimumFractionDigits: 0,
-                    maximumFractionDigits: 0,
-                  }),
+                  label: "مشاريع VIP",
+                  value: formatNumberEN(completedVipCount),
                 },
+                { label: "بمخرجات موثقة", value: formatNumberEN(completedDocumentedCount) },
               ]}
             />
 
@@ -2267,7 +2352,7 @@ export default function ProjectsPage() {
               ) : (
                 <>
                   <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-                    {done.items.map(p => InvestmentCard(p, "done"))}
+                    {done.items.map(CompletedProjectCard)}
                   </div>
 
                   <div className="mt-10 flex justify-center">
@@ -2685,7 +2770,7 @@ export default function ProjectsPage() {
               ) : (
                 <>
                   <div className="mt-10 grid md:grid-cols-2 xl:grid-cols-3 gap-5">
-                    {done.items.map(p => InvestmentCard(p, "done"))}
+                    {done.items.map(CompletedProjectCard)}
                   </div>
 
                   <div className="mt-10 flex justify-center">

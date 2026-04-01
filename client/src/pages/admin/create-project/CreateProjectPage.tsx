@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+﻿import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useLocation } from "wouter";
 import { collection, doc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/_core/firebase";
@@ -8,22 +8,25 @@ import DashboardLayout from "@/components/DashboardLayout";
 import { toast } from "sonner";
 import { CreateProjectUi } from "./CreateProjectUi";
 import {
+  FINAL_SETTINGS_SECTION_ID,
   SECTION_DEFINITIONS,
+  buildFinalSettingsMeta,
+  buildSectionStatusMap,
+  buildCompletionContentPayload,
   cleanStr,
   newAttachmentRow,
+  newCompletionOutputRow,
   newFaqRow,
   newMilestoneRow,
+  normalizeProjectBuilderSectionId,
   parseAttachmentRows,
   parseFaqRows,
   parseMilestoneRows,
-  progressModeLabels,
   projectTypeLabels,
   splitLines,
   statusLabels,
   toNumOrZero,
-  vipTierLabels,
   type FormDataState,
-  type ProgressMode,
 } from "./shared";
 
 export default function CreateProjectPage() {
@@ -32,6 +35,7 @@ export default function CreateProjectPage() {
   const [draftProjectId] = useState(() => doc(collection(db, "projects")).id);
   const [coverUploading, setCoverUploading] = useState(false);
   const [galleryUploading, setGalleryUploading] = useState(false);
+  const [completionGalleryUploading, setCompletionGalleryUploading] = useState(false);
   const [activeSection, setActiveSection] = useState(SECTION_DEFINITIONS[0]?.id ?? "basic");
 
   const [formData, setFormData] = useState<FormDataState>({
@@ -58,14 +62,26 @@ export default function CreateProjectPage() {
     featured: "false",
     isVip: "false",
     vipTier: "none",
+    completionOverviewAr: "",
+    completionSummaryAr: "",
+    completionGalleryText: "",
   });
 
   const [highlightRows, setHighlightRows] = useState<string[]>([""]);
   const [attachmentRows, setAttachmentRows] = useState([newAttachmentRow()]);
   const [milestoneRows, setMilestoneRows] = useState([newMilestoneRow()]);
   const [faqRows, setFaqRows] = useState([newFaqRow()]);
+  const [completionResultRows, setCompletionResultRows] = useState<string[]>([""]);
+  const [completionOutputRows, setCompletionOutputRows] = useState([
+    newCompletionOutputRow(),
+  ]);
+  const [completionFinalNoteRows, setCompletionFinalNoteRows] = useState<string[]>([""]);
 
   const galleryUrls = useMemo(() => splitLines(formData.galleryText), [formData.galleryText]);
+  const completionGalleryUrls = useMemo(
+    () => splitLines(formData.completionGalleryText),
+    [formData.completionGalleryText]
+  );
   const filledHighlights = useMemo(
     () => highlightRows.filter((item) => cleanStr(item)).length,
     [highlightRows]
@@ -92,6 +108,21 @@ export default function CreateProjectPage() {
     () => faqRows.filter((row) => cleanStr(row.q) || cleanStr(row.a)).length,
     [faqRows]
   );
+  const filledCompletionResults = useMemo(
+    () => completionResultRows.filter((item) => cleanStr(item)).length,
+    [completionResultRows]
+  );
+  const filledCompletionOutputs = useMemo(
+    () =>
+      completionOutputRows.filter(
+        (row) => cleanStr(row.titleAr) || cleanStr(row.descriptionAr) || cleanStr(row.metaAr)
+      ).length,
+    [completionOutputRows]
+  );
+  const filledCompletionFinalNotes = useMemo(
+    () => completionFinalNoteRows.filter((item) => cleanStr(item)).length,
+    [completionFinalNoteRows]
+  );
   const requiredReady = useMemo(
     () =>
       [formData.titleAr, formData.descriptionAr, formData.locationAr, formData.coverImage].filter(
@@ -100,8 +131,12 @@ export default function CreateProjectPage() {
     [formData.coverImage, formData.descriptionAr, formData.locationAr, formData.titleAr]
   );
   const totalAssets = useMemo(
-    () => (cleanStr(formData.coverImage) ? 1 : 0) + galleryUrls.length + filledAttachments,
-    [filledAttachments, formData.coverImage, galleryUrls.length]
+    () =>
+      (cleanStr(formData.coverImage) ? 1 : 0) +
+      galleryUrls.length +
+      completionGalleryUrls.length +
+      filledAttachments,
+    [completionGalleryUrls.length, filledAttachments, formData.coverImage, galleryUrls.length]
   );
   const progressWeightsTotal = useMemo(
     () =>
@@ -109,60 +144,104 @@ export default function CreateProjectPage() {
       toNumOrZero(formData.progressMilestonesWeight),
     [formData.progressFundingWeight, formData.progressMilestonesWeight]
   );
-  const isBusy = saving || coverUploading || galleryUploading;
+  const isBusy = saving || coverUploading || galleryUploading || completionGalleryUploading;
   const hasUploadingAttachment = attachmentRows.some((row) => row.uploading);
+  const visibleSections = useMemo(() => SECTION_DEFINITIONS, []);
 
+  const finalSettingsSectionMeta = useMemo(
+    () =>
+      buildFinalSettingsMeta({
+        formData,
+        filledCompletionResults,
+        filledCompletionOutputs,
+        filledCompletionFinalNotes,
+      }),
+    [
+      filledCompletionFinalNotes,
+      filledCompletionOutputs,
+      filledCompletionResults,
+      formData,
+    ]
+  );
   const sectionMeta = useMemo<Record<string, string>>(
     () => ({
-      basic: cleanStr(formData.titleAr) ? "تمت إضافة هوية المشروع" : "ابدأ بالعنوان والوصف",
+      basic: cleanStr(formData.titleAr) ? "طھظ…طھ ط¥ط¶ط§ظپط© ظ‡ظˆظٹط© ط§ظ„ظ…ط´ط±ظˆط¹" : "ط§ط¨ط¯ط£ ط¨ط§ظ„ط¹ظ†ظˆط§ظ† ظˆط§ظ„ظˆطµظپ",
       details: cleanStr(formData.locationAr)
-        ? `${projectTypeLabels[formData.projectType]} · ${statusLabels[formData.status]}`
-        : "النوع والحالة والموقع",
-      media: cleanStr(formData.coverImage) ? `${galleryUrls.length + 1} أصل بصري` : "أضف صورة الغلاف أولًا",
-      highlights: filledHighlights ? `${filledHighlights} مميزات` : "لا توجد مميزات بعد",
-      attachments: filledAttachments ? `${filledAttachments} مرفقات` : "لا توجد مرفقات بعد",
-      milestones: filledMilestones ? `${filledMilestones} مراحل` : "لا توجد مراحل بعد",
-      faq: filledFaq ? `${filledFaq} أسئلة` : "أضف الأسئلة الشائعة",
-      finance: cleanStr(formData.targetAmount) ? `${cleanStr(formData.targetAmount)} ر.س` : "أضف الأرقام المالية",
-      progress: progressModeLabels[formData.progressMode as ProgressMode],
-      options:
-        formData.isVip === "true" || formData.projectType === "vip_exclusive"
-          ? `VIP ${vipTierLabels[formData.vipTier]}`
-          : formData.featured === "true"
-            ? "مشروع مميز"
-            : "إعدادات افتراضية",
+        ? `${projectTypeLabels[formData.projectType]} آ· ${statusLabels[formData.status]}`
+        : "ط§ظ„ظ†ظˆط¹ ظˆط§ظ„ط­ط§ظ„ط© ظˆط§ظ„ظ…ظˆظ‚ط¹",
+      media: cleanStr(formData.coverImage) ? `${galleryUrls.length + 1} ط£طµظ„ ط¨طµط±ظٹ` : "ط£ط¶ظپ طµظˆط±ط© ط§ظ„ط؛ظ„ط§ظپ ط£ظˆظ„ظ‹ط§",
+      highlights: filledHighlights ? `${filledHighlights} ظ…ظ…ظٹط²ط§طھ` : "ظ„ط§ طھظˆط¬ط¯ ظ…ظ…ظٹط²ط§طھ ط¨ط¹ط¯",
+      attachments: filledAttachments ? `${filledAttachments} ظ…ط±ظپظ‚ط§طھ` : "ظ„ط§ طھظˆط¬ط¯ ظ…ط±ظپظ‚ط§طھ ط¨ط¹ط¯",
+      milestones: filledMilestones ? `${filledMilestones} ظ…ط±ط§ط­ظ„` : "ظ„ط§ طھظˆط¬ط¯ ظ…ط±ط§ط­ظ„ ط¨ط¹ط¯",
+      faq: filledFaq ? `${filledFaq} ط£ط³ط¦ظ„ط©` : "ط£ط¶ظپ ط§ظ„ط£ط³ط¦ظ„ط© ط§ظ„ط´ط§ط¦ط¹ط©",
+      finance: cleanStr(formData.targetAmount) ? `${cleanStr(formData.targetAmount)} ط±.ط³` : "ط£ط¶ظپ ط§ظ„ط£ط±ظ‚ط§ظ… ط§ظ„ظ…ط§ظ„ظٹط©",
+      [FINAL_SETTINGS_SECTION_ID]: finalSettingsSectionMeta,
     }),
     [
       filledAttachments,
       filledFaq,
       filledHighlights,
       filledMilestones,
+      finalSettingsSectionMeta,
       formData.coverImage,
-      formData.featured,
-      formData.isVip,
       formData.locationAr,
-      formData.progressMode,
       formData.projectType,
       formData.status,
       formData.targetAmount,
       formData.titleAr,
-      formData.vipTier,
       galleryUrls.length,
+    ]
+  );
+  const sectionStatuses = useMemo(
+    () =>
+      buildSectionStatusMap({
+        formData,
+        highlightRows,
+        attachmentRows,
+        milestoneRows,
+        faqRows,
+        completionResultRows,
+        completionOutputRows,
+        completionFinalNoteRows,
+        completionGalleryUrls,
+      }),
+    [
+      attachmentRows,
+      completionFinalNoteRows,
+      completionGalleryUrls,
+      completionOutputRows,
+      completionResultRows,
+      faqRows,
+      formData,
+      highlightRows,
+      milestoneRows,
     ]
   );
 
   const requiredChecklist = useMemo(
     () => [
-      { label: "العنوان العربي", ready: Boolean(cleanStr(formData.titleAr)) },
-      { label: "الوصف العربي", ready: Boolean(cleanStr(formData.descriptionAr)) },
-      { label: "الموقع العربي", ready: Boolean(cleanStr(formData.locationAr)) },
-      { label: "صورة الغلاف", ready: Boolean(cleanStr(formData.coverImage)) },
+      { label: "ط§ظ„ط¹ظ†ظˆط§ظ† ط§ظ„ط¹ط±ط¨ظٹ", ready: Boolean(cleanStr(formData.titleAr)) },
+      { label: "ط§ظ„ظˆطµظپ ط§ظ„ط¹ط±ط¨ظٹ", ready: Boolean(cleanStr(formData.descriptionAr)) },
+      { label: "ط§ظ„ظ…ظˆظ‚ط¹ ط§ظ„ط¹ط±ط¨ظٹ", ready: Boolean(cleanStr(formData.locationAr)) },
+      { label: "طµظˆط±ط© ط§ظ„ط؛ظ„ط§ظپ", ready: Boolean(cleanStr(formData.coverImage)) },
     ],
     [formData.coverImage, formData.descriptionAr, formData.locationAr, formData.titleAr]
   );
 
   useEffect(() => {
-    const sectionElements = SECTION_DEFINITIONS.map((section) =>
+    const normalizedActiveSection = normalizeProjectBuilderSectionId(activeSection);
+    if (normalizedActiveSection && normalizedActiveSection !== activeSection) {
+      setActiveSection(normalizedActiveSection);
+      return;
+    }
+
+    if (!visibleSections.some((section) => section.id === normalizedActiveSection)) {
+      setActiveSection(visibleSections[0]?.id ?? "basic");
+    }
+  }, [activeSection, visibleSections]);
+
+  useEffect(() => {
+    const sectionElements = visibleSections.map((section) =>
       document.getElementById(section.id)
     ).filter((element): element is HTMLElement => Boolean(element));
     if (!sectionElements.length) return;
@@ -177,7 +256,7 @@ export default function CreateProjectPage() {
         ? navElement.getBoundingClientRect().bottom + 24
         : Math.min(window.innerHeight * 0.24, 220);
 
-      let nextActiveSection = sectionElements[0]?.id ?? SECTION_DEFINITIONS[0]?.id ?? "basic";
+      let nextActiveSection = sectionElements[0]?.id ?? visibleSections[0]?.id ?? "basic";
 
       for (const section of sectionElements) {
         if (section.getBoundingClientRect().top <= probeY) {
@@ -220,7 +299,7 @@ export default function CreateProjectPage() {
       window.removeEventListener("resize", scheduleActiveSectionUpdate);
       resizeObserver?.disconnect();
     };
-  }, []);
+  }, [visibleSections]);
 
   const handleAttachmentFileUpload = async (index: number, file?: File | null) => {
     if (!file) return;
@@ -241,11 +320,11 @@ export default function CreateProjectPage() {
           rowIndex === index ? { ...row, uploading: false, url, name: row.name || file.name } : row
         )
       );
-      toast.success("تم رفع الملف بنجاح");
+      toast.success("طھظ… ط±ظپط¹ ط§ظ„ظ…ظ„ظپ ط¨ظ†ط¬ط§ط­");
     } catch (error) {
       console.error(error);
       setAttachmentRows((prev) => prev.map((row, rowIndex) => (rowIndex === index ? { ...row, uploading: false } : row)));
-      toast.error("فشل رفع الملف");
+      toast.error("ظپط´ظ„ ط±ظپط¹ ط§ظ„ظ…ظ„ظپ");
     }
   };
 
@@ -264,10 +343,10 @@ export default function CreateProjectPage() {
       const url = uploaded.fileUrl;
       if (!url) throw new Error("Upload failed");
       setFormData((prev) => ({ ...prev, coverImage: url }));
-      toast.success("تم رفع صورة الغلاف بنجاح");
+      toast.success("طھظ… ط±ظپط¹ طµظˆط±ط© ط§ظ„ط؛ظ„ط§ظپ ط¨ظ†ط¬ط§ط­");
     } catch (error) {
       console.error(error);
-      toast.error("فشل رفع صورة الغلاف");
+      toast.error("ظپط´ظ„ ط±ظپط¹ طµظˆط±ط© ط§ظ„ط؛ظ„ط§ظپ");
     } finally {
       setCoverUploading(false);
     }
@@ -300,33 +379,122 @@ export default function CreateProjectPage() {
       });
       toast.success(
         selected.length === 1
-          ? "تم رفع صورة المعرض بنجاح"
-          : `تم رفع ${selected.length} صور للمعرض بنجاح`
+          ? "طھظ… ط±ظپط¹ طµظˆط±ط© ط§ظ„ظ…ط¹ط±ط¶ ط¨ظ†ط¬ط§ط­"
+          : `طھظ… ط±ظپط¹ ${selected.length} طµظˆط± ظ„ظ„ظ…ط¹ط±ط¶ ط¨ظ†ط¬ط§ط­`
       );
     } catch (error) {
       console.error(error);
-      toast.error("فشل رفع صور المعرض");
+      toast.error("ظپط´ظ„ ط±ظپط¹ طµظˆط± ط§ظ„ظ…ط¹ط±ط¶");
     } finally {
       setGalleryUploading(false);
+    }
+  };
+
+  const handleCompletionGalleryImageUpload = async (files?: FileList | null) => {
+    const selected = Array.from(files ?? []);
+    if (!selected.length) return;
+
+    try {
+      setCompletionGalleryUploading(true);
+      const uploadedUrls = await Promise.all(
+        selected.map(async (file) => {
+          const uploaded = await uploadInvestmentDocument({
+            entityType: "project",
+            entityId: draftProjectId,
+            category: "project_completion_gallery",
+            projectId: draftProjectId,
+            file,
+            kind: "attachment",
+          });
+          const url = uploaded.fileUrl;
+          if (!url) throw new Error("Upload failed");
+          return url;
+        })
+      );
+
+      setFormData((prev) => {
+        const current = prev.completionGalleryText.trim();
+        const appended = uploadedUrls.join("\n");
+        return {
+          ...prev,
+          completionGalleryText: current ? `${current}\n${appended}` : appended,
+        };
+      });
+
+      toast.success(
+        selected.length === 1
+          ? "طھظ… ط±ظپط¹ طµظˆط±ط© ظ†طھط§ط¦ط¬ ط§ظ„ظ…ط´ط±ظˆط¹ ط¨ظ†ط¬ط§ط­"
+          : `طھظ… ط±ظپط¹ ${selected.length} طµظˆط± ظ„ظ†طھط§ط¦ط¬ ط§ظ„ظ…ط´ط±ظˆط¹ ط¨ظ†ط¬ط§ط­`
+      );
+    } catch (error) {
+      console.error(error);
+      toast.error("ظپط´ظ„ ط±ظپط¹ طµظˆط± ظ†طھط§ط¦ط¬ ط§ظ„ظ…ط´ط±ظˆط¹");
+    } finally {
+      setCompletionGalleryUploading(false);
     }
   };
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (saving) return;
-    if (!cleanStr(formData.titleAr)) return toast.error("عنوان المشروع (عربي) مطلوب");
-    if (!cleanStr(formData.descriptionAr)) return toast.error("الوصف (عربي) مطلوب");
-    if (!cleanStr(formData.locationAr)) return toast.error("الموقع (عربي) مطلوب");
-    if (!cleanStr(formData.coverImage)) return toast.error("صورة الغلاف مطلوبة");
-    if (attachmentRows.some((row) => row.uploading)) return toast.warning("انتظر حتى يكتمل رفع المرفقات.");
-    if (coverUploading || galleryUploading) return toast.warning("انتظر حتى يكتمل رفع الصور.");
+    if (!cleanStr(formData.titleAr)) {
+      toast.error("ط¹ظ†ظˆط§ظ† ط§ظ„ظ…ط´ط±ظˆط¹ (ط¹ط±ط¨ظٹ) ظ…ط·ظ„ظˆط¨");
+      return;
+    }
+    if (!cleanStr(formData.descriptionAr)) {
+      toast.error("ط§ظ„ظˆطµظپ (ط¹ط±ط¨ظٹ) ظ…ط·ظ„ظˆط¨");
+      return;
+    }
+    if (!cleanStr(formData.locationAr)) {
+      toast.error("ط§ظ„ظ…ظˆظ‚ط¹ (ط¹ط±ط¨ظٹ) ظ…ط·ظ„ظˆط¨");
+      return;
+    }
+    if (!cleanStr(formData.coverImage)) {
+      toast.error("طµظˆط±ط© ط§ظ„ط؛ظ„ط§ظپ ظ…ط·ظ„ظˆط¨ط©");
+      return;
+    }
+    if (attachmentRows.some((row) => row.uploading)) {
+      toast.warning("ط§ظ†طھط¸ط± ط­طھظ‰ ظٹظƒطھظ…ظ„ ط±ظپط¹ ط§ظ„ظ…ط±ظپظ‚ط§طھ.");
+      return;
+    }
+    if (coverUploading || galleryUploading) {
+      toast.warning("ط§ظ†طھط¸ط± ط­طھظ‰ ظٹظƒطھظ…ظ„ ط±ظپط¹ ط§ظ„طµظˆط±.");
+      return;
+    }
+
+    if (completionGalleryUploading) {
+      toast.warning("ط§ظ†طھط¸ط± ط­طھظ‰ ظٹظƒطھظ…ظ„ ط±ظپط¹ ط§ظ„طµظˆط±.");
+      return;
+    }
 
     const parsedAttachments = parseAttachmentRows(attachmentRows);
-    if (parsedAttachments.errors.length) return toast.error(`المرفقات: ${parsedAttachments.errors[0]}`);
+    if (parsedAttachments.errors.length) {
+      toast.error(`ط§ظ„ظ…ط±ظپظ‚ط§طھ: ${parsedAttachments.errors[0]}`);
+      return;
+    }
     const parsedMilestones = parseMilestoneRows(milestoneRows);
-    if (parsedMilestones.errors.length) return toast.error(`المراحل: ${parsedMilestones.errors[0]}`);
+    if (parsedMilestones.errors.length) {
+      toast.error(`ط§ظ„ظ…ط±ط§ط­ظ„: ${parsedMilestones.errors[0]}`);
+      return;
+    }
     const parsedFaq = parseFaqRows(faqRows);
-    if (parsedFaq.errors.length) return toast.error(`الأسئلة الشائعة: ${parsedFaq.errors[0]}`);
+    const completionPayload = buildCompletionContentPayload({
+      overviewAr: formData.completionOverviewAr,
+      summaryAr: formData.completionSummaryAr,
+      resultsAr: completionResultRows,
+      outputRows: completionOutputRows,
+      finalNotesAr: completionFinalNoteRows,
+      gallery: completionGalleryUrls,
+    });
+    if (parsedFaq.errors.length) {
+      toast.error(`ط§ظ„ط£ط³ط¦ظ„ط© ط§ظ„ط´ط§ط¦ط¹ط©: ${parsedFaq.errors[0]}`);
+      return;
+    }
+
+    if (completionPayload.errors.length) {
+      toast.error(`ط§ظ„ظ…ط­طھظˆظ‰ ط§ظ„ط®طھط§ظ…ظٹ: ${completionPayload.errors[0]}`);
+      return;
+    }
 
     const titleAr = cleanStr(formData.titleAr);
     const titleEn = cleanStr(formData.titleEn);
@@ -375,6 +543,7 @@ export default function CreateProjectPage() {
         isVip,
         vipOnly: isVip,
         vipTier: formData.vipTier,
+        ...(completionPayload.value ? { completionContent: completionPayload.value } : {}),
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       };
@@ -395,11 +564,11 @@ export default function CreateProjectPage() {
         },
         ignoreFields: ["updatedAt"],
       });
-      toast.success("تم إنشاء المشروع بنجاح");
+      toast.success("طھظ… ط¥ظ†ط´ط§ط، ط§ظ„ظ…ط´ط±ظˆط¹ ط¨ظ†ط¬ط§ط­");
       setLocation("/admin/projects");
     } catch (error) {
       console.error(error);
-      toast.error("فشل إنشاء المشروع");
+      toast.error("ظپط´ظ„ ط¥ظ†ط´ط§ط، ط§ظ„ظ…ط´ط±ظˆط¹");
     } finally {
       setSaving(false);
     }
@@ -411,9 +580,17 @@ export default function CreateProjectPage() {
         activeSection={activeSection}
         setActiveSection={setActiveSection}
         attachmentRows={attachmentRows}
+        completionFinalNoteRows={completionFinalNoteRows}
+        completionGalleryUploading={completionGalleryUploading}
+        completionGalleryUrls={completionGalleryUrls}
+        completionOutputRows={completionOutputRows}
+        completionResultRows={completionResultRows}
         coverUploading={coverUploading}
         draftProjectId={draftProjectId}
         faqRows={faqRows}
+        filledCompletionFinalNotes={filledCompletionFinalNotes}
+        filledCompletionOutputs={filledCompletionOutputs}
+        filledCompletionResults={filledCompletionResults}
         filledAttachments={filledAttachments}
         filledFaq={filledFaq}
         filledHighlights={filledHighlights}
@@ -422,6 +599,7 @@ export default function CreateProjectPage() {
         galleryUploading={galleryUploading}
         galleryUrls={galleryUrls}
         handleAttachmentFileUpload={handleAttachmentFileUpload}
+        handleCompletionGalleryImageUpload={handleCompletionGalleryImageUpload}
         handleCoverImageUpload={handleCoverImageUpload}
         handleGalleryImageUpload={handleGalleryImageUpload}
         handleSubmit={handleSubmit}
@@ -433,7 +611,11 @@ export default function CreateProjectPage() {
         requiredChecklist={requiredChecklist}
         requiredReady={requiredReady}
         sectionMeta={sectionMeta}
+        sectionStatuses={sectionStatuses}
         setAttachmentRows={setAttachmentRows}
+        setCompletionFinalNoteRows={setCompletionFinalNoteRows}
+        setCompletionOutputRows={setCompletionOutputRows}
+        setCompletionResultRows={setCompletionResultRows}
         setFaqRows={setFaqRows}
         setFormData={setFormData}
         setHighlightRows={setHighlightRows}
@@ -445,3 +627,4 @@ export default function CreateProjectPage() {
     </DashboardLayout>
   );
 }
+

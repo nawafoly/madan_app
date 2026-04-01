@@ -95,6 +95,21 @@ export type DelayPenaltyRule =
   | { mode: "percent_per_day"; percentPerDay: number; maxPercent?: number }
   | { mode: "fixed_per_day"; amountPerDay: number; maxAmount?: number };
 
+export interface ProjectCompletionOutput {
+  titleAr: string;
+  descriptionAr: string;
+  metaAr?: string;
+}
+
+export interface ProjectCompletionContent {
+  overviewAr: string;
+  summaryAr: string;
+  resultsAr: string[];
+  outputs: ProjectCompletionOutput[];
+  finalNotesAr: string[];
+  gallery: string[];
+}
+
 /* =========================
    Firestore Doc Shapes (Without id)
    ✅ هذا هو شكل المستند داخل Firestore
@@ -134,6 +149,7 @@ export interface ProjectDoc {
   // Media
   coverImage: string;
   gallery?: string[];
+  completionContent?: ProjectCompletionContent | null;
 
   // Timeline
   plannedLaunchAt?: Timestamp;

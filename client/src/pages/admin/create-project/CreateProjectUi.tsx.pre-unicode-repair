@@ -115,9 +115,9 @@ export function CreateProjectUi({
   saving,
   totalAssets,
   backPath = "/admin/projects",
-  backLabel = "\\u0627\\u0644\\u0639\\u0648\\u062f\\u0629 \\u0625\\u0644\\u0649 \\u0627\\u0644\\u0645\\u0634\\u0627\\u0631\\u064a\\u0639",
+  backLabel = "العودة إلى المشاريع",
   footerDescription,
-  footerTitle = "\\u0625\\u062c\\u0631\\u0627\\u0621\\u0627\\u062a \\u0627\\u0644\\u0625\\u0646\\u0634\\u0627\\u0621",
+  footerTitle = "إجراءات الإنشاء",
   formId,
   headerActions,
   headerBadgeText = "Project Creation",
@@ -125,68 +125,68 @@ export function CreateProjectUi({
   headerDescription,
   headerMetrics,
   headerTitle,
-  primaryActionLabel = "\\u0625\\u0646\\u0634\\u0627\\u0621 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639",
-  primaryActionLoadingLabel = "\\u062c\\u0627\\u0631\\u064d \\u0625\\u0646\\u0634\\u0627\\u0621 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639...",
-  sidebarChecklistDescription = "\\u064a\\u062c\\u0628 \\u0623\\u0646 \\u062a\\u0643\\u0648\\u0646 \\u062c\\u0627\\u0647\\u0632\\u0629 \\u0642\\u0628\\u0644 \\u0627\\u0644\\u062d\\u0641\\u0638.",
-  sidebarChecklistTitle = "\\u0639\\u0646\\u0627\\u0635\\u0631 \\u0623\\u0633\\u0627\\u0633\\u064a\\u0629",
+  primaryActionLabel = "إنشاء المشروع",
+  primaryActionLoadingLabel = "جارٍ إنشاء المشروع...",
+  sidebarChecklistDescription = "يجب أن تكون جاهزة قبل الحفظ.",
+  sidebarChecklistTitle = "عناصر أساسية",
   sidebarMetrics,
-  sidebarTitle = "\\u0644\\u0648\\u062d\\u0629 \\u0627\\u0644\\u062a\\u0646\\u0642\\u0644",
-  sidebarDescription = "\\u0627\\u0646\\u062a\\u0642\\u0627\\u0644 \\u0633\\u0631\\u064a\\u0639 \\u0628\\u064a\\u0646 \\u0627\\u0644\\u0623\\u0642\\u0633\\u0627\\u0645 \\u0645\\u0639 \\u0645\\u0644\\u062e\\u0635 \\u062c\\u0627\\u0647\\u0632\\u064a\\u0629 \\u0627\\u0644\\u0635\\u0641\\u062d\\u0629 \\u0642\\u0628\\u0644 \\u062d\\u0641\\u0638 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639.",
-  workspaceIdLabel = "\\u0645\\u0639\\u0631\\u0651\\u0641 \\u0627\\u0644\\u0645\\u0633\\u0648\\u062f\\u0629",
+  sidebarTitle = "لوحة التنقل",
+  sidebarDescription = "انتقال سريع بين الأقسام مع ملخص جاهزية الصفحة قبل حفظ المشروع.",
+  workspaceIdLabel = "معرّف المسودة",
   workspaceIdValue = draftProjectId.slice(0, 8),
 }: CreateProjectUiProps) {
   const visibleSections = SECTION_DEFINITIONS;
   const resolvedHeaderDescription =
     headerDescription ??
-    "\\u0625\\u0639\\u062f\\u0627\\u062f \\u0645\\u0634\\u0631\\u0648\\u0639 \\u0627\\u0633\\u062a\\u062b\\u0645\\u0627\\u0631\\u064a \\u062c\\u062f\\u064a\\u062f \\u0628\\u0647\\u0648\\u064a\\u0629 \\u0623\\u0648\\u0636\\u062d\\u060c \\u0648\\u0647\\u064a\\u0643\\u0644 \\u0623\\u0642\\u0633\\u0627\\u0645 \\u0645\\u0646\\u0638\\u0645\\u060c \\u0648\\u062a\\u062c\\u0631\\u0628\\u0629 \\u0625\\u062f\\u062e\\u0627\\u0644 \\u0623\\u0642\\u0631\\u0628 \\u0644\\u0645\\u0646\\u0635\\u0627\\u062a \\u0627\\u0644\\u062a\\u0645\\u0648\\u064a\\u0644 \\u0648\\u0627\\u0644\\u0627\\u0633\\u062a\\u062b\\u0645\\u0627\\u0631 \\u0627\\u0644\\u0627\\u062d\\u062a\\u0631\\u0627\\u0641\\u064a\\u0629.";
-  const resolvedHeaderTitle = headerTitle ?? "\\u0625\\u0646\\u0634\\u0627\\u0621 \\u0645\\u0634\\u0631\\u0648\\u0639 \\u062c\\u062f\\u064a\\u062f";
+    "إعداد مشروع استثماري جديد بهوية أوضح، وهيكل أقسام منظم، وتجربة إدخال أقرب لمنصات التمويل والاستثمار الاحترافية.";
+  const resolvedHeaderTitle = headerTitle ?? "إنشاء مشروع جديد";
   const resolvedHeaderMetrics = headerMetrics ?? [
     {
       icon: Target,
-      label: "\\u0627\\u0644\\u062c\\u0627\\u0647\\u0632\\u064a\\u0629 \\u0627\\u0644\\u0623\\u0633\\u0627\\u0633\\u064a\\u0629",
-      value: `${requiredReady}/4 \\u0639\\u0646\\u0627\\u0635\\u0631`,
+      label: "الجاهزية الأساسية",
+      value: `${requiredReady}/4 عناصر`,
     },
     {
       icon: FolderKanban,
-      label: "\\u062a\\u0635\\u0646\\u064a\\u0641 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639",
+      label: "تصنيف المشروع",
       value: projectTypeLabels[formData.projectType],
     },
     {
       icon: FileImage,
-      label: "\\u0627\\u0644\\u0623\\u0635\\u0648\\u0644",
-      value: `${totalAssets} \\u0639\\u0646\\u0627\\u0635\\u0631`,
+      label: "الأصول",
+      value: `${totalAssets} عناصر`,
     },
     {
       icon: BarChart3,
-      label: "\\u0627\\u0644\\u062a\\u0642\\u062f\\u0645",
+      label: "التقدم",
       value: progressModeLabels[formData.progressMode],
     },
   ];
   const resolvedFooterDescription =
     footerDescription ??
-    `\\u0633\\u064a\\u062a\\u0645 \\u062d\\u0641\\u0638 \\u0646\\u0641\\u0633 \\u0627\\u0644\\u062d\\u0642\\u0648\\u0644 \\u0648\\u0646\\u0641\\u0633 \\u0627\\u0644\\u0640 validation \\u0627\\u0644\\u062d\\u0627\\u0644\\u064a. ${
+    `سيتم حفظ نفس الحقول ونفس الـ validation الحالي. ${
       hasUploadingAttachment
-        ? "\\u064a\\u0648\\u062c\\u062f \\u0645\\u0631\\u0641\\u0642 \\u0642\\u064a\\u062f \\u0627\\u0644\\u0631\\u0641\\u0639 \\u062d\\u0627\\u0644\\u064a\\u064b\\u0627."
-        : "\\u0631\\u0627\\u062c\\u0639 \\u0627\\u0644\\u0639\\u0646\\u0627\\u0635\\u0631 \\u0627\\u0644\\u0623\\u0633\\u0627\\u0633\\u064a\\u0629 \\u062b\\u0645 \\u0623\\u0646\\u0634\\u0626 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639."
+        ? "يوجد مرفق قيد الرفع حاليًا."
+        : "راجع العناصر الأساسية ثم أنشئ المشروع."
     }`;
   const resolvedSidebarMetrics = sidebarMetrics ?? [
     {
       icon: FolderKanban,
-      label: "\\u0645\\u0639\\u0631\\u0651\\u0641 \\u0627\\u0644\\u0645\\u0633\\u0648\\u062f\\u0629",
+      label: "معرّف المسودة",
       value: workspaceIdValue,
     },
     {
       icon: ImagePlus,
-      label: "\\u0627\\u0644\\u0648\\u0633\\u0627\\u0626\\u0637",
-      value: `${totalAssets} \\u0639\\u0646\\u0627\\u0635\\u0631 \\u0645\\u0631\\u062a\\u0628\\u0637\\u0629`,
+      label: "الوسائط",
+      value: `${totalAssets} عناصر مرتبطة`,
     },
     {
       icon: Crown,
       label: "VIP",
       value:
         formData.isVip === "true" || formData.projectType === "vip_exclusive"
-          ? `\\u0645\\u0641\\u0639\\u0651\\u0644 \\u00b7 ${vipTierLabels[formData.vipTier]}`
-          : "\\u063a\\u064a\\u0631 \\u0645\\u0641\\u0639\\u0651\\u0644",
+          ? `مفعّل · ${vipTierLabels[formData.vipTier]}`
+          : "غير مفعّل",
     },
   ];
   const summaryPanelStatus = visibleSections.every(
@@ -218,7 +218,7 @@ export function CreateProjectUi({
   const activeSectionStatus = sectionStatuses[activeSectionId] ?? "incomplete";
   const activeSectionAppearance = getStatusAppearance(activeSectionStatus);
   const projectDisplayTitle =
-    cleanStr(formData.titleAr) || cleanStr(formData.titleEn) || "\\u0645\\u0634\\u0631\\u0648\\u0639 \\u062c\\u062f\\u064a\\u062f";
+    cleanStr(formData.titleAr) || cleanStr(formData.titleEn) || "ط¸â€¦ط·آ´ط·آ±ط¸ث†ط·آ¹ ط·آ¬ط·آ¯ط¸ظ¹ط·آ¯";
   const hasVipRequirement =
     formData.isVip === "true" || formData.projectType === "vip_exclusive";
   const hasCoverImage = Boolean(cleanStr(formData.coverImage));
@@ -229,10 +229,10 @@ export function CreateProjectUi({
     (row) => Boolean(cleanStr(row.q)) && Boolean(cleanStr(row.a))
   ).length;
   const financeMissingFields = [
-    !cleanStr(formData.targetAmount) ? "\\u0627\\u0644\\u0645\\u0628\\u0644\\u063a \\u0627\\u0644\\u0645\\u0633\\u062a\\u0647\\u062f\\u0641" : null,
-    !cleanStr(formData.minInvestment) ? "\\u0627\\u0644\\u062d\\u062f \\u0627\\u0644\\u0623\\u062f\\u0646\\u0649" : null,
-    !cleanStr(formData.annualReturn) ? "\\u0627\\u0644\\u0639\\u0627\\u0626\\u062f \\u0627\\u0644\\u0633\\u0646\\u0648\\u064a" : null,
-    !cleanStr(formData.duration) ? "\\u0627\\u0644\\u0645\\u062f\\u0629" : null,
+    !cleanStr(formData.targetAmount) ? "ط·ط§ظ„ظ…ط¨ظ„ط؛ ط§ظ„ظ…ط³طھظ‡ط¯ظپ" : null,
+    !cleanStr(formData.minInvestment) ? "ط·ط§ظ„ط­ط¯ ط§ظ„ط£ط¯ظ†ظ‰" : null,
+    !cleanStr(formData.annualReturn) ? "ط·ط§ظ„ط¹ط§ط¦ط¯ ط§ظ„ط³ظ†ظˆظٹ" : null,
+    !cleanStr(formData.duration) ? "ط·ط§ظ„ظ…ط¯ط©" : null,
   ].filter((item): item is string => Boolean(item));
   const activeOptionLabels = [
     formData.featured === "true" ? "Featured" : null,
@@ -257,140 +257,140 @@ export function CreateProjectUi({
       : "incomplete";
   const completionSectionSummary = isCompletionStatus(formData.status)
     ? [
-        filledCompletionResults ? `${filledCompletionResults} \\u0646\\u062a\\u0627\\u0626\\u062c` : "",
-        filledCompletionOutputs ? `${filledCompletionOutputs} \\u0645\\u062e\\u0631\\u062c\\u0627\\u062a` : "",
-        filledCompletionFinalNotes ? `${filledCompletionFinalNotes} \\u0645\\u0644\\u0627\\u062d\\u0638\\u0627\\u062a` : "",
+        filledCompletionResults ? `${filledCompletionResults} ظ†طھط§ط¦ط¬` : "",
+        filledCompletionOutputs ? `${filledCompletionOutputs} ظ…ط®ط±ط¬ط§طھ` : "",
+        filledCompletionFinalNotes ? `${filledCompletionFinalNotes} ظ…ظ„ط§ط­ط¸ط§طھ` : "",
       ]
         .filter(Boolean)
-        .join("\\u0622\\u00a2\\u0637\\u00a2\\u0622\\u00b7 ") || "\\u0623\\u0636\\u0641 \\u0627\\u0644\\u0645\\u062d\\u062a\\u0648\\u0649 \\u0627\\u0644\\u062e\\u062a\\u0627\\u0645\\u064a"
-    : "\\u0645\\u062a\\u0627\\u062d \\u0628\\u0639\\u062f \\u0627\\u0644\\u0625\\u063a\\u0644\\u0627\\u0642";
+        .join(" ط·آ¢ط¢آ· ") || "ط·ط£ط¶ظپ ط§ظ„ظ…ط­طھظˆظ‰ ط§ظ„ط®طھط§ظ…ظٹ"
+    : "ط¸ظ…طھط§ط­ ط¨ط¹ط¯ ط§ظ„ط¥ط؛ظ„ط§ظ‚";
   const sectionDiagnosticCards = {
     basic: {
       icon: Sparkles,
-      title: "\\u0647\\u0648\\u064a\\u0629 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639",
+      title: "ط¸ظ‡ظˆظٹط© ط§ظ„ظ…ط´ط±ظˆط¹",
       description:
-        "\\u0627\\u0644\\u0639\\u0646\\u0648\\u0627\\u0646 \\u0648\\u0627\\u0644\\u0648\\u0635\\u0641 \\u0647\\u0645\\u0627 \\u0623\\u0648\\u0644 \\u0645\\u0627 \\u064a\\u0639\\u0631\\u0651\\u0641 \\u0627\\u0644\\u0645\\u0633\\u062a\\u062b\\u0645\\u0631 \\u0639\\u0644\\u0649 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639 \\u062f\\u0627\\u062e\\u0644 \\u0627\\u0644\\u0642\\u0648\\u0627\\u0626\\u0645 \\u0648\\u0635\\u0641\\u062d\\u0629 \\u0627\\u0644\\u062a\\u0641\\u0627\\u0635\\u064a\\u0644.",
+        "ط·ط§ظ„ط¹ظ†ظˆط§ظ† ظˆط§ظ„ظˆطµظپ ظ‡ظ…ط§ ط£ظˆظ„ ظ…ط§ ظٹط¹ط±ظ‘ظپ ط§ظ„ظ…ط³طھط«ظ…ط± ط¹ظ„ظ‰ ط§ظ„ظ…ط´ط±ظˆط¹ ط¯ط§ط®ظ„ ط§ظ„ظ‚ظˆط§ط¦ظ… ظˆطµظپط­ط© ط§ظ„طھظپط§طµظٹظ„.",
       summary: sectionMeta.basic,
       metrics: [
         {
           icon: CheckCircle2,
-          label: "\\u0627\\u0644\\u0639\\u0646\\u0648\\u0627\\u0646 \\u0627\\u0644\\u0639\\u0631\\u0628\\u064a",
+          label: "ط·ط§ظ„ط¹ظ†ظˆط§ظ† ط§ظ„ط¹ط±ط¨ظٹ",
           status: cleanStr(formData.titleAr) ? "complete" : "incomplete",
-          value: cleanStr(formData.titleAr) ? "\\u0645\\u0643\\u062a\\u0645\\u0644" : "\\u063a\\u064a\\u0631 \\u0645\\u0643\\u062a\\u0645\\u0644",
+          value: cleanStr(formData.titleAr) ? "ط¸â€¦ط¸ئ’ط·ع¾ط¸â€¦ط¸â€‍" : "ط·آ·ط·ط›ط¸ظ¹ط·آ± ط¸â€¦ط¸ئ’ط·ع¾ط¸â€¦ط¸â€‍",
         },
         {
           icon: CheckCircle2,
-          label: "\\u0627\\u0644\\u0648\\u0635\\u0641 \\u0627\\u0644\\u0639\\u0631\\u0628\\u064a",
+          label: "ط·ط§ظ„ظˆطµظپ ط§ظ„ط¹ط±ط¨ظٹ",
           status: cleanStr(formData.descriptionAr) ? "complete" : "incomplete",
-          value: cleanStr(formData.descriptionAr) ? "\\u0645\\u0643\\u062a\\u0645\\u0644" : "\\u063a\\u064a\\u0631 \\u0645\\u0643\\u062a\\u0645\\u0644",
+          value: cleanStr(formData.descriptionAr) ? "ط¸â€¦ط¸ئ’ط·ع¾ط¸â€¦ط¸â€‍" : "ط·آ·ط·ط›ط¸ظ¹ط·آ± ط¸â€¦ط¸ئ’ط·ع¾ط¸â€¦ط¸â€‍",
         },
         {
           icon: BriefcaseBusiness,
-          label: "\\u0627\\u0644\\u0639\\u0646\\u0648\\u0627\\u0646 \\u0627\\u0644\\u0625\\u0646\\u062c\\u0644\\u064a\\u0632\\u064a",
-          value: cleanStr(formData.titleEn) ? "\\u0645\\u0648\\u062c\\u0648\\u062f" : "\\u0627\\u062e\\u062a\\u064a\\u0627\\u0631\\u064a",
+          label: "ط·ط§ظ„ط¹ظ†ظˆط§ظ† ط§ظ„ط¥ظ†ط¬ظ„ظٹط²ظٹ",
+          value: cleanStr(formData.titleEn) ? "ط¸â€¦ط¸ث†ط·آ¬ط¸ث†ط·آ¯" : "ط·آ§ط·آ®ط·ع¾ط¸ظ¹ط·آ§ط·آ±ط¸ظ¹",
         },
         {
           icon: BriefcaseBusiness,
-          label: "\\u0627\\u0644\\u0648\\u0635\\u0641 \\u0627\\u0644\\u0625\\u0646\\u062c\\u0644\\u064a\\u0632\\u064a",
-          value: cleanStr(formData.descriptionEn) ? "\\u0645\\u0648\\u062c\\u0648\\u062f" : "\\u0627\\u062e\\u062a\\u064a\\u0627\\u0631\\u064a",
+          label: "ط·ط§ظ„ظˆطµظپ ط§ظ„ط¥ظ†ط¬ظ„ظٹط²ظٹ",
+          value: cleanStr(formData.descriptionEn) ? "ط¸â€¦ط¸ث†ط·آ¬ط¸ث†ط·آ¯" : "ط·آ§ط·آ®ط·ع¾ط¸ظ¹ط·آ§ط·آ±ط¸ظ¹",
         },
       ],
     },
     details: {
       icon: MapPinned,
-      title: "\\u0645\\u0644\\u0641 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639",
+      title: "ط¸ظ…ظ„ظپ ط§ظ„ظ…ط´ط±ظˆط¹",
       description:
-        "\\u0647\\u0630\\u0627 \\u0627\\u0644\\u062c\\u0632\\u0621 \\u064a\\u0636\\u0628\\u0637 \\u0646\\u0648\\u0639 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639 \\u0648\\u062d\\u0627\\u0644\\u062a\\u0647 \\u0648\\u0645\\u0648\\u0642\\u0639\\u0647 \\u0648\\u0631\\u0642\\u0645 \\u0627\\u0644\\u0625\\u0635\\u062f\\u0627\\u0631 \\u062f\\u0627\\u062e\\u0644 \\u0627\\u0644\\u0646\\u0638\\u0627\\u0645 \\u0648\\u0644\\u0648\\u062d\\u0627\\u062a \\u0627\\u0644\\u0645\\u062a\\u0627\\u0628\\u0639\\u0629.",
+        "ط¸ظ‡ط°ط§ ط§ظ„ط¬ط²ط، ظٹط¶ط¨ط· ظ†ظˆط¹ ط§ظ„ظ…ط´ط±ظˆط¹ ظˆط­ط§ظ„طھظ‡ ظˆظ…ظˆظ‚ط¹ظ‡ ظˆط±ظ‚ظ… ط§ظ„ط¥طµط¯ط§ط± ط¯ط§ط®ظ„ ط§ظ„ظ†ط¸ط§ظ… ظˆظ„ظˆط­ط§طھ ط§ظ„ظ…طھط§ط¨ط¹ط©.",
       summary: sectionMeta.details,
       metrics: [
         {
           icon: Building2,
-          label: "\\u0646\\u0648\\u0639 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639",
+          label: "ط¸ظ†ظˆط¹ ط§ظ„ظ…ط´ط±ظˆط¹",
           value: projectTypeLabels[formData.projectType],
         },
         {
           icon: FolderKanban,
-          label: "\\u0627\\u0644\\u062d\\u0627\\u0644\\u0629 \\u0627\\u0644\\u062d\\u0627\\u0644\\u064a\\u0629",
+          label: "ط·ط§ظ„ط­ط§ظ„ط© ط§ظ„ط­ط§ظ„ظٹط©",
           value: statusLabels[formData.status],
         },
         {
           icon: FileText,
-          label: "\\u0631\\u0642\\u0645 \\u0627\\u0644\\u0625\\u0635\\u062f\\u0627\\u0631",
+          label: "ط·ط±ظ‚ظ… ط§ظ„ط¥طµط¯ط§ط±",
           status: cleanStr(formData.issueNumber) ? "complete" : "incomplete",
-          value: cleanStr(formData.issueNumber) || "\\u0628\\u0627\\u0646\\u062a\\u0638\\u0627\\u0631 \\u0627\\u0644\\u0625\\u062f\\u062e\\u0627\\u0644",
+          value: cleanStr(formData.issueNumber) || "ط·ط¨ط§ظ†طھط¸ط§ط± ط§ظ„ط¥ط¯ط®ط§ظ„",
         },
         {
           icon: MapPinned,
-          label: "\\u0627\\u0644\\u0645\\u0648\\u0642\\u0639",
+          label: "ط·ط§ظ„ظ…ظˆظ‚ط¹",
           status: cleanStr(formData.locationAr) ? "complete" : "incomplete",
-          value: cleanStr(formData.locationAr) || "\\u0628\\u0627\\u0646\\u062a\\u0638\\u0627\\u0631 \\u0627\\u0644\\u0625\\u062f\\u062e\\u0627\\u0644",
+          value: cleanStr(formData.locationAr) || "ط·ط¨ط§ظ†طھط¸ط§ط± ط§ظ„ط¥ط¯ط®ط§ظ„",
         },
       ],
     },
     media: {
       icon: ImagePlus,
-      title: "\\u0645\\u0644\\u0641 \\u0627\\u0644\\u0648\\u0633\\u0627\\u0626\\u0637",
-      description: "\\u0627\\u0644\\u063a\\u0644\\u0627\\u0641 \\u0648\\u0627\\u0644\\u0645\\u0639\\u0631\\u0636 \\u064a\\u0645\\u0646\\u062d\\u0627\\u0646 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639 \\u0627\\u0646\\u0637\\u0628\\u0627\\u0639\\u0647 \\u0627\\u0644\\u0628\\u0635\\u0631\\u064a \\u0627\\u0644\\u0623\\u0648\\u0644\\u060c \\u0644\\u0630\\u0627 \\u064a\\u062c\\u0628 \\u0645\\u0631\\u0627\\u062c\\u0639\\u062a\\u0647\\u0645\\u0627 \\u0643\\u062d\\u0632\\u0645\\u0629 \\u0648\\u0627\\u062d\\u062f\\u0629.",
+      title: "ط¸ظ…ظ„ظپ ط§ظ„ظˆط³ط§ط¦ط·",
+      description: "ط·ط§ظ„ط؛ظ„ط§ظپ ظˆط§ظ„ظ…ط¹ط±ط¶ ظٹظ…ظ†ط­ط§ظ† ط§ظ„ظ…ط´ط±ظˆط¹ ط§ظ†ط·ط¨ط§ط¹ظ‡ ط§ظ„ط¨طµط±ظٹ ط§ظ„ط£ظˆظ„طŒ ظ„ط°ط§ ظٹط¬ط¨ ظ…ط±ط§ط¬ط¹طھظ‡ظ…ط§ ظƒط­ط²ظ…ط© ظˆط§ط­ط¯ط©.",
       summary: hasCoverImage
-        ? `${sectionMeta.media} \\u0638\\u2026\\u0637\\u00b9 ${galleryUrls.length} \\u0635\\u0648\\u0631 \\u0641\\u064a \\u0627\\u0644\\u0645\\u0639\\u0631\\u0636.`
-        : "\\u0635\\u0648\\u0631\\u0629 \\u0627\\u0644\\u063a\\u0644\\u0627\\u0641 \\u0645\\u0627 \\u0632\\u0627\\u0644\\u062a \\u0645\\u0637\\u0644\\u0648\\u0628\\u0629 \\u0642\\u0628\\u0644 \\u0627\\u0639\\u062a\\u0628\\u0627\\u0631 \\u0627\\u0644\\u0648\\u0633\\u0627\\u0626\\u0637 \\u062c\\u0627\\u0647\\u0632\\u0629.",
+        ? `${sectionMeta.media} ط¸â€¦ط·آ¹ ${galleryUrls.length} طµظˆط± ظپظٹ ط§ظ„ظ…ط¹ط±ط¶.`
+        : "ط·طµظˆط±ط© ط§ظ„ط؛ظ„ط§ظپ ظ…ط§ ط²ط§ظ„طھ ظ…ط·ظ„ظˆط¨ط© ظ‚ط¨ظ„ ط§ط¹طھط¨ط§ط± ط§ظ„ظˆط³ط§ط¦ط· ط¬ط§ظ‡ط²ط©.",
       metrics: [
         {
           icon: FileImage,
-          label: "\\u0635\\u0648\\u0631\\u0629 \\u0627\\u0644\\u063a\\u0644\\u0627\\u0641",
+          label: "ط·طµظˆط±ط© ط§ظ„ط؛ظ„ط§ظپ",
           status: hasCoverImage ? "complete" : "incomplete",
-          value: coverUploading ? "\\u062c\\u0627\\u0631\\u064d \\u0627\\u0644\\u0631\\u0641\\u0639" : hasCoverImage ? "\\u062c\\u0627\\u0647\\u0632\\u0629" : "\\u063a\\u064a\\u0631 \\u062c\\u0627\\u0647\\u0632\\u0629",
+          value: coverUploading ? "ط·ط¬ط§ط±ظچ ط§ظ„ط±ظپط¹" : hasCoverImage ? "ط·ط¬ط§ظ‡ط²ط©" : "ط·آ·ط·ط›ط¸ظ¹ط·آ± ط·آ¬ط·آ§ط¸â€،ط·آ²ط·آ©",
         },
         {
           icon: ImagePlus,
-          label: "\\u0635\\u0648\\u0631 \\u0627\\u0644\\u0645\\u0639\\u0631\\u0636",
+          label: "ط·طµظˆط± ط§ظ„ظ…ط¹ط±ط¶",
           status: galleryUrls.length ? "complete" : "incomplete",
-          value: galleryUploading ? "\\u062c\\u0627\\u0631\\u064d \\u0627\\u0644\\u0631\\u0641\\u0639" : galleryUrls.length ? `${galleryUrls.length}  \\u0635\\u0648\\u0631` : "\\u0644\\u0627 \\u062a\\u0648\\u062c\\u062f \\u0635\\u0648\\u0631",
+          value: galleryUploading ? "ط·ط¬ط§ط±ظچ ط§ظ„ط±ظپط¹" : galleryUrls.length ? `${galleryUrls.length}  ط·آµط¸ث†ط·آ±"` : "ط¸ظ„ط§ طھظˆط¬ط¯ طµظˆط±"`,
         },
         {
           icon: ArrowRight,
-          label: "\\u0631\\u0627\\u0628\\u0637 \\u0623\\u0648 \\u0645\\u0644\\u0641 \\u0627\\u0644\\u063a\\u0644\\u0627\\u0641",
+          label: "ط·ط±ط§ط¨ط· ط£ظˆ ظ…ظ„ظپ ط§ظ„ط؛ظ„ط§ظپ",
           status: hasCoverImage ? "complete" : "incomplete",
-          value: hasCoverImage ? "\\u062a\\u0645 \\u062a\\u062d\\u062f\\u064a\\u062f \\u0645\\u0635\\u062f\\u0631 \\u0627\\u0644\\u063a\\u0644\\u0627\\u0641" : "\\u063a\\u064a\\u0631 \\u0645\\u062d\\u062f\\u062f",
+          value: hasCoverImage ? "ط·آ·ط·ع¾ط¸â€¦ ط·ع¾ط·آ­ط·آ¯ط¸ظ¹ط·آ¯ ط¸â€¦ط·آµط·آ¯ط·آ± ط·آ§ط¸â€‍ط·ط›ط¸â€‍ط·آ§ط¸ظ¾" : "ط·آ·ط·ط›ط¸ظ¹ط·آ± ط¸â€¦ط·آ­ط·آ¯ط·آ¯",
         },
         {
           icon: FolderKanban,
-          label: "\\u0625\\u062c\\u0645\\u0627\\u0644\\u064a \\u0627\\u0644\\u0648\\u0633\\u0627\\u0626\\u0637",
+          label: "ط·ط¥ط¬ظ…ط§ظ„ظٹ ط§ظ„ظˆط³ط§ط¦ط·",
           status: totalAssets ? "complete" : "incomplete",
-          value: `${totalAssets} \\u0639\\u0646\\u0627\\u0635\\u0631 \\u0645\\u0631\\u062a\\u0628\\u0637\\u0629`,
+          value: `${totalAssets} ط¹ظ†ط§طµط± ظ…ط±طھط¨ط·ط©`,
         },
       ],
     },
     highlights: {
       icon: Sparkles,
-      title: "\\u0645\\u0644\\u062e\\u0635 \\u0627\\u0644\\u0645\\u0645\\u064a\\u0632\\u0627\\u062a",
-      description: "\\u0631\\u0627\\u062c\\u0639 \\u0645\\u0627 \\u0625\\u0630\\u0627 \\u0643\\u0627\\u0646\\u062a \\u0646\\u0642\\u0627\\u0637 \\u0627\\u0644\\u062a\\u0645\\u064a\\u0632 \\u0643\\u0627\\u0641\\u064a\\u0629 \\u0648\\u0648\\u0627\\u0636\\u062d\\u0629 \\u0642\\u0628\\u0644 \\u0639\\u0631\\u0636 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639 \\u0644\\u0644\\u0645\\u0633\\u062a\\u062b\\u0645\\u0631\\u064a\\u0646.",
+      title: "ط¸ظ…ظ„ط®طµ ط§ظ„ظ…ظ…ظٹط²ط§طھ",
+      description: "ط·ط±ط§ط¬ط¹ ظ…ط§ ط¥ط°ط§ ظƒط§ظ†طھ ظ†ظ‚ط§ط· ط§ظ„طھظ…ظٹط² ظƒط§ظپظٹط© ظˆظˆط§ط¶ط­ط© ظ‚ط¨ظ„ ط¹ط±ط¶ ط§ظ„ظ…ط´ط±ظˆط¹ ظ„ظ„ظ…ط³طھط«ظ…ط±ظٹظ†.",
       summary: sectionMeta.highlights,
       metrics: [
         {
           icon: Sparkles,
-          label: "\\u0639\\u062f\\u062f \\u0627\\u0644\\u0645\\u0645\\u064a\\u0632\\u0627\\u062a",
+          label: "ط·ط¹ط¯ط¯ ط§ظ„ظ…ظ…ظٹط²ط§طھ",
           status: filledHighlights ? "complete" : "incomplete",
-          value: filledHighlights ? `${filledHighlights}  \\u0645\\u0645\\u064a\\u0632\\u0627\\u062a` : "\\u0644\\u0627 \\u062a\\u0648\\u062c\\u062f \\u0645\\u0645\\u064a\\u0632\\u0627\\u062a",
+          value: filledHighlights ? `${filledHighlights}  ط¸â€¦ط¸â€¦ط¸ظ¹ط·آ²ط·آ§ط·ع¾` : "ط¸ظ„ط§ طھظˆط¬ط¯ ظ…ظ…ظٹط²ط§طھ"`,
         },
         {
           icon: CheckCircle2,
-          label: "\\u0643\\u0641\\u0627\\u064a\\u0629 \\u0627\\u0644\\u0645\\u062d\\u062a\\u0648\\u0649",
+          label: "ط¸ظƒظپط§ظٹط© ط§ظ„ظ…ط­طھظˆظ‰",
           status: highlightContentSufficient ? "complete" : "incomplete",
-          value: highlightContentSufficient ? "\\u0645\\u062d\\u062a\\u0648\\u0649 \\u0643\\u0627\\u0641\\u064d" : "\\u0628\\u062d\\u0627\\u062c\\u0629 \\u0625\\u0644\\u0649 \\u0645\\u0632\\u064a\\u062f \\u0645\\u0646 \\u0627\\u0644\\u0625\\u0628\\u0631\\u0627\\u0632",
+          value: highlightContentSufficient ? "ط¸â€¦ط·آ­ط·ع¾ط¸ث†ط¸â€° ط¸ئ’ط·آ§ط¸ظ¾ط¸ع†" : "ط·ط¨ط­ط§ط¬ط© ط¥ظ„ظ‰ ظ…ط²ظٹط¯ ظ…ظ† ط§ظ„ط¥ط¨ط±ط§ط²",
         },
         {
           icon: FileText,
-          label: "\\u0648\\u0636\\u0648\\u062d \\u0627\\u0644\\u0635\\u064a\\u0627\\u063a\\u0629",
+          label: "ط¸ظˆط¶ظˆط­ ط§ظ„طµظٹط§ط؛ط©",
           status: highlightCopyReady ? "complete" : "incomplete",
-          value: highlightCopyReady ? "\\u0627\\u0644\\u0635\\u064a\\u0627\\u063a\\u0629 \\u0645\\u0642\\u0628\\u0648\\u0644\\u0629" : "\\u0628\\u0639\\u0636 \\u0627\\u0644\\u0645\\u0645\\u064a\\u0632\\u0627\\u062a \\u062a\\u062d\\u062a\\u0627\\u062c \\u0635\\u064a\\u0627\\u063a\\u0629 \\u0623\\u0648\\u0636\\u062d",
+          value: highlightCopyReady ? "ط·ط§ظ„طµظٹط§ط؛ط© ظ…ظ‚ط¨ظˆظ„ط©" : "ط·آ¨ط·آ¹ط·آ¶ ط·آ§ط¸â€‍ط¸â€¦ط¸â€¦ط¸ظ¹ط·آ²ط·آ§ط·ع¾ ط·ع¾ط·آ­ط·ع¾ط·آ§ط·آ¬ ط·آµط¸ظ¹ط·آ§ط·ط›ط·آ© ط·آ£ط¸ث†ط·آ¶ط·آ­",
         },
       ],
     },
     attachments: {
       icon: Paperclip,
-      title: "\\u0645\\u0644\\u0641 \\u0627\\u0644\\u0645\\u0631\\u0641\\u0642\\u0627\\u062a",
-      description: "\\u064a\\u064f\\u0644\\u062e\\u0651\\u0635 \\u0647\\u0630\\u0627 \\u0627\\u0644\\u062c\\u0632\\u0621 \\u0648\\u062c\\u0648\\u062f \\u0627\\u0644\\u0645\\u0644\\u0641\\u0627\\u062a \\u0623\\u0648 \\u0627\\u0644\\u0631\\u0648\\u0627\\u0628\\u0637 \\u0627\\u0644\\u062e\\u0627\\u0631\\u062c\\u064a\\u0629 \\u0648\\u0645\\u062f\\u0649 \\u0633\\u0644\\u0627\\u0645\\u0629 \\u0625\\u062f\\u062e\\u0627\\u0644\\u0647\\u0627 \\u0642\\u0628\\u0644 \\u0627\\u0644\\u062d\\u0641\\u0638.",
+      title: "ط¸ظ…ظ„ظپ ط§ظ„ظ…ط±ظپظ‚ط§طھ",
+      description: "ط¸ظٹظڈظ„ط®ظ‘طµ ظ‡ط°ط§ ط§ظ„ط¬ط²ط، ظˆط¬ظˆط¯ ط§ظ„ظ…ظ„ظپط§طھ ط£ظˆ ط§ظ„ط±ظˆط§ط¨ط· ط§ظ„ط®ط§ط±ط¬ظٹط© ظˆظ…ط¯ظ‰ ط³ظ„ط§ظ…ط© ط¥ط¯ط®ط§ظ„ظ‡ط§ ظ‚ط¨ظ„ ط§ظ„ط­ظپط¸.",
       summary:
         parsedAttachments.errors.length > 0
           ? parsedAttachments.errors[0]
@@ -398,31 +398,31 @@ export function CreateProjectUi({
       metrics: [
         {
           icon: Paperclip,
-          label: "\\u0639\\u062f\\u062f \\u0627\\u0644\\u0645\\u0631\\u0641\\u0642\\u0627\\u062a",
+          label: "ط·ط¹ط¯ط¯ ط§ظ„ظ…ط±ظپظ‚ط§طھ",
           status: parsedAttachments.items.length ? "complete" : "incomplete",
           value: parsedAttachments.items.length
-            ? `${parsedAttachments.items.length} \\u0645\\u0631\\u0641\\u0642\\u0627\\u062a \\u062c\\u0627\\u0647\\u0632\\u0629`
-            : "\\u0644\\u0627 \\u062a\\u0648\\u062c\\u062f \\u0645\\u0631\\u0641\\u0642\\u0627\\u062a",
+            ? `${parsedAttachments.items.length} ظ…ط±ظپظ‚ط§طھ ط¬ط§ظ‡ط²ط©`
+            : "ط¸ظ„ط§ طھظˆط¬ط¯ ظ…ط±ظپظ‚ط§طھ",
         },
         {
           icon: FileText,
-          label: "\\u0645\\u0644\\u0641 \\u0645\\u0631\\u0641\\u0648\\u0639",
+          label: "ط¸â€¦ط¸â€‍ط¸ظ¾ ط¸â€¦ط·آ±ط¸ظ¾ط¸ث†ط·آ¹",
           status: hasUploadedAttachmentFile ? "complete" : "incomplete",
-          value: hasUploadedAttachmentFile ? "\\u064a\\u0648\\u062c\\u062f \\u0645\\u0644\\u0641 \\u0645\\u0631\\u0641\\u0648\\u0639" : "\\u0644\\u0627 \\u064a\\u0648\\u062c\\u062f \\u0645\\u0644\\u0641 \\u0645\\u0631\\u0641\\u0648\\u0639",
+          value: hasUploadedAttachmentFile ? "ط·آ¸ط¸ظ¹ط¸ث†ط·آ¬ط·آ¯ ط¸â€¦ط¸â€‍ط¸ظ¾ ط¸â€¦ط·آ±ط¸ظ¾ط¸ث†ط·آ¹" : "ط¸ظ„ط§ ظٹظˆط¬ط¯ ظ…ظ„ظپ ظ…ط±ظپظˆط¹",
         },
         {
           icon: CheckCircle2,
-          label: "\\u0627\\u0644\\u062d\\u0627\\u0644\\u0629 \\u0627\\u0644\\u0639\\u0627\\u0645\\u0629",
+          label: "ط·ط§ظ„ط­ط§ظ„ط© ط§ظ„ط¹ط§ظ…ط©",
           status: sectionStatuses.attachments,
           value:
-            sectionStatuses.attachments === "complete" ? "\\u062c\\u0627\\u0647\\u0632 \\u0644\\u0644\\u062d\\u0641\\u0638" : "\\u0628\\u062d\\u0627\\u062c\\u0629 \\u0625\\u0644\\u0649 \\u0627\\u0633\\u062a\\u0643\\u0645\\u0627\\u0644",
+            sectionStatuses.attachments === "complete" ? "ط·ط¬ط§ظ‡ط² ظ„ظ„ط­ظپط¸" : "ط·ط¨ط­ط§ط¬ط© ط¥ظ„ظ‰ ط§ط³طھظƒظ…ط§ظ„",
         },
       ],
     },
     milestones: {
       icon: ListChecks,
-      title: "\\u0645\\u0644\\u062e\\u0635 \\u0627\\u0644\\u0645\\u0631\\u0627\\u062d\\u0644",
-      description: "\\u064a\\u0639\\u0631\\u0636 \\u0647\\u0630\\u0627 \\u0627\\u0644\\u0645\\u0644\\u062e\\u0635 \\u0639\\u062f\\u062f \\u0627\\u0644\\u0645\\u0631\\u0627\\u062d\\u0644 \\u0627\\u0644\\u0645\\u0639\\u0631\\u0641\\u0629 \\u0648\\u0633\\u0644\\u0627\\u0645\\u0629 \\u0628\\u064a\\u0627\\u0646\\u0627\\u062a\\u0647\\u0627 \\u0642\\u0628\\u0644 \\u0646\\u0634\\u0631 \\u0627\\u0644\\u062a\\u0633\\u0644\\u0633\\u0644 \\u0627\\u0644\\u062a\\u0646\\u0641\\u064a\\u0630\\u064a.",
+      title: "ط¸ظ…ظ„ط®طµ ط§ظ„ظ…ط±ط§ط­ظ„",
+      description: "ط¸ظٹط¹ط±ط¶ ظ‡ط°ط§ ط§ظ„ظ…ظ„ط®طµ ط¹ط¯ط¯ ط§ظ„ظ…ط±ط§ط­ظ„ ط§ظ„ظ…ط¹ط±ظپط© ظˆط³ظ„ط§ظ…ط© ط¨ظٹط§ظ†ط§طھظ‡ط§ ظ‚ط¨ظ„ ظ†ط´ط± ط§ظ„طھط³ظ„ط³ظ„ ط§ظ„طھظ†ظپظٹط°ظٹ.",
       summary:
         parsedMilestones.errors.length > 0
           ? parsedMilestones.errors[0]
@@ -430,118 +430,118 @@ export function CreateProjectUi({
       metrics: [
         {
           icon: ListChecks,
-          label: "\\u0639\\u062f\\u062f \\u0627\\u0644\\u0645\\u0631\\u0627\\u062d\\u0644",
+          label: "ط·ط¹ط¯ط¯ ط§ظ„ظ…ط±ط§ط­ظ„",
           status: parsedMilestones.items.length ? "complete" : "incomplete",
-          value: parsedMilestones.items.length ? `${parsedMilestones.items.length} \\u0645\\u0631\\u0627\\u062d\\u0644` : "\\u0644\\u0627 \\u062a\\u0648\\u062c\\u062f \\u0645\\u0631\\u0627\\u062d\\u0644",
+          value: parsedMilestones.items.length ? `${parsedMilestones.items.length} ظ…ط±ط§ط­ظ„` : "ط¸ظ„ط§ طھظˆط¬ط¯ ظ…ط±ط§ط­ظ„"`,
         },
         {
           icon: CheckCircle2,
-          label: "\\u0645\\u0631\\u0627\\u062d\\u0644 \\u0645\\u0639\\u0631\\u0641\\u0629",
+          label: "ط¸ظ…ط±ط§ط­ظ„ ظ…ط¹ط±ظپط©",
           status: parsedMilestones.items.length ? "complete" : "incomplete",
-          value: parsedMilestones.items.length ? "\\u0646\\u0639\\u0645" : "لا",
+          value: parsedMilestones.items.length ? "ط¸â€ ط·آ¹ط¸â€¦" : "ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ§",
         },
         {
           icon: FileText,
-          label: "\\u0633\\u0644\\u0627\\u0645\\u0629 \\u0627\\u0644\\u0628\\u064a\\u0627\\u0646\\u0627\\u062a",
+          label: "ط·ط³ظ„ط§ظ…ط© ط§ظ„ط¨ظٹط§ظ†ط§طھ",
           status: parsedMilestones.errors.length === 0 ? "complete" : "incomplete",
-          value: parsedMilestones.errors.length === 0 ? "\\u0633\\u0644\\u064a\\u0645\\u0629" : "\\u062a\\u062d\\u062a\\u0627\\u062c \\u062a\\u0635\\u062d\\u064a\\u062d",
+          value: parsedMilestones.errors.length === 0 ? "ط·آ³ط¸â€‍ط¸ظ¹ط¸â€¦ط·آ©" : "ط·آ·ط·ع¾ط·آ­ط·ع¾ط·آ§ط·آ¬ ط·ع¾ط·آµط·آ­ط¸ظ¹ط·آ­",
         },
       ],
     },
     faq: {
       icon: CircleHelp,
-      title: "\\u0645\\u0644\\u0641 \\u0627\\u0644\\u0623\\u0633\\u0626\\u0644\\u0629 \\u0627\\u0644\\u0634\\u0627\\u0626\\u0639\\u0629",
-      description: "\\u064a\\u062a\\u0627\\u0628\\u0639 \\u0647\\u0630\\u0627 \\u0627\\u0644\\u0643\\u0631\\u062a \\u0648\\u062c\\u0648\\u062f \\u0623\\u0633\\u0626\\u0644\\u0629 \\u062d\\u0642\\u064a\\u0642\\u064a\\u0629 \\u0628\\u0625\\u062c\\u0627\\u0628\\u0627\\u062a \\u0648\\u0627\\u0636\\u062d\\u0629 \\u0642\\u0628\\u0644 \\u0638\\u0647\\u0648\\u0631\\u0647\\u0627 \\u0644\\u0644\\u0645\\u0633\\u062a\\u062b\\u0645\\u0631\\u064a\\u0646.",
+      title: "ط¸ظ…ظ„ظپ ط§ظ„ط£ط³ط¦ظ„ط© ط§ظ„ط´ط§ط¦ط¹ط©",
+      description: "ط¸ظٹطھط§ط¨ط¹ ظ‡ط°ط§ ط§ظ„ظƒط±طھ ظˆط¬ظˆط¯ ط£ط³ط¦ظ„ط© ط­ظ‚ظٹظ‚ظٹط© ط¨ط¥ط¬ط§ط¨ط§طھ ظˆط§ط¶ط­ط© ظ‚ط¨ظ„ ط¸ظ‡ظˆط±ظ‡ط§ ظ„ظ„ظ…ط³طھط«ظ…ط±ظٹظ†.",
       summary: parsedFaq.errors.length > 0 ? parsedFaq.errors[0] : sectionMeta.faq,
       metrics: [
         {
           icon: CircleHelp,
-          label: "\\u0639\\u062f\\u062f \\u0627\\u0644\\u0623\\u0633\\u0626\\u0644\\u0629",
+          label: "ط·ط¹ط¯ط¯ ط§ظ„ط£ط³ط¦ظ„ط©",
           status: parsedFaq.items.length ? "complete" : "incomplete",
-          value: parsedFaq.items.length ? `${parsedFaq.items.length} \\u0623\\u0633\\u0626\\u0644\\u0629` : "\\u0644\\u0627 \\u062a\\u0648\\u062c\\u062f \\u0623\\u0633\\u0626\\u0644\\u0629",
+          value: parsedFaq.items.length ? `${parsedFaq.items.length} ط£ط³ط¦ظ„ط©` : "ط¸ظ„ط§ طھظˆط¬ط¯ ط£ط³ط¦ظ„ط©"`,
         },
         {
           icon: FileText,
-          label: "\\u0645\\u062d\\u062a\\u0648\\u0649 \\u0641\\u0639\\u0644\\u064a",
+          label: "ط¸â€¦ط·آ­ط·ع¾ط¸ث†ط¸â€° ط¸ظ¾ط·آ¹ط¸â€‍ط¸ظ¹",
           status: answeredFaqCount ? "complete" : "incomplete",
-          value: answeredFaqCount ? `${answeredFaqCount} \\u0628\\u0625\\u062c\\u0627\\u0628\\u0627\\u062a \\u0645\\u0643\\u062a\\u0645\\u0644\\u0629` : "\\u0644\\u0627 \\u062a\\u0648\\u062c\\u062f \\u0625\\u062c\\u0627\\u0628\\u0627\\u062a \\u0645\\u0643\\u062a\\u0645\\u0644\\u0629",
+          value: answeredFaqCount ? `${answeredFaqCount} ط¨ط¥ط¬ط§ط¨ط§طھ ظ…ظƒطھظ…ظ„ط©` : "ط¸ظ„ط§ طھظˆط¬ط¯ ط¥ط¬ط§ط¨ط§طھ ظ…ظƒطھظ…ظ„ط©"`,
         },
         {
           icon: CheckCircle2,
-          label: "\\u0627\\u0644\\u062d\\u0627\\u0644\\u0629 \\u0627\\u0644\\u0639\\u0627\\u0645\\u0629",
+          label: "ط·ط§ظ„ط­ط§ظ„ط© ط§ظ„ط¹ط§ظ…ط©",
           status: sectionStatuses.faq,
-          value: sectionStatuses.faq === "complete" ? "\\u062c\\u0627\\u0647\\u0632 \\u0644\\u0644\\u0646\\u0634\\u0631" : "\\u0628\\u062d\\u0627\\u062c\\u0629 \\u0625\\u0644\\u0649 \\u0645\\u062a\\u0627\\u0628\\u0639\\u0629",
+          value: sectionStatuses.faq === "complete" ? "ط·ط¬ط§ظ‡ط² ظ„ظ„ظ†ط´ط±" : "ط·ط¨ط­ط§ط¬ط© ط¥ظ„ظ‰ ظ…طھط§ط¨ط¹ط©",
         },
       ],
     },
     finance: {
       icon: Landmark,
-      title: "\\u0627\\u0644\\u0645\\u0644\\u0641 \\u0627\\u0644\\u0645\\u0627\\u0644\\u064a",
+      title: "ط·آ§ط¸â€‍ط¸â€¦ط¸â€‍ط¸ظ¾ ط·آ§ط¸â€‍ط¸â€¦ط·آ§ط¸â€‍ط¸ظ¹",
       description:
-        "\\u064a\\u0644\\u062e\\u0635 \\u0647\\u0630\\u0627 \\u0627\\u0644\\u062c\\u0632\\u0621 \\u0627\\u0644\\u0645\\u0628\\u0644\\u063a \\u0627\\u0644\\u0645\\u0633\\u062a\\u0647\\u062f\\u0641 \\u0648\\u0627\\u0644\\u062d\\u0627\\u0644\\u064a \\u0648\\u0627\\u0644\\u062d\\u062f \\u0627\\u0644\\u0623\\u062f\\u0646\\u0649 \\u0648\\u0627\\u0644\\u0639\\u0627\\u0626\\u062f \\u0648\\u0627\\u0644\\u0645\\u062f\\u0629 \\u0644\\u0644\\u062a\\u0623\\u0643\\u062f \\u0645\\u0646 \\u062c\\u0627\\u0647\\u0632\\u064a\\u0629 \\u0627\\u0644\\u0639\\u0631\\u0636 \\u0627\\u0644\\u0645\\u0627\\u0644\\u064a \\u0642\\u0628\\u0644 \\u0627\\u0644\\u062d\\u0641\\u0638.",
+        "ط¸ظ¹ط¸â€‍ط·آ®ط·آµ ط¸â€،ط·آ°ط·آ§ ط·آ§ط¸â€‍ط·آ¬ط·آ²ط·طŒ ط·آ§ط¸â€‍ط¸â€¦ط·آ¨ط¸â€‍ط·ط› ط·آ§ط¸â€‍ط¸â€¦ط·آ³ط·ع¾ط¸â€،ط·آ¯ط¸ظ¾ ط¸ث†ط·آ§ط¸â€‍ط·آ­ط·آ§ط¸â€‍ط¸ظ¹ ط¸ث†ط·آ§ط¸â€‍ط·آ­ط·آ¯ ط·آ§ط¸â€‍ط·آ£ط·آ¯ط¸â€ ط¸â€° ط¸ث†ط·آ§ط¸â€‍ط·آ¹ط·آ§ط·آ¦ط·آ¯ ط¸ث†ط·آ§ط¸â€‍ط¸â€¦ط·آ¯ط·آ© ط¸â€‍ط¸â€‍ط·ع¾ط·آ£ط¸ئ’ط·آ¯ ط¸â€¦ط¸â€  ط·آ¬ط·آ§ط¸â€،ط·آ²ط¸ظ¹ط·آ© ط·آ§ط¸â€‍ط·آ¹ط·آ±ط·آ¶ ط·آ§ط¸â€‍ط¸â€¦ط·آ§ط¸â€‍ط¸ظ¹ ط¸â€ڑط·آ¨ط¸â€‍ ط·آ§ط¸â€‍ط·آ­ط¸ظ¾ط·آ¸.",
       summary:
         financeMissingFields.length > 0
-          ? `الحقول الناقصة: ${financeMissingFields.join("، ")}`
+          ? `ط·آ§ط¸â€‍ط·آ­ط¸â€ڑط¸ث†ط¸â€‍ ط·آ§ط¸â€‍ط¸â€ ط·آ§ط¸â€ڑط·آµط·آ©: ${financeMissingFields.join("ط·إ’ ")}`
           : sectionMeta.finance,
       metrics: [
         {
           icon: Target,
-          label: "\\u0627\\u0644\\u0645\\u0628\\u0644\\u063a \\u0627\\u0644\\u0645\\u0633\\u062a\\u0647\\u062f\\u0641",
+          label: "ط·آ§ط¸â€‍ط¸â€¦ط·آ¨ط¸â€‍ط·ط› ط·آ§ط¸â€‍ط¸â€¦ط·آ³ط·ع¾ط¸â€،ط·آ¯ط¸ظ¾",
           status: cleanStr(formData.targetAmount) ? "complete" : "incomplete",
-          value: formatDisplayValue(formData.targetAmount, "\\u0631.\\u0633"),
+          value: formatDisplayValue(formData.targetAmount, "ط·آ±.ط·آ³"),
         },
         {
           icon: BarChart3,
-          label: "\\u0627\\u0644\\u0645\\u0628\\u0644\\u063a \\u0627\\u0644\\u062d\\u0627\\u0644\\u064a",
-          value: formatDisplayValue(formData.currentAmount, "\\u0631.\\u0633"),
+          label: "ط·آ§ط¸â€‍ط¸â€¦ط·آ¨ط¸â€‍ط·ط› ط·آ§ط¸â€‍ط·آ­ط·آ§ط¸â€‍ط¸ظ¹",
+          value: formatDisplayValue(formData.currentAmount, "ط·آ±.ط·آ³"),
         },
         {
           icon: Landmark,
-          label: "\\u0627\\u0644\\u062d\\u062f \\u0627\\u0644\\u0623\\u062f\\u0646\\u0649",
+          label: "ط·آ§ط¸â€‍ط·آ­ط·آ¯ ط·آ§ط¸â€‍ط·آ£ط·آ¯ط¸â€ ط¸â€°",
           status: cleanStr(formData.minInvestment) ? "complete" : "incomplete",
-          value: formatDisplayValue(formData.minInvestment, "\\u0631.\\u0633"),
+          value: formatDisplayValue(formData.minInvestment, "ط·آ±.ط·آ³"),
         },
         {
           icon: Sparkles,
-          label: "\\u0627\\u0644\\u0639\\u0627\\u0626\\u062f \\u0648\\u0627\\u0644\\u0645\\u062f\\u0629",
+          label: "ط·آ§ط¸â€‍ط·آ¹ط·آ§ط·آ¦ط·آ¯ ط¸ث†ط·آ§ط¸â€‍ط¸â€¦ط·آ¯ط·آ©",
           status: sectionStatuses.finance,
-          value: `${formatDisplayValue(formData.annualReturn, "%")} · ${formatDisplayValue(formData.duration, "شهر")}`,
+          value: `${formatDisplayValue(formData.annualReturn, "%")} ط¢آ· ${formatDisplayValue(formData.duration, "ط·آ´ط¸â€،ط·آ±")}`,
         },
       ],
     },
     [FINAL_SETTINGS_SECTION_ID]: {
       icon: CheckCircle2,
-      title: "\\u0627\\u0644\\u0625\\u0639\\u062f\\u0627\\u062f\\u0627\\u062a \\u0627\\u0644\\u062e\\u062a\\u0627\\u0645\\u064a\\u0629",
+      title: "ط·آ§ط¸â€‍ط·آ¥ط·آ¹ط·آ¯ط·آ§ط·آ¯ط·آ§ط·ع¾ ط·آ§ط¸â€‍ط·آ®ط·ع¾ط·آ§ط¸â€¦ط¸ظ¹ط·آ©",
       description:
-        "\\u064a\\u062c\\u0645\\u0639 \\u0647\\u0630\\u0627 \\u0627\\u0644\\u0642\\u0633\\u0645 \\u0625\\u0639\\u062f\\u0627\\u062f\\u0627\\u062a \\u0627\\u0644\\u062a\\u0642\\u062f\\u0645 \\u0648\\u062e\\u064a\\u0627\\u0631\\u0627\\u062a \\u0627\\u0644\\u0639\\u0631\\u0636 \\u0648\\u0627\\u0645\\u062a\\u064a\\u0627\\u0632\\u0627\\u062a VIP \\u0648\\u0627\\u0644\\u0645\\u062d\\u062a\\u0648\\u0649 \\u0627\\u0644\\u062e\\u062a\\u0627\\u0645\\u064a \\u0641\\u064a \\u0645\\u062d\\u0637\\u0629 \\u0646\\u0647\\u0627\\u0626\\u064a\\u0629 \\u0648\\u0627\\u062d\\u062f\\u0629 \\u0642\\u0628\\u0644 \\u0627\\u0644\\u062d\\u0641\\u0638 \\u0623\\u0648 \\u0627\\u0644\\u0625\\u063a\\u0644\\u0627\\u0642.",
+        "ط¸ظ¹ط·آ¬ط¸â€¦ط·آ¹ ط¸â€،ط·آ°ط·آ§ ط·آ§ط¸â€‍ط¸â€ڑط·آ³ط¸â€¦ ط·آ¥ط·آ¹ط·آ¯ط·آ§ط·آ¯ط·آ§ط·ع¾ ط·آ§ط¸â€‍ط·ع¾ط¸â€ڑط·آ¯ط¸â€¦ ط¸ث†ط·آ®ط¸ظ¹ط·آ§ط·آ±ط·آ§ط·ع¾ ط·آ§ط¸â€‍ط·آ¹ط·آ±ط·آ¶ ط¸ث†ط·آ§ط¸â€¦ط·ع¾ط¸ظ¹ط·آ§ط·آ²ط·آ§ط·ع¾ VIP ط¸ث†ط·آ§ط¸â€‍ط¸â€¦ط·آ­ط·ع¾ط¸ث†ط¸â€° ط·آ§ط¸â€‍ط·آ®ط·ع¾ط·آ§ط¸â€¦ط¸ظ¹ ط¸ظ¾ط¸ظ¹ ط¸â€¦ط·آ­ط·آ·ط·آ© ط¸â€ ط¸â€،ط·آ§ط·آ¦ط¸ظ¹ط·آ© ط¸ث†ط·آ§ط·آ­ط·آ¯ط·آ© ط¸â€ڑط·آ¨ط¸â€‍ ط·آ§ط¸â€‍ط·آ­ط¸ظ¾ط·آ¸ ط·آ£ط¸ث† ط·آ§ط¸â€‍ط·آ¥ط·ط›ط¸â€‍ط·آ§ط¸â€ڑ.",
       summary: sectionMeta[FINAL_SETTINGS_SECTION_ID],
       metrics: [
         {
           icon: Gauge,
-          label: "\\u0645\\u0635\\u062f\\u0631 \\u0627\\u0644\\u062a\\u0642\\u062f\\u0645",
+          label: "ط¸â€¦ط·آµط·آ¯ط·آ± ط·آ§ط¸â€‍ط·ع¾ط¸â€ڑط·آ¯ط¸â€¦",
           status: progressSectionStatus,
           value: progressModeLabels[formData.progressMode],
         },
         {
           icon: Crown,
-          label: "\\u0627\\u0644\\u062e\\u064a\\u0627\\u0631\\u0627\\u062a \\u0627\\u0644\\u0625\\u0636\\u0627\\u0641\\u064a\\u0629",
+          label: "ط·آ§ط¸â€‍ط·آ®ط¸ظ¹ط·آ§ط·آ±ط·آ§ط·ع¾ ط·آ§ط¸â€‍ط·آ¥ط·آ¶ط·آ§ط¸ظ¾ط¸ظ¹ط·آ©",
           status: optionsSectionStatus,
-          value: activeOptionLabels.join("\\u00a2\\u0622\\u00b7 ") || "\\u0625\\u0639\\u062f\\u0627\\u062f\\u0627\\u062a \\u0627\\u0641\\u062a\\u0631\\u0627\\u0636\\u064a\\u0629",
+          value: activeOptionLabels.join(" ط¢آ· ") || "ط·آ¥ط·آ¹ط·آ¯ط·آ§ط·آ¯ط·آ§ط·ع¾ ط·آ§ط¸ظ¾ط·ع¾ط·آ±ط·آ§ط·آ¶ط¸ظ¹ط·آ©",
         },
         {
           icon: FileText,
-          label: "\\u0627\\u0644\\u0645\\u062d\\u062a\\u0648\\u0649 \\u0627\\u0644\\u062e\\u062a\\u0627\\u0645\\u064a",
+          label: "ط·آ§ط¸â€‍ط¸â€¦ط·آ­ط·ع¾ط¸ث†ط¸â€° ط·آ§ط¸â€‍ط·آ®ط·ع¾ط·آ§ط¸â€¦ط¸ظ¹",
           status: completionSectionStatus,
           value: completionSectionSummary,
         },
         {
           icon: CheckCircle2,
-          label: "\\u0627\\u0644\\u062c\\u0627\\u0647\\u0632\\u064a\\u0629 \\u0627\\u0644\\u0639\\u0627\\u0645\\u0629",
+          label: "ط·آ§ط¸â€‍ط·آ¬ط·آ§ط¸â€،ط·آ²ط¸ظ¹ط·آ© ط·آ§ط¸â€‍ط·آ¹ط·آ§ط¸â€¦ط·آ©",
           status: sectionStatuses[FINAL_SETTINGS_SECTION_ID],
           value:
             sectionStatuses[FINAL_SETTINGS_SECTION_ID] === "complete"
-              ? "\\u0645\\u0643\\u062a\\u0645\\u0644\\u0629"
-              : "\\u0628\\u062d\\u0627\\u062c\\u0629 \\u0625\\u0644\\u0649 \\u0645\\u062a\\u0627\\u0628\\u0639\\u0629",
+              ? "ط¸â€¦ط¸ئ’ط·ع¾ط¸â€¦ط¸â€‍ط·آ©"
+              : "ط·آ¨ط·آ­ط·آ§ط·آ¬ط·آ© ط·آ¥ط¸â€‍ط¸â€° ط¸â€¦ط·ع¾ط·آ§ط·آ¨ط·آ¹ط·آ©",
         },
       ],
     },
@@ -549,121 +549,121 @@ export function CreateProjectUi({
   const completionChecklistItems = !isCompletionStatus(formData.status)
     ? [
         {
-          label: "\\u062d\\u0627\\u0644\\u0629 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639",
+          label: "ط·آ­ط·آ§ط¸â€‍ط·آ© ط·آ§ط¸â€‍ط¸â€¦ط·آ´ط·آ±ط¸ث†ط·آ¹",
           ready: false,
-          detail: "\\u064a\\u062a\\u0641\\u0639\\u0651\\u0644 \\u0647\\u0630\\u0627 \\u0627\\u0644\\u062c\\u0632\\u0621 \\u0639\\u0646\\u062f \\u062a\\u062d\\u0648\\u064a\\u0644 \\u062d\\u0627\\u0644\\u0629 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639 \\u0625\\u0644\\u0649 \\u0645\\u063a\\u0644\\u0642 \\u0623\\u0648 \\u0645\\u0643\\u062a\\u0645\\u0644.",
+          detail: "ط¸ظ¹ط·ع¾ط¸ظ¾ط·آ¹ط¸â€کط¸â€‍ ط¸â€،ط·آ°ط·آ§ ط·آ§ط¸â€‍ط·آ¬ط·آ²ط·طŒ ط·آ¹ط¸â€ ط·آ¯ ط·ع¾ط·آ­ط¸ث†ط¸ظ¹ط¸â€‍ ط·آ­ط·آ§ط¸â€‍ط·آ© ط·آ§ط¸â€‍ط¸â€¦ط·آ´ط·آ±ط¸ث†ط·آ¹ ط·آ¥ط¸â€‍ط¸â€° ط¸â€¦ط·ط›ط¸â€‍ط¸â€ڑ ط·آ£ط¸ث† ط¸â€¦ط¸ئ’ط·ع¾ط¸â€¦ط¸â€‍.",
         },
         {
-          label: "\\u0627\\u0644\\u062c\\u0627\\u0647\\u0632\\u064a\\u0629 \\u0627\\u0644\\u062d\\u0627\\u0644\\u064a\\u0629",
+          label: "ط·آ§ط¸â€‍ط·آ¬ط·آ§ط¸â€،ط·آ²ط¸ظ¹ط·آ© ط·آ§ط¸â€‍ط·آ­ط·آ§ط¸â€‍ط¸ظ¹ط·آ©",
           ready: false,
-          detail: "\\u0623\\u0643\\u0645\\u0644 \\u0627\\u0644\\u062a\\u0646\\u0641\\u064a\\u0630 \\u0623\\u0648\\u0644\\u0627\\u064b\\u060c \\u062b\\u0645 \\u0623\\u0636\\u0641 \\u0627\\u0644\\u0646\\u062a\\u0627\\u0626\\u062c \\u0648\\u0627\\u0644\\u0645\\u062e\\u0631\\u062c\\u0627\\u062a \\u0648\\u0627\\u0644\\u0645\\u062d\\u062a\\u0648\\u0649 \\u0627\\u0644\\u062e\\u062a\\u0627\\u0645\\u064a \\u0647\\u0646\\u0627.",
+          detail: "ط·آ£ط¸ئ’ط¸â€¦ط¸â€‍ ط·آ§ط¸â€‍ط·ع¾ط¸â€ ط¸ظ¾ط¸ظ¹ط·آ° ط·آ£ط¸ث†ط¸â€‍ط·آ§ط¸â€¹ط·إ’ ط·آ«ط¸â€¦ ط·آ£ط·آ¶ط¸ظ¾ ط·آ§ط¸â€‍ط¸â€ ط·ع¾ط·آ§ط·آ¦ط·آ¬ ط¸ث†ط·آ§ط¸â€‍ط¸â€¦ط·آ®ط·آ±ط·آ¬ط·آ§ط·ع¾ ط¸ث†ط·آ§ط¸â€‍ط¸â€¦ط·آ­ط·ع¾ط¸ث†ط¸â€° ط·آ§ط¸â€‍ط·آ®ط·ع¾ط·آ§ط¸â€¦ط¸ظ¹ ط¸â€،ط¸â€ ط·آ§.",
         },
       ]
     : [
         {
-          label: "\\u0646\\u0638\\u0631\\u0629 \\u0639\\u0627\\u0645\\u0629 \\u0623\\u0648 \\u0645\\u0644\\u062e\\u0635",
+          label: "ط¸â€ ط·آ¸ط·آ±ط·آ© ط·آ¹ط·آ§ط¸â€¦ط·آ© ط·آ£ط¸ث† ط¸â€¦ط¸â€‍ط·آ®ط·آµ",
           ready: Boolean(
             cleanStr(formData.completionOverviewAr) || cleanStr(formData.completionSummaryAr)
           ),
           detail:
             cleanStr(formData.completionOverviewAr) || cleanStr(formData.completionSummaryAr)
-              ? "\\u062a\\u0645\\u062a \\u0625\\u0636\\u0627\\u0641\\u0629 \\u0645\\u0642\\u062f\\u0645\\u0629 \\u062e\\u062a\\u0627\\u0645\\u064a\\u0629 \\u0644\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639."
-              : "\\u0623\\u0636\\u0641 \\u0646\\u0638\\u0631\\u0629 \\u0639\\u0627\\u0645\\u0629 \\u0623\\u0648 \\u0645\\u0644\\u062e\\u0635\\u064b\\u0627 \\u062e\\u062a\\u0627\\u0645\\u064a\\u064b\\u0627.",
+              ? "ط·ع¾ط¸â€¦ط·ع¾ ط·آ¥ط·آ¶ط·آ§ط¸ظ¾ط·آ© ط¸â€¦ط¸â€ڑط·آ¯ط¸â€¦ط·آ© ط·آ®ط·ع¾ط·آ§ط¸â€¦ط¸ظ¹ط·آ© ط¸â€‍ط¸â€‍ط¸â€¦ط·آ´ط·آ±ط¸ث†ط·آ¹."
+              : "ط·آ£ط·آ¶ط¸ظ¾ ط¸â€ ط·آ¸ط·آ±ط·آ© ط·آ¹ط·آ§ط¸â€¦ط·آ© ط·آ£ط¸ث† ط¸â€¦ط¸â€‍ط·آ®ط·آµط¸â€¹ط·آ§ ط·آ®ط·ع¾ط·آ§ط¸â€¦ط¸ظ¹ط¸â€¹ط·آ§.",
         },
         {
-          label: "\\u0627\\u0644\\u0646\\u062a\\u0627\\u0626\\u062c",
+          label: "ط·آ§ط¸â€‍ط¸â€ ط·ع¾ط·آ§ط·آ¦ط·آ¬",
           ready: filledCompletionResults > 0,
           detail: filledCompletionResults
-            ? `${filledCompletionResults} \\u0646\\u062a\\u0627\\u0626\\u062c \\u0645\\u0648\\u062b\\u0642\\u0629.`
-            : "\\u0644\\u0627 \\u062a\\u0648\\u062c\\u062f \\u0646\\u062a\\u0627\\u0626\\u062c \\u0645\\u0636\\u0627\\u0641\\u0629 \\u0628\\u0639\\u062f.",
+            ? `${filledCompletionResults} ط¸â€ ط·ع¾ط·آ§ط·آ¦ط·آ¬ ط¸â€¦ط¸ث†ط·آ«ط¸â€ڑط·آ©.`
+            : "ط¸â€‍ط·آ§ ط·ع¾ط¸ث†ط·آ¬ط·آ¯ ط¸â€ ط·ع¾ط·آ§ط·آ¦ط·آ¬ ط¸â€¦ط·آ¶ط·آ§ط¸ظ¾ط·آ© ط·آ¨ط·آ¹ط·آ¯.",
         },
         {
-          label: "\\u0627\\u0644\\u0645\\u062e\\u0631\\u062c\\u0627\\u062a",
+          label: "ط·آ§ط¸â€‍ط¸â€¦ط·آ®ط·آ±ط·آ¬ط·آ§ط·ع¾",
           ready: filledCompletionOutputs > 0,
           detail: filledCompletionOutputs
-            ? `${filledCompletionOutputs} \\u0645\\u062e\\u0631\\u062c\\u0627\\u062a \\u0646\\u0647\\u0627\\u0626\\u064a\\u0629.`
-            : "\\u0623\\u0636\\u0641 \\u0645\\u062e\\u0631\\u062c\\u064b\\u0627 \\u0648\\u0627\\u062d\\u062f\\u064b\\u0627 \\u0639\\u0644\\u0649 \\u0627\\u0644\\u0623\\u0642\\u0644.",
+            ? `${filledCompletionOutputs} ط¸â€¦ط·آ®ط·آ±ط·آ¬ط·آ§ط·ع¾ ط¸â€ ط¸â€،ط·آ§ط·آ¦ط¸ظ¹ط·آ©.`
+            : "ط·آ£ط·آ¶ط¸ظ¾ ط¸â€¦ط·آ®ط·آ±ط·آ¬ط¸â€¹ط·آ§ ط¸ث†ط·آ§ط·آ­ط·آ¯ط¸â€¹ط·آ§ ط·آ¹ط¸â€‍ط¸â€° ط·آ§ط¸â€‍ط·آ£ط¸â€ڑط¸â€‍.",
         },
         {
-          label: "\\u0633\\u0644\\u0627\\u0645\\u0629 \\u0627\\u0644\\u0645\\u062d\\u062a\\u0648\\u0649",
+          label: "ط·آ³ط¸â€‍ط·آ§ط¸â€¦ط·آ© ط·آ§ط¸â€‍ط¸â€¦ط·آ­ط·ع¾ط¸ث†ط¸â€°",
           ready: completionPayload.errors.length === 0,
-          detail: completionPayload.errors[0] || "\\u0627\\u0644\\u0645\\u062d\\u062a\\u0648\\u0649 \\u0627\\u0644\\u062e\\u062a\\u0627\\u0645\\u064a \\u0627\\u0644\\u062d\\u0627\\u0644\\u064a \\u0633\\u0644\\u064a\\u0645.",
+          detail: completionPayload.errors[0] || "ط·آ§ط¸â€‍ط¸â€¦ط·آ­ط·ع¾ط¸ث†ط¸â€° ط·آ§ط¸â€‍ط·آ®ط·ع¾ط·آ§ط¸â€¦ط¸ظ¹ ط·آ§ط¸â€‍ط·آ­ط·آ§ط¸â€‍ط¸ظ¹ ط·آ³ط¸â€‍ط¸ظ¹ط¸â€¦.",
         },
       ];
   const progressChecklistItems =
     formData.progressMode === "hybrid"
       ? [
           {
-            label: "\\u0631\\u064a\\u0642\\u0629 \\u0627\\u0644\\u062d\\u0633\\u0627\\u0628",
+            label: "ط·آ·ط·آ±ط¸ظ¹ط¸â€ڑط·آ© ط·آ§ط¸â€‍ط·آ­ط·آ³ط·آ§ط·آ¨",
             ready: true,
             detail: progressModeLabels[formData.progressMode],
           },
           {
-            label: "\\u0648\\u0632\\u0646 \\u0627\\u0644\\u062a\\u0645\\u0648\\u064a\\u0644",
+            label: "ط¸ث†ط·آ²ط¸â€  ط·آ§ط¸â€‍ط·ع¾ط¸â€¦ط¸ث†ط¸ظ¹ط¸â€‍",
             ready: Boolean(cleanStr(formData.progressFundingWeight)),
             detail:
               formatDisplayValue(formData.progressFundingWeight, "%") ||
-              "\\u0623\\u062f\\u062e\\u0644 \\u0648\\u0632\\u0646 \\u0627\\u0644\\u062a\\u0645\\u0648\\u064a\\u0644.",
+              "ط·آ£ط·آ¯ط·آ®ط¸â€‍ ط¸ث†ط·آ²ط¸â€  ط·آ§ط¸â€‍ط·ع¾ط¸â€¦ط¸ث†ط¸ظ¹ط¸â€‍.",
           },
           {
-            label: "\\u0648\\u0632\\u0646 \\u0627\\u0644\\u0645\\u0631\\u0627\\u062d\\u0644",
+            label: "ط¸ث†ط·آ²ط¸â€  ط·آ§ط¸â€‍ط¸â€¦ط·آ±ط·آ§ط·آ­ط¸â€‍",
             ready: Boolean(cleanStr(formData.progressMilestonesWeight)),
             detail:
               formatDisplayValue(formData.progressMilestonesWeight, "%") ||
-              "\\u0623\\u062f\\u062e\\u0644 \\u0648\\u0632\\u0646 \\u0627\\u0644\\u0645\\u0631\\u0627\\u062d\\u0644.",
+              "ط·آ£ط·آ¯ط·آ®ط¸â€‍ ط¸ث†ط·آ²ط¸â€  ط·آ§ط¸â€‍ط¸â€¦ط·آ±ط·آ§ط·آ­ط¸â€‍.",
           },
           {
-            label: "\\u0645\\u062c\\u0645\\u0648\\u0639 \\u0627\\u0644\\u0623\\u0648\\u0632\\u0627\\u0646",
+            label: "ط¸â€¦ط·آ¬ط¸â€¦ط¸ث†ط·آ¹ ط·آ§ط¸â€‍ط·آ£ط¸ث†ط·آ²ط·آ§ط¸â€ ",
             ready: progressWeightsTotal === 100,
-            detail: `${progressWeightsTotal}% \\u0645\\u0646 100% \\u0627\\u0644\\u0645\\u0637\\u0644\\u0648\\u0628\\u0629.`,
+            detail: `${progressWeightsTotal}% ط¸â€¦ط¸â€  100% ط·آ§ط¸â€‍ط¸â€¦ط·آ·ط¸â€‍ط¸ث†ط·آ¨ط·آ©.`,
           },
         ]
       : [
           {
-            label: "\\u0631\\u064a\\u0642\\u0629 \\u0627\\u0644\\u062d\\u0633\\u0627\\u0628",
+            label: "ط·آ·ط·آ±ط¸ظ¹ط¸â€ڑط·آ© ط·آ§ط¸â€‍ط·آ­ط·آ³ط·آ§ط·آ¨",
             ready: true,
             detail: progressModeLabels[formData.progressMode],
           },
           {
-            label: "\\u062c\\u0627\\u0647\\u0632\\u064a\\u0629 \\u0627\\u0644\\u0645\\u0646\\u0637\\u0642",
+            label: "ط·آ¬ط·آ§ط¸â€،ط·آ²ط¸ظ¹ط·آ© ط·آ§ط¸â€‍ط¸â€¦ط¸â€ ط·آ·ط¸â€ڑ",
             ready: true,
-            detail: "\\u0647\\u0630\\u0627 \\u0627\\u0644\\u0646\\u0645\\u0637 \\u0644\\u0627 \\u064a\\u062d\\u062a\\u0627\\u062c \\u0623\\u0648\\u0632\\u0627\\u0646\\u064b\\u0627 \\u0625\\u0636\\u0627\\u0641\\u064a\\u0629.",
+            detail: "ط¸â€،ط·آ°ط·آ§ ط·آ§ط¸â€‍ط¸â€ ط¸â€¦ط·آ· ط¸â€‍ط·آ§ ط¸ظ¹ط·آ­ط·ع¾ط·آ§ط·آ¬ ط·آ£ط¸ث†ط·آ²ط·آ§ط¸â€ ط¸â€¹ط·آ§ ط·آ¥ط·آ¶ط·آ§ط¸ظ¾ط¸ظ¹ط·آ©.",
           },
         ];
   const optionsChecklistItems = [
     {
-      label: "\\u0648\\u0636\\u0639 Featured",
+      label: "ط¸ث†ط·آ¶ط·آ¹ Featured",
       ready: true,
-      detail: formData.featured === "true" ? "\\u0645\\u0641\\u0639\\u0651\\u0644 \\u0641\\u064a \\u0627\\u0644\\u0642\\u0648\\u0627\\u0626\\u0645." : "\\u063a\\u064a\\u0631 \\u0645\\u0641\\u0639\\u0651\\u0644 \\u062d\\u0627\\u0644\\u064a\\u064b\\u0627.",
+      detail: formData.featured === "true" ? "ط¸â€¦ط¸ظ¾ط·آ¹ط¸â€کط¸â€‍ ط¸ظ¾ط¸ظ¹ ط·آ§ط¸â€‍ط¸â€ڑط¸ث†ط·آ§ط·آ¦ط¸â€¦." : "ط·ط›ط¸ظ¹ط·آ± ط¸â€¦ط¸ظ¾ط·آ¹ط¸â€کط¸â€‍ ط·آ­ط·آ§ط¸â€‍ط¸ظ¹ط¸â€¹ط·آ§.",
     },
     {
-      label: "\\u062a\\u0641\\u0639\\u064a\\u0644 VIP",
+      label: "ط·ع¾ط¸ظ¾ط·آ¹ط¸ظ¹ط¸â€‍ VIP",
       ready: !hasVipRequirement || formData.vipTier !== "none",
       detail: hasVipRequirement
-        ? `\\u0627\\u0644\\u0645\\u0633\\u062a\\u0648\\u0649 \\u0627\\u0644\\u062d\\u0627\\u0644\\u064a: ${vipTierLabels[formData.vipTier]}.`
-        : "\\u0644\\u0627 \\u062a\\u0648\\u062c\\u062f \\u0645\\u062a\\u0637\\u0644\\u0628\\u0627\\u062a VIP \\u0625\\u0636\\u0627\\u0641\\u064a\\u0629.",
+        ? `ط·آ§ط¸â€‍ط¸â€¦ط·آ³ط·ع¾ط¸ث†ط¸â€° ط·آ§ط¸â€‍ط·آ­ط·آ§ط¸â€‍ط¸ظ¹: ${vipTierLabels[formData.vipTier]}.`
+        : "ط¸â€‍ط·آ§ ط·ع¾ط¸ث†ط·آ¬ط·آ¯ ط¸â€¦ط·ع¾ط·آ·ط¸â€‍ط·آ¨ط·آ§ط·ع¾ VIP ط·آ¥ط·آ¶ط·آ§ط¸ظ¾ط¸ظ¹ط·آ©.",
     },
     {
-      label: "\\u0645\\u0633\\u062a\\u0648\\u0649 VIP",
+      label: "ط¸â€¦ط·آ³ط·ع¾ط¸ث†ط¸â€° VIP",
       ready: !hasVipRequirement || formData.vipTier !== "none",
       detail:
         !hasVipRequirement || formData.vipTier !== "none"
           ? vipTierLabels[formData.vipTier]
-          : "\\u062d\\u062f\\u062f \\u0645\\u0633\\u062a\\u0648\\u0649 VIP \\u0639\\u0646\\u062f \\u0627\\u0644\\u062a\\u0641\\u0639\\u064a\\u0644.",
+          : "ط·آ­ط·آ¯ط·آ¯ ط¸â€¦ط·آ³ط·ع¾ط¸ث†ط¸â€° VIP ط·آ¹ط¸â€ ط·آ¯ ط·آ§ط¸â€‍ط·ع¾ط¸ظ¾ط·آ¹ط¸ظ¹ط¸â€‍.",
     },
   ];
   const finalSettingsChecklistItems = [
     ...progressChecklistItems.map((item) => ({
       ...item,
-      label: `\\u0627\\u0644\\u062a\\u0642\\u062f\\u0645: ${item.label}`,
+      label: `ط·آ§ط¸â€‍ط·ع¾ط¸â€ڑط·آ¯ط¸â€¦: ${item.label}`,
     })),
     ...optionsChecklistItems.map((item) => ({
       ...item,
-      label: `\\u0627\\u0644\\u062e\\u064a\\u0627\\u0631\\u0627\\u062a: ${item.label}`,
+      label: `ط·آ§ط¸â€‍ط·آ®ط¸ظ¹ط·آ§ط·آ±ط·آ§ط·ع¾: ${item.label}`,
     })),
     ...completionChecklistItems.map((item) => ({
       ...item,
-      label: `\\u0627\\u0644\\u062e\\u062a\\u0627\\u0645: ${item.label}`,
+      label: `ط·آ§ط¸â€‍ط·آ®ط·ع¾ط·آ§ط¸â€¦: ${item.label}`,
     })),
   ];
   const activeSectionChecklistItems: Array<{
@@ -676,106 +676,106 @@ export function CreateProjectUi({
         return requiredChecklist.map((item) => ({
           label: item.label,
           ready: item.ready,
-          detail: item.ready ? "\\u062a\\u0645 \\u0625\\u062f\\u062e\\u0627\\u0644 \\u0647\\u0630\\u0627 \\u0627\\u0644\\u0639\\u0646\\u0635\\u0631 \\u0628\\u0646\\u062c\\u0627\\u062d." : "\\u0645\\u0627 \\u0632\\u0627\\u0644 \\u0647\\u0630\\u0627 \\u0627\\u0644\\u0639\\u0646\\u0635\\u0631 \\u0645\\u0637\\u0644\\u0648\\u0628\\u064b\\u0627.",
+          detail: item.ready ? "ط·طھظ… ط¥ط¯ط®ط§ظ„ ظ‡ط°ط§ ط§ظ„ط¹ظ†طµط± ط¨ظ†ط¬ط§ط­." : "ط¸ظ…ط§ ط²ط§ظ„ ظ‡ط°ط§ ط§ظ„ط¹ظ†طµط± ظ…ط·ظ„ظˆط¨ظ‹ط§.",
         }));
       case "details":
         return [
           {
-            label: "\\u0646\\u0648\\u0639 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639",
+            label: "ط¸ظ†ظˆط¹ ط§ظ„ظ…ط´ط±ظˆط¹",
             ready: true,
             detail: projectTypeLabels[formData.projectType],
           },
           {
-            label: "\\u062d\\u0627\\u0644\\u0629 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639",
+            label: "ط·ط­ط§ظ„ط© ط§ظ„ظ…ط´ط±ظˆط¹",
             ready: true,
             detail: statusLabels[formData.status],
           },
           {
-            label: "\\u0627\\u0644\\u0645\\u0648\\u0642\\u0639 \\u0627\\u0644\\u0639\\u0631\\u0628\\u064a",
+            label: "ط·ط§ظ„ظ…ظˆظ‚ط¹ ط§ظ„ط¹ط±ط¨ظٹ",
             ready: Boolean(cleanStr(formData.locationAr)),
-            detail: cleanStr(formData.locationAr) || "\\u0623\\u0636\\u0641 \\u0645\\u0648\\u0642\\u0639 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639 \\u062f\\u0627\\u062e\\u0644 \\u0627\\u0644\\u0646\\u0638\\u0627\\u0645.",
+            detail: cleanStr(formData.locationAr) || "ط·ط£ط¶ظپ ظ…ظˆظ‚ط¹ ط§ظ„ظ…ط´ط±ظˆط¹ ط¯ط§ط®ظ„ ط§ظ„ظ†ط¸ط§ظ….",
           },
         ];
       case "media":
         return [
           {
-            label: "\\u0635\\u0648\\u0631\\u0629 \\u0627\\u0644\\u063a\\u0644\\u0627\\u0641",
+            label: "ط·طµظˆط±ط© ط§ظ„ط؛ظ„ط§ظپ",
             ready: Boolean(cleanStr(formData.coverImage)),
             detail: cleanStr(formData.coverImage)
-              ? "\\u0645\\u0631\\u062a\\u0628\\u0637\\u0629 \\u0648\\u062c\\u0627\\u0647\\u0632\\u0629 \\u0644\\u0644\\u0639\\u0631\\u0636."
-              : "\\u0645\\u0637\\u0644\\u0648\\u0628\\u0629 \\u0644\\u0648\\u0627\\u062c\\u0647\\u0629 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639 \\u0627\\u0644\\u0623\\u0633\\u0627\\u0633\\u064a\\u0629.",
+              ? "ط¸ظ…ط±طھط¨ط·ط© ظˆط¬ط§ظ‡ط²ط© ظ„ظ„ط¹ط±ط¶."
+              : "ط¸ظ…ط·ظ„ظˆط¨ط© ظ„ظˆط§ط¬ظ‡ط© ط§ظ„ظ…ط´ط±ظˆط¹ ط§ظ„ط£ط³ط§ط³ظٹط©.",
           },
           {
-            label: "\\u0635\\u0648\\u0631 \\u0627\\u0644\\u0645\\u0639\\u0631\\u0636",
+            label: "ط·طµظˆط± ط§ظ„ظ…ط¹ط±ط¶",
             ready: galleryUrls.length > 0,
             detail: galleryUrls.length
-              ? `${galleryUrls.length} \\u0635\\u0648\\u0631 \\u0645\\u0631\\u062a\\u0628\\u0637\\u0629 \\u0628\\u0627\\u0644\\u0645\\u0639\\u0631\\u0636.`
-              : "\\u0644\\u0645 \\u064a\\u062a\\u0645 \\u0625\\u0636\\u0627\\u0641\\u0629 \\u0635\\u0648\\u0631 \\u0644\\u0644\\u0645\\u0639\\u0631\\u0636 \\u0628\\u0639\\u062f.",
+              ? `${galleryUrls.length} طµظˆط± ظ…ط±طھط¨ط·ط© ط¨ط§ظ„ظ…ط¹ط±ط¶.`
+              : "ط¸ظ„ظ… ظٹطھظ… ط¥ط¶ط§ظپط© طµظˆط± ظ„ظ„ظ…ط¹ط±ط¶ ط¨ط¹ط¯.",
           },
           {
-            label: "\\u0625\\u062c\\u0645\\u0627\\u0644\\u064a \\u0627\\u0644\\u0623\\u0635\\u0648\\u0644",
+            label: "ط·ط¥ط¬ظ…ط§ظ„ظٹ ط§ظ„ط£طµظˆظ„",
             ready: totalAssets > 0,
-            detail: `${totalAssets}  \\u0639\\u0646\\u0635\\u0631 \\u0628\\u0635\\u0631\\u064a \\u0623\\u0648 \\u0645\\u0633\\u062a\\u0646\\u062f\\u064a \\u0645\\u0631\\u062a\\u0628\\u0637.`,
+            detail: `${totalAssets}  ط·آ¹ط¸â€ ط·آµط·آ± ط·آ¨ط·آµط·آ±ط¸ظ¹ ط·آ£ط¸ث† ط¸â€¦ط·آ³ط·ع¾ط¸â€ ط·آ¯ط¸ظ¹ ط¸â€¦ط·آ±ط·ع¾ط·آ¨ط·آ·.`,
           },
         ];
       case "highlights":
         return [
           {
-            label: "\\u0646\\u0642\\u0627\\u0637 \\u0627\\u0644\\u062a\\u0645\\u064a\\u0632",
+            label: "ط¸ظ†ظ‚ط§ط· ط§ظ„طھظ…ظٹط²",
             ready: filledHighlights > 0,
             detail: filledHighlights
-              ? `${filledHighlights} \\u0645\\u0645\\u064a\\u0632\\u0627\\u062a \\u062c\\u0627\\u0647\\u0632\\u0629 \\u0644\\u0644\\u0639\\u0631\\u0636.`
-              : "\\u0623\\u0636\\u0641 \\u0645\\u064a\\u0632\\u0629 \\u0648\\u0627\\u062d\\u062f\\u0629 \\u0639\\u0644\\u0649 \\u0627\\u0644\\u0623\\u0642\\u0644.",
+              ? `${filledHighlights} ظ…ظ…ظٹط²ط§طھ ط¬ط§ظ‡ط²ط© ظ„ظ„ط¹ط±ط¶.`
+              : "ط·ط£ط¶ظپ ظ…ظٹط²ط© ظˆط§ط­ط¯ط© ط¹ظ„ظ‰ ط§ظ„ط£ظ‚ظ„.",
           },
           {
-            label: "\\u062a\\u0646\\u0633\\u064a\\u0642 \\u0627\\u0644\\u0645\\u062d\\u062a\\u0648\\u0649",
+            label: "ط·آ·ط·ع¾ط¸â€ ط·آ³ط¸ظ¹ط¸â€ڑ ط·آ§ط¸â€‍ط¸â€¦ط·آ­ط·ع¾ط¸ث†ط¸â€°",
             ready: highlightRows.every((item) => !cleanStr(item) || cleanStr(item).length > 2),
-            detail: "\\u064a\\u0641\\u0636\\u0651\\u0644 \\u0623\\u0646 \\u062a\\u0643\\u0648\\u0646 \\u0627\\u0644\\u0645\\u064a\\u0632\\u0629 \\u0648\\u0627\\u0636\\u062d\\u0629 \\u0648\\u0645\\u0628\\u0627\\u0634\\u0631\\u0629 \\u0648\\u0642\\u0627\\u0628\\u0644\\u0629 \\u0644\\u0644\\u0642\\u0631\\u0627\\u0621\\u0629.",
+            detail: "ط¸ظٹظپط¶ظ‘ظ„ ط£ظ† طھظƒظˆظ† ط§ظ„ظ…ظٹط²ط© ظˆط§ط¶ط­ط© ظˆظ…ط¨ط§ط´ط±ط© ظˆظ‚ط§ط¨ظ„ط© ظ„ظ„ظ‚ط±ط§ط،ط©.",
           },
         ];
       case "attachments":
         return [
           {
-            label: "\\u0645\\u0644\\u0641\\u0627\\u062a \\u0623\\u0648 \\u0631\\u0648\\u0627\\u0628\\u0637 \\u0635\\u0627\\u0644\\u062d\\u0629",
+            label: "ط¸ظ…ظ„ظپط§طھ ط£ظˆ ط±ظˆط§ط¨ط· طµط§ظ„ط­ط©",
             ready: parsedAttachments.items.length > 0,
             detail: parsedAttachments.items.length
-              ? `${parsedAttachments.items.length} \\u0645\\u0631\\u0641\\u0642\\u0627\\u062a \\u062c\\u0627\\u0647\\u0632\\u0629.`
-              : "\\u0623\\u0636\\u0641 \\u0645\\u0644\\u0641\\u064b\\u0627 \\u0623\\u0648 \\u0631\\u0627\\u0628\\u0637\\u064b\\u0627 \\u062e\\u0627\\u0631\\u062c\\u064a\\u064b\\u0627 \\u0648\\u0627\\u062d\\u062f\\u064b\\u0627 \\u0639\\u0644\\u0649 \\u0627\\u0644\\u0623\\u0642\\u0644.",
+              ? `${parsedAttachments.items.length} ظ…ط±ظپظ‚ط§طھ ط¬ط§ظ‡ط²ط©.`
+              : "ط·ط£ط¶ظپ ظ…ظ„ظپظ‹ط§ ط£ظˆ ط±ط§ط¨ط·ظ‹ط§ ط®ط§ط±ط¬ظٹظ‹ط§ ظˆط§ط­ط¯ظ‹ط§ ط¹ظ„ظ‰ ط§ظ„ط£ظ‚ظ„.",
           },
           {
-            label: "\\u0633\\u0644\\u0627\\u0645\\u0629 \\u0627\\u0644\\u0625\\u062f\\u062e\\u0627\\u0644",
+            label: "ط·ط³ظ„ط§ظ…ط© ط§ظ„ط¥ط¯ط®ط§ظ„",
             ready: parsedAttachments.errors.length === 0,
-            detail: parsedAttachments.errors[0] || "\\u0644\\u0627 \\u062a\\u0648\\u062c\\u062f \\u0623\\u062e\\u0637\\u0627\\u0621 \\u0641\\u064a \\u0627\\u0644\\u0645\\u0631\\u0641\\u0642\\u0627\\u062a \\u0627\\u0644\\u062d\\u0627\\u0644\\u064a\\u0629.",
+            detail: parsedAttachments.errors[0] || "ط¸ظ„ط§ طھظˆط¬ط¯ ط£ط®ط·ط§ط، ظپظٹ ط§ظ„ظ…ط±ظپظ‚ط§طھ ط§ظ„ط­ط§ظ„ظٹط©.",
           },
         ];
       case "milestones":
         return [
           {
-            label: "\\u0645\\u0631\\u0627\\u062d\\u0644 \\u0627\\u0644\\u062a\\u0646\\u0641\\u064a\\u0630",
+            label: "ط¸ظ…ط±ط§ط­ظ„ ط§ظ„طھظ†ظپظٹط°",
             ready: parsedMilestones.items.length > 0,
             detail: parsedMilestones.items.length
-              ? `${parsedMilestones.items.length} \\u0645\\u0631\\u0627\\u062d\\u0644 \\u0645\\u0636\\u0627\\u0641\\u0629.`
-              : "\\u0627\\u0628\\u062f\\u0623 \\u0628\\u0625\\u0636\\u0627\\u0641\\u0629 \\u0645\\u0631\\u062d\\u0644\\u0629 \\u0648\\u0627\\u062d\\u062f\\u0629 \\u0639\\u0644\\u0649 \\u0627\\u0644\\u0623\\u0642\\u0644.",
+              ? `${parsedMilestones.items.length} ظ…ط±ط§ط­ظ„ ظ…ط¶ط§ظپط©.`
+              : "ط·ط§ط¨ط¯ط£ ط¨ط¥ط¶ط§ظپط© ظ…ط±ط­ظ„ط© ظˆط§ط­ط¯ط© ط¹ظ„ظ‰ ط§ظ„ط£ظ‚ظ„.",
           },
           {
-            label: "\\u0627\\u0643\\u062a\\u0645\\u0627\\u0644 \\u0627\\u0644\\u0628\\u064a\\u0627\\u0646\\u0627\\u062a",
+            label: "ط·ط§ظƒطھظ…ط§ظ„ ط§ظ„ط¨ظٹط§ظ†ط§طھ",
             ready: parsedMilestones.errors.length === 0,
-            detail: parsedMilestones.errors[0] || "\\u0643\\u0644 \\u0627\\u0644\\u0645\\u0631\\u0627\\u062d\\u0644 \\u0627\\u0644\\u062d\\u0627\\u0644\\u064a\\u0629 \\u0642\\u0627\\u0628\\u0644\\u0629 \\u0644\\u0644\\u062d\\u0641\\u0638.",
+            detail: parsedMilestones.errors[0] || "ط¸ظƒظ„ ط§ظ„ظ…ط±ط§ط­ظ„ ط§ظ„ط­ط§ظ„ظٹط© ظ‚ط§ط¨ظ„ط© ظ„ظ„ط­ظپط¸.",
           },
         ];
       case "faq":
         return [
           {
-            label: "\\u0623\\u0633\\u0626\\u0644\\u0629 \\u0645\\u0646\\u0634\\u0648\\u0631\\u0629",
+            label: "ط·ط£ط³ط¦ظ„ط© ظ…ظ†ط´ظˆط±ط©",
             ready: parsedFaq.items.length > 0,
             detail: parsedFaq.items.length
-              ? `${parsedFaq.items.length} \\u0623\\u0633\\u0626\\u0644\\u0629 \\u062c\\u0627\\u0647\\u0632\\u0629 \\u0644\\u0644\\u0639\\u0631\\u0636.`
-              : "\\u0623\\u0636\\u0641 \\u0633\\u0624\\u0627\\u0644\\u064b\\u0627 \\u0634\\u0627\\u0626\\u0639\\u064b\\u0627 \\u0648\\u0627\\u062d\\u062f\\u064b\\u0627 \\u0639\\u0644\\u0649 \\u0627\\u0644\\u0623\\u0642\\u0644.",
+              ? `${parsedFaq.items.length} ط£ط³ط¦ظ„ط© ط¬ط§ظ‡ط²ط© ظ„ظ„ط¹ط±ط¶.`
+              : "ط·ط£ط¶ظپ ط³ط¤ط§ظ„ظ‹ط§ ط´ط§ط¦ط¹ظ‹ط§ ظˆط§ط­ط¯ظ‹ط§ ط¹ظ„ظ‰ ط§ظ„ط£ظ‚ظ„.",
           },
           {
-            label: "\\u0633\\u0644\\u0627\\u0645\\u0629 \\u0627\\u0644\\u0635\\u064a\\u0627\\u063a\\u0629",
+            label: "ط·ط³ظ„ط§ظ…ط© ط§ظ„طµظٹط§ط؛ط©",
             ready: parsedFaq.errors.length === 0,
-            detail: parsedFaq.errors[0] || "\\u0647\\u064a\\u0643\\u0644 \\u0627\\u0644\\u0623\\u0633\\u0626\\u0644\\u0629 \\u0627\\u0644\\u062d\\u0627\\u0644\\u064a \\u0633\\u0644\\u064a\\u0645.",
+            detail: parsedFaq.errors[0] || "ط¸ظ‡ظٹظƒظ„ ط§ظ„ط£ط³ط¦ظ„ط© ط§ظ„ط­ط§ظ„ظٹ ط³ظ„ظٹظ….",
           },
         ];
       case "completion":
@@ -783,29 +783,29 @@ export function CreateProjectUi({
       case "finance":
         return [
           {
-            label: "\\u0627\\u0644\\u0645\\u0628\\u0644\\u063a \\u0627\\u0644\\u0633\\u062a\\u0647\\u062f\\u0641",
+            label: "ط·ط§ظ„ظ…ط¨ظ„ط؛ ط§ظ„ط³طھظ‡ط¯ظپ",
             ready: Boolean(cleanStr(formData.targetAmount)),
             detail:
-              formatDisplayValue(formData.targetAmount, "\\u0622\\u00b1.\\u0637\\u00b7\\u0622\\u00b3") || "\\u0623\\u0636\\u0641 \\u0627\\u0644\\u0645\\u0628\\u0644\\u063a \\u0627\\u0644\\u0633\\u062a\\u0647\\u062f\\u0641 \\u0644\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639.",
+              formatDisplayValue(formData.targetAmount, "ط·آ·ط¢آ±.ط·آ·ط¢آ³") || "ط·ط£ط¶ظپ ط§ظ„ظ…ط¨ظ„ط؛ ط§ظ„ط³طھظ‡ط¯ظپ ظ„ظ„ظ…ط´ط±ظˆط¹.",
           },
           {
-            label: "\\u0627\\u0644\\u062d\\u062f \\u0627\\u0644\\u0623\\u062f\\u0646\\u0649",
+            label: "ط·ط§ظ„ط­ط¯ ط§ظ„ط£ط¯ظ†ظ‰",
             ready: Boolean(cleanStr(formData.minInvestment)),
             detail:
-              formatDisplayValue(formData.minInvestment, "\\u0622\\u00b1.\\u0637\\u00b7\\u0622\\u00b3") ||
-              "\\u062d\\u062f\\u062f \\u0627\\u0644\\u062d\\u062f \\u0627\\u0644\\u0623\\u062f\\u0646\\u0649 \\u0644\\u0644\\u0627\\u0633\\u062a\\u062b\\u0645\\u0627\\u0631.",
+              formatDisplayValue(formData.minInvestment, "ط·آ·ط¢آ±.ط·آ·ط¢آ³") ||
+              "ط·ط­ط¯ط¯ ط§ظ„ط­ط¯ ط§ظ„ط£ط¯ظ†ظ‰ ظ„ظ„ط§ط³طھط«ظ…ط§ط±.",
           },
           {
-            label: "\\u0627\\u0644\\u0639\\u0627\\u0626\\u062f \\u0627\\u0644\\u0633\\u0646\\u0648\\u064a",
+            label: "ط·ط§ظ„ط¹ط§ط¦ط¯ ط§ظ„ط³ظ†ظˆظٹ",
             ready: Boolean(cleanStr(formData.annualReturn)),
             detail:
-              formatDisplayValue(formData.annualReturn, "%") || "\\u0623\\u0636\\u0641 \\u0646\\u0633\\u0628\\u0629 \\u0627\\u0644\\u0639\\u0627\\u0626\\u062f \\u0627\\u0644\\u0633\\u0646\\u0648\\u064a.",
+              formatDisplayValue(formData.annualReturn, "%") || "ط·ط£ط¶ظپ ظ†ط³ط¨ط© ط§ظ„ط¹ط§ط¦ط¯ ط§ظ„ط³ظ†ظˆظٹ.",
           },
           {
-            label: "\\u0627\\u0644\\u0645\\u062f\\u0629",
+            label: "ط·ط§ظ„ظ…ط¯ط©",
             ready: Boolean(cleanStr(formData.duration)),
             detail:
-              formatDisplayValue(formData.duration, "\\u0634\\u0647\\u0631") || "\\u062d\\u062f\\u062f \\u0645\\u062f\\u0629 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639 \\u0628\\u0627\\u0644\\u0623\\u0634\\u0647\\u0631.",
+              formatDisplayValue(formData.duration, "ط·آ·ط·آ´ط¸â€،ط·آ±) || "ط·ط­ط¯ط¯ ظ…ط¯ط© ط§ظ„ظ…ط´ط±ظˆط¹ ط¨ط§ظ„ط£ط´ظ‡ط±.",
           },
         ];
       case "progress":
@@ -877,9 +877,9 @@ export function CreateProjectUi({
     <div className="rounded-[28px] border border-slate-200/80 bg-white/95 p-5 shadow-sm">
       <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 className="text-base font-semibold text-slate-950">\\u0645\\u0635\\u062f\\u0631 \\u0627\\u0644\\u062a\\u0642\\u062f\\u0645"</h3>
+          <h3 className="text-base font-semibold text-slate-950">ظ…طµط¯ط± ط§ظ„طھظ‚ط¯ظ…</h3">
           <p className="text-xs leading-6 text-slate-500">
-            ط·آ·ط¢آ§ط·آ·ط¢آ®ط·آ·ط¹آ¾ط·آ·ط¢آ± ط·آ·ط¢آ·ط·آ·ط¢آ±ط·آ¸ط¸آ¹ط·آ¸أ¢â‚¬ع‘ط·آ·ط¢آ© ط·آ·ط¢آ§ط·آ·ط¢آ­ط·آ·ط¹آ¾ط·آ·ط¢آ³ط·آ·ط¢آ§ط·آ·ط¢آ¨ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¹آ¾ط·آ¸أ¢â‚¬ع‘ط·آ·ط¢آ¯ط·آ¸أ¢â‚¬آ¦ط·آ·ط¥â€™ ط·آ¸ط«â€ ط·آ·ط¢آ¥ط·آ·ط¢آ°ط·آ·ط¢آ§ ط·آ¸ط¦â€™ط·آ·ط¢آ§ط·آ¸أ¢â‚¬آ  ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ· ط·آ¸أ¢â‚¬طŒط·آ·ط¢آ¬ط·آ¸ط¸آ¹ط·آ¸أ¢â‚¬آ ط·آ¸ط¸آ¹ط·آ¸أ¢â‚¬آ¹ط·آ·ط¢آ§ ط·آ¸ط¸آ¾ط·آ·ط¢آ§ط·آ·ط¢آ¶ط·آ·ط¢آ¨ط·آ·ط¢آ· ط·آ·ط¢آ£ط·آ¸ط«â€ ط·آ·ط¢آ²ط·آ·ط¢آ§ط·آ¸أ¢â‚¬آ  ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¹آ¾ط·آ¸أ¢â‚¬آ¦ط·آ¸ط«â€ ط·آ¸ط¸آ¹ط·آ¸أ¢â‚¬â€چ ط·آ¸ط«â€ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ±ط·آ·ط¢آ§ط·آ·ط¢آ­ط·آ¸أ¢â‚¬â€چ ط·آ¸أ¢â‚¬طŒط·آ¸أ¢â‚¬آ ط·آ·ط¢آ§.
+            ط·آ§ط·آ®ط·ع¾ط·آ± ط·آ·ط·آ±ط¸ظ¹ط¸â€ڑط·آ© ط·آ§ط·آ­ط·ع¾ط·آ³ط·آ§ط·آ¨ ط·آ§ط¸â€‍ط·ع¾ط¸â€ڑط·آ¯ط¸â€¦ط·إ’ ط¸ث†ط·آ¥ط·آ°ط·آ§ ط¸ئ’ط·آ§ط¸â€  ط·آ§ط¸â€‍ط¸â€ ط¸â€¦ط·آ· ط¸â€،ط·آ¬ط¸ظ¹ط¸â€ ط¸ظ¹ط¸â€¹ط·آ§ ط¸ظ¾ط·آ§ط·آ¶ط·آ¨ط·آ· ط·آ£ط¸ث†ط·آ²ط·آ§ط¸â€  ط·آ§ط¸â€‍ط·ع¾ط¸â€¦ط¸ث†ط¸ظ¹ط¸â€‍ ط¸ث†ط·آ§ط¸â€‍ط¸â€¦ط·آ±ط·آ§ط·آ­ط¸â€‍ ط¸â€،ط¸â€ ط·آ§.
           </p>
         </div>
         <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
@@ -888,7 +888,7 @@ export function CreateProjectUi({
       </div>
 
       <div className="grid gap-5 md:grid-cols-3">
-        <Field label="\\u0631\\u064a\\u0642\\u0629 \\u0627\\u0644\\u062d\\u0633\\u0627\\u0628" className="md:col-span-3">
+        <Field label="ط·آ·ط·آ±ط¸ظ¹ط¸â€ڑط·آ© ط·آ§ط¸â€‍ط·آ­ط·آ³ط·آ§ط·آ¨" className="md:col-span-3">
           <Select
             value={formData.progressMode}
             onValueChange={(value) =>
@@ -902,9 +902,9 @@ export function CreateProjectUi({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="funding">\\u062d\\u0633\\u0628 \\u0627\\u0644\\u062a\\u0645\\u0648\\u064a\\u0644 \\u0641\\u0642\\u0637"</SelectItem>
-              <SelectItem value="milestones">\\u062d\\u0633\\u0628 \\u0627\\u0644\\u0645\\u0631\\u0627\\u062d\\u0644 \\u0641\\u0642\\u0637"</SelectItem>
-              <SelectItem value="hybrid">\\u0647\\u062c\\u064a\\u0646\\u064a (\\u062a\\u0645\\u0648\\u064a\\u0644 + \\u0645\\u0631\\u0627\\u062d\\u0644)"</SelectItem>
+              <SelectItem value="funding">ط­ط³ط¨ ط§ظ„طھظ…ظˆظٹظ„ ظپظ‚ط·</SelectItem">
+              <SelectItem value="milestones">ط­ط³ط¨ ط§ظ„ظ…ط±ط§ط­ظ„ ظپظ‚ط·</SelectItem">
+              <SelectItem value="hybrid">ط¸â€،ط·آ¬ط¸ظ¹ط¸â€ ط¸ظ¹ (ط·ع¾ط¸â€¦ط¸ث†ط¸ظ¹ط¸â€‍ + ط¸â€¦ط·آ±ط·آ§ط·آ­ط¸â€‍)</SelectItem">
             </SelectContent>
           </Select>
         </Field>
@@ -917,7 +917,7 @@ export function CreateProjectUi({
 
         {formData.progressMode === "hybrid" ? (
           <>
-            <Field label="\\u0645\\u0639\\u062f\\u0644 \\u0627\\u0644\\u062a\\u0645\\u0648\\u064a\\u0644 (%)">
+            <Field label="ط¸â€¦ط·آ¹ط·آ¯ط¸â€‍ ط·آ§ط¸â€‍ط·ع¾ط¸â€¦ط¸ث†ط¸ظ¹ط¸â€‍ (%)">
               <Input
                 dir="ltr"
                 inputMode="numeric"
@@ -932,7 +932,7 @@ export function CreateProjectUi({
               />
             </Field>
 
-            <Field label="\\u0645\\u0639\\u062f\\u0644 \\u0627\\u0644\\u0645\\u0631\\u0627\\u062d\\u0644 (%)">
+            <Field label="ط¸â€¦ط·آ¹ط·آ¯ط¸â€‍ ط·آ§ط¸â€‍ط¸â€¦ط·آ±ط·آ§ط·آ­ط¸â€‍ (%)">
               <Input
                 dir="ltr"
                 inputMode="numeric"
@@ -958,17 +958,17 @@ export function CreateProjectUi({
                 }`}
               >
                 {progressWeightsTotal === 100
-                  ? "\\u0627\\u0644\\u062a\\u0648\\u0632\\u064a\\u0639 \\u0627\\u0644\\u062d\\u0627\\u0644\\u064a \\u0645\\u062a\\u0648\\u0627\\u0632\\u0646 \\u0639\\u0644\\u0649 100%."
-                  : "\\u0647\\u0630\\u0627 \\u0627\\u0644\\u0645\\u0624\\u0634\\u0631 \\u0628\\u0635\\u0631\\u064a \\u0641\\u0642\\u0637 \\u0648\\u0644\\u0627 \\u064a\\u063a\\u064a\\u0651\\u0631 \\u0645\\u0646\\u0637\\u0642 \\u0627\\u0644\\u062d\\u0641\\u0638 \\u0627\\u0644\\u062d\\u0627\\u0644\\u064a."}
+                  ? "ط·آ§ط¸â€‍ط·ع¾ط¸ث†ط·آ²ط¸ظ¹ط·آ¹ ط·آ§ط¸â€‍ط·آ­ط·آ§ط¸â€‍ط¸ظ¹ ط¸â€¦ط·ع¾ط¸ث†ط·آ§ط·آ²ط¸â€  ط·آ¹ط¸â€‍ط¸â€° 100%."
+                  : "ط¸â€،ط·آ°ط·آ§ ط·آ§ط¸â€‍ط¸â€¦ط·آ¤ط·آ´ط·آ± ط·آ¨ط·آµط·آ±ط¸ظ¹ ط¸ظ¾ط¸â€ڑط·آ· ط¸ث†ط¸â€‍ط·آ§ ط¸ظ¹ط·ط›ط¸ظ¹ط¸â€کط·آ± ط¸â€¦ط¸â€ ط·آ·ط¸â€ڑ ط·آ§ط¸â€‍ط·آ­ط¸ظ¾ط·آ¸ ط·آ§ط¸â€‍ط·آ­ط·آ§ط¸â€‍ط¸ظ¹."}
               </p>
             </div>
           </>
         ) : (
           <div className="rounded-[22px] border border-slate-200 bg-slate-50/80 p-4 shadow-sm md:col-span-3">
-            <p className="text-sm font-semibold text-slate-950">\\u0644\\u0627 \\u062a\\u0648\\u062c\\u062f \\u0623\\u0648\\u0632\\u0627\\u0646 \\u0625\\u0636\\u0627\\u0641\\u064a\\u0629"</p>
+            <p className="text-sm font-semibold text-slate-950">ظ„ط§ طھظˆط¬ط¯ ط£ظˆط²ط§ظ† ط¥ط¶ط§ظپظٹط©</p">
             <p className="mt-2 text-xs leading-6 text-slate-500">
-              ط·آ¸أ¢â‚¬طŒط·آ·ط¢آ°ط·آ·ط¢آ§ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ· ط·آ¸ط¸آ¹ط·آ·ط¢آ¹ط·آ·ط¹آ¾ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ¯ ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ¨ط·آ·ط¢آ§ط·آ·ط¢آ´ط·آ·ط¢آ±ط·آ·ط¢آ© ط·آ·ط¢آ¹ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ° {progressModeLabels[formData.progressMode]} ط·آ·ط¢آ¨ط·آ·ط¢آ¯ط·آ¸ط«â€ ط·آ¸أ¢â‚¬آ  ط·آ·ط¹آ¾ط·آ¸ط«â€ ط·آ·ط¢آ²ط·آ¸ط¸آ¹ط·آ·ط¢آ¹
-              ط·آ·ط¢آ£ط·آ¸ط«â€ ط·آ·ط¢آ²ط·آ·ط¢آ§ط·آ¸أ¢â‚¬آ  ط·آ¸ط¸آ¹ط·آ·ط¢آ¯ط·آ¸ط«â€ ط·آ¸ط¸آ¹.
+              ط¸â€،ط·آ°ط·آ§ ط·آ§ط¸â€‍ط¸â€ ط¸â€¦ط·آ· ط¸ظ¹ط·آ¹ط·ع¾ط¸â€¦ط·آ¯ ط¸â€¦ط·آ¨ط·آ§ط·آ´ط·آ±ط·آ© ط·آ¹ط¸â€‍ط¸â€° {progressModeLabels[formData.progressMode]} ط·آ¨ط·آ¯ط¸ث†ط¸â€  ط·ع¾ط¸ث†ط·آ²ط¸ظ¹ط·آ¹
+              ط·آ£ط¸ث†ط·آ²ط·آ§ط¸â€  ط¸ظ¹ط·آ¯ط¸ث†ط¸ظ¹.
             </p>
           </div>
         )}
@@ -980,18 +980,18 @@ export function CreateProjectUi({
     <div className="rounded-[28px] border border-slate-200/80 bg-white/95 p-5 shadow-sm">
       <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 className="text-base font-semibold text-slate-950">\\u0627\\u0644\\u062e\\u064a\\u0627\\u0631\\u0627\\u062a \\u0627\\u0644\\u0625\\u0636\\u0627\\u0641\\u064a\\u0629"</h3>
+          <h3 className="text-base font-semibold text-slate-950">ط§ظ„ط®ظٹط§ط±ط§طھ ط§ظ„ط¥ط¶ط§ظپظٹط©</h3">
           <p className="text-xs leading-6 text-slate-500">
-            ط·آ·ط¢آ§ط·آ·ط¢آ¶ط·آ·ط¢آ¨ط·آ·ط¢آ· ط·آ·ط¢آ¥ط·آ·ط¢آ¨ط·آ·ط¢آ±ط·آ·ط¢آ§ط·آ·ط¢آ² ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ´ط·آ·ط¢آ±ط·آ¸ط«â€ ط·آ·ط¢آ¹ ط·آ¸ط«â€ ط·آ·ط¢آ®ط·آ¸ط¸آ¹ط·آ·ط¢آ§ط·آ·ط¢آ±ط·آ·ط¢آ§ط·آ·ط¹آ¾ VIP ط·آ·ط¢آ¶ط·آ¸أ¢â‚¬آ¦ط·آ¸أ¢â‚¬آ  ط·آ¸أ¢â‚¬آ ط·آ¸ط¸آ¾ط·آ·ط¢آ³ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ±ط·آ·ط¢آ­ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ© ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ®ط·آ·ط¹آ¾ط·آ·ط¢آ§ط·آ¸أ¢â‚¬آ¦ط·آ¸ط¸آ¹ط·آ·ط¢آ© ط·آ·ط¢آ¨ط·آ·ط¢آ¯ط·آ¸أ¢â‚¬â€چ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ§ط·آ¸أ¢â‚¬آ ط·آ·ط¹آ¾ط·آ¸أ¢â‚¬ع‘ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چ ط·آ·ط¢آ¥ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ° ط·آ¸أ¢â‚¬ع‘ط·آ·ط¢آ³ط·آ¸أ¢â‚¬آ¦ ط·آ¸أ¢â‚¬آ¦ط·آ¸أ¢â‚¬آ ط·آ¸ط¸آ¾ط·آ·ط¢آµط·آ¸أ¢â‚¬â€چ.
+            ط·آ§ط·آ¶ط·آ¨ط·آ· ط·آ¥ط·آ¨ط·آ±ط·آ§ط·آ² ط·آ§ط¸â€‍ط¸â€¦ط·آ´ط·آ±ط¸ث†ط·آ¹ ط¸ث†ط·آ®ط¸ظ¹ط·آ§ط·آ±ط·آ§ط·ع¾ VIP ط·آ¶ط¸â€¦ط¸â€  ط¸â€ ط¸ظ¾ط·آ³ ط·آ§ط¸â€‍ط¸â€¦ط·آ±ط·آ­ط¸â€‍ط·آ© ط·آ§ط¸â€‍ط·آ®ط·ع¾ط·آ§ط¸â€¦ط¸ظ¹ط·آ© ط·آ¨ط·آ¯ط¸â€‍ ط·آ§ط¸â€‍ط·آ§ط¸â€ ط·ع¾ط¸â€ڑط·آ§ط¸â€‍ ط·آ¥ط¸â€‍ط¸â€° ط¸â€ڑط·آ³ط¸â€¦ ط¸â€¦ط¸â€ ط¸ظ¾ط·آµط¸â€‍.
           </p>
         </div>
         <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
-          {activeOptionLabels.join("\\u00a2\\u0622\\u00b7 ") || "\\u0625\\u0639\\u062f\\u0627\\u062f\\u0627\\u062a \\u0627\\u0641\\u062a\\u0631\\u0627\\u0636\\u064a\\u0629"}
+          {activeOptionLabels.join(" ط¢آ· ") || "ط·آ¥ط·آ¹ط·آ¯ط·آ§ط·آ¯ط·آ§ط·ع¾ ط·آ§ط¸ظ¾ط·ع¾ط·آ±ط·آ§ط·آ¶ط¸ظ¹ط·آ©"}
         </Badge>
       </div>
 
       <div className="grid gap-5 md:grid-cols-3">
-        <Field label="\\u0645\\u0645\\u064a\\u0632 (featured)">
+        <Field label="ط¸â€¦ط¸â€¦ط¸ظ¹ط·آ² (featured)">
           <Select
             value={formData.featured}
             onValueChange={(value) =>
@@ -1005,8 +1005,8 @@ export function CreateProjectUi({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="false">\\u0644\\u0627"</SelectItem>
-              <SelectItem value="true">\\u0646\\u0639\\u0645"</SelectItem>
+              <SelectItem value="false">ظ„ط§</SelectItem">
+              <SelectItem value="true">ط¸â€ ط·آ¹ط¸â€¦</SelectItem">
             </SelectContent>
           </Select>
         </Field>
@@ -1025,13 +1025,13 @@ export function CreateProjectUi({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="false">\\u0644\\u0627"</SelectItem>
-              <SelectItem value="true">\\u0646\\u0639\\u0645"</SelectItem>
+              <SelectItem value="false">ظ„ط§</SelectItem">
+              <SelectItem value="true">ط¸â€ ط·آ¹ط¸â€¦</SelectItem">
             </SelectContent>
           </Select>
         </Field>
 
-        <Field label="\\u0645\\u0633\\u062a\\u0648\\u0649 VIP (vipTier)">
+        <Field label="ط¸â€¦ط·آ³ط·ع¾ط¸ث†ط¸â€° VIP (vipTier)">
           <Select
             value={formData.vipTier}
             onValueChange={(value) =>
@@ -1060,16 +1060,16 @@ export function CreateProjectUi({
     <div className="space-y-6">
       <div className="grid gap-5 md:grid-cols-2">
         <Field
-          label="\\u0646\\u0638\\u0631\\u0629 \\u0639\\u0627\\u0645\\u0629 \\u0639\\u0644\\u0649 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639"
+          label="ط¸â€ ط·آ¸ط·آ±ط·آ© ط·آ¹ط·آ§ط¸â€¦ط·آ© ط·آ¹ط¸â€‍ط¸â€° ط·آ§ط¸â€‍ط¸â€¦ط·آ´ط·آ±ط¸ث†ط·آ¹"
           className="md:col-span-2"
-          hint="\\u0648\\u0635\\u0641 \\u0628\\u0635\\u064a\\u063a\\u0629 \\u0645\\u0627 \\u0628\\u0639\\u062f \\u0627\\u0644\\u062a\\u0646\\u0641\\u064a\\u0630 \\u064a\\u0634\\u0631\\u062d \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639 \\u0628\\u0639\\u062f \\u0627\\u0643\\u062a\\u0645\\u0627\\u0644\\u0647."
+          hint="ط¸ث†ط·آµط¸ظ¾ ط·آ¨ط·آµط¸ظ¹ط·ط›ط·آ© ط¸â€¦ط·آ§ ط·آ¨ط·آ¹ط·آ¯ ط·آ§ط¸â€‍ط·ع¾ط¸â€ ط¸ظ¾ط¸ظ¹ط·آ° ط¸ظ¹ط·آ´ط·آ±ط·آ­ ط·آ§ط¸â€‍ط¸â€¦ط·آ´ط·آ±ط¸ث†ط·آ¹ ط·آ¨ط·آ¹ط·آ¯ ط·آ§ط¸ئ’ط·ع¾ط¸â€¦ط·آ§ط¸â€‍ط¸â€،."
         >
           <Textarea
             rows={4}
             dir="rtl"
             className={`${textareaClassName} text-right leading-7`}
             value={formData.completionOverviewAr}
-            placeholder="\\u0627\\u0643\\u062a\\u0628 \\u0646\\u0638\\u0631\\u0629 \\u0639\\u0627\\u0645\\u0629 \\u062a\\u0648\\u0636\\u062d \\u0645\\u0627 \\u0627\\u0644\\u0630\\u064a \\u0643\\u0627\\u0646 \\u0639\\u0644\\u064a\\u0647 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639 \\u0628\\u0639\\u062f \\u0627\\u0644\\u062a\\u0646\\u0641\\u064a\\u0630."
+            placeholder="ط·آ§ط¸ئ’ط·ع¾ط·آ¨ ط¸â€ ط·آ¸ط·آ±ط·آ© ط·آ¹ط·آ§ط¸â€¦ط·آ© ط·ع¾ط¸ث†ط·آ¶ط·آ­ ط¸â€¦ط·آ§ ط·آ§ط¸â€‍ط·آ°ط¸ظ¹ ط¸ئ’ط·آ§ط¸â€  ط·آ¹ط¸â€‍ط¸ظ¹ط¸â€، ط·آ§ط¸â€‍ط¸â€¦ط·آ´ط·آ±ط¸ث†ط·آ¹ ط·آ¨ط·آ¹ط·آ¯ ط·آ§ط¸â€‍ط·ع¾ط¸â€ ط¸ظ¾ط¸ظ¹ط·آ°."
             onChange={(e) =>
               setFormData((prev) => ({
                 ...prev,
@@ -1080,16 +1080,16 @@ export function CreateProjectUi({
         </Field>
 
         <Field
-          label="\\u0645\\u0644\\u062e\\u0635 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639"
+          label="ط¸â€¦ط¸â€‍ط·آ®ط·آµ ط·آ§ط¸â€‍ط¸â€¦ط·آ´ط·آ±ط¸ث†ط·آ¹"
           className="md:col-span-2"
-          hint="\\u0645\\u0644\\u062e\\u0635 \\u0642\\u0635\\u064a\\u0631 \\u064a\\u0638\\u0647\\u0631 \\u0641\\u064a \\u0635\\u0641\\u062d\\u0629 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639 \\u0627\\u0644\\u0645\\u0643\\u062a\\u0645\\u0644."
+          hint="ط¸â€¦ط¸â€‍ط·آ®ط·آµ ط¸â€ڑط·آµط¸ظ¹ط·آ± ط¸ظ¹ط·آ¸ط¸â€،ط·آ± ط¸ظ¾ط¸ظ¹ ط·آµط¸ظ¾ط·آ­ط·آ© ط·آ§ط¸â€‍ط¸â€¦ط·آ´ط·آ±ط¸ث†ط·آ¹ ط·آ§ط¸â€‍ط¸â€¦ط¸ئ’ط·ع¾ط¸â€¦ط¸â€‍."
         >
           <Textarea
             rows={3}
             dir="rtl"
             className={`${textareaClassName} min-h-[120px] text-right leading-7`}
             value={formData.completionSummaryAr}
-            placeholder="\\u0627\\u0643\\u062a\\u0628 \\u0645\\u0644\\u062e\\u0635\\u064b\\u0627 \\u0646\\u0647\\u0627\\u0626\\u064a\\u064b\\u0627 \\u0645\\u062e\\u062a\\u0635\\u0631\\u064b\\u0627 \\u0644\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639 \\u0628\\u0639\\u062f \\u0625\\u0642\\u0641\\u0627\\u0644\\u0647."
+            placeholder="ط·آ§ط¸ئ’ط·ع¾ط·آ¨ ط¸â€¦ط¸â€‍ط·آ®ط·آµط¸â€¹ط·آ§ ط¸â€ ط¸â€،ط·آ§ط·آ¦ط¸ظ¹ط¸â€¹ط·آ§ ط¸â€¦ط·آ®ط·ع¾ط·آµط·آ±ط¸â€¹ط·آ§ ط¸â€‍ط¸â€‍ط¸â€¦ط·آ´ط·آ±ط¸ث†ط·آ¹ ط·آ¨ط·آ¹ط·آ¯ ط·آ¥ط¸â€ڑط¸ظ¾ط·آ§ط¸â€‍ط¸â€،."
             onChange={(e) =>
               setFormData((prev) => ({
                 ...prev,
@@ -1104,9 +1104,9 @@ export function CreateProjectUi({
         <div className="space-y-4">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <h4 className="text-base font-semibold text-slate-950">\\u0646\\u062a\\u0627\\u0626\\u062c \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639"</h4>
+              <h4 className="text-base font-semibold text-slate-950">ظ†طھط§ط¦ط¬ ط§ظ„ظ…ط´ط±ظˆط¹</h4">
               <p className="text-xs text-slate-500">
-                ط·آ¸ط¦â€™ط·آ¸أ¢â‚¬â€چ ط·آ¸أ¢â‚¬آ ط·آ·ط¹آ¾ط·آ¸ط¸آ¹ط·آ·ط¢آ¬ط·آ·ط¢آ© ط·آ·ط¹آ¾ط·آ·ط¢آ¸ط·آ¸أ¢â‚¬طŒط·آ·ط¢آ± ط·آ¸ط¦â€™ط·آ·ط¢آ¹ط·آ¸أ¢â‚¬آ ط·آ·ط¢آµط·آ·ط¢آ± ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ³ط·آ·ط¹آ¾ط·آ¸أ¢â‚¬ع‘ط·آ¸أ¢â‚¬â€چ ط·آ¸ط¸آ¾ط·آ¸ط¸آ¹ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آµط·آ¸ط¸آ¾ط·آ·ط¢آ­ط·آ·ط¢آ© ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ ط·آ¸أ¢â‚¬طŒط·آ·ط¢آ§ط·آ·ط¢آ¦ط·آ¸ط¸آ¹ط·آ·ط¢آ©.
+                ط¸ئ’ط¸â€‍ ط¸â€ ط·ع¾ط¸ظ¹ط·آ¬ط·آ© ط·ع¾ط·آ¸ط¸â€،ط·آ± ط¸ئ’ط·آ¹ط¸â€ ط·آµط·آ± ط¸â€¦ط·آ³ط·ع¾ط¸â€ڑط¸â€‍ ط¸ظ¾ط¸ظ¹ ط·آ§ط¸â€‍ط·آµط¸ظ¾ط·آ­ط·آ© ط·آ§ط¸â€‍ط¸â€ ط¸â€،ط·آ§ط·آ¦ط¸ظ¹ط·آ©.
               </p>
             </div>
             <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
@@ -1120,7 +1120,7 @@ export function CreateProjectUi({
               className="rounded-[24px] border border-slate-200/80 bg-slate-50/80 p-4 shadow-sm"
             >
               <div className="mb-3 flex items-center justify-between gap-3">
-                <p className="text-sm font-semibold text-slate-950">النتيجة {index + 1}</p>
+                <p className="text-sm font-semibold text-slate-950">ط§ظ„ظ†طھظٹط¬ط© {index + 1}</p">
                 <Button
                   type="button"
                   variant="outline"
@@ -1134,7 +1134,7 @@ export function CreateProjectUi({
                   }
                 >
                   <Trash2 className="ml-2 h-4 w-4" />
-                  ط·آ·ط¢آ­ط·آ·ط¢آ°ط·آ¸ط¸آ¾
+                  ط·آ­ط·آ°ط¸ظ¾
                 </Button>
               </div>
 
@@ -1143,7 +1143,7 @@ export function CreateProjectUi({
                 dir="rtl"
                 className={`${textareaClassName} min-h-[110px] text-right leading-7`}
                 value={row}
-                placeholder="\\u0645\\u062b\\u0627\\u0644: \\u062a\\u0645 \\u062a\\u0646\\u0641\\u064a\\u0630 \\u0623\\u0639\\u0645\\u0627\\u0644 \\u0627\\u0644\\u062a\\u0637\\u0648\\u064a\\u0631 \\u0648\\u062a\\u0633\\u0644\\u064a\\u0645 \\u0627\\u0644\\u0623\\u0635\\u0648\\u0644 \\u0648\\u0641\\u0642 \\u0627\\u0644\\u062e\\u0637\\u0629 \\u0627\\u0644\\u0645\\u0639\\u062a\\u0645\\u062f\\u0629."
+                placeholder="ط¸â€¦ط·آ«ط·آ§ط¸â€‍: ط·ع¾ط¸â€¦ ط·ع¾ط¸â€ ط¸ظ¾ط¸ظ¹ط·آ° ط·آ£ط·آ¹ط¸â€¦ط·آ§ط¸â€‍ ط·آ§ط¸â€‍ط·ع¾ط·آ·ط¸ث†ط¸ظ¹ط·آ± ط¸ث†ط·ع¾ط·آ³ط¸â€‍ط¸ظ¹ط¸â€¦ ط·آ§ط¸â€‍ط·آ£ط·آµط¸ث†ط¸â€‍ ط¸ث†ط¸ظ¾ط¸â€ڑ ط·آ§ط¸â€‍ط·آ®ط·آ·ط·آ© ط·آ§ط¸â€‍ط¸â€¦ط·آ¹ط·ع¾ط¸â€¦ط·آ¯ط·آ©."
                 onChange={(e) =>
                   setCompletionResultRows((prev) =>
                     prev.map((item, rowIndex) => (rowIndex === index ? e.target.value : item))
@@ -1160,15 +1160,15 @@ export function CreateProjectUi({
             onClick={() => setCompletionResultRows((prev) => [...prev, ""])}
           >
             <Plus className="ml-2 h-4 w-4" />
-            ط·آ·ط¢آ¥ط·آ·ط¢آ¶ط·آ·ط¢آ§ط·آ¸ط¸آ¾ط·آ·ط¢آ© ط·آ¸أ¢â‚¬آ ط·آ·ط¹آ¾ط·آ¸ط¸آ¹ط·آ·ط¢آ¬ط·آ·ط¢آ© ط·آ·ط¢آ¬ط·آ·ط¢آ¯ط·آ¸ط¸آ¹ط·آ·ط¢آ¯ط·آ·ط¢آ©
+            ط·آ¥ط·آ¶ط·آ§ط¸ظ¾ط·آ© ط¸â€ ط·ع¾ط¸ظ¹ط·آ¬ط·آ© ط·آ¬ط·آ¯ط¸ظ¹ط·آ¯ط·آ©
           </Button>
         </div>
 
         <div className="space-y-4">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <h4 className="text-base font-semibold text-slate-950">\\u0645\\u0644\\u062e\\u0635 \\u0646\\u0647\\u0627\\u0626\\u064a / \\u0645\\u0644\\u0627\\u062d\\u0638\\u0627\\u062a"</h4>
-              <p className="text-xs text-slate-500">\\u0645\\u0644\\u0627\\u062d\\u0638\\u0627\\u062a \\u062e\\u062a\\u0627\\u0645\\u064a\\u0629 \\u0623\\u0648 \\u0646\\u0642\\u0627\\u0637 \\u062a\\u0648\\u062b\\u064a\\u0642\\u064a\\u0629 \\u0625\\u0636\\u0627\\u0641\\u064a\\u0629."</p>
+              <h4 className="text-base font-semibold text-slate-950">ظ…ظ„ط®طµ ظ†ظ‡ط§ط¦ظٹ / ظ…ظ„ط§ط­ط¸ط§طھ</h4">
+              <p className="text-xs text-slate-500">ظ…ظ„ط§ط­ط¸ط§طھ ط®طھط§ظ…ظٹط© ط£ظˆ ظ†ظ‚ط§ط· طھظˆط«ظٹظ‚ظٹط© ط¥ط¶ط§ظپظٹط©.</p">
             </div>
             <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
               {filledCompletionFinalNotes}
@@ -1181,7 +1181,7 @@ export function CreateProjectUi({
               className="rounded-[24px] border border-slate-200/80 bg-slate-50/80 p-4 shadow-sm"
             >
               <div className="mb-3 flex items-center justify-between gap-3">
-                <p className="text-sm font-semibold text-slate-950">ملاحظة {index + 1}</p>
+                <p className="text-sm font-semibold text-slate-950">ظ…ظ„ط§ط­ط¸ط© {index + 1}</p">
                 <Button
                   type="button"
                   variant="outline"
@@ -1195,7 +1195,7 @@ export function CreateProjectUi({
                   }
                 >
                   <Trash2 className="ml-2 h-4 w-4" />
-                  ط·آ·ط¢آ­ط·آ·ط¢آ°ط·آ¸ط¸آ¾
+                  ط·آ­ط·آ°ط¸ظ¾
                 </Button>
               </div>
 
@@ -1204,7 +1204,7 @@ export function CreateProjectUi({
                 dir="rtl"
                 className={`${textareaClassName} min-h-[110px] text-right leading-7`}
                 value={row}
-                placeholder="\\u0623\\u0636\\u0641 \\u0645\\u0644\\u0627\\u062d\\u0638\\u0629 \\u0646\\u0647\\u0627\\u0626\\u064a\\u0629 \\u0623\\u0648 \\u0645\\u0644\\u062e\\u0635\\u064b\\u0627 \\u062e\\u062a\\u0627\\u0645\\u064a\\u064b\\u0627 \\u0644\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639."
+                placeholder="ط·آ£ط·آ¶ط¸ظ¾ ط¸â€¦ط¸â€‍ط·آ§ط·آ­ط·آ¸ط·آ© ط¸â€ ط¸â€،ط·آ§ط·آ¦ط¸ظ¹ط·آ© ط·آ£ط¸ث† ط¸â€¦ط¸â€‍ط·آ®ط·آµط¸â€¹ط·آ§ ط·آ®ط·ع¾ط·آ§ط¸â€¦ط¸ظ¹ط¸â€¹ط·آ§ ط¸â€‍ط¸â€‍ط¸â€¦ط·آ´ط·آ±ط¸ث†ط·آ¹."
                 onChange={(e) =>
                   setCompletionFinalNoteRows((prev) =>
                     prev.map((item, rowIndex) => (rowIndex === index ? e.target.value : item))
@@ -1221,7 +1221,7 @@ export function CreateProjectUi({
             onClick={() => setCompletionFinalNoteRows((prev) => [...prev, ""])}
           >
             <Plus className="ml-2 h-4 w-4" />
-            ط·آ·ط¢آ¥ط·آ·ط¢آ¶ط·آ·ط¢آ§ط·آ¸ط¸آ¾ط·آ·ط¢آ© ط·آ¸أ¢â‚¬آ¦ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ§ط·آ·ط¢آ­ط·آ·ط¢آ¸ط·آ·ط¢آ© ط·آ¸أ¢â‚¬آ ط·آ¸أ¢â‚¬طŒط·آ·ط¢آ§ط·آ·ط¢آ¦ط·آ¸ط¸آ¹ط·آ·ط¢آ©
+            ط·آ¥ط·آ¶ط·آ§ط¸ظ¾ط·آ© ط¸â€¦ط¸â€‍ط·آ§ط·آ­ط·آ¸ط·آ© ط¸â€ ط¸â€،ط·آ§ط·آ¦ط¸ظ¹ط·آ©
           </Button>
         </div>
       </div>
@@ -1229,9 +1229,9 @@ export function CreateProjectUi({
       <div className="space-y-4">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h4 className="text-base font-semibold text-slate-950">\\u0645\\u062e\\u0631\\u062c\\u0627\\u062a \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639"</h4>
+            <h4 className="text-base font-semibold text-slate-950">ظ…ط®ط±ط¬ط§طھ ط§ظ„ظ…ط´ط±ظˆط¹</h4">
             <p className="text-xs text-slate-500">
-              ط·آ·ط¢آ¹ط·آ¸أ¢â‚¬آ ط·آ·ط¢آ§ط·آ·ط¢آµط·آ·ط¢آ± ط·آ¸ط«â€ ط·آ·ط¢آµط·آ¸ط¸آ¾ط·آ¸ط¸آ¹ط·آ·ط¢آ© ط·آ¸أ¢â‚¬آ¦ط·آ¸أ¢â‚¬آ ط·آ·ط¢آ¸ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ© ط·آ·ط¢آ¨ط·آ·ط¢آ¹ط·آ¸أ¢â‚¬آ ط·آ¸ط«â€ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬آ  ط·آ¸ط«â€ ط·آ¸ط«â€ ط·آ·ط¢آµط·آ¸ط¸آ¾ ط·آ¸ط«â€ ط·آ¸ط«â€ ط·آ·ط¢آ³ط·آ¸أ¢â‚¬آ¦ ط·آ·ط¢آ§ط·آ·ط¢آ®ط·آ·ط¹آ¾ط·آ¸ط¸آ¹ط·آ·ط¢آ§ط·آ·ط¢آ±ط·آ¸ط¸آ¹ ط·آ¸أ¢â‚¬â€چط·آ¸ط¦â€™ط·آ¸أ¢â‚¬â€چ ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ®ط·آ·ط¢آ±ط·آ·ط¢آ¬.
+              ط·آ¹ط¸â€ ط·آ§ط·آµط·آ± ط¸ث†ط·آµط¸ظ¾ط¸ظ¹ط·آ© ط¸â€¦ط¸â€ ط·آ¸ط¸â€¦ط·آ© ط·آ¨ط·آ¹ط¸â€ ط¸ث†ط·آ§ط¸â€  ط¸ث†ط¸ث†ط·آµط¸ظ¾ ط¸ث†ط¸ث†ط·آ³ط¸â€¦ ط·آ§ط·آ®ط·ع¾ط¸ظ¹ط·آ§ط·آ±ط¸ظ¹ ط¸â€‍ط¸ئ’ط¸â€‍ ط¸â€¦ط·آ®ط·آ±ط·آ¬.
             </p>
           </div>
           <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
@@ -1246,9 +1246,9 @@ export function CreateProjectUi({
           >
             <div className="mb-5 flex items-center justify-between gap-3">
               <div>
-                <p className="text-sm font-semibold text-slate-950">المخرج {index + 1}</p>
+                <p className="text-sm font-semibold text-slate-950">ط§ظ„ظ…ط®ط±ط¬ {index + 1}</p">
                 <p className="text-xs text-slate-500">
-                  ط·آ·ط¢آ¹ط·آ¸أ¢â‚¬آ ط·آ¸ط«â€ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬آ  ط·آ¸ط«â€ ط·آ¸ط«â€ ط·آ·ط¢آµط·آ¸ط¸آ¾ ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ®ط·آ·ط¹آ¾ط·آ·ط¢آµط·آ·ط¢آ± ط·آ¸ط¸آ¹ط·آ¸ط«â€ ط·آ·ط¢آ¶ط·آ·ط¢آ­ ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ§ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ°ط·آ¸ط¸آ¹ ط·آ·ط¹آ¾ط·آ·ط¢آ­ط·آ¸أ¢â‚¬ع‘ط·آ¸أ¢â‚¬ع‘ ط·آ¸ط¸آ¾ط·آ·ط¢آ¹ط·آ¸أ¢â‚¬â€چط·آ¸ط¸آ¹ط·آ¸أ¢â‚¬آ¹ط·آ·ط¢آ§.
+                  ط·آ¹ط¸â€ ط¸ث†ط·آ§ط¸â€  ط¸ث†ط¸ث†ط·آµط¸ظ¾ ط¸â€¦ط·آ®ط·ع¾ط·آµط·آ± ط¸ظ¹ط¸ث†ط·آ¶ط·آ­ ط¸â€¦ط·آ§ ط·آ§ط¸â€‍ط·آ°ط¸ظ¹ ط·ع¾ط·آ­ط¸â€ڑط¸â€ڑ ط¸ظ¾ط·آ¹ط¸â€‍ط¸ظ¹ط¸â€¹ط·آ§.
                 </p>
               </div>
               <Button
@@ -1264,17 +1264,17 @@ export function CreateProjectUi({
                 }
               >
                 <Trash2 className="ml-2 h-4 w-4" />
-                ط·آ·ط¢آ­ط·آ·ط¢آ°ط·آ¸ط¸آ¾
+                ط·آ­ط·آ°ط¸ظ¾
               </Button>
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
-              <Field label="\\u0627\\u0644\\u0639\\u0646\\u0648\\u0627\\u0646">
+              <Field label="ط·آ§ط¸â€‍ط·آ¹ط¸â€ ط¸ث†ط·آ§ط¸â€ ">
                 <Input
                   dir="rtl"
                   className={`${inputClassName} text-right`}
                   value={row.titleAr}
-                  placeholder={`\\u0639\\u0646\\u0648\\u0627\\u0646 \\u0627\\u0644\\u0645\\u062e\\u0631\\u062c ${index + 1}`}
+                  placeholder={`ط·آ¹ط¸â€ ط¸ث†ط·آ§ط¸â€  ط·آ§ط¸â€‍ط¸â€¦ط·آ®ط·آ±ط·آ¬ ${index + 1}`}
                   onChange={(e) =>
                     setCompletionOutputRows((prev) =>
                       prev.map((item, rowIndex) =>
@@ -1285,12 +1285,12 @@ export function CreateProjectUi({
                 />
               </Field>
 
-              <Field label="\\u0648\\u0633\\u0645 \\u0625\\u0636\\u0627\\u0641\\u064a (\\u0627\\u062e\\u062a\\u064a\\u0627\\u0631\\u064a)">
+              <Field label="ط¸ث†ط·آ³ط¸â€¦ ط·آ¥ط·آ¶ط·آ§ط¸ظ¾ط¸ظ¹ (ط·آ§ط·آ®ط·ع¾ط¸ظ¹ط·آ§ط·آ±ط¸ظ¹)">
                 <Input
                   dir="rtl"
                   className={`${inputClassName} text-right`}
                   value={row.metaAr}
-                  placeholder="\\u0645\\u062b\\u0627\\u0644: \\u062a\\u0633\\u0644\\u064a\\u0645 \\u0646\\u0647\\u0627\\u0626\\u064a"
+                  placeholder="ط¸â€¦ط·آ«ط·آ§ط¸â€‍: ط·ع¾ط·آ³ط¸â€‍ط¸ظ¹ط¸â€¦ ط¸â€ ط¸â€،ط·آ§ط·آ¦ط¸ظ¹"
                   onChange={(e) =>
                     setCompletionOutputRows((prev) =>
                       prev.map((item, rowIndex) =>
@@ -1301,13 +1301,13 @@ export function CreateProjectUi({
                 />
               </Field>
 
-              <Field label="\\u0627\\u0644\\u0648\\u0635\\u0641" className="md:col-span-2">
+              <Field label="ط·آ§ط¸â€‍ط¸ث†ط·آµط¸ظ¾" className="md:col-span-2">
                 <Textarea
                   rows={3}
                   dir="rtl"
                   className={`${textareaClassName} min-h-[120px] text-right leading-7`}
                   value={row.descriptionAr}
-                  placeholder="\\u0635\\u0641 \\u0647\\u0630\\u0627 \\u0627\\u0644\\u0645\\u062e\\u0631\\u062c \\u0628\\u0634\\u0643\\u0644 \\u0648\\u0627\\u0636\\u062d \\u0648\\u0645\\u0628\\u0627\\u0634\\u0631."
+                  placeholder="ط·آµط¸ظ¾ ط¸â€،ط·آ°ط·آ§ ط·آ§ط¸â€‍ط¸â€¦ط·آ®ط·آ±ط·آ¬ ط·آ¨ط·آ´ط¸ئ’ط¸â€‍ ط¸ث†ط·آ§ط·آ¶ط·آ­ ط¸ث†ط¸â€¦ط·آ¨ط·آ§ط·آ´ط·آ±."
                   onChange={(e) =>
                     setCompletionOutputRows((prev) =>
                       prev.map((item, rowIndex) =>
@@ -1333,14 +1333,14 @@ export function CreateProjectUi({
           }
         >
           <Plus className="ml-2 h-4 w-4" />
-          ط·آ·ط¢آ¥ط·آ·ط¢آ¶ط·آ·ط¢آ§ط·آ¸ط¸آ¾ط·آ·ط¢آ© ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ®ط·آ·ط¢آ±ط·آ·ط¢آ¬ ط·آ·ط¢آ¬ط·آ·ط¢آ¯ط·آ¸ط¸آ¹ط·آ·ط¢آ¯
+          ط·آ¥ط·آ¶ط·آ§ط¸ظ¾ط·آ© ط¸â€¦ط·آ®ط·آ±ط·آ¬ ط·آ¬ط·آ¯ط¸ظ¹ط·آ¯
         </Button>
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_260px]">
         <Field
-          label="\\u0645\\u0639\\u0631\\u0636 \\u0635\\u0648\\u0631 \\u0645\\u0627 \\u0628\\u0639\\u062f \\u0627\\u0644\\u062a\\u0646\\u0641\\u064a\\u0630"
-          hint="\\u0631\\u0627\\u0628\\u0637 \\u0644\\u0643\\u0644 \\u0635\\u0648\\u0631\\u0629 \\u0641\\u064a \\u0633\\u0637\\u0631 \\u0645\\u0633\\u062a\\u0642\\u0644. \\u0647\\u0630\\u0647 \\u0627\\u0644\\u0635\\u0648\\u0631 \\u062a\\u0633\\u062a\\u062e\\u062f\\u0645 \\u0641\\u064a \\u0635\\u0641\\u062d\\u0629 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639 \\u0627\\u0644\\u0645\\u0643\\u062a\\u0645\\u0644."
+          label="ط¸â€¦ط·آ¹ط·آ±ط·آ¶ ط·آµط¸ث†ط·آ± ط¸â€¦ط·آ§ ط·آ¨ط·آ¹ط·آ¯ ط·آ§ط¸â€‍ط·ع¾ط¸â€ ط¸ظ¾ط¸ظ¹ط·آ°"
+          hint="ط·آ±ط·آ§ط·آ¨ط·آ· ط¸â€‍ط¸ئ’ط¸â€‍ ط·آµط¸ث†ط·آ±ط·آ© ط¸ظ¾ط¸ظ¹ ط·آ³ط·آ·ط·آ± ط¸â€¦ط·آ³ط·ع¾ط¸â€ڑط¸â€‍. ط¸â€،ط·آ°ط¸â€، ط·آ§ط¸â€‍ط·آµط¸ث†ط·آ± ط·ع¾ط·آ³ط·ع¾ط·آ®ط·آ¯ط¸â€¦ ط¸ظ¾ط¸ظ¹ ط·آµط¸ظ¾ط·آ­ط·آ© ط·آ§ط¸â€‍ط¸â€¦ط·آ´ط·آ±ط¸ث†ط·آ¹ ط·آ§ط¸â€‍ط¸â€¦ط¸ئ’ط·ع¾ط¸â€¦ط¸â€‍."
         >
           <Textarea
             rows={5}
@@ -1359,8 +1359,8 @@ export function CreateProjectUi({
 
         <UploadDropzone
           inputId="project-completion-gallery-upload"
-          title="\\u0631\\u0641\\u0639 \\u0635\\u0648\\u0631 \\u0646\\u0647\\u0627\\u0626\\u064a\\u0629"
-          description="\\u0627\\u0631\\u0641\\u0639 \\u0627\\u0644\\u0635\\u0648\\u0631 \\u0627\\u0644\\u062a\\u064a \\u062a\\u0648\\u062b\\u0642 \\u0627\\u0644\\u062d\\u0627\\u0644\\u0629 \\u0627\\u0644\\u0646\\u0647\\u0627\\u0626\\u064a\\u0629 \\u0644\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639 \\u0628\\u0639\\u062f \\u0627\\u0644\\u062a\\u0646\\u0641\\u064a\\u0630."
+          title="ط·آ±ط¸ظ¾ط·آ¹ ط·آµط¸ث†ط·آ± ط¸â€ ط¸â€،ط·آ§ط·آ¦ط¸ظ¹ط·آ©"
+          description="ط·آ§ط·آ±ط¸ظ¾ط·آ¹ ط·آ§ط¸â€‍ط·آµط¸ث†ط·آ± ط·آ§ط¸â€‍ط·ع¾ط¸ظ¹ ط·ع¾ط¸ث†ط·آ«ط¸â€ڑ ط·آ§ط¸â€‍ط·آ­ط·آ§ط¸â€‍ط·آ© ط·آ§ط¸â€‍ط¸â€ ط¸â€،ط·آ§ط·آ¦ط¸ظ¹ط·آ© ط¸â€‍ط¸â€‍ط¸â€¦ط·آ´ط·آ±ط¸ث†ط·آ¹ ط·آ¨ط·آ¹ط·آ¯ ط·آ§ط¸â€‍ط·ع¾ط¸â€ ط¸ظ¾ط¸ظ¹ط·آ°."
           accept="image/*"
           multiple
           disabled={completionGalleryUploading}
@@ -1386,7 +1386,7 @@ export function CreateProjectUi({
                 />
               </div>
               <div className="flex items-center justify-between gap-3 p-3">
-                <p className="min-w-0 truncate text-xs text-slate-500">الصورة {index + 1}</p>
+                <p className="min-w-0 truncate text-xs text-slate-500">ط§ظ„طµظˆط±ط© {index + 1}</p">
                 <Button
                   type="button"
                   variant="outline"
@@ -1401,7 +1401,7 @@ export function CreateProjectUi({
                     }))
                   }
                 >
-                  ط·آ·ط¢آ­ط·آ·ط¢آ°ط·آ¸ط¸آ¾
+                  ط·آ­ط·آ°ط¸ظ¾
                 </Button>
               </div>
             </div>
@@ -1419,11 +1419,11 @@ export function CreateProjectUi({
             <FileText className="h-4 w-4 text-slate-800" />
           </div>
           <div className="space-y-2">
-            <h4 className="text-sm font-semibold text-slate-950">\\u0627\\u0644\\u0642\\u0633\\u0645 \\u0645\\u0624\\u062c\\u0644 \\u062d\\u062a\\u0649 \\u0627\\u0644\\u0625\\u063a\\u0644\\u0627\\u0642"</h4>
+            <h4 className="text-sm font-semibold text-slate-950">ط§ظ„ظ‚ط³ظ… ظ…ط¤ط¬ظ„ ط­طھظ‰ ط§ظ„ط¥ط؛ظ„ط§ظ‚</h4">
             <p className="text-xs leading-6 text-slate-500">
-              ط·آ·ط¢آ³ط·آ·ط¹آ¾ط·آ·ط¹آ¾ط·آ¸أ¢â‚¬آ¦ط·آ¸ط¦â€™ط·آ¸أ¢â‚¬آ  ط·آ¸أ¢â‚¬آ¦ط·آ¸أ¢â‚¬آ  ط·آ·ط¢آ¥ط·آ·ط¢آ¶ط·آ·ط¢آ§ط·آ¸ط¸آ¾ط·آ·ط¢آ© ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ ط·آ·ط¹آ¾ط·آ·ط¢آ§ط·آ·ط¢آ¦ط·آ·ط¢آ¬ ط·آ¸ط«â€ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ®ط·آ·ط¢آ±ط·آ·ط¢آ¬ط·آ·ط¢آ§ط·آ·ط¹آ¾ ط·آ¸ط«â€ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آµط·آ¸ط«â€ ط·آ·ط¢آ± ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ®ط·آ·ط¹آ¾ط·آ·ط¢آ§ط·آ¸أ¢â‚¬آ¦ط·آ¸ط¸آ¹ط·آ·ط¢آ© ط·آ¸أ¢â‚¬طŒط·آ¸أ¢â‚¬آ ط·آ·ط¢آ§ ط·آ·ط¢آ¹ط·آ¸أ¢â‚¬آ ط·آ·ط¢آ¯ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ§ ط·آ·ط¹آ¾ط·آ·ط¢آµط·آ·ط¢آ¨ط·آ·ط¢آ­ ط·آ·ط¢آ­ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ© ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ´ط·آ·ط¢آ±ط·آ¸ط«â€ ط·آ·ط¢آ¹
-              &quot;ط·آ¸أ¢â‚¬آ¦ط·آ·ط·â€؛ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬ع‘&quot; ط·آ·ط¢آ£ط·آ¸ط«â€  &quot;ط·آ¸أ¢â‚¬آ¦ط·آ¸ط¦â€™ط·آ·ط¹آ¾ط·آ¸أ¢â‚¬آ¦ط·آ¸أ¢â‚¬â€چ&quot;. ط·آ·ط¢آ¥ط·آ·ط¢آ¨ط·آ¸أ¢â‚¬ع‘ط·آ·ط¢آ§ط·آ·ط·إ’ ط·آ¸أ¢â‚¬طŒط·آ·ط¢آ°ط·آ·ط¢آ§ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ¬ط·آ·ط¢آ²ط·آ·ط·إ’ ط·آ·ط¢آ¯ط·آ·ط¢آ§ط·آ·ط¢آ®ط·آ¸أ¢â‚¬â€چ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ±ط·آ·ط¢آ­ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ© ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ®ط·آ·ط¹آ¾ط·آ·ط¢آ§ط·آ¸أ¢â‚¬آ¦ط·آ¸ط¸آ¹ط·آ·ط¢آ© ط·آ¸ط¸آ¹ط·آ·ط¢آ³ط·آ·ط¢آ§ط·آ·ط¢آ¹ط·آ·ط¢آ¯
-              ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸ط¸آ¾ط·آ·ط¢آ±ط·آ¸ط¸آ¹ط·آ¸أ¢â‚¬ع‘ ط·آ·ط¢آ¹ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ° ط·آ·ط¢آ±ط·آ·ط¢آ¤ط·آ¸ط¸آ¹ط·آ·ط¢آ© ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ³ط·آ·ط¢آ§ط·آ·ط¢آ± ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸ط¦â€™ط·آ·ط¢آ§ط·آ¸أ¢â‚¬آ¦ط·آ¸أ¢â‚¬â€چ ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ´ط·آ·ط¢آ±ط·آ¸ط«â€ ط·آ·ط¢آ¹ ط·آ¸ط¸آ¾ط·آ¸ط¸آ¹ ط·آ¸أ¢â‚¬آ¦ط·آ¸ط¦â€™ط·آ·ط¢آ§ط·آ¸أ¢â‚¬آ  ط·آ¸ط«â€ ط·آ·ط¢آ§ط·آ·ط¢آ­ط·آ·ط¢آ¯.
+              ط·آ³ط·ع¾ط·ع¾ط¸â€¦ط¸ئ’ط¸â€  ط¸â€¦ط¸â€  ط·آ¥ط·آ¶ط·آ§ط¸ظ¾ط·آ© ط·آ§ط¸â€‍ط¸â€ ط·ع¾ط·آ§ط·آ¦ط·آ¬ ط¸ث†ط·آ§ط¸â€‍ط¸â€¦ط·آ®ط·آ±ط·آ¬ط·آ§ط·ع¾ ط¸ث†ط·آ§ط¸â€‍ط·آµط¸ث†ط·آ± ط·آ§ط¸â€‍ط·آ®ط·ع¾ط·آ§ط¸â€¦ط¸ظ¹ط·آ© ط¸â€،ط¸â€ ط·آ§ ط·آ¹ط¸â€ ط·آ¯ط¸â€¦ط·آ§ ط·ع¾ط·آµط·آ¨ط·آ­ ط·آ­ط·آ§ط¸â€‍ط·آ© ط·آ§ط¸â€‍ط¸â€¦ط·آ´ط·آ±ط¸ث†ط·آ¹
+              &quot;ط¸â€¦ط·ط›ط¸â€‍ط¸â€ڑ&quot; ط·آ£ط¸ث† &quot;ط¸â€¦ط¸ئ’ط·ع¾ط¸â€¦ط¸â€‍&quot;. ط·آ¥ط·آ¨ط¸â€ڑط·آ§ط·طŒ ط¸â€،ط·آ°ط·آ§ ط·آ§ط¸â€‍ط·آ¬ط·آ²ط·طŒ ط·آ¯ط·آ§ط·آ®ط¸â€‍ ط·آ§ط¸â€‍ط¸â€¦ط·آ±ط·آ­ط¸â€‍ط·آ© ط·آ§ط¸â€‍ط·آ®ط·ع¾ط·آ§ط¸â€¦ط¸ظ¹ط·آ© ط¸ظ¹ط·آ³ط·آ§ط·آ¹ط·آ¯
+              ط·آ§ط¸â€‍ط¸ظ¾ط·آ±ط¸ظ¹ط¸â€ڑ ط·آ¹ط¸â€‍ط¸â€° ط·آ±ط·آ¤ط¸ظ¹ط·آ© ط·آ§ط¸â€‍ط¸â€¦ط·آ³ط·آ§ط·آ± ط·آ§ط¸â€‍ط¸ئ’ط·آ§ط¸â€¦ط¸â€‍ ط¸â€‍ط¸â€‍ط¸â€¦ط·آ´ط·آ±ط¸ث†ط·آ¹ ط¸ظ¾ط¸ظ¹ ط¸â€¦ط¸ئ’ط·آ§ط¸â€  ط¸ث†ط·آ§ط·آ­ط·آ¯.
             </p>
           </div>
         </div>
@@ -1433,20 +1433,20 @@ export function CreateProjectUi({
         <MetricCard
           icon={CheckCircle2}
           status="incomplete"
-          label="\\u062d\\u0627\\u0644\\u0629 \\u0627\\u0644\\u0642\\u0633\\u0645"
-          value="\\u0645\\u0624\\u062c\\u0644 \\u062d\\u0627\\u0644\\u064a\\u064b\\u0627"
+          label="ط·آ­ط·آ§ط¸â€‍ط·آ© ط·آ§ط¸â€‍ط¸â€ڑط·آ³ط¸â€¦"
+          value="ط¸â€¦ط·آ¤ط·آ¬ط¸â€‍ ط·آ­ط·آ§ط¸â€‍ط¸ظ¹ط¸â€¹ط·آ§"
         />
         <MetricCard
           icon={FileText}
           status="incomplete"
-          label="\\u0627\\u0644\\u062d\\u0627\\u0644\\u0629 \\u0627\\u0644\\u062d\\u0627\\u0644\\u064a\\u0629"
+          label="ط·آ§ط¸â€‍ط·آ­ط·آ§ط¸â€‍ط·آ© ط·آ§ط¸â€‍ط·آ­ط·آ§ط¸â€‍ط¸ظ¹ط·آ©"
           value={statusLabels[formData.status]}
         />
         <MetricCard
           icon={FileImage}
           status="incomplete"
-          label="\\u064a\\u062a\\u0641\\u0639\\u0651\\u0644 \\u0639\\u0646\\u062f"
-          value="\\u0625\\u063a\\u0644\\u0627\\u0642 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639"
+          label="ط¸ظ¹ط·ع¾ط¸ظ¾ط·آ¹ط¸â€کط¸â€‍ ط·آ¹ط¸â€ ط·آ¯"
+          value="ط·آ¥ط·ط›ط¸â€‍ط·آ§ط¸â€ڑ ط·آ§ط¸â€‍ط¸â€¦ط·آ´ط·آ±ط¸ث†ط·آ¹"
         />
       </div>
     </div>
@@ -1456,14 +1456,14 @@ export function CreateProjectUi({
     <div className="rounded-[28px] border border-slate-200/80 bg-white/95 p-5 shadow-sm">
       <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 className="text-base font-semibold text-slate-950">\\u0627\\u0644\\u0645\\u062d\\u062a\\u0648\\u0649 \\u0627\\u0644\\u062e\\u062a\\u0627\\u0645\\u064a"</h3>
+          <h3 className="text-base font-semibold text-slate-950">ط§ظ„ظ…ط­طھظˆظ‰ ط§ظ„ط®طھط§ظ…ظٹ</h3">
           <p className="text-xs leading-6 text-slate-500">
-            ط·آ¸أ¢â‚¬طŒط·آ·ط¢آ°ط·آ·ط¢آ§ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ¬ط·آ·ط¢آ²ط·آ·ط·إ’ ط·آ¸ط¸آ¹ط·آ·ط¢آ¨ط·آ¸أ¢â‚¬ع‘ط·آ¸أ¢â‚¬آ° ط·آ·ط¢آ¶ط·آ¸أ¢â‚¬آ¦ط·آ¸أ¢â‚¬آ  ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ±ط·آ·ط¢آ­ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ© ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ®ط·آ·ط¹آ¾ط·آ·ط¢آ§ط·آ¸أ¢â‚¬آ¦ط·آ¸ط¸آ¹ط·آ·ط¢آ© ط·آ¸أ¢â‚¬آ ط·آ¸ط¸آ¾ط·آ·ط¢آ³ط·آ¸أ¢â‚¬طŒط·آ·ط¢آ§ط·آ·ط¥â€™ ط·آ¸ط«â€ ط·آ¸ط¸آ¹ط·آ·ط¹آ¾ط·آ·ط¢آ­ط·آ¸ط«â€ ط·آ¸أ¢â‚¬â€چ ط·آ·ط¢آ¥ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ° ط·آ¸ط«â€ ط·آ·ط¢آ¶ط·آ·ط¢آ¹ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¹آ¾ط·آ·ط¢آ­ط·آ·ط¢آ±ط·آ¸ط¸آ¹ط·آ·ط¢آ± ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸ط¦â€™ط·آ·ط¢آ§ط·آ¸أ¢â‚¬آ¦ط·آ¸أ¢â‚¬â€چ ط·آ·ط¢آ¹ط·آ¸أ¢â‚¬آ ط·آ·ط¢آ¯ ط·آ·ط¢آ¥ط·آ·ط·â€؛ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ§ط·آ¸أ¢â‚¬ع‘
-            ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ´ط·آ·ط¢آ±ط·آ¸ط«â€ ط·آ·ط¢آ¹ ط·آ·ط¢آ£ط·آ¸ط«â€  ط·آ·ط¢آ§ط·آ¸ط¦â€™ط·آ·ط¹آ¾ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬طŒ.
+            ط¸â€،ط·آ°ط·آ§ ط·آ§ط¸â€‍ط·آ¬ط·آ²ط·طŒ ط¸ظ¹ط·آ¨ط¸â€ڑط¸â€° ط·آ¶ط¸â€¦ط¸â€  ط·آ§ط¸â€‍ط¸â€¦ط·آ±ط·آ­ط¸â€‍ط·آ© ط·آ§ط¸â€‍ط·آ®ط·ع¾ط·آ§ط¸â€¦ط¸ظ¹ط·آ© ط¸â€ ط¸ظ¾ط·آ³ط¸â€،ط·آ§ط·إ’ ط¸ث†ط¸ظ¹ط·ع¾ط·آ­ط¸ث†ط¸â€‍ ط·آ¥ط¸â€‍ط¸â€° ط¸ث†ط·آ¶ط·آ¹ ط·آ§ط¸â€‍ط·ع¾ط·آ­ط·آ±ط¸ظ¹ط·آ± ط·آ§ط¸â€‍ط¸ئ’ط·آ§ط¸â€¦ط¸â€‍ ط·آ¹ط¸â€ ط·آ¯ ط·آ¥ط·ط›ط¸â€‍ط·آ§ط¸â€ڑ
+            ط·آ§ط¸â€‍ط¸â€¦ط·آ´ط·آ±ط¸ث†ط·آ¹ ط·آ£ط¸ث† ط·آ§ط¸ئ’ط·ع¾ط¸â€¦ط·آ§ط¸â€‍ط¸â€،.
           </p>
         </div>
         <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
-          {isCompletionSectionEditable ? completionSectionSummary : "\\u0645\\u062a\\u0627\\u062d \\u0628\\u0639\\u062f \\u0627\\u0644\\u0625\\u063a\\u0644\\u0627\\u0642"}
+          {isCompletionSectionEditable ? completionSectionSummary : "ط¸â€¦ط·ع¾ط·آ§ط·آ­ ط·آ¨ط·آ¹ط·آ¯ ط·آ§ط¸â€‍ط·آ¥ط·ط›ط¸â€‍ط·آ§ط¸â€ڑ"}
         </Badge>
       </div>
 
@@ -1617,17 +1617,17 @@ export function CreateProjectUi({
           <SectionCard
             id="basic"
             index={1}
-            title="\\u0627\\u0644\\u0645\\u0639\\u0644\\u0648\\u0645\\u0627\\u062a \\u0627\\u0644\\u0623\\u0633\\u0627\\u0633\\u064a\\u0629"
-            description="\\u0627\\u0628\\u062f\\u0623 \\u0628\\u0647\\u0648\\u064a\\u0629 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639 \\u0648\\u0627\\u0644\\u0639\\u0646\\u0627\\u0648\\u064a\\u0646 \\u0648\\u0627\\u0644\\u0648\\u0635\\u0641\\u064a\\u0646 \\u0627\\u0644\\u0639\\u0631\\u0628\\u064a \\u0648\\u0627\\u0644\\u0625\\u0646\\u062c\\u0644\\u064a\\u0632\\u064a \\u062f\\u0627\\u062e\\u0644 \\u062a\\u062e\\u0637\\u064a\\u0637 \\u0623\\u0643\\u062b\\u0631 \\u0627\\u062a\\u0632\\u0627\\u0646\\u064b\\u0627."
+            title="ط·ط§ظ„ظ…ط¹ظ„ظˆظ…ط§طھ ط§ظ„ط£ط³ط§ط³ظٹط©"
+            description="ط·ط§ط¨ط¯ط£ ط¨ظ‡ظˆظٹط© ط§ظ„ظ…ط´ط±ظˆط¹ ظˆط§ظ„ط¹ظ†ط§ظˆظٹظ† ظˆط§ظ„ظˆطµظپظٹظ† ط§ظ„ط¹ط±ط¨ظٹ ظˆط§ظ„ط¥ظ†ط¬ظ„ظٹط²ظٹ ط¯ط§ط®ظ„ طھط®ط·ظٹط· ط£ظƒط«ط± ط§طھط²ط§ظ†ظ‹ط§."
             icon={BriefcaseBusiness}
             status={sectionStatuses.basic}
             headerAside={
               <>
                 <Badge className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-700">
-                  {cleanStr(formData.titleAr) ? "\\u0627\\u0644\\u0639\\u0646\\u0648\\u0627\\u0646 \\u062c\\u0627\\u0647\\u0632" : "\\u0627\\u0644\\u0639\\u0646\\u0648\\u0627\\u0646 \\u0628\\u0627\\u0646\\u062a\\u0638\\u0627\\u0631 \\u0627\\u0644\\u0625\\u062f\\u062e\\u0627\\u0644"}
+                  {cleanStr(formData.titleAr) ? "ط·ط§ظ„ط¹ظ†ظˆط§ظ† ط¬ط§ظ‡ط²" : "ط·ط§ظ„ط¹ظ†ظˆط§ظ† ط¨ط§ظ†طھط¸ط§ط± ط§ظ„ط¥ط¯ط®ط§ظ„"}
                 </Badge>
                 <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
-                  {cleanStr(formData.descriptionAr) ? "\\u0627\\u0644\\u0648\\u0635\\u0641 \\u0627\\u0644\\u0639\\u0631\\u0628\\u064a \\u062c\\u0627\\u0647\\u0632" : "\\u0627\\u0644\\u0648\\u0635\\u0641 \\u0627\\u0644\\u0639\\u0631\\u0628\\u064a \\u0645\\u0637\\u0644\\u0648\\u0628"}
+                  {cleanStr(formData.descriptionAr) ? "ط·ط§ظ„ظˆطµظپ ط§ظ„ط¹ط±ط¨ظٹ ط¬ط§ظ‡ط²" : "ط·ط§ظ„ظˆطµظپ ط§ظ„ط¹ط±ط¨ظٹ ظ…ط·ظ„ظˆط¨"}
                 </Badge>
               </>
             }
@@ -1641,19 +1641,19 @@ export function CreateProjectUi({
                 />
               }
             >
-                <Field label="\\u0627\\u0644\\u0639\\u0646\\u0648\\u0627\\u0646 (\\u0639\\u0631\\u0628\\u064a)" required>
+                <Field label="ط·ط§ظ„ط¹ظ†ظˆط§ظ† (ط¹ط±ط¨ظٹ)" required>
                   <Input
                     dir="rtl"
                     className={`${inputClassName} text-right`}
                     value={formData.titleAr}
-                    placeholder="\\u0645\\u062b\\u0627\\u0644: \\u0645\\u0634\\u0631\\u0648\\u0639 \\u0623\\u0628\\u0631\\u0627\\u062c \\u0627\\u0644\\u0639\\u0627\\u0635\\u0645\\u0629"
+                    placeholder="ط¸ظ…ط«ط§ظ„: ظ…ط´ط±ظˆط¹ ط£ط¨ط±ط§ط¬ ط§ظ„ط¹ط§طµظ…ط©"
                     onChange={(e) =>
                       setFormData((prev) => ({ ...prev, titleAr: e.target.value }))
                     }
                   />
                 </Field>
 
-                <Field label="\\u0627\\u0644\\u0639\\u0646\\u0648\\u0627\\u0646 (\\u0625\\u0646\\u062c\\u0644\\u064a\\u0632\\u064a)">
+                <Field label="ط·ط§ظ„ط¹ظ†ظˆط§ظ† (ط¥ظ†ط¬ظ„ظٹط²ظٹ)">
                   <Input
                     dir="ltr"
                     className={`${inputClassName} text-left`}
@@ -1666,24 +1666,24 @@ export function CreateProjectUi({
                 </Field>
 
                 <Field
-                  label="الوصف (عربي)"
+                  label="ط·آ§ط¸â€‍ط¸ث†ط·آµط¸ظ¾ (ط·آ¹ط·آ±ط·آ¨ط¸ظ¹")
                   required
                   className="md:col-span-2"
-                  hint="\\u0647\\u0630\\u0627 \\u0627\\u0644\\u0646\\u0635 \\u0647\\u0648 \\u0623\\u0648\\u0644 \\u0645\\u0627 \\u064a\\u0642\\u0631\\u0623\\u0647 \\u0627\\u0644\\u0645\\u0633\\u062a\\u062b\\u0645\\u0631 \\u062f\\u0627\\u062e\\u0644 \\u0627\\u0644\\u0628\\u0637\\u0627\\u0642\\u0629 \\u0648\\u0635\\u0641\\u062d\\u0629 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639."
+                  hint="ط¸ظ‡ط°ط§ ط§ظ„ظ†طµ ظ‡ظˆ ط£ظˆظ„ ظ…ط§ ظٹظ‚ط±ط£ظ‡ ط§ظ„ظ…ط³طھط«ظ…ط± ط¯ط§ط®ظ„ ط§ظ„ط¨ط·ط§ظ‚ط© ظˆطµظپط­ط© ط§ظ„ظ…ط´ط±ظˆط¹."
                 >
                   <Textarea
                     rows={5}
                     dir="rtl"
                     className={`${textareaClassName} text-right leading-7`}
                     value={formData.descriptionAr}
-                    placeholder="\\u0627\\u0643\\u062a\\u0628 \\u0648\\u0635\\u0641\\u064b\\u0627 \\u0645\\u0647\\u0646\\u064a\\u064b\\u0627 \\u064a\\u0634\\u0631\\u062d \\u0641\\u0643\\u0631\\u0629 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639 \\u0648\\u0627\\u0644\\u0641\\u0631\\u0635\\u0629 \\u0627\\u0644\\u0627\\u0633\\u062a\\u062b\\u0645\\u0627\\u0631\\u064a\\u0629."
+                    placeholder="ط·ط§ظƒطھط¨ ظˆطµظپظ‹ط§ ظ…ظ‡ظ†ظٹظ‹ط§ ظٹط´ط±ط­ ظپظƒط±ط© ط§ظ„ظ…ط´ط±ظˆط¹ ظˆط§ظ„ظپط±طµط© ط§ظ„ط§ط³طھط«ظ…ط§ط±ظٹط©."
                     onChange={(e) =>
                       setFormData((prev) => ({ ...prev, descriptionAr: e.target.value }))
                     }
                   />
                 </Field>
 
-                <Field label="\\u0627\\u0644\\u0648\\u0635\\u0641 (\\u0625\\u0646\\u062c\\u0644\\u064a\\u0632\\u064a)" className="md:col-span-2">
+                <Field label="ط·ط§ظ„ظˆطµظپ (ط¥ظ†ط¬ظ„ظٹط²ظٹ)" className="md:col-span-2">
                   <Textarea
                     rows={5}
                     dir="ltr"
@@ -1701,13 +1701,13 @@ export function CreateProjectUi({
           <SectionCard
             id="details"
             index={2}
-            title="\\u0628\\u064a\\u0627\\u0646\\u0627\\u062a \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639"
-            description="\\u062a\\u0646\\u0638\\u064a\\u0645 \\u0646\\u0648\\u0639 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639 \\u0648\\u062d\\u0627\\u0644\\u062a\\u0647 \\u0648\\u0631\\u0642\\u0645 \\u0627\\u0644\\u0625\\u0635\\u062f\\u0627\\u0631 \\u0648\\u0627\\u0644\\u0645\\u0648\\u0642\\u0639 \\u0636\\u0645\\u0646 \\u0634\\u0628\\u0643\\u0629 \\u0623\\u0643\\u062b\\u0631 \\u0648\\u0636\\u0648\\u062d\\u064b\\u0627."
+            title="ط·ط¨ظٹط§ظ†ط§طھ ط§ظ„ظ…ط´ط±ظˆط¹"
+            description="ط·طھظ†ط¸ظٹظ… ظ†ظˆط¹ ط§ظ„ظ…ط´ط±ظˆط¹ ظˆط­ط§ظ„طھظ‡ ظˆط±ظ‚ظ… ط§ظ„ط¥طµط¯ط§ط± ظˆط§ظ„ظ…ظˆظ‚ط¹ ط¶ظ…ظ† ط´ط¨ظƒط© ط£ظƒط«ط± ظˆط¶ظˆط­ظ‹ط§."
             icon={Building2}
             status={sectionStatuses.details}
             headerAside={
               <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
-                {projectTypeLabels[formData.projectType]} ط·آ·ط¢آ¢ط·آ¢ط¢آ· {statusLabels[formData.status]}
+                {projectTypeLabels[formData.projectType]} ط·آ¢ط¢آ· {statusLabels[formData.status]}
               </Badge>
             }
           >
@@ -1720,7 +1720,7 @@ export function CreateProjectUi({
                 />
               }
             >
-                <Field label="\\u0646\\u0648\\u0639 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639">
+                <Field label="ط¸ظ†ظˆط¹ ط§ظ„ظ…ط´ط±ظˆط¹">
                   <Select
                     value={formData.projectType}
                     onValueChange={(value) =>
@@ -1734,14 +1734,14 @@ export function CreateProjectUi({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="sukuk">\\u0637\\u0627\\u0633\\u062a\\u062b\\u0645\\u0627\\u0631 \\u0628\\u0627\\u0644\\u0635\\u0643\\u0648\\u0643"</SelectItem>
-                      <SelectItem value="land_development">\\u0637\\u062a\\u0637\\u0648\\u064a\\u0631 \\u0623\\u0631\\u0627\\u0636\\u064d"</SelectItem>
-                      <SelectItem value="vip_exclusive">VVIP \\u062d\\u0635\\u0631\\u064a"</SelectItem>
+                      <SelectItem value="sukuk">ط·ط§ط³طھط«ظ…ط§ط± ط¨ط§ظ„طµظƒظˆظƒ</SelectItem">
+                      <SelectItem value="land_development">ط·طھط·ظˆظٹط± ط£ط±ط§ط¶ظچ</SelectItem">
+                      <SelectItem value="vip_exclusive">VVIP ط·آ­ط·آµط·آ±ط¸ظ¹</SelectItem">
                     </SelectContent>
                   </Select>
                 </Field>
 
-                <Field label="\\u0627\\u0644\\u062d\\u0627\\u0644\\u0629">
+                <Field label="ط·ط§ظ„ط­ط§ظ„ط©">
                   <Select
                     value={formData.status}
                     onValueChange={(value) =>
@@ -1755,15 +1755,15 @@ export function CreateProjectUi({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="draft">\\u0642\\u0631\\u064a\\u0628\\u0627\\u064b"</SelectItem>
-                      <SelectItem value="published">\\u0645\\u0646\\u0634\\u0648\\u0631"</SelectItem>
-                      <SelectItem value="closed">\\u0645\\u063a\\u0644\\u0642"</SelectItem>
-                      <SelectItem value="completed">\\u0645\\u0643\\u062a\\u0645\\u0644"</SelectItem>
+                      <SelectItem value="draft">ظ‚ط±ظٹط¨ط§ظ‹</SelectItem">
+                      <SelectItem value="published">ط¸â€¦ط¸â€ ط·آ´ط¸ث†ط·آ±</SelectItem">
+                      <SelectItem value="closed">ظ…ط؛ظ„ظ‚</SelectItem">
+                      <SelectItem value="completed">ظ…ظƒطھظ…ظ„</SelectItem">
                     </SelectContent>
                   </Select>
                 </Field>
 
-                <Field label="\\u0631\\u0642\\u0645 \\u0627\\u0644\\u0625\\u0635\\u062f\\u0627\\u0631">
+                <Field label="ط·ط±ظ‚ظ… ط§ظ„ط¥طµط¯ط§ط±">
                   <Input
                     dir="ltr"
                     className={`${inputClassName} text-left`}
@@ -1774,19 +1774,19 @@ export function CreateProjectUi({
                   />
                 </Field>
 
-                <Field label="\\u0627\\u0644\\u0645\\u0648\\u0642\\u0639 (\\u0639\\u0631\\u0628\\u064a)" required>
+                <Field label="ط·ط§ظ„ظ…ظˆظ‚ط¹ (ط¹ط±ط¨ظٹ)" required>
                   <Input
                     dir="rtl"
                     className={`${inputClassName} text-right`}
                     value={formData.locationAr}
-                    placeholder="\\u0627\\u0644\\u0631\\u064a\\u0627\\u0636\\u060c \\u0627\\u0644\\u0645\\u0645\\u0644\\u0643\\u0629 \\u0627\\u0644\\u0639\\u0631\\u0628\\u064a\\u0629 \\u0627\\u0644\\u0633\\u0639\\u0648\\u062f\\u064a\\u0629"
+                    placeholder="ط·ط§ظ„ط±ظٹط§ط¶طŒ ط§ظ„ظ…ظ…ظ„ظƒط© ط§ظ„ط¹ط±ط¨ظٹط© ط§ظ„ط³ط¹ظˆط¯ظٹط©"
                     onChange={(e) =>
                       setFormData((prev) => ({ ...prev, locationAr: e.target.value }))
                     }
                   />
                 </Field>
 
-                <Field label="\\u0627\\u0644\\u0645\\u0648\\u0642\\u0639 (\\u0625\\u0646\\u062c\\u0644\\u064a\\u0632\\u064a)" className="md:col-span-2">
+                <Field label="ط·ط§ظ„ظ…ظˆظ‚ط¹ (ط¥ظ†ط¬ظ„ظٹط²ظٹ)" className="md:col-span-2">
                   <Input
                     dir="ltr"
                     className={`${inputClassName} text-left`}
@@ -1802,18 +1802,18 @@ export function CreateProjectUi({
           <SectionCard
             id="media"
             index={3}
-            title="\\u0627\\u0644\\u0635\\u0648\\u0631 \\u0648\\u0627\\u0644\\u0645\\u0639\\u0631\\u0636"
-            description="\\u0648\\u0627\\u062c\\u0647\\u0629 \\u0631\\u0641\\u0639 \\u0623\\u0646\\u0638\\u0641 \\u0644\\u0635\\u0648\\u0631\\u0629 \\u0627\\u0644\\u063a\\u0644\\u0627\\u0641 \\u0648\\u0627\\u0644\\u0645\\u0639\\u0631\\u0636 \\u0645\\u0639 \\u0645\\u0639\\u0627\\u064a\\u0646\\u0629 \\u0645\\u0628\\u0627\\u0634\\u0631\\u0629 \\u0648\\u062a\\u0646\\u0638\\u064a\\u0645 \\u0623\\u0641\\u0636\\u0644 \\u0644\\u0644\\u0631\\u0648\\u0627\\u0628\\u0637."
+            title="ط·ط§ظ„طµظˆط± ظˆط§ظ„ظ…ط¹ط±ط¶"
+            description="ط¸ظˆط§ط¬ظ‡ط© ط±ظپط¹ ط£ظ†ط¸ظپ ظ„طµظˆط±ط© ط§ظ„ط؛ظ„ط§ظپ ظˆط§ظ„ظ…ط¹ط±ط¶ ظ…ط¹ ظ…ط¹ط§ظٹظ†ط© ظ…ط¨ط§ط´ط±ط© ظˆطھظ†ط¸ظٹظ… ط£ظپط¶ظ„ ظ„ظ„ط±ظˆط§ط¨ط·."
             icon={ImagePlus}
             status={sectionStatuses.media}
             headerAside={
               <>
                 <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
 
-                  {cleanStr(formData.coverImage) ? "جاهز" : "غير مرفوع"}
+                  ط·آ§ط¸â€‍ط·ط›ط¸â€‍ط·آ§ط¸ظ¾ cleanStr(formData.coverImage) ? "ط·ط¬ط§ظ‡ط²" : "ط·آ·ط·ط›ط¸ظ¹ط·آ± ط¸â€¦ط·آ±ط¸ظ¾ط¸ث†ط·آ¹"}
                 </Badge>
                 <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
-                  {galleryUrls.length} صورة في المعرض
+                  {galleryUrls.length}  ط·آµط¸ث†ط·آ± ط¸ظ¾ط¸ظ¹ ط·آ§ط¸â€‍ط¸â€¦ط·آ¹ط·آ±ط·آ¶
                 </Badge>
               </>
             }
@@ -1830,18 +1830,18 @@ export function CreateProjectUi({
               <div className="rounded-[28px] border border-slate-200/80 bg-slate-50/70 p-5 shadow-sm">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <h3 className="text-base font-semibold text-slate-950">\\u0637\\u0635\\u0648\\u0631\\u0629 \\u0627\\u0644\\u063a\\u0644\\u0627\\u0641"</h3>
+                    <h3 className="text-base font-semibold text-slate-950">ط·طµظˆط±ط© ط§ظ„ط؛ظ„ط§ظپ</h3">
                     <p className="mt-1 text-xs leading-6 text-slate-500">
 
-                      ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ¹ط·آ¸أ¢â‚¬آ ط·آ·ط¢آµط·آ·ط¢آ± ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ¨ط·آ·ط¢آµط·آ·ط¢آ±ط·آ¸ط¸آ¹ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ±ط·آ·ط¢آ¦ط·آ¸ط¸آ¹ط·آ·ط¢آ³ط·آ¸ط¸آ¹ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ°ط·آ¸ط¸آ¹ ط·آ¸ط¸آ¹ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ«ط·آ¸أ¢â‚¬â€چ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ´ط·آ·ط¢آ±ط·آ¸ط«â€ ط·آ·ط¢آ¹ ط·آ·ط¢آ¯ط·آ·ط¢آ§ط·آ·ط¢آ®ط·آ¸أ¢â‚¬â€چ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ¨ط·آ·ط¢آ·ط·آ·ط¢آ§ط·آ¸أ¢â‚¬ع‘ط·آ·ط¢آ§ط·آ·ط¹آ¾ ط·آ¸ط«â€ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آµط·آ¸ط¸آ¾ط·آ·ط¢آ­ط·آ·ط¢آ§ط·آ·ط¹آ¾.
+                      ط·آ§ط¸â€‍ط·آ¹ط¸â€ ط·آµط·آ± ط·آ§ط¸â€‍ط·آ¨ط·آµط·آ±ط¸ظ¹ ط·آ§ط¸â€‍ط·آ±ط·آ¦ط¸ظ¹ط·آ³ط¸ظ¹ ط·آ§ط¸â€‍ط·آ°ط¸ظ¹ ط¸ظ¹ط¸â€¦ط·آ«ط¸â€‍ ط·آ§ط¸â€‍ط¸â€¦ط·آ´ط·آ±ط¸ث†ط·آ¹ ط·آ¯ط·آ§ط·آ®ط¸â€‍ ط·آ§ط¸â€‍ط·آ¨ط·آ·ط·آ§ط¸â€ڑط·آ§ط·ع¾ ط¸ث†ط·آ§ط¸â€‍ط·آµط¸ظ¾ط·آ­ط·آ§ط·ع¾.
                     </p>
                   </div>
                   <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
                     {coverUploading
-                      ? "\\u062c\\u0627\\u0631\\u064d \\u0627\\u0644\\u0631\\u0641\\u0639..."
+                      ? "ط·ط¬ط§ط±ظچ ط§ظ„ط±ظپط¹..."
                       : cleanStr(formData.coverImage)
-                        ? "\\u0645\\u0631\\u0641\\u0648\\u0639"
-                        : "\\u0628\\u0627\\u0646\\u062a\\u0638\\u0627\\u0631"}
+                        ? "ط¸â€¦ط·آ±ط¸ظ¾ط¸ث†ط·آ¹"
+                        : "ط·ط¨ط§ظ†طھط¸ط§ط±"}
                   </Badge>
                 </div>
 
@@ -1849,15 +1849,15 @@ export function CreateProjectUi({
                   {cleanStr(formData.coverImage) ? (
                     <img
                       src={formData.coverImage}
-                      alt="\\u0645\\u0639\\u0627\\u064a\\u0646\\u0629 \\u0635\\u0648\\u0631\\u0629 \\u0627\\u0644\\u063a\\u0644\\u0627\\u0641"
+                      alt="ط¸ظ…ط¹ط§ظٹظ†ط© طµظˆط±ط© ط§ظ„ط؛ظ„ط§ظپ"
                       className="aspect-[16/9] h-full w-full object-cover"
                     />
                   ) : (
                     <div className="flex aspect-[16/9] items-center justify-center bg-[linear-gradient(135deg,rgba(248,250,252,1),rgba(226,232,240,0.6))]">
                       <div className="space-y-2 text-center text-slate-500">
                         <FileImage className="mx-auto h-7 w-7" />
-                        <p className="text-sm font-semibold">\\u0638\\u0644\\u0627 \\u062a\\u0648\\u062c\\u062f \\u0635\\u0648\\u0631\\u0629 \\u063a\\u0644\\u0627\\u0641 \\u0628\\u0639\\u062f"</p>
-                        <p className="text-xs">\\u0637\\u0623\\u0636\\u0641 \\u0631\\u0627\\u0628\\u0637\\u064b\\u0627 \\u0623\\u0648 \\u0627\\u0631\\u0641\\u0639 \\u0645\\u0644\\u0641\\u064b\\u0627 \\u0644\\u0639\\u0631\\u0636 \\u0627\\u0644\\u0645\\u0639\\u0627\\u064a\\u0646\\u0629 \\u0647\\u0646\\u0627."</p>
+                        <p className="text-sm font-semibold">ط¸ظ„ط§ طھظˆط¬ط¯ طµظˆط±ط© ط؛ظ„ط§ظپ ط¨ط¹ط¯</p">
+                        <p className="text-xs">ط·ط£ط¶ظپ ط±ط§ط¨ط·ظ‹ط§ ط£ظˆ ط§ط±ظپط¹ ظ…ظ„ظپظ‹ط§ ظ„ط¹ط±ط¶ ط§ظ„ظ…ط¹ط§ظٹظ†ط© ظ‡ظ†ط§.</p">
                       </div>
                     </div>
                   )}
@@ -1865,14 +1865,14 @@ export function CreateProjectUi({
 
                 <div className="mt-5 space-y-4">
                   <Field
-                    label="\\u0631\\u0627\\u0628\\u0637 \\u0635\\u0648\\u0631\\u0629 \\u0627\\u0644\\u063a\\u0644\\u0627\\u0641"
+                    label="ط·ط±ط§ط¨ط· طµظˆط±ط© ط§ظ„ط؛ظ„ط§ظپ"
                     required
-                    hint="\\u064a\\u0645\\u0643\\u0646\\u0643 \\u0627\\u0644\\u0625\\u0628\\u0642\\u0627\\u0621 \\u0639\\u0644\\u0649 \\u0646\\u0641\\u0633 \\u0645\\u0646\\u0637\\u0642 \\u0627\\u0644\\u0631\\u0627\\u0628\\u0637 \\u0627\\u0644\\u0646\\u0635\\u064a \\u0627\\u0644\\u062d\\u0627\\u0644\\u064a \\u0623\\u0648 \\u0627\\u0633\\u062a\\u062e\\u062f\\u0627\\u0645 \\u0627\\u0644\\u0631\\u0641\\u0639 \\u0627\\u0644\\u0645\\u0628\\u0627\\u0634\\u0631."
+                    hint="ط¸ظٹظ…ظƒظ†ظƒ ط§ظ„ط¥ط¨ظ‚ط§ط، ط¹ظ„ظ‰ ظ†ظپط³ ظ…ظ†ط·ظ‚ ط§ظ„ط±ط§ط¨ط· ط§ظ„ظ†طµظٹ ط§ظ„ط­ط§ظ„ظٹ ط£ظˆ ط§ط³طھط®ط¯ط§ظ… ط§ظ„ط±ظپط¹ ط§ظ„ظ…ط¨ط§ط´ط±."
                   >
                     <Input
                       value={formData.coverImage}
                       className={inputClassName}
-                      placeholder="pproject-cover.png \\u0623\\u0648 /project-cover.png \\u0623\\u0648 https://..."
+                      placeholder="pproject-cover.png ط·آ£ط¸ث† /project-cover.png ط·آ£ط¸ث† https://..."
                       onChange={(e) =>
                         setFormData((prev) => ({ ...prev, coverImage: e.target.value }))
                       }
@@ -1881,8 +1881,8 @@ export function CreateProjectUi({
 
                   <UploadDropzone
                     inputId="project-cover-upload"
-                    title="\\u0631\\u0641\\u0639 \\u0635\\u0648\\u0631\\u0629 \\u063a\\u0644\\u0627\\u0641"
-                    description="\\u0627\\u0633\\u062d\\u0628 \\u0623\\u0648 \\u0627\\u062e\\u062a\\u0631 \\u0635\\u0648\\u0631\\u0629 \\u062a\\u0645\\u062b\\u0644 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639 \\u0628\\u0635\\u0631\\u064a\\u064b\\u0627."
+                    title="ط·آ±ط¸ظ¾ط·آ¹ ط·آµط¸ث†ط·آ±ط·آ© ط·ط›ط¸â€‍ط·آ§ط¸ظ¾"
+                    description="ط·ط§ط³ط­ط¨ ط£ظˆ ط§ط®طھط± طµظˆط±ط© طھظ…ط«ظ„ ط§ظ„ظ…ط´ط±ظˆط¹ ط¨طµط±ظٹظ‹ط§."
                     accept="image/*"
                     disabled={coverUploading}
                     onChange={(e) => {
@@ -1901,7 +1901,7 @@ export function CreateProjectUi({
                       }
                     >
 
-                      ط·آ·ط¢آ¥ط·آ·ط¢آ²ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ© ط·آ·ط¢آµط·آ¸ط«â€ ط·آ·ط¢آ±ط·آ·ط¢آ© ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط·â€؛ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ§ط·آ¸ط¸آ¾
+                      ط·آ¥ط·آ²ط·آ§ط¸â€‍ط·آ© ط·آµط¸ث†ط·آ±ط·آ© ط·آ§ط¸â€‍ط·ط›ط¸â€‍ط·آ§ط¸ظ¾
                     </Button>
                   ) : null}
                 </div>
@@ -1910,22 +1910,22 @@ export function CreateProjectUi({
               <div className="rounded-[28px] border border-slate-200/80 bg-slate-50/70 p-5 shadow-sm">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <h3 className="text-base font-semibold text-slate-950">\\u0638\\u0645\\u0639\\u0631\\u0636 \\u0627\\u0644\\u0635\\u0648\\u0631"</h3>
+                    <h3 className="text-base font-semibold text-slate-950">ط¸ظ…ط¹ط±ط¶ ط§ظ„طµظˆط±</h3">
                     <p className="mt-1 text-xs leading-6 text-slate-500">
 
-                      ط·آ·ط¢آ£ط·آ·ط¢آ¯ط·آ·ط¢آ± ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آµط·آ¸ط«â€ ط·آ·ط¢آ± ط·آ¸ط¦â€™ط·آ·ط¢آ±ط·آ·ط¢آ§ط·آ·ط¢آ¨ط·آ·ط¢آ· ط·آ¸أ¢â‚¬â€چط·آ¸ط¦â€™ط·آ¸أ¢â‚¬â€چ ط·آ·ط¢آ³ط·آ·ط¢آ·ط·آ·ط¢آ± ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ¹ ط·آ·ط¢آ¥ط·آ¸أ¢â‚¬آ¦ط·آ¸ط¦â€™ط·آ·ط¢آ§ط·آ¸أ¢â‚¬آ ط·آ¸ط¸آ¹ط·آ·ط¢آ© ط·آ·ط¢آ±ط·آ¸ط¸آ¾ط·آ·ط¢آ¹ ط·آ·ط¢آ¹ط·آ·ط¢آ¯ط·آ·ط¢آ© ط·آ·ط¢آµط·آ¸ط«â€ ط·آ·ط¢آ± ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ¨ط·آ·ط¢آ§ط·آ·ط¢آ´ط·آ·ط¢آ±ط·آ·ط¢آ© ط·آ¸ط«â€ ط·آ·ط¢آ¥ط·آ·ط¢آ¸ط·آ¸أ¢â‚¬طŒط·آ·ط¢آ§ط·آ·ط¢آ±ط·آ¸أ¢â‚¬طŒط·آ·ط¢آ§ ط·آ·ط¢آ¯ط·آ·ط¢آ§ط·آ·ط¢آ®ط·آ¸أ¢â‚¬â€چ
-                      ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ¹ط·آ·ط¢آ§ط·آ¸ط¸آ¹ط·آ¸أ¢â‚¬آ ط·آ·ط¢آ§ط·آ·ط¹آ¾ ط·آ¸أ¢â‚¬آ¦ط·آ¸أ¢â‚¬آ ط·آ·ط¢آ¸ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ©.
+                      ط·آ£ط·آ¯ط·آ± ط·آ§ط¸â€‍ط·آµط¸ث†ط·آ± ط¸ئ’ط·آ±ط·آ§ط·آ¨ط·آ· ط¸â€‍ط¸ئ’ط¸â€‍ ط·آ³ط·آ·ط·آ± ط¸â€¦ط·آ¹ ط·آ¥ط¸â€¦ط¸ئ’ط·آ§ط¸â€ ط¸ظ¹ط·آ© ط·آ±ط¸ظ¾ط·آ¹ ط·آ¹ط·آ¯ط·آ© ط·آµط¸ث†ط·آ± ط¸â€¦ط·آ¨ط·آ§ط·آ´ط·آ±ط·آ© ط¸ث†ط·آ¥ط·آ¸ط¸â€،ط·آ§ط·آ±ط¸â€،ط·آ§ ط·آ¯ط·آ§ط·آ®ط¸â€‍
+                      ط¸â€¦ط·آ¹ط·آ§ط¸ظ¹ط¸â€ ط·آ§ط·ع¾ ط¸â€¦ط¸â€ ط·آ¸ط¸â€¦ط·آ©.
                     </p>
                   </div>
                   <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
-                    {galleryUploading ? "جارٍ الرفع..." : `${galleryUrls.length} صورة`}
+                    {galleryUploading ? "ط·ط¬ط§ط±ظچ ط§ظ„ط±ظپط¹..." : `${galleryUrls.length}  ط·آµط¸ث†ط·آ±ط·آ©"`}
                   </Badge>
                 </div>
 
                 <div className="mt-5 space-y-4">
                   <Field
-                    label="\\u0631\\u0648\\u0627\\u0628\\u0637 \\u0627\\u0644\\u0645\\u0639\\u0631\\u0636"
-                    hint="\\u0643\\u0644 \\u0631\\u0627\\u0628\\u0637 \\u0641\\u064a \\u0633\\u0637\\u0631 \\u0645\\u0633\\u062a\\u0642\\u0644. \\u064a\\u0645\\u0643\\u0646 \\u0627\\u0644\\u0645\\u0632\\u062c \\u0628\\u064a\\u0646 \\u0627\\u0644\\u0631\\u0648\\u0627\\u0628\\u0637 \\u0627\\u0644\\u0645\\u0643\\u062a\\u0648\\u0628\\u0629 \\u0648\\u0627\\u0644\\u0645\\u0644\\u0641\\u0627\\u062a \\u0627\\u0644\\u0645\\u0631\\u0641\\u0648\\u0639\\u0629."
+                    label="ط·ط±ظˆط§ط¨ط· ط§ظ„ظ…ط¹ط±ط¶"
+                    hint="ط¸ظƒظ„ ط±ط§ط¨ط· ظپظٹ ط³ط·ط± ظ…ط³طھظ‚ظ„. ظٹظ…ظƒظ† ط§ظ„ظ…ط²ط¬ ط¨ظٹظ† ط§ظ„ط±ظˆط§ط¨ط· ط§ظ„ظ…ظƒطھظˆط¨ط© ظˆط§ظ„ظ…ظ„ظپط§طھ ط§ظ„ظ…ط±ظپظˆط¹ط©."
                   >
                     <Textarea
                       rows={6}
@@ -1940,8 +1940,8 @@ export function CreateProjectUi({
 
                   <UploadDropzone
                     inputId="project-gallery-upload"
-                    title="\\u0631\\u0641\\u0639 \\u0635\\u0648\\u0631 \\u0627\\u0644\\u0645\\u0639\\u0631\\u0636"
-                    description="\\u0627\\u062e\\u062a\\u0631 \\u0639\\u062f\\u0629 \\u0635\\u0648\\u0631 \\u0648\\u0633\\u064a\\u062a\\u0645 \\u0625\\u0644\\u062d\\u0627\\u0642 \\u0631\\u0648\\u0627\\u0628\\u0637\\u0647\\u0627 \\u0645\\u0628\\u0627\\u0634\\u0631\\u0629 \\u0628\\u0646\\u0641\\u0633 \\u0627\\u0644\\u062d\\u0642\\u0644 \\u0627\\u0644\\u062d\\u0627\\u0644\\u064a."
+                    title="ط·ط±ظپط¹ طµظˆط± ط§ظ„ظ…ط¹ط±ط¶"
+                    description="ط·ط§ط®طھط± ط¹ط¯ط© طµظˆط± ظˆط³ظٹطھظ… ط¥ظ„ط­ط§ظ‚ ط±ظˆط§ط¨ط·ظ‡ط§ ظ…ط¨ط§ط´ط±ط© ط¨ظ†ظپط³ ط§ظ„ط­ظ‚ظ„ ط§ظ„ط­ط§ظ„ظٹ."
                     accept="image/*"
                     multiple
                     disabled={galleryUploading}
@@ -1961,7 +1961,7 @@ export function CreateProjectUi({
                           <div className="aspect-[4/3] bg-slate-100">
                             <img
                               src={url}
-                              alt={`\\u0635\\u0648\\u0631\\u0629 \\u0627\\u0644\\u0645\\u0639\\u0631\\u0636 {index + 1}`}
+                              alt={`ط·آ·ط·آµط¸ث†ط·آ±ط·آ© ط·آ§ط¸â€‍ط¸â€¦ط·آ¹ط·آ±ط·آ¶ {index + 1}`}
                               className="h-full w-full object-cover"
                             />
                           </div>
@@ -1985,7 +1985,7 @@ export function CreateProjectUi({
                             >
                               <Trash2 className="ml-2 h-4 w-4" />
 
-                              ط·آ·ط¢آ­ط·آ·ط¢آ°ط·آ¸ط¸آ¾ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آµط·آ¸ط«â€ ط·آ·ط¢آ±ط·آ·ط¢آ©
+                              ط·آ­ط·آ°ط¸ظ¾ ط·آ§ط¸â€‍ط·آµط¸ث†ط·آ±ط·آ©
                             </Button>
                           </div>
                         </div>
@@ -1993,7 +1993,7 @@ export function CreateProjectUi({
                     ) : (
                       <div className="rounded-[22px] border border-dashed border-slate-300 bg-white/80 p-6 text-center text-sm text-slate-500 sm:col-span-2">
 
-                        ط·آ·ط¢آ³ط·آ·ط¹آ¾ط·آ·ط¢آ¸ط·آ¸أ¢â‚¬طŒط·آ·ط¢آ± ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ¹ط·آ·ط¢آ§ط·آ¸ط¸آ¹ط·آ¸أ¢â‚¬آ ط·آ·ط¢آ§ط·آ·ط¹آ¾ ط·آ·ط¢آµط·آ¸ط«â€ ط·آ·ط¢آ± ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ¹ط·آ·ط¢آ±ط·آ·ط¢آ¶ ط·آ¸أ¢â‚¬طŒط·آ¸أ¢â‚¬آ ط·آ·ط¢آ§ ط·آ·ط¢آ¨ط·آ·ط¢آ¹ط·آ·ط¢آ¯ ط·آ·ط¢آ¥ط·آ·ط¢آ¶ط·آ·ط¢آ§ط·آ¸ط¸آ¾ط·آ·ط¢آ© ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ±ط·آ¸ط«â€ ط·آ·ط¢آ§ط·آ·ط¢آ¨ط·آ·ط¢آ· ط·آ·ط¢آ£ط·آ¸ط«â€  ط·آ·ط¢آ±ط·آ¸ط¸آ¾ط·آ·ط¢آ¹ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آµط·آ¸ط«â€ ط·آ·ط¢آ±.
+                        ط·آ³ط·ع¾ط·آ¸ط¸â€،ط·آ± ط¸â€¦ط·آ¹ط·آ§ط¸ظ¹ط¸â€ ط·آ§ط·ع¾ ط·آµط¸ث†ط·آ± ط·آ§ط¸â€‍ط¸â€¦ط·آ¹ط·آ±ط·آ¶ ط¸â€،ط¸â€ ط·آ§ ط·آ¨ط·آ¹ط·آ¯ ط·آ¥ط·آ¶ط·آ§ط¸ظ¾ط·آ© ط·آ§ط¸â€‍ط·آ±ط¸ث†ط·آ§ط·آ¨ط·آ· ط·آ£ط¸ث† ط·آ±ط¸ظ¾ط·آ¹ ط·آ§ط¸â€‍ط·آµط¸ث†ط·آ±.
                       </div>
                     )}
                   </div>
@@ -2005,13 +2005,13 @@ export function CreateProjectUi({
           <SectionCard
             id="highlights"
             index={4}
-            title="\\u0627\\u0644\\u0645\\u0645\\u064a\\u0632\\u0627\\u062a"
-            description="\\u062d\\u0648\\u0651\\u0644 \\u0642\\u0627\\u0626\\u0645\\u0629 \\u0627\\u0644\\u0645\\u0645\\u064a\\u0632\\u0627\\u062a \\u0625\\u0644\\u0649 repeater \\u0628\\u0635\\u0631\\u064a \\u0623\\u0646\\u0638\\u0641 \\u064a\\u0633\\u0627\\u0639\\u062f \\u0639\\u0644\\u0649 \\u0642\\u0631\\u0627\\u0621\\u0629 \\u0627\\u0644\\u0639\\u0631\\u0636 \\u0627\\u0644\\u0627\\u0633\\u062a\\u062b\\u0645\\u0627\\u0631\\u064a \\u0628\\u0633\\u0631\\u0639\\u0629."
+            title="ط·ط§ظ„ظ…ظ…ظٹط²ط§طھ"
+            description="ط·ط­ظˆظ‘ظ„ ظ‚ط§ط¦ظ…ط© ط§ظ„ظ…ظ…ظٹط²ط§طھ ط¥ظ„ظ‰ repeater ط¨طµط±ظٹ ط£ظ†ط¸ظپ ظٹط³ط§ط¹ط¯ ط¹ظ„ظ‰ ظ‚ط±ط§ط،ط© ط§ظ„ط¹ط±ط¶ ط§ظ„ط§ط³طھط«ظ…ط§ط±ظٹ ط¨ط³ط±ط¹ط©."
             icon={Sparkles}
             status={sectionStatuses.highlights}
             headerAside={
               <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
-                {filledHighlights}  ط·آ¸أ¢â‚¬آ¦ط·آ¸أ¢â‚¬آ¦ط·آ¸ط¸آ¹ط·آ·ط¢آ²ط·آ·ط¢آ§ط·آ·ط¹آ¾ ط·آ¸أ¢â‚¬آ¦ط·آ¸ط¦â€™ط·آ·ط¹آ¾ط·آ¸ط«â€ ط·آ·ط¢آ¨ط·آ·ط¢آ©
+                {filledHighlights}  ط¸â€¦ط¸â€¦ط¸ظ¹ط·آ²ط·آ§ط·ع¾ ط¸â€¦ط¸ئ’ط·ع¾ط¸ث†ط·آ¨ط·آ©
               </Badge>
             }
           >
@@ -2031,10 +2031,10 @@ export function CreateProjectUi({
                 >
                   <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <p className="text-sm font-semibold text-slate-950">الميزة {index + 1}</p>
+                      <p className="text-sm font-semibold text-slate-950">ط·ط§ظ„ظ…ظٹط²ط© index + 1}</p">
                       <p className="text-xs text-slate-500">
 
-                        ط·آ·ط¢آ§ط·آ¸ط¦â€™ط·آ·ط¹آ¾ط·آ·ط¢آ¨ ط·آ¸أ¢â‚¬آ¦ط·آ¸ط¸آ¹ط·آ·ط¢آ²ط·آ·ط¢آ© ط·آ·ط¢آ§ط·آ·ط¢آ³ط·آ·ط¹آ¾ط·آ·ط¢آ«ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ§ط·آ·ط¢آ±ط·آ¸ط¸آ¹ط·آ·ط¢آ© ط·آ¸أ¢â‚¬ع‘ط·آ·ط¢آµط·آ¸ط¸آ¹ط·آ·ط¢آ±ط·آ·ط¢آ© ط·آ¸ط«â€ ط·آ¸ط«â€ ط·آ·ط¢آ§ط·آ·ط¢آ¶ط·آ·ط¢آ­ط·آ·ط¢آ©.
+                        ط·آ§ط¸ئ’ط·ع¾ط·آ¨ ط¸â€¦ط¸ظ¹ط·آ²ط·آ© ط·آ§ط·آ³ط·ع¾ط·آ«ط¸â€¦ط·آ§ط·آ±ط¸ظ¹ط·آ© ط¸â€ڑط·آµط¸ظ¹ط·آ±ط·آ© ط¸ث†ط¸ث†ط·آ§ط·آ¶ط·آ­ط·آ©.
                       </p>
                     </div>
 
@@ -2052,7 +2052,7 @@ export function CreateProjectUi({
                     >
                       <Trash2 className="ml-2 h-4 w-4" />
 
-                      ط·آ·ط¢آ­ط·آ·ط¢آ°ط·آ¸ط¸آ¾
+                      ط·آ­ط·آ°ط¸ظ¾
                     </Button>
                   </div>
 
@@ -2060,7 +2060,7 @@ export function CreateProjectUi({
                     dir="rtl"
                     className={`${inputClassName} text-right`}
                     value={row}
-                    placeholder={`\\u0627\\u0644\\u0645\\u064a\\u0632\\u0629 {index + 1}`}
+                    placeholder={`ط·آ·ط·آ§ط¸â€‍ط¸â€¦ط¸ظ¹ط·آ²ط·آ© {index + 1}`}
                     onChange={(e) =>
                       setHighlightRows((prev) =>
                         prev.map((item, rowIndex) =>
@@ -2080,20 +2080,20 @@ export function CreateProjectUi({
               >
                 <Plus className="ml-2 h-4 w-4" />
 
-                ط·آ·ط¢آ¥ط·آ·ط¢آ¶ط·آ·ط¢آ§ط·آ¸ط¸آ¾ط·آ·ط¢آ© ط·آ¸أ¢â‚¬آ¦ط·آ¸ط¸آ¹ط·آ·ط¢آ²ط·آ·ط¢آ© ط·آ·ط¢آ¬ط·آ·ط¢آ¯ط·آ¸ط¸آ¹ط·آ·ط¢آ¯ط·آ·ط¢آ©
+                ط·آ¥ط·آ¶ط·آ§ط¸ظ¾ط·آ© ط¸â€¦ط¸ظ¹ط·آ²ط·آ© ط·آ¬ط·آ¯ط¸ظ¹ط·آ¯ط·آ©
               </Button>
             </SectionBodyLayout>
           </SectionCard>
           <SectionCard
             id="attachments"
             index={5}
-            title="\\u0627\\u0644\\u0645\\u0631\\u0641\\u0642\\u0627\\u062a"
-            description="\\u0643\\u0644 \\u0645\\u0631\\u0641\\u0642 \\u064a\\u0638\\u0647\\u0631 \\u0627\\u0644\\u0622\\u0646 \\u0643\\u0628\\u0637\\u0627\\u0642\\u0629 \\u0645\\u0633\\u062a\\u0642\\u0644\\u0629 \\u062a\\u062a\\u0636\\u0645\\u0646 \\u0627\\u0644\\u0627\\u0633\\u0645 \\u0648\\u0627\\u0644\\u0631\\u0627\\u0628\\u0637 \\u0648\\u0627\\u0644\\u0631\\u0641\\u0639 \\u0648\\u0627\\u0644\\u0645\\u0639\\u0627\\u064a\\u0646\\u0629 \\u062f\\u0627\\u062e\\u0644 \\u0635\\u0641 \\u0648\\u0627\\u062d\\u062f \\u0645\\u0646\\u0638\\u0645."
+            title="ط·ط§ظ„ظ…ط±ظپظ‚ط§طھ"
+            description="ط¸ظƒظ„ ظ…ط±ظپظ‚ ظٹط¸ظ‡ط± ط§ظ„ط¢ظ† ظƒط¨ط·ط§ظ‚ط© ظ…ط³طھظ‚ظ„ط© طھطھط¶ظ…ظ† ط§ظ„ط§ط³ظ… ظˆط§ظ„ط±ط§ط¨ط· ظˆط§ظ„ط±ظپط¹ ظˆط§ظ„ظ…ط¹ط§ظٹظ†ط© ط¯ط§ط®ظ„ طµظپ ظˆط§ط­ط¯ ظ…ظ†ط¸ظ…."
             icon={Paperclip}
             status={sectionStatuses.attachments}
             headerAside={
               <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
-                {filledAttachments}  ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ±ط·آ¸ط¸آ¾ط·آ¸أ¢â‚¬ع‘ط·آ·ط¢آ§ط·آ·ط¹آ¾
+                {filledAttachments}  ط¸â€¦ط·آ±ط¸ظ¾ط¸â€ڑط·آ§ط·ع¾
               </Badge>
             }
           >
@@ -2113,10 +2113,10 @@ export function CreateProjectUi({
                 >
                   <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <p className="text-sm font-semibold text-slate-950">المرفق {index + 1}</p>
+                      <p className="text-sm font-semibold text-slate-950">ط·ط§ظ„ظ…ط±ظپظ‚ index + 1}</p">
                       <p className="text-xs text-slate-500">
 
-                        ط·آ·ط¢آ§ط·آ·ط¢آ±ط·آ¸ط¸آ¾ط·آ·ط¢آ¹ ط·آ¸أ¢â‚¬آ¦ط·آ¸أ¢â‚¬â€چط·آ¸ط¸آ¾ط·آ¸أ¢â‚¬آ¹ط·آ·ط¢آ§ ط·آ·ط¢آ£ط·آ¸ط«â€  ط·آ·ط¢آ£ط·آ·ط¢آ¶ط·آ¸ط¸آ¾ ط·آ·ط¢آ±ط·آ·ط¢آ§ط·آ·ط¢آ¨ط·آ·ط¢آ·ط·آ¸أ¢â‚¬آ¹ط·آ·ط¢آ§ ط·آ·ط¢آ®ط·آ·ط¢آ§ط·آ·ط¢آ±ط·آ·ط¢آ¬ط·آ¸ط¸آ¹ط·آ¸أ¢â‚¬آ¹ط·آ·ط¢آ§ ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ¹ ط·آ·ط¢آ§ط·آ·ط¢آ³ط·آ¸أ¢â‚¬آ¦ ط·آ¸ط«â€ ط·آ·ط¢آ§ط·آ·ط¢آ¶ط·آ·ط¢آ­ ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ±ط·آ¸ط¸آ¾ط·آ¸أ¢â‚¬ع‘.
+                        ط·آ§ط·آ±ط¸ظ¾ط·آ¹ ط¸â€¦ط¸â€‍ط¸ظ¾ط¸â€¹ط·آ§ ط·آ£ط¸ث† ط·آ£ط·آ¶ط¸ظ¾ ط·آ±ط·آ§ط·آ¨ط·آ·ط¸â€¹ط·آ§ ط·آ®ط·آ§ط·آ±ط·آ¬ط¸ظ¹ط¸â€¹ط·آ§ ط¸â€¦ط·آ¹ ط·آ§ط·آ³ط¸â€¦ ط¸ث†ط·آ§ط·آ¶ط·آ­ ط¸â€‍ط¸â€‍ط¸â€¦ط·آ±ط¸ظ¾ط¸â€ڑ.
                       </p>
                     </div>
 
@@ -2134,18 +2134,18 @@ export function CreateProjectUi({
                     >
                       <Trash2 className="ml-2 h-4 w-4" />
 
-                      ط·آ·ط¢آ­ط·آ·ط¢آ°ط·آ¸ط¸آ¾ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ±ط·آ¸ط¸آ¾ط·آ¸أ¢â‚¬ع‘
+                      ط·آ­ط·آ°ط¸ظ¾ ط·آ§ط¸â€‍ط¸â€¦ط·آ±ط¸ظ¾ط¸â€ڑ
                     </Button>
                   </div>
 
                   <div className="grid gap-4">
                     <div className="grid gap-4 md:grid-cols-2">
-                      <Field label="\\u0627\\u0644\\u0627\\u0633\\u0645">
+                      <Field label="ط·ط§ظ„ط§ط³ظ…">
                         <Input
                           dir="rtl"
                           className={`${inputClassName} text-right`}
                           value={row.name}
-                          placeholder={`\\u0627\\u0633\\u0645 \\u0627\\u0644\\u0645\\u0631\\u0641\\u0642 {index + 1}`}
+                          placeholder={`ط·آ·ط·آ§ط·آ³ط¸â€¦ ط·آ§ط¸â€‍ط¸â€¦ط·آ±ط¸ظ¾ط¸â€ڑ {index + 1}`}
                           onChange={(e) =>
                             setAttachmentRows((prev) =>
                               prev.map((item, rowIndex) =>
@@ -2156,7 +2156,7 @@ export function CreateProjectUi({
                         />
                       </Field>
 
-                      <Field label="\\u0627\\u0644\\u0631\\u0627\\u0628\\u0637 \\u0627\\u0644\\u062e\\u0627\\u0631\\u062c\\u064a (\\u0627\\u062e\\u062a\\u064a\\u0627\\u0631\\u064a)">
+                      <Field label="ط·ط§ظ„ط±ط§ط¨ط· ط§ظ„ط®ط§ط±ط¬ظٹ (ط§ط®طھظٹط§ط±ظٹ)">
                         <Input
                           dir="ltr"
                           className={`${inputClassName} text-left`}
@@ -2179,13 +2179,13 @@ export function CreateProjectUi({
                       <div className="rounded-[22px] border border-slate-200 bg-white p-4">
                         <div className="flex items-start justify-between gap-4">
                           <div className="space-y-1">
-                            <p className="text-sm font-semibold text-slate-950">\\u0637\\u062d\\u0627\\u0644\\u0629 \\u0627\\u0644\\u0645\\u0644\\u0641"</p>
+                            <p className="text-sm font-semibold text-slate-950">ط·ط­ط§ظ„ط© ط§ظ„ظ…ظ„ظپ</p">
                             <p className="text-xs text-slate-500">
                               {row.uploading
-                                ? "\\u062c\\u0627\\u0631\\u064d \\u0631\\u0641\\u0639 \\u0627\\u0644\\u0645\\u0644\\u0641 \\u0625\\u0644\\u0649 \\u0627\\u0644\\u062a\\u062e\\u0632\\u064a\\u0646..."
+                                ? "ط·ط¬ط§ط±ظچ ط±ظپط¹ ط§ظ„ظ…ظ„ظپ ط¥ظ„ظ‰ ط§ظ„طھط®ط²ظٹظ†..."
                                 : row.url
-                                  ? "\\u062a\\u0645 \\u0631\\u0641\\u0639 \\u0627\\u0644\\u0645\\u0644\\u0641 \\u0648\\u0647\\u0648 \\u062c\\u0627\\u0647\\u0632 \\u0644\\u0644\\u0645\\u0631\\u0627\\u062c\\u0639\\u0629."
-                                  : "\\u0644\\u0645 \\u064a\\u062a\\u0645 \\u0631\\u0641\\u0639 \\u0645\\u0644\\u0641 \\u0644\\u0647\\u0630\\u0627 \\u0627\\u0644\\u0645\\u0631\\u0641\\u0642 \\u0628\\u0639\\u062f."}
+                                  ? "ط·طھظ… ط±ظپط¹ ط§ظ„ظ…ظ„ظپ ظˆظ‡ظˆ ط¬ط§ظ‡ط² ظ„ظ„ظ…ط±ط§ط¬ط¹ط©."
+                                  : "ط¸ظ„ظ… ظٹطھظ… ط±ظپط¹ ظ…ظ„ظپ ظ„ظ‡ط°ط§ ط§ظ„ظ…ط±ظپظ‚ ط¨ط¹ط¯."}
                             </p>
                           </div>
 
@@ -2205,7 +2205,7 @@ export function CreateProjectUi({
                               className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
                             >
 
-                              ط·آ·ط¢آ¹ط·آ·ط¢آ±ط·آ·ط¢آ¶ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ¦ط·آ¸أ¢â‚¬â€چط·آ¸ط¸آ¾ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ±ط·آ¸ط¸آ¾ط·آ¸ط«â€ ط·آ·ط¢آ¹
+                              ط·آ¹ط·آ±ط·آ¶ ط·آ§ط¸â€‍ط¸â€¦ط¸â€‍ط¸ظ¾ ط·آ§ط¸â€‍ط¸â€¦ط·آ±ط¸ظ¾ط¸ث†ط·آ¹
                             </a>
                           ) : null}
 
@@ -2224,15 +2224,15 @@ export function CreateProjectUi({
                             }
                           >
 
-                            ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ³ط·آ·ط¢آ­ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ¦ط·آ¸أ¢â‚¬â€چط·آ¸ط¸آ¾
+                            ط¸â€¦ط·آ³ط·آ­ ط·آ§ط¸â€‍ط¸â€¦ط¸â€‍ط¸ظ¾
                           </Button>
                         </div>
                       </div>
 
                       <UploadDropzone
                         inputId={`attachment-upload-${index}`}
-                        title="\\u0631\\u0641\\u0639 \\u0645\\u0631\\u0641\\u0642"
-                        description="\\u0627\\u0631\\u0641\\u0639 \\u0645\\u0644\\u0641 PDF \\u0623\\u0648 \\u0635\\u0648\\u0631\\u0629 \\u0623\\u0648 \\u0623\\u064a \\u0645\\u0644\\u0641 \\u062f\\u0627\\u0639\\u0645 \\u0644\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639."
+                        title="ط·آ±ط¸ظ¾ط·آ¹ ط¸â€¦ط·آ±ط¸ظ¾ط¸â€ڑ"
+                        description="ط·ط§ط±ظپط¹ ظ…ظ„ظپ PDF ط£ظˆ طµظˆط±ط© ط£ظˆ ط£ظٹ ظ…ظ„ظپ ط¯ط§ط¹ظ… ظ„ظ„ظ…ط´ط±ظˆط¹."
                         accept="*/*"
                         disabled={row.uploading}
                         onChange={(e) => {
@@ -2253,7 +2253,7 @@ export function CreateProjectUi({
               >
                 <Plus className="ml-2 h-4 w-4" />
 
-                ط·آ·ط¢آ¥ط·آ·ط¢آ¶ط·آ·ط¢آ§ط·آ¸ط¸آ¾ط·آ·ط¢آ© ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ±ط·آ¸ط¸آ¾ط·آ¸أ¢â‚¬ع‘ ط·آ·ط¢آ¬ط·آ·ط¢آ¯ط·آ¸ط¸آ¹ط·آ·ط¢آ¯
+                ط·آ¥ط·آ¶ط·آ§ط¸ظ¾ط·آ© ط¸â€¦ط·آ±ط¸ظ¾ط¸â€ڑ ط·آ¬ط·آ¯ط¸ظ¹ط·آ¯
               </Button>
             </SectionBodyLayout>
           </SectionCard>
@@ -2261,13 +2261,13 @@ export function CreateProjectUi({
           <SectionCard
             id="milestones"
             index={6}
-            title="\\u0627\\u0644\\u0645\\u0631\\u0627\\u062d\\u0644"
-            description="\\u0645\\u0631\\u0627\\u062d\\u0644 \\u0627\\u0644\\u062a\\u0646\\u0641\\u064a\\u0630 \\u0641\\u064a \\u0628\\u0637\\u0627\\u0642\\u0627\\u062a mini-card \\u0645\\u0639 \\u062a\\u0642\\u0633\\u064a\\u0645 \\u0623\\u0648\\u0636\\u062d \\u0628\\u064a\\u0646 \\u0627\\u0644\\u062a\\u0627\\u0631\\u064a\\u062e \\u0648\\u0627\\u0644\\u062d\\u0627\\u0644\\u0629 \\u0648\\u0627\\u0644\\u0648\\u0635\\u0641."
+            title="ط·ط§ظ„ظ…ط±ط§ط­ظ„"
+            description="ط¸ظ…ط±ط§ط­ظ„ ط§ظ„طھظ†ظپظٹط° ظپظٹ ط¨ط·ط§ظ‚ط§طھ mini-card ظ…ط¹ طھظ‚ط³ظٹظ… ط£ظˆط¶ط­ ط¨ظٹظ† ط§ظ„طھط§ط±ظٹط® ظˆط§ظ„ط­ط§ظ„ط© ظˆط§ظ„ظˆطµظپ."
             icon={ListChecks}
             status={sectionStatuses.milestones}
             headerAside={
               <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
-                {filledMilestones}  ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ±ط·آ·ط¢آ§ط·آ·ط¢آ­ط·آ¸أ¢â‚¬â€چ
+                {filledMilestones}  ط¸â€¦ط·آ±ط·آ§ط·آ­ط¸â€‍
               </Badge>
             }
           >
@@ -2287,10 +2287,10 @@ export function CreateProjectUi({
                 >
                   <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <p className="text-sm font-semibold text-slate-950">المرحلة {index + 1}</p>
+                      <p className="text-sm font-semibold text-slate-950">ط·ط§ظ„ظ…ط±ط­ظ„ط© index + 1}</p">
                       <p className="text-xs text-slate-500">
 
-                        ط·آ¸أ¢â‚¬آ ط·آ·ط¢آ¸ط·آ¸أ¢â‚¬ع©ط·آ¸أ¢â‚¬آ¦ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ¹ط·آ¸أ¢â‚¬آ ط·آ¸ط«â€ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬آ  ط·آ¸ط«â€ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¹آ¾ط·آ·ط¢آ§ط·آ·ط¢آ±ط·آ¸ط¸آ¹ط·آ·ط¢آ® ط·آ¸ط«â€ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ­ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ© ط·آ¸ط«â€ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸ط«â€ ط·آ·ط¢آµط·آ¸ط¸آ¾ ط·آ·ط¢آ¯ط·آ·ط¢آ§ط·آ·ط¢آ®ط·آ¸أ¢â‚¬â€چ ط·آ·ط¢آµط·آ¸ط¸آ¾ ط·آ¸ط«â€ ط·آ·ط¢آ§ط·آ·ط¢آ¶ط·آ·ط¢آ­ ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ±ط·آ·ط¢آ§ط·آ·ط¢آ¬ط·آ·ط¢آ¹ط·آ·ط¢آ©.
+                        ط¸â€ ط·آ¸ط¸â€کط¸â€¦ ط·آ§ط¸â€‍ط·آ¹ط¸â€ ط¸ث†ط·آ§ط¸â€  ط¸ث†ط·آ§ط¸â€‍ط·ع¾ط·آ§ط·آ±ط¸ظ¹ط·آ® ط¸ث†ط·آ§ط¸â€‍ط·آ­ط·آ§ط¸â€‍ط·آ© ط¸ث†ط·آ§ط¸â€‍ط¸ث†ط·آµط¸ظ¾ ط·آ¯ط·آ§ط·آ®ط¸â€‍ ط·آµط¸ظ¾ ط¸ث†ط·آ§ط·آ¶ط·آ­ ط¸â€‍ط¸â€‍ط¸â€¦ط·آ±ط·آ§ط·آ¬ط·آ¹ط·آ©.
                       </p>
                     </div>
 
@@ -2308,17 +2308,17 @@ export function CreateProjectUi({
                     >
                       <Trash2 className="ml-2 h-4 w-4" />
 
-                      ط·آ·ط¢آ­ط·آ·ط¢آ°ط·آ¸ط¸آ¾ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ±ط·آ·ط¢آ­ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ©
+                      ط·آ­ط·آ°ط¸ظ¾ ط·آ§ط¸â€‍ط¸â€¦ط·آ±ط·آ­ط¸â€‍ط·آ©
                     </Button>
                   </div>
 
                   <div className="grid gap-4 md:grid-cols-2">
-                    <Field label="\\u0627\\u0644\\u0639\\u0646\\u0648\\u0627\\u0646">
+                    <Field label="ط·ط§ظ„ط¹ظ†ظˆط§ظ†">
                       <Input
                         dir="rtl"
                         className={`${inputClassName} text-right`}
                         value={row.title}
-                        placeholder={`\\u0639\\u0646\\u0648\\u0627\\u0646 \\u0627\\u0644\\u0645\\u0631\\u062d\\u0644\\u0629 {index + 1}`}
+                        placeholder={`ط·آ·ط·آ¹ط¸â€ ط¸ث†ط·آ§ط¸â€  ط·آ§ط¸â€‍ط¸â€¦ط·آ±ط·آ­ط¸â€‍ط·آ© {index + 1}`}
                         onChange={(e) =>
                           setMilestoneRows((prev) =>
                             prev.map((item, rowIndex) =>
@@ -2329,7 +2329,7 @@ export function CreateProjectUi({
                       />
                     </Field>
 
-                    <Field label="\\u0627\\u0644\\u062a\\u0627\\u0631\\u064a\\u062e">
+                    <Field label="ط·ط§ظ„طھط§ط±ظٹط®">
                       <Input
                         dir="ltr"
                         className={`${inputClassName} text-left`}
@@ -2345,12 +2345,12 @@ export function CreateProjectUi({
                       />
                     </Field>
 
-                    <Field label="\\u0627\\u0644\\u062d\\u0627\\u0644\\u0629">
+                    <Field label="ط·ط§ظ„ط­ط§ظ„ط©">
                       <Input
                         dir="rtl"
                         className={`${inputClassName} text-right`}
                         value={row.status}
-                        placeholder="\\u0642\\u064a\\u062f \\u0627\\u0644\\u062a\\u0646\\u0641\\u064a\\u0630"
+                        placeholder="ط¸â€ڑط¸ظ¹ط·آ¯ ط·آ§ط¸â€‍ط·ع¾ط¸â€ ط¸ظ¾ط¸ظ¹ط·آ°"
                         onChange={(e) =>
                           setMilestoneRows((prev) =>
                             prev.map((item, rowIndex) =>
@@ -2361,12 +2361,12 @@ export function CreateProjectUi({
                       />
                     </Field>
 
-                    <Field label="\\u0627\\u0644\\u0648\\u0635\\u0641">
+                    <Field label="ط·ط§ظ„ظˆطµظپ">
                       <Input
                         dir="rtl"
                         className={`${inputClassName} text-right`}
                         value={row.description}
-                        placeholder="\\u0648\\u0635\\u0641 \\u0645\\u062e\\u062a\\u0635\\u0631"
+                        placeholder="ط¸ث†ط·آµط¸ظ¾ ط¸â€¦ط·آ®ط·ع¾ط·آµط·آ±"
                         onChange={(e) =>
                           setMilestoneRows((prev) =>
                             prev.map((item, rowIndex) =>
@@ -2395,7 +2395,7 @@ export function CreateProjectUi({
               >
                 <Plus className="ml-2 h-4 w-4" />
 
-                ط·آ·ط¢آ¥ط·آ·ط¢آ¶ط·آ·ط¢آ§ط·آ¸ط¸آ¾ط·آ·ط¢آ© ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ±ط·آ·ط¢آ­ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ© ط·آ·ط¢آ¬ط·آ·ط¢آ¯ط·آ¸ط¸آ¹ط·آ·ط¢آ¯ط·آ·ط¢آ©
+                ط·آ¥ط·آ¶ط·آ§ط¸ظ¾ط·آ© ط¸â€¦ط·آ±ط·آ­ط¸â€‍ط·آ© ط·آ¬ط·آ¯ط¸ظ¹ط·آ¯ط·آ©
               </Button>
             </SectionBodyLayout>
           </SectionCard>
@@ -2403,13 +2403,13 @@ export function CreateProjectUi({
           <SectionCard
             id="faq"
             index={7}
-            title="\\u0627\\u0644\\u0623\\u0633\\u0626\\u0644\\u0629 \\u0627\\u0644\\u0634\\u0627\\u0626\\u0639\\u0629"
-            description="\\u0627\\u0644\\u0623\\u0633\\u0626\\u0644\\u0629 \\u0648\\u0627\\u0644\\u0623\\u062c\\u0648\\u0628\\u0629 \\u0636\\u0645\\u0646 \\u0628\\u0637\\u0627\\u0642\\u0627\\u062a \\u0623\\u0643\\u062b\\u0631 \\u062a\\u0631\\u062a\\u064a\\u0628\\u064b\\u0627 \\u0644\\u062a\\u0633\\u0647\\u064a\\u0644 \\u0642\\u0631\\u0627\\u0621\\u0629 \\u0627\\u0644\\u0645\\u062d\\u062a\\u0648\\u0649 \\u0627\\u0644\\u0645\\u062a\\u0643\\u0631\\u0631."
+            title="ط·ط§ظ„ط£ط³ط¦ظ„ط© ط§ظ„ط´ط§ط¦ط¹ط©"
+            description="ط·ط§ظ„ط£ط³ط¦ظ„ط© ظˆط§ظ„ط£ط¬ظˆط¨ط© ط¶ظ…ظ† ط¨ط·ط§ظ‚ط§طھ ط£ظƒط«ط± طھط±طھظٹط¨ظ‹ط§ ظ„طھط³ظ‡ظٹظ„ ظ‚ط±ط§ط،ط© ط§ظ„ظ…ط­طھظˆظ‰ ط§ظ„ظ…طھظƒط±ط±."
             icon={CircleHelp}
             status={sectionStatuses.faq}
             headerAside={
               <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
-                {filledFaq}  ط·آ·ط¢آ£ط·آ·ط¢آ³ط·آ·ط¢آ¦ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ©
+                {filledFaq}  ط·آ£ط·آ³ط·آ¦ط¸â€‍ط·آ©
               </Badge>
             }
           >
@@ -2429,10 +2429,10 @@ export function CreateProjectUi({
                 >
                   <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <p className="text-sm font-semibold text-slate-950">السؤال {index + 1}</p>
+                      <p className="text-sm font-semibold text-slate-950">ط·ط§ظ„ط³ط¤ط§ظ„ index + 1}</p">
                       <p className="text-xs text-slate-500">
 
-                        ط·آ·ط¢آ£ط·آ·ط¢آ¶ط·آ¸ط¸آ¾ ط·آ·ط¢آ³ط·آ·ط¢آ¤ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ¹ط·آ·ط¢آ§ ط·آ·ط¢آ´ط·آ·ط¢آ§ط·آ·ط¢آ¦ط·آ·ط¢آ¹ط·آ¸أ¢â‚¬آ¹ط·آ·ط¢آ§ ط·آ¸ط«â€ ط·آ·ط¢آ¥ط·آ·ط¢آ¬ط·آ·ط¢آ§ط·آ·ط¢آ¨ط·آ·ط¢آ© ط·آ¸ط«â€ ط·آ·ط¢آ§ط·آ·ط¢آ¶ط·آ·ط¢آ­ط·آ·ط¢آ© ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ³ط·آ·ط¹آ¾ط·آ·ط¢آ«ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ±.
+                        ط·آ£ط·آ¶ط¸ظ¾ ط·آ³ط·آ¤ط·آ§ط¸â€‍ط¸â€¹ط·آ§ ط·آ´ط·آ§ط·آ¦ط·آ¹ط¸â€¹ط·آ§ ط¸ث†ط·آ¥ط·آ¬ط·آ§ط·آ¨ط·آ© ط¸ث†ط·آ§ط·آ¶ط·آ­ط·آ© ط¸â€‍ط¸â€‍ط¸â€¦ط·آ³ط·ع¾ط·آ«ط¸â€¦ط·آ±.
                       </p>
                     </div>
 
@@ -2450,17 +2450,17 @@ export function CreateProjectUi({
                     >
                       <Trash2 className="ml-2 h-4 w-4" />
 
-                      ط·آ·ط¢آ­ط·آ·ط¢آ°ط·آ¸ط¸آ¾ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ³ط·آ·ط¢آ¤ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چ
+                      ط·آ­ط·آ°ط¸ظ¾ ط·آ§ط¸â€‍ط·آ³ط·آ¤ط·آ§ط¸â€‍
                     </Button>
                   </div>
 
                   <div className="grid gap-4">
-                    <Field label="\\u0627\\u0644\\u0633\\u0624\\u0627\\u0644">
+                    <Field label="ط·ط§ظ„ط³ط¤ط§ظ„">
                       <Input
                         dir="rtl"
                         className={`${inputClassName} text-right`}
                         value={row.q}
-                        placeholder={`\\u0627\\u0644\\u0633\\u0624\\u0627\\u0644 {index + 1}`}
+                        placeholder={`ط·آ·ط·آ§ط¸â€‍ط·آ³ط·آ¤ط·آ§ط¸â€‍ {index + 1}`}
                         onChange={(e) =>
                           setFaqRows((prev) =>
                             prev.map((item, rowIndex) =>
@@ -2471,13 +2471,13 @@ export function CreateProjectUi({
                       />
                     </Field>
 
-                    <Field label="\\u0627\\u0644\\u062c\\u0648\\u0627\\u0628">
+                    <Field label="ط·ط§ظ„ط¬ظˆط§ط¨">
                       <Textarea
                         rows={3}
                         dir="rtl"
                         className={`${textareaClassName} min-h-[120px] text-right leading-7`}
                         value={row.a}
-                        placeholder="\\u0627\\u0643\\u062a\\u0628 \\u0627\\u0644\\u062c\\u0648\\u0627\\u0628"
+                        placeholder="ط·ط§ظƒطھط¨ ط§ظ„ط¬ظˆط§ط¨"
                         onChange={(e) =>
                           setFaqRows((prev) =>
                             prev.map((item, rowIndex) =>
@@ -2499,7 +2499,7 @@ export function CreateProjectUi({
               >
                 <Plus className="ml-2 h-4 w-4" />
 
-                ط·آ·ط¢آ¥ط·آ·ط¢آ¶ط·آ·ط¢آ§ط·آ¸ط¸آ¾ط·آ·ط¢آ© ط·آ·ط¢آ³ط·آ·ط¢آ¤ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چ ط·آ·ط¢آ¬ط·آ·ط¢آ¯ط·آ¸ط¸آ¹ط·آ·ط¢آ¯
+                ط·آ¥ط·آ¶ط·آ§ط¸ظ¾ط·آ© ط·آ³ط·آ¤ط·آ§ط¸â€‍ ط·آ¬ط·آ¯ط¸ظ¹ط·آ¯
               </Button>
             </SectionBodyLayout>
           </SectionCard>
@@ -2509,19 +2509,19 @@ export function CreateProjectUi({
             <SectionCard
               id="completion"
               index={visibleSections.findIndex((section) => section.id === "completion") + 1}
-              title="\\u0627\\u0644\\u0645\\u062d\\u062a\\u0648\\u0649 \\u0627\\u0644\\u062e\\u062a\\u0627\\u0645\\u064a"
-              description="\\u0645\\u062d\\u062a\\u0648\\u0649 \\u062e\\u0627\\u0635 \\u0628\\u0627\\u0644\\u0645\\u0634\\u0627\\u0631\\u064a\\u0639 \\u0627\\u0644\\u0645\\u0643\\u062a\\u0645\\u0644\\u0629 \\u0648\\u0627\\u0644\\u0645\\u063a\\u0644\\u0642\\u0629 \\u064a\\u0639\\u0631\\u0636 \\u0645\\u0627 \\u0628\\u0639\\u062f \\u0627\\u0644\\u062a\\u0646\\u0641\\u064a\\u0630 \\u0628\\u0634\\u0643\\u0644 \\u062a\\u0648\\u062b\\u064a\\u0642\\u064a \\u0648\\u0627\\u0636\\u062d\\u060c \\u0628\\u0639\\u064a\\u062f\\u064b\\u0627 \\u0639\\u0646 \\u0644\\u063a\\u0629 \\u0627\\u0644\\u0627\\u0633\\u062a\\u062b\\u0645\\u0627\\u0631 \\u0627\\u0644\\u0646\\u0634\\u0637."
+              title="ط·ط§ظ„ظ…ط­طھظˆظ‰ ط§ظ„ط®طھط§ظ…ظٹ"
+              description="ط¸ظ…ط­طھظˆظ‰ ط®ط§طµ ط¨ط§ظ„ظ…ط´ط§ط±ظٹط¹ ط§ظ„ظ…ظƒطھظ…ظ„ط© ظˆط§ظ„ظ…ط؛ظ„ظ‚ط© ظٹط¹ط±ط¶ ظ…ط§ ط¨ط¹ط¯ ط§ظ„طھظ†ظپظٹط° ط¨ط´ظƒظ„ طھظˆط«ظٹظ‚ظٹ ظˆط§ط¶ط­طŒ ط¨ط¹ظٹط¯ظ‹ط§ ط¹ظ† ظ„ط؛ط© ط§ظ„ط§ط³طھط«ظ…ط§ط± ط§ظ„ظ†ط´ط·."
               icon={CheckCircle2}
               status={sectionStatuses.completion}
               headerAside={
                 <Badge className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-700">
                   {[
-                    filledCompletionResults ? `${filledCompletionResults} \\u0646\\u062a\\u0627\\u0626\\u062c` : "",
-                    filledCompletionOutputs ? `${filledCompletionOutputs} \\u0645\\u062e\\u0631\\u062c\\u0627\\u062a` : "",
-                    filledCompletionFinalNotes ? `${filledCompletionFinalNotes} \\u0645\\u0644\\u0627\\u062d\\u0638\\u0627\\u062a` : "",
+                    filledCompletionResults ? `${filledCompletionResults} ظ†طھط§ط¦ط¬` : "",
+                    filledCompletionOutputs ? `${filledCompletionOutputs} ظ…ط®ط±ط¬ط§طھ` : "",
+                    filledCompletionFinalNotes ? `${filledCompletionFinalNotes} ظ…ظ„ط§ط­ط¸ط§طھ` : "",
                   ]
                     .filter(Boolean)
-                    .join("\\u0622\\u00a2\\u0637\\u00a2\\u0622\\u00b7 ") || "\\u0623\\u0636\\u0641 \\u0627\\u0644\\u0646\\u062a\\u0627\\u0626\\u062c \\u0627\\u0644\\u0646\\u0647\\u0627\\u0626\\u064a\\u0629"}
+                    .join(" ط·آ¢ط¢آ· ") || "ط·ط£ط¶ظپ ط§ظ„ظ†طھط§ط¦ط¬ ط§ظ„ظ†ظ‡ط§ط¦ظٹط©"}
                 </Badge>
               }
             >
@@ -2536,16 +2536,16 @@ export function CreateProjectUi({
               >
                 <div className="grid gap-5 md:grid-cols-2">
                     <Field
-                      label="\\u0646\\u0638\\u0631\\u0629 \\u0639\\u0627\\u0645\\u0629 \\u0639\\u0644\\u0649 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639"
+                      label="ط¸ظ†ط¸ط±ط© ط¹ط§ظ…ط© ط¹ظ„ظ‰ ط§ظ„ظ…ط´ط±ظˆط¹"
                       className="md:col-span-2"
-                      hint="\\u0648\\u0635\\u0641 \\u0628\\u0635\\u064a\\u063a\\u0629 \\u0645\\u0627 \\u0628\\u0639\\u062f \\u0627\\u0644\\u062a\\u0646\\u0641\\u064a\\u0630 \\u064a\\u0634\\u0631\\u062d \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639 \\u0628\\u0639\\u062f \\u0627\\u0643\\u062a\\u0645\\u0627\\u0644\\u0647."
+                      hint="ط¸ظˆطµظپ ط¨طµظٹط؛ط© ظ…ط§ ط¨ط¹ط¯ ط§ظ„طھظ†ظپظٹط° ظٹط´ط±ط­ ط§ظ„ظ…ط´ط±ظˆط¹ ط¨ط¹ط¯ ط§ظƒطھظ…ط§ظ„ظ‡."
                     >
                       <Textarea
                         rows={4}
                         dir="rtl"
                         className={`${textareaClassName} text-right leading-7`}
                         value={formData.completionOverviewAr}
-                        placeholder="\\u0627\\u0643\\u062a\\u0628 \\u0646\\u0638\\u0631\\u0629 \\u0639\\u0627\\u0645\\u0629 \\u062a\\u0648\\u0636\\u062d \\u0645\\u0627 \\u0627\\u0644\\u0630\\u064a \\u0643\\u0627\\u0646 \\u0639\\u0644\\u064a\\u0647 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639 \\u0628\\u0639\\u062f \\u0627\\u0644\\u062a\\u0646\\u0641\\u064a\\u0630."
+                        placeholder="ط·ط§ظƒطھط¨ ظ†ط¸ط±ط© ط¹ط§ظ…ط© طھظˆط¶ط­ ظ…ط§ ط§ظ„ط°ظٹ ظƒط§ظ† ط¹ظ„ظٹظ‡ ط§ظ„ظ…ط´ط±ظˆط¹ ط¨ط¹ط¯ ط§ظ„طھظ†ظپظٹط°."
                         onChange={(e) =>
                           setFormData((prev) => ({
                             ...prev,
@@ -2556,16 +2556,16 @@ export function CreateProjectUi({
                     </Field>
 
                     <Field
-                      label="\\u0645\\u0644\\u062e\\u0635 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639"
+                      label="ط¸ظ…ظ„ط®طµ ط§ظ„ظ…ط´ط±ظˆط¹"
                       className="md:col-span-2"
-                      hint="\\u0645\\u0644\\u062e\\u0635 \\u0642\\u0635\\u064a\\u0631 \\u064a\\u0638\\u0647\\u0631 \\u0641\\u064a \\u0635\\u0641\\u062d\\u0629 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639 \\u0627\\u0644\\u0645\\u0643\\u062a\\u0645\\u0644."
+                      hint="ط¸ظ…ظ„ط®طµ ظ‚طµظٹط± ظٹط¸ظ‡ط± ظپظٹ طµظپط­ط© ط§ظ„ظ…ط´ط±ظˆط¹ ط§ظ„ظ…ظƒطھظ…ظ„."
                     >
                       <Textarea
                         rows={3}
                         dir="rtl"
                         className={`${textareaClassName} min-h-[120px] text-right leading-7`}
                         value={formData.completionSummaryAr}
-                        placeholder="\\u0627\\u0643\\u062a\\u0628 \\u0645\\u0644\\u062e\\u0635\\u064b\\u0627 \\u0646\\u0647\\u0627\\u0626\\u064a\\u064b\\u0627 \\u0645\\u062e\\u062a\\u0635\\u0631\\u064b\\u0627 \\u0644\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639 \\u0628\\u0639\\u062f \\u0625\\u0642\\u0641\\u0627\\u0644\\u0647."
+                        placeholder="ط·ط§ظƒطھط¨ ظ…ظ„ط®طµظ‹ط§ ظ†ظ‡ط§ط¦ظٹظ‹ط§ ظ…ط®طھطµط±ظ‹ط§ ظ„ظ„ظ…ط´ط±ظˆط¹ ط¨ط¹ط¯ ط¥ظ‚ظپط§ظ„ظ‡."
                         onChange={(e) =>
                           setFormData((prev) => ({
                             ...prev,
@@ -2579,8 +2579,8 @@ export function CreateProjectUi({
                   <div className="space-y-4">
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <h3 className="text-base font-semibold text-slate-950">\\u0638\\u0646\\u062a\\u0627\\u0626\\u062c \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639"</h3>
-                        <p className="text-xs text-slate-500">\\u0638\\u0643\\u0644 \\u0646\\u062a\\u064a\\u062c\\u0629 \\u062a\\u0638\\u0647\\u0631 \\u0643\\u0639\\u0646\\u0635\\u0631 \\u0645\\u0633\\u062a\\u0642\\u0644 \\u0641\\u064a \\u0627\\u0644\\u0635\\u0641\\u062d\\u0629 \\u0627\\u0644\\u0646\\u0647\\u0627\\u0626\\u064a\\u0629."</p>
+                        <h3 className="text-base font-semibold text-slate-950">ط¸ظ†طھط§ط¦ط¬ ط§ظ„ظ…ط´ط±ظˆط¹</h3">
+                        <p className="text-xs text-slate-500">ط¸ظƒظ„ ظ†طھظٹط¬ط© طھط¸ظ‡ط± ظƒط¹ظ†طµط± ظ…ط³طھظ‚ظ„ ظپظٹ ط§ظ„طµظپط­ط© ط§ظ„ظ†ظ‡ط§ط¦ظٹط©.</p">
                       </div>
                       <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
                         {filledCompletionResults}
@@ -2593,7 +2593,7 @@ export function CreateProjectUi({
                         className="rounded-[24px] border border-slate-200/80 bg-slate-50/80 p-4 shadow-sm"
                       >
                         <div className="mb-3 flex items-center justify-between gap-3">
-                          <p className="text-sm font-semibold text-slate-950">النتيجة {index + 1}</p>
+                          <p className="text-sm font-semibold text-slate-950">ط·ط§ظ„ظ†طھظٹط¬ط© index + 1}</p">
                           <Button
                             type="button"
                             variant="outline"
@@ -2608,7 +2608,7 @@ export function CreateProjectUi({
                           >
                             <Trash2 className="ml-2 h-4 w-4" />
 
-                            ط·آ·ط¢آ­ط·آ·ط¢آ°ط·آ¸ط¸آ¾
+                            ط·آ­ط·آ°ط¸ظ¾
                           </Button>
                         </div>
 
@@ -2617,7 +2617,7 @@ export function CreateProjectUi({
                           dir="rtl"
                           className={`${textareaClassName} min-h-[110px] text-right leading-7`}
                           value={row}
-                          placeholder="\\u0645\\u062b\\u0627\\u0644: \\u062a\\u0645 \\u062a\\u0646\\u0641\\u064a\\u0630 \\u0623\\u0639\\u0645\\u0627\\u0644 \\u0627\\u0644\\u062a\\u0637\\u0648\\u064a\\u0631 \\u0648\\u062a\\u0633\\u0644\\u064a\\u0645 \\u0627\\u0644\\u0623\\u0635\\u0648\\u0644 \\u0648\\u0641\\u0642 \\u0627\\u0644\\u062e\\u0637\\u0629 \\u0627\\u0644\\u0645\\u0639\\u062a\\u0645\\u062f\\u0629."
+                          placeholder="ط¸ظ…ط«ط§ظ„: طھظ… طھظ†ظپظٹط° ط£ط¹ظ…ط§ظ„ ط§ظ„طھط·ظˆظٹط± ظˆطھط³ظ„ظٹظ… ط§ظ„ط£طµظˆظ„ ظˆظپظ‚ ط§ظ„ط®ط·ط© ط§ظ„ظ…ط¹طھظ…ط¯ط©."
                           onChange={(e) =>
                             setCompletionResultRows((prev) =>
                               prev.map((item, rowIndex) =>
@@ -2637,15 +2637,15 @@ export function CreateProjectUi({
                     >
                       <Plus className="ml-2 h-4 w-4" />
 
-                      ط·آ·ط¢آ¥ط·آ·ط¢آ¶ط·آ·ط¢آ§ط·آ¸ط¸آ¾ط·آ·ط¢آ© ط·آ¸أ¢â‚¬آ ط·آ·ط¹آ¾ط·آ¸ط¸آ¹ط·آ·ط¢آ¬ط·آ·ط¢آ© ط·آ·ط¢آ¬ط·آ·ط¢آ¯ط·آ¸ط¸آ¹ط·آ·ط¢آ¯ط·آ·ط¢آ©
+                      ط·آ¥ط·آ¶ط·آ§ط¸ظ¾ط·آ© ط¸â€ ط·ع¾ط¸ظ¹ط·آ¬ط·آ© ط·آ¬ط·آ¯ط¸ظ¹ط·آ¯ط·آ©
                     </Button>
                   </div>
 
                   <div className="space-y-4">
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <h3 className="text-base font-semibold text-slate-950">\\u0638\\u0645\\u0644\\u062e\\u0635 \\u0646\\u0647\\u0627\\u0626\\u064a / \\u0645\\u0644\\u0627\\u062d\\u0638\\u0627\\u062a"</h3>
-                        <p className="text-xs text-slate-500">\\u0638\\u0645\\u0644\\u0627\\u062d\\u0638\\u0627\\u062a \\u062e\\u062a\\u0627\\u0645\\u064a\\u0629 \\u0623\\u0648 \\u0646\\u0642\\u0627\\u0637 \\u062a\\u0648\\u062b\\u064a\\u0642\\u064a\\u0629 \\u0625\\u0636\\u0627\\u0641\\u064a\\u0629."</p>
+                        <h3 className="text-base font-semibold text-slate-950">ط¸ظ…ظ„ط®طµ ظ†ظ‡ط§ط¦ظٹ / ظ…ظ„ط§ط­ط¸ط§طھ</h3">
+                        <p className="text-xs text-slate-500">ط¸ظ…ظ„ط§ط­ط¸ط§طھ ط®طھط§ظ…ظٹط© ط£ظˆ ظ†ظ‚ط§ط· طھظˆط«ظٹظ‚ظٹط© ط¥ط¶ط§ظپظٹط©.</p">
                       </div>
                       <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
                         {filledCompletionFinalNotes}
@@ -2658,7 +2658,7 @@ export function CreateProjectUi({
                         className="rounded-[24px] border border-slate-200/80 bg-slate-50/80 p-4 shadow-sm"
                       >
                         <div className="mb-3 flex items-center justify-between gap-3">
-                          <p className="text-sm font-semibold text-slate-950">ملاحظة {index + 1}</p>
+                          <p className="text-sm font-semibold text-slate-950">ط¸ظ…ظ„ط§ط­ط¸ط© index + 1}</p">
                           <Button
                             type="button"
                             variant="outline"
@@ -2673,7 +2673,7 @@ export function CreateProjectUi({
                           >
                             <Trash2 className="ml-2 h-4 w-4" />
 
-                            ط·آ·ط¢آ­ط·آ·ط¢آ°ط·آ¸ط¸آ¾
+                            ط·آ­ط·آ°ط¸ظ¾
                           </Button>
                         </div>
 
@@ -2682,7 +2682,7 @@ export function CreateProjectUi({
                           dir="rtl"
                           className={`${textareaClassName} min-h-[110px] text-right leading-7`}
                           value={row}
-                          placeholder="\\u0623\\u0636\\u0641 \\u0645\\u0644\\u0627\\u062d\\u0638\\u0629 \\u0646\\u0647\\u0627\\u0626\\u064a\\u0629 \\u0623\\u0648 \\u0645\\u0644\\u062e\\u0635\\u064b\\u0627 \\u062e\\u062a\\u0627\\u0645\\u064a\\u064b\\u0627 \\u0644\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639."
+                          placeholder="ط·ط£ط¶ظپ ظ…ظ„ط§ط­ط¸ط© ظ†ظ‡ط§ط¦ظٹط© ط£ظˆ ظ…ظ„ط®طµظ‹ط§ ط®طھط§ظ…ظٹظ‹ط§ ظ„ظ„ظ…ط´ط±ظˆط¹."
                           onChange={(e) =>
                             setCompletionFinalNoteRows((prev) =>
                               prev.map((item, rowIndex) =>
@@ -2702,7 +2702,7 @@ export function CreateProjectUi({
                     >
                       <Plus className="ml-2 h-4 w-4" />
 
-                      ط·آ·ط¢آ¥ط·آ·ط¢آ¶ط·آ·ط¢آ§ط·آ¸ط¸آ¾ط·آ·ط¢آ© ط·آ¸أ¢â‚¬آ¦ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ§ط·آ·ط¢آ­ط·آ·ط¢آ¸ط·آ·ط¢آ© ط·آ¸أ¢â‚¬آ ط·آ¸أ¢â‚¬طŒط·آ·ط¢آ§ط·آ·ط¢آ¦ط·آ¸ط¸آ¹ط·آ·ط¢آ©
+                      ط·آ¥ط·آ¶ط·آ§ط¸ظ¾ط·آ© ط¸â€¦ط¸â€‍ط·آ§ط·آ­ط·آ¸ط·آ© ط¸â€ ط¸â€،ط·آ§ط·آ¦ط¸ظ¹ط·آ©
                     </Button>
                   </div>
                 </div>
@@ -2710,10 +2710,10 @@ export function CreateProjectUi({
                 <div className="space-y-4">
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <h3 className="text-base font-semibold text-slate-950">\\u0638\\u0645\\u062e\\u0631\\u062c\\u0627\\u062a \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639"</h3>
+                      <h3 className="text-base font-semibold text-slate-950">ط¸ظ…ط®ط±ط¬ط§طھ ط§ظ„ظ…ط´ط±ظˆط¹</h3">
                       <p className="text-xs text-slate-500">
 
-                        ط·آ·ط¢آ¹ط·آ¸أ¢â‚¬آ ط·آ·ط¢آ§ط·آ·ط¢آµط·آ·ط¢آ± ط·آ¸ط«â€ ط·آ·ط¢آµط·آ¸ط¸آ¾ط·آ¸ط¸آ¹ط·آ·ط¢آ© ط·آ¸أ¢â‚¬آ¦ط·آ¸أ¢â‚¬آ ط·آ·ط¢آ¸ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ© ط·آ·ط¢آ¨ط·آ·ط¢آ¹ط·آ¸أ¢â‚¬آ ط·آ¸ط«â€ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬آ  ط·آ¸ط«â€ ط·آ¸ط«â€ ط·آ·ط¢آµط·آ¸ط¸آ¾ ط·آ¸ط«â€ ط·آ¸ط«â€ ط·آ·ط¢آ³ط·آ¸أ¢â‚¬آ¦ ط·آ·ط¢آ§ط·آ·ط¢آ®ط·آ·ط¹آ¾ط·آ¸ط¸آ¹ط·آ·ط¢آ§ط·آ·ط¢آ±ط·آ¸ط¸آ¹ ط·آ¸أ¢â‚¬â€چط·آ¸ط¦â€™ط·آ¸أ¢â‚¬â€چ ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ®ط·آ·ط¢آ±ط·آ·ط¢آ¬.
+                        ط·آ¹ط¸â€ ط·آ§ط·آµط·آ± ط¸ث†ط·آµط¸ظ¾ط¸ظ¹ط·آ© ط¸â€¦ط¸â€ ط·آ¸ط¸â€¦ط·آ© ط·آ¨ط·آ¹ط¸â€ ط¸ث†ط·آ§ط¸â€  ط¸ث†ط¸ث†ط·آµط¸ظ¾ ط¸ث†ط¸ث†ط·آ³ط¸â€¦ ط·آ§ط·آ®ط·ع¾ط¸ظ¹ط·آ§ط·آ±ط¸ظ¹ ط¸â€‍ط¸ئ’ط¸â€‍ ط¸â€¦ط·آ®ط·آ±ط·آ¬.
                       </p>
                     </div>
                     <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
@@ -2728,10 +2728,10 @@ export function CreateProjectUi({
                     >
                       <div className="mb-5 flex items-center justify-between gap-3">
                         <div>
-                          <p className="text-sm font-semibold text-slate-950">المخرج {index + 1}</p>
+                          <p className="text-sm font-semibold text-slate-950">ط·ط§ظ„ظ…ط®ط±ط¬ index + 1}</p">
                           <p className="text-xs text-slate-500">
 
-                            ط·آ·ط¢آ¹ط·آ¸أ¢â‚¬آ ط·آ¸ط«â€ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬آ  ط·آ¸ط«â€ ط·آ¸ط«â€ ط·آ·ط¢آµط·آ¸ط¸آ¾ ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ®ط·آ·ط¹آ¾ط·آ·ط¢آµط·آ·ط¢آ± ط·آ¸ط¸آ¹ط·آ¸ط«â€ ط·آ·ط¢آ¶ط·آ·ط¢آ­ ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ§ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ°ط·آ¸ط¸آ¹ ط·آ·ط¹آ¾ط·آ·ط¢آ­ط·آ¸أ¢â‚¬ع‘ط·آ¸أ¢â‚¬ع‘ ط·آ¸ط¸آ¾ط·آ·ط¢آ¹ط·آ¸أ¢â‚¬â€چط·آ¸ط¸آ¹ط·آ¸أ¢â‚¬آ¹ط·آ·ط¢آ§.
+                            ط·آ¹ط¸â€ ط¸ث†ط·آ§ط¸â€  ط¸ث†ط¸ث†ط·آµط¸ظ¾ ط¸â€¦ط·آ®ط·ع¾ط·آµط·آ± ط¸ظ¹ط¸ث†ط·آ¶ط·آ­ ط¸â€¦ط·آ§ ط·آ§ط¸â€‍ط·آ°ط¸ظ¹ ط·ع¾ط·آ­ط¸â€ڑط¸â€ڑ ط¸ظ¾ط·آ¹ط¸â€‍ط¸ظ¹ط¸â€¹ط·آ§.
                           </p>
                         </div>
                         <Button
@@ -2748,17 +2748,17 @@ export function CreateProjectUi({
                         >
                           <Trash2 className="ml-2 h-4 w-4" />
 
-                          ط·آ·ط¢آ­ط·آ·ط¢آ°ط·آ¸ط¸آ¾
+                          ط·آ­ط·آ°ط¸ظ¾
                         </Button>
                       </div>
 
                       <div className="grid gap-4 md:grid-cols-2">
-                        <Field label="\\u0627\\u0644\\u0639\\u0646\\u0648\\u0627\\u0646">
+                        <Field label="ط·ط§ظ„ط¹ظ†ظˆط§ظ†">
                           <Input
                             dir="rtl"
                             className={`${inputClassName} text-right`}
                             value={row.titleAr}
-                            placeholder={`\\u0639\\u0646\\u0648\\u0627\\u0646 \\u0627\\u0644\\u0645\\u062e\\u0631\\u062c {index + 1}`}
+                            placeholder={`ط·آ·ط·آ¹ط¸â€ ط¸ث†ط·آ§ط¸â€  ط·آ§ط¸â€‍ط¸â€¦ط·آ®ط·آ±ط·آ¬ {index + 1}`}
                             onChange={(e) =>
                               setCompletionOutputRows((prev) =>
                                 prev.map((item, rowIndex) =>
@@ -2769,12 +2769,12 @@ export function CreateProjectUi({
                           />
                         </Field>
 
-                        <Field label="\\u0648\\u0633\\u0645 \\u0625\\u0636\\u0627\\u0641\\u064a (\\u0627\\u062e\\u062a\\u064a\\u0627\\u0631\\u064a)">
+                        <Field label="ط¸ث†ط·آ³ط¸â€¦ ط·آ¥ط·آ¶ط·آ§ط¸ظ¾ط¸ظ¹ (ط·آ§ط·آ®ط·ع¾ط¸ظ¹ط·آ§ط·آ±ط¸ظ¹)">
                           <Input
                             dir="rtl"
                             className={`${inputClassName} text-right`}
                             value={row.metaAr}
-                            placeholder="\\u0645\\u062b\\u0627\\u0644: \\u062a\\u0633\\u0644\\u064a\\u0645 \\u0646\\u0647\\u0627\\u0626\\u064a"
+                            placeholder="ط¸ظ…ط«ط§ظ„: طھط³ظ„ظٹظ… ظ†ظ‡ط§ط¦ظٹ"
                             onChange={(e) =>
                               setCompletionOutputRows((prev) =>
                                 prev.map((item, rowIndex) =>
@@ -2785,13 +2785,13 @@ export function CreateProjectUi({
                           />
                         </Field>
 
-                        <Field label="\\u0627\\u0644\\u0648\\u0635\\u0641" className="md:col-span-2">
+                        <Field label="ط·ط§ظ„ظˆطµظپ" className="md:col-span-2">
                           <Textarea
                             rows={3}
                             dir="rtl"
                             className={`${textareaClassName} min-h-[120px] text-right leading-7`}
                             value={row.descriptionAr}
-                            placeholder="\\u0635\\u0641 \\u0647\\u0630\\u0627 \\u0627\\u0644\\u0645\\u062e\\u0631\\u062c \\u0628\\u0634\\u0643\\u0644 \\u0648\\u0627\\u0636\\u062d \\u0648\\u0645\\u0628\\u0627\\u0634\\u0631."
+                            placeholder="ط·طµظپ ظ‡ط°ط§ ط§ظ„ظ…ط®ط±ط¬ ط¨ط´ظƒظ„ ظˆط§ط¶ط­ ظˆظ…ط¨ط§ط´ط±."
                             onChange={(e) =>
                               setCompletionOutputRows((prev) =>
                                 prev.map((item, rowIndex) =>
@@ -2820,14 +2820,14 @@ export function CreateProjectUi({
                   >
                     <Plus className="ml-2 h-4 w-4" />
 
-                    ط·آ·ط¢آ¥ط·آ·ط¢آ¶ط·آ·ط¢آ§ط·آ¸ط¸آ¾ط·آ·ط¢آ© ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ®ط·آ·ط¢آ±ط·آ·ط¢آ¬ ط·آ·ط¢آ¬ط·آ·ط¢آ¯ط·آ¸ط¸آ¹ط·آ·ط¢آ¯
+                    ط·آ¥ط·آ¶ط·آ§ط¸ظ¾ط·آ© ط¸â€¦ط·آ®ط·آ±ط·آ¬ ط·آ¬ط·آ¯ط¸ظ¹ط·آ¯
                   </Button>
                 </div>
 
                 <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_260px]">
                   <Field
-                    label="\\u0645\\u0639\\u0631\\u0636 \\u0635\\u0648\\u0631 \\u0645\\u0627 \\u0628\\u0639\\u062f \\u0627\\u0644\\u062a\\u0646\\u0641\\u064a\\u0630"
-                    hint="\\u0631\\u0627\\u0628\\u0637 \\u0644\\u0643\\u0644 \\u0635\\u0648\\u0631\\u0629 \\u0641\\u064a \\u0633\\u0637\\u0631 \\u0645\\u0633\\u062a\\u0642\\u0644. \\u0647\\u0630\\u0647 \\u0627\\u0644\\u0635\\u0648\\u0631 \\u062a\\u064f\\u0633\\u062a\\u062e\\u062f\\u0645 \\u0641\\u064a \\u0635\\u0641\\u062d\\u0629 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639 \\u0627\\u0644\\u0645\\u0643\\u062a\\u0645\\u0644."
+                    label="ط¸ظ…ط¹ط±ط¶ طµظˆط± ظ…ط§ ط¨ط¹ط¯ ط§ظ„طھظ†ظپظٹط°"
+                    hint="ط·ط±ط§ط¨ط· ظ„ظƒظ„ طµظˆط±ط© ظپظٹ ط³ط·ط± ظ…ط³طھظ‚ظ„. ظ‡ط°ظ‡ ط§ظ„طµظˆط± طھظڈط³طھط®ط¯ظ… ظپظٹ طµظپط­ط© ط§ظ„ظ…ط´ط±ظˆط¹ ط§ظ„ظ…ظƒطھظ…ظ„."
                   >
                     <Textarea
                       rows={5}
@@ -2846,8 +2846,8 @@ export function CreateProjectUi({
 
                   <UploadDropzone
                     inputId="project-completion-gallery-upload"
-                    title="\\u0631\\u0641\\u0639 \\u0635\\u0648\\u0631 \\u0646\\u0647\\u0627\\u0626\\u064a\\u0629"
-                    description="\\u0627\\u0631\\u0641\\u0639 \\u0627\\u0644\\u0635\\u0648\\u0631 \\u0627\\u0644\\u062a\\u064a \\u062a\\u0648\\u062b\\u0642 \\u0627\\u0644\\u062d\\u0627\\u0644\\u0629 \\u0627\\u0644\\u0646\\u0647\\u0627\\u0626\\u064a\\u0629 \\u0644\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639 \\u0628\\u0639\\u062f \\u0627\\u0644\\u062a\\u0646\\u0641\\u064a\\u0630."
+                    title="ط·آ±ط¸ظ¾ط·آ¹ ط·آµط¸ث†ط·آ± ط¸â€ ط¸â€،ط·آ§ط·آ¦ط¸ظ¹ط·آ©"
+                    description="ط·ط§ط±ظپط¹ ط§ظ„طµظˆط± ط§ظ„طھظٹ طھظˆط«ظ‚ ط§ظ„ط­ط§ظ„ط© ط§ظ„ظ†ظ‡ط§ط¦ظٹط© ظ„ظ„ظ…ط´ط±ظˆط¹ ط¨ط¹ط¯ ط§ظ„طھظ†ظپظٹط°."
                     accept="image/*"
                     multiple
                     disabled={completionGalleryUploading}
@@ -2875,7 +2875,7 @@ export function CreateProjectUi({
                         <div className="flex items-center justify-between gap-3 p-3">
                           <p className="min-w-0 truncate text-xs text-slate-500">
 
-                            الصورة {index + 1}
+                            ط·آ§ط¸â€‍ط·آµط¸ث†ط·آ±ط·آ© index + 1}
                           </p>
                           <Button
                             type="button"
@@ -2892,7 +2892,7 @@ export function CreateProjectUi({
                             }
                           >
 
-                            ط·آ·ط¢آ­ط·آ·ط¢آ°ط·آ¸ط¸آ¾
+                            ط·آ­ط·آ°ط¸ظ¾
                           </Button>
                         </div>
                       </div>
@@ -2905,14 +2905,14 @@ export function CreateProjectUi({
             <SectionCard
               id="completion"
               index={visibleSections.findIndex((section) => section.id === "completion") + 1}
-              title="\\u0627\\u0644\\u0645\\u062d\\u062a\\u0648\\u0649 \\u0627\\u0644\\u062e\\u062a\\u0627\\u0645\\u064a"
-              description="\\u064a\\u0628\\u0642\\u0649 \\u0647\\u0630\\u0627 \\u0627\\u0644\\u0642\\u0633\\u0645 \\u0638\\u0627\\u0647\\u0631\\u064b\\u0627 \\u0636\\u0645\\u0646 \\u0644\\u0648\\u062d\\u0629 \\u0627\\u0644\\u0628\\u0646\\u0627\\u0621\\u060c \\u0648\\u064a\\u062a\\u062d\\u0648\\u0651\\u0644 \\u0625\\u0644\\u0649 \\u0648\\u0636\\u0639 \\u0627\\u0644\\u062a\\u062d\\u0631\\u064a\\u0631 \\u0627\\u0644\\u0643\\u0627\\u0645\\u0644 \\u0639\\u0646\\u062f \\u0625\\u063a\\u0644\\u0627\\u0642 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639 \\u0623\\u0648 \\u0627\\u0643\\u062a\\u0645\\u0627\\u0644\\u0647."
+              title="ط·ط§ظ„ظ…ط­طھظˆظ‰ ط§ظ„ط®طھط§ظ…ظٹ"
+              description="ط¸ظٹط¨ظ‚ظ‰ ظ‡ط°ط§ ط§ظ„ظ‚ط³ظ… ط¸ط§ظ‡ط±ظ‹ط§ ط¶ظ…ظ† ظ„ظˆط­ط© ط§ظ„ط¨ظ†ط§ط،طŒ ظˆظٹطھط­ظˆظ‘ظ„ ط¥ظ„ظ‰ ظˆط¶ط¹ ط§ظ„طھط­ط±ظٹط± ط§ظ„ظƒط§ظ…ظ„ ط¹ظ†ط¯ ط¥ط؛ظ„ط§ظ‚ ط§ظ„ظ…ط´ط±ظˆط¹ ط£ظˆ ط§ظƒطھظ…ط§ظ„ظ‡."
               icon={CheckCircle2}
               status={sectionStatuses.completion}
               headerAside={
                 <Badge className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-700">
 
-                  ط·آ¸أ¢â‚¬آ¦ط·آ·ط¹آ¾ط·آ·ط¢آ§ط·آ·ط¢آ­ ط·آ·ط¢آ¨ط·آ·ط¢آ¹ط·آ·ط¢آ¯ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ¥ط·آ·ط·â€؛ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ§ط·آ¸أ¢â‚¬ع‘
+                  ط¸â€¦ط·ع¾ط·آ§ط·آ­ ط·آ¨ط·آ¹ط·آ¯ ط·آ§ط¸â€‍ط·آ¥ط·ط›ط¸â€‍ط·آ§ط¸â€ڑ
                 </Badge>
               }
             >
@@ -2931,12 +2931,12 @@ export function CreateProjectUi({
                       <FileText className="h-4 w-4 text-slate-800" />
                     </div>
                     <div className="space-y-2">
-                      <h3 className="text-sm font-semibold text-slate-950">\\u0637\\u0627\\u0644\\u0642\\u0633\\u0645 \\u0645\\u0624\\u062c\\u0644 \\u062d\\u062a\\u0649 \\u0627\\u0644\\u0625\\u063a\\u0644\\u0627\\u0642"</h3>
+                      <h3 className="text-sm font-semibold text-slate-950">ط·ط§ظ„ظ‚ط³ظ… ظ…ط¤ط¬ظ„ ط­طھظ‰ ط§ظ„ط¥ط؛ظ„ط§ظ‚</h3">
                       <p className="text-xs leading-6 text-slate-500">
 
-                        ط·آ·ط¢آ³ط·آ·ط¹آ¾ط·آ·ط¹آ¾ط·آ¸أ¢â‚¬آ¦ط·آ¸ط¦â€™ط·آ¸أ¢â‚¬آ  ط·آ¸أ¢â‚¬آ¦ط·آ¸أ¢â‚¬آ  ط·آ·ط¢آ¥ط·آ·ط¢آ¶ط·آ·ط¢آ§ط·آ¸ط¸آ¾ط·آ·ط¢آ© ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ ط·آ·ط¹آ¾ط·آ·ط¢آ§ط·آ·ط¢آ¦ط·آ·ط¢آ¬ ط·آ¸ط«â€ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ®ط·آ·ط¢آ±ط·آ·ط¢آ¬ط·آ·ط¢آ§ط·آ·ط¹آ¾ ط·آ¸ط«â€ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آµط·آ¸ط«â€ ط·آ·ط¢آ± ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ®ط·آ·ط¹آ¾ط·آ·ط¢آ§ط·آ¸أ¢â‚¬آ¦ط·آ¸ط¸آ¹ط·آ·ط¢آ© ط·آ¸أ¢â‚¬طŒط·آ¸أ¢â‚¬آ ط·آ·ط¢آ§ ط·آ·ط¢آ¹ط·آ¸أ¢â‚¬آ ط·آ·ط¢آ¯ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ§ ط·آ·ط¹آ¾ط·آ·ط¢آµط·آ·ط¢آ¨ط·آ·ط¢آ­ ط·آ·ط¢آ­ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ©
-                        ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ´ط·آ·ط¢آ±ط·آ¸ط«â€ ط·آ·ط¢آ¹ &quot;ط·آ¸أ¢â‚¬آ¦ط·آ·ط·â€؛ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬ع‘&quot; ط·آ·ط¢آ£ط·آ¸ط«â€  &quot;ط·آ¸أ¢â‚¬آ¦ط·آ¸ط¦â€™ط·آ·ط¹آ¾ط·آ¸أ¢â‚¬آ¦ط·آ¸أ¢â‚¬â€چ&quot;. ط·آ·ط¢آ¥ط·آ·ط¢آ¨ط·آ¸أ¢â‚¬ع‘ط·آ·ط¢آ§ط·آ·ط·إ’ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬ع‘ط·آ·ط¢آ³ط·آ¸أ¢â‚¬آ¦ ط·آ·ط¢آ¸ط·آ·ط¢آ§ط·آ¸أ¢â‚¬طŒط·آ·ط¢آ±ط·آ¸أ¢â‚¬آ¹ط·آ·ط¢آ§ ط·آ·ط¢آ¯ط·آ·ط¢آ§ط·آ·ط¢آ®ط·آ¸أ¢â‚¬â€چ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬â€چط·آ¸ط«â€ ط·آ·ط¢آ­ط·آ·ط¢آ©
-                        ط·آ¸ط¸آ¹ط·آ·ط¢آ³ط·آ·ط¢آ§ط·آ·ط¢آ¹ط·آ·ط¢آ¯ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸ط¸آ¾ط·آ·ط¢آ±ط·آ¸ط¸آ¹ط·آ¸أ¢â‚¬ع‘ ط·آ·ط¢آ¹ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ° ط·آ·ط¢آ±ط·آ·ط¢آ¤ط·آ¸ط¸آ¹ط·آ·ط¢آ© ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ³ط·آ·ط¢آ§ط·آ·ط¢آ± ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸ط¦â€™ط·آ·ط¢آ§ط·آ¸أ¢â‚¬آ¦ط·آ¸أ¢â‚¬â€چ ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ´ط·آ·ط¢آ±ط·آ¸ط«â€ ط·آ·ط¢آ¹ ط·آ¸أ¢â‚¬آ¦ط·آ¸أ¢â‚¬آ  ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ¨ط·آ·ط¢آ¯ط·آ·ط¢آ§ط·آ¸ط¸آ¹ط·آ·ط¢آ© ط·آ·ط¢آ¥ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ° ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ¥ط·آ¸أ¢â‚¬ع‘ط·آ¸ط¸آ¾ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چ.
+                        ط·آ³ط·ع¾ط·ع¾ط¸â€¦ط¸ئ’ط¸â€  ط¸â€¦ط¸â€  ط·آ¥ط·آ¶ط·آ§ط¸ظ¾ط·آ© ط·آ§ط¸â€‍ط¸â€ ط·ع¾ط·آ§ط·آ¦ط·آ¬ ط¸ث†ط·آ§ط¸â€‍ط¸â€¦ط·آ®ط·آ±ط·آ¬ط·آ§ط·ع¾ ط¸ث†ط·آ§ط¸â€‍ط·آµط¸ث†ط·آ± ط·آ§ط¸â€‍ط·آ®ط·ع¾ط·آ§ط¸â€¦ط¸ظ¹ط·آ© ط¸â€،ط¸â€ ط·آ§ ط·آ¹ط¸â€ ط·آ¯ط¸â€¦ط·آ§ ط·ع¾ط·آµط·آ¨ط·آ­ ط·آ­ط·آ§ط¸â€‍ط·آ©
+                        ط·آ§ط¸â€‍ط¸â€¦ط·آ´ط·آ±ط¸ث†ط·آ¹ &quot;ط¸â€¦ط·ط›ط¸â€‍ط¸â€ڑ&quot; ط·آ£ط¸ث† &quot;ط¸â€¦ط¸ئ’ط·ع¾ط¸â€¦ط¸â€‍&quot;. ط·آ¥ط·آ¨ط¸â€ڑط·آ§ط·طŒ ط·آ§ط¸â€‍ط¸â€ڑط·آ³ط¸â€¦ ط·آ¸ط·آ§ط¸â€،ط·آ±ط¸â€¹ط·آ§ ط·آ¯ط·آ§ط·آ®ط¸â€‍ ط·آ§ط¸â€‍ط¸â€‍ط¸ث†ط·آ­ط·آ©
+                        ط¸ظ¹ط·آ³ط·آ§ط·آ¹ط·آ¯ ط·آ§ط¸â€‍ط¸ظ¾ط·آ±ط¸ظ¹ط¸â€ڑ ط·آ¹ط¸â€‍ط¸â€° ط·آ±ط·آ¤ط¸ظ¹ط·آ© ط·آ§ط¸â€‍ط¸â€¦ط·آ³ط·آ§ط·آ± ط·آ§ط¸â€‍ط¸ئ’ط·آ§ط¸â€¦ط¸â€‍ ط¸â€‍ط¸â€‍ط¸â€¦ط·آ´ط·آ±ط¸ث†ط·آ¹ ط¸â€¦ط¸â€  ط·آ§ط¸â€‍ط·آ¨ط·آ¯ط·آ§ط¸ظ¹ط·آ© ط·آ¥ط¸â€‍ط¸â€° ط·آ§ط¸â€‍ط·آ¥ط¸â€ڑط¸ظ¾ط·آ§ط¸â€‍.
                       </p>
                     </div>
                   </div>
@@ -2946,20 +2946,20 @@ export function CreateProjectUi({
                   <MetricCard
                     icon={CheckCircle2}
                     status="incomplete"
-                    label="\\u062d\\u0627\\u0644\\u0629 \\u0627\\u0644\\u0642\\u0633\\u0645"
-                    value="\\u0645\\u0624\\u062c\\u0644 \\u062d\\u0627\\u0644\\u064a\\u064b\\u0627"
+                    label="ط·ط­ط§ظ„ط© ط§ظ„ظ‚ط³ظ…"
+                    value="ط¸ظ…ط¤ط¬ظ„ ط­ط§ظ„ظٹظ‹ط§"
                   />
                   <MetricCard
                     icon={FileText}
                     status="incomplete"
-                    label="\\u0627\\u0644\\u062d\\u0627\\u0644\\u0629 \\u0627\\u0644\\u062d\\u0627\\u0644\\u064a\\u0629"
+                    label="ط·ط§ظ„ط­ط§ظ„ط© ط§ظ„ط­ط§ظ„ظٹط©"
                     value={statusLabels[formData.status]}
                   />
                   <MetricCard
                     icon={FileImage}
                     status="incomplete"
-                    label="\\u064a\\u062a\\u0641\\u0639\\u0651\\u0644 \\u0639\\u0646\\u062f"
-                    value="\\u0625\\u063a\\u0644\\u0627\\u0642 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639"
+                    label="ط·آ¸ط¸ظ¹ط·ع¾ط¸ظ¾ط·آ¹ط¸â€کط¸â€‍ ط·آ¹ط¸â€ ط·آ¯"
+                    value="ط·ط¥ط؛ظ„ط§ظ‚ ط§ظ„ظ…ط´ط±ظˆط¹"
                   />
                 </div>
               </SectionBodyLayout>
@@ -2970,8 +2970,8 @@ export function CreateProjectUi({
           <SectionCard
             id="finance"
             index={financeSectionIndex}
-            title="\\u0627\\u0644\\u0628\\u064a\\u0627\\u0646\\u0627\\u062a \\u0627\\u0644\\u0645\\u0627\\u0644\\u064a\\u0629"
-            description="\\u0642\\u0633\\u0645 \\u0645\\u0627\\u0644\\u064a \\u0623\\u0648\\u0636\\u062d \\u0648\\u0623\\u0643\\u062b\\u0631 \\u0625\\u0628\\u0631\\u0627\\u0632\\u064b\\u0627 \\u064a\\u0636\\u0639 \\u0627\\u0644\\u0645\\u0633\\u062a\\u0647\\u062f\\u0641 \\u0648\\u0627\\u0644\\u062d\\u0627\\u0644\\u064a \\u0648\\u0627\\u0644\\u0639\\u0627\\u0626\\u062f \\u0648\\u0627\\u0644\\u0645\\u062f\\u0629 \\u0636\\u0645\\u0646 \\u0634\\u0628\\u0643\\u0629 \\u0627\\u0633\\u062a\\u062b\\u0645\\u0627\\u0631\\u064a\\u0629 \\u0645\\u0646\\u0638\\u0645\\u0629."
+            title="ط·ط§ظ„ط¨ظٹط§ظ†ط§طھ ط§ظ„ظ…ط§ظ„ظٹط©"
+            description="ط¸ظ‚ط³ظ… ظ…ط§ظ„ظٹ ط£ظˆط¶ط­ ظˆط£ظƒط«ط± ط¥ط¨ط±ط§ط²ظ‹ط§ ظٹط¶ط¹ ط§ظ„ظ…ط³طھظ‡ط¯ظپ ظˆط§ظ„ط­ط§ظ„ظٹ ظˆط§ظ„ط¹ط§ط¦ط¯ ظˆط§ظ„ظ…ط¯ط© ط¶ظ…ظ† ط´ط¨ظƒط© ط§ط³طھط«ظ…ط§ط±ظٹط© ظ…ظ†ط¸ظ…ط©."
             icon={Landmark}
             status={sectionStatuses.finance}
             toneClassName="bg-[linear-gradient(135deg,rgba(11,23,38,0.07),rgba(242,174,48,0.11),rgba(255,255,255,0.98))] border-b border-slate-200/70 pb-6"
@@ -2993,29 +2993,29 @@ export function CreateProjectUi({
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                 <MetricCard
                   icon={Target}
-                  label="\\u0627\\u0644\\u0645\\u0628\\u0644\\u063a \\u0627\\u0644\\u0645\\u0633\\u062a\\u0647\\u062f\\u0641"
-                  value={formatDisplayValue(formData.targetAmount, "\\u0622\\u00b1.\\u0637\\u00b7\\u0622\\u00b3")}
+                  label="ط·ط§ظ„ظ…ط¨ظ„ط؛ ط§ظ„ظ…ط³طھظ‡ط¯ظپ"
+                  value={formatDisplayValue(formData.targetAmount, "ط·آ·ط¢آ±.ط·آ·ط¢آ³")}
                 />
                 <MetricCard
                   icon={BarChart3}
-                  label="\\u0627\\u0644\\u0645\\u0628\\u0644\\u063a \\u0627\\u0644\\u062d\\u0627\\u0644\\u064a"
-                  value={formatDisplayValue(formData.currentAmount, "\\u0622\\u00b1.\\u0637\\u00b7\\u0622\\u00b3")}
+                  label="ط·ط§ظ„ظ…ط¨ظ„ط؛ ط§ظ„ط­ط§ظ„ظٹ"
+                  value={formatDisplayValue(formData.currentAmount, "ط·آ·ط¢آ±.ط·آ·ط¢آ³")}
                 />
                 <MetricCard
                   icon={Landmark}
-                  label="\\u0627\\u0644\\u062d\\u062f \\u0627\\u0644\\u0623\\u062f\\u0646\\u0649"
-                  value={formatDisplayValue(formData.minInvestment, "\\u0622\\u00b1.\\u0637\\u00b7\\u0622\\u00b3")}
+                  label="ط·ط§ظ„ط­ط¯ ط§ظ„ط£ط¯ظ†ظ‰"
+                  value={formatDisplayValue(formData.minInvestment, "ط·آ·ط¢آ±.ط·آ·ط¢آ³")}
                 />
                 <MetricCard
                   icon={Sparkles}
-                  label="\\u0627\\u0644\\u0639\\u0627\\u0626\\u062f \\u0627\\u0644\\u0633\\u0646\\u0648\\u064a"
+                  label="ط·ط§ظ„ط¹ط§ط¦ط¯ ط§ظ„ط³ظ†ظˆظٹ"
                   value={formatDisplayValue(formData.annualReturn, "%")}
                 />
               </div>
 
               <div className="rounded-[26px] border border-slate-200/80 bg-white/90 p-5 shadow-sm">
                 <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-                  <Field label="\\u0627\\u0644\\u0645\\u0628\\u0644\\u063a \\u0627\\u0644\\u0645\\u0633\\u062a\\u0647\\u062f\\u0641">
+                  <Field label="ط·ط§ظ„ظ…ط¨ظ„ط؛ ط§ظ„ظ…ط³طھظ‡ط¯ظپ">
                     <Input
                       dir="ltr"
                       inputMode="numeric"
@@ -3026,7 +3026,7 @@ export function CreateProjectUi({
                       }
                     />
                   </Field>
-                  <Field label="\\u0627\\u0644\\u0645\\u0628\\u0644\\u063a \\u0627\\u0644\\u062d\\u0627\\u0644\\u064a">
+                  <Field label="ط·ط§ظ„ظ…ط¨ظ„ط؛ ط§ظ„ط­ط§ظ„ظٹ">
                     <Input
                       dir="ltr"
                       inputMode="numeric"
@@ -3037,7 +3037,7 @@ export function CreateProjectUi({
                       }
                     />
                   </Field>
-                  <Field label="\\u0627\\u0644\\u062d\\u062f \\u0627\\u0644\\u0623\\u062f\\u0646\\u0649">
+                  <Field label="ط·ط§ظ„ط­ط¯ ط§ظ„ط£ط¯ظ†ظ‰">
                     <Input
                       dir="ltr"
                       inputMode="numeric"
@@ -3048,7 +3048,7 @@ export function CreateProjectUi({
                       }
                     />
                   </Field>
-                  <Field label="\\u0627\\u0644\\u0639\\u0627\\u0626\\u062f \\u0627\\u0644\\u0633\\u0646\\u0648\\u064a %">
+                  <Field label="ط·ط§ظ„ط¹ط§ط¦ط¯ ط§ظ„ط³ظ†ظˆظٹ %">
                     <Input
                       dir="ltr"
                       inputMode="numeric"
@@ -3059,7 +3059,7 @@ export function CreateProjectUi({
                       }
                     />
                   </Field>
-                  <Field label="\\u0627\\u0644\\u0645\\u062f\\u0629 \\u0628\\u0627\\u0644\\u0634\\u0647\\u0648\\u0631">
+                  <Field label="ط·ط§ظ„ظ…ط¯ط© ط¨ط§ظ„ط´ظ‡ظˆط±">
                     <Input
                       dir="ltr"
                       inputMode="numeric"
@@ -3070,7 +3070,7 @@ export function CreateProjectUi({
                       }
                     />
                   </Field>
-                  <Field label="\\u0639\\u062f\\u062f \\u0627\\u0644\\u0645\\u0633\\u062a\\u062b\\u0645\\u0631\\u064a\\u0646">
+                  <Field label="ط·آ¹ط·آ¯ط·آ¯ ط·آ§ط¸â€‍ط¸â€¦ط·آ³ط·ع¾ط·آ«ط¸â€¦ط·آ±ط¸ظ¹ط¸â€ ">
                     <Input
                       dir="ltr"
                       inputMode="numeric"
@@ -3089,13 +3089,13 @@ export function CreateProjectUi({
           <SectionCard
             id={FINAL_SETTINGS_SECTION_ID}
             index={finalSettingsSectionIndex}
-            title="\\u0627\\u0644\\u0625\\u0639\\u062f\\u0627\\u062f\\u0627\\u062a \\u0627\\u0644\\u062e\\u062a\\u0627\\u0645\\u064a\\u0629"
-            description="\\u0645\\u0631\\u062d\\u0644\\u0629 \\u062e\\u062a\\u0627\\u0645\\u064a\\u0629 \\u0645\\u0648\\u062d\\u062f\\u0629 \\u062a\\u062c\\u0645\\u0639 \\u0645\\u0635\\u062f\\u0631 \\u0627\\u0644\\u062a\\u0642\\u062f\\u0645 \\u0648\\u062e\\u064a\\u0627\\u0631\\u0627\\u062a \\u0627\\u0644\\u0639\\u0631\\u0636 \\u0648\\u0627\\u0645\\u062a\\u064a\\u0627\\u0632\\u0627\\u062a VIP \\u0648\\u0627\\u0644\\u0645\\u062d\\u062a\\u0648\\u0649 \\u0627\\u0644\\u062e\\u062a\\u0627\\u0645\\u064a \\u0642\\u0628\\u0644 \\u0627\\u0644\\u062d\\u0641\\u0638."
+            title="ط·آ§ط¸â€‍ط·آ¥ط·آ¹ط·آ¯ط·آ§ط·آ¯ط·آ§ط·ع¾ ط·آ§ط¸â€‍ط·آ®ط·ع¾ط·آ§ط¸â€¦ط¸ظ¹ط·آ©"
+            description="ط¸â€¦ط·آ±ط·آ­ط¸â€‍ط·آ© ط·آ®ط·ع¾ط·آ§ط¸â€¦ط¸ظ¹ط·آ© ط¸â€¦ط¸ث†ط·آ­ط·آ¯ط·آ© ط·ع¾ط·آ¬ط¸â€¦ط·آ¹ ط¸â€¦ط·آµط·آ¯ط·آ± ط·آ§ط¸â€‍ط·ع¾ط¸â€ڑط·آ¯ط¸â€¦ ط¸ث†ط·آ®ط¸ظ¹ط·آ§ط·آ±ط·آ§ط·ع¾ ط·آ§ط¸â€‍ط·آ¹ط·آ±ط·آ¶ ط¸ث†ط·آ§ط¸â€¦ط·ع¾ط¸ظ¹ط·آ§ط·آ²ط·آ§ط·ع¾ VIP ط¸ث†ط·آ§ط¸â€‍ط¸â€¦ط·آ­ط·ع¾ط¸ث†ط¸â€° ط·آ§ط¸â€‍ط·آ®ط·ع¾ط·آ§ط¸â€¦ط¸ظ¹ ط¸â€ڑط·آ¨ط¸â€‍ ط·آ§ط¸â€‍ط·آ­ط¸ظ¾ط·آ¸."
             icon={CheckCircle2}
             status={sectionStatuses[FINAL_SETTINGS_SECTION_ID]}
             headerAside={
               <Badge className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-700">
-                {isCompletionSectionEditable ? completionSectionSummary : "3 \\u0645\\u062d\\u0627\\u0648\\u0631 \\u062e\\u062a\\u0627\\u0645\\u064a\\u0629"}
+                {isCompletionSectionEditable ? completionSectionSummary : "3 ط¸â€¦ط·آ­ط·آ§ط¸ث†ط·آ± ط·آ®ط·ع¾ط·آ§ط¸â€¦ط¸ظ¹ط·آ©"}
               </Badge>
             }
           >
@@ -3111,19 +3111,19 @@ export function CreateProjectUi({
               <div className="grid gap-3 md:grid-cols-3">
                 <MetricCard
                   icon={Gauge}
-                  label="\\u0645\\u0635\\u062f\\u0631 \\u0627\\u0644\\u062a\\u0642\\u062f\\u0645"
+                  label="ط¸â€¦ط·آµط·آ¯ط·آ± ط·آ§ط¸â€‍ط·ع¾ط¸â€ڑط·آ¯ط¸â€¦"
                   status={progressSectionStatus}
                   value={progressModeLabels[formData.progressMode]}
                 />
                 <MetricCard
                   icon={Crown}
-                  label="\\u0627\\u0644\\u062e\\u064a\\u0627\\u0631\\u0627\\u062a \\u0627\\u0644\\u0625\\u0636\\u0627\\u0641\\u064a\\u0629"
+                  label="ط·آ§ط¸â€‍ط·آ®ط¸ظ¹ط·آ§ط·آ±ط·آ§ط·ع¾ ط·آ§ط¸â€‍ط·آ¥ط·آ¶ط·آ§ط¸ظ¾ط¸ظ¹ط·آ©"
                   status={optionsSectionStatus}
-                  value={activeOptionLabels.join("\\u00a2\\u0622\\u00b7 ") || "\\u0625\\u0639\\u062f\\u0627\\u062f\\u0627\\u062a \\u0627\\u0641\\u062a\\u0631\\u0627\\u0636\\u064a\\u0629"}
+                  value={activeOptionLabels.join(" ط¢آ· ") || "ط·آ¥ط·آ¹ط·آ¯ط·آ§ط·آ¯ط·آ§ط·ع¾ ط·آ§ط¸ظ¾ط·ع¾ط·آ±ط·آ§ط·آ¶ط¸ظ¹ط·آ©"}
                 />
                 <MetricCard
                   icon={FileText}
-                  label="\\u0627\\u0644\\u0645\\u062d\\u062a\\u0648\\u0649 \\u0627\\u0644\\u062e\\u062a\\u0627\\u0645\\u064a"
+                  label="ط·آ§ط¸â€‍ط¸â€¦ط·آ­ط·ع¾ط¸ث†ط¸â€° ط·آ§ط¸â€‍ط·آ®ط·ع¾ط·آ§ط¸â€¦ط¸ظ¹"
                   status={completionSectionStatus}
                   value={completionSectionSummary}
                 />
@@ -3139,8 +3139,8 @@ export function CreateProjectUi({
           <SectionCard
             id="progress"
             index={9}
-            title="\\u0645\\u0635\\u062f\\u0631 \\u0627\\u0644\\u062a\\u0642\\u062f\\u0645"
-            description="\\u0631\\u0628\\u0637 \\u0637\\u0631\\u064a\\u0642\\u0629 \\u0627\\u0644\\u062d\\u0633\\u0627\\u0628 \\u0628\\u0627\\u0644\\u0623\\u0648\\u0632\\u0627\\u0646 \\u0627\\u0644\\u062d\\u0627\\u0644\\u064a\\u0629 \\u062f\\u0627\\u062e\\u0644 \\u0648\\u0627\\u062c\\u0647\\u0629 \\u0623\\u0648\\u0636\\u062d \\u062a\\u0634\\u0631\\u062d \\u0627\\u0644\\u0639\\u0644\\u0627\\u0642\\u0629 \\u0628\\u064a\\u0646 \\u0627\\u0644\\u062a\\u0645\\u0648\\u064a\\u0644 \\u0648\\u0627\\u0644\\u0645\\u0631\\u0627\\u062d\\u0644."
+            title="ط¸ظ…طµط¯ط± ط§ظ„طھظ‚ط¯ظ…"
+            description="ط·ط±ط¨ط· ط·ط±ظٹظ‚ط© ط§ظ„ط­ط³ط§ط¨ ط¨ط§ظ„ط£ظˆط²ط§ظ† ط§ظ„ط­ط§ظ„ظٹط© ط¯ط§ط®ظ„ ظˆط§ط¬ظ‡ط© ط£ظˆط¶ط­ طھط´ط±ط­ ط§ظ„ط¹ظ„ط§ظ‚ط© ط¨ظٹظ† ط§ظ„طھظ…ظˆظٹظ„ ظˆط§ظ„ظ…ط±ط§ط­ظ„."
             icon={Gauge}
             status={sectionStatuses.progress}
             headerAside={
@@ -3158,7 +3158,7 @@ export function CreateProjectUi({
                 />
               }
             >
-                <Field label="\\u0637\\u0637\\u0631\\u064a\\u0642\\u0629 \\u0627\\u0644\\u062d\\u0633\\u0627\\u0628" className="md:col-span-3">
+                <Field label="ط·ط·ط±ظٹظ‚ط© ط§ظ„ط­ط³ط§ط¨" className="md:col-span-3">
                   <Select
                     value={formData.progressMode}
                     onValueChange={(value) =>
@@ -3172,16 +3172,16 @@ export function CreateProjectUi({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="funding">\\u0637\\u062d\\u0633\\u0628 \\u0627\\u0644\\u062a\\u0645\\u0648\\u064a\\u0644 \\u0641\\u0642\\u0637"</SelectItem>
-                      <SelectItem value="milestones">\\u0637\\u062d\\u0633\\u0628 \\u0627\\u0644\\u0645\\u0631\\u0627\\u062d\\u0644 \\u0641\\u0642\\u0637"</SelectItem>
-                      <SelectItem value="hybrid">\\u0638\\u0647\\u062c\\u064a\\u0646 (\\u062a\\u0645\\u0648\\u064a\\u0644 + \\u0645\\u0631\\u0627\\u062d\\u0644)"</SelectItem>
+                      <SelectItem value="funding">ط·ط­ط³ط¨ ط§ظ„طھظ…ظˆظٹظ„ ظپظ‚ط·</SelectItem">
+                      <SelectItem value="milestones">ط·ط­ط³ط¨ ط§ظ„ظ…ط±ط§ط­ظ„ ظپظ‚ط·</SelectItem">
+                      <SelectItem value="hybrid">ط¸ظ‡ط¬ظٹظ† (طھظ…ظˆظٹظ„ + ظ…ط±ط§ط­ظ„)</SelectItem">
                     </SelectContent>
                   </Select>
                 </Field>
 
                 {formData.progressMode === "hybrid" ? (
                   <>
-                    <Field label="\\u0645\\u0639\\u062f\\u0644 \\u0627\\u0644\\u062a\\u0645\\u0648\\u064a\\u0644 (%)">
+                    <Field label="ط¸ظ…ط¹ط¯ظ„ ط§ظ„طھظ…ظˆظٹظ„ (%)">
                       <Input
                         dir="ltr"
                         inputMode="numeric"
@@ -3195,7 +3195,7 @@ export function CreateProjectUi({
                         }
                       />
                     </Field>
-                    <Field label="\\u0645\\u0639\\u062f\\u0644 \\u0627\\u0644\\u0645\\u0631\\u0627\\u062d\\u0644 (%)">
+                    <Field label="ط¸ظ…ط¹ط¯ظ„ ط§ظ„ظ…ط±ط§ط­ظ„ (%)">
                       <Input
                         dir="ltr"
                         inputMode="numeric"
@@ -3222,8 +3222,8 @@ export function CreateProjectUi({
                         }`}
                       >
                         {progressWeightsTotal === 100
-                          ? "\\u0627\\u0644\\u062a\\u0648\\u0632\\u064a\\u0639 \\u0627\\u0644\\u062d\\u0627\\u0644\\u064a \\u0645\\u062a\\u0648\\u0627\\u0632\\u0646 \\u0639\\u0644\\u0649 100%."
-                          : "\\u0647\\u0630\\u0627 \\u0627\\u0644\\u0645\\u0624\\u0634\\u0631 \\u0628\\u0635\\u0631\\u064a \\u0641\\u0642\\u0637 \\u0648\\u0644\\u0627 \\u064a\\u063a\\u064a\\u0631 \\u0627\\u0644\\u0641\\u0627\\u0644\\u064a\\u062f\\u064a\\u0634\\u0646 \\u0627\\u0644\\u062d\\u0627\\u0644\\u064a."}
+                          ? "ط·ط§ظ„طھظˆط²ظٹط¹ ط§ظ„ط­ط§ظ„ظٹ ظ…طھظˆط§ط²ظ† ط¹ظ„ظ‰ 100%."
+                          : "ط¸ظ‡ط°ط§ ط§ظ„ظ…ط¤ط´ط± ط¨طµط±ظٹ ظپظ‚ط· ظˆظ„ط§ ظٹط؛ظٹط± ط§ظ„ظپط§ظ„ظٹط¯ظٹط´ظ† ط§ظ„ط­ط§ظ„ظٹ."}
                       </p>
                     </div>
                   </>
@@ -3236,15 +3236,15 @@ export function CreateProjectUi({
           <SectionCard
             id="options"
             index={10}
-            title="\\u062e\\u064a\\u0627\\u0631\\u0627\\u062a \\u0625\\u0636\\u0627\\u0641\\u064a\\u0629"
-            description="\\u0625\\u062f\\u0627\\u0631\\u0629 \\u0645\\u064a\\u0632\\u0629 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639 \\u0648\\u0627\\u0645\\u062a\\u064a\\u0627\\u0632\\u0627\\u062a VIP \\u0636\\u0645\\u0646 \\u0628\\u0644\\u0648\\u0643 \\u0645\\u0633\\u062a\\u0642\\u0644 \\u0648\\u0648\\u0627\\u0636\\u062d \\u0628\\u0635\\u0631\\u064a\\u064b\\u0627."
+            title="ط·ط®ظٹط§ط±ط§طھ ط¥ط¶ط§ظپظٹط©"
+            description="ط·ط¥ط¯ط§ط±ط© ظ…ظٹط²ط© ط§ظ„ظ…ط´ط±ظˆط¹ ظˆط§ظ…طھظٹط§ط²ط§طھ VIP ط¶ظ…ظ† ط¨ظ„ظˆظƒ ظ…ط³طھظ‚ظ„ ظˆظˆط§ط¶ط­ ط¨طµط±ظٹظ‹ط§."
             icon={Crown}
             status={sectionStatuses.options}
             headerAside={
               <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
                 {formData.isVip === "true" || formData.projectType === "vip_exclusive"
                   ? `VIP ${vipTierLabels[formData.vipTier]}`
-                  : "\\u0625\\u0639\\u062f\\u0627\\u062f\\u0627\\u062a \\u0627\\u0641\\u062a\\u0631\\u0627\\u0636\\u064a\\u0629"}
+                  : "ط·ط¥ط¹ط¯ط§ط¯ط§طھ ط§ظپطھط±ط§ط¶ظٹط©"}
               </Badge>
             }
           >
@@ -3257,7 +3257,7 @@ export function CreateProjectUi({
                 />
               }
             >
-                <Field label="\\u0645\\u0645\\u064a\\u0632 (featured)">
+                <Field label="ط¸â€¦ط¸â€¦ط¸ظ¹ط·آ² (featured)">
                   <Select
                     value={formData.featured}
                     onValueChange={(value) =>
@@ -3271,8 +3271,8 @@ export function CreateProjectUi({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="false">\\u0644\\u0627"</SelectItem>
-                      <SelectItem value="true">\\u0646\\u0639\\u0645"</SelectItem>
+                      <SelectItem value="false">ط¸â€‍ط·آ§</SelectItem">
+                      <SelectItem value="true">ط¸â€ ط·آ¹ط¸â€¦</SelectItem">
                     </SelectContent>
                   </Select>
                 </Field>
@@ -3290,12 +3290,12 @@ export function CreateProjectUi({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="false">\\u0644\\u0627"</SelectItem>
-                      <SelectItem value="true">\\u0646\\u0639\\u0645"</SelectItem>
+                      <SelectItem value="false">ط¸â€‍ط·آ§</SelectItem">
+                      <SelectItem value="true">ط¸â€ ط·آ¹ط¸â€¦</SelectItem">
                     </SelectContent>
                   </Select>
                 </Field>
-                <Field label="\\u0645\\u0633\\u062a\\u0648\\u0649 VIP (vipTier)">
+                <Field label="ط¸â€¦ط·آ³ط·ع¾ط¸ث†ط¸â€° VIP (vipTier)">
                   <Select
                     value={formData.vipTier}
                     onValueChange={(value) =>
@@ -3341,7 +3341,7 @@ export function CreateProjectUi({
                   onClick={() => setLocation(backPath)}
                 >
 
-                  ط·آ·ط¢آ¥ط·آ¸أ¢â‚¬â€چط·آ·ط·â€؛ط·آ·ط¢آ§ط·آ·ط·إ’
+                  ط·آ¥ط¸â€‍ط·ط›ط·آ§ط·طŒ
                 </Button>
                 <Button
                   type="submit"
@@ -3374,10 +3374,10 @@ export function CreateProjectUi({
                         <FileImage className="h-6 w-6" />
                       </span>
                       <div>
-                        <p className="text-sm font-semibold">لم تتم إضافة صورة غلاف بعد</p>
+                        <p className="text-sm font-semibold">ط¸ظ„ظ… طھطھظ… ط¥ط¶ط§ظپط© طµظˆط±ط© ط؛ظ„ط§ظپ ط¨ط¹ط¯</p">
                         <p className="mt-1 text-xs leading-6 text-white/70">
 
-                          ط·آ·ط¢آ³ط·آ·ط¹آ¾ط·آ·ط¢آ±ط·آ·ط¹آ¾ط·آ·ط¢آ¨ط·آ·ط¢آ· ط·آ¸أ¢â‚¬طŒط·آ¸ط«â€ ط·آ¸ط¸آ¹ط·آ·ط¢آ© ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ´ط·آ·ط¢آ±ط·آ¸ط«â€ ط·آ·ط¢آ¹ ط·آ·ط¢آ¨ط·آ·ط¢آµط·آ·ط¢آ±ط·آ¸ط¸آ¹ط·آ¸أ¢â‚¬آ¹ط·آ·ط¢آ§ ط·آ¸أ¢â‚¬طŒط·آ¸أ¢â‚¬آ ط·آ·ط¢آ§ ط·آ·ط¢آ¨ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ¬ط·آ·ط¢آ±ط·آ·ط¢آ¯ ط·آ·ط¢آ±ط·آ¸ط¸آ¾ط·آ·ط¢آ¹ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آµط·آ¸ط«â€ ط·آ·ط¢آ±ط·آ·ط¢آ© ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ£ط·آ·ط¢آ³ط·آ·ط¢آ§ط·آ·ط¢آ³ط·آ¸ط¸آ¹ط·آ·ط¢آ©.
+                          ط·آ³ط·ع¾ط·آ±ط·ع¾ط·آ¨ط·آ· ط¸â€،ط¸ث†ط¸ظ¹ط·آ© ط·آ§ط¸â€‍ط¸â€¦ط·آ´ط·آ±ط¸ث†ط·آ¹ ط·آ¨ط·آµط·آ±ط¸ظ¹ط¸â€¹ط·آ§ ط¸â€،ط¸â€ ط·آ§ ط·آ¨ط¸â€¦ط·آ¬ط·آ±ط·آ¯ ط·آ±ط¸ظ¾ط·آ¹ ط·آ§ط¸â€‍ط·آµط¸ث†ط·آ±ط·آ© ط·آ§ط¸â€‍ط·آ£ط·آ³ط·آ§ط·آ³ط¸ظ¹ط·آ©.
                         </p>
                       </div>
                     </div>
@@ -3398,8 +3398,8 @@ export function CreateProjectUi({
                       <span className={cn("h-1.5 w-1.5 rounded-full", activeSectionAppearance.dot)} />
                       <span>
                         {activeSectionStatus === "complete"
-                          ? "\\u0627\\u0644\\u0642\\u0633\\u0645 \\u0627\\u0644\\u062d\\u0627\\u0644\\u064a \\u0645\\u0643\\u062a\\u0645\\u0644"
-                          : "\\u0627\\u0644\\u0642\\u0633\\u0645 \\u0627\\u0644\\u062d\\u0627\\u0644\\u064a \\u064a\\u062d\\u062a\\u0627\\u062c \\u0645\\u062a\\u0627\\u0628\\u0639\\u0629"}
+                          ? "ط·ط§ظ„ظ‚ط³ظ… ط§ظ„ط­ط§ظ„ظٹ ظ…ظƒطھظ…ظ„"
+                          : "ط·ط§ظ„ظ‚ط³ظ… ط§ظ„ط­ط§ظ„ظٹ ظٹط­طھط§ط¬ ظ…طھط§ط¨ط¹ط©"}
                       </span>
                     </span>
                   </div>
@@ -3416,7 +3416,7 @@ export function CreateProjectUi({
 
                   <div className="mt-4 rounded-[22px] border border-white/12 bg-white/10 px-3.5 py-3 backdrop-blur-sm">
                     <div className="flex items-center justify-between text-[11px] font-semibold text-white/70">
-                      <span>{"\\u0627\\u0644\\u062a\\u0642\\u062f\\u0645 \\u0627\\u0644\\u0639\\u0627\\u0645"}</span>
+                      <span>ط·ط§ظ„طھظ‚ط¯ظ… ط§ظ„ط¹ط§ظ…</span>
                       <span>{completionPercent}%</span>
                     </div>
                     <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/15">
@@ -3426,11 +3426,11 @@ export function CreateProjectUi({
                       />
                     </div>
                     <div className="mt-3 flex items-center justify-between text-xs text-white/78">
-                      <span>{completedSectionsCount}/{visibleSections.length} أقسام مكتملة</span>
+                      <span>{completedSectionsCount}/{visibleSections.length}  ط·آ³ط¸ئ’ط·آ´ط¸â€ ط·آ§ط·ع¾ ط¸â€¦ط¸ئ’ط·ع¾ط¸â€¦ط¸â€‍ط·آ©/span>
                       <span>
                         {pendingSectionsCount === 0
-                          ? "\\u0644\\u0627 \\u062a\\u0648\\u062c\\u062f \\u0646\\u0648\\u0627\\u0642\\u0635"
-                          : `${pendingSectionsCount} \\u0628\\u062d\\u0627\\u062c\\u0629 \\u0645\\u062a\\u0627\\u0628\\u0639\\u0629`}
+                          ? "ط¸ظ„ط§ طھظˆط¬ط¯ ظ†ظˆط§ظ‚طµ"
+                          : `${pendingSectionsCount} ط¨ط­ط§ط¬ط© ظ…طھط§ط¨ط¹ط©`}
                       </span>
                     </div>
                   </div>
@@ -3443,14 +3443,14 @@ export function CreateProjectUi({
                 <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-2">
                   <MetricCard
                     icon={CheckCircle2}
-                    label="\\u0627\\u0644\\u0645\\u0643\\u062a\\u0645\\u0644"
+                    label="ط·ط§ظ„ظ…ظƒطھظ…ظ„"
                     value={`${completedSectionsCount}/${visibleSections.length}`}
                     status={summaryPanelStatus}
                   />
                   <MetricCard
                     icon={CircleHelp}
-                    label="\\u0627\\u0644\\u0645\\u062a\\u0628\\u0642\\u064a"
-                    value={`${pendingSectionsCount} \\u0623\\u0642\\u0633\\u0627\\u0645`}
+                    label="ط·آ§ط¸â€‍ط¸â€¦ط·ع¾ط·آ¨ط¸â€ڑط¸ظ¹"
+                    value={`${pendingSectionsCount} ط£ظ‚ط³ط§ظ…`}
                     status={pendingSectionsCount === 0 ? "complete" : "incomplete"}
                   />
                 </div>
@@ -3460,7 +3460,7 @@ export function CreateProjectUi({
                     <div className="min-w-0 text-right">
                       <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
 
-                        ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬ع‘ط·آ·ط¢آ³ط·آ¸أ¢â‚¬آ¦ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ ط·آ·ط¢آ´ط·آ·ط¢آ·
+                        ط·آ§ط¸â€‍ط¸â€ڑط·آ³ط¸â€¦ ط·آ§ط¸â€‍ط¸â€ ط·آ´ط·آ·
                       </p>
                       <h3 className="mt-1 text-base font-semibold text-slate-950">
                         {activeSectionConfig?.title}
@@ -3476,7 +3476,7 @@ export function CreateProjectUi({
                       )}
                     >
                       <span className={cn("h-1.5 w-1.5 rounded-full", activeSectionAppearance.dot)} />
-                      <span>{activeSectionStatus === "complete" ? "مكتمل" : "غير مكتمل"}</span>
+                      <span>{activeSectionStatus === "complete" ? "ط¸â€¦ط¸ئ’ط·ع¾ط¸â€¦ط¸â€‍" : "ط·آ·ط·ط›ط¸ظ¹ط·آ± ط¸â€¦ط¸ئ’ط·ع¾ط¸â€¦ط¸â€‍}</span">
                     </span>
                   </div>
 
@@ -3491,7 +3491,7 @@ export function CreateProjectUi({
                       <p className="text-sm font-semibold text-slate-950">{sidebarTitle}</p>
                       <p className="text-xs text-slate-500">
 
-                        ط·آ·ط¹آ¾ط·آ¸أ¢â‚¬آ ط·آ¸أ¢â‚¬ع‘ط·آ¸أ¢â‚¬â€چ ط·آ·ط¢آ­ط·آ¸ط¸آ¹ ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ¹ ط·آ·ط¹آ¾ط·آ·ط¢آ´ط·آ·ط¢آ®ط·آ¸ط¸آ¹ط·آ·ط¢آµ ط·آ¸أ¢â‚¬آ¦ط·آ¸ط«â€ ط·آ·ط¢آ­ط·آ·ط¢آ¯ ط·آ¸أ¢â‚¬â€چط·آ¸ط¦â€™ط·آ¸أ¢â‚¬â€چ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ³ط·آ¸ط¦â€™ط·آ·ط¢آ´ط·آ¸أ¢â‚¬آ ط·آ·ط¢آ§ط·آ·ط¹آ¾.
+                        ط·ع¾ط¸â€ ط¸â€ڑط¸â€‍ ط·آ­ط¸ظ¹ ط¸â€¦ط·آ¹ ط·ع¾ط·آ´ط·آ®ط¸ظ¹ط·آµ ط¸â€¦ط¸ث†ط·آ­ط·آ¯ ط¸â€‍ط¸ئ’ط¸â€‍ ط·آ§ط¸â€‍ط·آ³ط¸ئ’ط·آ´ط¸â€ ط·آ§ط·ع¾.
                       </p>
                     </div>
                     <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
@@ -3577,8 +3577,8 @@ export function CreateProjectUi({
                     </div>
                     <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
                       {activeChecklistPendingCount === 0
-                        ? "\\u062c\\u0627\\u0647\\u0632"
-                        : `${activeChecklistPendingCount} \\u0646\\u0648\\u0627\\u0642\\u0635`}
+                        ? "ط·ط¬ط§ظ‡ط²"
+                        : `${activeChecklistPendingCount} ظ†ظˆط§ظ‚طµ`}
                     </Badge>
                   </div>
 
@@ -3611,7 +3611,7 @@ export function CreateProjectUi({
                               )}
                             >
                               <span className={cn("h-1.5 w-1.5 rounded-full", itemAppearance.dot)} />
-                              <span>{item.ready ? "جاهز" : "ناقص"}</span>
+                              <span>{item.ready ? "ط·ط¬ط§ظ‡ط²" : "ط¸ظ†ط§ظ‚طµ}</span">
                             </span>
                           </div>
                         </div>
@@ -3622,10 +3622,10 @@ export function CreateProjectUi({
 
                 <div className="space-y-2">
                   <div className="px-1 text-right">
-                    <p className="text-sm font-semibold text-slate-950">نظرة سريعة</p>
+                    <p className="text-sm font-semibold text-slate-950">ظ†ط¸ط±ط© ط³ط±ظٹط¹ط©</p">
                     <p className="text-xs text-slate-500">
 
-                      ط·آ¸أ¢â‚¬آ¦ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ®ط·آ·ط¢آµ ط·آ·ط¢آ«ط·آ·ط¢آ§ط·آ·ط¢آ¨ط·آ·ط¹آ¾ ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬طŒط·آ¸ط«â€ ط·آ¸ط¸آ¹ط·آ·ط¢آ© ط·آ¸ط«â€ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ£ط·آ·ط¢آµط·آ¸ط«â€ ط·آ¸أ¢â‚¬â€چ ط·آ¸ط«â€ ط·آ¸ط«â€ ط·آ·ط¢آ¶ط·آ·ط¢آ¹ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ´ط·آ·ط¢آ±ط·آ¸ط«â€ ط·آ·ط¢آ¹ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ­ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸ط¸آ¹.
+                      ط¸â€¦ط¸â€‍ط·آ®ط·آµ ط·آ«ط·آ§ط·آ¨ط·ع¾ ط¸â€‍ط¸â€‍ط¸â€،ط¸ث†ط¸ظ¹ط·آ© ط¸ث†ط·آ§ط¸â€‍ط·آ£ط·آµط¸ث†ط¸â€‍ ط¸ث†ط¸ث†ط·آ¶ط·آ¹ ط·آ§ط¸â€‍ط¸â€¦ط·آ´ط·آ±ط¸ث†ط·آ¹ ط·آ§ط¸â€‍ط·آ­ط·آ§ط¸â€‍ط¸ظ¹.
                     </p>
                   </div>
                   <div className="grid gap-3">
