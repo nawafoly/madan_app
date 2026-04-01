@@ -1,6 +1,7 @@
 // client/src/pages/Projects.tsx
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "wouter";
+import useEmblaCarousel from "embla-carousel-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -146,7 +147,19 @@ function MobileProjectCarousel({
   hint: string;
   tone?: "light" | "dark";
 }) {
-  const slider = useDragScroll<HTMLDivElement>();
+  const carouselDirection: "rtl" | "ltr" =
+    typeof document !== "undefined" &&
+    document.documentElement.dir === "ltr"
+      ? "ltr"
+      : "rtl";
+  const [viewportRef, api] = useEmblaCarousel({
+    align: "start",
+    containScroll: "trimSnaps",
+    direction: carouselDirection,
+    dragFree: false,
+    slidesToScroll: 1,
+    skipSnaps: false,
+  });
   const [activeIndex, setActiveIndex] = useState(0);
 
   const canNavigate = items.length > 1;
@@ -154,97 +167,73 @@ function MobileProjectCarousel({
     tone === "dark"
       ? {
           shell:
-            "border-white/12 bg-[linear-gradient(180deg,rgba(255,255,255,0.08)_0%,rgba(255,255,255,0.03)_100%)] text-white shadow-[0_22px_50px_-36px_rgba(0,0,0,0.45)]",
-          kicker: "text-white/55",
+            "border-white/12 bg-[linear-gradient(180deg,rgba(16,33,55,0.96)_0%,rgba(11,26,44,0.92)_100%)] text-white shadow-[0_28px_62px_-40px_rgba(2,12,27,0.62)]",
+          kicker: "text-white/52",
           title: "text-white",
-          helper: "text-white/72",
-          dotIdle: "bg-white/25",
+          helper: "text-white/68",
+          counter: "border-white/12 bg-white/8 text-white",
+          swipeHint: "border-white/10 bg-white/6 text-white/70",
+          divider: "border-white/10",
+          dotIdle: "bg-white/20",
           dotActive: "bg-white",
-          arrow:
-            "border-white/15 bg-white/8 text-white hover:bg-white hover:text-slate-950 disabled:opacity-35",
-          fadeFrom: "from-[#102137]",
-          fadeTo: "to-transparent",
+          arrowEnabled:
+            "border-white/14 bg-white/8 text-white shadow-[0_14px_30px_-24px_rgba(0,0,0,0.55)] hover:bg-white hover:text-slate-950",
+          arrowDisabled: "border-white/10 bg-white/5 text-white/28",
         }
       : {
           shell:
-            "border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98)_0%,rgba(248,250,252,0.96)_100%)] text-slate-950 shadow-[0_22px_50px_-38px_rgba(15,23,42,0.18)]",
+            "border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98)_0%,rgba(248,250,252,0.95)_100%)] text-slate-950 shadow-[0_26px_58px_-42px_rgba(15,23,42,0.18)]",
           kicker: "text-slate-400",
           title: "text-slate-950",
           helper: "text-slate-500",
+          counter: "border-slate-200/80 bg-white text-slate-900",
+          swipeHint: "border-slate-200 bg-slate-50/90 text-slate-600",
+          divider: "border-slate-200/80",
           dotIdle: "bg-slate-300",
           dotActive: "bg-slate-900",
-          arrow:
-            "border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-35",
-          fadeFrom: "from-[#f8fafc]",
-          fadeTo: "to-transparent",
+          arrowEnabled:
+            "border-slate-200 bg-white text-slate-700 shadow-[0_14px_28px_-24px_rgba(15,23,42,0.18)] hover:bg-slate-50",
+          arrowDisabled: "border-slate-200/80 bg-slate-100 text-slate-300",
         };
 
   useEffect(() => {
-    const el = slider.ref.current;
-    if (!el || items.length <= 1) {
+    if (!api || items.length <= 1) {
       setActiveIndex(0);
       return;
     }
 
-    const getStep = () => {
-      const item = el.querySelector<HTMLElement>("[data-mobile-project-card]");
-      if (!item) return el.clientWidth || 1;
-      const styles = window.getComputedStyle(el);
-      const gap = parseFloat(styles.columnGap || styles.gap || "0");
-      return item.offsetWidth + gap || 1;
+    const syncState = () => {
+      setActiveIndex(api.selectedScrollSnap());
     };
 
-    let raf = 0;
-    const updateIndex = () => {
-      const step = getStep();
-      const nextIndex = Math.max(
-        0,
-        Math.min(items.length - 1, Math.round(el.scrollLeft / step))
-      );
-      setActiveIndex(nextIndex);
-    };
-
-    const handleScroll = () => {
-      cancelAnimationFrame(raf);
-      raf = window.requestAnimationFrame(updateIndex);
-    };
-
-    updateIndex();
-    el.addEventListener("scroll", handleScroll, { passive: true });
-    window.addEventListener("resize", handleScroll);
+    syncState();
+    api.on("select", syncState);
+    api.on("reInit", syncState);
 
     return () => {
-      cancelAnimationFrame(raf);
-      el.removeEventListener("scroll", handleScroll);
-      window.removeEventListener("resize", handleScroll);
+      api.off("select", syncState);
+      api.off("reInit", syncState);
     };
-  }, [items.length, slider.ref]);
+  }, [api, items.length]);
+
+  useEffect(() => {
+    if (!api) return;
+    api.reInit();
+    api.scrollTo(0, true);
+    setActiveIndex(0);
+  }, [api, items.length]);
+
+  const canScrollPrev = canNavigate && (api?.canScrollPrev() ?? false);
+  const canScrollNext = canNavigate && (api?.canScrollNext() ?? false);
 
   const scrollToIndex = (targetIndex: number) => {
-    const el = slider.ref.current;
-    if (!el) return;
-
-    const item = el.querySelector<HTMLElement>("[data-mobile-project-card]");
-    const styles = window.getComputedStyle(el);
-    const gap = parseFloat(styles.columnGap || styles.gap || "0");
-    const step = (item?.offsetWidth || el.clientWidth || 1) + gap;
     const nextIndex = Math.max(0, Math.min(items.length - 1, targetIndex));
-
-    el.scrollTo({
-      left: step * nextIndex,
-      behavior: "smooth",
-    });
-    setActiveIndex(nextIndex);
+    api?.scrollTo(nextIndex);
   };
 
   return (
     <div className="md:hidden">
-      <div
-        className={cn(
-          "mb-4 rounded-[24px] border px-4 py-4 backdrop-blur",
-          toneMap.shell
-        )}
-      >
+      <div className={cn("rounded-[26px] border p-4", toneMap.shell)}>
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div
@@ -255,98 +244,121 @@ function MobileProjectCarousel({
             >
               {sectionLabel}
             </div>
-            <div className={cn("mt-1 text-sm font-semibold", toneMap.title)}>
-              الفرصة {formatNumberEN(activeIndex + 1)} من{" "}
-              {formatNumberEN(items.length)}
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <div
+                className={cn(
+                  "inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold",
+                  toneMap.counter
+                )}
+              >
+                الفرصة {formatNumberEN(activeIndex + 1)} من{" "}
+                {formatNumberEN(items.length)}
+              </div>
+
+              {canNavigate ? (
+                <div
+                  className={cn(
+                    "inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-medium",
+                    toneMap.swipeHint
+                  )}
+                >
+                  اسحب للتنقل أو استخدم الأسهم
+                </div>
+              ) : null}
             </div>
-            <p className={cn("mt-1 text-xs leading-6", toneMap.helper)}>
+            <p className={cn("mt-2 text-xs leading-6", toneMap.helper)}>
               {hint}
             </p>
           </div>
 
           {canNavigate ? (
-            <div className="flex shrink-0 items-center gap-2">
+            <div dir="ltr" className="flex shrink-0 items-center gap-2">
               <Button
                 type="button"
                 variant="outline"
                 size="icon"
-                className={cn("h-9 w-9 rounded-full", toneMap.arrow)}
+                className={cn(
+                  "h-10 w-10 rounded-full border transition-all duration-200 disabled:opacity-100",
+                  canScrollPrev
+                    ? toneMap.arrowEnabled
+                    : toneMap.arrowDisabled
+                )}
                 onClick={() => scrollToIndex(activeIndex - 1)}
-                disabled={activeIndex === 0}
-                aria-label="المشروع السابق"
+                disabled={!canScrollPrev}
+                aria-label="الفرصة السابقة"
               >
-                <ChevronRight className="h-4 w-4" />
+                <ChevronLeft className="h-4 w-4" />
               </Button>
               <Button
                 type="button"
                 variant="outline"
                 size="icon"
-                className={cn("h-9 w-9 rounded-full", toneMap.arrow)}
+                className={cn(
+                  "h-10 w-10 rounded-full border transition-all duration-200 disabled:opacity-100",
+                  canScrollNext
+                    ? toneMap.arrowEnabled
+                    : toneMap.arrowDisabled
+                )}
                 onClick={() => scrollToIndex(activeIndex + 1)}
-                disabled={activeIndex >= items.length - 1}
-                aria-label="المشروع التالي"
+                disabled={!canScrollNext}
+                aria-label="الفرصة التالية"
               >
-                <ChevronLeft className="h-4 w-4" />
+                <ChevronRight className="h-4 w-4" />
               </Button>
             </div>
           ) : null}
         </div>
 
+        <div className="mt-4">
+          <div
+            ref={viewportRef}
+            dir={carouselDirection}
+            className="overflow-hidden [touch-action:pan-y] select-none"
+          >
+            <div className="flex items-stretch will-change-transform">
+              {items.map((project, index) => (
+                <div
+                  key={project.id}
+                  dir="rtl"
+                  data-mobile-project-card
+                  className="w-full min-w-0 shrink-0 grow-0 basis-full pb-2 pt-1"
+                >
+                  {renderCard(project, index)}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
         {canNavigate ? (
-          <div className="mt-3 flex items-center gap-1.5">
-            {items.map((item, index) => (
-              <button
-                key={item.id}
-                type="button"
-                className={cn(
-                  "h-2 rounded-full transition-all duration-200",
-                  index === activeIndex
-                    ? cn("w-6", toneMap.dotActive)
-                    : cn("w-2", toneMap.dotIdle)
-                )}
-                onClick={() => scrollToIndex(index)}
-                aria-label={`الانتقال إلى المشروع ${index + 1}`}
-                aria-current={index === activeIndex ? "true" : undefined}
-              />
-            ))}
+          <div
+            className={cn(
+              "mt-3 flex items-center justify-between gap-3 border-t pt-3",
+              toneMap.divider
+            )}
+          >
+            <div className={cn("text-[11px] font-medium", toneMap.helper)}>
+              تنقل سريع بين الفرص مع تثبيت واضح لكل بطاقة
+            </div>
+            <div className="flex items-center gap-1.5">
+              {items.map((item, index) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={cn(
+                    "h-2 rounded-full transition-all duration-200",
+                    index === activeIndex
+                      ? cn("w-6", toneMap.dotActive)
+                      : cn("w-2", toneMap.dotIdle)
+                  )}
+                  onClick={() => scrollToIndex(index)}
+                  aria-label={`الانتقال إلى الفرصة ${index + 1}`}
+                  aria-current={index === activeIndex ? "true" : undefined}
+                />
+              ))}
+            </div>
           </div>
         ) : null}
-      </div>
-
-      <div className="relative">
-        <div
-          className={cn(
-            "pointer-events-none absolute inset-y-0 left-0 z-10 w-8 bg-gradient-to-r",
-            toneMap.fadeFrom,
-            toneMap.fadeTo
-          )}
-        />
-        <div
-          className={cn(
-            "pointer-events-none absolute inset-y-0 right-0 z-10 w-10 bg-gradient-to-l",
-            toneMap.fadeFrom,
-            toneMap.fadeTo
-          )}
-        />
-
-        <div
-          ref={slider.ref}
-          {...slider.bind}
-          dir="ltr"
-          className="flex gap-3 overflow-x-auto overflow-y-hidden px-1 pr-10 pb-4 snap-x snap-mandatory scroll-smooth overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden select-none cursor-grab active:cursor-grabbing"
-          style={{ WebkitOverflowScrolling: "touch" }}
-        >
-          {items.map((project, index) => (
-            <div
-              key={project.id}
-              dir="rtl"
-              data-mobile-project-card
-              className="w-[calc(100vw-72px)] max-w-[320px] shrink-0 snap-start"
-            >
-              {renderCard(project, index)}
-            </div>
-          ))}
-        </div>
       </div>
     </div>
   );
@@ -1643,7 +1655,6 @@ export default function ProjectsPage() {
         <CurvedProjectsHero
           title={
             <>
-              <Sparkles className="h-7 w-7" />
               مشاريعنا الاستثمارية
             </>
           }
@@ -2259,7 +2270,6 @@ export default function ProjectsPage() {
         <CurvedProjectsHero
           title={
             <>
-              <Sparkles className="w-7 h-7" />
               مشاريعنا الاستثمارية
             </>
           }
