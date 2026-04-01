@@ -450,7 +450,7 @@ function buildRequestTimelineEvents(input: {
   );
 
   const baseEvents = Array.isArray(request?.events) ? request.events : [];
-  const hasCreatedEvent = baseEvents.some(event =>
+  const hasCreatedEvent = baseEvents.some((event: TimelineEvent) =>
     ["request_created", "request_submitted"].includes(String(event?.type || ""))
   );
 

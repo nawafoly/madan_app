@@ -16,7 +16,7 @@ const numberFormatterCache = new Map<string, Intl.NumberFormat>();
 const dateTimeFormatterCache = new Map<string, Intl.DateTimeFormat>();
 const relativeTimeFormatterCache = new Map<string, Intl.RelativeTimeFormat>();
 
-function buildCacheKey(locale: string, options: Record<string, unknown>) {
+function buildCacheKey<T extends object>(locale: string, options: T) {
   return `${locale}:${JSON.stringify(options)}`;
 }
 

@@ -917,7 +917,7 @@ export default function ProjectDetails() {
         ? completionContent.gallery
         : completedMedia;
 
-    return media.filter((src) => {
+    return media.filter((src: string) => {
       if (!src || seen.has(src)) return false;
       seen.add(src);
       return true;
@@ -1428,7 +1428,7 @@ export default function ProjectDetails() {
                 </CardHeader>
                 <CardContent className="pt-6">
                   <div className="grid gap-4 md:grid-cols-2">
-                    {completionResultsData.map((item, index) => (
+                    {completionResultsData.map((item: string, index: number) => (
                       <div
                         key={`${item}-${index}`}
                         className="rounded-[26px] border border-slate-200 bg-slate-50/70 p-5 shadow-sm"
@@ -1454,7 +1454,7 @@ export default function ProjectDetails() {
                 </CardHeader>
                 <CardContent className="pt-6">
                   <div className="grid gap-4 md:grid-cols-2">
-                    {completionOutputsData.map(output => (
+                    {completionOutputsData.map((output: (typeof completionOutputsData)[number]) => (
                       <div
                         key={output.title}
                         className="rounded-[28px] border border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] p-5 shadow-sm"
@@ -1483,7 +1483,7 @@ export default function ProjectDetails() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3 pt-6">
-                    {completionFinalNotesData.map((note, index) => (
+                    {completionFinalNotesData.map((note: string, index: number) => (
                       <div
                         key={`${note}-${index}`}
                         className="rounded-[22px] border border-slate-200 bg-slate-50/80 p-4 text-sm leading-7 text-slate-700"
@@ -1519,7 +1519,7 @@ export default function ProjectDetails() {
 
                     {completionMediaData.length > 1 ? (
                       <div className="grid grid-cols-3 gap-3">
-                        {completionMediaData.slice(1, 4).map((src, index) => (
+                        {completionMediaData.slice(1, 4).map((src: string, index: number) => (
                           <div
                             key={`${src}-${index}`}
                             className="overflow-hidden rounded-[20px] border border-slate-200 aspect-square"

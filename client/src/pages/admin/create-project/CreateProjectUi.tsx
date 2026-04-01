@@ -115,78 +115,85 @@ export function CreateProjectUi({
   saving,
   totalAssets,
   backPath = "/admin/projects",
-  backLabel = "\\u0627\\u0644\\u0639\\u0648\\u062f\\u0629 \\u0625\\u0644\\u0649 \\u0627\\u0644\\u0645\\u0634\\u0627\\u0631\\u064a\\u0639",
+  backLabel = "العودة إلى المشاريع",
   footerDescription,
-  footerTitle = "\\u0625\\u062c\\u0631\\u0627\\u0621\\u0627\\u062a \\u0627\\u0644\\u0625\\u0646\\u0634\\u0627\\u0621",
+  footerTitle = "إجراءات الإنشاء",
   formId,
   headerActions,
-  headerBadgeText = "Project Creation",
+  headerBadgeText = "إنشاء مشروع",
   headerContext,
   headerDescription,
   headerMetrics,
   headerTitle,
-  primaryActionLabel = "\\u0625\\u0646\\u0634\\u0627\\u0621 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639",
-  primaryActionLoadingLabel = "\\u062c\\u0627\\u0631\\u064d \\u0625\\u0646\\u0634\\u0627\\u0621 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639...",
-  sidebarChecklistDescription = "\\u064a\\u062c\\u0628 \\u0623\\u0646 \\u062a\\u0643\\u0648\\u0646 \\u062c\\u0627\\u0647\\u0632\\u0629 \\u0642\\u0628\\u0644 \\u0627\\u0644\\u062d\\u0641\\u0638.",
-  sidebarChecklistTitle = "\\u0639\\u0646\\u0627\\u0635\\u0631 \\u0623\\u0633\\u0627\\u0633\\u064a\\u0629",
+  primaryActionLabel = "إنشاء المشروع",
+  primaryActionLoadingLabel = "جارٍ إنشاء المشروع...",
+  sidebarChecklistDescription = "يجب أن تكون جاهزة قبل الحفظ.",
+  sidebarChecklistTitle = "عناصر أساسية",
   sidebarMetrics,
-  sidebarTitle = "\\u0644\\u0648\\u062d\\u0629 \\u0627\\u0644\\u062a\\u0646\\u0642\\u0644",
-  sidebarDescription = "\\u0627\\u0646\\u062a\\u0642\\u0627\\u0644 \\u0633\\u0631\\u064a\\u0639 \\u0628\\u064a\\u0646 \\u0627\\u0644\\u0623\\u0642\\u0633\\u0627\\u0645 \\u0645\\u0639 \\u0645\\u0644\\u062e\\u0635 \\u062c\\u0627\\u0647\\u0632\\u064a\\u0629 \\u0627\\u0644\\u0635\\u0641\\u062d\\u0629 \\u0642\\u0628\\u0644 \\u062d\\u0641\\u0638 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639.",
-  workspaceIdLabel = "\\u0645\\u0639\\u0631\\u0651\\u0641 \\u0627\\u0644\\u0645\\u0633\\u0648\\u062f\\u0629",
+  sidebarTitle = "لوحة التنقل",
+  sidebarDescription = "انتقال سريع بين الأقسام مع ملخص جاهزية الصفحة قبل حفظ المشروع.",
+  workspaceIdLabel = "معرّف المسودة",
   workspaceIdValue = draftProjectId.slice(0, 8),
 }: CreateProjectUiProps) {
   const visibleSections = SECTION_DEFINITIONS;
   const resolvedHeaderDescription =
     headerDescription ??
-    "\\u0625\\u0639\\u062f\\u0627\\u062f \\u0645\\u0634\\u0631\\u0648\\u0639 \\u0627\\u0633\\u062a\\u062b\\u0645\\u0627\\u0631\\u064a \\u062c\\u062f\\u064a\\u062f \\u0628\\u0647\\u0648\\u064a\\u0629 \\u0623\\u0648\\u0636\\u062d\\u060c \\u0648\\u0647\\u064a\\u0643\\u0644 \\u0623\\u0642\\u0633\\u0627\\u0645 \\u0645\\u0646\\u0638\\u0645\\u060c \\u0648\\u062a\\u062c\\u0631\\u0628\\u0629 \\u0625\\u062f\\u062e\\u0627\\u0644 \\u0623\\u0642\\u0631\\u0628 \\u0644\\u0645\\u0646\\u0635\\u0627\\u062a \\u0627\\u0644\\u062a\\u0645\\u0648\\u064a\\u0644 \\u0648\\u0627\\u0644\\u0627\\u0633\\u062a\\u062b\\u0645\\u0627\\u0631 \\u0627\\u0644\\u0627\\u062d\\u062a\\u0631\\u0627\\u0641\\u064a\\u0629.";
-  const resolvedHeaderTitle = headerTitle ?? "\\u0625\\u0646\\u0634\\u0627\\u0621 \\u0645\\u0634\\u0631\\u0648\\u0639 \\u062c\\u062f\\u064a\\u062f";
+    "إعداد مشروع استثماري جديد بهوية أوضح، وهيكل أقسام منظم، وتجربة إدخال أقرب لمنصات التمويل والاستثمار الاحترافية.";
+  const resolvedHeaderTitle = headerTitle ?? "إنشاء مشروع جديد";
   const resolvedHeaderMetrics = headerMetrics ?? [
     {
       icon: Target,
-      label: "\\u0627\\u0644\\u062c\\u0627\\u0647\\u0632\\u064a\\u0629 \\u0627\\u0644\\u0623\\u0633\\u0627\\u0633\\u064a\\u0629",
-      value: `${requiredReady}/4 \\u0639\\u0646\\u0627\\u0635\\u0631`,
+      label: "الجاهزية الأساسية",
+      value: `${requiredReady}/4 عناصر`,
     },
     {
       icon: FolderKanban,
-      label: "\\u062a\\u0635\\u0646\\u064a\\u0641 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639",
+      label: "تصنيف المشروع",
       value: projectTypeLabels[formData.projectType],
     },
     {
       icon: FileImage,
-      label: "\\u0627\\u0644\\u0623\\u0635\\u0648\\u0644",
-      value: `${totalAssets} \\u0639\\u0646\\u0627\\u0635\\u0631`,
+      label: "الأصول",
+      value: `${totalAssets} عناصر`,
     },
     {
       icon: BarChart3,
-      label: "\\u0627\\u0644\\u062a\\u0642\\u062f\\u0645",
+      label: "التقدم",
       value: progressModeLabels[formData.progressMode],
     },
   ];
+  const vipTierDisplayLabel =
+    {
+      none: "بدون",
+      silver: "فضي",
+      gold: "ذهبي",
+      platinum: "بلاتيني",
+    }[formData.vipTier] ?? vipTierLabels[formData.vipTier];
   const resolvedFooterDescription =
     footerDescription ??
-    `\\u0633\\u064a\\u062a\\u0645 \\u062d\\u0641\\u0638 \\u0646\\u0641\\u0633 \\u0627\\u0644\\u062d\\u0642\\u0648\\u0644 \\u0648\\u0646\\u0641\\u0633 \\u0627\\u0644\\u0640 validation \\u0627\\u0644\\u062d\\u0627\\u0644\\u064a. ${
+    `سيتم حفظ نفس الحقول ونفس قواعد التحقق الحالية. ${
       hasUploadingAttachment
-        ? "\\u064a\\u0648\\u062c\\u062f \\u0645\\u0631\\u0641\\u0642 \\u0642\\u064a\\u062f \\u0627\\u0644\\u0631\\u0641\\u0639 \\u062d\\u0627\\u0644\\u064a\\u064b\\u0627."
-        : "\\u0631\\u0627\\u062c\\u0639 \\u0627\\u0644\\u0639\\u0646\\u0627\\u0635\\u0631 \\u0627\\u0644\\u0623\\u0633\\u0627\\u0633\\u064a\\u0629 \\u062b\\u0645 \\u0623\\u0646\\u0634\\u0626 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639."
+        ? "يوجد مرفق قيد الرفع حاليًا."
+        : "راجع العناصر الأساسية ثم أنشئ المشروع."
     }`;
   const resolvedSidebarMetrics = sidebarMetrics ?? [
     {
       icon: FolderKanban,
-      label: "\\u0645\\u0639\\u0631\\u0651\\u0641 \\u0627\\u0644\\u0645\\u0633\\u0648\\u062f\\u0629",
+      label: "معرّف المسودة",
       value: workspaceIdValue,
     },
     {
       icon: ImagePlus,
-      label: "\\u0627\\u0644\\u0648\\u0633\\u0627\\u0626\\u0637",
-      value: `${totalAssets} \\u0639\\u0646\\u0627\\u0635\\u0631 \\u0645\\u0631\\u062a\\u0628\\u0637\\u0629`,
+      label: "الوسائط",
+      value: `${totalAssets} عناصر مرتبطة`,
     },
     {
       icon: Crown,
       label: "VIP",
       value:
         formData.isVip === "true" || formData.projectType === "vip_exclusive"
-          ? `\\u0645\\u0641\\u0639\\u0651\\u0644 \\u00b7 ${vipTierLabels[formData.vipTier]}`
-          : "\\u063a\\u064a\\u0631 \\u0645\\u0641\\u0639\\u0651\\u0644",
+          ? `مفعّل · ${vipTierDisplayLabel}`
+          : "غير مفعّل",
     },
   ];
   const summaryPanelStatus = visibleSections.every(
@@ -218,7 +225,7 @@ export function CreateProjectUi({
   const activeSectionStatus = sectionStatuses[activeSectionId] ?? "incomplete";
   const activeSectionAppearance = getStatusAppearance(activeSectionStatus);
   const projectDisplayTitle =
-    cleanStr(formData.titleAr) || cleanStr(formData.titleEn) || "\\u0645\\u0634\\u0631\\u0648\\u0639 \\u062c\\u062f\\u064a\\u062f";
+    cleanStr(formData.titleAr) || cleanStr(formData.titleEn) || "مشروع جديد";
   const hasVipRequirement =
     formData.isVip === "true" || formData.projectType === "vip_exclusive";
   const hasCoverImage = Boolean(cleanStr(formData.coverImage));
@@ -229,14 +236,14 @@ export function CreateProjectUi({
     (row) => Boolean(cleanStr(row.q)) && Boolean(cleanStr(row.a))
   ).length;
   const financeMissingFields = [
-    !cleanStr(formData.targetAmount) ? "\\u0627\\u0644\\u0645\\u0628\\u0644\\u063a \\u0627\\u0644\\u0645\\u0633\\u062a\\u0647\\u062f\\u0641" : null,
-    !cleanStr(formData.minInvestment) ? "\\u0627\\u0644\\u062d\\u062f \\u0627\\u0644\\u0623\\u062f\\u0646\\u0649" : null,
-    !cleanStr(formData.annualReturn) ? "\\u0627\\u0644\\u0639\\u0627\\u0626\\u062f \\u0627\\u0644\\u0633\\u0646\\u0648\\u064a" : null,
-    !cleanStr(formData.duration) ? "\\u0627\\u0644\\u0645\\u062f\\u0629" : null,
+    !cleanStr(formData.targetAmount) ? "المبلغ المستهدف" : null,
+    !cleanStr(formData.minInvestment) ? "الحد الأدنى" : null,
+    !cleanStr(formData.annualReturn) ? "العائد السنوي" : null,
+    !cleanStr(formData.duration) ? "المدة" : null,
   ].filter((item): item is string => Boolean(item));
   const activeOptionLabels = [
-    formData.featured === "true" ? "Featured" : null,
-    hasVipRequirement ? `VIP ${vipTierLabels[formData.vipTier]}` : null,
+    formData.featured === "true" ? "مميز" : null,
+    hasVipRequirement ? `VIP ${vipTierDisplayLabel}` : null,
   ].filter((item): item is string => Boolean(item));
   const isCompletionSectionEditable = isCompletionStatus(formData.status);
   const financeSectionIndex =
@@ -256,141 +263,141 @@ export function CreateProjectUi({
       ? "complete"
       : "incomplete";
   const completionSectionSummary = isCompletionStatus(formData.status)
-    ? [
-        filledCompletionResults ? `${filledCompletionResults} \\u0646\\u062a\\u0627\\u0626\\u062c` : "",
-        filledCompletionOutputs ? `${filledCompletionOutputs} \\u0645\\u062e\\u0631\\u062c\\u0627\\u062a` : "",
-        filledCompletionFinalNotes ? `${filledCompletionFinalNotes} \\u0645\\u0644\\u0627\\u062d\\u0638\\u0627\\u062a` : "",
-      ]
-        .filter(Boolean)
-        .join("\\u0622\\u00a2\\u0637\\u00a2\\u0622\\u00b7 ") || "\\u0623\\u0636\\u0641 \\u0627\\u0644\\u0645\\u062d\\u062a\\u0648\\u0649 \\u0627\\u0644\\u062e\\u062a\\u0627\\u0645\\u064a"
-    : "\\u0645\\u062a\\u0627\\u062d \\u0628\\u0639\\u062f \\u0627\\u0644\\u0625\\u063a\\u0644\\u0627\\u0642";
+      ? [
+          filledCompletionResults ? `${filledCompletionResults} نتائج` : "",
+          filledCompletionOutputs ? `${filledCompletionOutputs} مخرجات` : "",
+          filledCompletionFinalNotes ? `${filledCompletionFinalNotes} ملاحظات` : "",
+        ]
+          .filter(Boolean)
+          .join(" · ") || "أضف المحتوى الختامي"
+    : "متاح بعد الإغلاق";
   const sectionDiagnosticCards = {
     basic: {
       icon: Sparkles,
-      title: "\\u0647\\u0648\\u064a\\u0629 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639",
+      title: "هوية المشروع",
       description:
-        "\\u0627\\u0644\\u0639\\u0646\\u0648\\u0627\\u0646 \\u0648\\u0627\\u0644\\u0648\\u0635\\u0641 \\u0647\\u0645\\u0627 \\u0623\\u0648\\u0644 \\u0645\\u0627 \\u064a\\u0639\\u0631\\u0651\\u0641 \\u0627\\u0644\\u0645\\u0633\\u062a\\u062b\\u0645\\u0631 \\u0639\\u0644\\u0649 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639 \\u062f\\u0627\\u062e\\u0644 \\u0627\\u0644\\u0642\\u0648\\u0627\\u0626\\u0645 \\u0648\\u0635\\u0641\\u062d\\u0629 \\u0627\\u0644\\u062a\\u0641\\u0627\\u0635\\u064a\\u0644.",
+        "العنوان والوصف هما أول ما يعرّف المستثمر على المشروع داخل القوائم وصفحة التفاصيل.",
       summary: sectionMeta.basic,
       metrics: [
         {
           icon: CheckCircle2,
-          label: "\\u0627\\u0644\\u0639\\u0646\\u0648\\u0627\\u0646 \\u0627\\u0644\\u0639\\u0631\\u0628\\u064a",
+          label: "العنوان العربي",
           status: cleanStr(formData.titleAr) ? "complete" : "incomplete",
-          value: cleanStr(formData.titleAr) ? "\\u0645\\u0643\\u062a\\u0645\\u0644" : "\\u063a\\u064a\\u0631 \\u0645\\u0643\\u062a\\u0645\\u0644",
+          value: cleanStr(formData.titleAr) ? "مكتمل" : "غير مكتمل",
         },
         {
           icon: CheckCircle2,
-          label: "\\u0627\\u0644\\u0648\\u0635\\u0641 \\u0627\\u0644\\u0639\\u0631\\u0628\\u064a",
+          label: "الوصف العربي",
           status: cleanStr(formData.descriptionAr) ? "complete" : "incomplete",
-          value: cleanStr(formData.descriptionAr) ? "\\u0645\\u0643\\u062a\\u0645\\u0644" : "\\u063a\\u064a\\u0631 \\u0645\\u0643\\u062a\\u0645\\u0644",
+          value: cleanStr(formData.descriptionAr) ? "مكتمل" : "غير مكتمل",
         },
         {
           icon: BriefcaseBusiness,
-          label: "\\u0627\\u0644\\u0639\\u0646\\u0648\\u0627\\u0646 \\u0627\\u0644\\u0625\\u0646\\u062c\\u0644\\u064a\\u0632\\u064a",
-          value: cleanStr(formData.titleEn) ? "\\u0645\\u0648\\u062c\\u0648\\u062f" : "\\u0627\\u062e\\u062a\\u064a\\u0627\\u0631\\u064a",
+          label: "العنوان الإنجليزي",
+          value: cleanStr(formData.titleEn) ? "موجود" : "اختياري",
         },
         {
           icon: BriefcaseBusiness,
-          label: "\\u0627\\u0644\\u0648\\u0635\\u0641 \\u0627\\u0644\\u0625\\u0646\\u062c\\u0644\\u064a\\u0632\\u064a",
-          value: cleanStr(formData.descriptionEn) ? "\\u0645\\u0648\\u062c\\u0648\\u062f" : "\\u0627\\u062e\\u062a\\u064a\\u0627\\u0631\\u064a",
+          label: "الوصف الإنجليزي",
+          value: cleanStr(formData.descriptionEn) ? "موجود" : "اختياري",
         },
       ],
     },
     details: {
       icon: MapPinned,
-      title: "\\u0645\\u0644\\u0641 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639",
+      title: "ملف المشروع",
       description:
-        "\\u0647\\u0630\\u0627 \\u0627\\u0644\\u062c\\u0632\\u0621 \\u064a\\u0636\\u0628\\u0637 \\u0646\\u0648\\u0639 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639 \\u0648\\u062d\\u0627\\u0644\\u062a\\u0647 \\u0648\\u0645\\u0648\\u0642\\u0639\\u0647 \\u0648\\u0631\\u0642\\u0645 \\u0627\\u0644\\u0625\\u0635\\u062f\\u0627\\u0631 \\u062f\\u0627\\u062e\\u0644 \\u0627\\u0644\\u0646\\u0638\\u0627\\u0645 \\u0648\\u0644\\u0648\\u062d\\u0627\\u062a \\u0627\\u0644\\u0645\\u062a\\u0627\\u0628\\u0639\\u0629.",
+        "هذا الجزء يضبط نوع المشروع وحالته وموقعه ورقم الإصدار داخل النظام ولوحات المتابعة.",
       summary: sectionMeta.details,
       metrics: [
         {
           icon: Building2,
-          label: "\\u0646\\u0648\\u0639 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639",
+          label: "نوع المشروع",
           value: projectTypeLabels[formData.projectType],
         },
         {
           icon: FolderKanban,
-          label: "\\u0627\\u0644\\u062d\\u0627\\u0644\\u0629 \\u0627\\u0644\\u062d\\u0627\\u0644\\u064a\\u0629",
+          label: "الحالة الحالية",
           value: statusLabels[formData.status],
         },
         {
           icon: FileText,
-          label: "\\u0631\\u0642\\u0645 \\u0627\\u0644\\u0625\\u0635\\u062f\\u0627\\u0631",
+          label: "رقم الإصدار",
           status: cleanStr(formData.issueNumber) ? "complete" : "incomplete",
-          value: cleanStr(formData.issueNumber) || "\\u0628\\u0627\\u0646\\u062a\\u0638\\u0627\\u0631 \\u0627\\u0644\\u0625\\u062f\\u062e\\u0627\\u0644",
+          value: cleanStr(formData.issueNumber) || "بانتظار الإدخال",
         },
         {
           icon: MapPinned,
-          label: "\\u0627\\u0644\\u0645\\u0648\\u0642\\u0639",
+          label: "الموقع",
           status: cleanStr(formData.locationAr) ? "complete" : "incomplete",
-          value: cleanStr(formData.locationAr) || "\\u0628\\u0627\\u0646\\u062a\\u0638\\u0627\\u0631 \\u0627\\u0644\\u0625\\u062f\\u062e\\u0627\\u0644",
+          value: cleanStr(formData.locationAr) || "بانتظار الإدخال",
         },
       ],
     },
     media: {
       icon: ImagePlus,
-      title: "\\u0645\\u0644\\u0641 \\u0627\\u0644\\u0648\\u0633\\u0627\\u0626\\u0637",
-      description: "\\u0627\\u0644\\u063a\\u0644\\u0627\\u0641 \\u0648\\u0627\\u0644\\u0645\\u0639\\u0631\\u0636 \\u064a\\u0645\\u0646\\u062d\\u0627\\u0646 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639 \\u0627\\u0646\\u0637\\u0628\\u0627\\u0639\\u0647 \\u0627\\u0644\\u0628\\u0635\\u0631\\u064a \\u0627\\u0644\\u0623\\u0648\\u0644\\u060c \\u0644\\u0630\\u0627 \\u064a\\u062c\\u0628 \\u0645\\u0631\\u0627\\u062c\\u0639\\u062a\\u0647\\u0645\\u0627 \\u0643\\u062d\\u0632\\u0645\\u0629 \\u0648\\u0627\\u062d\\u062f\\u0629.",
+      title: "ملف الوسائط",
+      description: "الغلاف والمعرض يمنحان المشروع انطباعه البصري الأول، لذا يجب مراجعتهما كحزمة واحدة.",
       summary: hasCoverImage
-        ? `${sectionMeta.media} \\u0638\\u2026\\u0637\\u00b9 ${galleryUrls.length} \\u0635\\u0648\\u0631 \\u0641\\u064a \\u0627\\u0644\\u0645\\u0639\\u0631\\u0636.`
-        : "\\u0635\\u0648\\u0631\\u0629 \\u0627\\u0644\\u063a\\u0644\\u0627\\u0641 \\u0645\\u0627 \\u0632\\u0627\\u0644\\u062a \\u0645\\u0637\\u0644\\u0648\\u0628\\u0629 \\u0642\\u0628\\u0644 \\u0627\\u0639\\u062a\\u0628\\u0627\\u0631 \\u0627\\u0644\\u0648\\u0633\\u0627\\u0626\\u0637 \\u062c\\u0627\\u0647\\u0632\\u0629.",
+        ? `${sectionMeta.media} · ${galleryUrls.length} صور في المعرض.`
+        : "صورة الغلاف ما زالت مطلوبة قبل اعتبار الوسائط جاهزة.",
       metrics: [
         {
           icon: FileImage,
-          label: "\\u0635\\u0648\\u0631\\u0629 \\u0627\\u0644\\u063a\\u0644\\u0627\\u0641",
+          label: "صورة الغلاف",
           status: hasCoverImage ? "complete" : "incomplete",
-          value: coverUploading ? "\\u062c\\u0627\\u0631\\u064d \\u0627\\u0644\\u0631\\u0641\\u0639" : hasCoverImage ? "\\u062c\\u0627\\u0647\\u0632\\u0629" : "\\u063a\\u064a\\u0631 \\u062c\\u0627\\u0647\\u0632\\u0629",
+          value: coverUploading ? "جارٍ الرفع" : hasCoverImage ? "جاهزة" : "غير جاهزة",
         },
         {
           icon: ImagePlus,
-          label: "\\u0635\\u0648\\u0631 \\u0627\\u0644\\u0645\\u0639\\u0631\\u0636",
+          label: "صور المعرض",
           status: galleryUrls.length ? "complete" : "incomplete",
-          value: galleryUploading ? "\\u062c\\u0627\\u0631\\u064d \\u0627\\u0644\\u0631\\u0641\\u0639" : galleryUrls.length ? `${galleryUrls.length}  \\u0635\\u0648\\u0631` : "\\u0644\\u0627 \\u062a\\u0648\\u062c\\u062f \\u0635\\u0648\\u0631",
+          value: galleryUploading ? "جارٍ الرفع" : galleryUrls.length ? `${galleryUrls.length} صور` : "لا توجد صور",
         },
         {
           icon: ArrowRight,
-          label: "\\u0631\\u0627\\u0628\\u0637 \\u0623\\u0648 \\u0645\\u0644\\u0641 \\u0627\\u0644\\u063a\\u0644\\u0627\\u0641",
+          label: "رابط أو ملف الغلاف",
           status: hasCoverImage ? "complete" : "incomplete",
-          value: hasCoverImage ? "\\u062a\\u0645 \\u062a\\u062d\\u062f\\u064a\\u062f \\u0645\\u0635\\u062f\\u0631 \\u0627\\u0644\\u063a\\u0644\\u0627\\u0641" : "\\u063a\\u064a\\u0631 \\u0645\\u062d\\u062f\\u062f",
+          value: hasCoverImage ? "تم تحديد مصدر الغلاف" : "غير محدد",
         },
         {
           icon: FolderKanban,
-          label: "\\u0625\\u062c\\u0645\\u0627\\u0644\\u064a \\u0627\\u0644\\u0648\\u0633\\u0627\\u0626\\u0637",
+          label: "إجمالي الوسائط",
           status: totalAssets ? "complete" : "incomplete",
-          value: `${totalAssets} \\u0639\\u0646\\u0627\\u0635\\u0631 \\u0645\\u0631\\u062a\\u0628\\u0637\\u0629`,
+          value: `${totalAssets} عناصر مرتبطة`,
         },
       ],
     },
     highlights: {
       icon: Sparkles,
-      title: "\\u0645\\u0644\\u062e\\u0635 \\u0627\\u0644\\u0645\\u0645\\u064a\\u0632\\u0627\\u062a",
-      description: "\\u0631\\u0627\\u062c\\u0639 \\u0645\\u0627 \\u0625\\u0630\\u0627 \\u0643\\u0627\\u0646\\u062a \\u0646\\u0642\\u0627\\u0637 \\u0627\\u0644\\u062a\\u0645\\u064a\\u0632 \\u0643\\u0627\\u0641\\u064a\\u0629 \\u0648\\u0648\\u0627\\u0636\\u062d\\u0629 \\u0642\\u0628\\u0644 \\u0639\\u0631\\u0636 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639 \\u0644\\u0644\\u0645\\u0633\\u062a\\u062b\\u0645\\u0631\\u064a\\u0646.",
+      title: "ملخص المميزات",
+      description: "راجع ما إذا كانت نقاط التميز كافية وواضحة قبل عرض المشروع للمستثمرين.",
       summary: sectionMeta.highlights,
       metrics: [
         {
           icon: Sparkles,
-          label: "\\u0639\\u062f\\u062f \\u0627\\u0644\\u0645\\u0645\\u064a\\u0632\\u0627\\u062a",
+          label: "عدد المميزات",
           status: filledHighlights ? "complete" : "incomplete",
-          value: filledHighlights ? `${filledHighlights}  \\u0645\\u0645\\u064a\\u0632\\u0627\\u062a` : "\\u0644\\u0627 \\u062a\\u0648\\u062c\\u062f \\u0645\\u0645\\u064a\\u0632\\u0627\\u062a",
+          value: filledHighlights ? `${filledHighlights} مميزات` : "لا توجد مميزات",
         },
         {
           icon: CheckCircle2,
-          label: "\\u0643\\u0641\\u0627\\u064a\\u0629 \\u0627\\u0644\\u0645\\u062d\\u062a\\u0648\\u0649",
+          label: "كفاية المحتوى",
           status: highlightContentSufficient ? "complete" : "incomplete",
-          value: highlightContentSufficient ? "\\u0645\\u062d\\u062a\\u0648\\u0649 \\u0643\\u0627\\u0641\\u064d" : "\\u0628\\u062d\\u0627\\u062c\\u0629 \\u0625\\u0644\\u0649 \\u0645\\u0632\\u064a\\u062f \\u0645\\u0646 \\u0627\\u0644\\u0625\\u0628\\u0631\\u0627\\u0632",
+          value: highlightContentSufficient ? "محتوى كافٍ" : "بحاجة إلى مزيد من الإبراز",
         },
         {
           icon: FileText,
-          label: "\\u0648\\u0636\\u0648\\u062d \\u0627\\u0644\\u0635\\u064a\\u0627\\u063a\\u0629",
+          label: "وضوح الصياغة",
           status: highlightCopyReady ? "complete" : "incomplete",
-          value: highlightCopyReady ? "\\u0627\\u0644\\u0635\\u064a\\u0627\\u063a\\u0629 \\u0645\\u0642\\u0628\\u0648\\u0644\\u0629" : "\\u0628\\u0639\\u0636 \\u0627\\u0644\\u0645\\u0645\\u064a\\u0632\\u0627\\u062a \\u062a\\u062d\\u062a\\u0627\\u062c \\u0635\\u064a\\u0627\\u063a\\u0629 \\u0623\\u0648\\u0636\\u062d",
+          value: highlightCopyReady ? "الصياغة مقبولة" : "بعض المميزات تحتاج صياغة أوضح",
         },
       ],
     },
     attachments: {
       icon: Paperclip,
-      title: "\\u0645\\u0644\\u0641 \\u0627\\u0644\\u0645\\u0631\\u0641\\u0642\\u0627\\u062a",
-      description: "\\u064a\\u064f\\u0644\\u062e\\u0651\\u0635 \\u0647\\u0630\\u0627 \\u0627\\u0644\\u062c\\u0632\\u0621 \\u0648\\u062c\\u0648\\u062f \\u0627\\u0644\\u0645\\u0644\\u0641\\u0627\\u062a \\u0623\\u0648 \\u0627\\u0644\\u0631\\u0648\\u0627\\u0628\\u0637 \\u0627\\u0644\\u062e\\u0627\\u0631\\u062c\\u064a\\u0629 \\u0648\\u0645\\u062f\\u0649 \\u0633\\u0644\\u0627\\u0645\\u0629 \\u0625\\u062f\\u062e\\u0627\\u0644\\u0647\\u0627 \\u0642\\u0628\\u0644 \\u0627\\u0644\\u062d\\u0641\\u0638.",
+      title: "ملف المرفقات",
+      description: "يُلخّص هذا الجزء وجود الملفات أو الروابط الخارجية ومدى سلامة إدخالها قبل الحفظ.",
       summary:
         parsedAttachments.errors.length > 0
           ? parsedAttachments.errors[0]
@@ -398,31 +405,31 @@ export function CreateProjectUi({
       metrics: [
         {
           icon: Paperclip,
-          label: "\\u0639\\u062f\\u062f \\u0627\\u0644\\u0645\\u0631\\u0641\\u0642\\u0627\\u062a",
+          label: "عدد المرفقات",
           status: parsedAttachments.items.length ? "complete" : "incomplete",
           value: parsedAttachments.items.length
-            ? `${parsedAttachments.items.length} \\u0645\\u0631\\u0641\\u0642\\u0627\\u062a \\u062c\\u0627\\u0647\\u0632\\u0629`
-            : "\\u0644\\u0627 \\u062a\\u0648\\u062c\\u062f \\u0645\\u0631\\u0641\\u0642\\u0627\\u062a",
+            ? `${parsedAttachments.items.length} مرفقات جاهزة`
+            : "لا توجد مرفقات",
         },
         {
           icon: FileText,
-          label: "\\u0645\\u0644\\u0641 \\u0645\\u0631\\u0641\\u0648\\u0639",
+          label: "ملف مرفوع",
           status: hasUploadedAttachmentFile ? "complete" : "incomplete",
-          value: hasUploadedAttachmentFile ? "\\u064a\\u0648\\u062c\\u062f \\u0645\\u0644\\u0641 \\u0645\\u0631\\u0641\\u0648\\u0639" : "\\u0644\\u0627 \\u064a\\u0648\\u062c\\u062f \\u0645\\u0644\\u0641 \\u0645\\u0631\\u0641\\u0648\\u0639",
+          value: hasUploadedAttachmentFile ? "يوجد ملف مرفوع" : "لا يوجد ملف مرفوع",
         },
         {
           icon: CheckCircle2,
-          label: "\\u0627\\u0644\\u062d\\u0627\\u0644\\u0629 \\u0627\\u0644\\u0639\\u0627\\u0645\\u0629",
+          label: "الحالة العامة",
           status: sectionStatuses.attachments,
           value:
-            sectionStatuses.attachments === "complete" ? "\\u062c\\u0627\\u0647\\u0632 \\u0644\\u0644\\u062d\\u0641\\u0638" : "\\u0628\\u062d\\u0627\\u062c\\u0629 \\u0625\\u0644\\u0649 \\u0627\\u0633\\u062a\\u0643\\u0645\\u0627\\u0644",
+            sectionStatuses.attachments === "complete" ? "جاهز للحفظ" : "بحاجة إلى استكمال",
         },
       ],
     },
     milestones: {
       icon: ListChecks,
-      title: "\\u0645\\u0644\\u062e\\u0635 \\u0627\\u0644\\u0645\\u0631\\u0627\\u062d\\u0644",
-      description: "\\u064a\\u0639\\u0631\\u0636 \\u0647\\u0630\\u0627 \\u0627\\u0644\\u0645\\u0644\\u062e\\u0635 \\u0639\\u062f\\u062f \\u0627\\u0644\\u0645\\u0631\\u0627\\u062d\\u0644 \\u0627\\u0644\\u0645\\u0639\\u0631\\u0641\\u0629 \\u0648\\u0633\\u0644\\u0627\\u0645\\u0629 \\u0628\\u064a\\u0627\\u0646\\u0627\\u062a\\u0647\\u0627 \\u0642\\u0628\\u0644 \\u0646\\u0634\\u0631 \\u0627\\u0644\\u062a\\u0633\\u0644\\u0633\\u0644 \\u0627\\u0644\\u062a\\u0646\\u0641\\u064a\\u0630\\u064a.",
+      title: "ملخص المراحل",
+      description: "يعرض هذا الملخص عدد المراحل المعرفة وسلامة بياناتها قبل نشر التسلسل التنفيذي.",
       summary:
         parsedMilestones.errors.length > 0
           ? parsedMilestones.errors[0]
@@ -430,55 +437,55 @@ export function CreateProjectUi({
       metrics: [
         {
           icon: ListChecks,
-          label: "\\u0639\\u062f\\u062f \\u0627\\u0644\\u0645\\u0631\\u0627\\u062d\\u0644",
+          label: "عدد المراحل",
           status: parsedMilestones.items.length ? "complete" : "incomplete",
-          value: parsedMilestones.items.length ? `${parsedMilestones.items.length} \\u0645\\u0631\\u0627\\u062d\\u0644` : "\\u0644\\u0627 \\u062a\\u0648\\u062c\\u062f \\u0645\\u0631\\u0627\\u062d\\u0644",
+          value: parsedMilestones.items.length ? `${parsedMilestones.items.length} مراحل` : "لا توجد مراحل",
         },
         {
           icon: CheckCircle2,
-          label: "\\u0645\\u0631\\u0627\\u062d\\u0644 \\u0645\\u0639\\u0631\\u0641\\u0629",
+          label: "مراحل معرفة",
           status: parsedMilestones.items.length ? "complete" : "incomplete",
-          value: parsedMilestones.items.length ? "\\u0646\\u0639\\u0645" : "لا",
+          value: parsedMilestones.items.length ? "نعم" : "لا",
         },
         {
           icon: FileText,
-          label: "\\u0633\\u0644\\u0627\\u0645\\u0629 \\u0627\\u0644\\u0628\\u064a\\u0627\\u0646\\u0627\\u062a",
+          label: "سلامة البيانات",
           status: parsedMilestones.errors.length === 0 ? "complete" : "incomplete",
-          value: parsedMilestones.errors.length === 0 ? "\\u0633\\u0644\\u064a\\u0645\\u0629" : "\\u062a\\u062d\\u062a\\u0627\\u062c \\u062a\\u0635\\u062d\\u064a\\u062d",
+          value: parsedMilestones.errors.length === 0 ? "سليمة" : "تحتاج تصحيح",
         },
       ],
     },
     faq: {
       icon: CircleHelp,
-      title: "\\u0645\\u0644\\u0641 \\u0627\\u0644\\u0623\\u0633\\u0626\\u0644\\u0629 \\u0627\\u0644\\u0634\\u0627\\u0626\\u0639\\u0629",
-      description: "\\u064a\\u062a\\u0627\\u0628\\u0639 \\u0647\\u0630\\u0627 \\u0627\\u0644\\u0643\\u0631\\u062a \\u0648\\u062c\\u0648\\u062f \\u0623\\u0633\\u0626\\u0644\\u0629 \\u062d\\u0642\\u064a\\u0642\\u064a\\u0629 \\u0628\\u0625\\u062c\\u0627\\u0628\\u0627\\u062a \\u0648\\u0627\\u0636\\u062d\\u0629 \\u0642\\u0628\\u0644 \\u0638\\u0647\\u0648\\u0631\\u0647\\u0627 \\u0644\\u0644\\u0645\\u0633\\u062a\\u062b\\u0645\\u0631\\u064a\\u0646.",
+      title: "ملف الأسئلة الشائعة",
+      description: "يتابع هذا الكرت وجود أسئلة حقيقية بإجابات واضحة قبل ظهورها للمستثمرين.",
       summary: parsedFaq.errors.length > 0 ? parsedFaq.errors[0] : sectionMeta.faq,
       metrics: [
         {
           icon: CircleHelp,
-          label: "\\u0639\\u062f\\u062f \\u0627\\u0644\\u0623\\u0633\\u0626\\u0644\\u0629",
+          label: "عدد الأسئلة",
           status: parsedFaq.items.length ? "complete" : "incomplete",
-          value: parsedFaq.items.length ? `${parsedFaq.items.length} \\u0623\\u0633\\u0626\\u0644\\u0629` : "\\u0644\\u0627 \\u062a\\u0648\\u062c\\u062f \\u0623\\u0633\\u0626\\u0644\\u0629",
+          value: parsedFaq.items.length ? `${parsedFaq.items.length} أسئلة` : "لا توجد أسئلة",
         },
         {
           icon: FileText,
-          label: "\\u0645\\u062d\\u062a\\u0648\\u0649 \\u0641\\u0639\\u0644\\u064a",
+          label: "محتوى فعلي",
           status: answeredFaqCount ? "complete" : "incomplete",
-          value: answeredFaqCount ? `${answeredFaqCount} \\u0628\\u0625\\u062c\\u0627\\u0628\\u0627\\u062a \\u0645\\u0643\\u062a\\u0645\\u0644\\u0629` : "\\u0644\\u0627 \\u062a\\u0648\\u062c\\u062f \\u0625\\u062c\\u0627\\u0628\\u0627\\u062a \\u0645\\u0643\\u062a\\u0645\\u0644\\u0629",
+          value: answeredFaqCount ? `${answeredFaqCount} بإجابات مكتملة` : "لا توجد إجابات مكتملة",
         },
         {
           icon: CheckCircle2,
-          label: "\\u0627\\u0644\\u062d\\u0627\\u0644\\u0629 \\u0627\\u0644\\u0639\\u0627\\u0645\\u0629",
+          label: "الحالة العامة",
           status: sectionStatuses.faq,
-          value: sectionStatuses.faq === "complete" ? "\\u062c\\u0627\\u0647\\u0632 \\u0644\\u0644\\u0646\\u0634\\u0631" : "\\u0628\\u062d\\u0627\\u062c\\u0629 \\u0625\\u0644\\u0649 \\u0645\\u062a\\u0627\\u0628\\u0639\\u0629",
+          value: sectionStatuses.faq === "complete" ? "جاهز للنشر" : "بحاجة إلى متابعة",
         },
       ],
     },
     finance: {
       icon: Landmark,
-      title: "\\u0627\\u0644\\u0645\\u0644\\u0641 \\u0627\\u0644\\u0645\\u0627\\u0644\\u064a",
+      title: "الملف المالي",
       description:
-        "\\u064a\\u0644\\u062e\\u0635 \\u0647\\u0630\\u0627 \\u0627\\u0644\\u062c\\u0632\\u0621 \\u0627\\u0644\\u0645\\u0628\\u0644\\u063a \\u0627\\u0644\\u0645\\u0633\\u062a\\u0647\\u062f\\u0641 \\u0648\\u0627\\u0644\\u062d\\u0627\\u0644\\u064a \\u0648\\u0627\\u0644\\u062d\\u062f \\u0627\\u0644\\u0623\\u062f\\u0646\\u0649 \\u0648\\u0627\\u0644\\u0639\\u0627\\u0626\\u062f \\u0648\\u0627\\u0644\\u0645\\u062f\\u0629 \\u0644\\u0644\\u062a\\u0623\\u0643\\u062f \\u0645\\u0646 \\u062c\\u0627\\u0647\\u0632\\u064a\\u0629 \\u0627\\u0644\\u0639\\u0631\\u0636 \\u0627\\u0644\\u0645\\u0627\\u0644\\u064a \\u0642\\u0628\\u0644 \\u0627\\u0644\\u062d\\u0641\\u0638.",
+        "يلخص هذا الجزء المبلغ المستهدف والحالي والحد الأدنى والعائد والمدة للتأكد من جاهزية العرض المالي قبل الحفظ.",
       summary:
         financeMissingFields.length > 0
           ? `الحقول الناقصة: ${financeMissingFields.join("، ")}`
@@ -486,24 +493,24 @@ export function CreateProjectUi({
       metrics: [
         {
           icon: Target,
-          label: "\\u0627\\u0644\\u0645\\u0628\\u0644\\u063a \\u0627\\u0644\\u0645\\u0633\\u062a\\u0647\\u062f\\u0641",
+          label: "المبلغ المستهدف",
           status: cleanStr(formData.targetAmount) ? "complete" : "incomplete",
-          value: formatDisplayValue(formData.targetAmount, "\\u0631.\\u0633"),
+          value: formatDisplayValue(formData.targetAmount, "ر.س"),
         },
         {
           icon: BarChart3,
-          label: "\\u0627\\u0644\\u0645\\u0628\\u0644\\u063a \\u0627\\u0644\\u062d\\u0627\\u0644\\u064a",
-          value: formatDisplayValue(formData.currentAmount, "\\u0631.\\u0633"),
+          label: "المبلغ الحالي",
+          value: formatDisplayValue(formData.currentAmount, "ر.س"),
         },
         {
           icon: Landmark,
-          label: "\\u0627\\u0644\\u062d\\u062f \\u0627\\u0644\\u0623\\u062f\\u0646\\u0649",
+          label: "الحد الأدنى",
           status: cleanStr(formData.minInvestment) ? "complete" : "incomplete",
-          value: formatDisplayValue(formData.minInvestment, "\\u0631.\\u0633"),
+          value: formatDisplayValue(formData.minInvestment, "ر.س"),
         },
         {
           icon: Sparkles,
-          label: "\\u0627\\u0644\\u0639\\u0627\\u0626\\u062f \\u0648\\u0627\\u0644\\u0645\\u062f\\u0629",
+          label: "العائد والمدة",
           status: sectionStatuses.finance,
           value: `${formatDisplayValue(formData.annualReturn, "%")} · ${formatDisplayValue(formData.duration, "شهر")}`,
         },
@@ -511,37 +518,37 @@ export function CreateProjectUi({
     },
     [FINAL_SETTINGS_SECTION_ID]: {
       icon: CheckCircle2,
-      title: "\\u0627\\u0644\\u0625\\u0639\\u062f\\u0627\\u062f\\u0627\\u062a \\u0627\\u0644\\u062e\\u062a\\u0627\\u0645\\u064a\\u0629",
+      title: "الإعدادات الختامية",
       description:
-        "\\u064a\\u062c\\u0645\\u0639 \\u0647\\u0630\\u0627 \\u0627\\u0644\\u0642\\u0633\\u0645 \\u0625\\u0639\\u062f\\u0627\\u062f\\u0627\\u062a \\u0627\\u0644\\u062a\\u0642\\u062f\\u0645 \\u0648\\u062e\\u064a\\u0627\\u0631\\u0627\\u062a \\u0627\\u0644\\u0639\\u0631\\u0636 \\u0648\\u0627\\u0645\\u062a\\u064a\\u0627\\u0632\\u0627\\u062a VIP \\u0648\\u0627\\u0644\\u0645\\u062d\\u062a\\u0648\\u0649 \\u0627\\u0644\\u062e\\u062a\\u0627\\u0645\\u064a \\u0641\\u064a \\u0645\\u062d\\u0637\\u0629 \\u0646\\u0647\\u0627\\u0626\\u064a\\u0629 \\u0648\\u0627\\u062d\\u062f\\u0629 \\u0642\\u0628\\u0644 \\u0627\\u0644\\u062d\\u0641\\u0638 \\u0623\\u0648 \\u0627\\u0644\\u0625\\u063a\\u0644\\u0627\\u0642.",
+        "يجمع هذا القسم إعدادات التقدم وخيارات العرض وامتيازات VIP والمحتوى الختامي في محطة نهائية واحدة قبل الحفظ أو الإغلاق.",
       summary: sectionMeta[FINAL_SETTINGS_SECTION_ID],
       metrics: [
         {
           icon: Gauge,
-          label: "\\u0645\\u0635\\u062f\\u0631 \\u0627\\u0644\\u062a\\u0642\\u062f\\u0645",
+          label: "مصدر التقدم",
           status: progressSectionStatus,
           value: progressModeLabels[formData.progressMode],
         },
         {
           icon: Crown,
-          label: "\\u0627\\u0644\\u062e\\u064a\\u0627\\u0631\\u0627\\u062a \\u0627\\u0644\\u0625\\u0636\\u0627\\u0641\\u064a\\u0629",
+          label: "الخيارات الإضافية",
           status: optionsSectionStatus,
-          value: activeOptionLabels.join("\\u00a2\\u0622\\u00b7 ") || "\\u0625\\u0639\\u062f\\u0627\\u062f\\u0627\\u062a \\u0627\\u0641\\u062a\\u0631\\u0627\\u0636\\u064a\\u0629",
+          value: activeOptionLabels.join(" · ") || "إعدادات افتراضية",
         },
         {
           icon: FileText,
-          label: "\\u0627\\u0644\\u0645\\u062d\\u062a\\u0648\\u0649 \\u0627\\u0644\\u062e\\u062a\\u0627\\u0645\\u064a",
+          label: "المحتوى الختامي",
           status: completionSectionStatus,
           value: completionSectionSummary,
         },
         {
           icon: CheckCircle2,
-          label: "\\u0627\\u0644\\u062c\\u0627\\u0647\\u0632\\u064a\\u0629 \\u0627\\u0644\\u0639\\u0627\\u0645\\u0629",
+          label: "الجاهزية العامة",
           status: sectionStatuses[FINAL_SETTINGS_SECTION_ID],
           value:
             sectionStatuses[FINAL_SETTINGS_SECTION_ID] === "complete"
-              ? "\\u0645\\u0643\\u062a\\u0645\\u0644\\u0629"
-              : "\\u0628\\u062d\\u0627\\u062c\\u0629 \\u0625\\u0644\\u0649 \\u0645\\u062a\\u0627\\u0628\\u0639\\u0629",
+              ? "مكتملة"
+              : "بحاجة إلى متابعة",
         },
       ],
     },
@@ -549,121 +556,121 @@ export function CreateProjectUi({
   const completionChecklistItems = !isCompletionStatus(formData.status)
     ? [
         {
-          label: "\\u062d\\u0627\\u0644\\u0629 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639",
+          label: "حالة المشروع",
           ready: false,
-          detail: "\\u064a\\u062a\\u0641\\u0639\\u0651\\u0644 \\u0647\\u0630\\u0627 \\u0627\\u0644\\u062c\\u0632\\u0621 \\u0639\\u0646\\u062f \\u062a\\u062d\\u0648\\u064a\\u0644 \\u062d\\u0627\\u0644\\u0629 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639 \\u0625\\u0644\\u0649 \\u0645\\u063a\\u0644\\u0642 \\u0623\\u0648 \\u0645\\u0643\\u062a\\u0645\\u0644.",
+          detail: "يتفعّل هذا الجزء عند تحويل حالة المشروع إلى مغلق أو مكتمل.",
         },
         {
-          label: "\\u0627\\u0644\\u062c\\u0627\\u0647\\u0632\\u064a\\u0629 \\u0627\\u0644\\u062d\\u0627\\u0644\\u064a\\u0629",
+          label: "الجاهزية الحالية",
           ready: false,
-          detail: "\\u0623\\u0643\\u0645\\u0644 \\u0627\\u0644\\u062a\\u0646\\u0641\\u064a\\u0630 \\u0623\\u0648\\u0644\\u0627\\u064b\\u060c \\u062b\\u0645 \\u0623\\u0636\\u0641 \\u0627\\u0644\\u0646\\u062a\\u0627\\u0626\\u062c \\u0648\\u0627\\u0644\\u0645\\u062e\\u0631\\u062c\\u0627\\u062a \\u0648\\u0627\\u0644\\u0645\\u062d\\u062a\\u0648\\u0649 \\u0627\\u0644\\u062e\\u062a\\u0627\\u0645\\u064a \\u0647\\u0646\\u0627.",
+          detail: "أكمل التنفيذ أولاً، ثم أضف النتائج والمخرجات والمحتوى الختامي هنا.",
         },
       ]
     : [
         {
-          label: "\\u0646\\u0638\\u0631\\u0629 \\u0639\\u0627\\u0645\\u0629 \\u0623\\u0648 \\u0645\\u0644\\u062e\\u0635",
+          label: "نظرة عامة أو ملخص",
           ready: Boolean(
             cleanStr(formData.completionOverviewAr) || cleanStr(formData.completionSummaryAr)
           ),
           detail:
             cleanStr(formData.completionOverviewAr) || cleanStr(formData.completionSummaryAr)
-              ? "\\u062a\\u0645\\u062a \\u0625\\u0636\\u0627\\u0641\\u0629 \\u0645\\u0642\\u062f\\u0645\\u0629 \\u062e\\u062a\\u0627\\u0645\\u064a\\u0629 \\u0644\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639."
-              : "\\u0623\\u0636\\u0641 \\u0646\\u0638\\u0631\\u0629 \\u0639\\u0627\\u0645\\u0629 \\u0623\\u0648 \\u0645\\u0644\\u062e\\u0635\\u064b\\u0627 \\u062e\\u062a\\u0627\\u0645\\u064a\\u064b\\u0627.",
+              ? "تمت إضافة مقدمة ختامية للمشروع."
+              : "أضف نظرة عامة أو ملخصًا ختاميًا.",
         },
         {
-          label: "\\u0627\\u0644\\u0646\\u062a\\u0627\\u0626\\u062c",
+          label: "النتائج",
           ready: filledCompletionResults > 0,
           detail: filledCompletionResults
-            ? `${filledCompletionResults} \\u0646\\u062a\\u0627\\u0626\\u062c \\u0645\\u0648\\u062b\\u0642\\u0629.`
-            : "\\u0644\\u0627 \\u062a\\u0648\\u062c\\u062f \\u0646\\u062a\\u0627\\u0626\\u062c \\u0645\\u0636\\u0627\\u0641\\u0629 \\u0628\\u0639\\u062f.",
+            ? `${filledCompletionResults} نتائج موثقة.`
+            : "لا توجد نتائج مضافة بعد.",
         },
         {
-          label: "\\u0627\\u0644\\u0645\\u062e\\u0631\\u062c\\u0627\\u062a",
+          label: "المخرجات",
           ready: filledCompletionOutputs > 0,
           detail: filledCompletionOutputs
-            ? `${filledCompletionOutputs} \\u0645\\u062e\\u0631\\u062c\\u0627\\u062a \\u0646\\u0647\\u0627\\u0626\\u064a\\u0629.`
-            : "\\u0623\\u0636\\u0641 \\u0645\\u062e\\u0631\\u062c\\u064b\\u0627 \\u0648\\u0627\\u062d\\u062f\\u064b\\u0627 \\u0639\\u0644\\u0649 \\u0627\\u0644\\u0623\\u0642\\u0644.",
+            ? `${filledCompletionOutputs} مخرجات نهائية.`
+            : "أضف مخرجًا واحدًا على الأقل.",
         },
         {
-          label: "\\u0633\\u0644\\u0627\\u0645\\u0629 \\u0627\\u0644\\u0645\\u062d\\u062a\\u0648\\u0649",
+          label: "سلامة المحتوى",
           ready: completionPayload.errors.length === 0,
-          detail: completionPayload.errors[0] || "\\u0627\\u0644\\u0645\\u062d\\u062a\\u0648\\u0649 \\u0627\\u0644\\u062e\\u062a\\u0627\\u0645\\u064a \\u0627\\u0644\\u062d\\u0627\\u0644\\u064a \\u0633\\u0644\\u064a\\u0645.",
+          detail: completionPayload.errors[0] || "المحتوى الختامي الحالي سليم.",
         },
       ];
   const progressChecklistItems =
     formData.progressMode === "hybrid"
       ? [
           {
-            label: "\\u0631\\u064a\\u0642\\u0629 \\u0627\\u0644\\u062d\\u0633\\u0627\\u0628",
+            label: "طريقة الحساب",
             ready: true,
             detail: progressModeLabels[formData.progressMode],
           },
           {
-            label: "\\u0648\\u0632\\u0646 \\u0627\\u0644\\u062a\\u0645\\u0648\\u064a\\u0644",
+            label: "وزن التمويل",
             ready: Boolean(cleanStr(formData.progressFundingWeight)),
             detail:
               formatDisplayValue(formData.progressFundingWeight, "%") ||
-              "\\u0623\\u062f\\u062e\\u0644 \\u0648\\u0632\\u0646 \\u0627\\u0644\\u062a\\u0645\\u0648\\u064a\\u0644.",
+              "أدخل وزن التمويل.",
           },
           {
-            label: "\\u0648\\u0632\\u0646 \\u0627\\u0644\\u0645\\u0631\\u0627\\u062d\\u0644",
+            label: "وزن المراحل",
             ready: Boolean(cleanStr(formData.progressMilestonesWeight)),
             detail:
               formatDisplayValue(formData.progressMilestonesWeight, "%") ||
-              "\\u0623\\u062f\\u062e\\u0644 \\u0648\\u0632\\u0646 \\u0627\\u0644\\u0645\\u0631\\u0627\\u062d\\u0644.",
+              "أدخل وزن المراحل.",
           },
           {
-            label: "\\u0645\\u062c\\u0645\\u0648\\u0639 \\u0627\\u0644\\u0623\\u0648\\u0632\\u0627\\u0646",
+            label: "مجموع الأوزان",
             ready: progressWeightsTotal === 100,
-            detail: `${progressWeightsTotal}% \\u0645\\u0646 100% \\u0627\\u0644\\u0645\\u0637\\u0644\\u0648\\u0628\\u0629.`,
+            detail: `${progressWeightsTotal}% من 100% المطلوبة.`,
           },
         ]
       : [
           {
-            label: "\\u0631\\u064a\\u0642\\u0629 \\u0627\\u0644\\u062d\\u0633\\u0627\\u0628",
+            label: "طريقة الحساب",
             ready: true,
             detail: progressModeLabels[formData.progressMode],
           },
           {
-            label: "\\u062c\\u0627\\u0647\\u0632\\u064a\\u0629 \\u0627\\u0644\\u0645\\u0646\\u0637\\u0642",
+            label: "جاهزية المنطق",
             ready: true,
-            detail: "\\u0647\\u0630\\u0627 \\u0627\\u0644\\u0646\\u0645\\u0637 \\u0644\\u0627 \\u064a\\u062d\\u062a\\u0627\\u062c \\u0623\\u0648\\u0632\\u0627\\u0646\\u064b\\u0627 \\u0625\\u0636\\u0627\\u0641\\u064a\\u0629.",
+            detail: "هذا النمط لا يحتاج أوزانًا إضافية.",
           },
         ];
   const optionsChecklistItems = [
     {
-      label: "\\u0648\\u0636\\u0639 Featured",
+      label: "إبراز المشروع",
       ready: true,
-      detail: formData.featured === "true" ? "\\u0645\\u0641\\u0639\\u0651\\u0644 \\u0641\\u064a \\u0627\\u0644\\u0642\\u0648\\u0627\\u0626\\u0645." : "\\u063a\\u064a\\u0631 \\u0645\\u0641\\u0639\\u0651\\u0644 \\u062d\\u0627\\u0644\\u064a\\u064b\\u0627.",
+      detail: formData.featured === "true" ? "مفعّل في القوائم." : "غير مفعّل حاليًا.",
     },
     {
-      label: "\\u062a\\u0641\\u0639\\u064a\\u0644 VIP",
+      label: "تفعيل VIP",
       ready: !hasVipRequirement || formData.vipTier !== "none",
       detail: hasVipRequirement
-        ? `\\u0627\\u0644\\u0645\\u0633\\u062a\\u0648\\u0649 \\u0627\\u0644\\u062d\\u0627\\u0644\\u064a: ${vipTierLabels[formData.vipTier]}.`
-        : "\\u0644\\u0627 \\u062a\\u0648\\u062c\\u062f \\u0645\\u062a\\u0637\\u0644\\u0628\\u0627\\u062a VIP \\u0625\\u0636\\u0627\\u0641\\u064a\\u0629.",
+        ? `المستوى الحالي: ${vipTierDisplayLabel}.`
+        : "لا توجد متطلبات VIP إضافية.",
     },
     {
-      label: "\\u0645\\u0633\\u062a\\u0648\\u0649 VIP",
+      label: "مستوى VIP",
       ready: !hasVipRequirement || formData.vipTier !== "none",
       detail:
         !hasVipRequirement || formData.vipTier !== "none"
-          ? vipTierLabels[formData.vipTier]
-          : "\\u062d\\u062f\\u062f \\u0645\\u0633\\u062a\\u0648\\u0649 VIP \\u0639\\u0646\\u062f \\u0627\\u0644\\u062a\\u0641\\u0639\\u064a\\u0644.",
+          ? vipTierDisplayLabel
+          : "حدد مستوى VIP عند التفعيل.",
     },
   ];
   const finalSettingsChecklistItems = [
     ...progressChecklistItems.map((item) => ({
       ...item,
-      label: `\\u0627\\u0644\\u062a\\u0642\\u062f\\u0645: ${item.label}`,
+      label: `التقدم: ${item.label}`,
     })),
     ...optionsChecklistItems.map((item) => ({
       ...item,
-      label: `\\u0627\\u0644\\u062e\\u064a\\u0627\\u0631\\u0627\\u062a: ${item.label}`,
+      label: `الخيارات: ${item.label}`,
     })),
     ...completionChecklistItems.map((item) => ({
       ...item,
-      label: `\\u0627\\u0644\\u062e\\u062a\\u0627\\u0645: ${item.label}`,
+      label: `الختام: ${item.label}`,
     })),
   ];
   const activeSectionChecklistItems: Array<{
@@ -676,106 +683,106 @@ export function CreateProjectUi({
         return requiredChecklist.map((item) => ({
           label: item.label,
           ready: item.ready,
-          detail: item.ready ? "\\u062a\\u0645 \\u0625\\u062f\\u062e\\u0627\\u0644 \\u0647\\u0630\\u0627 \\u0627\\u0644\\u0639\\u0646\\u0635\\u0631 \\u0628\\u0646\\u062c\\u0627\\u062d." : "\\u0645\\u0627 \\u0632\\u0627\\u0644 \\u0647\\u0630\\u0627 \\u0627\\u0644\\u0639\\u0646\\u0635\\u0631 \\u0645\\u0637\\u0644\\u0648\\u0628\\u064b\\u0627.",
+          detail: item.ready ? "تم إدخال هذا العنصر بنجاح." : "ما زال هذا العنصر مطلوبًا.",
         }));
       case "details":
         return [
           {
-            label: "\\u0646\\u0648\\u0639 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639",
+            label: "نوع المشروع",
             ready: true,
             detail: projectTypeLabels[formData.projectType],
           },
           {
-            label: "\\u062d\\u0627\\u0644\\u0629 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639",
+            label: "حالة المشروع",
             ready: true,
             detail: statusLabels[formData.status],
           },
           {
-            label: "\\u0627\\u0644\\u0645\\u0648\\u0642\\u0639 \\u0627\\u0644\\u0639\\u0631\\u0628\\u064a",
+            label: "الموقع العربي",
             ready: Boolean(cleanStr(formData.locationAr)),
-            detail: cleanStr(formData.locationAr) || "\\u0623\\u0636\\u0641 \\u0645\\u0648\\u0642\\u0639 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639 \\u062f\\u0627\\u062e\\u0644 \\u0627\\u0644\\u0646\\u0638\\u0627\\u0645.",
+            detail: cleanStr(formData.locationAr) || "أضف موقع المشروع داخل النظام.",
           },
         ];
       case "media":
         return [
           {
-            label: "\\u0635\\u0648\\u0631\\u0629 \\u0627\\u0644\\u063a\\u0644\\u0627\\u0641",
+            label: "صورة الغلاف",
             ready: Boolean(cleanStr(formData.coverImage)),
             detail: cleanStr(formData.coverImage)
-              ? "\\u0645\\u0631\\u062a\\u0628\\u0637\\u0629 \\u0648\\u062c\\u0627\\u0647\\u0632\\u0629 \\u0644\\u0644\\u0639\\u0631\\u0636."
-              : "\\u0645\\u0637\\u0644\\u0648\\u0628\\u0629 \\u0644\\u0648\\u0627\\u062c\\u0647\\u0629 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639 \\u0627\\u0644\\u0623\\u0633\\u0627\\u0633\\u064a\\u0629.",
+              ? "مرتبطة وجاهزة للعرض."
+              : "مطلوبة لواجهة المشروع الأساسية.",
           },
           {
-            label: "\\u0635\\u0648\\u0631 \\u0627\\u0644\\u0645\\u0639\\u0631\\u0636",
+            label: "صور المعرض",
             ready: galleryUrls.length > 0,
             detail: galleryUrls.length
-              ? `${galleryUrls.length} \\u0635\\u0648\\u0631 \\u0645\\u0631\\u062a\\u0628\\u0637\\u0629 \\u0628\\u0627\\u0644\\u0645\\u0639\\u0631\\u0636.`
-              : "\\u0644\\u0645 \\u064a\\u062a\\u0645 \\u0625\\u0636\\u0627\\u0641\\u0629 \\u0635\\u0648\\u0631 \\u0644\\u0644\\u0645\\u0639\\u0631\\u0636 \\u0628\\u0639\\u062f.",
+              ? `${galleryUrls.length} صور مرتبطة بالمعرض.`
+              : "لم يتم إضافة صور للمعرض بعد.",
           },
           {
-            label: "\\u0625\\u062c\\u0645\\u0627\\u0644\\u064a \\u0627\\u0644\\u0623\\u0635\\u0648\\u0644",
+            label: "إجمالي الأصول",
             ready: totalAssets > 0,
-            detail: `${totalAssets}  \\u0639\\u0646\\u0635\\u0631 \\u0628\\u0635\\u0631\\u064a \\u0623\\u0648 \\u0645\\u0633\\u062a\\u0646\\u062f\\u064a \\u0645\\u0631\\u062a\\u0628\\u0637.`,
+            detail: `${totalAssets} عنصر بصري أو مستندي مرتبط.`,
           },
         ];
       case "highlights":
         return [
           {
-            label: "\\u0646\\u0642\\u0627\\u0637 \\u0627\\u0644\\u062a\\u0645\\u064a\\u0632",
+            label: "نقاط التميز",
             ready: filledHighlights > 0,
             detail: filledHighlights
-              ? `${filledHighlights} \\u0645\\u0645\\u064a\\u0632\\u0627\\u062a \\u062c\\u0627\\u0647\\u0632\\u0629 \\u0644\\u0644\\u0639\\u0631\\u0636.`
-              : "\\u0623\\u0636\\u0641 \\u0645\\u064a\\u0632\\u0629 \\u0648\\u0627\\u062d\\u062f\\u0629 \\u0639\\u0644\\u0649 \\u0627\\u0644\\u0623\\u0642\\u0644.",
+              ? `${filledHighlights} مميزات جاهزة للعرض.`
+              : "أضف ميزة واحدة على الأقل.",
           },
           {
-            label: "\\u062a\\u0646\\u0633\\u064a\\u0642 \\u0627\\u0644\\u0645\\u062d\\u062a\\u0648\\u0649",
+            label: "تنسيق المحتوى",
             ready: highlightRows.every((item) => !cleanStr(item) || cleanStr(item).length > 2),
-            detail: "\\u064a\\u0641\\u0636\\u0651\\u0644 \\u0623\\u0646 \\u062a\\u0643\\u0648\\u0646 \\u0627\\u0644\\u0645\\u064a\\u0632\\u0629 \\u0648\\u0627\\u0636\\u062d\\u0629 \\u0648\\u0645\\u0628\\u0627\\u0634\\u0631\\u0629 \\u0648\\u0642\\u0627\\u0628\\u0644\\u0629 \\u0644\\u0644\\u0642\\u0631\\u0627\\u0621\\u0629.",
+            detail: "يفضّل أن تكون الميزة واضحة ومباشرة وقابلة للقراءة.",
           },
         ];
       case "attachments":
         return [
           {
-            label: "\\u0645\\u0644\\u0641\\u0627\\u062a \\u0623\\u0648 \\u0631\\u0648\\u0627\\u0628\\u0637 \\u0635\\u0627\\u0644\\u062d\\u0629",
+            label: "ملفات أو روابط صالحة",
             ready: parsedAttachments.items.length > 0,
             detail: parsedAttachments.items.length
-              ? `${parsedAttachments.items.length} \\u0645\\u0631\\u0641\\u0642\\u0627\\u062a \\u062c\\u0627\\u0647\\u0632\\u0629.`
-              : "\\u0623\\u0636\\u0641 \\u0645\\u0644\\u0641\\u064b\\u0627 \\u0623\\u0648 \\u0631\\u0627\\u0628\\u0637\\u064b\\u0627 \\u062e\\u0627\\u0631\\u062c\\u064a\\u064b\\u0627 \\u0648\\u0627\\u062d\\u062f\\u064b\\u0627 \\u0639\\u0644\\u0649 \\u0627\\u0644\\u0623\\u0642\\u0644.",
+              ? `${parsedAttachments.items.length} مرفقات جاهزة.`
+              : "أضف ملفًا أو رابطًا خارجيًا واحدًا على الأقل.",
           },
           {
-            label: "\\u0633\\u0644\\u0627\\u0645\\u0629 \\u0627\\u0644\\u0625\\u062f\\u062e\\u0627\\u0644",
+            label: "سلامة الإدخال",
             ready: parsedAttachments.errors.length === 0,
-            detail: parsedAttachments.errors[0] || "\\u0644\\u0627 \\u062a\\u0648\\u062c\\u062f \\u0623\\u062e\\u0637\\u0627\\u0621 \\u0641\\u064a \\u0627\\u0644\\u0645\\u0631\\u0641\\u0642\\u0627\\u062a \\u0627\\u0644\\u062d\\u0627\\u0644\\u064a\\u0629.",
+            detail: parsedAttachments.errors[0] || "لا توجد أخطاء في المرفقات الحالية.",
           },
         ];
       case "milestones":
         return [
           {
-            label: "\\u0645\\u0631\\u0627\\u062d\\u0644 \\u0627\\u0644\\u062a\\u0646\\u0641\\u064a\\u0630",
+            label: "مراحل التنفيذ",
             ready: parsedMilestones.items.length > 0,
             detail: parsedMilestones.items.length
-              ? `${parsedMilestones.items.length} \\u0645\\u0631\\u0627\\u062d\\u0644 \\u0645\\u0636\\u0627\\u0641\\u0629.`
-              : "\\u0627\\u0628\\u062f\\u0623 \\u0628\\u0625\\u0636\\u0627\\u0641\\u0629 \\u0645\\u0631\\u062d\\u0644\\u0629 \\u0648\\u0627\\u062d\\u062f\\u0629 \\u0639\\u0644\\u0649 \\u0627\\u0644\\u0623\\u0642\\u0644.",
+              ? `${parsedMilestones.items.length} مراحل مضافة.`
+              : "ابدأ بإضافة مرحلة واحدة على الأقل.",
           },
           {
-            label: "\\u0627\\u0643\\u062a\\u0645\\u0627\\u0644 \\u0627\\u0644\\u0628\\u064a\\u0627\\u0646\\u0627\\u062a",
+            label: "اكتمال البيانات",
             ready: parsedMilestones.errors.length === 0,
-            detail: parsedMilestones.errors[0] || "\\u0643\\u0644 \\u0627\\u0644\\u0645\\u0631\\u0627\\u062d\\u0644 \\u0627\\u0644\\u062d\\u0627\\u0644\\u064a\\u0629 \\u0642\\u0627\\u0628\\u0644\\u0629 \\u0644\\u0644\\u062d\\u0641\\u0638.",
+            detail: parsedMilestones.errors[0] || "كل المراحل الحالية قابلة للحفظ.",
           },
         ];
       case "faq":
         return [
           {
-            label: "\\u0623\\u0633\\u0626\\u0644\\u0629 \\u0645\\u0646\\u0634\\u0648\\u0631\\u0629",
+            label: "أسئلة منشورة",
             ready: parsedFaq.items.length > 0,
             detail: parsedFaq.items.length
-              ? `${parsedFaq.items.length} \\u0623\\u0633\\u0626\\u0644\\u0629 \\u062c\\u0627\\u0647\\u0632\\u0629 \\u0644\\u0644\\u0639\\u0631\\u0636.`
-              : "\\u0623\\u0636\\u0641 \\u0633\\u0624\\u0627\\u0644\\u064b\\u0627 \\u0634\\u0627\\u0626\\u0639\\u064b\\u0627 \\u0648\\u0627\\u062d\\u062f\\u064b\\u0627 \\u0639\\u0644\\u0649 \\u0627\\u0644\\u0623\\u0642\\u0644.",
+              ? `${parsedFaq.items.length} أسئلة جاهزة للعرض.`
+              : "أضف سؤالًا شائعًا واحدًا على الأقل.",
           },
           {
-            label: "\\u0633\\u0644\\u0627\\u0645\\u0629 \\u0627\\u0644\\u0635\\u064a\\u0627\\u063a\\u0629",
+            label: "سلامة الصياغة",
             ready: parsedFaq.errors.length === 0,
-            detail: parsedFaq.errors[0] || "\\u0647\\u064a\\u0643\\u0644 \\u0627\\u0644\\u0623\\u0633\\u0626\\u0644\\u0629 \\u0627\\u0644\\u062d\\u0627\\u0644\\u064a \\u0633\\u0644\\u064a\\u0645.",
+            detail: parsedFaq.errors[0] || "هيكل الأسئلة الحالي سليم.",
           },
         ];
       case "completion":
@@ -783,29 +790,29 @@ export function CreateProjectUi({
       case "finance":
         return [
           {
-            label: "\\u0627\\u0644\\u0645\\u0628\\u0644\\u063a \\u0627\\u0644\\u0633\\u062a\\u0647\\u062f\\u0641",
+            label: "المبلغ المستهدف",
             ready: Boolean(cleanStr(formData.targetAmount)),
             detail:
-              formatDisplayValue(formData.targetAmount, "\\u0622\\u00b1.\\u0637\\u00b7\\u0622\\u00b3") || "\\u0623\\u0636\\u0641 \\u0627\\u0644\\u0645\\u0628\\u0644\\u063a \\u0627\\u0644\\u0633\\u062a\\u0647\\u062f\\u0641 \\u0644\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639.",
+              formatDisplayValue(formData.targetAmount, "ر.س") || "أضف المبلغ المستهدف للمشروع.",
           },
           {
-            label: "\\u0627\\u0644\\u062d\\u062f \\u0627\\u0644\\u0623\\u062f\\u0646\\u0649",
+            label: "الحد الأدنى",
             ready: Boolean(cleanStr(formData.minInvestment)),
             detail:
-              formatDisplayValue(formData.minInvestment, "\\u0622\\u00b1.\\u0637\\u00b7\\u0622\\u00b3") ||
-              "\\u062d\\u062f\\u062f \\u0627\\u0644\\u062d\\u062f \\u0627\\u0644\\u0623\\u062f\\u0646\\u0649 \\u0644\\u0644\\u0627\\u0633\\u062a\\u062b\\u0645\\u0627\\u0631.",
+              formatDisplayValue(formData.minInvestment, "ر.س") ||
+              "حدد الحد الأدنى للاستثمار.",
           },
           {
-            label: "\\u0627\\u0644\\u0639\\u0627\\u0626\\u062f \\u0627\\u0644\\u0633\\u0646\\u0648\\u064a",
+            label: "العائد السنوي",
             ready: Boolean(cleanStr(formData.annualReturn)),
             detail:
-              formatDisplayValue(formData.annualReturn, "%") || "\\u0623\\u0636\\u0641 \\u0646\\u0633\\u0628\\u0629 \\u0627\\u0644\\u0639\\u0627\\u0626\\u062f \\u0627\\u0644\\u0633\\u0646\\u0648\\u064a.",
+              formatDisplayValue(formData.annualReturn, "%") || "أضف نسبة العائد السنوي.",
           },
           {
-            label: "\\u0627\\u0644\\u0645\\u062f\\u0629",
+            label: "المدة",
             ready: Boolean(cleanStr(formData.duration)),
             detail:
-              formatDisplayValue(formData.duration, "\\u0634\\u0647\\u0631") || "\\u062d\\u062f\\u062f \\u0645\\u062f\\u0629 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639 \\u0628\\u0627\\u0644\\u0623\\u0634\\u0647\\u0631.",
+              formatDisplayValue(formData.duration, "شهر") || "حدد مدة المشروع بالأشهر.",
           },
         ];
       case "progress":
@@ -877,9 +884,9 @@ export function CreateProjectUi({
     <div className="rounded-[28px] border border-slate-200/80 bg-white/95 p-5 shadow-sm">
       <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 className="text-base font-semibold text-slate-950">\\u0645\\u0635\\u062f\\u0631 \\u0627\\u0644\\u062a\\u0642\\u062f\\u0645"</h3>
+          <h3 className="text-base font-semibold text-slate-950">مصدر التقدم</h3>
           <p className="text-xs leading-6 text-slate-500">
-            ط·آ·ط¢آ§ط·آ·ط¢آ®ط·آ·ط¹آ¾ط·آ·ط¢آ± ط·آ·ط¢آ·ط·آ·ط¢آ±ط·آ¸ط¸آ¹ط·آ¸أ¢â‚¬ع‘ط·آ·ط¢آ© ط·آ·ط¢آ§ط·آ·ط¢آ­ط·آ·ط¹آ¾ط·آ·ط¢آ³ط·آ·ط¢آ§ط·آ·ط¢آ¨ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¹آ¾ط·آ¸أ¢â‚¬ع‘ط·آ·ط¢آ¯ط·آ¸أ¢â‚¬آ¦ط·آ·ط¥â€™ ط·آ¸ط«â€ ط·آ·ط¢آ¥ط·آ·ط¢آ°ط·آ·ط¢آ§ ط·آ¸ط¦â€™ط·آ·ط¢آ§ط·آ¸أ¢â‚¬آ  ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ· ط·آ¸أ¢â‚¬طŒط·آ·ط¢آ¬ط·آ¸ط¸آ¹ط·آ¸أ¢â‚¬آ ط·آ¸ط¸آ¹ط·آ¸أ¢â‚¬آ¹ط·آ·ط¢آ§ ط·آ¸ط¸آ¾ط·آ·ط¢آ§ط·آ·ط¢آ¶ط·آ·ط¢آ¨ط·آ·ط¢آ· ط·آ·ط¢آ£ط·آ¸ط«â€ ط·آ·ط¢آ²ط·آ·ط¢آ§ط·آ¸أ¢â‚¬آ  ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¹آ¾ط·آ¸أ¢â‚¬آ¦ط·آ¸ط«â€ ط·آ¸ط¸آ¹ط·آ¸أ¢â‚¬â€چ ط·آ¸ط«â€ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ±ط·آ·ط¢آ§ط·آ·ط¢آ­ط·آ¸أ¢â‚¬â€چ ط·آ¸أ¢â‚¬طŒط·آ¸أ¢â‚¬آ ط·آ·ط¢آ§.
+            حدد طريقة احتساب تقدم المشروع بناءً على التمويل أو المراحل أو مزيج بينهما.
           </p>
         </div>
         <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
@@ -888,7 +895,7 @@ export function CreateProjectUi({
       </div>
 
       <div className="grid gap-5 md:grid-cols-3">
-        <Field label="\\u0631\\u064a\\u0642\\u0629 \\u0627\\u0644\\u062d\\u0633\\u0627\\u0628" className="md:col-span-3">
+        <Field label="طريقة الحساب" className="md:col-span-3">
           <Select
             value={formData.progressMode}
             onValueChange={(value) =>
@@ -902,9 +909,9 @@ export function CreateProjectUi({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="funding">\\u062d\\u0633\\u0628 \\u0627\\u0644\\u062a\\u0645\\u0648\\u064a\\u0644 \\u0641\\u0642\\u0637"</SelectItem>
-              <SelectItem value="milestones">\\u062d\\u0633\\u0628 \\u0627\\u0644\\u0645\\u0631\\u0627\\u062d\\u0644 \\u0641\\u0642\\u0637"</SelectItem>
-              <SelectItem value="hybrid">\\u0647\\u062c\\u064a\\u0646\\u064a (\\u062a\\u0645\\u0648\\u064a\\u0644 + \\u0645\\u0631\\u0627\\u062d\\u0644)"</SelectItem>
+              <SelectItem value="funding">{progressModeLabels.funding}</SelectItem>
+              <SelectItem value="milestones">{progressModeLabels.milestones}</SelectItem>
+              <SelectItem value="hybrid">{progressModeLabels.hybrid}</SelectItem>
             </SelectContent>
           </Select>
         </Field>
@@ -917,7 +924,7 @@ export function CreateProjectUi({
 
         {formData.progressMode === "hybrid" ? (
           <>
-            <Field label="\\u0645\\u0639\\u062f\\u0644 \\u0627\\u0644\\u062a\\u0645\\u0648\\u064a\\u0644 (%)">
+            <Field label="معدل التمويل (%)">
               <Input
                 dir="ltr"
                 inputMode="numeric"
@@ -932,7 +939,7 @@ export function CreateProjectUi({
               />
             </Field>
 
-            <Field label="\\u0645\\u0639\\u062f\\u0644 \\u0627\\u0644\\u0645\\u0631\\u0627\\u062d\\u0644 (%)">
+            <Field label="معدل المراحل (%)">
               <Input
                 dir="ltr"
                 inputMode="numeric"
@@ -949,7 +956,7 @@ export function CreateProjectUi({
 
             <div className="rounded-[22px] border border-slate-200 bg-slate-50/80 p-4 shadow-sm">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                Total Weight
+                إجمالي الأوزان
               </p>
               <p className="mt-2 text-2xl font-semibold text-slate-950">{progressWeightsTotal}%</p>
               <p
@@ -958,17 +965,16 @@ export function CreateProjectUi({
                 }`}
               >
                 {progressWeightsTotal === 100
-                  ? "\\u0627\\u0644\\u062a\\u0648\\u0632\\u064a\\u0639 \\u0627\\u0644\\u062d\\u0627\\u0644\\u064a \\u0645\\u062a\\u0648\\u0627\\u0632\\u0646 \\u0639\\u0644\\u0649 100%."
-                  : "\\u0647\\u0630\\u0627 \\u0627\\u0644\\u0645\\u0624\\u0634\\u0631 \\u0628\\u0635\\u0631\\u064a \\u0641\\u0642\\u0637 \\u0648\\u0644\\u0627 \\u064a\\u063a\\u064a\\u0651\\u0631 \\u0645\\u0646\\u0637\\u0642 \\u0627\\u0644\\u062d\\u0641\\u0638 \\u0627\\u0644\\u062d\\u0627\\u0644\\u064a."}
+                  ? "التوزيع الحالي متوازن على 100%."
+                  : "هذا المؤشر بصري فقط ولا يغيّر قواعد الحفظ الحالية."}
               </p>
             </div>
           </>
         ) : (
           <div className="rounded-[22px] border border-slate-200 bg-slate-50/80 p-4 shadow-sm md:col-span-3">
-            <p className="text-sm font-semibold text-slate-950">\\u0644\\u0627 \\u062a\\u0648\\u062c\\u062f \\u0623\\u0648\\u0632\\u0627\\u0646 \\u0625\\u0636\\u0627\\u0641\\u064a\\u0629"</p>
+            <p className="text-sm font-semibold text-slate-950">لا توجد أوزان إضافية</p>
             <p className="mt-2 text-xs leading-6 text-slate-500">
-              ط·آ¸أ¢â‚¬طŒط·آ·ط¢آ°ط·آ·ط¢آ§ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ· ط·آ¸ط¸آ¹ط·آ·ط¢آ¹ط·آ·ط¹آ¾ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ¯ ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ¨ط·آ·ط¢آ§ط·آ·ط¢آ´ط·آ·ط¢آ±ط·آ·ط¢آ© ط·آ·ط¢آ¹ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ° {progressModeLabels[formData.progressMode]} ط·آ·ط¢آ¨ط·آ·ط¢آ¯ط·آ¸ط«â€ ط·آ¸أ¢â‚¬آ  ط·آ·ط¹آ¾ط·آ¸ط«â€ ط·آ·ط¢آ²ط·آ¸ط¸آ¹ط·آ·ط¢آ¹
-              ط·آ·ط¢آ£ط·آ¸ط«â€ ط·آ·ط¢آ²ط·آ·ط¢آ§ط·آ¸أ¢â‚¬آ  ط·آ¸ط¸آ¹ط·آ·ط¢آ¯ط·آ¸ط«â€ ط·آ¸ط¸آ¹.
+              هذا النمط لا يتطلب أوزانًا إضافية، لأنه يعتمد على طريقة الاحتساب المحددة فقط.
             </p>
           </div>
         )}
@@ -980,18 +986,18 @@ export function CreateProjectUi({
     <div className="rounded-[28px] border border-slate-200/80 bg-white/95 p-5 shadow-sm">
       <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 className="text-base font-semibold text-slate-950">\\u0627\\u0644\\u062e\\u064a\\u0627\\u0631\\u0627\\u062a \\u0627\\u0644\\u0625\\u0636\\u0627\\u0641\\u064a\\u0629"</h3>
+          <h3 className="text-base font-semibold text-slate-950">الخيارات الإضافية</h3>
           <p className="text-xs leading-6 text-slate-500">
-            ط·آ·ط¢آ§ط·آ·ط¢آ¶ط·آ·ط¢آ¨ط·آ·ط¢آ· ط·آ·ط¢آ¥ط·آ·ط¢آ¨ط·آ·ط¢آ±ط·آ·ط¢آ§ط·آ·ط¢آ² ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ´ط·آ·ط¢آ±ط·آ¸ط«â€ ط·آ·ط¢آ¹ ط·آ¸ط«â€ ط·آ·ط¢آ®ط·آ¸ط¸آ¹ط·آ·ط¢آ§ط·آ·ط¢آ±ط·آ·ط¢آ§ط·آ·ط¹آ¾ VIP ط·آ·ط¢آ¶ط·آ¸أ¢â‚¬آ¦ط·آ¸أ¢â‚¬آ  ط·آ¸أ¢â‚¬آ ط·آ¸ط¸آ¾ط·آ·ط¢آ³ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ±ط·آ·ط¢آ­ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ© ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ®ط·آ·ط¹آ¾ط·آ·ط¢آ§ط·آ¸أ¢â‚¬آ¦ط·آ¸ط¸آ¹ط·آ·ط¢آ© ط·آ·ط¢آ¨ط·آ·ط¢آ¯ط·آ¸أ¢â‚¬â€چ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ§ط·آ¸أ¢â‚¬آ ط·آ·ط¹آ¾ط·آ¸أ¢â‚¬ع‘ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چ ط·آ·ط¢آ¥ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ° ط·آ¸أ¢â‚¬ع‘ط·آ·ط¢آ³ط·آ¸أ¢â‚¬آ¦ ط·آ¸أ¢â‚¬آ¦ط·آ¸أ¢â‚¬آ ط·آ¸ط¸آ¾ط·آ·ط¢آµط·آ¸أ¢â‚¬â€چ.
+            اضبط إبراز المشروع وامتيازات VIP قبل حفظ الإعدادات الختامية.
           </p>
         </div>
         <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
-          {activeOptionLabels.join("\\u00a2\\u0622\\u00b7 ") || "\\u0625\\u0639\\u062f\\u0627\\u062f\\u0627\\u062a \\u0627\\u0641\\u062a\\u0631\\u0627\\u0636\\u064a\\u0629"}
+          {activeOptionLabels.join(" · ") || "إعدادات افتراضية"}
         </Badge>
       </div>
 
       <div className="grid gap-5 md:grid-cols-3">
-        <Field label="\\u0645\\u0645\\u064a\\u0632 (featured)">
+        <Field label="إبراز المشروع">
           <Select
             value={formData.featured}
             onValueChange={(value) =>
@@ -1005,13 +1011,13 @@ export function CreateProjectUi({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="false">\\u0644\\u0627"</SelectItem>
-              <SelectItem value="true">\\u0646\\u0639\\u0645"</SelectItem>
+              <SelectItem value="false">لا</SelectItem>
+              <SelectItem value="true">نعم</SelectItem>
             </SelectContent>
           </Select>
         </Field>
 
-        <Field label="VIP (isVip)">
+        <Field label="تفعيل VIP">
           <Select
             value={formData.isVip}
             onValueChange={(value) =>
@@ -1025,13 +1031,13 @@ export function CreateProjectUi({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="false">\\u0644\\u0627"</SelectItem>
-              <SelectItem value="true">\\u0646\\u0639\\u0645"</SelectItem>
+              <SelectItem value="false">لا</SelectItem>
+              <SelectItem value="true">نعم</SelectItem>
             </SelectContent>
           </Select>
         </Field>
 
-        <Field label="\\u0645\\u0633\\u062a\\u0648\\u0649 VIP (vipTier)">
+        <Field label="مستوى VIP">
           <Select
             value={formData.vipTier}
             onValueChange={(value) =>
@@ -1045,10 +1051,10 @@ export function CreateProjectUi({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="none">None</SelectItem>
-              <SelectItem value="silver">Silver</SelectItem>
-              <SelectItem value="gold">Gold</SelectItem>
-              <SelectItem value="platinum">Platinum</SelectItem>
+              <SelectItem value="none">بدون</SelectItem>
+              <SelectItem value="silver">فضي</SelectItem>
+              <SelectItem value="gold">ذهبي</SelectItem>
+              <SelectItem value="platinum">بلاتيني</SelectItem>
             </SelectContent>
           </Select>
         </Field>
@@ -1060,16 +1066,16 @@ export function CreateProjectUi({
     <div className="space-y-6">
       <div className="grid gap-5 md:grid-cols-2">
         <Field
-          label="\\u0646\\u0638\\u0631\\u0629 \\u0639\\u0627\\u0645\\u0629 \\u0639\\u0644\\u0649 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639"
+          label="نظرة عامة على المشروع"
           className="md:col-span-2"
-          hint="\\u0648\\u0635\\u0641 \\u0628\\u0635\\u064a\\u063a\\u0629 \\u0645\\u0627 \\u0628\\u0639\\u062f \\u0627\\u0644\\u062a\\u0646\\u0641\\u064a\\u0630 \\u064a\\u0634\\u0631\\u062d \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639 \\u0628\\u0639\\u062f \\u0627\\u0643\\u062a\\u0645\\u0627\\u0644\\u0647."
+          hint="وصف بصيغة ما بعد التنفيذ يشرح المشروع بعد اكتماله."
         >
           <Textarea
             rows={4}
             dir="rtl"
             className={`${textareaClassName} text-right leading-7`}
             value={formData.completionOverviewAr}
-            placeholder="\\u0627\\u0643\\u062a\\u0628 \\u0646\\u0638\\u0631\\u0629 \\u0639\\u0627\\u0645\\u0629 \\u062a\\u0648\\u0636\\u062d \\u0645\\u0627 \\u0627\\u0644\\u0630\\u064a \\u0643\\u0627\\u0646 \\u0639\\u0644\\u064a\\u0647 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639 \\u0628\\u0639\\u062f \\u0627\\u0644\\u062a\\u0646\\u0641\\u064a\\u0630."
+            placeholder="اكتب نظرة عامة توضح ما الذي كان عليه المشروع بعد التنفيذ."
             onChange={(e) =>
               setFormData((prev) => ({
                 ...prev,
@@ -1080,16 +1086,16 @@ export function CreateProjectUi({
         </Field>
 
         <Field
-          label="\\u0645\\u0644\\u062e\\u0635 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639"
+          label="ملخص المشروع"
           className="md:col-span-2"
-          hint="\\u0645\\u0644\\u062e\\u0635 \\u0642\\u0635\\u064a\\u0631 \\u064a\\u0638\\u0647\\u0631 \\u0641\\u064a \\u0635\\u0641\\u062d\\u0629 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639 \\u0627\\u0644\\u0645\\u0643\\u062a\\u0645\\u0644."
+          hint="ملخص قصير يظهر في صفحة المشروع المكتمل."
         >
           <Textarea
             rows={3}
             dir="rtl"
             className={`${textareaClassName} min-h-[120px] text-right leading-7`}
             value={formData.completionSummaryAr}
-            placeholder="\\u0627\\u0643\\u062a\\u0628 \\u0645\\u0644\\u062e\\u0635\\u064b\\u0627 \\u0646\\u0647\\u0627\\u0626\\u064a\\u064b\\u0627 \\u0645\\u062e\\u062a\\u0635\\u0631\\u064b\\u0627 \\u0644\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639 \\u0628\\u0639\\u062f \\u0625\\u0642\\u0641\\u0627\\u0644\\u0647."
+            placeholder="اكتب ملخصًا نهائيًا مختصرًا للمشروع بعد إقفاله."
             onChange={(e) =>
               setFormData((prev) => ({
                 ...prev,
@@ -1104,9 +1110,9 @@ export function CreateProjectUi({
         <div className="space-y-4">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <h4 className="text-base font-semibold text-slate-950">\\u0646\\u062a\\u0627\\u0626\\u062c \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639"</h4>
+              <h4 className="text-base font-semibold text-slate-950">نتائج المشروع</h4>
               <p className="text-xs text-slate-500">
-                ط·آ¸ط¦â€™ط·آ¸أ¢â‚¬â€چ ط·آ¸أ¢â‚¬آ ط·آ·ط¹آ¾ط·آ¸ط¸آ¹ط·آ·ط¢آ¬ط·آ·ط¢آ© ط·آ·ط¹آ¾ط·آ·ط¢آ¸ط·آ¸أ¢â‚¬طŒط·آ·ط¢آ± ط·آ¸ط¦â€™ط·آ·ط¢آ¹ط·آ¸أ¢â‚¬آ ط·آ·ط¢آµط·آ·ط¢آ± ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ³ط·آ·ط¹آ¾ط·آ¸أ¢â‚¬ع‘ط·آ¸أ¢â‚¬â€چ ط·آ¸ط¸آ¾ط·آ¸ط¸آ¹ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آµط·آ¸ط¸آ¾ط·آ·ط¢آ­ط·آ·ط¢آ© ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ ط·آ¸أ¢â‚¬طŒط·آ·ط¢آ§ط·آ·ط¢آ¦ط·آ¸ط¸آ¹ط·آ·ط¢آ©.
+                أضف النتائج التي تحققت بعد التنفيذ بصياغة واضحة ومباشرة لتظهر في الصفحة النهائية.
               </p>
             </div>
             <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
@@ -1134,7 +1140,7 @@ export function CreateProjectUi({
                   }
                 >
                   <Trash2 className="ml-2 h-4 w-4" />
-                  ط·آ·ط¢آ­ط·آ·ط¢آ°ط·آ¸ط¸آ¾
+                  حذف
                 </Button>
               </div>
 
@@ -1143,7 +1149,7 @@ export function CreateProjectUi({
                 dir="rtl"
                 className={`${textareaClassName} min-h-[110px] text-right leading-7`}
                 value={row}
-                placeholder="\\u0645\\u062b\\u0627\\u0644: \\u062a\\u0645 \\u062a\\u0646\\u0641\\u064a\\u0630 \\u0623\\u0639\\u0645\\u0627\\u0644 \\u0627\\u0644\\u062a\\u0637\\u0648\\u064a\\u0631 \\u0648\\u062a\\u0633\\u0644\\u064a\\u0645 \\u0627\\u0644\\u0623\\u0635\\u0648\\u0644 \\u0648\\u0641\\u0642 \\u0627\\u0644\\u062e\\u0637\\u0629 \\u0627\\u0644\\u0645\\u0639\\u062a\\u0645\\u062f\\u0629."
+                placeholder="مثال: تم تنفيذ أعمال التطوير وتسليم الأصول وفق الخطة المعتمدة."
                 onChange={(e) =>
                   setCompletionResultRows((prev) =>
                     prev.map((item, rowIndex) => (rowIndex === index ? e.target.value : item))
@@ -1160,15 +1166,15 @@ export function CreateProjectUi({
             onClick={() => setCompletionResultRows((prev) => [...prev, ""])}
           >
             <Plus className="ml-2 h-4 w-4" />
-            ط·آ·ط¢آ¥ط·آ·ط¢آ¶ط·آ·ط¢آ§ط·آ¸ط¸آ¾ط·آ·ط¢آ© ط·آ¸أ¢â‚¬آ ط·آ·ط¹آ¾ط·آ¸ط¸آ¹ط·آ·ط¢آ¬ط·آ·ط¢آ© ط·آ·ط¢آ¬ط·آ·ط¢آ¯ط·آ¸ط¸آ¹ط·آ·ط¢آ¯ط·آ·ط¢آ©
+            إضافة نتيجة جديدة
           </Button>
         </div>
 
         <div className="space-y-4">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <h4 className="text-base font-semibold text-slate-950">\\u0645\\u0644\\u062e\\u0635 \\u0646\\u0647\\u0627\\u0626\\u064a / \\u0645\\u0644\\u0627\\u062d\\u0638\\u0627\\u062a"</h4>
-              <p className="text-xs text-slate-500">\\u0645\\u0644\\u0627\\u062d\\u0638\\u0627\\u062a \\u062e\\u062a\\u0627\\u0645\\u064a\\u0629 \\u0623\\u0648 \\u0646\\u0642\\u0627\\u0637 \\u062a\\u0648\\u062b\\u064a\\u0642\\u064a\\u0629 \\u0625\\u0636\\u0627\\u0641\\u064a\\u0629."</p>
+              <h4 className="text-base font-semibold text-slate-950">ملخص نهائي / ملاحظات</h4>
+              <p className="text-xs text-slate-500">ملاحظات ختامية أو نقاط توثيقية إضافية.</p>
             </div>
             <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
               {filledCompletionFinalNotes}
@@ -1195,7 +1201,7 @@ export function CreateProjectUi({
                   }
                 >
                   <Trash2 className="ml-2 h-4 w-4" />
-                  ط·آ·ط¢آ­ط·آ·ط¢آ°ط·آ¸ط¸آ¾
+                  حذف
                 </Button>
               </div>
 
@@ -1204,7 +1210,7 @@ export function CreateProjectUi({
                 dir="rtl"
                 className={`${textareaClassName} min-h-[110px] text-right leading-7`}
                 value={row}
-                placeholder="\\u0623\\u0636\\u0641 \\u0645\\u0644\\u0627\\u062d\\u0638\\u0629 \\u0646\\u0647\\u0627\\u0626\\u064a\\u0629 \\u0623\\u0648 \\u0645\\u0644\\u062e\\u0635\\u064b\\u0627 \\u062e\\u062a\\u0627\\u0645\\u064a\\u064b\\u0627 \\u0644\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639."
+                placeholder="أضف ملاحظة نهائية أو ملخصًا ختاميًا للمشروع."
                 onChange={(e) =>
                   setCompletionFinalNoteRows((prev) =>
                     prev.map((item, rowIndex) => (rowIndex === index ? e.target.value : item))
@@ -1221,7 +1227,7 @@ export function CreateProjectUi({
             onClick={() => setCompletionFinalNoteRows((prev) => [...prev, ""])}
           >
             <Plus className="ml-2 h-4 w-4" />
-            ط·آ·ط¢آ¥ط·آ·ط¢آ¶ط·آ·ط¢آ§ط·آ¸ط¸آ¾ط·آ·ط¢آ© ط·آ¸أ¢â‚¬آ¦ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ§ط·آ·ط¢آ­ط·آ·ط¢آ¸ط·آ·ط¢آ© ط·آ¸أ¢â‚¬آ ط·آ¸أ¢â‚¬طŒط·آ·ط¢آ§ط·آ·ط¢آ¦ط·آ¸ط¸آ¹ط·آ·ط¢آ©
+            إضافة ملاحظة ختامية
           </Button>
         </div>
       </div>
@@ -1229,9 +1235,9 @@ export function CreateProjectUi({
       <div className="space-y-4">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h4 className="text-base font-semibold text-slate-950">\\u0645\\u062e\\u0631\\u062c\\u0627\\u062a \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639"</h4>
+            <h4 className="text-base font-semibold text-slate-950">مخرجات المشروع</h4>
             <p className="text-xs text-slate-500">
-              ط·آ·ط¢آ¹ط·آ¸أ¢â‚¬آ ط·آ·ط¢آ§ط·آ·ط¢آµط·آ·ط¢آ± ط·آ¸ط«â€ ط·آ·ط¢آµط·آ¸ط¸آ¾ط·آ¸ط¸آ¹ط·آ·ط¢آ© ط·آ¸أ¢â‚¬آ¦ط·آ¸أ¢â‚¬آ ط·آ·ط¢آ¸ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ© ط·آ·ط¢آ¨ط·آ·ط¢آ¹ط·آ¸أ¢â‚¬آ ط·آ¸ط«â€ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬آ  ط·آ¸ط«â€ ط·آ¸ط«â€ ط·آ·ط¢آµط·آ¸ط¸آ¾ ط·آ¸ط«â€ ط·آ¸ط«â€ ط·آ·ط¢آ³ط·آ¸أ¢â‚¬آ¦ ط·آ·ط¢آ§ط·آ·ط¢آ®ط·آ·ط¹آ¾ط·آ¸ط¸آ¹ط·آ·ط¢آ§ط·آ·ط¢آ±ط·آ¸ط¸آ¹ ط·آ¸أ¢â‚¬â€چط·آ¸ط¦â€™ط·آ¸أ¢â‚¬â€چ ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ®ط·آ·ط¢آ±ط·آ·ط¢آ¬.
+              أضف المخرجات النهائية التي تم تسليمها أو إنتاجها بعد التنفيذ، مع عنوان واضح ووصف مختصر لكل مخرج.
             </p>
           </div>
           <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
@@ -1248,7 +1254,7 @@ export function CreateProjectUi({
               <div>
                 <p className="text-sm font-semibold text-slate-950">المخرج {index + 1}</p>
                 <p className="text-xs text-slate-500">
-                  ط·آ·ط¢آ¹ط·آ¸أ¢â‚¬آ ط·آ¸ط«â€ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬آ  ط·آ¸ط«â€ ط·آ¸ط«â€ ط·آ·ط¢آµط·آ¸ط¸آ¾ ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ®ط·آ·ط¹آ¾ط·آ·ط¢آµط·آ·ط¢آ± ط·آ¸ط¸آ¹ط·آ¸ط«â€ ط·آ·ط¢آ¶ط·آ·ط¢آ­ ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ§ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ°ط·آ¸ط¸آ¹ ط·آ·ط¹آ¾ط·آ·ط¢آ­ط·آ¸أ¢â‚¬ع‘ط·آ¸أ¢â‚¬ع‘ ط·آ¸ط¸آ¾ط·آ·ط¢آ¹ط·آ¸أ¢â‚¬â€چط·آ¸ط¸آ¹ط·آ¸أ¢â‚¬آ¹ط·آ·ط¢آ§.
+                  اكتب اسم المخرج ووصفه المختصر، وأضف وسمًا اختياريًا إذا احتجت إلى توضيح إضافي.
                 </p>
               </div>
               <Button
@@ -1264,17 +1270,17 @@ export function CreateProjectUi({
                 }
               >
                 <Trash2 className="ml-2 h-4 w-4" />
-                ط·آ·ط¢آ­ط·آ·ط¢آ°ط·آ¸ط¸آ¾
+                حذف
               </Button>
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
-              <Field label="\\u0627\\u0644\\u0639\\u0646\\u0648\\u0627\\u0646">
+              <Field label="العنوان">
                 <Input
                   dir="rtl"
                   className={`${inputClassName} text-right`}
                   value={row.titleAr}
-                  placeholder={`\\u0639\\u0646\\u0648\\u0627\\u0646 \\u0627\\u0644\\u0645\\u062e\\u0631\\u062c ${index + 1}`}
+                  placeholder={`عنوان المخرج ${index + 1}`}
                   onChange={(e) =>
                     setCompletionOutputRows((prev) =>
                       prev.map((item, rowIndex) =>
@@ -1285,12 +1291,12 @@ export function CreateProjectUi({
                 />
               </Field>
 
-              <Field label="\\u0648\\u0633\\u0645 \\u0625\\u0636\\u0627\\u0641\\u064a (\\u0627\\u062e\\u062a\\u064a\\u0627\\u0631\\u064a)">
+              <Field label="وسم إضافي (اختياري)">
                 <Input
                   dir="rtl"
                   className={`${inputClassName} text-right`}
                   value={row.metaAr}
-                  placeholder="\\u0645\\u062b\\u0627\\u0644: \\u062a\\u0633\\u0644\\u064a\\u0645 \\u0646\\u0647\\u0627\\u0626\\u064a"
+                  placeholder="مثال: تسليم نهائي"
                   onChange={(e) =>
                     setCompletionOutputRows((prev) =>
                       prev.map((item, rowIndex) =>
@@ -1301,13 +1307,13 @@ export function CreateProjectUi({
                 />
               </Field>
 
-              <Field label="\\u0627\\u0644\\u0648\\u0635\\u0641" className="md:col-span-2">
+              <Field label="الوصف" className="md:col-span-2">
                 <Textarea
                   rows={3}
                   dir="rtl"
                   className={`${textareaClassName} min-h-[120px] text-right leading-7`}
                   value={row.descriptionAr}
-                  placeholder="\\u0635\\u0641 \\u0647\\u0630\\u0627 \\u0627\\u0644\\u0645\\u062e\\u0631\\u062c \\u0628\\u0634\\u0643\\u0644 \\u0648\\u0627\\u0636\\u062d \\u0648\\u0645\\u0628\\u0627\\u0634\\u0631."
+                  placeholder="صف هذا المخرج بشكل واضح ومباشر."
                   onChange={(e) =>
                     setCompletionOutputRows((prev) =>
                       prev.map((item, rowIndex) =>
@@ -1333,14 +1339,14 @@ export function CreateProjectUi({
           }
         >
           <Plus className="ml-2 h-4 w-4" />
-          ط·آ·ط¢آ¥ط·آ·ط¢آ¶ط·آ·ط¢آ§ط·آ¸ط¸آ¾ط·آ·ط¢آ© ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ®ط·آ·ط¢آ±ط·آ·ط¢آ¬ ط·آ·ط¢آ¬ط·آ·ط¢آ¯ط·آ¸ط¸آ¹ط·آ·ط¢آ¯
+          إضافة مخرج جديد
         </Button>
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_260px]">
         <Field
-          label="\\u0645\\u0639\\u0631\\u0636 \\u0635\\u0648\\u0631 \\u0645\\u0627 \\u0628\\u0639\\u062f \\u0627\\u0644\\u062a\\u0646\\u0641\\u064a\\u0630"
-          hint="\\u0631\\u0627\\u0628\\u0637 \\u0644\\u0643\\u0644 \\u0635\\u0648\\u0631\\u0629 \\u0641\\u064a \\u0633\\u0637\\u0631 \\u0645\\u0633\\u062a\\u0642\\u0644. \\u0647\\u0630\\u0647 \\u0627\\u0644\\u0635\\u0648\\u0631 \\u062a\\u0633\\u062a\\u062e\\u062f\\u0645 \\u0641\\u064a \\u0635\\u0641\\u062d\\u0629 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639 \\u0627\\u0644\\u0645\\u0643\\u062a\\u0645\\u0644."
+          label="معرض صور ما بعد التنفيذ"
+          hint="رابط لكل صورة في سطر مستقل. هذه الصور تستخدم في صفحة المشروع المكتمل."
         >
           <Textarea
             rows={5}
@@ -1359,8 +1365,8 @@ export function CreateProjectUi({
 
         <UploadDropzone
           inputId="project-completion-gallery-upload"
-          title="\\u0631\\u0641\\u0639 \\u0635\\u0648\\u0631 \\u0646\\u0647\\u0627\\u0626\\u064a\\u0629"
-          description="\\u0627\\u0631\\u0641\\u0639 \\u0627\\u0644\\u0635\\u0648\\u0631 \\u0627\\u0644\\u062a\\u064a \\u062a\\u0648\\u062b\\u0642 \\u0627\\u0644\\u062d\\u0627\\u0644\\u0629 \\u0627\\u0644\\u0646\\u0647\\u0627\\u0626\\u064a\\u0629 \\u0644\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639 \\u0628\\u0639\\u062f \\u0627\\u0644\\u062a\\u0646\\u0641\\u064a\\u0630."
+          title="رفع صور نهائية"
+          description="ارفع الصور التي توثق الحالة النهائية للمشروع بعد التنفيذ."
           accept="image/*"
           multiple
           disabled={completionGalleryUploading}
@@ -1401,7 +1407,7 @@ export function CreateProjectUi({
                     }))
                   }
                 >
-                  ط·آ·ط¢آ­ط·آ·ط¢آ°ط·آ¸ط¸آ¾
+                  حذف
                 </Button>
               </div>
             </div>
@@ -1419,11 +1425,11 @@ export function CreateProjectUi({
             <FileText className="h-4 w-4 text-slate-800" />
           </div>
           <div className="space-y-2">
-            <h4 className="text-sm font-semibold text-slate-950">\\u0627\\u0644\\u0642\\u0633\\u0645 \\u0645\\u0624\\u062c\\u0644 \\u062d\\u062a\\u0649 \\u0627\\u0644\\u0625\\u063a\\u0644\\u0627\\u0642"</h4>
+            <h4 className="text-sm font-semibold text-slate-950">القسم مؤجل حتى الإغلاق</h4>
             <p className="text-xs leading-6 text-slate-500">
-              ط·آ·ط¢آ³ط·آ·ط¹آ¾ط·آ·ط¹آ¾ط·آ¸أ¢â‚¬آ¦ط·آ¸ط¦â€™ط·آ¸أ¢â‚¬آ  ط·آ¸أ¢â‚¬آ¦ط·آ¸أ¢â‚¬آ  ط·آ·ط¢آ¥ط·آ·ط¢آ¶ط·آ·ط¢آ§ط·آ¸ط¸آ¾ط·آ·ط¢آ© ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ ط·آ·ط¹آ¾ط·آ·ط¢آ§ط·آ·ط¢آ¦ط·آ·ط¢آ¬ ط·آ¸ط«â€ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ®ط·آ·ط¢آ±ط·آ·ط¢آ¬ط·آ·ط¢آ§ط·آ·ط¹آ¾ ط·آ¸ط«â€ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آµط·آ¸ط«â€ ط·آ·ط¢آ± ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ®ط·آ·ط¹آ¾ط·آ·ط¢آ§ط·آ¸أ¢â‚¬آ¦ط·آ¸ط¸آ¹ط·آ·ط¢آ© ط·آ¸أ¢â‚¬طŒط·آ¸أ¢â‚¬آ ط·آ·ط¢آ§ ط·آ·ط¢آ¹ط·آ¸أ¢â‚¬آ ط·آ·ط¢آ¯ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ§ ط·آ·ط¹آ¾ط·آ·ط¢آµط·آ·ط¢آ¨ط·آ·ط¢آ­ ط·آ·ط¢آ­ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ© ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ´ط·آ·ط¢آ±ط·آ¸ط«â€ ط·آ·ط¢آ¹
-              &quot;ط·آ¸أ¢â‚¬آ¦ط·آ·ط·â€؛ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬ع‘&quot; ط·آ·ط¢آ£ط·آ¸ط«â€  &quot;ط·آ¸أ¢â‚¬آ¦ط·آ¸ط¦â€™ط·آ·ط¹آ¾ط·آ¸أ¢â‚¬آ¦ط·آ¸أ¢â‚¬â€چ&quot;. ط·آ·ط¢آ¥ط·آ·ط¢آ¨ط·آ¸أ¢â‚¬ع‘ط·آ·ط¢آ§ط·آ·ط·إ’ ط·آ¸أ¢â‚¬طŒط·آ·ط¢آ°ط·آ·ط¢آ§ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ¬ط·آ·ط¢آ²ط·آ·ط·إ’ ط·آ·ط¢آ¯ط·آ·ط¢آ§ط·آ·ط¢آ®ط·آ¸أ¢â‚¬â€چ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ±ط·آ·ط¢آ­ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ© ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ®ط·آ·ط¹آ¾ط·آ·ط¢آ§ط·آ¸أ¢â‚¬آ¦ط·آ¸ط¸آ¹ط·آ·ط¢آ© ط·آ¸ط¸آ¹ط·آ·ط¢آ³ط·آ·ط¢آ§ط·آ·ط¢آ¹ط·آ·ط¢آ¯
-              ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸ط¸آ¾ط·آ·ط¢آ±ط·آ¸ط¸آ¹ط·آ¸أ¢â‚¬ع‘ ط·آ·ط¢آ¹ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ° ط·آ·ط¢آ±ط·آ·ط¢آ¤ط·آ¸ط¸آ¹ط·آ·ط¢آ© ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ³ط·آ·ط¢آ§ط·آ·ط¢آ± ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸ط¦â€™ط·آ·ط¢آ§ط·آ¸أ¢â‚¬آ¦ط·آ¸أ¢â‚¬â€چ ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ´ط·آ·ط¢آ±ط·آ¸ط«â€ ط·آ·ط¢آ¹ ط·آ¸ط¸آ¾ط·آ¸ط¸آ¹ ط·آ¸أ¢â‚¬آ¦ط·آ¸ط¦â€™ط·آ·ط¢آ§ط·آ¸أ¢â‚¬آ  ط·آ¸ط«â€ ط·آ·ط¢آ§ط·آ·ط¢آ­ط·آ·ط¢آ¯.
+              سيبقى هذا القسم ظاهرًا داخل لوحة البناء، لكنه يتحول إلى مساحة تحرير كاملة عند
+              إغلاق المشروع أو اكتماله. عندها يمكنك إضافة النتائج والمخرجات وصور ما بعد
+              التنفيذ والمحتوى الختامي بشكل منظم.
             </p>
           </div>
         </div>
@@ -1433,20 +1439,20 @@ export function CreateProjectUi({
         <MetricCard
           icon={CheckCircle2}
           status="incomplete"
-          label="\\u062d\\u0627\\u0644\\u0629 \\u0627\\u0644\\u0642\\u0633\\u0645"
-          value="\\u0645\\u0624\\u062c\\u0644 \\u062d\\u0627\\u0644\\u064a\\u064b\\u0627"
+          label="حالة القسم"
+          value="مؤجل حاليًا"
         />
         <MetricCard
           icon={FileText}
           status="incomplete"
-          label="\\u0627\\u0644\\u062d\\u0627\\u0644\\u0629 \\u0627\\u0644\\u062d\\u0627\\u0644\\u064a\\u0629"
+          label="الحالة الحالية"
           value={statusLabels[formData.status]}
         />
         <MetricCard
           icon={FileImage}
           status="incomplete"
-          label="\\u064a\\u062a\\u0641\\u0639\\u0651\\u0644 \\u0639\\u0646\\u062f"
-          value="\\u0625\\u063a\\u0644\\u0627\\u0642 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639"
+          label="يتفعّل عند"
+          value="إغلاق المشروع"
         />
       </div>
     </div>
@@ -1456,14 +1462,14 @@ export function CreateProjectUi({
     <div className="rounded-[28px] border border-slate-200/80 bg-white/95 p-5 shadow-sm">
       <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 className="text-base font-semibold text-slate-950">\\u0627\\u0644\\u0645\\u062d\\u062a\\u0648\\u0649 \\u0627\\u0644\\u062e\\u062a\\u0627\\u0645\\u064a"</h3>
+          <h3 className="text-base font-semibold text-slate-950">المحتوى الختامي</h3>
           <p className="text-xs leading-6 text-slate-500">
-            ط·آ¸أ¢â‚¬طŒط·آ·ط¢آ°ط·آ·ط¢آ§ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ¬ط·آ·ط¢آ²ط·آ·ط·إ’ ط·آ¸ط¸آ¹ط·آ·ط¢آ¨ط·آ¸أ¢â‚¬ع‘ط·آ¸أ¢â‚¬آ° ط·آ·ط¢آ¶ط·آ¸أ¢â‚¬آ¦ط·آ¸أ¢â‚¬آ  ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ±ط·آ·ط¢آ­ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ© ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ®ط·آ·ط¹آ¾ط·آ·ط¢آ§ط·آ¸أ¢â‚¬آ¦ط·آ¸ط¸آ¹ط·آ·ط¢آ© ط·آ¸أ¢â‚¬آ ط·آ¸ط¸آ¾ط·آ·ط¢آ³ط·آ¸أ¢â‚¬طŒط·آ·ط¢آ§ط·آ·ط¥â€™ ط·آ¸ط«â€ ط·آ¸ط¸آ¹ط·آ·ط¹آ¾ط·آ·ط¢آ­ط·آ¸ط«â€ ط·آ¸أ¢â‚¬â€چ ط·آ·ط¢آ¥ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ° ط·آ¸ط«â€ ط·آ·ط¢آ¶ط·آ·ط¢آ¹ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¹آ¾ط·آ·ط¢آ­ط·آ·ط¢آ±ط·آ¸ط¸آ¹ط·آ·ط¢آ± ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸ط¦â€™ط·آ·ط¢آ§ط·آ¸أ¢â‚¬آ¦ط·آ¸أ¢â‚¬â€چ ط·آ·ط¢آ¹ط·آ¸أ¢â‚¬آ ط·آ·ط¢آ¯ ط·آ·ط¢آ¥ط·آ·ط·â€؛ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ§ط·آ¸أ¢â‚¬ع‘
-            ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ´ط·آ·ط¢آ±ط·آ¸ط«â€ ط·آ·ط¢آ¹ ط·آ·ط¢آ£ط·آ¸ط«â€  ط·آ·ط¢آ§ط·آ¸ط¦â€™ط·آ·ط¹آ¾ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬طŒ.
+            أضف النصوص والنتائج والمخرجات وصور ما بعد التنفيذ لبناء صفحة مكتملة تعكس
+            المشروع بعد إقفاله أو اكتماله.
           </p>
         </div>
         <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
-          {isCompletionSectionEditable ? completionSectionSummary : "\\u0645\\u062a\\u0627\\u062d \\u0628\\u0639\\u062f \\u0627\\u0644\\u0625\\u063a\\u0644\\u0627\\u0642"}
+          {isCompletionSectionEditable ? completionSectionSummary : "متاح بعد الإغلاق"}
         </Badge>
       </div>
 
@@ -1617,17 +1623,17 @@ export function CreateProjectUi({
           <SectionCard
             id="basic"
             index={1}
-            title="\\u0627\\u0644\\u0645\\u0639\\u0644\\u0648\\u0645\\u0627\\u062a \\u0627\\u0644\\u0623\\u0633\\u0627\\u0633\\u064a\\u0629"
-            description="\\u0627\\u0628\\u062f\\u0623 \\u0628\\u0647\\u0648\\u064a\\u0629 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639 \\u0648\\u0627\\u0644\\u0639\\u0646\\u0627\\u0648\\u064a\\u0646 \\u0648\\u0627\\u0644\\u0648\\u0635\\u0641\\u064a\\u0646 \\u0627\\u0644\\u0639\\u0631\\u0628\\u064a \\u0648\\u0627\\u0644\\u0625\\u0646\\u062c\\u0644\\u064a\\u0632\\u064a \\u062f\\u0627\\u062e\\u0644 \\u062a\\u062e\\u0637\\u064a\\u0637 \\u0623\\u0643\\u062b\\u0631 \\u0627\\u062a\\u0632\\u0627\\u0646\\u064b\\u0627."
+            title="المعلومات الأساسية"
+            description="ابدأ بهوية المشروع والعناوين والوصفين العربي والإنجليزي داخل تخطيط أكثر اتزانًا."
             icon={BriefcaseBusiness}
             status={sectionStatuses.basic}
             headerAside={
               <>
                 <Badge className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-700">
-                  {cleanStr(formData.titleAr) ? "\\u0627\\u0644\\u0639\\u0646\\u0648\\u0627\\u0646 \\u062c\\u0627\\u0647\\u0632" : "\\u0627\\u0644\\u0639\\u0646\\u0648\\u0627\\u0646 \\u0628\\u0627\\u0646\\u062a\\u0638\\u0627\\u0631 \\u0627\\u0644\\u0625\\u062f\\u062e\\u0627\\u0644"}
+                  {cleanStr(formData.titleAr) ? "العنوان جاهز" : "العنوان بانتظار الإدخال"}
                 </Badge>
                 <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
-                  {cleanStr(formData.descriptionAr) ? "\\u0627\\u0644\\u0648\\u0635\\u0641 \\u0627\\u0644\\u0639\\u0631\\u0628\\u064a \\u062c\\u0627\\u0647\\u0632" : "\\u0627\\u0644\\u0648\\u0635\\u0641 \\u0627\\u0644\\u0639\\u0631\\u0628\\u064a \\u0645\\u0637\\u0644\\u0648\\u0628"}
+                  {cleanStr(formData.descriptionAr) ? "الوصف العربي جاهز" : "الوصف العربي مطلوب"}
                 </Badge>
               </>
             }
@@ -1641,19 +1647,19 @@ export function CreateProjectUi({
                 />
               }
             >
-                <Field label="\\u0627\\u0644\\u0639\\u0646\\u0648\\u0627\\u0646 (\\u0639\\u0631\\u0628\\u064a)" required>
+                <Field label="العنوان (عربي)" required>
                   <Input
                     dir="rtl"
                     className={`${inputClassName} text-right`}
                     value={formData.titleAr}
-                    placeholder="\\u0645\\u062b\\u0627\\u0644: \\u0645\\u0634\\u0631\\u0648\\u0639 \\u0623\\u0628\\u0631\\u0627\\u062c \\u0627\\u0644\\u0639\\u0627\\u0635\\u0645\\u0629"
+                    placeholder="مثال: مشروع أبراج العاصمة"
                     onChange={(e) =>
                       setFormData((prev) => ({ ...prev, titleAr: e.target.value }))
                     }
                   />
                 </Field>
 
-                <Field label="\\u0627\\u0644\\u0639\\u0646\\u0648\\u0627\\u0646 (\\u0625\\u0646\\u062c\\u0644\\u064a\\u0632\\u064a)">
+                <Field label="العنوان (إنجليزي)">
                   <Input
                     dir="ltr"
                     className={`${inputClassName} text-left`}
@@ -1669,21 +1675,21 @@ export function CreateProjectUi({
                   label="الوصف (عربي)"
                   required
                   className="md:col-span-2"
-                  hint="\\u0647\\u0630\\u0627 \\u0627\\u0644\\u0646\\u0635 \\u0647\\u0648 \\u0623\\u0648\\u0644 \\u0645\\u0627 \\u064a\\u0642\\u0631\\u0623\\u0647 \\u0627\\u0644\\u0645\\u0633\\u062a\\u062b\\u0645\\u0631 \\u062f\\u0627\\u062e\\u0644 \\u0627\\u0644\\u0628\\u0637\\u0627\\u0642\\u0629 \\u0648\\u0635\\u0641\\u062d\\u0629 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639."
+                  hint="هذا النص هو أول ما يقرأه المستثمر داخل البطاقة وصفحة المشروع."
                 >
                   <Textarea
                     rows={5}
                     dir="rtl"
                     className={`${textareaClassName} text-right leading-7`}
                     value={formData.descriptionAr}
-                    placeholder="\\u0627\\u0643\\u062a\\u0628 \\u0648\\u0635\\u0641\\u064b\\u0627 \\u0645\\u0647\\u0646\\u064a\\u064b\\u0627 \\u064a\\u0634\\u0631\\u062d \\u0641\\u0643\\u0631\\u0629 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639 \\u0648\\u0627\\u0644\\u0641\\u0631\\u0635\\u0629 \\u0627\\u0644\\u0627\\u0633\\u062a\\u062b\\u0645\\u0627\\u0631\\u064a\\u0629."
+                    placeholder="اكتب وصفًا مهنيًا يشرح فكرة المشروع والفرصة الاستثمارية."
                     onChange={(e) =>
                       setFormData((prev) => ({ ...prev, descriptionAr: e.target.value }))
                     }
                   />
                 </Field>
 
-                <Field label="\\u0627\\u0644\\u0648\\u0635\\u0641 (\\u0625\\u0646\\u062c\\u0644\\u064a\\u0632\\u064a)" className="md:col-span-2">
+                <Field label="الوصف (إنجليزي)" className="md:col-span-2">
                   <Textarea
                     rows={5}
                     dir="ltr"
@@ -1701,13 +1707,13 @@ export function CreateProjectUi({
           <SectionCard
             id="details"
             index={2}
-            title="\\u0628\\u064a\\u0627\\u0646\\u0627\\u062a \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639"
-            description="\\u062a\\u0646\\u0638\\u064a\\u0645 \\u0646\\u0648\\u0639 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639 \\u0648\\u062d\\u0627\\u0644\\u062a\\u0647 \\u0648\\u0631\\u0642\\u0645 \\u0627\\u0644\\u0625\\u0635\\u062f\\u0627\\u0631 \\u0648\\u0627\\u0644\\u0645\\u0648\\u0642\\u0639 \\u0636\\u0645\\u0646 \\u0634\\u0628\\u0643\\u0629 \\u0623\\u0643\\u062b\\u0631 \\u0648\\u0636\\u0648\\u062d\\u064b\\u0627."
+            title="بيانات المشروع"
+            description="تنظيم نوع المشروع وحالته ورقم الإصدار والموقع ضمن شبكة أكثر وضوحًا."
             icon={Building2}
             status={sectionStatuses.details}
             headerAside={
               <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
-                {projectTypeLabels[formData.projectType]} ط·آ·ط¢آ¢ط·آ¢ط¢آ· {statusLabels[formData.status]}
+                {projectTypeLabels[formData.projectType]} · {statusLabels[formData.status]}
               </Badge>
             }
           >
@@ -1720,7 +1726,7 @@ export function CreateProjectUi({
                 />
               }
             >
-                <Field label="\\u0646\\u0648\\u0639 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639">
+                <Field label="نوع المشروع">
                   <Select
                     value={formData.projectType}
                     onValueChange={(value) =>
@@ -1734,14 +1740,18 @@ export function CreateProjectUi({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="sukuk">\\u0637\\u0627\\u0633\\u062a\\u062b\\u0645\\u0627\\u0631 \\u0628\\u0627\\u0644\\u0635\\u0643\\u0648\\u0643"</SelectItem>
-                      <SelectItem value="land_development">\\u0637\\u062a\\u0637\\u0648\\u064a\\u0631 \\u0623\\u0631\\u0627\\u0636\\u064d"</SelectItem>
-                      <SelectItem value="vip_exclusive">VVIP \\u062d\\u0635\\u0631\\u064a"</SelectItem>
+                      <SelectItem value="sukuk">{projectTypeLabels.sukuk}</SelectItem>
+                      <SelectItem value="land_development">
+                        {projectTypeLabels.land_development}
+                      </SelectItem>
+                      <SelectItem value="vip_exclusive">
+                        {projectTypeLabels.vip_exclusive}
+                      </SelectItem>
                     </SelectContent>
                   </Select>
                 </Field>
 
-                <Field label="\\u0627\\u0644\\u062d\\u0627\\u0644\\u0629">
+                <Field label="الحالة">
                   <Select
                     value={formData.status}
                     onValueChange={(value) =>
@@ -1755,15 +1765,15 @@ export function CreateProjectUi({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="draft">\\u0642\\u0631\\u064a\\u0628\\u0627\\u064b"</SelectItem>
-                      <SelectItem value="published">\\u0645\\u0646\\u0634\\u0648\\u0631"</SelectItem>
-                      <SelectItem value="closed">\\u0645\\u063a\\u0644\\u0642"</SelectItem>
-                      <SelectItem value="completed">\\u0645\\u0643\\u062a\\u0645\\u0644"</SelectItem>
+                      <SelectItem value="draft">قريباً</SelectItem>
+                      <SelectItem value="published">منشور</SelectItem>
+                      <SelectItem value="closed">مغلق</SelectItem>
+                      <SelectItem value="completed">مكتمل</SelectItem>
                     </SelectContent>
                   </Select>
                 </Field>
 
-                <Field label="\\u0631\\u0642\\u0645 \\u0627\\u0644\\u0625\\u0635\\u062f\\u0627\\u0631">
+                <Field label="رقم الإصدار">
                   <Input
                     dir="ltr"
                     className={`${inputClassName} text-left`}
@@ -1774,19 +1784,19 @@ export function CreateProjectUi({
                   />
                 </Field>
 
-                <Field label="\\u0627\\u0644\\u0645\\u0648\\u0642\\u0639 (\\u0639\\u0631\\u0628\\u064a)" required>
+                <Field label="الموقع (عربي)" required>
                   <Input
                     dir="rtl"
                     className={`${inputClassName} text-right`}
                     value={formData.locationAr}
-                    placeholder="\\u0627\\u0644\\u0631\\u064a\\u0627\\u0636\\u060c \\u0627\\u0644\\u0645\\u0645\\u0644\\u0643\\u0629 \\u0627\\u0644\\u0639\\u0631\\u0628\\u064a\\u0629 \\u0627\\u0644\\u0633\\u0639\\u0648\\u062f\\u064a\\u0629"
+                    placeholder="الرياض، المملكة العربية السعودية"
                     onChange={(e) =>
                       setFormData((prev) => ({ ...prev, locationAr: e.target.value }))
                     }
                   />
                 </Field>
 
-                <Field label="\\u0627\\u0644\\u0645\\u0648\\u0642\\u0639 (\\u0625\\u0646\\u062c\\u0644\\u064a\\u0632\\u064a)" className="md:col-span-2">
+                <Field label="الموقع (إنجليزي)" className="md:col-span-2">
                   <Input
                     dir="ltr"
                     className={`${inputClassName} text-left`}
@@ -1802,8 +1812,8 @@ export function CreateProjectUi({
           <SectionCard
             id="media"
             index={3}
-            title="\\u0627\\u0644\\u0635\\u0648\\u0631 \\u0648\\u0627\\u0644\\u0645\\u0639\\u0631\\u0636"
-            description="\\u0648\\u0627\\u062c\\u0647\\u0629 \\u0631\\u0641\\u0639 \\u0623\\u0646\\u0638\\u0641 \\u0644\\u0635\\u0648\\u0631\\u0629 \\u0627\\u0644\\u063a\\u0644\\u0627\\u0641 \\u0648\\u0627\\u0644\\u0645\\u0639\\u0631\\u0636 \\u0645\\u0639 \\u0645\\u0639\\u0627\\u064a\\u0646\\u0629 \\u0645\\u0628\\u0627\\u0634\\u0631\\u0629 \\u0648\\u062a\\u0646\\u0638\\u064a\\u0645 \\u0623\\u0641\\u0636\\u0644 \\u0644\\u0644\\u0631\\u0648\\u0627\\u0628\\u0637."
+            title="الصور والمعرض"
+            description="واجهة رفع أنظف لصورة الغلاف والمعرض مع معاينة مباشرة وتنظيم أفضل للروابط."
             icon={ImagePlus}
             status={sectionStatuses.media}
             headerAside={
@@ -1830,18 +1840,18 @@ export function CreateProjectUi({
               <div className="rounded-[28px] border border-slate-200/80 bg-slate-50/70 p-5 shadow-sm">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <h3 className="text-base font-semibold text-slate-950">\\u0637\\u0635\\u0648\\u0631\\u0629 \\u0627\\u0644\\u063a\\u0644\\u0627\\u0641"</h3>
+                    <h3 className="text-base font-semibold text-slate-950">صورة الغلاف</h3>
                     <p className="mt-1 text-xs leading-6 text-slate-500">
-
-                      ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ¹ط·آ¸أ¢â‚¬آ ط·آ·ط¢آµط·آ·ط¢آ± ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ¨ط·آ·ط¢آµط·آ·ط¢آ±ط·آ¸ط¸آ¹ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ±ط·آ·ط¢آ¦ط·آ¸ط¸آ¹ط·آ·ط¢آ³ط·آ¸ط¸آ¹ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ°ط·آ¸ط¸آ¹ ط·آ¸ط¸آ¹ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ«ط·آ¸أ¢â‚¬â€چ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ´ط·آ·ط¢آ±ط·آ¸ط«â€ ط·آ·ط¢آ¹ ط·آ·ط¢آ¯ط·آ·ط¢آ§ط·آ·ط¢آ®ط·آ¸أ¢â‚¬â€چ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ¨ط·آ·ط¢آ·ط·آ·ط¢آ§ط·آ¸أ¢â‚¬ع‘ط·آ·ط¢آ§ط·آ·ط¹آ¾ ط·آ¸ط«â€ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آµط·آ¸ط¸آ¾ط·آ·ط¢آ­ط·آ·ط¢آ§ط·آ·ط¹آ¾.
+                      أضف الصورة الأساسية التي تمثل المشروع بصريًا داخل البطاقة وصفحة
+                      التفاصيل، ويمكنك استخدام الرابط النصي أو الرفع المباشر.
                     </p>
                   </div>
                   <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
                     {coverUploading
-                      ? "\\u062c\\u0627\\u0631\\u064d \\u0627\\u0644\\u0631\\u0641\\u0639..."
+                      ? "جارٍ الرفع..."
                       : cleanStr(formData.coverImage)
-                        ? "\\u0645\\u0631\\u0641\\u0648\\u0639"
-                        : "\\u0628\\u0627\\u0646\\u062a\\u0638\\u0627\\u0631"}
+                        ? "مرفوع"
+                        : "بانتظار"}
                   </Badge>
                 </div>
 
@@ -1849,15 +1859,15 @@ export function CreateProjectUi({
                   {cleanStr(formData.coverImage) ? (
                     <img
                       src={formData.coverImage}
-                      alt="\\u0645\\u0639\\u0627\\u064a\\u0646\\u0629 \\u0635\\u0648\\u0631\\u0629 \\u0627\\u0644\\u063a\\u0644\\u0627\\u0641"
+                      alt="معاينة صورة الغلاف"
                       className="aspect-[16/9] h-full w-full object-cover"
                     />
                   ) : (
                     <div className="flex aspect-[16/9] items-center justify-center bg-[linear-gradient(135deg,rgba(248,250,252,1),rgba(226,232,240,0.6))]">
                       <div className="space-y-2 text-center text-slate-500">
                         <FileImage className="mx-auto h-7 w-7" />
-                        <p className="text-sm font-semibold">\\u0638\\u0644\\u0627 \\u062a\\u0648\\u062c\\u062f \\u0635\\u0648\\u0631\\u0629 \\u063a\\u0644\\u0627\\u0641 \\u0628\\u0639\\u062f"</p>
-                        <p className="text-xs">\\u0637\\u0623\\u0636\\u0641 \\u0631\\u0627\\u0628\\u0637\\u064b\\u0627 \\u0623\\u0648 \\u0627\\u0631\\u0641\\u0639 \\u0645\\u0644\\u0641\\u064b\\u0627 \\u0644\\u0639\\u0631\\u0636 \\u0627\\u0644\\u0645\\u0639\\u0627\\u064a\\u0646\\u0629 \\u0647\\u0646\\u0627."</p>
+                        <p className="text-sm font-semibold">لا توجد صورة غلاف بعد</p>
+                        <p className="text-xs">أضف رابطًا أو ارفع ملفًا لعرض المعاينة هنا.</p>
                       </div>
                     </div>
                   )}
@@ -1865,14 +1875,14 @@ export function CreateProjectUi({
 
                 <div className="mt-5 space-y-4">
                   <Field
-                    label="\\u0631\\u0627\\u0628\\u0637 \\u0635\\u0648\\u0631\\u0629 \\u0627\\u0644\\u063a\\u0644\\u0627\\u0641"
+                    label="رابط صورة الغلاف"
                     required
-                    hint="\\u064a\\u0645\\u0643\\u0646\\u0643 \\u0627\\u0644\\u0625\\u0628\\u0642\\u0627\\u0621 \\u0639\\u0644\\u0649 \\u0646\\u0641\\u0633 \\u0645\\u0646\\u0637\\u0642 \\u0627\\u0644\\u0631\\u0627\\u0628\\u0637 \\u0627\\u0644\\u0646\\u0635\\u064a \\u0627\\u0644\\u062d\\u0627\\u0644\\u064a \\u0623\\u0648 \\u0627\\u0633\\u062a\\u062e\\u062f\\u0627\\u0645 \\u0627\\u0644\\u0631\\u0641\\u0639 \\u0627\\u0644\\u0645\\u0628\\u0627\\u0634\\u0631."
+                    hint="يمكنك الإبقاء على نفس منطق الرابط النصي الحالي أو استخدام الرفع المباشر."
                   >
                     <Input
                       value={formData.coverImage}
                       className={inputClassName}
-                      placeholder="pproject-cover.png \\u0623\\u0648 /project-cover.png \\u0623\\u0648 https://..."
+                      placeholder="project-cover.png أو /project-cover.png أو https://..."
                       onChange={(e) =>
                         setFormData((prev) => ({ ...prev, coverImage: e.target.value }))
                       }
@@ -1881,8 +1891,8 @@ export function CreateProjectUi({
 
                   <UploadDropzone
                     inputId="project-cover-upload"
-                    title="\\u0631\\u0641\\u0639 \\u0635\\u0648\\u0631\\u0629 \\u063a\\u0644\\u0627\\u0641"
-                    description="\\u0627\\u0633\\u062d\\u0628 \\u0623\\u0648 \\u0627\\u062e\\u062a\\u0631 \\u0635\\u0648\\u0631\\u0629 \\u062a\\u0645\\u062b\\u0644 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639 \\u0628\\u0635\\u0631\\u064a\\u064b\\u0627."
+                    title="رفع صورة غلاف"
+                    description="اسحب أو اختر صورة تمثل المشروع بصريًا."
                     accept="image/*"
                     disabled={coverUploading}
                     onChange={(e) => {
@@ -1901,7 +1911,7 @@ export function CreateProjectUi({
                       }
                     >
 
-                      ط·آ·ط¢آ¥ط·آ·ط¢آ²ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ© ط·آ·ط¢آµط·آ¸ط«â€ ط·آ·ط¢آ±ط·آ·ط¢آ© ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط·â€؛ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ§ط·آ¸ط¸آ¾
+                      إزالة صورة الغلاف
                     </Button>
                   ) : null}
                 </div>
@@ -1910,11 +1920,10 @@ export function CreateProjectUi({
               <div className="rounded-[28px] border border-slate-200/80 bg-slate-50/70 p-5 shadow-sm">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <h3 className="text-base font-semibold text-slate-950">\\u0638\\u0645\\u0639\\u0631\\u0636 \\u0627\\u0644\\u0635\\u0648\\u0631"</h3>
+                    <h3 className="text-base font-semibold text-slate-950">معرض الصور</h3>
                     <p className="mt-1 text-xs leading-6 text-slate-500">
-
-                      ط·آ·ط¢آ£ط·آ·ط¢آ¯ط·آ·ط¢آ± ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آµط·آ¸ط«â€ ط·آ·ط¢آ± ط·آ¸ط¦â€™ط·آ·ط¢آ±ط·آ·ط¢آ§ط·آ·ط¢آ¨ط·آ·ط¢آ· ط·آ¸أ¢â‚¬â€چط·آ¸ط¦â€™ط·آ¸أ¢â‚¬â€چ ط·آ·ط¢آ³ط·آ·ط¢آ·ط·آ·ط¢آ± ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ¹ ط·آ·ط¢آ¥ط·آ¸أ¢â‚¬آ¦ط·آ¸ط¦â€™ط·آ·ط¢آ§ط·آ¸أ¢â‚¬آ ط·آ¸ط¸آ¹ط·آ·ط¢آ© ط·آ·ط¢آ±ط·آ¸ط¸آ¾ط·آ·ط¢آ¹ ط·آ·ط¢آ¹ط·آ·ط¢آ¯ط·آ·ط¢آ© ط·آ·ط¢آµط·آ¸ط«â€ ط·آ·ط¢آ± ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ¨ط·آ·ط¢آ§ط·آ·ط¢آ´ط·آ·ط¢آ±ط·آ·ط¢آ© ط·آ¸ط«â€ ط·آ·ط¢آ¥ط·آ·ط¢آ¸ط·آ¸أ¢â‚¬طŒط·آ·ط¢آ§ط·آ·ط¢آ±ط·آ¸أ¢â‚¬طŒط·آ·ط¢آ§ ط·آ·ط¢آ¯ط·آ·ط¢آ§ط·آ·ط¢آ®ط·آ¸أ¢â‚¬â€چ
-                      ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ¹ط·آ·ط¢آ§ط·آ¸ط¸آ¹ط·آ¸أ¢â‚¬آ ط·آ·ط¢آ§ط·آ·ط¹آ¾ ط·آ¸أ¢â‚¬آ¦ط·آ¸أ¢â‚¬آ ط·آ·ط¢آ¸ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ©.
+                      أضف صورًا إضافية للمشروع عبر الروابط أو الرفع المباشر، وسيتم تحديث
+                      نفس الحقل الحالي تلقائيًا لعرضها داخل المعرض.
                     </p>
                   </div>
                   <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
@@ -1924,8 +1933,8 @@ export function CreateProjectUi({
 
                 <div className="mt-5 space-y-4">
                   <Field
-                    label="\\u0631\\u0648\\u0627\\u0628\\u0637 \\u0627\\u0644\\u0645\\u0639\\u0631\\u0636"
-                    hint="\\u0643\\u0644 \\u0631\\u0627\\u0628\\u0637 \\u0641\\u064a \\u0633\\u0637\\u0631 \\u0645\\u0633\\u062a\\u0642\\u0644. \\u064a\\u0645\\u0643\\u0646 \\u0627\\u0644\\u0645\\u0632\\u062c \\u0628\\u064a\\u0646 \\u0627\\u0644\\u0631\\u0648\\u0627\\u0628\\u0637 \\u0627\\u0644\\u0645\\u0643\\u062a\\u0648\\u0628\\u0629 \\u0648\\u0627\\u0644\\u0645\\u0644\\u0641\\u0627\\u062a \\u0627\\u0644\\u0645\\u0631\\u0641\\u0648\\u0639\\u0629."
+                    label="روابط المعرض"
+                    hint="كل رابط في سطر مستقل. يمكن المزج بين الروابط المكتوبة والملفات المرفوعة."
                   >
                     <Textarea
                       rows={6}
@@ -1940,8 +1949,8 @@ export function CreateProjectUi({
 
                   <UploadDropzone
                     inputId="project-gallery-upload"
-                    title="\\u0631\\u0641\\u0639 \\u0635\\u0648\\u0631 \\u0627\\u0644\\u0645\\u0639\\u0631\\u0636"
-                    description="\\u0627\\u062e\\u062a\\u0631 \\u0639\\u062f\\u0629 \\u0635\\u0648\\u0631 \\u0648\\u0633\\u064a\\u062a\\u0645 \\u0625\\u0644\\u062d\\u0627\\u0642 \\u0631\\u0648\\u0627\\u0628\\u0637\\u0647\\u0627 \\u0645\\u0628\\u0627\\u0634\\u0631\\u0629 \\u0628\\u0646\\u0641\\u0633 \\u0627\\u0644\\u062d\\u0642\\u0644 \\u0627\\u0644\\u062d\\u0627\\u0644\\u064a."
+                    title="رفع صور المعرض"
+                    description="اختر عدة صور وسيتم إلحاق روابطها مباشرة بنفس الحقل الحالي."
                     accept="image/*"
                     multiple
                     disabled={galleryUploading}
@@ -1961,7 +1970,7 @@ export function CreateProjectUi({
                           <div className="aspect-[4/3] bg-slate-100">
                             <img
                               src={url}
-                              alt={`\\u0635\\u0648\\u0631\\u0629 \\u0627\\u0644\\u0645\\u0639\\u0631\\u0636 {index + 1}`}
+                              alt={`صورة المعرض ${index + 1}`}
                               className="h-full w-full object-cover"
                             />
                           </div>
@@ -1985,7 +1994,7 @@ export function CreateProjectUi({
                             >
                               <Trash2 className="ml-2 h-4 w-4" />
 
-                              ط·آ·ط¢آ­ط·آ·ط¢آ°ط·آ¸ط¸آ¾ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آµط·آ¸ط«â€ ط·آ·ط¢آ±ط·آ·ط¢آ©
+                              حذف الصورة
                             </Button>
                           </div>
                         </div>
@@ -1993,7 +2002,7 @@ export function CreateProjectUi({
                     ) : (
                       <div className="rounded-[22px] border border-dashed border-slate-300 bg-white/80 p-6 text-center text-sm text-slate-500 sm:col-span-2">
 
-                        ط·آ·ط¢آ³ط·آ·ط¹آ¾ط·آ·ط¢آ¸ط·آ¸أ¢â‚¬طŒط·آ·ط¢آ± ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ¹ط·آ·ط¢آ§ط·آ¸ط¸آ¹ط·آ¸أ¢â‚¬آ ط·آ·ط¢آ§ط·آ·ط¹آ¾ ط·آ·ط¢آµط·آ¸ط«â€ ط·آ·ط¢آ± ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ¹ط·آ·ط¢آ±ط·آ·ط¢آ¶ ط·آ¸أ¢â‚¬طŒط·آ¸أ¢â‚¬آ ط·آ·ط¢آ§ ط·آ·ط¢آ¨ط·آ·ط¢آ¹ط·آ·ط¢آ¯ ط·آ·ط¢آ¥ط·آ·ط¢آ¶ط·آ·ط¢آ§ط·آ¸ط¸آ¾ط·آ·ط¢آ© ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ±ط·آ¸ط«â€ ط·آ·ط¢آ§ط·آ·ط¢آ¨ط·آ·ط¢آ· ط·آ·ط¢آ£ط·آ¸ط«â€  ط·آ·ط¢آ±ط·آ¸ط¸آ¾ط·آ·ط¢آ¹ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آµط·آ¸ط«â€ ط·آ·ط¢آ±.
+                        ستظهر معاينات صور المعرض هنا بعد إضافة الروابط أو رفع الملفات.
                       </div>
                     )}
                   </div>
@@ -2005,13 +2014,13 @@ export function CreateProjectUi({
           <SectionCard
             id="highlights"
             index={4}
-            title="\\u0627\\u0644\\u0645\\u0645\\u064a\\u0632\\u0627\\u062a"
-            description="\\u062d\\u0648\\u0651\\u0644 \\u0642\\u0627\\u0626\\u0645\\u0629 \\u0627\\u0644\\u0645\\u0645\\u064a\\u0632\\u0627\\u062a \\u0625\\u0644\\u0649 repeater \\u0628\\u0635\\u0631\\u064a \\u0623\\u0646\\u0638\\u0641 \\u064a\\u0633\\u0627\\u0639\\u062f \\u0639\\u0644\\u0649 \\u0642\\u0631\\u0627\\u0621\\u0629 \\u0627\\u0644\\u0639\\u0631\\u0636 \\u0627\\u0644\\u0627\\u0633\\u062a\\u062b\\u0645\\u0627\\u0631\\u064a \\u0628\\u0633\\u0631\\u0639\\u0629."
+            title="المميزات"
+            description="حوّل قائمة المميزات إلى repeater بصري أنظف يساعد على قراءة العرض الاستثماري بسرعة."
             icon={Sparkles}
             status={sectionStatuses.highlights}
             headerAside={
               <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
-                {filledHighlights}  ط·آ¸أ¢â‚¬آ¦ط·آ¸أ¢â‚¬آ¦ط·آ¸ط¸آ¹ط·آ·ط¢آ²ط·آ·ط¢آ§ط·آ·ط¹آ¾ ط·آ¸أ¢â‚¬آ¦ط·آ¸ط¦â€™ط·آ·ط¹آ¾ط·آ¸ط«â€ ط·آ·ط¢آ¨ط·آ·ط¢آ©
+                {filledHighlights} مميزات
               </Badge>
             }
           >
@@ -2033,8 +2042,7 @@ export function CreateProjectUi({
                     <div>
                       <p className="text-sm font-semibold text-slate-950">الميزة {index + 1}</p>
                       <p className="text-xs text-slate-500">
-
-                        ط·آ·ط¢آ§ط·آ¸ط¦â€™ط·آ·ط¹آ¾ط·آ·ط¢آ¨ ط·آ¸أ¢â‚¬آ¦ط·آ¸ط¸آ¹ط·آ·ط¢آ²ط·آ·ط¢آ© ط·آ·ط¢آ§ط·آ·ط¢آ³ط·آ·ط¹آ¾ط·آ·ط¢آ«ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ§ط·آ·ط¢آ±ط·آ¸ط¸آ¹ط·آ·ط¢آ© ط·آ¸أ¢â‚¬ع‘ط·آ·ط¢آµط·آ¸ط¸آ¹ط·آ·ط¢آ±ط·آ·ط¢آ© ط·آ¸ط«â€ ط·آ¸ط«â€ ط·آ·ط¢آ§ط·آ·ط¢آ¶ط·آ·ط¢آ­ط·آ·ط¢آ©.
+                        اكتب الميزة بصياغة موجزة تبرز قيمة المشروع بشكل واضح وسريع.
                       </p>
                     </div>
 
@@ -2052,7 +2060,7 @@ export function CreateProjectUi({
                     >
                       <Trash2 className="ml-2 h-4 w-4" />
 
-                      ط·آ·ط¢آ­ط·آ·ط¢آ°ط·آ¸ط¸آ¾
+                      حذف
                     </Button>
                   </div>
 
@@ -2060,7 +2068,7 @@ export function CreateProjectUi({
                     dir="rtl"
                     className={`${inputClassName} text-right`}
                     value={row}
-                    placeholder={`\\u0627\\u0644\\u0645\\u064a\\u0632\\u0629 {index + 1}`}
+                    placeholder={`الميزة ${index + 1}`}
                     onChange={(e) =>
                       setHighlightRows((prev) =>
                         prev.map((item, rowIndex) =>
@@ -2080,20 +2088,20 @@ export function CreateProjectUi({
               >
                 <Plus className="ml-2 h-4 w-4" />
 
-                ط·آ·ط¢آ¥ط·آ·ط¢آ¶ط·آ·ط¢آ§ط·آ¸ط¸آ¾ط·آ·ط¢آ© ط·آ¸أ¢â‚¬آ¦ط·آ¸ط¸آ¹ط·آ·ط¢آ²ط·آ·ط¢آ© ط·آ·ط¢آ¬ط·آ·ط¢آ¯ط·آ¸ط¸آ¹ط·آ·ط¢آ¯ط·آ·ط¢آ©
+                إضافة ميزة جديدة
               </Button>
             </SectionBodyLayout>
           </SectionCard>
           <SectionCard
             id="attachments"
             index={5}
-            title="\\u0627\\u0644\\u0645\\u0631\\u0641\\u0642\\u0627\\u062a"
-            description="\\u0643\\u0644 \\u0645\\u0631\\u0641\\u0642 \\u064a\\u0638\\u0647\\u0631 \\u0627\\u0644\\u0622\\u0646 \\u0643\\u0628\\u0637\\u0627\\u0642\\u0629 \\u0645\\u0633\\u062a\\u0642\\u0644\\u0629 \\u062a\\u062a\\u0636\\u0645\\u0646 \\u0627\\u0644\\u0627\\u0633\\u0645 \\u0648\\u0627\\u0644\\u0631\\u0627\\u0628\\u0637 \\u0648\\u0627\\u0644\\u0631\\u0641\\u0639 \\u0648\\u0627\\u0644\\u0645\\u0639\\u0627\\u064a\\u0646\\u0629 \\u062f\\u0627\\u062e\\u0644 \\u0635\\u0641 \\u0648\\u0627\\u062d\\u062f \\u0645\\u0646\\u0638\\u0645."
+            title="المرفقات"
+            description="كل مرفق يظهر الآن كبطاقة مستقلة تتضمن الاسم والرابط والرفع والمعاينة داخل صف واحد منظم."
             icon={Paperclip}
             status={sectionStatuses.attachments}
             headerAside={
               <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
-                {filledAttachments}  ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ±ط·آ¸ط¸آ¾ط·آ¸أ¢â‚¬ع‘ط·آ·ط¢آ§ط·آ·ط¹آ¾
+                {filledAttachments} مرفقات
               </Badge>
             }
           >
@@ -2115,8 +2123,8 @@ export function CreateProjectUi({
                     <div>
                       <p className="text-sm font-semibold text-slate-950">المرفق {index + 1}</p>
                       <p className="text-xs text-slate-500">
-
-                        ط·آ·ط¢آ§ط·آ·ط¢آ±ط·آ¸ط¸آ¾ط·آ·ط¢آ¹ ط·آ¸أ¢â‚¬آ¦ط·آ¸أ¢â‚¬â€چط·آ¸ط¸آ¾ط·آ¸أ¢â‚¬آ¹ط·آ·ط¢آ§ ط·آ·ط¢آ£ط·آ¸ط«â€  ط·آ·ط¢آ£ط·آ·ط¢آ¶ط·آ¸ط¸آ¾ ط·آ·ط¢آ±ط·آ·ط¢آ§ط·آ·ط¢آ¨ط·آ·ط¢آ·ط·آ¸أ¢â‚¬آ¹ط·آ·ط¢آ§ ط·آ·ط¢آ®ط·آ·ط¢آ§ط·آ·ط¢آ±ط·آ·ط¢آ¬ط·آ¸ط¸آ¹ط·آ¸أ¢â‚¬آ¹ط·آ·ط¢آ§ ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ¹ ط·آ·ط¢آ§ط·آ·ط¢آ³ط·آ¸أ¢â‚¬آ¦ ط·آ¸ط«â€ ط·آ·ط¢آ§ط·آ·ط¢آ¶ط·آ·ط¢آ­ ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ±ط·آ¸ط¸آ¾ط·آ¸أ¢â‚¬ع‘.
+                        أضف اسم المرفق ورابطه أو ارفع الملف مباشرة ليظهر ضمن هذا السجل
+                        بشكل منظم وواضح.
                       </p>
                     </div>
 
@@ -2134,18 +2142,18 @@ export function CreateProjectUi({
                     >
                       <Trash2 className="ml-2 h-4 w-4" />
 
-                      ط·آ·ط¢آ­ط·آ·ط¢آ°ط·آ¸ط¸آ¾ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ±ط·آ¸ط¸آ¾ط·آ¸أ¢â‚¬ع‘
+                      حذف المرفق
                     </Button>
                   </div>
 
                   <div className="grid gap-4">
                     <div className="grid gap-4 md:grid-cols-2">
-                      <Field label="\\u0627\\u0644\\u0627\\u0633\\u0645">
+                      <Field label="الاسم">
                         <Input
                           dir="rtl"
                           className={`${inputClassName} text-right`}
                           value={row.name}
-                          placeholder={`\\u0627\\u0633\\u0645 \\u0627\\u0644\\u0645\\u0631\\u0641\\u0642 {index + 1}`}
+                          placeholder={`اسم المرفق ${index + 1}`}
                           onChange={(e) =>
                             setAttachmentRows((prev) =>
                               prev.map((item, rowIndex) =>
@@ -2156,7 +2164,7 @@ export function CreateProjectUi({
                         />
                       </Field>
 
-                      <Field label="\\u0627\\u0644\\u0631\\u0627\\u0628\\u0637 \\u0627\\u0644\\u062e\\u0627\\u0631\\u062c\\u064a (\\u0627\\u062e\\u062a\\u064a\\u0627\\u0631\\u064a)">
+                      <Field label="الرابط الخارجي (اختياري)">
                         <Input
                           dir="ltr"
                           className={`${inputClassName} text-left`}
@@ -2179,13 +2187,13 @@ export function CreateProjectUi({
                       <div className="rounded-[22px] border border-slate-200 bg-white p-4">
                         <div className="flex items-start justify-between gap-4">
                           <div className="space-y-1">
-                            <p className="text-sm font-semibold text-slate-950">\\u0637\\u062d\\u0627\\u0644\\u0629 \\u0627\\u0644\\u0645\\u0644\\u0641"</p>
+                            <p className="text-sm font-semibold text-slate-950">حالة الملف</p>
                             <p className="text-xs text-slate-500">
                               {row.uploading
-                                ? "\\u062c\\u0627\\u0631\\u064d \\u0631\\u0641\\u0639 \\u0627\\u0644\\u0645\\u0644\\u0641 \\u0625\\u0644\\u0649 \\u0627\\u0644\\u062a\\u062e\\u0632\\u064a\\u0646..."
+                                ? "جارٍ رفع الملف إلى التخزين..."
                                 : row.url
-                                  ? "\\u062a\\u0645 \\u0631\\u0641\\u0639 \\u0627\\u0644\\u0645\\u0644\\u0641 \\u0648\\u0647\\u0648 \\u062c\\u0627\\u0647\\u0632 \\u0644\\u0644\\u0645\\u0631\\u0627\\u062c\\u0639\\u0629."
-                                  : "\\u0644\\u0645 \\u064a\\u062a\\u0645 \\u0631\\u0641\\u0639 \\u0645\\u0644\\u0641 \\u0644\\u0647\\u0630\\u0627 \\u0627\\u0644\\u0645\\u0631\\u0641\\u0642 \\u0628\\u0639\\u062f."}
+                                  ? "تم رفع الملف وهو جاهز للمراجعة."
+                                  : "لم يتم رفع ملف لهذا المرفق بعد."}
                             </p>
                           </div>
 
@@ -2205,7 +2213,7 @@ export function CreateProjectUi({
                               className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
                             >
 
-                              ط·آ·ط¢آ¹ط·آ·ط¢آ±ط·آ·ط¢آ¶ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ¦ط·آ¸أ¢â‚¬â€چط·آ¸ط¸آ¾ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ±ط·آ¸ط¸آ¾ط·آ¸ط«â€ ط·آ·ط¢آ¹
+                              عرض الملف المرفوع
                             </a>
                           ) : null}
 
@@ -2224,15 +2232,15 @@ export function CreateProjectUi({
                             }
                           >
 
-                            ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ³ط·آ·ط¢آ­ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ¦ط·آ¸أ¢â‚¬â€چط·آ¸ط¸آ¾
+                            إزالة الملف
                           </Button>
                         </div>
                       </div>
 
                       <UploadDropzone
                         inputId={`attachment-upload-${index}`}
-                        title="\\u0631\\u0641\\u0639 \\u0645\\u0631\\u0641\\u0642"
-                        description="\\u0627\\u0631\\u0641\\u0639 \\u0645\\u0644\\u0641 PDF \\u0623\\u0648 \\u0635\\u0648\\u0631\\u0629 \\u0623\\u0648 \\u0623\\u064a \\u0645\\u0644\\u0641 \\u062f\\u0627\\u0639\\u0645 \\u0644\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639."
+                        title="رفع مرفق"
+                        description="ارفع ملف PDF أو صورة أو أي ملف داعم للمشروع."
                         accept="*/*"
                         disabled={row.uploading}
                         onChange={(e) => {
@@ -2253,7 +2261,7 @@ export function CreateProjectUi({
               >
                 <Plus className="ml-2 h-4 w-4" />
 
-                ط·آ·ط¢آ¥ط·آ·ط¢آ¶ط·آ·ط¢آ§ط·آ¸ط¸آ¾ط·آ·ط¢آ© ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ±ط·آ¸ط¸آ¾ط·آ¸أ¢â‚¬ع‘ ط·آ·ط¢آ¬ط·آ·ط¢آ¯ط·آ¸ط¸آ¹ط·آ·ط¢آ¯
+                إضافة مرفق جديد
               </Button>
             </SectionBodyLayout>
           </SectionCard>
@@ -2261,13 +2269,13 @@ export function CreateProjectUi({
           <SectionCard
             id="milestones"
             index={6}
-            title="\\u0627\\u0644\\u0645\\u0631\\u0627\\u062d\\u0644"
-            description="\\u0645\\u0631\\u0627\\u062d\\u0644 \\u0627\\u0644\\u062a\\u0646\\u0641\\u064a\\u0630 \\u0641\\u064a \\u0628\\u0637\\u0627\\u0642\\u0627\\u062a mini-card \\u0645\\u0639 \\u062a\\u0642\\u0633\\u064a\\u0645 \\u0623\\u0648\\u0636\\u062d \\u0628\\u064a\\u0646 \\u0627\\u0644\\u062a\\u0627\\u0631\\u064a\\u062e \\u0648\\u0627\\u0644\\u062d\\u0627\\u0644\\u0629 \\u0648\\u0627\\u0644\\u0648\\u0635\\u0641."
+            title="المراحل"
+            description="مراحل التنفيذ في بطاقات مصغّرة مع تقسيم أوضح بين التاريخ والحالة والوصف."
             icon={ListChecks}
             status={sectionStatuses.milestones}
             headerAside={
               <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
-                {filledMilestones}  ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ±ط·آ·ط¢آ§ط·آ·ط¢آ­ط·آ¸أ¢â‚¬â€چ
+                {filledMilestones} مراحل
               </Badge>
             }
           >
@@ -2289,8 +2297,8 @@ export function CreateProjectUi({
                     <div>
                       <p className="text-sm font-semibold text-slate-950">المرحلة {index + 1}</p>
                       <p className="text-xs text-slate-500">
-
-                        ط·آ¸أ¢â‚¬آ ط·آ·ط¢آ¸ط·آ¸أ¢â‚¬ع©ط·آ¸أ¢â‚¬آ¦ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ¹ط·آ¸أ¢â‚¬آ ط·آ¸ط«â€ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬آ  ط·آ¸ط«â€ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¹آ¾ط·آ·ط¢آ§ط·آ·ط¢آ±ط·آ¸ط¸آ¹ط·آ·ط¢آ® ط·آ¸ط«â€ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ­ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ© ط·آ¸ط«â€ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸ط«â€ ط·آ·ط¢آµط·آ¸ط¸آ¾ ط·آ·ط¢آ¯ط·آ·ط¢آ§ط·آ·ط¢آ®ط·آ¸أ¢â‚¬â€چ ط·آ·ط¢آµط·آ¸ط¸آ¾ ط·آ¸ط«â€ ط·آ·ط¢آ§ط·آ·ط¢آ¶ط·آ·ط¢آ­ ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ±ط·آ·ط¢آ§ط·آ·ط¢آ¬ط·آ·ط¢آ¹ط·آ·ط¢آ©.
+                        نسّق عنوان المرحلة وتاريخها وحالتها ووصفها داخل بطاقة واحدة لعرض
+                        الخطة التنفيذية بشكل أوضح.
                       </p>
                     </div>
 
@@ -2308,17 +2316,17 @@ export function CreateProjectUi({
                     >
                       <Trash2 className="ml-2 h-4 w-4" />
 
-                      ط·آ·ط¢آ­ط·آ·ط¢آ°ط·آ¸ط¸آ¾ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ±ط·آ·ط¢آ­ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ©
+                      حذف المرحلة
                     </Button>
                   </div>
 
                   <div className="grid gap-4 md:grid-cols-2">
-                    <Field label="\\u0627\\u0644\\u0639\\u0646\\u0648\\u0627\\u0646">
+                    <Field label="العنوان">
                       <Input
                         dir="rtl"
                         className={`${inputClassName} text-right`}
                         value={row.title}
-                        placeholder={`\\u0639\\u0646\\u0648\\u0627\\u0646 \\u0627\\u0644\\u0645\\u0631\\u062d\\u0644\\u0629 {index + 1}`}
+                        placeholder={`عنوان المرحلة ${index + 1}`}
                         onChange={(e) =>
                           setMilestoneRows((prev) =>
                             prev.map((item, rowIndex) =>
@@ -2329,7 +2337,7 @@ export function CreateProjectUi({
                       />
                     </Field>
 
-                    <Field label="\\u0627\\u0644\\u062a\\u0627\\u0631\\u064a\\u062e">
+                    <Field label="التاريخ">
                       <Input
                         dir="ltr"
                         className={`${inputClassName} text-left`}
@@ -2345,12 +2353,12 @@ export function CreateProjectUi({
                       />
                     </Field>
 
-                    <Field label="\\u0627\\u0644\\u062d\\u0627\\u0644\\u0629">
+                    <Field label="الحالة">
                       <Input
                         dir="rtl"
                         className={`${inputClassName} text-right`}
                         value={row.status}
-                        placeholder="\\u0642\\u064a\\u062f \\u0627\\u0644\\u062a\\u0646\\u0641\\u064a\\u0630"
+                        placeholder="قيد التنفيذ"
                         onChange={(e) =>
                           setMilestoneRows((prev) =>
                             prev.map((item, rowIndex) =>
@@ -2361,12 +2369,12 @@ export function CreateProjectUi({
                       />
                     </Field>
 
-                    <Field label="\\u0627\\u0644\\u0648\\u0635\\u0641">
+                    <Field label="الوصف">
                       <Input
                         dir="rtl"
                         className={`${inputClassName} text-right`}
                         value={row.description}
-                        placeholder="\\u0648\\u0635\\u0641 \\u0645\\u062e\\u062a\\u0635\\u0631"
+                        placeholder="وصف مختصر"
                         onChange={(e) =>
                           setMilestoneRows((prev) =>
                             prev.map((item, rowIndex) =>
@@ -2395,7 +2403,7 @@ export function CreateProjectUi({
               >
                 <Plus className="ml-2 h-4 w-4" />
 
-                ط·آ·ط¢آ¥ط·آ·ط¢آ¶ط·آ·ط¢آ§ط·آ¸ط¸آ¾ط·آ·ط¢آ© ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ±ط·آ·ط¢آ­ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ© ط·آ·ط¢آ¬ط·آ·ط¢آ¯ط·آ¸ط¸آ¹ط·آ·ط¢آ¯ط·آ·ط¢آ©
+                إضافة مرحلة جديدة
               </Button>
             </SectionBodyLayout>
           </SectionCard>
@@ -2403,13 +2411,13 @@ export function CreateProjectUi({
           <SectionCard
             id="faq"
             index={7}
-            title="\\u0627\\u0644\\u0623\\u0633\\u0626\\u0644\\u0629 \\u0627\\u0644\\u0634\\u0627\\u0626\\u0639\\u0629"
-            description="\\u0627\\u0644\\u0623\\u0633\\u0626\\u0644\\u0629 \\u0648\\u0627\\u0644\\u0623\\u062c\\u0648\\u0628\\u0629 \\u0636\\u0645\\u0646 \\u0628\\u0637\\u0627\\u0642\\u0627\\u062a \\u0623\\u0643\\u062b\\u0631 \\u062a\\u0631\\u062a\\u064a\\u0628\\u064b\\u0627 \\u0644\\u062a\\u0633\\u0647\\u064a\\u0644 \\u0642\\u0631\\u0627\\u0621\\u0629 \\u0627\\u0644\\u0645\\u062d\\u062a\\u0648\\u0649 \\u0627\\u0644\\u0645\\u062a\\u0643\\u0631\\u0631."
+            title="الأسئلة الشائعة"
+            description="الأسئلة والأجوبة ضمن بطاقات أكثر ترتيبًا لتسهيل قراءة المحتوى المتكرر."
             icon={CircleHelp}
             status={sectionStatuses.faq}
             headerAside={
               <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
-                {filledFaq}  ط·آ·ط¢آ£ط·آ·ط¢آ³ط·آ·ط¢آ¦ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ©
+                {filledFaq} أسئلة
               </Badge>
             }
           >
@@ -2431,8 +2439,8 @@ export function CreateProjectUi({
                     <div>
                       <p className="text-sm font-semibold text-slate-950">السؤال {index + 1}</p>
                       <p className="text-xs text-slate-500">
-
-                        ط·آ·ط¢آ£ط·آ·ط¢آ¶ط·آ¸ط¸آ¾ ط·آ·ط¢آ³ط·آ·ط¢آ¤ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ¹ط·آ·ط¢آ§ ط·آ·ط¢آ´ط·آ·ط¢آ§ط·آ·ط¢آ¦ط·آ·ط¢آ¹ط·آ¸أ¢â‚¬آ¹ط·آ·ط¢آ§ ط·آ¸ط«â€ ط·آ·ط¢آ¥ط·آ·ط¢آ¬ط·آ·ط¢آ§ط·آ·ط¢آ¨ط·آ·ط¢آ© ط·آ¸ط«â€ ط·آ·ط¢آ§ط·آ·ط¢آ¶ط·آ·ط¢آ­ط·آ·ط¢آ© ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ³ط·آ·ط¹آ¾ط·آ·ط¢آ«ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ±.
+                        أضف السؤال الشائع بصياغة واضحة، ثم اكتب الإجابة المختصرة التي تساعد
+                        المستخدم على فهم النقطة بسرعة.
                       </p>
                     </div>
 
@@ -2450,17 +2458,17 @@ export function CreateProjectUi({
                     >
                       <Trash2 className="ml-2 h-4 w-4" />
 
-                      ط·آ·ط¢آ­ط·آ·ط¢آ°ط·آ¸ط¸آ¾ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ³ط·آ·ط¢آ¤ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چ
+                      حذف السؤال
                     </Button>
                   </div>
 
                   <div className="grid gap-4">
-                    <Field label="\\u0627\\u0644\\u0633\\u0624\\u0627\\u0644">
+                    <Field label="السؤال">
                       <Input
                         dir="rtl"
                         className={`${inputClassName} text-right`}
                         value={row.q}
-                        placeholder={`\\u0627\\u0644\\u0633\\u0624\\u0627\\u0644 {index + 1}`}
+                        placeholder={`السؤال ${index + 1}`}
                         onChange={(e) =>
                           setFaqRows((prev) =>
                             prev.map((item, rowIndex) =>
@@ -2471,13 +2479,13 @@ export function CreateProjectUi({
                       />
                     </Field>
 
-                    <Field label="\\u0627\\u0644\\u062c\\u0648\\u0627\\u0628">
+                    <Field label="الجواب">
                       <Textarea
                         rows={3}
                         dir="rtl"
                         className={`${textareaClassName} min-h-[120px] text-right leading-7`}
                         value={row.a}
-                        placeholder="\\u0627\\u0643\\u062a\\u0628 \\u0627\\u0644\\u062c\\u0648\\u0627\\u0628"
+                        placeholder="اكتب الجواب"
                         onChange={(e) =>
                           setFaqRows((prev) =>
                             prev.map((item, rowIndex) =>
@@ -2499,7 +2507,7 @@ export function CreateProjectUi({
               >
                 <Plus className="ml-2 h-4 w-4" />
 
-                ط·آ·ط¢آ¥ط·آ·ط¢آ¶ط·آ·ط¢آ§ط·آ¸ط¸آ¾ط·آ·ط¢آ© ط·آ·ط¢آ³ط·آ·ط¢آ¤ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چ ط·آ·ط¢آ¬ط·آ·ط¢آ¯ط·آ¸ط¸آ¹ط·آ·ط¢آ¯
+                إضافة سؤال جديد
               </Button>
             </SectionBodyLayout>
           </SectionCard>
@@ -2509,19 +2517,19 @@ export function CreateProjectUi({
             <SectionCard
               id="completion"
               index={visibleSections.findIndex((section) => section.id === "completion") + 1}
-              title="\\u0627\\u0644\\u0645\\u062d\\u062a\\u0648\\u0649 \\u0627\\u0644\\u062e\\u062a\\u0627\\u0645\\u064a"
-              description="\\u0645\\u062d\\u062a\\u0648\\u0649 \\u062e\\u0627\\u0635 \\u0628\\u0627\\u0644\\u0645\\u0634\\u0627\\u0631\\u064a\\u0639 \\u0627\\u0644\\u0645\\u0643\\u062a\\u0645\\u0644\\u0629 \\u0648\\u0627\\u0644\\u0645\\u063a\\u0644\\u0642\\u0629 \\u064a\\u0639\\u0631\\u0636 \\u0645\\u0627 \\u0628\\u0639\\u062f \\u0627\\u0644\\u062a\\u0646\\u0641\\u064a\\u0630 \\u0628\\u0634\\u0643\\u0644 \\u062a\\u0648\\u062b\\u064a\\u0642\\u064a \\u0648\\u0627\\u0636\\u062d\\u060c \\u0628\\u0639\\u064a\\u062f\\u064b\\u0627 \\u0639\\u0646 \\u0644\\u063a\\u0629 \\u0627\\u0644\\u0627\\u0633\\u062a\\u062b\\u0645\\u0627\\u0631 \\u0627\\u0644\\u0646\\u0634\\u0637."
+              title="المحتوى الختامي"
+              description="محتوى خاص بالمشاريع المكتملة والمغلقة يعرض ما بعد التنفيذ بشكل توثيقي واضح، بعيدًا عن لغة الاستثمار النشط."
               icon={CheckCircle2}
               status={sectionStatuses.completion}
               headerAside={
                 <Badge className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-700">
                   {[
-                    filledCompletionResults ? `${filledCompletionResults} \\u0646\\u062a\\u0627\\u0626\\u062c` : "",
-                    filledCompletionOutputs ? `${filledCompletionOutputs} \\u0645\\u062e\\u0631\\u062c\\u0627\\u062a` : "",
-                    filledCompletionFinalNotes ? `${filledCompletionFinalNotes} \\u0645\\u0644\\u0627\\u062d\\u0638\\u0627\\u062a` : "",
+                    filledCompletionResults ? `${filledCompletionResults} نتائج` : "",
+                    filledCompletionOutputs ? `${filledCompletionOutputs} مخرجات` : "",
+                    filledCompletionFinalNotes ? `${filledCompletionFinalNotes} ملاحظات` : "",
                   ]
                     .filter(Boolean)
-                    .join("\\u0622\\u00a2\\u0637\\u00a2\\u0622\\u00b7 ") || "\\u0623\\u0636\\u0641 \\u0627\\u0644\\u0646\\u062a\\u0627\\u0626\\u062c \\u0627\\u0644\\u0646\\u0647\\u0627\\u0626\\u064a\\u0629"}
+                    .join(" · ") || "أضف النتائج النهائية"}
                 </Badge>
               }
             >
@@ -2536,16 +2544,16 @@ export function CreateProjectUi({
               >
                 <div className="grid gap-5 md:grid-cols-2">
                     <Field
-                      label="\\u0646\\u0638\\u0631\\u0629 \\u0639\\u0627\\u0645\\u0629 \\u0639\\u0644\\u0649 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639"
+                      label="نظرة عامة على المشروع"
                       className="md:col-span-2"
-                      hint="\\u0648\\u0635\\u0641 \\u0628\\u0635\\u064a\\u063a\\u0629 \\u0645\\u0627 \\u0628\\u0639\\u062f \\u0627\\u0644\\u062a\\u0646\\u0641\\u064a\\u0630 \\u064a\\u0634\\u0631\\u062d \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639 \\u0628\\u0639\\u062f \\u0627\\u0643\\u062a\\u0645\\u0627\\u0644\\u0647."
+                      hint="وصف بصيغة ما بعد التنفيذ يشرح المشروع بعد اكتماله."
                     >
                       <Textarea
                         rows={4}
                         dir="rtl"
                         className={`${textareaClassName} text-right leading-7`}
                         value={formData.completionOverviewAr}
-                        placeholder="\\u0627\\u0643\\u062a\\u0628 \\u0646\\u0638\\u0631\\u0629 \\u0639\\u0627\\u0645\\u0629 \\u062a\\u0648\\u0636\\u062d \\u0645\\u0627 \\u0627\\u0644\\u0630\\u064a \\u0643\\u0627\\u0646 \\u0639\\u0644\\u064a\\u0647 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639 \\u0628\\u0639\\u062f \\u0627\\u0644\\u062a\\u0646\\u0641\\u064a\\u0630."
+                        placeholder="اكتب نظرة عامة توضح ما الذي كان عليه المشروع بعد التنفيذ."
                         onChange={(e) =>
                           setFormData((prev) => ({
                             ...prev,
@@ -2556,16 +2564,16 @@ export function CreateProjectUi({
                     </Field>
 
                     <Field
-                      label="\\u0645\\u0644\\u062e\\u0635 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639"
+                      label="ملخص المشروع"
                       className="md:col-span-2"
-                      hint="\\u0645\\u0644\\u062e\\u0635 \\u0642\\u0635\\u064a\\u0631 \\u064a\\u0638\\u0647\\u0631 \\u0641\\u064a \\u0635\\u0641\\u062d\\u0629 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639 \\u0627\\u0644\\u0645\\u0643\\u062a\\u0645\\u0644."
+                      hint="ملخص قصير يظهر في صفحة المشروع المكتمل."
                     >
                       <Textarea
                         rows={3}
                         dir="rtl"
                         className={`${textareaClassName} min-h-[120px] text-right leading-7`}
                         value={formData.completionSummaryAr}
-                        placeholder="\\u0627\\u0643\\u062a\\u0628 \\u0645\\u0644\\u062e\\u0635\\u064b\\u0627 \\u0646\\u0647\\u0627\\u0626\\u064a\\u064b\\u0627 \\u0645\\u062e\\u062a\\u0635\\u0631\\u064b\\u0627 \\u0644\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639 \\u0628\\u0639\\u062f \\u0625\\u0642\\u0641\\u0627\\u0644\\u0647."
+                        placeholder="اكتب ملخصًا نهائيًا مختصرًا للمشروع بعد إقفاله."
                         onChange={(e) =>
                           setFormData((prev) => ({
                             ...prev,
@@ -2579,8 +2587,10 @@ export function CreateProjectUi({
                   <div className="space-y-4">
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <h3 className="text-base font-semibold text-slate-950">\\u0638\\u0646\\u062a\\u0627\\u0626\\u062c \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639"</h3>
-                        <p className="text-xs text-slate-500">\\u0638\\u0643\\u0644 \\u0646\\u062a\\u064a\\u062c\\u0629 \\u062a\\u0638\\u0647\\u0631 \\u0643\\u0639\\u0646\\u0635\\u0631 \\u0645\\u0633\\u062a\\u0642\\u0644 \\u0641\\u064a \\u0627\\u0644\\u0635\\u0641\\u062d\\u0629 \\u0627\\u0644\\u0646\\u0647\\u0627\\u0626\\u064a\\u0629."</p>
+                        <h3 className="text-base font-semibold text-slate-950">نتائج المشروع</h3>
+                        <p className="text-xs text-slate-500">
+                          كل نتيجة تظهر كعنصر مستقل في الصفحة النهائية.
+                        </p>
                       </div>
                       <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
                         {filledCompletionResults}
@@ -2608,7 +2618,7 @@ export function CreateProjectUi({
                           >
                             <Trash2 className="ml-2 h-4 w-4" />
 
-                            ط·آ·ط¢آ­ط·آ·ط¢آ°ط·آ¸ط¸آ¾
+                            حذف
                           </Button>
                         </div>
 
@@ -2617,7 +2627,7 @@ export function CreateProjectUi({
                           dir="rtl"
                           className={`${textareaClassName} min-h-[110px] text-right leading-7`}
                           value={row}
-                          placeholder="\\u0645\\u062b\\u0627\\u0644: \\u062a\\u0645 \\u062a\\u0646\\u0641\\u064a\\u0630 \\u0623\\u0639\\u0645\\u0627\\u0644 \\u0627\\u0644\\u062a\\u0637\\u0648\\u064a\\u0631 \\u0648\\u062a\\u0633\\u0644\\u064a\\u0645 \\u0627\\u0644\\u0623\\u0635\\u0648\\u0644 \\u0648\\u0641\\u0642 \\u0627\\u0644\\u062e\\u0637\\u0629 \\u0627\\u0644\\u0645\\u0639\\u062a\\u0645\\u062f\\u0629."
+                          placeholder="مثال: تم تنفيذ أعمال التطوير وتسليم الأصول وفق الخطة المعتمدة."
                           onChange={(e) =>
                             setCompletionResultRows((prev) =>
                               prev.map((item, rowIndex) =>
@@ -2637,15 +2647,19 @@ export function CreateProjectUi({
                     >
                       <Plus className="ml-2 h-4 w-4" />
 
-                      ط·آ·ط¢آ¥ط·آ·ط¢آ¶ط·آ·ط¢آ§ط·آ¸ط¸آ¾ط·آ·ط¢آ© ط·آ¸أ¢â‚¬آ ط·آ·ط¹آ¾ط·آ¸ط¸آ¹ط·آ·ط¢آ¬ط·آ·ط¢آ© ط·آ·ط¢آ¬ط·آ·ط¢آ¯ط·آ¸ط¸آ¹ط·آ·ط¢آ¯ط·آ·ط¢آ©
+                      إضافة نتيجة جديدة
                     </Button>
                   </div>
 
                   <div className="space-y-4">
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <h3 className="text-base font-semibold text-slate-950">\\u0638\\u0645\\u0644\\u062e\\u0635 \\u0646\\u0647\\u0627\\u0626\\u064a / \\u0645\\u0644\\u0627\\u062d\\u0638\\u0627\\u062a"</h3>
-                        <p className="text-xs text-slate-500">\\u0638\\u0645\\u0644\\u0627\\u062d\\u0638\\u0627\\u062a \\u062e\\u062a\\u0627\\u0645\\u064a\\u0629 \\u0623\\u0648 \\u0646\\u0642\\u0627\\u0637 \\u062a\\u0648\\u062b\\u064a\\u0642\\u064a\\u0629 \\u0625\\u0636\\u0627\\u0641\\u064a\\u0629."</p>
+                        <h3 className="text-base font-semibold text-slate-950">
+                          ملخص نهائي / ملاحظات
+                        </h3>
+                        <p className="text-xs text-slate-500">
+                          ملاحظات ختامية أو نقاط توثيقية إضافية.
+                        </p>
                       </div>
                       <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
                         {filledCompletionFinalNotes}
@@ -2673,7 +2687,7 @@ export function CreateProjectUi({
                           >
                             <Trash2 className="ml-2 h-4 w-4" />
 
-                            ط·آ·ط¢آ­ط·آ·ط¢آ°ط·آ¸ط¸آ¾
+                            حذف
                           </Button>
                         </div>
 
@@ -2682,7 +2696,7 @@ export function CreateProjectUi({
                           dir="rtl"
                           className={`${textareaClassName} min-h-[110px] text-right leading-7`}
                           value={row}
-                          placeholder="\\u0623\\u0636\\u0641 \\u0645\\u0644\\u0627\\u062d\\u0638\\u0629 \\u0646\\u0647\\u0627\\u0626\\u064a\\u0629 \\u0623\\u0648 \\u0645\\u0644\\u062e\\u0635\\u064b\\u0627 \\u062e\\u062a\\u0627\\u0645\\u064a\\u064b\\u0627 \\u0644\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639."
+                          placeholder="أضف ملاحظة نهائية أو ملخصًا ختاميًا للمشروع."
                           onChange={(e) =>
                             setCompletionFinalNoteRows((prev) =>
                               prev.map((item, rowIndex) =>
@@ -2702,7 +2716,7 @@ export function CreateProjectUi({
                     >
                       <Plus className="ml-2 h-4 w-4" />
 
-                      ط·آ·ط¢آ¥ط·آ·ط¢آ¶ط·آ·ط¢آ§ط·آ¸ط¸آ¾ط·آ·ط¢آ© ط·آ¸أ¢â‚¬آ¦ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ§ط·آ·ط¢آ­ط·آ·ط¢آ¸ط·آ·ط¢آ© ط·آ¸أ¢â‚¬آ ط·آ¸أ¢â‚¬طŒط·آ·ط¢آ§ط·آ·ط¢آ¦ط·آ¸ط¸آ¹ط·آ·ط¢آ©
+                      إضافة ملاحظة ختامية
                     </Button>
                   </div>
                 </div>
@@ -2710,10 +2724,10 @@ export function CreateProjectUi({
                 <div className="space-y-4">
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <h3 className="text-base font-semibold text-slate-950">\\u0638\\u0645\\u062e\\u0631\\u062c\\u0627\\u062a \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639"</h3>
+                      <h3 className="text-base font-semibold text-slate-950">مخرجات المشروع</h3>
                       <p className="text-xs text-slate-500">
-
-                        ط·آ·ط¢آ¹ط·آ¸أ¢â‚¬آ ط·آ·ط¢آ§ط·آ·ط¢آµط·آ·ط¢آ± ط·آ¸ط«â€ ط·آ·ط¢آµط·آ¸ط¸آ¾ط·آ¸ط¸آ¹ط·آ·ط¢آ© ط·آ¸أ¢â‚¬آ¦ط·آ¸أ¢â‚¬آ ط·آ·ط¢آ¸ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ© ط·آ·ط¢آ¨ط·آ·ط¢آ¹ط·آ¸أ¢â‚¬آ ط·آ¸ط«â€ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬آ  ط·آ¸ط«â€ ط·آ¸ط«â€ ط·آ·ط¢آµط·آ¸ط¸آ¾ ط·آ¸ط«â€ ط·آ¸ط«â€ ط·آ·ط¢آ³ط·آ¸أ¢â‚¬آ¦ ط·آ·ط¢آ§ط·آ·ط¢آ®ط·آ·ط¹آ¾ط·آ¸ط¸آ¹ط·آ·ط¢آ§ط·آ·ط¢آ±ط·آ¸ط¸آ¹ ط·آ¸أ¢â‚¬â€چط·آ¸ط¦â€™ط·آ¸أ¢â‚¬â€چ ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ®ط·آ·ط¢آ±ط·آ·ط¢آ¬.
+                        أضف المخرجات النهائية التي تم تسليمها أو إنتاجها بعد التنفيذ، مع
+                        عنوان واضح ووصف مختصر لكل مخرج.
                       </p>
                     </div>
                     <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
@@ -2730,8 +2744,8 @@ export function CreateProjectUi({
                         <div>
                           <p className="text-sm font-semibold text-slate-950">المخرج {index + 1}</p>
                           <p className="text-xs text-slate-500">
-
-                            ط·آ·ط¢آ¹ط·آ¸أ¢â‚¬آ ط·آ¸ط«â€ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬آ  ط·آ¸ط«â€ ط·آ¸ط«â€ ط·آ·ط¢آµط·آ¸ط¸آ¾ ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ®ط·آ·ط¹آ¾ط·آ·ط¢آµط·آ·ط¢آ± ط·آ¸ط¸آ¹ط·آ¸ط«â€ ط·آ·ط¢آ¶ط·آ·ط¢آ­ ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ§ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ°ط·آ¸ط¸آ¹ ط·آ·ط¹آ¾ط·آ·ط¢آ­ط·آ¸أ¢â‚¬ع‘ط·آ¸أ¢â‚¬ع‘ ط·آ¸ط¸آ¾ط·آ·ط¢آ¹ط·آ¸أ¢â‚¬â€چط·آ¸ط¸آ¹ط·آ¸أ¢â‚¬آ¹ط·آ·ط¢آ§.
+                            اكتب اسم المخرج ووصفه المختصر، وأضف وسمًا اختياريًا إذا احتجت
+                            إلى توضيح إضافي.
                           </p>
                         </div>
                         <Button
@@ -2748,17 +2762,17 @@ export function CreateProjectUi({
                         >
                           <Trash2 className="ml-2 h-4 w-4" />
 
-                          ط·آ·ط¢آ­ط·آ·ط¢آ°ط·آ¸ط¸آ¾
+                          حذف
                         </Button>
                       </div>
 
                       <div className="grid gap-4 md:grid-cols-2">
-                        <Field label="\\u0627\\u0644\\u0639\\u0646\\u0648\\u0627\\u0646">
+                        <Field label="العنوان">
                           <Input
                             dir="rtl"
                             className={`${inputClassName} text-right`}
                             value={row.titleAr}
-                            placeholder={`\\u0639\\u0646\\u0648\\u0627\\u0646 \\u0627\\u0644\\u0645\\u062e\\u0631\\u062c {index + 1}`}
+                            placeholder={`عنوان المخرج ${index + 1}`}
                             onChange={(e) =>
                               setCompletionOutputRows((prev) =>
                                 prev.map((item, rowIndex) =>
@@ -2769,12 +2783,12 @@ export function CreateProjectUi({
                           />
                         </Field>
 
-                        <Field label="\\u0648\\u0633\\u0645 \\u0625\\u0636\\u0627\\u0641\\u064a (\\u0627\\u062e\\u062a\\u064a\\u0627\\u0631\\u064a)">
+                        <Field label="وسم إضافي (اختياري)">
                           <Input
                             dir="rtl"
                             className={`${inputClassName} text-right`}
                             value={row.metaAr}
-                            placeholder="\\u0645\\u062b\\u0627\\u0644: \\u062a\\u0633\\u0644\\u064a\\u0645 \\u0646\\u0647\\u0627\\u0626\\u064a"
+                            placeholder="مثال: تسليم نهائي"
                             onChange={(e) =>
                               setCompletionOutputRows((prev) =>
                                 prev.map((item, rowIndex) =>
@@ -2785,13 +2799,13 @@ export function CreateProjectUi({
                           />
                         </Field>
 
-                        <Field label="\\u0627\\u0644\\u0648\\u0635\\u0641" className="md:col-span-2">
+                        <Field label="الوصف" className="md:col-span-2">
                           <Textarea
                             rows={3}
                             dir="rtl"
                             className={`${textareaClassName} min-h-[120px] text-right leading-7`}
                             value={row.descriptionAr}
-                            placeholder="\\u0635\\u0641 \\u0647\\u0630\\u0627 \\u0627\\u0644\\u0645\\u062e\\u0631\\u062c \\u0628\\u0634\\u0643\\u0644 \\u0648\\u0627\\u0636\\u062d \\u0648\\u0645\\u0628\\u0627\\u0634\\u0631."
+                            placeholder="صف هذا المخرج بشكل واضح ومباشر."
                             onChange={(e) =>
                               setCompletionOutputRows((prev) =>
                                 prev.map((item, rowIndex) =>
@@ -2820,14 +2834,14 @@ export function CreateProjectUi({
                   >
                     <Plus className="ml-2 h-4 w-4" />
 
-                    ط·آ·ط¢آ¥ط·آ·ط¢آ¶ط·آ·ط¢آ§ط·آ¸ط¸آ¾ط·آ·ط¢آ© ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ®ط·آ·ط¢آ±ط·آ·ط¢آ¬ ط·آ·ط¢آ¬ط·آ·ط¢آ¯ط·آ¸ط¸آ¹ط·آ·ط¢آ¯
+                    إضافة مخرج جديد
                   </Button>
                 </div>
 
                 <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_260px]">
                   <Field
-                    label="\\u0645\\u0639\\u0631\\u0636 \\u0635\\u0648\\u0631 \\u0645\\u0627 \\u0628\\u0639\\u062f \\u0627\\u0644\\u062a\\u0646\\u0641\\u064a\\u0630"
-                    hint="\\u0631\\u0627\\u0628\\u0637 \\u0644\\u0643\\u0644 \\u0635\\u0648\\u0631\\u0629 \\u0641\\u064a \\u0633\\u0637\\u0631 \\u0645\\u0633\\u062a\\u0642\\u0644. \\u0647\\u0630\\u0647 \\u0627\\u0644\\u0635\\u0648\\u0631 \\u062a\\u064f\\u0633\\u062a\\u062e\\u062f\\u0645 \\u0641\\u064a \\u0635\\u0641\\u062d\\u0629 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639 \\u0627\\u0644\\u0645\\u0643\\u062a\\u0645\\u0644."
+                    label="معرض صور ما بعد التنفيذ"
+                    hint="رابط لكل صورة في سطر مستقل. هذه الصور تُستخدم في صفحة المشروع المكتمل."
                   >
                     <Textarea
                       rows={5}
@@ -2846,8 +2860,8 @@ export function CreateProjectUi({
 
                   <UploadDropzone
                     inputId="project-completion-gallery-upload"
-                    title="\\u0631\\u0641\\u0639 \\u0635\\u0648\\u0631 \\u0646\\u0647\\u0627\\u0626\\u064a\\u0629"
-                    description="\\u0627\\u0631\\u0641\\u0639 \\u0627\\u0644\\u0635\\u0648\\u0631 \\u0627\\u0644\\u062a\\u064a \\u062a\\u0648\\u062b\\u0642 \\u0627\\u0644\\u062d\\u0627\\u0644\\u0629 \\u0627\\u0644\\u0646\\u0647\\u0627\\u0626\\u064a\\u0629 \\u0644\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639 \\u0628\\u0639\\u062f \\u0627\\u0644\\u062a\\u0646\\u0641\\u064a\\u0630."
+                    title="رفع صور نهائية"
+                    description="ارفع الصور التي توثق الحالة النهائية للمشروع بعد التنفيذ."
                     accept="image/*"
                     multiple
                     disabled={completionGalleryUploading}
@@ -2892,7 +2906,7 @@ export function CreateProjectUi({
                             }
                           >
 
-                            ط·آ·ط¢آ­ط·آ·ط¢آ°ط·آ¸ط¸آ¾
+                            حذف
                           </Button>
                         </div>
                       </div>
@@ -2905,14 +2919,14 @@ export function CreateProjectUi({
             <SectionCard
               id="completion"
               index={visibleSections.findIndex((section) => section.id === "completion") + 1}
-              title="\\u0627\\u0644\\u0645\\u062d\\u062a\\u0648\\u0649 \\u0627\\u0644\\u062e\\u062a\\u0627\\u0645\\u064a"
-              description="\\u064a\\u0628\\u0642\\u0649 \\u0647\\u0630\\u0627 \\u0627\\u0644\\u0642\\u0633\\u0645 \\u0638\\u0627\\u0647\\u0631\\u064b\\u0627 \\u0636\\u0645\\u0646 \\u0644\\u0648\\u062d\\u0629 \\u0627\\u0644\\u0628\\u0646\\u0627\\u0621\\u060c \\u0648\\u064a\\u062a\\u062d\\u0648\\u0651\\u0644 \\u0625\\u0644\\u0649 \\u0648\\u0636\\u0639 \\u0627\\u0644\\u062a\\u062d\\u0631\\u064a\\u0631 \\u0627\\u0644\\u0643\\u0627\\u0645\\u0644 \\u0639\\u0646\\u062f \\u0625\\u063a\\u0644\\u0627\\u0642 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639 \\u0623\\u0648 \\u0627\\u0643\\u062a\\u0645\\u0627\\u0644\\u0647."
+              title="المحتوى الختامي"
+              description="يبقى هذا القسم ظاهرًا ضمن لوحة البناء، ويتحوّل إلى وضع التحرير الكامل عند إغلاق المشروع أو اكتماله."
               icon={CheckCircle2}
               status={sectionStatuses.completion}
               headerAside={
                 <Badge className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-700">
 
-                  ط·آ¸أ¢â‚¬آ¦ط·آ·ط¹آ¾ط·آ·ط¢آ§ط·آ·ط¢آ­ ط·آ·ط¢آ¨ط·آ·ط¢آ¹ط·آ·ط¢آ¯ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ¥ط·آ·ط·â€؛ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ§ط·آ¸أ¢â‚¬ع‘
+                  متاح بعد الإغلاق
                 </Badge>
               }
             >
@@ -2931,12 +2945,13 @@ export function CreateProjectUi({
                       <FileText className="h-4 w-4 text-slate-800" />
                     </div>
                     <div className="space-y-2">
-                      <h3 className="text-sm font-semibold text-slate-950">\\u0637\\u0627\\u0644\\u0642\\u0633\\u0645 \\u0645\\u0624\\u062c\\u0644 \\u062d\\u062a\\u0649 \\u0627\\u0644\\u0625\\u063a\\u0644\\u0627\\u0642"</h3>
+                      <h3 className="text-sm font-semibold text-slate-950">
+                        القسم مؤجل حتى الإغلاق
+                      </h3>
                       <p className="text-xs leading-6 text-slate-500">
-
-                        ط·آ·ط¢آ³ط·آ·ط¹آ¾ط·آ·ط¹آ¾ط·آ¸أ¢â‚¬آ¦ط·آ¸ط¦â€™ط·آ¸أ¢â‚¬آ  ط·آ¸أ¢â‚¬آ¦ط·آ¸أ¢â‚¬آ  ط·آ·ط¢آ¥ط·آ·ط¢آ¶ط·آ·ط¢آ§ط·آ¸ط¸آ¾ط·آ·ط¢آ© ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ ط·آ·ط¹آ¾ط·آ·ط¢آ§ط·آ·ط¢آ¦ط·آ·ط¢آ¬ ط·آ¸ط«â€ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ®ط·آ·ط¢آ±ط·آ·ط¢آ¬ط·آ·ط¢آ§ط·آ·ط¹آ¾ ط·آ¸ط«â€ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آµط·آ¸ط«â€ ط·آ·ط¢آ± ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ®ط·آ·ط¹آ¾ط·آ·ط¢آ§ط·آ¸أ¢â‚¬آ¦ط·آ¸ط¸آ¹ط·آ·ط¢آ© ط·آ¸أ¢â‚¬طŒط·آ¸أ¢â‚¬آ ط·آ·ط¢آ§ ط·آ·ط¢آ¹ط·آ¸أ¢â‚¬آ ط·آ·ط¢آ¯ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ§ ط·آ·ط¹آ¾ط·آ·ط¢آµط·آ·ط¢آ¨ط·آ·ط¢آ­ ط·آ·ط¢آ­ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ©
-                        ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ´ط·آ·ط¢آ±ط·آ¸ط«â€ ط·آ·ط¢آ¹ &quot;ط·آ¸أ¢â‚¬آ¦ط·آ·ط·â€؛ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬ع‘&quot; ط·آ·ط¢آ£ط·آ¸ط«â€  &quot;ط·آ¸أ¢â‚¬آ¦ط·آ¸ط¦â€™ط·آ·ط¹آ¾ط·آ¸أ¢â‚¬آ¦ط·آ¸أ¢â‚¬â€چ&quot;. ط·آ·ط¢آ¥ط·آ·ط¢آ¨ط·آ¸أ¢â‚¬ع‘ط·آ·ط¢آ§ط·آ·ط·إ’ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬ع‘ط·آ·ط¢آ³ط·آ¸أ¢â‚¬آ¦ ط·آ·ط¢آ¸ط·آ·ط¢آ§ط·آ¸أ¢â‚¬طŒط·آ·ط¢آ±ط·آ¸أ¢â‚¬آ¹ط·آ·ط¢آ§ ط·آ·ط¢آ¯ط·آ·ط¢آ§ط·آ·ط¢آ®ط·آ¸أ¢â‚¬â€چ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬â€چط·آ¸ط«â€ ط·آ·ط¢آ­ط·آ·ط¢آ©
-                        ط·آ¸ط¸آ¹ط·آ·ط¢آ³ط·آ·ط¢آ§ط·آ·ط¢آ¹ط·آ·ط¢آ¯ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸ط¸آ¾ط·آ·ط¢آ±ط·آ¸ط¸آ¹ط·آ¸أ¢â‚¬ع‘ ط·آ·ط¢آ¹ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ° ط·آ·ط¢آ±ط·آ·ط¢آ¤ط·آ¸ط¸آ¹ط·آ·ط¢آ© ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ³ط·آ·ط¢آ§ط·آ·ط¢آ± ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸ط¦â€™ط·آ·ط¢آ§ط·آ¸أ¢â‚¬آ¦ط·آ¸أ¢â‚¬â€چ ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ´ط·آ·ط¢آ±ط·آ¸ط«â€ ط·آ·ط¢آ¹ ط·آ¸أ¢â‚¬آ¦ط·آ¸أ¢â‚¬آ  ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ¨ط·آ·ط¢آ¯ط·آ·ط¢آ§ط·آ¸ط¸آ¹ط·آ·ط¢آ© ط·آ·ط¢آ¥ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ° ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ¥ط·آ¸أ¢â‚¬ع‘ط·آ¸ط¸آ¾ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چ.
+                        سيبقى هذا القسم ظاهرًا داخل لوحة البناء، لكنه يتحول إلى مساحة
+                        تحرير كاملة عند إغلاق المشروع أو اكتماله. عندها يمكنك إضافة
+                        النتائج والمخرجات وصور ما بعد التنفيذ والمحتوى الختامي بشكل منظم.
                       </p>
                     </div>
                   </div>
@@ -2946,20 +2961,20 @@ export function CreateProjectUi({
                   <MetricCard
                     icon={CheckCircle2}
                     status="incomplete"
-                    label="\\u062d\\u0627\\u0644\\u0629 \\u0627\\u0644\\u0642\\u0633\\u0645"
-                    value="\\u0645\\u0624\\u062c\\u0644 \\u062d\\u0627\\u0644\\u064a\\u064b\\u0627"
+                    label="حالة القسم"
+                    value="مؤجل حاليًا"
                   />
                   <MetricCard
                     icon={FileText}
                     status="incomplete"
-                    label="\\u0627\\u0644\\u062d\\u0627\\u0644\\u0629 \\u0627\\u0644\\u062d\\u0627\\u0644\\u064a\\u0629"
+                    label="الحالة الحالية"
                     value={statusLabels[formData.status]}
                   />
                   <MetricCard
                     icon={FileImage}
                     status="incomplete"
-                    label="\\u064a\\u062a\\u0641\\u0639\\u0651\\u0644 \\u0639\\u0646\\u062f"
-                    value="\\u0625\\u063a\\u0644\\u0627\\u0642 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639"
+                    label="يتفعّل عند"
+                    value="إغلاق المشروع"
                   />
                 </div>
               </SectionBodyLayout>
@@ -2970,14 +2985,14 @@ export function CreateProjectUi({
           <SectionCard
             id="finance"
             index={financeSectionIndex}
-            title="\\u0627\\u0644\\u0628\\u064a\\u0627\\u0646\\u0627\\u062a \\u0627\\u0644\\u0645\\u0627\\u0644\\u064a\\u0629"
-            description="\\u0642\\u0633\\u0645 \\u0645\\u0627\\u0644\\u064a \\u0623\\u0648\\u0636\\u062d \\u0648\\u0623\\u0643\\u062b\\u0631 \\u0625\\u0628\\u0631\\u0627\\u0632\\u064b\\u0627 \\u064a\\u0636\\u0639 \\u0627\\u0644\\u0645\\u0633\\u062a\\u0647\\u062f\\u0641 \\u0648\\u0627\\u0644\\u062d\\u0627\\u0644\\u064a \\u0648\\u0627\\u0644\\u0639\\u0627\\u0626\\u062f \\u0648\\u0627\\u0644\\u0645\\u062f\\u0629 \\u0636\\u0645\\u0646 \\u0634\\u0628\\u0643\\u0629 \\u0627\\u0633\\u062a\\u062b\\u0645\\u0627\\u0631\\u064a\\u0629 \\u0645\\u0646\\u0638\\u0645\\u0629."
+            title="البيانات المالية"
+            description="قسم مالي أوضح وأكثر إبرازًا يضع المستهدف والحالي والعائد والمدة ضمن شبكة استثمارية منظمة."
             icon={Landmark}
             status={sectionStatuses.finance}
             toneClassName="bg-[linear-gradient(135deg,rgba(11,23,38,0.07),rgba(242,174,48,0.11),rgba(255,255,255,0.98))] border-b border-slate-200/70 pb-6"
             headerAside={
               <Badge className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-700">
-                Financial Snapshot
+                ملخص مالي
               </Badge>
             }
           >
@@ -2993,29 +3008,29 @@ export function CreateProjectUi({
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                 <MetricCard
                   icon={Target}
-                  label="\\u0627\\u0644\\u0645\\u0628\\u0644\\u063a \\u0627\\u0644\\u0645\\u0633\\u062a\\u0647\\u062f\\u0641"
-                  value={formatDisplayValue(formData.targetAmount, "\\u0622\\u00b1.\\u0637\\u00b7\\u0622\\u00b3")}
+                  label="المبلغ المستهدف"
+                  value={formatDisplayValue(formData.targetAmount, "ر.س")}
                 />
                 <MetricCard
                   icon={BarChart3}
-                  label="\\u0627\\u0644\\u0645\\u0628\\u0644\\u063a \\u0627\\u0644\\u062d\\u0627\\u0644\\u064a"
-                  value={formatDisplayValue(formData.currentAmount, "\\u0622\\u00b1.\\u0637\\u00b7\\u0622\\u00b3")}
+                  label="المبلغ الحالي"
+                  value={formatDisplayValue(formData.currentAmount, "ر.س")}
                 />
                 <MetricCard
                   icon={Landmark}
-                  label="\\u0627\\u0644\\u062d\\u062f \\u0627\\u0644\\u0623\\u062f\\u0646\\u0649"
-                  value={formatDisplayValue(formData.minInvestment, "\\u0622\\u00b1.\\u0637\\u00b7\\u0622\\u00b3")}
+                  label="الحد الأدنى"
+                  value={formatDisplayValue(formData.minInvestment, "ر.س")}
                 />
                 <MetricCard
                   icon={Sparkles}
-                  label="\\u0627\\u0644\\u0639\\u0627\\u0626\\u062f \\u0627\\u0644\\u0633\\u0646\\u0648\\u064a"
+                  label="العائد السنوي"
                   value={formatDisplayValue(formData.annualReturn, "%")}
                 />
               </div>
 
               <div className="rounded-[26px] border border-slate-200/80 bg-white/90 p-5 shadow-sm">
                 <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-                  <Field label="\\u0627\\u0644\\u0645\\u0628\\u0644\\u063a \\u0627\\u0644\\u0645\\u0633\\u062a\\u0647\\u062f\\u0641">
+                  <Field label="المبلغ المستهدف">
                     <Input
                       dir="ltr"
                       inputMode="numeric"
@@ -3026,7 +3041,7 @@ export function CreateProjectUi({
                       }
                     />
                   </Field>
-                  <Field label="\\u0627\\u0644\\u0645\\u0628\\u0644\\u063a \\u0627\\u0644\\u062d\\u0627\\u0644\\u064a">
+                  <Field label="المبلغ الحالي">
                     <Input
                       dir="ltr"
                       inputMode="numeric"
@@ -3037,7 +3052,7 @@ export function CreateProjectUi({
                       }
                     />
                   </Field>
-                  <Field label="\\u0627\\u0644\\u062d\\u062f \\u0627\\u0644\\u0623\\u062f\\u0646\\u0649">
+                  <Field label="الحد الأدنى">
                     <Input
                       dir="ltr"
                       inputMode="numeric"
@@ -3048,7 +3063,7 @@ export function CreateProjectUi({
                       }
                     />
                   </Field>
-                  <Field label="\\u0627\\u0644\\u0639\\u0627\\u0626\\u062f \\u0627\\u0644\\u0633\\u0646\\u0648\\u064a %">
+                  <Field label="العائد السنوي %">
                     <Input
                       dir="ltr"
                       inputMode="numeric"
@@ -3059,7 +3074,7 @@ export function CreateProjectUi({
                       }
                     />
                   </Field>
-                  <Field label="\\u0627\\u0644\\u0645\\u062f\\u0629 \\u0628\\u0627\\u0644\\u0634\\u0647\\u0648\\u0631">
+                  <Field label="المدة بالشهور">
                     <Input
                       dir="ltr"
                       inputMode="numeric"
@@ -3070,7 +3085,7 @@ export function CreateProjectUi({
                       }
                     />
                   </Field>
-                  <Field label="\\u0639\\u062f\\u062f \\u0627\\u0644\\u0645\\u0633\\u062a\\u062b\\u0645\\u0631\\u064a\\u0646">
+                  <Field label="عدد المستثمرين">
                     <Input
                       dir="ltr"
                       inputMode="numeric"
@@ -3089,13 +3104,13 @@ export function CreateProjectUi({
           <SectionCard
             id={FINAL_SETTINGS_SECTION_ID}
             index={finalSettingsSectionIndex}
-            title="\\u0627\\u0644\\u0625\\u0639\\u062f\\u0627\\u062f\\u0627\\u062a \\u0627\\u0644\\u062e\\u062a\\u0627\\u0645\\u064a\\u0629"
-            description="\\u0645\\u0631\\u062d\\u0644\\u0629 \\u062e\\u062a\\u0627\\u0645\\u064a\\u0629 \\u0645\\u0648\\u062d\\u062f\\u0629 \\u062a\\u062c\\u0645\\u0639 \\u0645\\u0635\\u062f\\u0631 \\u0627\\u0644\\u062a\\u0642\\u062f\\u0645 \\u0648\\u062e\\u064a\\u0627\\u0631\\u0627\\u062a \\u0627\\u0644\\u0639\\u0631\\u0636 \\u0648\\u0627\\u0645\\u062a\\u064a\\u0627\\u0632\\u0627\\u062a VIP \\u0648\\u0627\\u0644\\u0645\\u062d\\u062a\\u0648\\u0649 \\u0627\\u0644\\u062e\\u062a\\u0627\\u0645\\u064a \\u0642\\u0628\\u0644 \\u0627\\u0644\\u062d\\u0641\\u0638."
+            title="الإعدادات الختامية"
+            description="مرحلة ختامية موحدة تجمع مصدر التقدم وخيارات العرض وامتيازات VIP والمحتوى الختامي قبل الحفظ."
             icon={CheckCircle2}
             status={sectionStatuses[FINAL_SETTINGS_SECTION_ID]}
             headerAside={
               <Badge className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-700">
-                {isCompletionSectionEditable ? completionSectionSummary : "3 \\u0645\\u062d\\u0627\\u0648\\u0631 \\u062e\\u062a\\u0627\\u0645\\u064a\\u0629"}
+                {isCompletionSectionEditable ? completionSectionSummary : "3 محاور ختامية"}
               </Badge>
             }
           >
@@ -3111,19 +3126,19 @@ export function CreateProjectUi({
               <div className="grid gap-3 md:grid-cols-3">
                 <MetricCard
                   icon={Gauge}
-                  label="\\u0645\\u0635\\u062f\\u0631 \\u0627\\u0644\\u062a\\u0642\\u062f\\u0645"
+                  label="مصدر التقدم"
                   status={progressSectionStatus}
                   value={progressModeLabels[formData.progressMode]}
                 />
                 <MetricCard
                   icon={Crown}
-                  label="\\u0627\\u0644\\u062e\\u064a\\u0627\\u0631\\u0627\\u062a \\u0627\\u0644\\u0625\\u0636\\u0627\\u0641\\u064a\\u0629"
+                  label="الخيارات الإضافية"
                   status={optionsSectionStatus}
-                  value={activeOptionLabels.join("\\u00a2\\u0622\\u00b7 ") || "\\u0625\\u0639\\u062f\\u0627\\u062f\\u0627\\u062a \\u0627\\u0641\\u062a\\u0631\\u0627\\u0636\\u064a\\u0629"}
+                  value={activeOptionLabels.join(" · ") || "إعدادات افتراضية"}
                 />
                 <MetricCard
                   icon={FileText}
-                  label="\\u0627\\u0644\\u0645\\u062d\\u062a\\u0648\\u0649 \\u0627\\u0644\\u062e\\u062a\\u0627\\u0645\\u064a"
+                  label="المحتوى الختامي"
                   status={completionSectionStatus}
                   value={completionSectionSummary}
                 />
@@ -3139,8 +3154,8 @@ export function CreateProjectUi({
           <SectionCard
             id="progress"
             index={9}
-            title="\\u0645\\u0635\\u062f\\u0631 \\u0627\\u0644\\u062a\\u0642\\u062f\\u0645"
-            description="\\u0631\\u0628\\u0637 \\u0637\\u0631\\u064a\\u0642\\u0629 \\u0627\\u0644\\u062d\\u0633\\u0627\\u0628 \\u0628\\u0627\\u0644\\u0623\\u0648\\u0632\\u0627\\u0646 \\u0627\\u0644\\u062d\\u0627\\u0644\\u064a\\u0629 \\u062f\\u0627\\u062e\\u0644 \\u0648\\u0627\\u062c\\u0647\\u0629 \\u0623\\u0648\\u0636\\u062d \\u062a\\u0634\\u0631\\u062d \\u0627\\u0644\\u0639\\u0644\\u0627\\u0642\\u0629 \\u0628\\u064a\\u0646 \\u0627\\u0644\\u062a\\u0645\\u0648\\u064a\\u0644 \\u0648\\u0627\\u0644\\u0645\\u0631\\u0627\\u062d\\u0644."
+            title="مصدر التقدم"
+            description="ربط طريقة الحساب بالأوزان الحالية داخل واجهة أوضح تشرح العلاقة بين التمويل والمراحل."
             icon={Gauge}
             status={sectionStatuses.progress}
             headerAside={
@@ -3158,7 +3173,7 @@ export function CreateProjectUi({
                 />
               }
             >
-                <Field label="\\u0637\\u0637\\u0631\\u064a\\u0642\\u0629 \\u0627\\u0644\\u062d\\u0633\\u0627\\u0628" className="md:col-span-3">
+                <Field label="طريقة الحساب" className="md:col-span-3">
                   <Select
                     value={formData.progressMode}
                     onValueChange={(value) =>
@@ -3172,16 +3187,16 @@ export function CreateProjectUi({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="funding">\\u0637\\u062d\\u0633\\u0628 \\u0627\\u0644\\u062a\\u0645\\u0648\\u064a\\u0644 \\u0641\\u0642\\u0637"</SelectItem>
-                      <SelectItem value="milestones">\\u0637\\u062d\\u0633\\u0628 \\u0627\\u0644\\u0645\\u0631\\u0627\\u062d\\u0644 \\u0641\\u0642\\u0637"</SelectItem>
-                      <SelectItem value="hybrid">\\u0638\\u0647\\u062c\\u064a\\u0646 (\\u062a\\u0645\\u0648\\u064a\\u0644 + \\u0645\\u0631\\u0627\\u062d\\u0644)"</SelectItem>
+                      <SelectItem value="funding">{progressModeLabels.funding}</SelectItem>
+                      <SelectItem value="milestones">{progressModeLabels.milestones}</SelectItem>
+                      <SelectItem value="hybrid">{progressModeLabels.hybrid}</SelectItem>
                     </SelectContent>
                   </Select>
                 </Field>
 
                 {formData.progressMode === "hybrid" ? (
                   <>
-                    <Field label="\\u0645\\u0639\\u062f\\u0644 \\u0627\\u0644\\u062a\\u0645\\u0648\\u064a\\u0644 (%)">
+                    <Field label="معدل التمويل (%)">
                       <Input
                         dir="ltr"
                         inputMode="numeric"
@@ -3195,7 +3210,7 @@ export function CreateProjectUi({
                         }
                       />
                     </Field>
-                    <Field label="\\u0645\\u0639\\u062f\\u0644 \\u0627\\u0644\\u0645\\u0631\\u0627\\u062d\\u0644 (%)">
+                    <Field label="معدل المراحل (%)">
                       <Input
                         dir="ltr"
                         inputMode="numeric"
@@ -3211,7 +3226,7 @@ export function CreateProjectUi({
                     </Field>
                     <div className="rounded-[22px] border border-slate-200 bg-slate-50/80 p-4 shadow-sm">
                       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                        Total Weight
+                        إجمالي الأوزان
                       </p>
                       <p className="mt-2 text-2xl font-semibold text-slate-950">
                         {progressWeightsTotal}%
@@ -3222,8 +3237,8 @@ export function CreateProjectUi({
                         }`}
                       >
                         {progressWeightsTotal === 100
-                          ? "\\u0627\\u0644\\u062a\\u0648\\u0632\\u064a\\u0639 \\u0627\\u0644\\u062d\\u0627\\u0644\\u064a \\u0645\\u062a\\u0648\\u0627\\u0632\\u0646 \\u0639\\u0644\\u0649 100%."
-                          : "\\u0647\\u0630\\u0627 \\u0627\\u0644\\u0645\\u0624\\u0634\\u0631 \\u0628\\u0635\\u0631\\u064a \\u0641\\u0642\\u0637 \\u0648\\u0644\\u0627 \\u064a\\u063a\\u064a\\u0631 \\u0627\\u0644\\u0641\\u0627\\u0644\\u064a\\u062f\\u064a\\u0634\\u0646 \\u0627\\u0644\\u062d\\u0627\\u0644\\u064a."}
+                          ? "التوزيع الحالي متوازن على 100%."
+                          : "هذا المؤشر بصري فقط ولا يغيّر منطق الحفظ الحالي."}
                       </p>
                     </div>
                   </>
@@ -3236,15 +3251,15 @@ export function CreateProjectUi({
           <SectionCard
             id="options"
             index={10}
-            title="\\u062e\\u064a\\u0627\\u0631\\u0627\\u062a \\u0625\\u0636\\u0627\\u0641\\u064a\\u0629"
-            description="\\u0625\\u062f\\u0627\\u0631\\u0629 \\u0645\\u064a\\u0632\\u0629 \\u0627\\u0644\\u0645\\u0634\\u0631\\u0648\\u0639 \\u0648\\u0627\\u0645\\u062a\\u064a\\u0627\\u0632\\u0627\\u062a VIP \\u0636\\u0645\\u0646 \\u0628\\u0644\\u0648\\u0643 \\u0645\\u0633\\u062a\\u0642\\u0644 \\u0648\\u0648\\u0627\\u0636\\u062d \\u0628\\u0635\\u0631\\u064a\\u064b\\u0627."
+            title="خيارات إضافية"
+            description="إدارة ميزة المشروع وامتيازات VIP ضمن بلوك مستقل وواضح بصريًا."
             icon={Crown}
             status={sectionStatuses.options}
             headerAside={
               <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
                 {formData.isVip === "true" || formData.projectType === "vip_exclusive"
-                  ? `VIP ${vipTierLabels[formData.vipTier]}`
-                  : "\\u0625\\u0639\\u062f\\u0627\\u062f\\u0627\\u062a \\u0627\\u0641\\u062a\\u0631\\u0627\\u0636\\u064a\\u0629"}
+                  ? `VIP ${vipTierDisplayLabel}`
+                  : "إعدادات افتراضية"}
               </Badge>
             }
           >
@@ -3257,7 +3272,7 @@ export function CreateProjectUi({
                 />
               }
             >
-                <Field label="\\u0645\\u0645\\u064a\\u0632 (featured)">
+                <Field label="إبراز المشروع">
                   <Select
                     value={formData.featured}
                     onValueChange={(value) =>
@@ -3271,12 +3286,12 @@ export function CreateProjectUi({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="false">\\u0644\\u0627"</SelectItem>
-                      <SelectItem value="true">\\u0646\\u0639\\u0645"</SelectItem>
+                      <SelectItem value="false">لا</SelectItem>
+                      <SelectItem value="true">نعم</SelectItem>
                     </SelectContent>
                   </Select>
                 </Field>
-                <Field label="VIP (isVip)">
+                <Field label="تفعيل VIP">
                   <Select
                     value={formData.isVip}
                     onValueChange={(value) =>
@@ -3290,12 +3305,12 @@ export function CreateProjectUi({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="false">\\u0644\\u0627"</SelectItem>
-                      <SelectItem value="true">\\u0646\\u0639\\u0645"</SelectItem>
+                      <SelectItem value="false">لا</SelectItem>
+                      <SelectItem value="true">نعم</SelectItem>
                     </SelectContent>
                   </Select>
                 </Field>
-                <Field label="\\u0645\\u0633\\u062a\\u0648\\u0649 VIP (vipTier)">
+                <Field label="مستوى VIP">
                   <Select
                     value={formData.vipTier}
                     onValueChange={(value) =>
@@ -3309,10 +3324,10 @@ export function CreateProjectUi({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="none">None</SelectItem>
-                      <SelectItem value="silver">Silver</SelectItem>
-                      <SelectItem value="gold">Gold</SelectItem>
-                      <SelectItem value="platinum">Platinum</SelectItem>
+                      <SelectItem value="none">بدون</SelectItem>
+                      <SelectItem value="silver">فضي</SelectItem>
+                      <SelectItem value="gold">ذهبي</SelectItem>
+                      <SelectItem value="platinum">بلاتيني</SelectItem>
                     </SelectContent>
                   </Select>
                 </Field>
@@ -3341,7 +3356,7 @@ export function CreateProjectUi({
                   onClick={() => setLocation(backPath)}
                 >
 
-                  ط·آ·ط¢آ¥ط·آ¸أ¢â‚¬â€چط·آ·ط·â€؛ط·آ·ط¢آ§ط·آ·ط·إ’
+                  {backLabel}
                 </Button>
                 <Button
                   type="submit"
@@ -3376,8 +3391,8 @@ export function CreateProjectUi({
                       <div>
                         <p className="text-sm font-semibold">لم تتم إضافة صورة غلاف بعد</p>
                         <p className="mt-1 text-xs leading-6 text-white/70">
-
-                          ط·آ·ط¢آ³ط·آ·ط¹آ¾ط·آ·ط¢آ±ط·آ·ط¹آ¾ط·آ·ط¢آ¨ط·آ·ط¢آ· ط·آ¸أ¢â‚¬طŒط·آ¸ط«â€ ط·آ¸ط¸آ¹ط·آ·ط¢آ© ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ´ط·آ·ط¢آ±ط·آ¸ط«â€ ط·آ·ط¢آ¹ ط·آ·ط¢آ¨ط·آ·ط¢آµط·آ·ط¢آ±ط·آ¸ط¸آ¹ط·آ¸أ¢â‚¬آ¹ط·آ·ط¢آ§ ط·آ¸أ¢â‚¬طŒط·آ¸أ¢â‚¬آ ط·آ·ط¢آ§ ط·آ·ط¢آ¨ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ¬ط·آ·ط¢آ±ط·آ·ط¢آ¯ ط·آ·ط¢آ±ط·آ¸ط¸آ¾ط·آ·ط¢آ¹ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آµط·آ¸ط«â€ ط·آ·ط¢آ±ط·آ·ط¢آ© ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ£ط·آ·ط¢آ³ط·آ·ط¢آ§ط·آ·ط¢آ³ط·آ¸ط¸آ¹ط·آ·ط¢آ©.
+                          ستظهر معاينة الغلاف هنا بعد إضافة صورة أساسية، لتسهيل مراجعة
+                          الهوية البصرية للمشروع داخل لوحة الإنشاء.
                         </p>
                       </div>
                     </div>
@@ -3398,15 +3413,15 @@ export function CreateProjectUi({
                       <span className={cn("h-1.5 w-1.5 rounded-full", activeSectionAppearance.dot)} />
                       <span>
                         {activeSectionStatus === "complete"
-                          ? "\\u0627\\u0644\\u0642\\u0633\\u0645 \\u0627\\u0644\\u062d\\u0627\\u0644\\u064a \\u0645\\u0643\\u062a\\u0645\\u0644"
-                          : "\\u0627\\u0644\\u0642\\u0633\\u0645 \\u0627\\u0644\\u062d\\u0627\\u0644\\u064a \\u064a\\u062d\\u062a\\u0627\\u062c \\u0645\\u062a\\u0627\\u0628\\u0639\\u0629"}
+                          ? "القسم الحالي مكتمل"
+                          : "القسم الحالي يحتاج متابعة"}
                       </span>
                     </span>
                   </div>
 
                   <div className="mt-4">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/60">
-                      Smart Project Builder
+                      منشئ المشروع الذكي
                     </p>
                     <h2 className="mt-2 text-xl font-semibold leading-tight">{projectDisplayTitle}</h2>
                     <p className="mt-1 text-xs leading-6 text-white/70">
@@ -3416,7 +3431,7 @@ export function CreateProjectUi({
 
                   <div className="mt-4 rounded-[22px] border border-white/12 bg-white/10 px-3.5 py-3 backdrop-blur-sm">
                     <div className="flex items-center justify-between text-[11px] font-semibold text-white/70">
-                      <span>{"\\u0627\\u0644\\u062a\\u0642\\u062f\\u0645 \\u0627\\u0644\\u0639\\u0627\\u0645"}</span>
+                      <span>{"التقدم العام"}</span>
                       <span>{completionPercent}%</span>
                     </div>
                     <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/15">
@@ -3429,8 +3444,8 @@ export function CreateProjectUi({
                       <span>{completedSectionsCount}/{visibleSections.length} أقسام مكتملة</span>
                       <span>
                         {pendingSectionsCount === 0
-                          ? "\\u0644\\u0627 \\u062a\\u0648\\u062c\\u062f \\u0646\\u0648\\u0627\\u0642\\u0635"
-                          : `${pendingSectionsCount} \\u0628\\u062d\\u0627\\u062c\\u0629 \\u0645\\u062a\\u0627\\u0628\\u0639\\u0629`}
+                          ? "لا توجد نواقص"
+                          : `${pendingSectionsCount} بحاجة متابعة`}
                       </span>
                     </div>
                   </div>
@@ -3443,14 +3458,14 @@ export function CreateProjectUi({
                 <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-2">
                   <MetricCard
                     icon={CheckCircle2}
-                    label="\\u0627\\u0644\\u0645\\u0643\\u062a\\u0645\\u0644"
+                    label="المكتمل"
                     value={`${completedSectionsCount}/${visibleSections.length}`}
                     status={summaryPanelStatus}
                   />
                   <MetricCard
                     icon={CircleHelp}
-                    label="\\u0627\\u0644\\u0645\\u062a\\u0628\\u0642\\u064a"
-                    value={`${pendingSectionsCount} \\u0623\\u0642\\u0633\\u0627\\u0645`}
+                    label="المتبقي"
+                    value={`${pendingSectionsCount} أقسام`}
                     status={pendingSectionsCount === 0 ? "complete" : "incomplete"}
                   />
                 </div>
@@ -3460,7 +3475,7 @@ export function CreateProjectUi({
                     <div className="min-w-0 text-right">
                       <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
 
-                        ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬ع‘ط·آ·ط¢آ³ط·آ¸أ¢â‚¬آ¦ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ ط·آ·ط¢آ´ط·آ·ط¢آ·
+                        القسم النشط
                       </p>
                       <h3 className="mt-1 text-base font-semibold text-slate-950">
                         {activeSectionConfig?.title}
@@ -3491,7 +3506,7 @@ export function CreateProjectUi({
                       <p className="text-sm font-semibold text-slate-950">{sidebarTitle}</p>
                       <p className="text-xs text-slate-500">
 
-                        ط·آ·ط¹آ¾ط·آ¸أ¢â‚¬آ ط·آ¸أ¢â‚¬ع‘ط·آ¸أ¢â‚¬â€چ ط·آ·ط¢آ­ط·آ¸ط¸آ¹ ط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ¹ ط·آ·ط¹آ¾ط·آ·ط¢آ´ط·آ·ط¢آ®ط·آ¸ط¸آ¹ط·آ·ط¢آµ ط·آ¸أ¢â‚¬آ¦ط·آ¸ط«â€ ط·آ·ط¢آ­ط·آ·ط¢آ¯ ط·آ¸أ¢â‚¬â€چط·آ¸ط¦â€™ط·آ¸أ¢â‚¬â€چ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ³ط·آ¸ط¦â€™ط·آ·ط¢آ´ط·آ¸أ¢â‚¬آ ط·آ·ط¢آ§ط·آ·ط¹آ¾.
+                        تنقّل سريع بين الأقسام مع ملخص واضح لحالة كل جزء قبل الحفظ.
                       </p>
                     </div>
                     <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
@@ -3577,8 +3592,8 @@ export function CreateProjectUi({
                     </div>
                     <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
                       {activeChecklistPendingCount === 0
-                        ? "\\u062c\\u0627\\u0647\\u0632"
-                        : `${activeChecklistPendingCount} \\u0646\\u0648\\u0627\\u0642\\u0635`}
+                        ? "جاهز"
+                        : `${activeChecklistPendingCount} نواقص`}
                     </Badge>
                   </div>
 
@@ -3624,8 +3639,7 @@ export function CreateProjectUi({
                   <div className="px-1 text-right">
                     <p className="text-sm font-semibold text-slate-950">نظرة سريعة</p>
                     <p className="text-xs text-slate-500">
-
-                      ط·آ¸أ¢â‚¬آ¦ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ®ط·آ·ط¢آµ ط·آ·ط¢آ«ط·آ·ط¢آ§ط·آ·ط¢آ¨ط·آ·ط¹آ¾ ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬طŒط·آ¸ط«â€ ط·آ¸ط¸آ¹ط·آ·ط¢آ© ط·آ¸ط«â€ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ£ط·آ·ط¢آµط·آ¸ط«â€ ط·آ¸أ¢â‚¬â€چ ط·آ¸ط«â€ ط·آ¸ط«â€ ط·آ·ط¢آ¶ط·آ·ط¢آ¹ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸أ¢â‚¬آ¦ط·آ·ط¢آ´ط·آ·ط¢آ±ط·آ¸ط«â€ ط·آ·ط¢آ¹ ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ·ط¢آ­ط·آ·ط¢آ§ط·آ¸أ¢â‚¬â€چط·آ¸ط¸آ¹.
+                      ملخص سريع لأهم مؤشرات المشروع لمراجعة الحالة العامة قبل الحفظ.
                     </p>
                   </div>
                   <div className="grid gap-3">
@@ -3647,4 +3661,5 @@ export function CreateProjectUi({
     </div>
   );
 }
+
 

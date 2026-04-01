@@ -2777,7 +2777,7 @@ export default function ClientProfile() {
                       />
                       <InfoTile
                         label="معرف العميل"
-                        value={fallbackText(user.id)}
+                        value={fallbackText(user?.id)}
                         icon={ReceiptText}
                         breakAll
                       />
@@ -2830,7 +2830,7 @@ export default function ClientProfile() {
                   </CardHeader>
                   <CardContent className="pt-6">
                     <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/80 p-4 text-sm leading-8 text-slate-700 whitespace-pre-wrap break-words">
-                      {fallbackText(user.internalNotes)}
+                      {fallbackText(user?.internalNotes)}
                     </div>
                   </CardContent>
                 </Card>

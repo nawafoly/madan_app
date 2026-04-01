@@ -521,7 +521,7 @@ export default function Reports() {
       if (date) years.add(date.getFullYear());
     }
 
-    return [...years].sort((left, right) => right - left).map(String);
+    return Array.from(years).sort((left, right) => right - left).map(String);
   }, [investments]);
 
   useEffect(() => {

@@ -68,6 +68,7 @@ import {
   getInvestmentProfitSnapshot,
   hasReadableInvestmentProfit,
   roundMoney,
+  type InvestmentProfitLike,
 } from "@shared/investmentProfit";
 
 type UserDoc = {
@@ -106,7 +107,32 @@ type UserDoc = {
   aggregatesUpdatedAt?: any;
 };
 
-type InvestmentDoc = Record<string, any> & { id: string };
+type InvestmentUserSnapshot = Record<string, unknown> & {
+  id?: string;
+  uid?: string;
+  userId?: string;
+  authUid?: string;
+  clientId?: string;
+  displayName?: string;
+  name?: string;
+  email?: string;
+};
+
+type InvestmentDoc = InvestmentProfitLike &
+  Record<string, unknown> & {
+    id: string;
+    userId?: string;
+    investorUid?: string;
+    investorId?: string;
+    clientId?: string;
+    customerId?: string;
+    uid?: string;
+    createdByUid?: string;
+    investorName?: string;
+    investorEmail?: string;
+    projectId?: string;
+    userSnapshot?: InvestmentUserSnapshot;
+  };
 type ProjectDoc = Record<string, any> & { id: string };
 
 function safeNum(x: any) {

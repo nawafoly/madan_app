@@ -165,16 +165,20 @@ export default function CreateProjectPage() {
   );
   const sectionMeta = useMemo<Record<string, string>>(
     () => ({
-      basic: cleanStr(formData.titleAr) ? "طھظ…طھ ط¥ط¶ط§ظپط© ظ‡ظˆظٹط© ط§ظ„ظ…ط´ط±ظˆط¹" : "ط§ط¨ط¯ط£ ط¨ط§ظ„ط¹ظ†ظˆط§ظ† ظˆط§ظ„ظˆطµظپ",
+      basic: cleanStr(formData.titleAr) ? "تمت إضافة هوية المشروع" : "ابدأ بالعنوان والوصف",
       details: cleanStr(formData.locationAr)
-        ? `${projectTypeLabels[formData.projectType]} آ· ${statusLabels[formData.status]}`
-        : "ط§ظ„ظ†ظˆط¹ ظˆط§ظ„ط­ط§ظ„ط© ظˆط§ظ„ظ…ظˆظ‚ط¹",
-      media: cleanStr(formData.coverImage) ? `${galleryUrls.length + 1} ط£طµظ„ ط¨طµط±ظٹ` : "ط£ط¶ظپ طµظˆط±ط© ط§ظ„ط؛ظ„ط§ظپ ط£ظˆظ„ظ‹ط§",
-      highlights: filledHighlights ? `${filledHighlights} ظ…ظ…ظٹط²ط§طھ` : "ظ„ط§ طھظˆط¬ط¯ ظ…ظ…ظٹط²ط§طھ ط¨ط¹ط¯",
-      attachments: filledAttachments ? `${filledAttachments} ظ…ط±ظپظ‚ط§طھ` : "ظ„ط§ طھظˆط¬ط¯ ظ…ط±ظپظ‚ط§طھ ط¨ط¹ط¯",
-      milestones: filledMilestones ? `${filledMilestones} ظ…ط±ط§ط­ظ„` : "ظ„ط§ طھظˆط¬ط¯ ظ…ط±ط§ط­ظ„ ط¨ط¹ط¯",
-      faq: filledFaq ? `${filledFaq} ط£ط³ط¦ظ„ط©` : "ط£ط¶ظپ ط§ظ„ط£ط³ط¦ظ„ط© ط§ظ„ط´ط§ط¦ط¹ط©",
-      finance: cleanStr(formData.targetAmount) ? `${cleanStr(formData.targetAmount)} ط±.ط³` : "ط£ط¶ظپ ط§ظ„ط£ط±ظ‚ط§ظ… ط§ظ„ظ…ط§ظ„ظٹط©",
+        ? `${projectTypeLabels[formData.projectType]} · ${statusLabels[formData.status]}`
+        : "النوع والحالة والموقع",
+      media: cleanStr(formData.coverImage)
+        ? `${galleryUrls.length + 1} أصل بصري`
+        : "أضف صورة الغلاف أولًا",
+      highlights: filledHighlights ? `${filledHighlights} مميزات` : "لا توجد مميزات بعد",
+      attachments: filledAttachments ? `${filledAttachments} مرفقات` : "لا توجد مرفقات بعد",
+      milestones: filledMilestones ? `${filledMilestones} مراحل` : "لا توجد مراحل بعد",
+      faq: filledFaq ? `${filledFaq} أسئلة` : "أضف الأسئلة الشائعة",
+      finance: cleanStr(formData.targetAmount)
+        ? `${cleanStr(formData.targetAmount)} ر.س`
+        : "أضف الأرقام المالية",
       [FINAL_SETTINGS_SECTION_ID]: finalSettingsSectionMeta,
     }),
     [
@@ -220,10 +224,10 @@ export default function CreateProjectPage() {
 
   const requiredChecklist = useMemo(
     () => [
-      { label: "ط§ظ„ط¹ظ†ظˆط§ظ† ط§ظ„ط¹ط±ط¨ظٹ", ready: Boolean(cleanStr(formData.titleAr)) },
-      { label: "ط§ظ„ظˆطµظپ ط§ظ„ط¹ط±ط¨ظٹ", ready: Boolean(cleanStr(formData.descriptionAr)) },
-      { label: "ط§ظ„ظ…ظˆظ‚ط¹ ط§ظ„ط¹ط±ط¨ظٹ", ready: Boolean(cleanStr(formData.locationAr)) },
-      { label: "طµظˆط±ط© ط§ظ„ط؛ظ„ط§ظپ", ready: Boolean(cleanStr(formData.coverImage)) },
+      { label: "العنوان العربي", ready: Boolean(cleanStr(formData.titleAr)) },
+      { label: "الوصف العربي", ready: Boolean(cleanStr(formData.descriptionAr)) },
+      { label: "الموقع العربي", ready: Boolean(cleanStr(formData.locationAr)) },
+      { label: "صورة الغلاف", ready: Boolean(cleanStr(formData.coverImage)) },
     ],
     [formData.coverImage, formData.descriptionAr, formData.locationAr, formData.titleAr]
   );
@@ -320,11 +324,11 @@ export default function CreateProjectPage() {
           rowIndex === index ? { ...row, uploading: false, url, name: row.name || file.name } : row
         )
       );
-      toast.success("طھظ… ط±ظپط¹ ط§ظ„ظ…ظ„ظپ ط¨ظ†ط¬ط§ط­");
+      toast.success("تم رفع الملف بنجاح");
     } catch (error) {
       console.error(error);
       setAttachmentRows((prev) => prev.map((row, rowIndex) => (rowIndex === index ? { ...row, uploading: false } : row)));
-      toast.error("ظپط´ظ„ ط±ظپط¹ ط§ظ„ظ…ظ„ظپ");
+      toast.error("فشل رفع الملف");
     }
   };
 
@@ -343,10 +347,10 @@ export default function CreateProjectPage() {
       const url = uploaded.fileUrl;
       if (!url) throw new Error("Upload failed");
       setFormData((prev) => ({ ...prev, coverImage: url }));
-      toast.success("طھظ… ط±ظپط¹ طµظˆط±ط© ط§ظ„ط؛ظ„ط§ظپ ط¨ظ†ط¬ط§ط­");
+      toast.success("تم رفع صورة الغلاف بنجاح");
     } catch (error) {
       console.error(error);
-      toast.error("ظپط´ظ„ ط±ظپط¹ طµظˆط±ط© ط§ظ„ط؛ظ„ط§ظپ");
+      toast.error("فشل رفع صورة الغلاف");
     } finally {
       setCoverUploading(false);
     }
@@ -379,12 +383,12 @@ export default function CreateProjectPage() {
       });
       toast.success(
         selected.length === 1
-          ? "طھظ… ط±ظپط¹ طµظˆط±ط© ط§ظ„ظ…ط¹ط±ط¶ ط¨ظ†ط¬ط§ط­"
-          : `طھظ… ط±ظپط¹ ${selected.length} طµظˆط± ظ„ظ„ظ…ط¹ط±ط¶ ط¨ظ†ط¬ط§ط­`
+          ? "تم رفع صورة المعرض بنجاح"
+          : `تم رفع ${selected.length} صور للمعرض بنجاح`
       );
     } catch (error) {
       console.error(error);
-      toast.error("ظپط´ظ„ ط±ظپط¹ طµظˆط± ط§ظ„ظ…ط¹ط±ط¶");
+      toast.error("فشل رفع صور المعرض");
     } finally {
       setGalleryUploading(false);
     }
@@ -423,12 +427,12 @@ export default function CreateProjectPage() {
 
       toast.success(
         selected.length === 1
-          ? "طھظ… ط±ظپط¹ طµظˆط±ط© ظ†طھط§ط¦ط¬ ط§ظ„ظ…ط´ط±ظˆط¹ ط¨ظ†ط¬ط§ط­"
-          : `طھظ… ط±ظپط¹ ${selected.length} طµظˆط± ظ„ظ†طھط§ط¦ط¬ ط§ظ„ظ…ط´ط±ظˆط¹ ط¨ظ†ط¬ط§ط­`
+          ? "تم رفع صورة نتائج المشروع بنجاح"
+          : `تم رفع ${selected.length} صور لنتائج المشروع بنجاح`
       );
     } catch (error) {
       console.error(error);
-      toast.error("ظپط´ظ„ ط±ظپط¹ طµظˆط± ظ†طھط§ط¦ط¬ ط§ظ„ظ…ط´ط±ظˆط¹");
+      toast.error("فشل رفع صور نتائج المشروع");
     } finally {
       setCompletionGalleryUploading(false);
     }
@@ -438,43 +442,43 @@ export default function CreateProjectPage() {
     e.preventDefault();
     if (saving) return;
     if (!cleanStr(formData.titleAr)) {
-      toast.error("ط¹ظ†ظˆط§ظ† ط§ظ„ظ…ط´ط±ظˆط¹ (ط¹ط±ط¨ظٹ) ظ…ط·ظ„ظˆط¨");
+      toast.error("عنوان المشروع (عربي) مطلوب");
       return;
     }
     if (!cleanStr(formData.descriptionAr)) {
-      toast.error("ط§ظ„ظˆطµظپ (ط¹ط±ط¨ظٹ) ظ…ط·ظ„ظˆط¨");
+      toast.error("الوصف (عربي) مطلوب");
       return;
     }
     if (!cleanStr(formData.locationAr)) {
-      toast.error("ط§ظ„ظ…ظˆظ‚ط¹ (ط¹ط±ط¨ظٹ) ظ…ط·ظ„ظˆط¨");
+      toast.error("الموقع (عربي) مطلوب");
       return;
     }
     if (!cleanStr(formData.coverImage)) {
-      toast.error("طµظˆط±ط© ط§ظ„ط؛ظ„ط§ظپ ظ…ط·ظ„ظˆط¨ط©");
+      toast.error("صورة الغلاف مطلوبة");
       return;
     }
     if (attachmentRows.some((row) => row.uploading)) {
-      toast.warning("ط§ظ†طھط¸ط± ط­طھظ‰ ظٹظƒطھظ…ظ„ ط±ظپط¹ ط§ظ„ظ…ط±ظپظ‚ط§طھ.");
+      toast.warning("انتظر حتى يكتمل رفع المرفقات.");
       return;
     }
     if (coverUploading || galleryUploading) {
-      toast.warning("ط§ظ†طھط¸ط± ط­طھظ‰ ظٹظƒطھظ…ظ„ ط±ظپط¹ ط§ظ„طµظˆط±.");
+      toast.warning("انتظر حتى يكتمل رفع الصور.");
       return;
     }
 
     if (completionGalleryUploading) {
-      toast.warning("ط§ظ†طھط¸ط± ط­طھظ‰ ظٹظƒطھظ…ظ„ ط±ظپط¹ ط§ظ„طµظˆط±.");
+      toast.warning("انتظر حتى يكتمل رفع الصور.");
       return;
     }
 
     const parsedAttachments = parseAttachmentRows(attachmentRows);
     if (parsedAttachments.errors.length) {
-      toast.error(`ط§ظ„ظ…ط±ظپظ‚ط§طھ: ${parsedAttachments.errors[0]}`);
+      toast.error(`المرفقات: ${parsedAttachments.errors[0]}`);
       return;
     }
     const parsedMilestones = parseMilestoneRows(milestoneRows);
     if (parsedMilestones.errors.length) {
-      toast.error(`ط§ظ„ظ…ط±ط§ط­ظ„: ${parsedMilestones.errors[0]}`);
+      toast.error(`المراحل: ${parsedMilestones.errors[0]}`);
       return;
     }
     const parsedFaq = parseFaqRows(faqRows);
@@ -487,12 +491,12 @@ export default function CreateProjectPage() {
       gallery: completionGalleryUrls,
     });
     if (parsedFaq.errors.length) {
-      toast.error(`ط§ظ„ط£ط³ط¦ظ„ط© ط§ظ„ط´ط§ط¦ط¹ط©: ${parsedFaq.errors[0]}`);
+      toast.error(`الأسئلة الشائعة: ${parsedFaq.errors[0]}`);
       return;
     }
 
     if (completionPayload.errors.length) {
-      toast.error(`ط§ظ„ظ…ط­طھظˆظ‰ ط§ظ„ط®طھط§ظ…ظٹ: ${completionPayload.errors[0]}`);
+      toast.error(`المحتوى الختامي: ${completionPayload.errors[0]}`);
       return;
     }
 
@@ -564,11 +568,11 @@ export default function CreateProjectPage() {
         },
         ignoreFields: ["updatedAt"],
       });
-      toast.success("طھظ… ط¥ظ†ط´ط§ط، ط§ظ„ظ…ط´ط±ظˆط¹ ط¨ظ†ط¬ط§ط­");
+      toast.success("تم إنشاء المشروع بنجاح");
       setLocation("/admin/projects");
     } catch (error) {
       console.error(error);
-      toast.error("ظپط´ظ„ ط¥ظ†ط´ط§ط، ط§ظ„ظ…ط´ط±ظˆط¹");
+      toast.error("فشل إنشاء المشروع");
     } finally {
       setSaving(false);
     }
