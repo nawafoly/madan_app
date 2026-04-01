@@ -1,7 +1,6 @@
 // client/src/pages/Projects.tsx
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link } from "wouter";
-import useEmblaCarousel from "embla-carousel-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -147,20 +146,10 @@ function MobileProjectCarousel({
   hint: string;
   tone?: "light" | "dark";
 }) {
-  const carouselDirection: "rtl" | "ltr" =
-    typeof document !== "undefined" &&
-    document.documentElement.dir === "ltr"
-      ? "ltr"
-      : "rtl";
-  const [viewportRef, api] = useEmblaCarousel({
-    align: "start",
-    containScroll: "trimSnaps",
-    direction: carouselDirection,
-    dragFree: false,
-    slidesToScroll: 1,
-    skipSnaps: false,
-  });
   const [activeIndex, setActiveIndex] = useState(0);
+  const [dragOffsetPx, setDragOffsetPx] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStartXRef = useRef<number | null>(null);
 
   const canNavigate = items.length > 1;
   const toneMap =
@@ -197,38 +186,66 @@ function MobileProjectCarousel({
         };
 
   useEffect(() => {
-    if (!api || items.length <= 1) {
-      setActiveIndex(0);
-      return;
-    }
+    setActiveIndex(currentIndex =>
+      Math.max(0, Math.min(items.length - 1, currentIndex))
+    );
+    setDragOffsetPx(0);
+    setIsDragging(false);
+    dragStartXRef.current = null;
+  }, [items.length]);
 
-    const syncState = () => {
-      setActiveIndex(api.selectedScrollSnap());
-    };
-
-    syncState();
-    api.on("select", syncState);
-    api.on("reInit", syncState);
-
-    return () => {
-      api.off("select", syncState);
-      api.off("reInit", syncState);
-    };
-  }, [api, items.length]);
-
-  useEffect(() => {
-    if (!api) return;
-    api.reInit();
-    api.scrollTo(0, true);
-    setActiveIndex(0);
-  }, [api, items.length]);
-
-  const canScrollPrev = canNavigate && (api?.canScrollPrev() ?? false);
-  const canScrollNext = canNavigate && (api?.canScrollNext() ?? false);
+  const canScrollPrev = canNavigate && activeIndex > 0;
+  const canScrollNext = canNavigate && activeIndex < items.length - 1;
 
   const scrollToIndex = (targetIndex: number) => {
     const nextIndex = Math.max(0, Math.min(items.length - 1, targetIndex));
-    api?.scrollTo(nextIndex);
+    setActiveIndex(nextIndex);
+  };
+
+  const finishDrag = () => {
+    dragStartXRef.current = null;
+    setDragOffsetPx(0);
+    setIsDragging(false);
+  };
+
+  const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!canNavigate) return;
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+
+    dragStartXRef.current = event.clientX;
+    setDragOffsetPx(0);
+    setIsDragging(true);
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  };
+
+  const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const startX = dragStartXRef.current;
+    if (startX === null) return;
+
+    const rawDelta = event.clientX - startX;
+    const dampedDelta =
+      (activeIndex === 0 && rawDelta > 0) ||
+      (activeIndex === items.length - 1 && rawDelta < 0)
+        ? rawDelta * 0.32
+        : rawDelta;
+
+    setDragOffsetPx(dampedDelta);
+  };
+
+  const handlePointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+    const startX = dragStartXRef.current;
+    if (startX === null) return;
+
+    const deltaX = event.clientX - startX;
+    const swipeThreshold = 56;
+
+    if (deltaX <= -swipeThreshold) {
+      scrollToIndex(activeIndex + 1);
+    } else if (deltaX >= swipeThreshold) {
+      scrollToIndex(activeIndex - 1);
+    }
+
+    finishDrag();
   };
 
   return (
@@ -311,17 +328,31 @@ function MobileProjectCarousel({
 
         <div className="mt-4">
           <div
-            ref={viewportRef}
-            dir={carouselDirection}
             className="overflow-hidden [touch-action:pan-y] select-none"
+            dir="ltr"
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={finishDrag}
+            onLostPointerCapture={finishDrag}
           >
-            <div className="flex items-stretch will-change-transform">
+            <div
+              className={cn(
+                "flex items-stretch will-change-transform",
+                isDragging
+                  ? "transition-none"
+                  : "transition-transform duration-300 ease-out"
+              )}
+              style={{
+                transform: `translate3d(calc(${activeIndex * -100}% + ${dragOffsetPx}px), 0, 0)`,
+              }}
+            >
               {items.map((project, index) => (
                 <div
                   key={project.id}
                   dir="rtl"
                   data-mobile-project-card
-                  className="w-full min-w-0 shrink-0 grow-0 basis-full pb-2 pt-1"
+                  className="min-w-full max-w-full flex-none pb-2 pt-1"
                 >
                   {renderCard(project, index)}
                 </div>
