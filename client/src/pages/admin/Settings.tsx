@@ -1,14 +1,29 @@
 // client/src/pages/admin/Settings.tsx
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentProps,
+  type ReactNode,
+} from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+  InputGroupText,
+} from "@/components/ui/input-group";
 import { Label } from "@/components/ui/label";
+import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Card,
   CardContent,
+  CardFooter,
   CardDescription,
   CardHeader,
   CardTitle,
@@ -48,6 +63,7 @@ import {
   FileUp,
   Type,
   Archive,
+  Building2,
   CheckCircle2,
   CircleAlert,
   Clock3,
@@ -55,8 +71,13 @@ import {
   FolderOpen,
   Globe,
   HardDrive,
+  Landmark,
+  Mail,
   RefreshCw,
+  Save,
+  Sparkles,
   ServerCog,
+  TrendingUp,
   type LucideIcon,
 } from "lucide-react";
 
@@ -130,6 +151,52 @@ type AppSettings = {
   defaultReturn: string;
   defaultHorizonYears: string;
 };
+
+const DEFAULT_APP_SETTINGS: AppSettings = {
+  name: "",
+  email: "",
+  phone: "",
+  address: "",
+  minInvestment: "",
+  maxInvestment: "",
+  defaultReturn: "",
+  defaultHorizonYears: "",
+};
+
+const APP_SETTINGS_KEYS: Array<keyof AppSettings> = [
+  "name",
+  "email",
+  "phone",
+  "address",
+  "minInvestment",
+  "maxInvestment",
+  "defaultReturn",
+  "defaultHorizonYears",
+];
+
+const APP_SETTINGS_LABELS: Record<keyof AppSettings, string> = {
+  name: "اسم المنصة",
+  email: "البريد الإلكتروني",
+  phone: "رقم الهاتف",
+  address: "العنوان",
+  minInvestment: "الحد الأدنى للاستثمار",
+  maxInvestment: "الحد الأعلى للاستثمار",
+  defaultReturn: "العائد الافتراضي",
+  defaultHorizonYears: "الأفق الافتراضي",
+};
+
+const SETTINGS_EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function parseNumericSetting(value: string) {
+  const normalized = String(value || "")
+    .trim()
+    .replace(/,/g, "");
+
+  if (!normalized) return null;
+
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : Number.NaN;
+}
 
 type NotificationSettings = {
   email: boolean;
@@ -701,18 +768,13 @@ type SettingsExport = {
 
 export default function Settings() {
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState("general");
 
   // Existing docs
-  const [app, setApp] = useState<AppSettings>({
-    name: "",
-    email: "",
-    phone: "",
-    address: "",
-    minInvestment: "",
-    maxInvestment: "",
-    defaultReturn: "",
-    defaultHorizonYears: "",
-  });
+  const [app, setApp] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
+  const [savedApp, setSavedApp] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
+  const [savingApp, setSavingApp] = useState(false);
+  const [appSubmitAttempted, setAppSubmitAttempted] = useState(false);
 
   const [notifications, setNotifications] = useState<NotificationSettings>({
     email: true,
@@ -855,6 +917,175 @@ export default function Settings() {
   const [contractExportError, setContractExportError] = useState("");
   const [contractExcelExportError, setContractExcelExportError] = useState("");
 
+  const appValidation = useMemo(() => {
+    const errors: Partial<Record<keyof AppSettings, string>> = {};
+
+    if (!app.name.trim()) {
+      errors.name = "اسم المنصة مطلوب لعرض الهوية الأساسية للنظام.";
+    }
+
+    if (!app.email.trim()) {
+      errors.email = "البريد الإلكتروني مطلوب لقنوات التواصل الرسمية.";
+    } else if (!SETTINGS_EMAIL_REGEX.test(app.email.trim())) {
+      errors.email = "صيغة البريد الإلكتروني غير صحيحة.";
+    }
+
+    if (!app.phone.trim()) {
+      errors.phone = "رقم الهاتف مطلوب لبيانات التواصل.";
+    }
+
+    if (!app.address.trim()) {
+      errors.address = "أدخل عنوانًا مختصرًا أو مقرًا رسميًا للمنصة.";
+    }
+
+    const minInvestmentValue = parseNumericSetting(app.minInvestment);
+    const maxInvestmentValue = parseNumericSetting(app.maxInvestment);
+    const defaultReturnValue = parseNumericSetting(app.defaultReturn);
+    const defaultHorizonValue = parseNumericSetting(app.defaultHorizonYears);
+
+    if (!app.minInvestment.trim()) {
+      errors.minInvestment = "الحد الأدنى مطلوب لتوجيه طلبات الاستثمار.";
+    } else if (
+      minInvestmentValue === null ||
+      Number.isNaN(minInvestmentValue)
+    ) {
+      errors.minInvestment = "أدخل رقمًا صحيحًا للحد الأدنى.";
+    } else if (minInvestmentValue <= 0) {
+      errors.minInvestment = "يجب أن يكون الحد الأدنى أكبر من صفر.";
+    }
+
+    if (!app.maxInvestment.trim()) {
+      errors.maxInvestment = "الحد الأعلى مطلوب لتحديد السقف التشغيلي.";
+    } else if (
+      maxInvestmentValue === null ||
+      Number.isNaN(maxInvestmentValue)
+    ) {
+      errors.maxInvestment = "أدخل رقمًا صحيحًا للحد الأعلى.";
+    } else if (maxInvestmentValue <= 0) {
+      errors.maxInvestment = "يجب أن يكون الحد الأعلى أكبر من صفر.";
+    }
+
+    if (
+      minInvestmentValue !== null &&
+      maxInvestmentValue !== null &&
+      !Number.isNaN(minInvestmentValue) &&
+      !Number.isNaN(maxInvestmentValue) &&
+      minInvestmentValue > maxInvestmentValue
+    ) {
+      errors.maxInvestment =
+        "الحد الأعلى يجب أن يكون مساويًا أو أكبر من الحد الأدنى.";
+    }
+
+    if (!app.defaultReturn.trim()) {
+      errors.defaultReturn = "أدخل نسبة العائد الافتراضية.";
+    } else if (
+      defaultReturnValue === null ||
+      Number.isNaN(defaultReturnValue)
+    ) {
+      errors.defaultReturn = "أدخل نسبة رقمية صحيحة.";
+    } else if (defaultReturnValue <= 0 || defaultReturnValue > 100) {
+      errors.defaultReturn = "النسبة يجب أن تكون بين 0 و100.";
+    }
+
+    if (!app.defaultHorizonYears.trim()) {
+      errors.defaultHorizonYears = "أدخل المدة الافتراضية للاستثمار.";
+    } else if (
+      defaultHorizonValue === null ||
+      Number.isNaN(defaultHorizonValue)
+    ) {
+      errors.defaultHorizonYears = "أدخل مدة رقمية صحيحة.";
+    } else if (defaultHorizonValue <= 0) {
+      errors.defaultHorizonYears = "المدة يجب أن تكون أكبر من صفر.";
+    }
+
+    return {
+      errors,
+      isValid: Object.keys(errors).length === 0,
+      completedFields: APP_SETTINGS_KEYS.filter(key =>
+        String(app[key] || "").trim()
+      ).length,
+      minInvestmentValue:
+        minInvestmentValue !== null && !Number.isNaN(minInvestmentValue)
+          ? minInvestmentValue
+          : null,
+      maxInvestmentValue:
+        maxInvestmentValue !== null && !Number.isNaN(maxInvestmentValue)
+          ? maxInvestmentValue
+          : null,
+      defaultReturnValue:
+        defaultReturnValue !== null && !Number.isNaN(defaultReturnValue)
+          ? defaultReturnValue
+          : null,
+      defaultHorizonValue:
+        defaultHorizonValue !== null && !Number.isNaN(defaultHorizonValue)
+          ? defaultHorizonValue
+          : null,
+    };
+  }, [app]);
+
+  const appDirty = useMemo(
+    () => JSON.stringify(app) !== JSON.stringify(savedApp),
+    [app, savedApp]
+  );
+
+  const changedAppFields = useMemo(
+    () => APP_SETTINGS_KEYS.filter(key => app[key] !== savedApp[key]),
+    [app, savedApp]
+  );
+
+  const appIssues = useMemo(
+    () => Object.values(appValidation.errors).filter(Boolean) as string[],
+    [appValidation.errors]
+  );
+
+  const investmentRangePreview = useMemo(() => {
+    if (
+      appValidation.minInvestmentValue === null ||
+      appValidation.maxInvestmentValue === null
+    ) {
+      return "غير محدد بعد";
+    }
+
+    return `${formatNumberEN(appValidation.minInvestmentValue)} - ${formatNumberEN(
+      appValidation.maxInvestmentValue
+    )} ر.س`;
+  }, [appValidation.maxInvestmentValue, appValidation.minInvestmentValue]);
+
+  const returnProfilePreview = useMemo(() => {
+    if (
+      appValidation.defaultReturnValue === null ||
+      appValidation.defaultHorizonValue === null
+    ) {
+      return "غير مكتمل";
+    }
+
+    return `${formatNumberEN(appValidation.defaultReturnValue)}% لمدة ${formatNumberEN(
+      appValidation.defaultHorizonValue
+    )} سنة`;
+  }, [appValidation.defaultHorizonValue, appValidation.defaultReturnValue]);
+
+  const shouldShowAppFieldFeedback = (key: keyof AppSettings) =>
+    appSubmitAttempted || app[key] !== savedApp[key];
+
+  const notificationsEnabledCount =
+    Object.values(notifications).filter(Boolean).length;
+  const securityEnabledCount = Object.values(security).filter(Boolean).length;
+  const activeRolesCount = roles.filter(role => role.isActive).length;
+  const systemRolesCount = roles.filter(role => role.isSystem).length;
+  const activeAdminsCount = adminUsers.filter(user => user.isActive).length;
+  const activeInvitesCount = roleInvites.filter(
+    invite => invite.isActive
+  ).length;
+  const totalLabelEntries =
+    Object.keys(labels.projectTypes || {}).length +
+    Object.keys(labels.projectStatuses || {}).length +
+    Object.keys(labels.investmentStatuses || {}).length +
+    Object.keys(labels.uiRoles || {}).length;
+  const enabledFlagsCount = Object.values(flags).filter(Boolean).length;
+  const contentCompletedCount = Object.values(content).filter(value =>
+    String(value || "").trim()
+  ).length;
+
   /* =========================
      Load settings (Firestore)
   ========================= */
@@ -879,10 +1110,15 @@ export default function Settings() {
         getDoc(doc(db, "settings", "content")),
       ]);
 
-      if (appSnap.exists()) {
-        const d = appSnap.data() as any;
-        setApp(prev => ({ ...prev, ...(d || {}) }));
-      }
+      const nextApp = appSnap.exists()
+        ? ({
+            ...DEFAULT_APP_SETTINGS,
+            ...((appSnap.data() as any) || {}),
+          } as AppSettings)
+        : DEFAULT_APP_SETTINGS;
+      setApp(nextApp);
+      setSavedApp(nextApp);
+      setAppSubmitAttempted(false);
       if (notifSnap.exists()) setNotifications(notifSnap.data() as any);
       if (secSnap.exists()) setSecurity(secSnap.data() as any);
 
@@ -1083,17 +1319,33 @@ export default function Settings() {
   };
 
   const saveApp = async () => {
+    setAppSubmitAttempted(true);
+
+    if (!appValidation.isValid) {
+      toast.error("يرجى مراجعة الحقول المميزة قبل حفظ الإعدادات.");
+      return;
+    }
+
     try {
+      setSavingApp(true);
       await persistSettingsDoc(
         "app",
         app as unknown as Record<string, unknown>,
         "Updated app settings"
       );
+      setSavedApp({ ...app });
       toast.success("تم حفظ الإعدادات العامة");
     } catch (e) {
       console.error(e);
       toast.error("فشل حفظ الإعدادات العامة");
+    } finally {
+      setSavingApp(false);
     }
+  };
+
+  const resetAppChanges = () => {
+    setApp(savedApp);
+    setAppSubmitAttempted(false);
   };
 
   const saveNotifications = async () => {
@@ -1770,10 +2022,11 @@ export default function Settings() {
       const beforeAdminData = beforeAdminSnap.exists()
         ? beforeAdminSnap.data()
         : null;
-      const { permissionsAllow, permissionsDeny } = normalizePermissionOverrides(
-        beforeAdminData?.permissionsAllow || [],
-        beforeAdminData?.permissionsDeny || []
-      );
+      const { permissionsAllow, permissionsDeny } =
+        normalizePermissionOverrides(
+          beforeAdminData?.permissionsAllow || [],
+          beforeAdminData?.permissionsDeny || []
+        );
       const effectivePermissions = getEffectivePermissionKeys(
         roleKey,
         permissionsAllow,
@@ -1787,7 +2040,9 @@ export default function Settings() {
           userData?.name ||
           email.split("@")[0]
       ).trim();
-      const title = String(beforeAdminData?.title || userData?.title || "").trim();
+      const title = String(
+        beforeAdminData?.title || userData?.title || ""
+      ).trim();
       const notes = String(beforeAdminData?.notes || "").trim();
       const isActive = beforeAdminData?.isActive !== false;
       await updateDoc(doc(db, "users", userDoc.id), {
@@ -2436,6 +2691,13 @@ export default function Settings() {
     });
   }, [databaseDashboard, databaseLoaded, databaseRefreshing]);
 
+  const databaseHealthyServicesCount = databaseOverviewCards.filter(
+    card => card.status === "success"
+  ).length;
+  const databaseActiveMetricCount = databaseMetricCards.filter(
+    metric => metric.value !== "—"
+  ).length;
+
   const databaseTechnicalDetails = useMemo(() => {
     return DATABASE_TECHNICAL_DETAILS.map(item => {
       if (item.label !== "Worker" || !databaseWorkerUrl) return item;
@@ -2458,6 +2720,206 @@ export default function Settings() {
     return notes;
   }, [databaseDashboard.checkedAt, databaseLoaded]);
 
+  const activeTabDescription =
+    {
+      general:
+        "إدارة هوية المنصة، بيانات التواصل، والسياسات الاستثمارية الأساسية من واجهة مؤسسية موحدة.",
+      notifications:
+        "تنظيم قنوات الإشعارات والتنبيهات التشغيلية ضمن توزيع أوضح وتجميع منطقي أكثر احترافية.",
+      security:
+        "ضبط سياسات الأمان والمصادقة ضمن تجربة إعدادات أكثر وضوحًا واتساقًا مع بقية النظام.",
+      roles:
+        "إدارة الأدوار والصلاحيات من خلال دليل صلاحيات منظم ومقسّم إلى وحدات قابلة للمراجعة السريعة.",
+      admins:
+        "متابعة حسابات الإدارة، الدعوات، وربطها بالأدوار من لوحة موحدة تشبه أنظمة SaaS الحديثة.",
+      labels:
+        "توحيد مسميات النظام والقوائم المرجعية ضمن محررات منظمة وسهلة القراءة والتحديث.",
+      flags:
+        "التحكم في Feature Flags وتجارب الإطلاق التدريجي من تبويب موحد ومتسق مع بقية الإعدادات.",
+      content:
+        "إدارة محتوى الموقع التشغيلي والتسويقي من وحدات واضحة تحافظ على نفس جودة تجربة الإعدادات.",
+      backup:
+        "إدارة النسخ، الاستيراد، وحزم التصدير التشغيلية من تجربة منظمة تحافظ على وضوح الحالة والإجراءات.",
+      database:
+        "مراجعة حالة البنية، التخزين، والمؤشرات التشغيلية في لوحة تقنية موحدة وواضحة القراءة.",
+    }[activeTab] ??
+    "لوحة إعدادات موحدة تغطي جميع الجوانب التشغيلية والإدارية للمنصة بنفس الهوية البصرية.";
+
+  const activeTabHeaderBadges: Array<{
+    label: string;
+    tone: "success" | "warning" | "neutral" | "info";
+  }> =
+    activeTab === "general"
+      ? [
+          {
+            label: appDirty
+              ? `${formatNumberEN(changedAppFields.length)} تغييرات غير محفوظة`
+              : "جميع التغييرات محفوظة",
+            tone: appDirty ? "warning" : "success",
+          },
+          {
+            label: `${formatNumberEN(appValidation.completedFields)}/${formatNumberEN(APP_SETTINGS_KEYS.length)} حقول مكتملة`,
+            tone: "neutral",
+          },
+          {
+            label: appValidation.isValid
+              ? "جاهزة للحفظ"
+              : `${formatNumberEN(appIssues.length)} ملاحظات تحتاج مراجعة`,
+            tone: appValidation.isValid ? "success" : "warning",
+          },
+        ]
+      : activeTab === "notifications"
+        ? [
+            {
+              label: `${formatNumberEN(notificationsEnabledCount)} عناصر مفعلة`,
+              tone: "success",
+            },
+            {
+              label: "قنوات وتنبيهات تشغيلية",
+              tone: "neutral",
+            },
+            {
+              label: "تجربة موحدة مع بقية التبويبات",
+              tone: "info",
+            },
+          ]
+        : activeTab === "security"
+          ? [
+              {
+                label: `${formatNumberEN(securityEnabledCount)} سياسات مفعلة`,
+                tone: "success",
+              },
+              {
+                label: "مراجعة المصادقة والوصول",
+                tone: "neutral",
+              },
+              {
+                label: "واجهة أمان موحدة",
+                tone: "info",
+              },
+            ]
+          : activeTab === "roles"
+            ? [
+                {
+                  label: `${formatNumberEN(activeRolesCount)} أدوار نشطة`,
+                  tone: "success",
+                },
+                {
+                  label: `${formatNumberEN(systemRolesCount)} أدوار نظام`,
+                  tone: "neutral",
+                },
+                {
+                  label: "دليل صلاحيات منظم",
+                  tone: "info",
+                },
+              ]
+            : activeTab === "admins"
+              ? [
+                  {
+                    label: `${formatNumberEN(activeAdminsCount)} حسابات نشطة`,
+                    tone: "success",
+                  },
+                  {
+                    label: `${formatNumberEN(activeInvitesCount)} دعوات فعالة`,
+                    tone: "neutral",
+                  },
+                  {
+                    label: "ربط الأدوار بالحسابات",
+                    tone: "info",
+                  },
+                ]
+              : activeTab === "labels"
+                ? [
+                    {
+                      label: `${formatNumberEN(totalLabelEntries)} تسمية معرفة`,
+                      tone: "success",
+                    },
+                    {
+                      label: "عربي / English",
+                      tone: "neutral",
+                    },
+                    {
+                      label: "محررات موحدة",
+                      tone: "info",
+                    },
+                  ]
+                : activeTab === "flags"
+                  ? [
+                      {
+                        label: `${formatNumberEN(enabledFlagsCount)} ميزات مفعلة`,
+                        tone: "success",
+                      },
+                      {
+                        label: `${formatNumberEN(Object.keys(flags).length)} مفاتيح إجمالاً`,
+                        tone: "neutral",
+                      },
+                      {
+                        label: "تحكم تدريجي بالخصائص",
+                        tone: "info",
+                      },
+                    ]
+                  : activeTab === "content"
+                    ? [
+                        {
+                          label: `${formatNumberEN(contentCompletedCount)} حقول مكتملة`,
+                          tone: "success",
+                        },
+                        {
+                          label: `${formatNumberEN(Object.keys(content).length)} حقول إجمالاً`,
+                          tone: "neutral",
+                        },
+                        {
+                          label: "تحرير محتوى موحد",
+                          tone: "info",
+                        },
+                      ]
+                    : activeTab === "backup"
+                      ? [
+                          {
+                            label: `${formatNumberEN(selectedContractIds.length)} عقود محددة`,
+                            tone: selectedContractIds.length
+                              ? "success"
+                              : "neutral",
+                          },
+                          {
+                            label: contractExportSummary
+                              ? "باقة النظام متاحة"
+                              : "باقة النظام غير مولدة",
+                            tone: contractExportSummary ? "success" : "warning",
+                          },
+                          {
+                            label: contractExcelExportSummary
+                              ? "نسخة Excel متاحة"
+                              : "نسخة Excel غير مولدة",
+                            tone: contractExcelExportSummary
+                              ? "info"
+                              : "neutral",
+                          },
+                        ]
+                      : [
+                          {
+                            label: `${formatNumberEN(databaseHealthyServicesCount)} خدمات سليمة`,
+                            tone: "success",
+                          },
+                          {
+                            label: `${formatNumberEN(databaseActiveMetricCount)} مؤشرات معروضة`,
+                            tone: "neutral",
+                          },
+                          {
+                            label: databaseRefreshing
+                              ? "جاري فحص البنية"
+                              : "حالة مباشرة",
+                            tone: "info",
+                          },
+                        ];
+
+  const headerBadgeToneClassName = {
+    success: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    warning: "border-amber-200 bg-amber-50 text-amber-700",
+    neutral: "border-slate-200 bg-white text-slate-600",
+    info: "border-sky-200 bg-sky-50 text-sky-700",
+  } as const;
+
   /* =========================
      UI
   ========================= */
@@ -2472,63 +2934,115 @@ export default function Settings() {
 
   return (
     <DashboardLayout>
-      <div className="container py-8 space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold">الإعدادات</h1>
-          <p className="text-muted-foreground">
-            مركز التحكم الأساسي للمنصة (Firebase)
-          </p>
-          {error ? <p className="text-red-600 mt-2 text-sm">{error}</p> : null}
+      <div className="container space-y-8 py-8">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+          <div className="space-y-3">
+            <Badge className="w-fit rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-600 shadow-none">
+              Platform Control Center
+            </Badge>
+            <div className="space-y-2">
+              <h1 className="text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
+                الإعدادات
+              </h1>
+              <p className="max-w-3xl text-sm leading-7 text-slate-600">
+                {activeTabDescription}
+              </p>
+            </div>
+            {error ? (
+              <p className="text-sm font-medium text-red-600">{error}</p>
+            ) : null}
+          </div>
+
+          {activeTabHeaderBadges.length ? (
+            <div className="flex flex-wrap gap-2">
+              {activeTabHeaderBadges.map(badge => (
+                <Badge
+                  key={badge.label}
+                  variant="outline"
+                  className={cn(
+                    "rounded-full px-3 py-1 text-sm font-medium",
+                    headerBadgeToneClassName[badge.tone]
+                  )}
+                >
+                  {badge.label}
+                </Badge>
+              ))}
+            </div>
+          ) : null}
         </div>
 
-        <Tabs defaultValue="general">
-          {/* ✅ Mobile: horizontal scroll بدل wrap عشان ما ينقص شيء */}
-          <TabsList className="w-full h-auto justify-start gap-2 overflow-x-auto flex-nowrap whitespace-nowrap">
-            <TabsTrigger value="general" className="shrink-0 whitespace-nowrap">
+        <Tabs
+          value={activeTab}
+          onValueChange={setActiveTab}
+          className="space-y-6"
+        >
+          <TabsList className="h-auto w-full justify-start gap-2 overflow-x-auto rounded-[22px] border border-slate-200/80 bg-white/90 p-2 shadow-[0_18px_45px_-34px_rgba(15,23,42,0.35)] backdrop-blur flex-nowrap whitespace-nowrap">
+            <TabsTrigger
+              value="general"
+              className="shrink-0 whitespace-nowrap rounded-xl px-4 py-2.5 text-slate-600 data-[state=active]:border-slate-950 data-[state=active]:bg-slate-950 data-[state=active]:text-white"
+            >
               <SettingsIcon className="w-4 h-4 ml-2" /> عام
             </TabsTrigger>
 
             <TabsTrigger
               value="notifications"
-              className="shrink-0 whitespace-nowrap"
+              className="shrink-0 whitespace-nowrap rounded-xl px-4 py-2.5 text-slate-600 data-[state=active]:border-slate-950 data-[state=active]:bg-slate-950 data-[state=active]:text-white"
             >
               <Bell className="w-4 h-4 ml-2" /> الإشعارات
             </TabsTrigger>
 
             <TabsTrigger
               value="security"
-              className="shrink-0 whitespace-nowrap"
+              className="shrink-0 whitespace-nowrap rounded-xl px-4 py-2.5 text-slate-600 data-[state=active]:border-slate-950 data-[state=active]:bg-slate-950 data-[state=active]:text-white"
             >
               <Shield className="w-4 h-4 ml-2" /> الأمان
             </TabsTrigger>
 
-            <TabsTrigger value="roles" className="shrink-0 whitespace-nowrap">
+            <TabsTrigger
+              value="roles"
+              className="shrink-0 whitespace-nowrap rounded-xl px-4 py-2.5 text-slate-600 data-[state=active]:border-slate-950 data-[state=active]:bg-slate-950 data-[state=active]:text-white"
+            >
               <KeyRound className="w-4 h-4 ml-2" /> الأدوار والصلاحيات
             </TabsTrigger>
 
-            <TabsTrigger value="admins" className="shrink-0 whitespace-nowrap">
+            <TabsTrigger
+              value="admins"
+              className="shrink-0 whitespace-nowrap rounded-xl px-4 py-2.5 text-slate-600 data-[state=active]:border-slate-950 data-[state=active]:bg-slate-950 data-[state=active]:text-white"
+            >
               <Users className="w-4 h-4 ml-2" /> حسابات الإدارة
             </TabsTrigger>
 
-            <TabsTrigger value="labels" className="shrink-0 whitespace-nowrap">
+            <TabsTrigger
+              value="labels"
+              className="shrink-0 whitespace-nowrap rounded-xl px-4 py-2.5 text-slate-600 data-[state=active]:border-slate-950 data-[state=active]:bg-slate-950 data-[state=active]:text-white"
+            >
               <Tags className="w-4 h-4 ml-2" /> المسميات
             </TabsTrigger>
 
-            <TabsTrigger value="flags" className="shrink-0 whitespace-nowrap">
+            <TabsTrigger
+              value="flags"
+              className="shrink-0 whitespace-nowrap rounded-xl px-4 py-2.5 text-slate-600 data-[state=active]:border-slate-950 data-[state=active]:bg-slate-950 data-[state=active]:text-white"
+            >
               <SlidersHorizontal className="w-4 h-4 ml-2" /> Feature Flags
             </TabsTrigger>
 
-            <TabsTrigger value="content" className="shrink-0 whitespace-nowrap">
+            <TabsTrigger
+              value="content"
+              className="shrink-0 whitespace-nowrap rounded-xl px-4 py-2.5 text-slate-600 data-[state=active]:border-slate-950 data-[state=active]:bg-slate-950 data-[state=active]:text-white"
+            >
               <Type className="w-4 h-4 ml-2" /> محتوى الموقع
             </TabsTrigger>
 
-            <TabsTrigger value="backup" className="shrink-0 whitespace-nowrap">
+            <TabsTrigger
+              value="backup"
+              className="shrink-0 whitespace-nowrap rounded-xl px-4 py-2.5 text-slate-600 data-[state=active]:border-slate-950 data-[state=active]:bg-slate-950 data-[state=active]:text-white"
+            >
               <FileDown className="w-4 h-4 ml-2" /> Backup
             </TabsTrigger>
 
             <TabsTrigger
               value="database"
-              className="shrink-0 whitespace-nowrap"
+              className="shrink-0 whitespace-nowrap rounded-xl px-4 py-2.5 text-slate-600 data-[state=active]:border-slate-950 data-[state=active]:bg-slate-950 data-[state=active]:text-white"
             >
               <Database className="w-4 h-4 ml-2" /> قاعدة البيانات
             </TabsTrigger>
@@ -2537,411 +3051,1061 @@ export default function Settings() {
           {/* =========================
               General
           ========================= */}
-          <TabsContent value="general">
-            <Card>
-              <CardHeader>
-                <CardTitle>معلومات المنصة</CardTitle>
-                <CardDescription>بيانات التواصل والضبط العام</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <Field
-                  label="اسم المنصة"
-                  value={app.name}
-                  onChange={(v: string) => setApp({ ...app, name: v })}
-                />
-                <Field
-                  label="البريد الإلكتروني"
-                  value={app.email}
-                  onChange={(v: string) => setApp({ ...app, email: v })}
-                />
-                <Field
-                  label="رقم الهاتف"
-                  value={app.phone}
-                  onChange={(v: string) => setApp({ ...app, phone: v })}
-                />
-                <Field
-                  label="العنوان"
-                  value={app.address}
-                  onChange={(v: string) => setApp({ ...app, address: v })}
-                />
+          <TabsContent value="general" className="space-y-6">
+            <Card className="overflow-hidden border-slate-200/80 bg-[radial-gradient(circle_at_top_right,rgba(242,183,5,0.14),transparent_25%),linear-gradient(135deg,#ffffff_0%,#f8fafc_48%,#eef4ff_100%)] shadow-[0_28px_75px_-44px_rgba(15,23,42,0.35)]">
+              <CardContent className="px-6 py-6 sm:px-8 sm:py-8">
+                <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(280px,0.85fr)] xl:items-end">
+                  <div className="space-y-5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge className="rounded-full border border-[#F2B705]/30 bg-[#F2B705]/12 px-3 py-1 text-xs font-semibold text-[#8d6700] shadow-none">
+                        <Sparkles className="h-3.5 w-3.5" />
+                        Settings Experience
+                      </Badge>
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "rounded-full px-3 py-1 text-xs font-semibold shadow-none",
+                          appDirty
+                            ? "border-amber-200 bg-amber-50 text-amber-700"
+                            : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                        )}
+                      >
+                        {appDirty
+                          ? `${formatNumberEN(changedAppFields.length)} تغييرات قيد المراجعة`
+                          : "جميع القيم متزامنة"}
+                      </Badge>
+                    </div>
 
-                <div className="grid md:grid-cols-4 gap-4">
-                  <Field
-                    label="الحد الأدنى للاستثمار"
-                    value={app.minInvestment}
-                    onChange={(v: string) =>
-                      setApp({ ...app, minInvestment: v })
-                    }
-                  />
-                  <Field
-                    label="الحد الأعلى للاستثمار"
-                    value={app.maxInvestment}
-                    onChange={(v: string) =>
-                      setApp({ ...app, maxInvestment: v })
-                    }
-                  />
-                  <Field
-                    label="العائد الافتراضي %"
-                    value={app.defaultReturn}
-                    onChange={(v: string) =>
-                      setApp({ ...app, defaultReturn: v })
-                    }
-                  />
-                  <Field
-                    label="الأفق الافتراضي (سنوات)"
-                    value={app.defaultHorizonYears}
-                    onChange={(v: string) =>
-                      setApp({ ...app, defaultHorizonYears: v })
-                    }
-                  />
+                    <div className="space-y-3">
+                      <h2 className="text-2xl font-semibold tracking-tight text-slate-950 sm:text-[2rem]">
+                        إعدادات المنصة الأساسية
+                      </h2>
+                      <p className="max-w-2xl text-sm leading-7 text-slate-600">
+                        لوحة تحكم مقسمة إلى وحدات واضحة للهوية، التواصل، سياسات
+                        الاستثمار، والإعدادات المالية الافتراضية.
+                      </p>
+                    </div>
+
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      <SettingsOverviewStat
+                        icon={Building2}
+                        label="Platform"
+                        value={app.name || "غير محدد"}
+                        helper="هوية المنصة في النظام"
+                      />
+                      <SettingsOverviewStat
+                        icon={Landmark}
+                        label="Investment Window"
+                        value={investmentRangePreview}
+                        helper="النطاق المرجعي للاستثمار"
+                      />
+                      <SettingsOverviewStat
+                        icon={TrendingUp}
+                        label="Return Profile"
+                        value={returnProfilePreview}
+                        helper="العائد والمدة الافتراضية"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="rounded-[28px] border border-[#1e3358] bg-[linear-gradient(180deg,rgba(8,18,47,0.98),rgba(2,6,23,0.96))] p-6 text-white shadow-[0_28px_60px_-42px_rgba(2,6,23,0.85)]">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/45">
+                          Readiness
+                        </p>
+                        <h3 className="mt-3 text-xl font-semibold tracking-tight">
+                          جاهزية الإعدادات
+                        </h3>
+                      </div>
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "rounded-full border px-3 py-1 text-[11px] font-semibold shadow-none",
+                          appValidation.isValid
+                            ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-200"
+                            : "border-amber-400/30 bg-amber-400/10 text-amber-200"
+                        )}
+                      >
+                        {appValidation.isValid ? "Stable" : "Needs Review"}
+                      </Badge>
+                    </div>
+
+                    <div className="mt-6 grid gap-3">
+                      <SettingsSidebarMetric
+                        label="الحقول المكتملة"
+                        value={`${formatNumberEN(appValidation.completedFields)}/${formatNumberEN(APP_SETTINGS_KEYS.length)}`}
+                        helper="مستوى اكتمال الإعدادات الأساسية"
+                      />
+                      <SettingsSidebarMetric
+                        label="التواصل الرسمي"
+                        value={app.email || "غير محدد"}
+                        helper={app.phone || "أضف رقم خدمة عملاء رسمي"}
+                      />
+                      <SettingsSidebarMetric
+                        label="المراجعات المطلوبة"
+                        value={
+                          appIssues.length === 0
+                            ? "لا توجد ملاحظات حرجة"
+                            : `${formatNumberEN(appIssues.length)} ملاحظات`
+                        }
+                        helper="نفس الحقول ستُحفظ إلى settings/app"
+                      />
+                    </div>
+                  </div>
                 </div>
-
-                <Button className="bg-[#F2B705]" onClick={saveApp}>
-                  حفظ
-                </Button>
               </CardContent>
             </Card>
+
+            <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+              <div className="space-y-6">
+                <SettingsSectionCard
+                  icon={Building2}
+                  eyebrow="Module 01"
+                  title="Platform Info"
+                  description="الهوية الأساسية للمنصة كما تظهر داخليًا وفي الواجهات الرسمية."
+                >
+                  <div className="grid gap-5 md:grid-cols-2">
+                    <SettingsField
+                      label="اسم المنصة"
+                      description="الاسم الرسمي المستخدم في التقارير والواجهات."
+                      placeholder="مثال: Maedin Capital"
+                      value={app.name}
+                      onChange={v => setApp({ ...app, name: v })}
+                      error={
+                        shouldShowAppFieldFeedback("name")
+                          ? appValidation.errors.name
+                          : undefined
+                      }
+                    />
+                    <SettingsField
+                      label="العنوان"
+                      description="عنوان مختصر للمقر أو الجهة التشغيلية."
+                      placeholder="الرياض، المملكة العربية السعودية"
+                      value={app.address}
+                      onChange={v => setApp({ ...app, address: v })}
+                      textarea
+                      rows={4}
+                      containerClassName="md:col-span-2"
+                      className="min-h-[124px]"
+                      error={
+                        shouldShowAppFieldFeedback("address")
+                          ? appValidation.errors.address
+                          : undefined
+                      }
+                    />
+                  </div>
+                </SettingsSectionCard>
+
+                <SettingsSectionCard
+                  icon={Mail}
+                  eyebrow="Module 02"
+                  title="Contact Details"
+                  description="بيانات التواصل الرسمية التي يعتمد عليها المستخدمون والإدارة."
+                >
+                  <div className="grid gap-5 md:grid-cols-2">
+                    <SettingsField
+                      label="البريد الإلكتروني"
+                      description="البريد المعتمد للدعم والتواصل الرسمي."
+                      placeholder="support@maedin.sa"
+                      value={app.email}
+                      onChange={v => setApp({ ...app, email: v })}
+                      type="email"
+                      dir="ltr"
+                      inputClassName="text-left"
+                      error={
+                        shouldShowAppFieldFeedback("email")
+                          ? appValidation.errors.email
+                          : undefined
+                      }
+                    />
+                    <SettingsField
+                      label="رقم الهاتف"
+                      description="رقم خدمة العملاء أو خط الدعم الأساسي."
+                      placeholder="+966 5X XXX XXXX"
+                      value={app.phone}
+                      onChange={v => setApp({ ...app, phone: v })}
+                      dir="ltr"
+                      inputClassName="text-left"
+                      error={
+                        shouldShowAppFieldFeedback("phone")
+                          ? appValidation.errors.phone
+                          : undefined
+                      }
+                    />
+                  </div>
+                </SettingsSectionCard>
+
+                <SettingsSectionCard
+                  icon={Landmark}
+                  eyebrow="Module 03"
+                  title="Investment Rules"
+                  description="الحدود التشغيلية الافتراضية لطلبات الاستثمار الجديدة."
+                >
+                  <div className="grid gap-5 md:grid-cols-2">
+                    <SettingsField
+                      label="الحد الأدنى للاستثمار"
+                      description="أقل قيمة مسموحة لبدء طلب استثماري."
+                      placeholder="50000"
+                      value={app.minInvestment}
+                      onChange={v => setApp({ ...app, minInvestment: v })}
+                      suffix="ر.س"
+                      inputMode="decimal"
+                      dir="ltr"
+                      inputClassName="text-right font-semibold tabular-nums"
+                      helper={
+                        appValidation.minInvestmentValue !== null
+                          ? `القيمة الحالية: ${formatNumberEN(appValidation.minInvestmentValue)} ر.س`
+                          : "اكتب الرقم بدون نصوص إضافية."
+                      }
+                      error={
+                        shouldShowAppFieldFeedback("minInvestment")
+                          ? appValidation.errors.minInvestment
+                          : undefined
+                      }
+                    />
+                    <SettingsField
+                      label="الحد الأعلى للاستثمار"
+                      description="السقف الافتراضي لكل استثمار داخل المنصة."
+                      placeholder="500000"
+                      value={app.maxInvestment}
+                      onChange={v => setApp({ ...app, maxInvestment: v })}
+                      suffix="ر.س"
+                      inputMode="decimal"
+                      dir="ltr"
+                      inputClassName="text-right font-semibold tabular-nums"
+                      helper={
+                        appValidation.maxInvestmentValue !== null
+                          ? `القيمة الحالية: ${formatNumberEN(appValidation.maxInvestmentValue)} ر.س`
+                          : "اكتب الرقم بدون نصوص إضافية."
+                      }
+                      error={
+                        shouldShowAppFieldFeedback("maxInvestment")
+                          ? appValidation.errors.maxInvestment
+                          : undefined
+                      }
+                    />
+                  </div>
+                </SettingsSectionCard>
+
+                <SettingsSectionCard
+                  icon={TrendingUp}
+                  eyebrow="Module 04"
+                  title="Financial Defaults"
+                  description="العائد والمدة المرجعية للمشاريع والاستثمارات الجديدة."
+                >
+                  <div className="grid gap-5 md:grid-cols-2">
+                    <SettingsField
+                      label="العائد الافتراضي"
+                      description="نسبة عائد مرجعية قبل تخصيص كل مشروع."
+                      placeholder="12"
+                      value={app.defaultReturn}
+                      onChange={v => setApp({ ...app, defaultReturn: v })}
+                      suffix="%"
+                      inputMode="decimal"
+                      dir="ltr"
+                      inputClassName="text-right font-semibold tabular-nums"
+                      helper={
+                        appValidation.defaultReturnValue !== null
+                          ? `المعدل الحالي: ${formatNumberEN(appValidation.defaultReturnValue)}%`
+                          : "أدخل نسبة مرجعية للمشاريع الجديدة."
+                      }
+                      error={
+                        shouldShowAppFieldFeedback("defaultReturn")
+                          ? appValidation.errors.defaultReturn
+                          : undefined
+                      }
+                    />
+                    <SettingsField
+                      label="الأفق الافتراضي"
+                      description="المدة الأساسية للاستثمار قبل التخصيص."
+                      placeholder="3"
+                      value={app.defaultHorizonYears}
+                      onChange={v => setApp({ ...app, defaultHorizonYears: v })}
+                      suffix="سنة"
+                      inputMode="decimal"
+                      dir="ltr"
+                      inputClassName="text-right font-semibold tabular-nums"
+                      helper={
+                        appValidation.defaultHorizonValue !== null
+                          ? `المدة الحالية: ${formatNumberEN(appValidation.defaultHorizonValue)} سنة`
+                          : "استخدم رقمًا يمثل عدد السنوات."
+                      }
+                      error={
+                        shouldShowAppFieldFeedback("defaultHorizonYears")
+                          ? appValidation.errors.defaultHorizonYears
+                          : undefined
+                      }
+                    />
+                  </div>
+                </SettingsSectionCard>
+              </div>
+
+              <div className="space-y-4 xl:sticky xl:top-24 self-start">
+                <SettingsSavePanel
+                  appDirty={appDirty}
+                  savingApp={savingApp}
+                  appIssues={appIssues}
+                  changedFields={changedAppFields}
+                  onReset={resetAppChanges}
+                  onSave={saveApp}
+                />
+
+                <Alert className="border-slate-200/80 bg-white shadow-[0_16px_40px_-34px_rgba(15,23,42,0.25)]">
+                  <Sparkles className="h-4 w-4" />
+                  <AlertTitle>بدون تغيير في المنطق</AlertTitle>
+                  <AlertDescription className="leading-7">
+                    الحفظ ما زال يستخدم نفس Firestore document ونفس أسماء الحقول
+                    الحالية، والتعديل هنا يقتصر على طبقة UI / UX فقط.
+                  </AlertDescription>
+                </Alert>
+              </div>
+            </div>
           </TabsContent>
 
           {/* =========================
               Notifications
           ========================= */}
-          <TabsContent value="notifications">
-            <Card>
-              <CardHeader>
-                <CardTitle>الإشعارات</CardTitle>
-                <CardDescription>تحكم في إشعارات النظام</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <Toggle
-                  label="إشعارات البريد"
-                  value={notifications.email}
-                  onChange={(v: boolean) =>
-                    setNotifications({ ...notifications, email: v })
+          <TabsContent value="notifications" className="space-y-6">
+            <SettingsTabHero
+              eyebrow="Notification Center"
+              title="إعدادات الإشعارات"
+              description="تحكم في قنوات التنبيه والأحداث التي تستحق إشعارًا داخل النظام، مع فصل واضح بين قنوات الإرسال ومحفزات التنبيه."
+              stats={[
+                {
+                  icon: Bell,
+                  label: "Enabled",
+                  value: formatNumberEN(notificationsEnabledCount),
+                  helper: "عدد الإعدادات المفعلة حاليًا",
+                },
+                {
+                  icon: Mail,
+                  label: "Channels",
+                  value: formatNumberEN(
+                    [notifications.email, notifications.sms].filter(Boolean)
+                      .length
+                  ),
+                  helper: "قنوات الإرسال النشطة",
+                },
+                {
+                  icon: Globe,
+                  label: "Triggers",
+                  value: formatNumberEN(
+                    [notifications.investments, notifications.messages].filter(
+                      Boolean
+                    ).length
+                  ),
+                  helper: "الأحداث التي تولد إشعارات",
+                },
+              ]}
+              panel={
+                <SettingsHeroPanel
+                  status={
+                    notificationsEnabledCount > 0 ? "Operational" : "Muted"
                   }
+                  title="تنبيهات النظام"
+                  description="يمكنك ضبط القنوات ومحفزات التنبيه من دون تغيير أي منطق تشغيلي أو طرق الإرسال."
+                  metrics={[
+                    {
+                      label: "البريد الإلكتروني",
+                      value: notifications.email ? "مفعّل" : "موقوف",
+                      helper: "القناة الرسمية الأساسية",
+                    },
+                    {
+                      label: "الرسائل النصية",
+                      value: notifications.sms ? "مفعّل" : "موقوف",
+                      helper: "للتنبيهات الحساسة أو العاجلة",
+                    },
+                    {
+                      label: "الأحداث الرئيسية",
+                      value:
+                        notifications.investments || notifications.messages
+                          ? "نشطة"
+                          : "صامتة",
+                      helper: "الاستثمارات والرسائل الجديدة",
+                    },
+                  ]}
                 />
-                <Toggle
-                  label="إشعارات SMS"
-                  value={notifications.sms}
-                  onChange={(v: boolean) =>
-                    setNotifications({ ...notifications, sms: v })
-                  }
-                />
-                <Toggle
-                  label="استثمارات جديدة"
-                  value={notifications.investments}
-                  onChange={(v: boolean) =>
-                    setNotifications({ ...notifications, investments: v })
-                  }
-                />
-                <Toggle
-                  label="رسائل جديدة"
-                  value={notifications.messages}
-                  onChange={(v: boolean) =>
-                    setNotifications({ ...notifications, messages: v })
-                  }
-                />
+              }
+            />
 
-                <Button className="bg-[#F2B705]" onClick={saveNotifications}>
-                  حفظ
-                </Button>
-              </CardContent>
-            </Card>
+            <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+              <div className="space-y-6">
+                <SettingsSectionCard
+                  icon={Mail}
+                  eyebrow="Module 01"
+                  title="Delivery Channels"
+                  description="اختر قنوات الإرسال التي يعتمد عليها النظام عند بث التنبيهات الإدارية."
+                >
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <Toggle
+                      label="إشعارات البريد"
+                      description="إرسال التنبيهات الرسمية عبر البريد الإلكتروني المسجل."
+                      value={notifications.email}
+                      onChange={(v: boolean) =>
+                        setNotifications({ ...notifications, email: v })
+                      }
+                    />
+                    <Toggle
+                      label="إشعارات SMS"
+                      description="إرسال تنبيهات نصية مختصرة للرسائل أو الحالات الحرجة."
+                      value={notifications.sms}
+                      onChange={(v: boolean) =>
+                        setNotifications({ ...notifications, sms: v })
+                      }
+                    />
+                  </div>
+                </SettingsSectionCard>
+
+                <SettingsSectionCard
+                  icon={Bell}
+                  eyebrow="Module 02"
+                  title="Event Triggers"
+                  description="حدد ما إذا كان النظام ينشئ تنبيهات عند وصول استثمارات أو رسائل جديدة."
+                >
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <Toggle
+                      label="استثمارات جديدة"
+                      description="تنبيه الإدارة عندما يصل طلب استثمار أو تحديث استثماري جديد."
+                      value={notifications.investments}
+                      onChange={(v: boolean) =>
+                        setNotifications({
+                          ...notifications,
+                          investments: v,
+                        })
+                      }
+                    />
+                    <Toggle
+                      label="رسائل جديدة"
+                      description="تنبيه الفريق عند استقبال رسالة جديدة من المستخدمين أو العملاء."
+                      value={notifications.messages}
+                      onChange={(v: boolean) =>
+                        setNotifications({ ...notifications, messages: v })
+                      }
+                    />
+                  </div>
+                </SettingsSectionCard>
+              </div>
+
+              <div className="space-y-4 xl:sticky xl:top-24 self-start">
+                <SettingsSimpleActionPanel
+                  title="حفظ إعدادات الإشعارات"
+                  description="احفظ تفضيلات الإشعارات الحالية إلى نفس مستند الإعدادات بدون أي تغيير على منطق الإرسال."
+                  metrics={[
+                    {
+                      label: "القنوات المفعلة",
+                      value: formatNumberEN(
+                        [notifications.email, notifications.sms].filter(Boolean)
+                          .length
+                      ),
+                      helper: "Email / SMS",
+                    },
+                    {
+                      label: "الأحداث المفعلة",
+                      value: formatNumberEN(
+                        [
+                          notifications.investments,
+                          notifications.messages,
+                        ].filter(Boolean).length
+                      ),
+                      helper: "Investments / Messages",
+                    },
+                  ]}
+                  primaryLabel="Save Notification Settings"
+                  primaryAction={saveNotifications}
+                  notice={
+                    <Alert className="border-white/10 bg-white/5 text-white">
+                      <Bell className="h-4 w-4 text-[#F2B705]" />
+                      <AlertTitle className="text-white">
+                        تفعيل متوازن
+                      </AlertTitle>
+                      <AlertDescription className="text-white/70">
+                        يفضّل إبقاء قناة واحدة على الأقل مفعلة حتى لا تصبح
+                        المنصة صامتة بالكامل.
+                      </AlertDescription>
+                    </Alert>
+                  }
+                />
+              </div>
+            </div>
           </TabsContent>
 
           {/* =========================
               Security
           ========================= */}
-          <TabsContent value="security">
-            <Card>
-              <CardHeader>
-                <CardTitle>الأمان</CardTitle>
-                <CardDescription>إعدادات أمان عامة</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <Toggle
-                  label="المصادقة الثنائية"
-                  value={security.twoFactor}
-                  onChange={(v: boolean) => setSecurity({ twoFactor: v })}
+          <TabsContent value="security" className="space-y-6">
+            <SettingsTabHero
+              eyebrow="Security Controls"
+              title="إعدادات الأمان"
+              description="لوحة موحدة للتحكم في إعدادات الأمان العامة للمنصة مع إبراز الحالة الحالية والجاهزية التشغيلية."
+              stats={[
+                {
+                  icon: Shield,
+                  label: "Policies",
+                  value: formatNumberEN(Object.keys(security).length),
+                  helper: "سياسات أمنية مرتبطة بالإعدادات",
+                },
+                {
+                  icon: CheckCircle2,
+                  label: "Enabled",
+                  value: formatNumberEN(securityEnabledCount),
+                  helper: "عدد السياسات المفعلة حاليًا",
+                },
+                {
+                  icon: KeyRound,
+                  label: "2FA",
+                  value: security.twoFactor ? "On" : "Off",
+                  helper: "المصادقة الثنائية للإدارة",
+                },
+              ]}
+              panel={
+                <SettingsHeroPanel
+                  status={security.twoFactor ? "Protected" : "Basic"}
+                  title="حالة الأمان"
+                  description="هذا التبويب يحافظ على نفس المنطق الحالي مع تحسين واضح في العرض والقراءة واتخاذ القرار."
+                  metrics={[
+                    {
+                      label: "المصادقة الثنائية",
+                      value: security.twoFactor ? "مفعلة" : "غير مفعلة",
+                      helper: "للتحقق الإضافي أثناء تسجيل الدخول",
+                    },
+                    {
+                      label: "جاهزية المراجعة",
+                      value: "فورية",
+                      helper: "التغيير ينعكس فقط على واجهة الإعدادات الحالية",
+                    },
+                  ]}
                 />
-                <Button className="bg-[#F2B705]" onClick={saveSecurity}>
-                  حفظ
-                </Button>
-              </CardContent>
-            </Card>
+              }
+            />
+
+            <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+              <div className="space-y-6">
+                <SettingsSectionCard
+                  icon={Shield}
+                  eyebrow="Module 01"
+                  title="Authentication Policy"
+                  description="التحكم في إعداد التحقق الإضافي للإدارة من داخل لوحة إعدادات موحدة وأكثر وضوحًا."
+                >
+                  <div className="grid gap-4">
+                    <Toggle
+                      label="المصادقة الثنائية"
+                      description="إضافة طبقة تحقق إضافية لحسابات الإدارة عند تسجيل الدخول."
+                      value={security.twoFactor}
+                      onChange={(v: boolean) => setSecurity({ twoFactor: v })}
+                    />
+                  </div>
+                </SettingsSectionCard>
+
+                <SettingsSectionCard
+                  icon={CircleAlert}
+                  eyebrow="Module 02"
+                  title="Security Guidance"
+                  description="توصيات تشغيلية سريعة للحفاظ على مستوى موثوق من الأمان داخل لوحة الإدارة."
+                >
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <Alert className="border-slate-200 bg-slate-50">
+                      <Shield className="h-4 w-4" />
+                      <AlertTitle>وضع الحماية</AlertTitle>
+                      <AlertDescription className="leading-7">
+                        عند تفعيل المصادقة الثنائية، تصبح حسابات الإدارة أكثر
+                        مقاومة للوصول غير المصرح به.
+                      </AlertDescription>
+                    </Alert>
+                    <Alert className="border-slate-200 bg-slate-50">
+                      <KeyRound className="h-4 w-4" />
+                      <AlertTitle>بدون تغيير في المنطق</AlertTitle>
+                      <AlertDescription className="leading-7">
+                        التعديل هنا بصري فقط، مع الحفاظ على نفس بنية المستند
+                        الحالية ونفس سلوك الحفظ.
+                      </AlertDescription>
+                    </Alert>
+                  </div>
+                </SettingsSectionCard>
+              </div>
+
+              <div className="space-y-4 xl:sticky xl:top-24 self-start">
+                <SettingsSimpleActionPanel
+                  title="حفظ إعدادات الأمان"
+                  description="استخدم زر الحفظ لتثبيت الإعداد الحالي على نفس مستند الأمان الموجود بالفعل."
+                  metrics={[
+                    {
+                      label: "السياسات النشطة",
+                      value: formatNumberEN(securityEnabledCount),
+                      helper: "من إجمالي السياسات الحالية",
+                    },
+                    {
+                      label: "المستوى الحالي",
+                      value: security.twoFactor ? "محمي" : "أساسي",
+                      helper: "بحسب حالة المصادقة الثنائية",
+                    },
+                  ]}
+                  primaryLabel="Save Security Settings"
+                  primaryAction={saveSecurity}
+                  notice={
+                    <Alert className="border-white/10 bg-white/5 text-white">
+                      <Shield className="h-4 w-4 text-[#F2B705]" />
+                      <AlertTitle className="text-white">
+                        توصية تشغيلية
+                      </AlertTitle>
+                      <AlertDescription className="text-white/70">
+                        تفعيل المصادقة الثنائية يرفع موثوقية المنصة خصوصًا عند
+                        وجود أكثر من حساب إداري.
+                      </AlertDescription>
+                    </Alert>
+                  }
+                />
+              </div>
+            </div>
           </TabsContent>
 
           {/* =========================
               Roles & Permissions
           ========================= */}
-          <TabsContent value="roles">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle>الأدوار والصلاحيات</CardTitle>
-                  <CardDescription>
-                    أنشئ Role لأي تخصص، وحدد صلاحياته — وهذا اللي بنبني عليه
-                    Rules لاحقًا
-                  </CardDescription>
-                </div>
-                <Button onClick={openCreateRole} className="bg-[#F2B705]">
+          <TabsContent value="roles" className="space-y-6">
+            <SettingsTabHero
+              eyebrow="Roles & Permissions"
+              title="الأدوار والصلاحيات"
+              description="إدارة الأدوار وصلاحياتها من خلال لوحة أكثر تنظيمًا، مع إبراز الأدوار الأساسية، الأدوار النشطة، وحجم كتالوج الصلاحيات المتاح."
+              stats={[
+                {
+                  icon: KeyRound,
+                  label: "Roles",
+                  value: formatNumberEN(roles.length),
+                  helper: "إجمالي الأدوار المحفوظة",
+                },
+                {
+                  icon: CheckCircle2,
+                  label: "Active",
+                  value: formatNumberEN(activeRolesCount),
+                  helper: "عدد الأدوار النشطة حاليًا",
+                },
+                {
+                  icon: Shield,
+                  label: "Permissions",
+                  value: formatNumberEN(DEFAULT_PERMISSIONS.length),
+                  helper: "كتالوج الصلاحيات المتاح",
+                },
+              ]}
+              panel={
+                <SettingsHeroPanel
+                  status="Governed"
+                  title="حوكمة الوصول"
+                  description="كل الأدوار هنا تعتمد على نفس البنية الحالية في Firestore، لكن الواجهة الآن أوضح في عرض الحالة والصلاحيات والإجراءات."
+                  metrics={[
+                    {
+                      label: "الأدوار الأساسية",
+                      value: formatNumberEN(systemRolesCount),
+                      helper: "System roles",
+                    },
+                    {
+                      label: "الأدوار المخصصة",
+                      value: formatNumberEN(roles.length - systemRolesCount),
+                      helper: "Custom roles",
+                    },
+                    {
+                      label: "الحالة العامة",
+                      value: activeRolesCount > 0 ? "نشطة" : "فارغة",
+                      helper: "بحسب عدد الأدوار المفعلة",
+                    },
+                  ]}
+                />
+              }
+            />
+
+            <SettingsSectionCard
+              icon={KeyRound}
+              eyebrow="Module 01"
+              title="Role Directory"
+              description="أنشئ أدوارًا جديدة أو راجع الأدوار الحالية وصلاحياتها من بطاقة موحدة لكل دور."
+              action={
+                <Button
+                  onClick={openCreateRole}
+                  className="bg-[#F2B705] text-slate-950 hover:bg-[#e0ab00]"
+                >
                   <Plus className="w-4 h-4 ml-2" /> Role جديد
                 </Button>
-              </CardHeader>
-
-              <CardContent className="space-y-3">
-                {roles.length ? (
-                  <div className="grid gap-3">
-                    {roles
-                      .slice()
-                      .sort((a, b) => a.key.localeCompare(b.key))
-                      .map(r => (
-                        <div
-                          key={r.key}
-                          className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 border rounded-lg p-4"
-                        >
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <Badge variant="outline">
+              }
+            >
+              {roles.length ? (
+                <div className="grid gap-4 xl:grid-cols-2">
+                  {roles
+                    .slice()
+                    .sort((a, b) => a.key.localeCompare(b.key))
+                    .map(r => (
+                      <div
+                        key={r.key}
+                        className="rounded-[24px] border border-slate-200/80 bg-slate-50/60 p-5 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.24)]"
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-4">
+                          <div className="space-y-3">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Badge variant="outline" className="rounded-full">
                                 {getRoleDisplayLabel(r.key) || r.key}
                               </Badge>
-                              <span className="font-bold">{r.nameAr}</span>
-                              {!r.isActive ? (
-                                <Badge variant="secondary">موقوف</Badge>
-                              ) : null}
+                              <Badge
+                                variant="outline"
+                                className={cn(
+                                  "rounded-full",
+                                  r.isActive
+                                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                    : "border-slate-200 bg-white text-slate-500"
+                                )}
+                              >
+                                {r.isActive ? "نشط" : "موقوف"}
+                              </Badge>
                               {SYSTEM_ROLE_KEYS.includes(r.key) ? (
-                                <Badge>أساسي</Badge>
+                                <Badge className="rounded-full">أساسي</Badge>
                               ) : null}
                             </div>
 
-                            {r.description ? (
-                              <p className="text-sm text-muted-foreground">
-                                {r.description}
-                              </p>
-                            ) : null}
-
-                            <div className="flex flex-wrap gap-2 mt-2">
-                              {r.permissions?.length ? (
-                                r.permissions.slice(0, 10).map(p => (
-                                  <Badge key={p} variant="secondary">
-                                    {p}
-                                  </Badge>
-                                ))
-                              ) : (
-                                <span className="text-sm text-muted-foreground">
-                                  لا توجد صلاحيات
-                                </span>
-                              )}
-                              {r.permissions?.length > 10 ? (
-                                <Badge variant="secondary">
-                                  +{r.permissions.length - 10}
-                                </Badge>
-                              ) : null}
+                            <div>
+                              <div className="text-lg font-semibold tracking-tight text-slate-950">
+                                {r.nameAr}
+                              </div>
+                              <div className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-500">
+                                {r.nameEn || r.key}
+                              </div>
                             </div>
+
+                            <p className="min-h-[48px] text-sm leading-7 text-slate-600">
+                              {r.description ||
+                                "لا يوجد وصف مخصص لهذا الدور بعد."}
+                            </p>
                           </div>
 
-                          <div className="flex gap-2">
-                            <Button
-                              variant="outline"
-                              onClick={() => openEditRole(r)}
-                            >
-                              <Pencil className="w-4 h-4 ml-2" /> تعديل
-                            </Button>
-                            <Button
-                              variant="outline"
-                              onClick={async () => {
-                                const next = roles.map(x =>
-                                  x.key === r.key
-                                    ? { ...x, isActive: !x.isActive }
-                                    : x
-                                );
-                                try {
-                                  await saveRolesDoc(next);
-                                  setRoles(next);
-                                  toast.success(
-                                    r.isActive
-                                      ? "تم إيقاف الدور"
-                                      : "تم تفعيل الدور"
-                                  );
-                                } catch (e) {
-                                  console.error(e);
-                                  toast.error("فشل تحديث الدور");
-                                }
-                              }}
-                            >
-                              {r.isActive ? "إيقاف" : "تفعيل"}
-                            </Button>
-                            <Button
-                              variant="destructive"
-                              onClick={() => handleDeleteRole(r.key)}
-                              disabled={SYSTEM_ROLE_KEYS.includes(r.key)}
-                            >
-                              <Trash2 className="w-4 h-4 ml-2" /> حذف
-                            </Button>
+                          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-center">
+                            <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
+                              Permissions
+                            </div>
+                            <div className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">
+                              {formatNumberEN(r.permissions?.length || 0)}
+                            </div>
                           </div>
                         </div>
-                      ))}
+
+                        <div className="mt-5 flex flex-wrap gap-2">
+                          {r.permissions?.length ? (
+                            r.permissions.slice(0, 8).map(permission => (
+                              <Badge
+                                key={permission}
+                                variant="secondary"
+                                className="rounded-full"
+                              >
+                                {permission}
+                              </Badge>
+                            ))
+                          ) : (
+                            <span className="text-sm text-slate-500">
+                              لا توجد صلاحيات مرتبطة بهذا الدور.
+                            </span>
+                          )}
+                          {(r.permissions?.length || 0) > 8 ? (
+                            <Badge variant="outline" className="rounded-full">
+                              +{(r.permissions?.length || 0) - 8}
+                            </Badge>
+                          ) : null}
+                        </div>
+
+                        <div className="mt-5 flex flex-wrap gap-2">
+                          <Button
+                            variant="outline"
+                            onClick={() => openEditRole(r)}
+                          >
+                            <Pencil className="w-4 h-4 ml-2" /> تعديل
+                          </Button>
+                          <Button
+                            variant="outline"
+                            onClick={async () => {
+                              const next = roles.map(x =>
+                                x.key === r.key
+                                  ? { ...x, isActive: !x.isActive }
+                                  : x
+                              );
+                              try {
+                                await saveRolesDoc(next);
+                                setRoles(next);
+                                toast.success(
+                                  r.isActive
+                                    ? "تم إيقاف الدور"
+                                    : "تم تفعيل الدور"
+                                );
+                              } catch (e) {
+                                console.error(e);
+                                toast.error("فشل تحديث الدور");
+                              }
+                            }}
+                          >
+                            {r.isActive ? "إيقاف" : "تفعيل"}
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            onClick={() => handleDeleteRole(r.key)}
+                            disabled={SYSTEM_ROLE_KEYS.includes(r.key)}
+                          >
+                            <Trash2 className="w-4 h-4 ml-2" /> حذف
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              ) : (
+                <div className="rounded-[22px] border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-500">
+                  لا توجد أدوار محفوظة بعد. ابدأ بإنشاء Role جديد لإكمال الهيكل.
+                </div>
+              )}
+            </SettingsSectionCard>
+
+            <SettingsSectionCard
+              icon={Shield}
+              eyebrow="Module 02"
+              title="Permission Catalog"
+              description="مرجع سريع للصلاحيات المتاحة داخل النظام كما يتم استخدامها حاليًا."
+            >
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {DEFAULT_PERMISSIONS.map(permission => (
+                  <div
+                    key={permission.key}
+                    className="rounded-[20px] border border-slate-200 bg-white p-4"
+                  >
+                    <div className="text-sm font-semibold text-slate-950">
+                      {permission.label}
+                    </div>
+                    <div className="mt-2 text-xs leading-6 text-slate-500">
+                      {permission.key}
+                    </div>
                   </div>
-                ) : (
-                  <div className="text-sm text-muted-foreground">
-                    لا توجد Roles محفوظة بعد. اضغط “Role جديد”.
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+                ))}
+              </div>
+            </SettingsSectionCard>
           </TabsContent>
 
           {/* =========================
               Admin Accounts
           ========================= */}
-          <TabsContent value="admins">
-            <Card className="mb-4">
-              <CardHeader>
-                <CardTitle>ترقية مباشرة (بدون دعوة)</CardTitle>
-                <CardDescription>
-                  يرقّي مستخدم موجود بالفعل في users حسب الإيميل (لا ينشئ حساب
-                  جديد).
-                </CardDescription>
-              </CardHeader>
+          <TabsContent value="admins" className="space-y-6">
+            <SettingsTabHero
+              eyebrow="Admin Access"
+              title="حسابات الإدارة"
+              description="إدارة الترقية، الدعوات، والحسابات الإدارية من تبويب واحد منظم يعرض الحالة الحالية، القنوات المفتوحة، وعدد الحسابات النشطة بوضوح."
+              stats={[
+                {
+                  icon: Users,
+                  label: "Admins",
+                  value: formatNumberEN(adminUsers.length),
+                  helper: "إجمالي حسابات الإدارة",
+                },
+                {
+                  icon: CheckCircle2,
+                  label: "Active",
+                  value: formatNumberEN(activeAdminsCount),
+                  helper: "الحسابات المفعلة حاليًا",
+                },
+                {
+                  icon: Mail,
+                  label: "Invites",
+                  value: formatNumberEN(roleInvites.length),
+                  helper: "دعوات وربط أدوار عبر البريد",
+                },
+              ]}
+              panel={
+                <SettingsHeroPanel
+                  status="Access Managed"
+                  title="إدارة الوصول"
+                  description="يمكنك هنا الترقية المباشرة، إنشاء دعوات بالدور، وإدارة الحسابات الإدارية القائمة بنفس المنطق الحالي."
+                  metrics={[
+                    {
+                      label: "الدعوات المفعلة",
+                      value: formatNumberEN(activeInvitesCount),
+                      helper: "Active role invites",
+                    },
+                    {
+                      label: "الحسابات المباشرة",
+                      value: formatNumberEN(adminUsers.length),
+                      helper: "Firestore admin_users",
+                    },
+                    {
+                      label: "الجاهزية الحالية",
+                      value: adminUsers.length > 0 ? "مكتملة" : "قيد الإعداد",
+                      helper: "بحسب وجود حسابات إدارية",
+                    },
+                  ]}
+                />
+              }
+            />
 
-              <CardContent className="space-y-4">
-                <div className="grid md:grid-cols-3 gap-4">
-                  <div className="space-y-1 md:col-span-2">
-                    <Label>الإيميل</Label>
-                    <Input
-                      value={promoteEmail}
-                      onChange={e => setPromoteEmail(e.target.value)}
-                      placeholder="info@madanalbena.com"
-                    />
-                  </div>
+            <SettingsSectionCard
+              icon={Users}
+              eyebrow="Module 01"
+              title="Direct Promotion"
+              description="ترقية مستخدم موجود داخل users مباشرةً عبر البريد الإلكتروني، من دون إنشاء حساب جديد."
+            >
+              <div className="grid gap-5 md:grid-cols-3">
+                <SettingsField
+                  label="الإيميل"
+                  description="البريد الخاص بالمستخدم الموجود مسبقًا داخل users."
+                  placeholder="info@madanalbena.com"
+                  value={promoteEmail}
+                  onChange={setPromoteEmail}
+                  dir="ltr"
+                  inputClassName="text-left"
+                  containerClassName="md:col-span-2"
+                />
 
-                  <div className="space-y-1">
-                    <Label>الدور</Label>
-                    <Select
-                      value={promoteRoleKey}
-                      onValueChange={(v: any) =>
-                        setPromoteRoleKey(normalizeAdminRoleKey(v))
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="accountant">
-                          محاسب (accountant)
-                        </SelectItem>
-                        <SelectItem value="staff">موظف (staff)</SelectItem>
-                        <SelectItem value="admin">أدمن (admin)</SelectItem>
-                        <SelectItem value="owner">المالك (owner)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
+                <SettingsSelectField
+                  label="الدور"
+                  description="الدور الذي سيتم تعيينه مباشرة للمستخدم."
+                >
+                  <Select
+                    value={promoteRoleKey}
+                    onValueChange={(v: any) =>
+                      setPromoteRoleKey(normalizeAdminRoleKey(v))
+                    }
+                  >
+                    <SelectTrigger className="h-12 rounded-xl border-slate-200 bg-white px-4 shadow-none">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="accountant">
+                        محاسب (accountant)
+                      </SelectItem>
+                      <SelectItem value="staff">موظف (staff)</SelectItem>
+                      <SelectItem value="admin">أدمن (admin)</SelectItem>
+                      <SelectItem value="owner">المالك (owner)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </SettingsSelectField>
+              </div>
 
+              <div className="mt-5 flex flex-wrap gap-3">
                 <Button
-                  className="bg-[#F2B705]"
+                  className="bg-[#F2B705] text-slate-950 hover:bg-[#e0ab00]"
                   onClick={promoteExistingUserByEmail}
                   disabled={promoting}
                 >
                   {promoting ? "جاري الترقية..." : "ترقية الآن"}
                 </Button>
-              </CardContent>
-            </Card>
+              </div>
+            </SettingsSectionCard>
 
-            {/* ✅ NEW: Promote by email (no UID needed) */}
-            <Card className="mb-4">
-              <CardHeader>
-                <CardTitle>ترقية دور حسب الإيميل (بدون UID)</CardTitle>
-                <CardDescription>
-                  اكتب الإيميل وحدد الدور — أول ما يسوي Login/Signup يتم تعيين
-                  role تلقائيًا في users/{"{uid}"}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid md:grid-cols-3 gap-4">
-                  <div className="space-y-1 md:col-span-2">
-                    <Label>الإيميل</Label>
-                    <Input
-                      value={inviteEmail}
-                      onChange={e => setInviteEmail(e.target.value)}
-                      placeholder="accountant@example.com"
-                    />
-                  </div>
+            <SettingsSectionCard
+              icon={Mail}
+              eyebrow="Module 02"
+              title="Role Invites"
+              description="ربط دور ببريد إلكتروني حتى يتم تطبيقه تلقائيًا عند تسجيل الدخول أو إنشاء الحساب."
+            >
+              <div className="grid gap-5 md:grid-cols-3">
+                <SettingsField
+                  label="الإيميل"
+                  description="البريد الذي سيحمل الدعوة أو الترقية المؤجلة."
+                  placeholder="accountant@example.com"
+                  value={inviteEmail}
+                  onChange={setInviteEmail}
+                  dir="ltr"
+                  inputClassName="text-left"
+                  containerClassName="md:col-span-2"
+                />
 
-                  <div className="space-y-1">
-                    <Label>الدور</Label>
-                    <Select
-                      value={inviteRoleKey}
-                      onValueChange={(v: any) =>
-                        setInviteRoleKey(normalizeAdminRoleKey(v))
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="accountant">
-                          محاسب (accountant)
-                        </SelectItem>
-                        <SelectItem value="staff">موظف (staff)</SelectItem>
-                        <SelectItem value="admin">أدمن (admin)</SelectItem>
-                        <SelectItem value="owner">المالك (owner)</SelectItem>
-                      </SelectContent>
-                    </Select>
+                <SettingsSelectField
+                  label="الدور"
+                  description="الدور الافتراضي عند تطبيق الدعوة."
+                >
+                  <Select
+                    value={inviteRoleKey}
+                    onValueChange={(v: any) =>
+                      setInviteRoleKey(normalizeAdminRoleKey(v))
+                    }
+                  >
+                    <SelectTrigger className="h-12 rounded-xl border-slate-200 bg-white px-4 shadow-none">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="accountant">
+                        محاسب (accountant)
+                      </SelectItem>
+                      <SelectItem value="staff">موظف (staff)</SelectItem>
+                      <SelectItem value="admin">أدمن (admin)</SelectItem>
+                      <SelectItem value="owner">المالك (owner)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </SettingsSelectField>
+
+                <SettingsField
+                  label="ملاحظات (اختياري)"
+                  description="تفاصيل إضافية توضح غرض الدعوة أو الجهة المسؤولة."
+                  placeholder="مثال: محاسب رسمي"
+                  value={inviteNotes}
+                  onChange={setInviteNotes}
+                  textarea
+                  rows={3}
+                  containerClassName="md:col-span-3"
+                />
+              </div>
+
+              <div className="mt-5 flex flex-wrap gap-3">
+                <Button
+                  className="bg-[#F2B705] text-slate-950 hover:bg-[#e0ab00]"
+                  onClick={upsertRoleInvite}
+                >
+                  حفظ الدعوة
+                </Button>
+              </div>
+
+              <div className="mt-8 space-y-4 border-t border-slate-200 pt-6">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-base font-semibold text-slate-950">
+                      الدعوات الحالية
+                    </div>
+                    <div className="text-sm text-slate-500">
+                      مراجعة الدعوات النشطة أو الموقوفة وإدارتها من هنا.
+                    </div>
                   </div>
+                  <Badge variant="outline" className="rounded-full">
+                    {formatNumberEN(roleInvites.length)}
+                  </Badge>
                 </div>
 
-                <div className="space-y-1">
-                  <Label>ملاحظات (اختياري)</Label>
-                  <Textarea
-                    rows={2}
-                    value={inviteNotes}
-                    onChange={e => setInviteNotes(e.target.value)}
-                    placeholder="مثال: محاسب رسمي"
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <Button className="bg-[#F2B705]" onClick={upsertRoleInvite}>
-                    حفظ الدعوة
-                  </Button>
-                </div>
-
-                <div className="border-t pt-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="font-bold">الدعوات الحالية</div>
-                    <Badge variant="outline">{roleInvites.length}</Badge>
-                  </div>
-
-                  {roleInvites.length ? (
-                    <div className="grid gap-3">
-                      {roleInvites.map(inv => (
-                        <div
-                          key={inv.id}
-                          className="border rounded-lg p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3"
-                        >
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <Badge variant="outline">{inv.email}</Badge>
-                              <Badge variant="secondary">
-                                Role:{" "}
+                {roleInvites.length ? (
+                  <div className="grid gap-4">
+                    {roleInvites.map(inv => (
+                      <div
+                        key={inv.id}
+                        className="rounded-[22px] border border-slate-200 bg-slate-50/70 p-5"
+                      >
+                        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                          <div className="space-y-3">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Badge variant="outline" className="rounded-full">
+                                {inv.email}
+                              </Badge>
+                              <Badge
+                                variant="secondary"
+                                className="rounded-full"
+                              >
                                 {getRoleDisplayLabel(inv.roleKey) ||
                                   inv.roleKey}
                               </Badge>
-                              {inv.isActive ? (
-                                <Badge>مفعّلة</Badge>
-                              ) : (
-                                <Badge variant="secondary">موقوفة</Badge>
-                              )}
+                              <Badge
+                                variant="outline"
+                                className={cn(
+                                  "rounded-full",
+                                  inv.isActive
+                                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                    : "border-slate-200 bg-white text-slate-500"
+                                )}
+                              >
+                                {inv.isActive ? "مفعلة" : "موقوفة"}
+                              </Badge>
                             </div>
-                            {inv.notes ? (
-                              <div className="text-sm text-muted-foreground">
-                                {inv.notes}
-                              </div>
-                            ) : null}
+
+                            <p className="text-sm leading-7 text-slate-600">
+                              {inv.notes ||
+                                "لا توجد ملاحظات مضافة لهذه الدعوة."}
+                            </p>
                           </div>
 
-                          <div className="flex gap-2">
+                          <div className="flex flex-wrap gap-2">
                             <Button
                               variant="outline"
                               onClick={() => toggleInviteActive(inv)}
@@ -2956,69 +4120,83 @@ export default function Settings() {
                             </Button>
                           </div>
                         </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-sm text-muted-foreground">
-                      لا توجد دعوات بعد.
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-[22px] border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-500">
+                    لا توجد دعوات محفوظة حتى الآن.
+                  </div>
+                )}
+              </div>
+            </SettingsSectionCard>
 
-            {/* Existing admin_users card */}
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle>حسابات الإدارة</CardTitle>
-                  <CardDescription>
-                    إنشاء/تعديل/تفعيل/تعطيل حسابات الإدارة (Firestore فقط)
-                  </CardDescription>
-                </div>
-                <Button onClick={openCreateAdmin} className="bg-[#F2B705]">
+            <SettingsSectionCard
+              icon={Users}
+              eyebrow="Module 03"
+              title="Admin Accounts Directory"
+              description="إدارة الحسابات الإدارية الحالية ومراجعة صلاحياتها الفعلية وحالتها التشغيلية."
+              action={
+                <Button
+                  onClick={openCreateAdmin}
+                  className="bg-[#F2B705] text-slate-950 hover:bg-[#e0ab00]"
+                >
                   <Plus className="w-4 h-4 ml-2" /> حساب إداري جديد
                 </Button>
-              </CardHeader>
-
-              <CardContent className="space-y-3">
-                {adminUsers.length ? (
-                  <div className="grid gap-3">
-                    {adminUsers
-                      .slice()
-                      .sort((a, b) =>
-                        String(a.email || "").localeCompare(
-                          String(b.email || "")
-                        )
-                      )
-                      .map(u => (
-                        <div
-                          key={u.id}
-                          className="border rounded-lg p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3"
-                        >
-                          <div className="space-y-1">
+              }
+            >
+              {adminUsers.length ? (
+                <div className="grid gap-4 xl:grid-cols-2">
+                  {adminUsers
+                    .slice()
+                    .sort((a, b) =>
+                      String(a.email || "").localeCompare(String(b.email || ""))
+                    )
+                    .map(u => (
+                      <div
+                        key={u.id}
+                        className="rounded-[24px] border border-slate-200/80 bg-slate-50/60 p-5 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.24)]"
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-4">
+                          <div className="space-y-3">
                             <div className="flex flex-wrap items-center gap-2">
-                              <Badge variant="outline">ID: {u.id}</Badge>
-                              <span className="font-bold">
-                                {u.displayName || "بدون اسم"}
-                              </span>
-                              {u.isActive ? (
-                                <Badge>مفعّل</Badge>
-                              ) : (
-                                <Badge variant="secondary">معطّل</Badge>
-                              )}
-                              <Badge variant="secondary">
-                                Role:{" "}
+                              <Badge variant="outline" className="rounded-full">
+                                ID: {u.id}
+                              </Badge>
+                              <Badge
+                                variant="outline"
+                                className={cn(
+                                  "rounded-full",
+                                  u.isActive
+                                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                    : "border-slate-200 bg-white text-slate-500"
+                                )}
+                              >
+                                {u.isActive ? "مفعّل" : "معطّل"}
+                              </Badge>
+                              <Badge
+                                variant="secondary"
+                                className="rounded-full"
+                              >
                                 {getRoleDisplayLabel(u.roleKey) || u.roleKey}
                               </Badge>
                               {u.title ? (
-                                <Badge variant="outline">
+                                <Badge
+                                  variant="outline"
+                                  className="rounded-full"
+                                >
                                   {u.title}
                                 </Badge>
                               ) : null}
                             </div>
-                            <div className="text-sm text-muted-foreground">
-                              {u.email}
+
+                            <div>
+                              <div className="text-lg font-semibold tracking-tight text-slate-950">
+                                {u.displayName || "بدون اسم"}
+                              </div>
+                              <div className="mt-1 text-sm text-slate-500">
+                                {u.email}
+                              </div>
                             </div>
 
                             {getEffectivePermissionKeys(
@@ -3026,7 +4204,7 @@ export default function Settings() {
                               u.permissionsAllow || [],
                               u.permissionsDeny || []
                             ).length ? (
-                              <div className="flex flex-wrap gap-2 mt-2">
+                              <div className="flex flex-wrap gap-2">
                                 {getEffectivePermissionKeys(
                                   u.roleKey,
                                   u.permissionsAllow || [],
@@ -3037,6 +4215,7 @@ export default function Settings() {
                                     <Badge
                                       key={`effective-${u.id}-${p}`}
                                       variant="secondary"
+                                      className="rounded-full"
                                     >
                                       {p}
                                     </Badge>
@@ -3046,13 +4225,14 @@ export default function Settings() {
 
                             {u.permissionsAllow?.length ||
                             u.permissionsDeny?.length ? (
-                              <div className="flex flex-wrap gap-2 mt-2">
+                              <div className="flex flex-wrap gap-2">
                                 {(u.permissionsAllow || [])
                                   .slice(0, 6)
                                   .map(p => (
                                     <Badge
                                       key={`a-${u.id}-${p}`}
                                       variant="secondary"
+                                      className="rounded-full"
                                     >
                                       + {p}
                                     </Badge>
@@ -3063,6 +4243,7 @@ export default function Settings() {
                                     <Badge
                                       key={`d-${u.id}-${p}`}
                                       variant="outline"
+                                      className="rounded-full"
                                     >
                                       - {p}
                                     </Badge>
@@ -3070,297 +4251,658 @@ export default function Settings() {
                               </div>
                             ) : null}
 
-                            {u.notes ? (
-                              <div className="text-sm text-muted-foreground line-clamp-2">
-                                {u.notes}
-                              </div>
-                            ) : null}
+                            <p className="text-sm leading-7 text-slate-600">
+                              {u.notes || "لا توجد ملاحظات مرتبطة بهذا الحساب."}
+                            </p>
                           </div>
 
-                          <div className="flex gap-2">
-                            <Button
-                              variant="outline"
-                              onClick={() => openEditAdmin(u)}
-                            >
-                              <Pencil className="w-4 h-4 ml-2" /> تعديل
-                            </Button>
-                            <Button
-                              variant="outline"
-                              onClick={() => handleToggleAdminActive(u)}
-                            >
-                              {u.isActive ? "تعطيل" : "تفعيل"}
-                            </Button>
-                            <Button
-                              variant="destructive"
-                              onClick={() => handleDeleteAdmin(u)}
-                            >
-                              <Trash2 className="w-4 h-4 ml-2" /> حذف
-                            </Button>
+                          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-center">
+                            <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
+                              Effective
+                            </div>
+                            <div className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">
+                              {formatNumberEN(
+                                getEffectivePermissionKeys(
+                                  u.roleKey,
+                                  u.permissionsAllow || [],
+                                  u.permissionsDeny || []
+                                ).length
+                              )}
+                            </div>
                           </div>
                         </div>
-                      ))}
-                  </div>
-                ) : (
-                  <div className="text-sm text-muted-foreground">
-                    لا توجد حسابات إدارة بعد.
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+
+                        <div className="mt-5 flex flex-wrap gap-2">
+                          <Button
+                            variant="outline"
+                            onClick={() => openEditAdmin(u)}
+                          >
+                            <Pencil className="w-4 h-4 ml-2" /> تعديل
+                          </Button>
+                          <Button
+                            variant="outline"
+                            onClick={() => handleToggleAdminActive(u)}
+                          >
+                            {u.isActive ? "تعطيل" : "تفعيل"}
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            onClick={() => handleDeleteAdmin(u)}
+                          >
+                            <Trash2 className="w-4 h-4 ml-2" /> حذف
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              ) : (
+                <div className="rounded-[22px] border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-500">
+                  لا توجد حسابات إدارة محفوظة حتى الآن.
+                </div>
+              )}
+            </SettingsSectionCard>
           </TabsContent>
 
           {/* =========================
               Labels
           ========================= */}
-          <TabsContent value="labels">
-            <Card>
-              <CardHeader>
-                <CardTitle>المسميات</CardTitle>
-                <CardDescription>
-                  تغيير كل المسميات اللي تظهر في النظام (أنواع/حالات/أدوار) بدون
-                  تعديل كود
-                </CardDescription>
-              </CardHeader>
+          <TabsContent value="labels" className="space-y-6">
+            <SettingsTabHero
+              eyebrow="Label Management"
+              title="المسميات"
+              description="إدارة نصوص العرض المركزية للأنواع والحالات والأدوار من داخل لوحة موحدة، بحيث تبقى الهوية اللغوية للنظام متماسكة وسهلة الصيانة."
+              stats={[
+                {
+                  icon: Tags,
+                  label: "Entries",
+                  value: formatNumberEN(totalLabelEntries),
+                  helper: "إجمالي المسميات المحفوظة",
+                },
+                {
+                  icon: FolderOpen,
+                  label: "Categories",
+                  value: "4",
+                  helper: "أنواع، حالات، أدوار، استثمارات",
+                },
+                {
+                  icon: Globe,
+                  label: "Languages",
+                  value: "AR / EN",
+                  helper: "حقول العرض المتاحة",
+                },
+              ]}
+              panel={
+                <SettingsHeroPanel
+                  status="Centralized"
+                  title="قاموس العرض"
+                  description="التحكم في نصوص الواجهة من مكان واحد يساعد على الحفاظ على التناسق بين صفحات الإدارة والعملاء."
+                  metrics={[
+                    {
+                      label: "أنواع المشاريع",
+                      value: formatNumberEN(
+                        Object.keys(labels.projectTypes || {}).length
+                      ),
+                      helper: "Project Types",
+                    },
+                    {
+                      label: "حالات المشاريع",
+                      value: formatNumberEN(
+                        Object.keys(labels.projectStatuses || {}).length
+                      ),
+                      helper: "Project Statuses",
+                    },
+                    {
+                      label: "حالات الاستثمار",
+                      value: formatNumberEN(
+                        Object.keys(labels.investmentStatuses || {}).length
+                      ),
+                      helper: "Investment Statuses / UI Roles",
+                    },
+                  ]}
+                />
+              }
+            />
 
-              <CardContent className="space-y-6">
-                <LabelsEditor
-                  title="مسميات أنواع المشاريع (Project Types)"
-                  data={labels.projectTypes}
-                  onChange={next =>
-                    setLabels(p => ({ ...p, projectTypes: next }))
+            <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+              <div className="space-y-6">
+                <SettingsSectionCard
+                  icon={Tags}
+                  eyebrow="Module 01"
+                  title="Project Types"
+                  description="مسميات أنواع المشاريع التي تظهر في صفحات الإدارة والعرض."
+                >
+                  <LabelsEditor
+                    title="مسميات أنواع المشاريع (Project Types)"
+                    data={labels.projectTypes}
+                    onChange={next =>
+                      setLabels(p => ({ ...p, projectTypes: next }))
+                    }
+                  />
+                </SettingsSectionCard>
+
+                <SettingsSectionCard
+                  icon={FolderOpen}
+                  eyebrow="Module 02"
+                  title="Project Statuses"
+                  description="حالات المشاريع المعروضة في النظام للمستخدمين والإدارة."
+                >
+                  <LabelsEditor
+                    title="مسميات حالات المشاريع (Project Statuses)"
+                    data={labels.projectStatuses}
+                    onChange={next =>
+                      setLabels(p => ({ ...p, projectStatuses: next }))
+                    }
+                  />
+                </SettingsSectionCard>
+
+                <SettingsSectionCard
+                  icon={TrendingUp}
+                  eyebrow="Module 03"
+                  title="Investment Statuses"
+                  description="النصوص المستخدمة لوصف مراحل وحالات الاستثمار داخل النظام."
+                >
+                  <LabelsEditor
+                    title="مسميات حالات الاستثمارات (Investment Statuses)"
+                    data={labels.investmentStatuses}
+                    onChange={next =>
+                      setLabels(p => ({ ...p, investmentStatuses: next }))
+                    }
+                  />
+                </SettingsSectionCard>
+
+                <SettingsSectionCard
+                  icon={Users}
+                  eyebrow="Module 04"
+                  title="UI Roles Labels"
+                  description="مسميات العرض للأدوار المختلفة كما تظهر في واجهات النظام."
+                >
+                  <LabelsEditor
+                    title="مسميات الأدوار للعرض (UI Roles Labels)"
+                    data={labels.uiRoles}
+                    onChange={next => setLabels(p => ({ ...p, uiRoles: next }))}
+                  />
+                </SettingsSectionCard>
+              </div>
+
+              <div className="space-y-4 xl:sticky xl:top-24 self-start">
+                <SettingsSimpleActionPanel
+                  title="حفظ المسميات"
+                  description="بعد مراجعة التعديلات، احفظ كل القواميس اللغوية إلى نفس مستند `settings/labels` الحالي."
+                  metrics={[
+                    {
+                      label: "إجمالي السجلات",
+                      value: formatNumberEN(totalLabelEntries),
+                      helper: "كل المسميات الحالية",
+                    },
+                    {
+                      label: "نطاق التغطية",
+                      value: "4 وحدات",
+                      helper: "Projects / Investments / Roles",
+                    },
+                  ]}
+                  primaryLabel="Save Label Settings"
+                  primaryAction={saveLabels}
+                  notice={
+                    <Alert className="border-white/10 bg-white/5 text-white">
+                      <Tags className="h-4 w-4 text-[#F2B705]" />
+                      <AlertTitle className="text-white">
+                        قاموس مركزي
+                      </AlertTitle>
+                      <AlertDescription className="text-white/70">
+                        هذا التبويب يغيّر نصوص العرض فقط، من دون أي تعديل على
+                        الكود أو المفاتيح المستخدمة في البيانات.
+                      </AlertDescription>
+                    </Alert>
                   }
                 />
-
-                <LabelsEditor
-                  title="مسميات حالات المشاريع (Project Statuses)"
-                  data={labels.projectStatuses}
-                  onChange={next =>
-                    setLabels(p => ({ ...p, projectStatuses: next }))
-                  }
-                />
-
-                <LabelsEditor
-                  title="مسميات حالات الاستثمارات (Investment Statuses)"
-                  data={labels.investmentStatuses}
-                  onChange={next =>
-                    setLabels(p => ({ ...p, investmentStatuses: next }))
-                  }
-                />
-
-                <LabelsEditor
-                  title="مسميات الأدوار للعرض (UI Roles Labels)"
-                  data={labels.uiRoles}
-                  onChange={next => setLabels(p => ({ ...p, uiRoles: next }))}
-                />
-
-                <Button className="bg-[#F2B705]" onClick={saveLabels}>
-                  حفظ المسميات
-                </Button>
-
-                <p className="text-sm text-muted-foreground">
-                  * لاحقًا نربط صفحات العرض بحيث تستخدم المسميات من
-                  settings/labels بدل النصوص الثابتة.
-                </p>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           </TabsContent>
 
           {/* =========================
               Flags
           ========================= */}
-          <TabsContent value="flags">
-            <Card>
-              <CardHeader>
-                <CardTitle>Feature Flags</CardTitle>
-                <CardDescription>
-                  تشغيل/إيقاف أجزاء من الموقع فورًا (بدون كود إضافي)
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <Toggle
-                  label="Maintenance Mode (إيقاف الموقع/وضع صيانة)"
-                  value={flags.maintenanceMode}
-                  onChange={(v: boolean) =>
-                    setFlags(p => ({ ...p, maintenanceMode: v }))
-                  }
+          <TabsContent value="flags" className="space-y-6">
+            <SettingsTabHero
+              eyebrow="Feature Flag Center"
+              title="Feature Flags"
+              description="إدارة مفاتيح التحكم التشغيلي بشكل أوضح، مع فصل الإعدادات المتعلقة بالإتاحة العامة عن الإعدادات الخاصة بجمهور VIP."
+              stats={[
+                {
+                  icon: SlidersHorizontal,
+                  label: "Flags",
+                  value: formatNumberEN(Object.keys(flags).length),
+                  helper: "إجمالي مفاتيح التحكم",
+                },
+                {
+                  icon: CheckCircle2,
+                  label: "Enabled",
+                  value: formatNumberEN(enabledFlagsCount),
+                  helper: "عدد المفاتيح المفعلة",
+                },
+                {
+                  icon: Globe,
+                  label: "Audience",
+                  value: flags.vipOnlyMode ? "VIP" : "Public",
+                  helper: "وضع إتاحة المحتوى الحالي",
+                },
+              ]}
+              panel={
+                <SettingsHeroPanel
+                  status={enabledFlagsCount > 0 ? "Managed" : "Baseline"}
+                  title="مفاتيح التحكم"
+                  description="استخدم هذا التبويب لتفعيل أو تعطيل سلوكيات واجهة محددة من دون أي refactor في البزنس لوجك."
+                  metrics={[
+                    {
+                      label: "وضع الصيانة",
+                      value: flags.maintenanceMode ? "مفعل" : "مغلق",
+                      helper: "Maintenance Mode",
+                    },
+                    {
+                      label: "الاستثمارات",
+                      value: flags.disableInvestments ? "معطلة" : "متاحة",
+                      helper: "إنشاء استثمار جديد",
+                    },
+                    {
+                      label: "قناة VIP",
+                      value: flags.vipOnlyMode ? "حصرية" : "عامة",
+                      helper: "VIP Only / Hide VIP Projects",
+                    },
+                  ]}
                 />
-                <Toggle
-                  label="تعطيل الاستثمارات (منع إنشاء استثمار جديد)"
-                  value={flags.disableInvestments}
-                  onChange={(v: boolean) =>
-                    setFlags(p => ({ ...p, disableInvestments: v }))
-                  }
-                />
-                <Toggle
-                  label="تعطيل الرسائل (إخفاء نموذج/صفحة الرسائل)"
-                  value={flags.disableMessages}
-                  onChange={(v: boolean) =>
-                    setFlags(p => ({ ...p, disableMessages: v }))
-                  }
-                />
-                <Toggle
-                  label="VIP Only Mode (عرض محتوى VIP فقط)"
-                  value={flags.vipOnlyMode}
-                  onChange={(v: boolean) =>
-                    setFlags(p => ({ ...p, vipOnlyMode: v }))
-                  }
-                />
-                <Toggle
-                  label="إخفاء مشاريع VIP من العامة"
-                  value={flags.hideVipProjects}
-                  onChange={(v: boolean) =>
-                    setFlags(p => ({ ...p, hideVipProjects: v }))
-                  }
-                />
+              }
+            />
 
-                <Button className="bg-[#F2B705]" onClick={saveFlags}>
-                  حفظ Flags
-                </Button>
-              </CardContent>
-            </Card>
+            <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+              <div className="space-y-6">
+                <SettingsSectionCard
+                  icon={SlidersHorizontal}
+                  eyebrow="Module 01"
+                  title="Platform Availability"
+                  description="مفاتيح تؤثر على إتاحة أجزاء النظام للعامة أو للإدارة."
+                >
+                  <div className="grid gap-4">
+                    <Toggle
+                      label="Maintenance Mode"
+                      description="إيقاف واجهة الموقع مؤقتًا أو إظهار وضع الصيانة."
+                      value={flags.maintenanceMode}
+                      onChange={(v: boolean) =>
+                        setFlags(p => ({ ...p, maintenanceMode: v }))
+                      }
+                    />
+                    <Toggle
+                      label="تعطيل الاستثمارات"
+                      description="منع إنشاء استثمار جديد من الواجهة الحالية."
+                      value={flags.disableInvestments}
+                      onChange={(v: boolean) =>
+                        setFlags(p => ({ ...p, disableInvestments: v }))
+                      }
+                    />
+                    <Toggle
+                      label="تعطيل الرسائل"
+                      description="إخفاء أو إيقاف نموذج وصفحة الرسائل للمستخدمين."
+                      value={flags.disableMessages}
+                      onChange={(v: boolean) =>
+                        setFlags(p => ({ ...p, disableMessages: v }))
+                      }
+                    />
+                  </div>
+                </SettingsSectionCard>
+
+                <SettingsSectionCard
+                  icon={Users}
+                  eyebrow="Module 02"
+                  title="Audience Controls"
+                  description="مفاتيح التحكم في ظهور المحتوى الخاص بالمستخدمين العامين أو جمهور VIP."
+                >
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <Toggle
+                      label="VIP Only Mode"
+                      description="عرض محتوى VIP فقط داخل الواجهة العامة."
+                      value={flags.vipOnlyMode}
+                      onChange={(v: boolean) =>
+                        setFlags(p => ({ ...p, vipOnlyMode: v }))
+                      }
+                    />
+                    <Toggle
+                      label="إخفاء مشاريع VIP من العامة"
+                      description="إخفاء مشاريع VIP من الواجهات العامة غير المخصصة."
+                      value={flags.hideVipProjects}
+                      onChange={(v: boolean) =>
+                        setFlags(p => ({ ...p, hideVipProjects: v }))
+                      }
+                    />
+                  </div>
+                </SettingsSectionCard>
+              </div>
+
+              <div className="space-y-4 xl:sticky xl:top-24 self-start">
+                <SettingsSimpleActionPanel
+                  title="حفظ Feature Flags"
+                  description="احفظ مفاتيح التحكم الحالية إلى نفس المستند من دون أي تغيير في الأسماء أو طريقة القراءة داخل النظام."
+                  metrics={[
+                    {
+                      label: "المفاتيح المفعلة",
+                      value: formatNumberEN(enabledFlagsCount),
+                      helper: "من إجمالي مفاتيح التحكم",
+                    },
+                    {
+                      label: "وضع الجمهور",
+                      value: flags.vipOnlyMode ? "VIP" : "عام",
+                      helper: "بحسب حالة VIP Only Mode",
+                    },
+                  ]}
+                  primaryLabel="Save Feature Flags"
+                  primaryAction={saveFlags}
+                  notice={
+                    <Alert className="border-white/10 bg-white/5 text-white">
+                      <CircleAlert className="h-4 w-4 text-[#F2B705]" />
+                      <AlertTitle className="text-white">
+                        تأثير مباشر على الواجهة
+                      </AlertTitle>
+                      <AlertDescription className="text-white/70">
+                        هذه المفاتيح تغير الإتاحة والسلوك الظاهري، لذلك يفضّل
+                        مراجعتها بعناية قبل الحفظ.
+                      </AlertDescription>
+                    </Alert>
+                  }
+                />
+              </div>
+            </div>
           </TabsContent>
 
           {/* =========================
               Content CMS
           ========================= */}
-          <TabsContent value="content">
-            <Card>
-              <CardHeader>
-                <CardTitle>محتوى الموقع (CMS)</CardTitle>
-                <CardDescription>تحكم بالنصوص العامة للواجهة</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-5">
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <Label>Hero Title (عربي)</Label>
-                    <Input
+          <TabsContent value="content" className="space-y-6">
+            <SettingsTabHero
+              eyebrow="Content Management"
+              title="محتوى الموقع"
+              description="إدارة النصوص العامة للواجهة من داخل لوحة منظمة تشبه إعدادات أنظمة SaaS الاحترافية، مع فصل واضح بين Hero وFooter وبيانات التواصل."
+              stats={[
+                {
+                  icon: Type,
+                  label: "Fields",
+                  value: formatNumberEN(Object.keys(content).length),
+                  helper: "إجمالي حقول المحتوى المتاحة",
+                },
+                {
+                  icon: CheckCircle2,
+                  label: "Completed",
+                  value: formatNumberEN(contentCompletedCount),
+                  helper: "الحقول التي تحتوي على قيمة",
+                },
+                {
+                  icon: Globe,
+                  label: "Locales",
+                  value: "AR / EN",
+                  helper: "محتوى عربي وإنجليزي",
+                },
+              ]}
+              panel={
+                <SettingsHeroPanel
+                  status="Editorial"
+                  title="واجهة المحتوى"
+                  description="يتم هنا ضبط النصوص العامة للمنصة من دون أي تغيير على بنية الصفحات أو منطق عرضها."
+                  metrics={[
+                    {
+                      label: "Hero",
+                      value:
+                        content.heroTitleAr || content.heroTitleEn
+                          ? "مكتمل جزئيًا"
+                          : "فارغ",
+                      helper: "العنوان والوصف الرئيسي",
+                    },
+                    {
+                      label: "Footer",
+                      value:
+                        content.footerAboutAr || content.footerAboutEn
+                          ? "مكتمل جزئيًا"
+                          : "فارغ",
+                      helper: "نص تعريف المنصة",
+                    },
+                    {
+                      label: "Contact",
+                      value:
+                        content.contactEmail || content.contactPhone
+                          ? "جاهز"
+                          : "غير مكتمل",
+                      helper: "قنوات التواصل في الواجهة",
+                    },
+                  ]}
+                />
+              }
+            />
+
+            <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+              <div className="space-y-6">
+                <SettingsSectionCard
+                  icon={Type}
+                  eyebrow="Module 01"
+                  title="Hero Content"
+                  description="النصوص الرئيسية التي تشكل الانطباع الأول داخل الواجهة."
+                >
+                  <div className="grid gap-5 md:grid-cols-2">
+                    <SettingsField
+                      label="Hero Title (عربي)"
+                      description="العنوان الرئيسي للواجهة باللغة العربية."
+                      placeholder="اكتب العنوان العربي"
                       value={content.heroTitleAr}
-                      onChange={e =>
-                        setContent(p => ({
-                          ...p,
-                          heroTitleAr: e.target.value,
-                        }))
+                      onChange={value =>
+                        setContent(p => ({ ...p, heroTitleAr: value }))
                       }
                     />
-                  </div>
-                  <div className="space-y-1">
-                    <Label>Hero Title (English)</Label>
-                    <Input
+                    <SettingsField
+                      label="Hero Title (English)"
+                      description="العنوان الرئيسي للواجهة باللغة الإنجليزية."
+                      placeholder="Write the English headline"
                       value={content.heroTitleEn}
-                      onChange={e =>
-                        setContent(p => ({
-                          ...p,
-                          heroTitleEn: e.target.value,
-                        }))
+                      onChange={value =>
+                        setContent(p => ({ ...p, heroTitleEn: value }))
                       }
+                      dir="ltr"
+                      inputClassName="text-left"
                     />
-                  </div>
-                </div>
-
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <Label>Hero Subtitle (عربي)</Label>
-                    <Textarea
-                      rows={3}
+                    <SettingsField
+                      label="Hero Subtitle (عربي)"
+                      description="وصف مختصر يشرح القيمة الأساسية للمنصة."
+                      placeholder="اكتب الوصف العربي"
                       value={content.heroSubtitleAr}
-                      onChange={e =>
-                        setContent(p => ({
-                          ...p,
-                          heroSubtitleAr: e.target.value,
-                        }))
+                      onChange={value =>
+                        setContent(p => ({ ...p, heroSubtitleAr: value }))
                       }
+                      textarea
+                      rows={4}
+                      containerClassName="md:col-span-2"
                     />
-                  </div>
-                  <div className="space-y-1">
-                    <Label>Hero Subtitle (English)</Label>
-                    <Textarea
-                      rows={3}
+                    <SettingsField
+                      label="Hero Subtitle (English)"
+                      description="Supporting hero copy in English."
+                      placeholder="Write the English supporting copy"
                       value={content.heroSubtitleEn}
-                      onChange={e =>
-                        setContent(p => ({
-                          ...p,
-                          heroSubtitleEn: e.target.value,
-                        }))
+                      onChange={value =>
+                        setContent(p => ({ ...p, heroSubtitleEn: value }))
                       }
+                      textarea
+                      rows={4}
+                      dir="ltr"
+                      inputClassName="text-left"
+                      containerClassName="md:col-span-2"
                     />
                   </div>
-                </div>
+                </SettingsSectionCard>
 
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <Label>Footer About (عربي)</Label>
-                    <Textarea
-                      rows={3}
+                <SettingsSectionCard
+                  icon={Archive}
+                  eyebrow="Module 02"
+                  title="Footer Content"
+                  description="محتوى footer التعريفي بالمنصة باللغتين العربية والإنجليزية."
+                >
+                  <div className="grid gap-5 md:grid-cols-2">
+                    <SettingsField
+                      label="Footer About (عربي)"
+                      description="النص التعريفي العربي المختصر في footer."
+                      placeholder="اكتب وصفًا مختصرًا للمنصة"
                       value={content.footerAboutAr}
-                      onChange={e =>
-                        setContent(p => ({
-                          ...p,
-                          footerAboutAr: e.target.value,
-                        }))
+                      onChange={value =>
+                        setContent(p => ({ ...p, footerAboutAr: value }))
                       }
+                      textarea
+                      rows={4}
                     />
-                  </div>
-                  <div className="space-y-1">
-                    <Label>Footer About (English)</Label>
-                    <Textarea
-                      rows={3}
+                    <SettingsField
+                      label="Footer About (English)"
+                      description="English footer description."
+                      placeholder="Write a short platform description"
                       value={content.footerAboutEn}
-                      onChange={e =>
-                        setContent(p => ({
-                          ...p,
-                          footerAboutEn: e.target.value,
-                        }))
+                      onChange={value =>
+                        setContent(p => ({ ...p, footerAboutEn: value }))
                       }
+                      textarea
+                      rows={4}
+                      dir="ltr"
+                      inputClassName="text-left"
                     />
                   </div>
-                </div>
+                </SettingsSectionCard>
 
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <Label>Contact Email</Label>
-                    <Input
+                <SettingsSectionCard
+                  icon={Mail}
+                  eyebrow="Module 03"
+                  title="Contact Content"
+                  description="بيانات التواصل التي تعرض للمستخدمين داخل واجهة المنصة."
+                >
+                  <div className="grid gap-5 md:grid-cols-2">
+                    <SettingsField
+                      label="Contact Email"
+                      description="البريد الظاهر للمستخدمين في الواجهة."
+                      placeholder="support@maedin.sa"
                       value={content.contactEmail}
-                      onChange={e =>
-                        setContent(p => ({
-                          ...p,
-                          contactEmail: e.target.value,
-                        }))
+                      onChange={value =>
+                        setContent(p => ({ ...p, contactEmail: value }))
                       }
+                      dir="ltr"
+                      inputClassName="text-left"
                     />
-                  </div>
-                  <div className="space-y-1">
-                    <Label>Contact Phone</Label>
-                    <Input
+                    <SettingsField
+                      label="Contact Phone"
+                      description="رقم الهاتف المعروض في بيانات التواصل."
+                      placeholder="+966 5X XXX XXXX"
                       value={content.contactPhone}
-                      onChange={e =>
-                        setContent(p => ({
-                          ...p,
-                          contactPhone: e.target.value,
-                        }))
+                      onChange={value =>
+                        setContent(p => ({ ...p, contactPhone: value }))
                       }
+                      dir="ltr"
+                      inputClassName="text-left"
                     />
                   </div>
-                </div>
+                </SettingsSectionCard>
+              </div>
 
-                <Button className="bg-[#F2B705]" onClick={saveContent}>
-                  حفظ المحتوى
-                </Button>
-              </CardContent>
-            </Card>
+              <div className="space-y-4 xl:sticky xl:top-24 self-start">
+                <SettingsSimpleActionPanel
+                  title="حفظ محتوى الموقع"
+                  description="احفظ النصوص الحالية إلى نفس مستند المحتوى من غير أي تغيير في أسماء الحقول أو طريقة استخدامها."
+                  metrics={[
+                    {
+                      label: "الحقول المكتملة",
+                      value: formatNumberEN(contentCompletedCount),
+                      helper: "من إجمالي حقول المحتوى",
+                    },
+                    {
+                      label: "التغطية اللغوية",
+                      value: "عربي / English",
+                      helper: "حقول عرض ثنائية اللغة",
+                    },
+                  ]}
+                  primaryLabel="Save Content Settings"
+                  primaryAction={saveContent}
+                  notice={
+                    <Alert className="border-white/10 bg-white/5 text-white">
+                      <Type className="h-4 w-4 text-[#F2B705]" />
+                      <AlertTitle className="text-white">
+                        توحيد الرسائل
+                      </AlertTitle>
+                      <AlertDescription className="text-white/70">
+                        يفضّل مراجعة النسختين العربية والإنجليزية معًا للحفاظ
+                        على نبرة موحدة للمنتج.
+                      </AlertDescription>
+                    </Alert>
+                  }
+                />
+              </div>
+            </div>
           </TabsContent>
 
           {/* =========================
               Backup
           ========================= */}
           <TabsContent value="backup" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Backup / Restore</CardTitle>
-                <CardDescription>
-                  تصدير واستيراد إعدادات المنصة بسرعة
+            <SettingsTabHero
+              eyebrow="Backup & Export"
+              title="النسخ الاحتياطي والتصدير"
+              description="واجهة موحدة لحفظ إعدادات المنصة وتصدير حزم العقود والبيانات المرتبطة بها من مصادر النظام الحية."
+              stats={[
+                {
+                  icon: FileDown,
+                  label: "Selected",
+                  value: formatNumberEN(selectedContractIds.length),
+                  helper: "العقود المحددة للتصدير",
+                },
+                {
+                  icon: Files,
+                  label: "Filtered",
+                  value: formatNumberEN(filteredContractExportItems.length),
+                  helper: "العقود المطابقة للفلاتر الحالية",
+                },
+                {
+                  icon: Archive,
+                  label: "Exports",
+                  value:
+                    contractExportSummary || contractExcelExportSummary
+                      ? "جاهزة"
+                      : "قيد التحضير",
+                  helper: "آخر حالة تصدير معروفة",
+                },
+              ]}
+              panel={
+                <SettingsHeroPanel
+                  status="Portable"
+                  title="حركة البيانات"
+                  description="هذا التبويب يركّز على نقل إعدادات المنصة وتوليد باقات العقود من دون أي تعديل على بنية البيانات الأصلية."
+                  metrics={[
+                    {
+                      label: "إعدادات المنصة",
+                      value: importing ? "Importing" : "JSON Ready",
+                      helper: "Export / Import settings",
+                    },
+                    {
+                      label: "System Package",
+                      value: contractExportSummary ? "Generated" : "Pending",
+                      helper: "CSV + attachments + manifest",
+                    },
+                    {
+                      label: "Excel Bundle",
+                      value: contractExcelExportSummary
+                        ? "Generated"
+                        : "Pending",
+                      helper: "Human-readable export",
+                    },
+                  ]}
+                />
+              }
+            />
+
+            <Card className="overflow-hidden rounded-[26px] border border-slate-200/80 bg-white shadow-[0_24px_54px_-40px_rgba(15,23,42,0.28)]">
+              <CardHeader className="border-b border-slate-100/80 pb-6">
+                <CardTitle className="text-[1.1rem] font-semibold tracking-tight text-slate-950">
+                  Backup / Restore
+                </CardTitle>
+                <CardDescription className="max-w-2xl text-sm leading-7 text-slate-600">
+                  تصدير واستيراد إعدادات المنصة بسرعة من خلال ملف JSON محفوظ.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-4 pt-6">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <Button variant="outline" onClick={handleExport}>
                     <FileDown className="w-4 h-4 ml-2" /> Export JSON
@@ -3386,12 +4928,14 @@ export default function Settings() {
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader className="gap-4">
+            <Card className="overflow-hidden rounded-[26px] border border-slate-200/80 bg-white shadow-[0_24px_54px_-40px_rgba(15,23,42,0.28)]">
+              <CardHeader className="gap-4 border-b border-slate-100/80 pb-6">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                   <div className="space-y-2">
-                    <CardTitle>Contract Export</CardTitle>
-                    <CardDescription className="max-w-2xl leading-6">
+                    <CardTitle className="text-[1.1rem] font-semibold tracking-tight text-slate-950">
+                      Contract Export
+                    </CardTitle>
+                    <CardDescription className="max-w-2xl text-sm leading-7 text-slate-600">
                       Generate either the system package or the human-readable
                       Excel bundle from the current live sources: Firestore
                       business data, D1 file metadata, and R2 file references.
@@ -3502,6 +5046,7 @@ export default function Settings() {
                       onChange={event => setContractSearch(event.target.value)}
                       placeholder="Search by contract, project, investor, or investment ID"
                       disabled={contractExporting || contractExcelExporting}
+                      className="h-12 rounded-xl border-slate-200 bg-white shadow-none"
                     />
                   </div>
 
@@ -3512,6 +5057,7 @@ export default function Settings() {
                       onValueChange={setContractStatusFilter}
                     >
                       <SelectTrigger
+                        className="h-12 rounded-xl border-slate-200 bg-white px-4 shadow-none"
                         disabled={contractExporting || contractExcelExporting}
                       >
                         <SelectValue placeholder="All statuses" />
@@ -3592,7 +5138,7 @@ export default function Settings() {
                   </Button>
                 </div>
 
-                <div className="rounded-2xl border">
+                <div className="rounded-[24px] border border-slate-200 bg-slate-50/40">
                   {contractExportLoading ? (
                     <div className="p-6 text-sm text-muted-foreground">
                       Loading contracts for export...
@@ -3604,7 +5150,7 @@ export default function Settings() {
                         return (
                           <label
                             key={item.id}
-                            className="flex cursor-pointer items-start gap-3 p-4 hover:bg-muted/30"
+                            className="flex cursor-pointer items-start gap-3 p-4 transition hover:bg-white"
                           >
                             <Checkbox
                               checked={checked}
@@ -3620,11 +5166,16 @@ export default function Settings() {
                             <div className="min-w-0 flex-1 space-y-2">
                               <div className="flex flex-wrap items-center gap-2">
                                 <p className="font-medium">{item.id}</p>
-                                <Badge variant="outline">{item.status}</Badge>
+                                <Badge
+                                  variant="outline"
+                                  className="rounded-full"
+                                >
+                                  {item.status}
+                                </Badge>
                                 {item.projectTitle ? (
                                   <Badge
                                     variant="secondary"
-                                    className="max-w-full truncate"
+                                    className="max-w-full truncate rounded-full"
                                   >
                                     {item.projectTitle}
                                   </Badge>
@@ -3677,18 +5228,82 @@ export default function Settings() {
               Database
           ========================= */}
           <TabsContent value="database" className="space-y-6">
-            <Card>
-              <CardHeader className="gap-4">
+            <SettingsTabHero
+              eyebrow="Infrastructure Overview"
+              title="قاعدة البيانات والتخزين"
+              description="عرض تشغيلي موحد لبنية Cloudflare الحالية، يشمل الحالة العامة للخدمات، حركة البيانات، والمقاييس الحية المرتبطة بالتخزين."
+              stats={[
+                {
+                  icon: Database,
+                  label: "Healthy",
+                  value: formatNumberEN(databaseHealthyServicesCount),
+                  helper: "الخدمات الجاهزة حاليًا",
+                },
+                {
+                  icon: Files,
+                  label: "Metrics",
+                  value: formatNumberEN(databaseActiveMetricCount),
+                  helper: "المقاييس التي تحمل قيمة",
+                },
+                {
+                  icon: ServerCog,
+                  label: "Status",
+                  value: databaseRefreshing ? "Checking" : "Live",
+                  helper: "فحص حالة الخدمات",
+                },
+              ]}
+              panel={
+                <SettingsHeroPanel
+                  status={databaseRefreshing ? "Checking" : "Cloudflare"}
+                  title="طبقة التخزين"
+                  description="جميع البيانات هنا للعرض والمراجعة التشغيلية فقط، مع إبقاء نفس مصادر القراءة والمنطق القائم."
+                  metrics={[
+                    {
+                      label: "Worker",
+                      value: getDatabaseStatusLabel(
+                        databaseRefreshing
+                          ? "checking"
+                          : databaseDashboard.services.worker.status
+                      ),
+                      helper: "Cloudflare Worker health",
+                    },
+                    {
+                      label: "D1 / R2",
+                      value: `${getDatabaseStatusLabel(
+                        databaseRefreshing
+                          ? "checking"
+                          : databaseDashboard.services.d1.status
+                      )} / ${getDatabaseStatusLabel(
+                        databaseRefreshing
+                          ? "checking"
+                          : databaseDashboard.services.r2.status
+                      )}`,
+                      helper: "Storage layers",
+                    },
+                    {
+                      label: "Last Check",
+                      value: databaseDashboard.checkedAt
+                        ? formatDatabaseTimestamp(databaseDashboard.checkedAt)
+                        : "غير متاح",
+                      helper: "آخر تحديث معروف للحالة",
+                    },
+                  ]}
+                />
+              }
+            />
+
+            <Card className="overflow-hidden rounded-[26px] border border-slate-200/80 bg-white shadow-[0_24px_54px_-40px_rgba(15,23,42,0.28)]">
+              <CardHeader className="gap-4 border-b border-slate-100/80 pb-6">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                   <div className="space-y-2">
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <div className="flex items-center gap-2 text-sm text-slate-500">
                       <Database className="h-4 w-4" />
                       <span>Database / Storage</span>
                     </div>
-                    <CardTitle className="text-2xl">
+                    <CardTitle className="text-2xl font-semibold tracking-tight text-slate-950">
                       قاعدة البيانات والتخزين
                     </CardTitle>
-                    <CardDescription className="max-w-2xl leading-6">
+                    <CardDescription className="max-w-2xl text-sm leading-7 text-slate-600">
                       إدارة بنية الملفات الحالية عبر Cloudflare D1 وR2 وWorkers
                     </CardDescription>
                   </div>
@@ -3700,7 +5315,7 @@ export default function Settings() {
                 </div>
               </CardHeader>
 
-              <CardContent>
+              <CardContent className="pt-6">
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                   {databaseOverviewCards.map(card => {
                     const Icon = card.icon;
@@ -3708,7 +5323,7 @@ export default function Settings() {
                     return (
                       <div
                         key={card.title}
-                        className="rounded-2xl border bg-muted/20 p-4 shadow-sm"
+                        className="rounded-[22px] border border-slate-200 bg-slate-50/60 p-4 shadow-[0_16px_34px_-30px_rgba(15,23,42,0.22)]"
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div className="space-y-1">
@@ -3756,22 +5371,24 @@ export default function Settings() {
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>المعمارية الحالية</CardTitle>
-                <CardDescription>
+            <Card className="overflow-hidden rounded-[26px] border border-slate-200/80 bg-white shadow-[0_24px_54px_-40px_rgba(15,23,42,0.28)]">
+              <CardHeader className="border-b border-slate-100/80 pb-6">
+                <CardTitle className="text-[1.1rem] font-semibold tracking-tight text-slate-950">
+                  المعمارية الحالية
+                </CardTitle>
+                <CardDescription className="max-w-2xl text-sm leading-7 text-slate-600">
                   تدفق الملفات والبيانات من واجهة المنصة إلى طبقة الرفع ثم إلى
                   Cloudflare D1 وR2.
                 </CardDescription>
               </CardHeader>
 
-              <CardContent className="space-y-6">
-                <div className="rounded-2xl border bg-muted/20 p-4">
+              <CardContent className="space-y-6 pt-6">
+                <div className="rounded-[22px] border border-slate-200 bg-slate-50/60 p-4">
                   <div
                     className="flex flex-col gap-3 lg:flex-row lg:items-center"
                     dir="ltr"
                   >
-                    <div className="flex-1 rounded-xl border bg-background p-4 text-right">
+                    <div className="flex-1 rounded-xl border border-slate-200 bg-white p-4 text-right">
                       <div className="flex items-center gap-3">
                         <div className="rounded-xl border bg-muted/30 p-2 text-muted-foreground">
                           <Globe className="h-4 w-4" />
@@ -3789,7 +5406,7 @@ export default function Settings() {
                       →
                     </div>
 
-                    <div className="flex-1 rounded-xl border bg-background p-4 text-right">
+                    <div className="flex-1 rounded-xl border border-slate-200 bg-white p-4 text-right">
                       <div className="flex items-center gap-3">
                         <div className="rounded-xl border bg-muted/30 p-2 text-muted-foreground">
                           <ServerCog className="h-4 w-4" />
@@ -3828,7 +5445,7 @@ export default function Settings() {
                       →
                     </div>
 
-                    <div className="flex-1 rounded-xl border bg-background p-4 text-right">
+                    <div className="flex-1 rounded-xl border border-slate-200 bg-white p-4 text-right">
                       <div className="flex items-center gap-3">
                         <div className="rounded-xl border bg-muted/30 p-2 text-muted-foreground">
                           <Database className="h-4 w-4" />
@@ -3889,7 +5506,7 @@ export default function Settings() {
                 </div>
 
                 <div className="grid gap-4 md:grid-cols-3">
-                  <div className="rounded-2xl border bg-muted/20 p-4">
+                  <div className="rounded-[22px] border border-slate-200 bg-slate-50/60 p-4">
                     <div className="flex items-center gap-3">
                       <div className="rounded-xl border bg-background p-2 text-muted-foreground">
                         <Database className="h-4 w-4" />
@@ -3902,7 +5519,7 @@ export default function Settings() {
                     </p>
                   </div>
 
-                  <div className="rounded-2xl border bg-muted/20 p-4">
+                  <div className="rounded-[22px] border border-slate-200 bg-slate-50/60 p-4">
                     <div className="flex items-center gap-3">
                       <div className="rounded-xl border bg-background p-2 text-muted-foreground">
                         <HardDrive className="h-4 w-4" />
@@ -3915,7 +5532,7 @@ export default function Settings() {
                     </p>
                   </div>
 
-                  <div className="rounded-2xl border bg-muted/20 p-4">
+                  <div className="rounded-[22px] border border-slate-200 bg-slate-50/60 p-4">
                     <div className="flex items-center gap-3">
                       <div className="rounded-xl border bg-background p-2 text-muted-foreground">
                         <ServerCog className="h-4 w-4" />
@@ -3931,15 +5548,17 @@ export default function Settings() {
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>إحصاءات تشغيلية</CardTitle>
-                <CardDescription>
+            <Card className="overflow-hidden rounded-[26px] border border-slate-200/80 bg-white shadow-[0_24px_54px_-40px_rgba(15,23,42,0.28)]">
+              <CardHeader className="border-b border-slate-100/80 pb-6">
+                <CardTitle className="text-[1.1rem] font-semibold tracking-tight text-slate-950">
+                  إحصاءات تشغيلية
+                </CardTitle>
+                <CardDescription className="max-w-2xl text-sm leading-7 text-slate-600">
                   يتم تحديثها من بيانات التخزين الحالية عبر Cloudflare Worker.
                 </CardDescription>
               </CardHeader>
 
-              <CardContent>
+              <CardContent className="pt-6">
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                   {databaseMetricCards.map(metric => {
                     const Icon = metric.icon;
@@ -3947,7 +5566,7 @@ export default function Settings() {
                     return (
                       <div
                         key={metric.title}
-                        className="rounded-2xl border bg-muted/20 p-4"
+                        className="rounded-[22px] border border-slate-200 bg-slate-50/60 p-4"
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div className="space-y-1">
@@ -3976,15 +5595,17 @@ export default function Settings() {
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>عمليات إدارية</CardTitle>
-                <CardDescription>
+            <Card className="overflow-hidden rounded-[26px] border border-slate-200/80 bg-white shadow-[0_24px_54px_-40px_rgba(15,23,42,0.28)]">
+              <CardHeader className="border-b border-slate-100/80 pb-6">
+                <CardTitle className="text-[1.1rem] font-semibold tracking-tight text-slate-950">
+                  عمليات إدارية
+                </CardTitle>
+                <CardDescription className="max-w-2xl text-sm leading-7 text-slate-600">
                   المتاح حاليًا هو إعادة فحص الخدمات وتحديث القيم المعروضة فقط.
                 </CardDescription>
               </CardHeader>
 
-              <CardContent>
+              <CardContent className="pt-6">
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
                   {DATABASE_ACTION_CARDS.map(action => {
                     const Icon = action.icon;
@@ -3999,7 +5620,7 @@ export default function Settings() {
                     return (
                       <div
                         key={action.title}
-                        className="rounded-2xl border bg-muted/20 p-4"
+                        className="rounded-[22px] border border-slate-200 bg-slate-50/60 p-4"
                       >
                         <div className="flex items-center justify-between gap-3">
                           <div className="rounded-xl border bg-background p-2 text-muted-foreground">
@@ -4060,20 +5681,22 @@ export default function Settings() {
             </Card>
 
             <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-              <Card>
-                <CardHeader>
-                  <CardTitle>تفاصيل تقنية</CardTitle>
-                  <CardDescription>
+              <Card className="overflow-hidden rounded-[26px] border border-slate-200/80 bg-white shadow-[0_24px_54px_-40px_rgba(15,23,42,0.28)]">
+                <CardHeader className="border-b border-slate-100/80 pb-6">
+                  <CardTitle className="text-[1.1rem] font-semibold tracking-tight text-slate-950">
+                    تفاصيل تقنية
+                  </CardTitle>
+                  <CardDescription className="max-w-2xl text-sm leading-7 text-slate-600">
                     معلومات read-only عن البنية الحالية المعتمدة لهذا القسم.
                   </CardDescription>
                 </CardHeader>
 
-                <CardContent>
+                <CardContent className="pt-6">
                   <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
                     {databaseTechnicalDetails.map(item => (
                       <div
                         key={item.label}
-                        className="rounded-2xl border bg-muted/20 p-4"
+                        className="rounded-[22px] border border-slate-200 bg-slate-50/60 p-4"
                       >
                         <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
                           {item.label}
@@ -4090,16 +5713,18 @@ export default function Settings() {
                 </CardContent>
               </Card>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>ملاحظات</CardTitle>
-                  <CardDescription>
+              <Card className="overflow-hidden rounded-[26px] border border-slate-200/80 bg-white shadow-[0_24px_54px_-40px_rgba(15,23,42,0.28)]">
+                <CardHeader className="border-b border-slate-100/80 pb-6">
+                  <CardTitle className="text-[1.1rem] font-semibold tracking-tight text-slate-950">
+                    ملاحظات
+                  </CardTitle>
+                  <CardDescription className="max-w-2xl text-sm leading-7 text-slate-600">
                     توضيحات تشغيلية مهمة مرتبطة ببنية التخزين الحالية.
                   </CardDescription>
                 </CardHeader>
 
-                <CardContent className="space-y-4">
-                  <Alert className="border-dashed bg-muted/20">
+                <CardContent className="space-y-4 pt-6">
+                  <Alert className="border-dashed border-slate-200 bg-slate-50/60">
                     <CircleAlert className="h-4 w-4" />
                     <AlertTitle>Cloudflare Only</AlertTitle>
                     <AlertDescription>
@@ -4359,7 +5984,9 @@ export default function Settings() {
                         }
                       >
                         <div className="flex flex-col items-start leading-tight">
-                          <span className="text-sm font-medium">{perm.label}</span>
+                          <span className="text-sm font-medium">
+                            {perm.label}
+                          </span>
                           <span className="text-[11px] opacity-70">
                             {perm.key}
                           </span>
@@ -4369,11 +5996,13 @@ export default function Settings() {
                   })}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  يتم العرض هنا بناءً على الصلاحيات الفعلية: صلاحيات الدور الأساسية مع أي overrides محفوظة للحساب.
+                  يتم العرض هنا بناءً على الصلاحيات الفعلية: صلاحيات الدور
+                  الأساسية مع أي overrides محفوظة للحساب.
                 </p>
                 <div className="flex flex-wrap gap-2">
                   <Badge variant="secondary">
-                    Defaults: {getRoleDefaultPermissionKeys(adminForm.roleKey).length}
+                    Defaults:{" "}
+                    {getRoleDefaultPermissionKeys(adminForm.roleKey).length}
                   </Badge>
                   <Badge variant="secondary">
                     Effective: {adminFormEffectivePermissions.length}
@@ -4389,26 +6018,31 @@ export default function Settings() {
               <div className="space-y-2">
                 <Label>ملخص الـ Overrides</Label>
                 <div className="flex flex-wrap gap-2 rounded-lg border border-dashed p-3 min-h-16">
-                  {adminFormPermissionOverrides.permissionsAllow.map(permissionKey => (
-                    <Badge
-                      key={`override-allow-${permissionKey}`}
-                      variant="secondary"
-                    >
-                      + {permissionKey}
-                    </Badge>
-                  ))}
-                  {adminFormPermissionOverrides.permissionsDeny.map(permissionKey => (
-                    <Badge
-                      key={`override-deny-${permissionKey}`}
-                      variant="outline"
-                    >
-                      - {permissionKey}
-                    </Badge>
-                  ))}
+                  {adminFormPermissionOverrides.permissionsAllow.map(
+                    permissionKey => (
+                      <Badge
+                        key={`override-allow-${permissionKey}`}
+                        variant="secondary"
+                      >
+                        + {permissionKey}
+                      </Badge>
+                    )
+                  )}
+                  {adminFormPermissionOverrides.permissionsDeny.map(
+                    permissionKey => (
+                      <Badge
+                        key={`override-deny-${permissionKey}`}
+                        variant="outline"
+                      >
+                        - {permissionKey}
+                      </Badge>
+                    )
+                  )}
                   {adminFormPermissionOverrides.permissionsAllow.length === 0 &&
                   adminFormPermissionOverrides.permissionsDeny.length === 0 ? (
                     <span className="text-sm text-muted-foreground">
-                      لا توجد تعديلات يدوية حالياً. الحساب يستخدم صلاحيات الدور الافتراضية فقط.
+                      لا توجد تعديلات يدوية حالياً. الحساب يستخدم صلاحيات الدور
+                      الافتراضية فقط.
                     </span>
                   ) : null}
                 </div>
@@ -4418,7 +6052,8 @@ export default function Settings() {
                     variant="outline"
                     onClick={resetAdminPermissionOverrides}
                     disabled={
-                      adminFormPermissionOverrides.permissionsAllow.length === 0 &&
+                      adminFormPermissionOverrides.permissionsAllow.length ===
+                        0 &&
                       adminFormPermissionOverrides.permissionsDeny.length === 0
                     }
                   >
@@ -4450,35 +6085,644 @@ export default function Settings() {
  Small UI helpers
 ========================= */
 
-function Field({
+function SettingsTabHero({
+  eyebrow,
+  title,
+  description,
+  stats,
+  panel,
+}: {
+  eyebrow: string;
+  title: string;
+  description: string;
+  stats: Array<{
+    icon: LucideIcon;
+    label: string;
+    value: string;
+    helper: string;
+  }>;
+  panel: ReactNode;
+}) {
+  return (
+    <Card className="overflow-hidden border-slate-200/80 bg-[radial-gradient(circle_at_top_right,rgba(242,183,5,0.14),transparent_25%),linear-gradient(135deg,#ffffff_0%,#f8fafc_48%,#eef4ff_100%)] shadow-[0_28px_75px_-44px_rgba(15,23,42,0.35)]">
+      <CardContent className="px-6 py-6 sm:px-8 sm:py-8">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(280px,0.85fr)] xl:items-end">
+          <div className="space-y-5">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge className="rounded-full border border-[#F2B705]/30 bg-[#F2B705]/12 px-3 py-1 text-xs font-semibold text-[#8d6700] shadow-none">
+                <Sparkles className="h-3.5 w-3.5" />
+                {eyebrow}
+              </Badge>
+            </div>
+
+            <div className="space-y-3">
+              <h2 className="text-2xl font-semibold tracking-tight text-slate-950 sm:text-[2rem]">
+                {title}
+              </h2>
+              <p className="max-w-2xl text-sm leading-7 text-slate-600">
+                {description}
+              </p>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-3">
+              {stats.map(stat => (
+                <SettingsOverviewStat
+                  key={stat.label}
+                  icon={stat.icon}
+                  label={stat.label}
+                  value={stat.value}
+                  helper={stat.helper}
+                />
+              ))}
+            </div>
+          </div>
+
+          {panel}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function SettingsHeroPanel({
+  status,
+  title,
+  description,
+  metrics,
+}: {
+  status: string;
+  title: string;
+  description: string;
+  metrics: Array<{
+    label: string;
+    value: string;
+    helper: string;
+  }>;
+}) {
+  return (
+    <div className="rounded-[28px] border border-[#1e3358] bg-[linear-gradient(180deg,rgba(8,18,47,0.98),rgba(2,6,23,0.96))] p-6 text-white shadow-[0_28px_60px_-42px_rgba(2,6,23,0.85)]">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/45">
+            Readiness
+          </p>
+          <h3 className="mt-3 text-xl font-semibold tracking-tight">{title}</h3>
+        </div>
+        <Badge
+          variant="outline"
+          className="rounded-full border border-white/15 bg-white/5 px-3 py-1 text-[11px] font-semibold text-white/80 shadow-none"
+        >
+          {status}
+        </Badge>
+      </div>
+
+      <p className="mt-4 text-sm leading-7 text-white/60">{description}</p>
+
+      <div className="mt-6 grid gap-3">
+        {metrics.map(metric => (
+          <SettingsSidebarMetric
+            key={metric.label}
+            label={metric.label}
+            value={metric.value}
+            helper={metric.helper}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SettingsOverviewStat({
+  icon: Icon,
   label,
   value,
-  onChange,
+  helper,
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: string;
+  helper: string;
+}) {
+  return (
+    <div className="rounded-[22px] border border-slate-200/80 bg-white/90 p-4 shadow-[0_16px_34px_-30px_rgba(15,23,42,0.3)]">
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+          {label}
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-2 text-slate-700">
+          <Icon className="h-4 w-4" />
+        </div>
+      </div>
+      <div className="mt-4 text-base font-semibold tracking-tight text-slate-950">
+        {value}
+      </div>
+      <div className="mt-2 text-xs leading-6 text-slate-500">{helper}</div>
+    </div>
+  );
+}
+
+function SettingsSimpleActionPanel({
+  title,
+  description,
+  metrics,
+  primaryLabel,
+  primaryAction,
+  secondaryLabel,
+  secondaryAction,
+  primaryDisabled,
+  primaryBusyLabel,
+  isPrimaryBusy = false,
+  notice,
+}: {
+  title: string;
+  description: string;
+  metrics: Array<{
+    label: string;
+    value: string;
+    helper: string;
+  }>;
+  primaryLabel: string;
+  primaryAction: () => void;
+  secondaryLabel?: string;
+  secondaryAction?: () => void;
+  primaryDisabled?: boolean;
+  primaryBusyLabel?: string;
+  isPrimaryBusy?: boolean;
+  notice?: ReactNode;
+}) {
+  return (
+    <Card className="overflow-hidden rounded-[26px] border-[#17284a] bg-[linear-gradient(180deg,#08122f_0%,#020617_100%)] text-white shadow-[0_26px_60px_-42px_rgba(2,6,23,0.9)]">
+      <CardHeader className="gap-3 border-b border-white/10 pb-6">
+        <div className="flex items-center justify-between gap-4">
+          <div className="rounded-2xl border border-[#F2B705]/25 bg-[#F2B705]/10 p-3 text-[#F2B705]">
+            <Save className="h-5 w-5" />
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <CardTitle className="text-xl font-semibold text-white">
+            {title}
+          </CardTitle>
+          <CardDescription className="text-sm leading-7 text-white/65">
+            {description}
+          </CardDescription>
+        </div>
+      </CardHeader>
+
+      <CardContent className="space-y-4 pt-6">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+          {metrics.map(metric => (
+            <SettingsSidebarMetric
+              key={metric.label}
+              label={metric.label}
+              value={metric.value}
+              helper={metric.helper}
+            />
+          ))}
+        </div>
+
+        {notice}
+      </CardContent>
+
+      <CardFooter className="flex-col items-stretch gap-3 border-t border-white/10 pt-5">
+        {secondaryLabel && secondaryAction ? (
+          <Button
+            type="button"
+            variant="outline"
+            className="h-11 border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white"
+            onClick={secondaryAction}
+          >
+            {secondaryLabel}
+          </Button>
+        ) : null}
+
+        <Button
+          type="button"
+          className="h-11 rounded-xl bg-[#F2B705] text-slate-950 hover:bg-[#e0ab00]"
+          onClick={primaryAction}
+          disabled={primaryDisabled || isPrimaryBusy}
+        >
+          {isPrimaryBusy ? (
+            <>
+              <Spinner className="h-4 w-4" />
+              {primaryBusyLabel || primaryLabel}
+            </>
+          ) : (
+            <>
+              <Save className="h-4 w-4" />
+              {primaryLabel}
+            </>
+          )}
+        </Button>
+      </CardFooter>
+    </Card>
+  );
+}
+
+function SettingsSidebarMetric({
+  label,
+  value,
+  helper,
 }: {
   label: string;
   value: string;
-  onChange: (v: string) => void;
+  helper: string;
 }) {
   return (
-    <div className="space-y-1">
-      <Label>{label}</Label>
-      <Input value={value} onChange={e => onChange(e.target.value)} />
+    <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+      <div className="text-xs text-white/55">{label}</div>
+      <div className="mt-2 text-sm font-semibold text-white/92">{value}</div>
+      <div className="mt-1 text-xs text-white/50">{helper}</div>
     </div>
+  );
+}
+
+function SettingsSectionCard({
+  icon: Icon,
+  eyebrow,
+  title,
+  description,
+  action,
+  children,
+}: {
+  icon: LucideIcon;
+  eyebrow: string;
+  title: string;
+  description: string;
+  action?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <Card className="overflow-hidden rounded-[26px] border border-slate-200/80 bg-white shadow-[0_24px_54px_-40px_rgba(15,23,42,0.28)]">
+      <CardHeader className="border-b border-slate-100/80 pb-6">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start gap-4">
+            <div className="rounded-[22px] border border-slate-200 bg-slate-50 p-3 text-slate-700">
+              <Icon className="h-5 w-5" />
+            </div>
+            <div className="space-y-2">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">
+                {eyebrow}
+              </div>
+              <CardTitle className="text-[1.1rem] font-semibold tracking-tight text-slate-950">
+                {title}
+              </CardTitle>
+              <CardDescription className="max-w-2xl text-sm leading-7 text-slate-600">
+                {description}
+              </CardDescription>
+            </div>
+          </div>
+          {action ? <div className="shrink-0">{action}</div> : null}
+        </div>
+      </CardHeader>
+      <CardContent className="pt-6">{children}</CardContent>
+    </Card>
+  );
+}
+
+function SettingsField({
+  label,
+  description,
+  value,
+  onChange,
+  placeholder,
+  helper,
+  error,
+  suffix,
+  type = "text",
+  textarea = false,
+  rows = 3,
+  dir,
+  inputMode,
+  className,
+  containerClassName,
+  inputClassName,
+}: {
+  label: string;
+  description: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  helper?: string;
+  error?: string;
+  suffix?: string;
+  type?: string;
+  textarea?: boolean;
+  rows?: number;
+  dir?: "ltr" | "rtl";
+  inputMode?: ComponentProps<"input">["inputMode"];
+  className?: string;
+  containerClassName?: string;
+  inputClassName?: string;
+}) {
+  const hasValue = String(value || "").trim().length > 0;
+  const statusTone = error
+    ? "border-rose-200 bg-rose-50 text-rose-700"
+    : hasValue
+      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+      : "border-slate-200 bg-slate-50 text-slate-500";
+
+  const sharedControlClassName = cn(
+    "rounded-xl border-slate-200 bg-white/90 px-4 text-sm shadow-none transition hover:border-slate-300 focus-visible:ring-slate-300/60",
+    error && "border-rose-300 bg-rose-50/60 focus-visible:ring-rose-200",
+    hasValue && !error && "border-emerald-300/80 bg-emerald-50/30",
+    inputClassName,
+    className
+  );
+
+  return (
+    <div className={cn("space-y-3", containerClassName)}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="space-y-1">
+          <Label className="text-[13px] font-semibold text-slate-900">
+            {label}
+          </Label>
+          <p className="text-xs leading-6 text-slate-500">{description}</p>
+        </div>
+        <div
+          className={cn(
+            "shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-semibold",
+            statusTone
+          )}
+        >
+          {error ? "Needs review" : hasValue ? "Ready" : "Pending"}
+        </div>
+      </div>
+
+      {textarea ? (
+        <Textarea
+          rows={rows}
+          dir={dir}
+          value={value}
+          aria-invalid={!!error}
+          placeholder={placeholder}
+          onChange={e => onChange(e.target.value)}
+          className={cn("min-h-[108px] py-3 leading-7", sharedControlClassName)}
+        />
+      ) : suffix ? (
+        <InputGroup className="h-12 rounded-xl border-slate-200 bg-white/90 shadow-none">
+          <InputGroupInput
+            type={type}
+            dir={dir}
+            value={value}
+            inputMode={inputMode}
+            aria-invalid={!!error}
+            placeholder={placeholder}
+            onChange={e => onChange(e.target.value)}
+            className={cn("h-full px-4", sharedControlClassName)}
+          />
+          <InputGroupAddon align="inline-end">
+            <InputGroupText className="text-xs font-semibold text-slate-500">
+              {suffix}
+            </InputGroupText>
+          </InputGroupAddon>
+        </InputGroup>
+      ) : (
+        <Input
+          type={type}
+          dir={dir}
+          value={value}
+          inputMode={inputMode}
+          aria-invalid={!!error}
+          placeholder={placeholder}
+          onChange={e => onChange(e.target.value)}
+          className={cn("h-12", sharedControlClassName)}
+        />
+      )}
+
+      <p
+        className={cn(
+          "text-xs leading-6",
+          error ? "text-rose-600" : "text-slate-500"
+        )}
+      >
+        {error || helper || " "}
+      </p>
+    </div>
+  );
+}
+
+function SettingsSelectField({
+  label,
+  description,
+  children,
+  containerClassName,
+}: {
+  label: string;
+  description: string;
+  children: ReactNode;
+  containerClassName?: string;
+}) {
+  return (
+    <div className={cn("space-y-3", containerClassName)}>
+      <div className="space-y-1">
+        <Label className="text-[13px] font-semibold text-slate-900">
+          {label}
+        </Label>
+        <p className="text-xs leading-6 text-slate-500">{description}</p>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function SettingsSavePanel({
+  appDirty,
+  savingApp,
+  appIssues,
+  changedFields,
+  onReset,
+  onSave,
+}: {
+  appDirty: boolean;
+  savingApp: boolean;
+  appIssues: string[];
+  changedFields: Array<keyof AppSettings>;
+  onReset: () => void;
+  onSave: () => void;
+}) {
+  return (
+    <Card className="overflow-hidden rounded-[26px] border-[#17284a] bg-[linear-gradient(180deg,#08122f_0%,#020617_100%)] text-white shadow-[0_26px_60px_-42px_rgba(2,6,23,0.9)]">
+      <CardHeader className="gap-3 border-b border-white/10 pb-6">
+        <div className="flex items-center justify-between gap-4">
+          <div className="rounded-2xl border border-[#F2B705]/25 bg-[#F2B705]/10 p-3 text-[#F2B705]">
+            <Save className="h-5 w-5" />
+          </div>
+          <Badge
+            variant="outline"
+            className={cn(
+              "rounded-full border px-3 py-1 text-[11px] font-semibold shadow-none",
+              appDirty
+                ? "border-amber-400/30 bg-amber-400/10 text-amber-200"
+                : "border-emerald-400/30 bg-emerald-400/10 text-emerald-200"
+            )}
+          >
+            {appDirty ? "Dirty State" : "In Sync"}
+          </Badge>
+        </div>
+
+        <div className="space-y-2">
+          <CardTitle className="text-xl font-semibold text-white">
+            Save Changes
+          </CardTitle>
+          <CardDescription className="text-sm leading-7 text-white/65">
+            راجع الحقول المعدلة ثم احفظها إلى `settings/app` من دون أي تغيير على
+            منطق الحفظ أو بنية البيانات.
+          </CardDescription>
+        </div>
+      </CardHeader>
+
+      <CardContent className="space-y-4 pt-6">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+          <SettingsSidebarMetric
+            label="الحقول المعدلة"
+            value={formatNumberEN(changedFields.length)}
+            helper="تتبع حي للتغييرات غير المحفوظة"
+          />
+          <SettingsSidebarMetric
+            label="ملاحظات التحقق"
+            value={formatNumberEN(appIssues.length)}
+            helper="راجع الحقول المميزة قبل الحفظ"
+          />
+        </div>
+
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-sm font-medium text-white/90">
+              سجل التعديلات
+            </div>
+            <span className="text-xs text-white/45">Live</span>
+          </div>
+
+          <div className="mt-4 space-y-2">
+            {changedFields.length > 0 ? (
+              changedFields.map(fieldKey => (
+                <div
+                  key={fieldKey}
+                  className="flex items-center justify-between gap-3 rounded-xl border border-white/8 bg-white/5 px-3 py-2 text-sm"
+                >
+                  <span className="text-white/88">
+                    {APP_SETTINGS_LABELS[fieldKey]}
+                  </span>
+                  <span className="text-xs text-white/45">Modified</span>
+                </div>
+              ))
+            ) : (
+              <div className="rounded-xl border border-dashed border-white/10 px-3 py-4 text-sm text-white/60">
+                لا توجد تعديلات غير محفوظة حاليًا. أي تحديث جديد سيظهر هنا
+                مباشرة.
+              </div>
+            )}
+          </div>
+        </div>
+
+        {appIssues.length > 0 ? (
+          <Alert className="border-amber-400/20 bg-amber-400/10 text-white">
+            <CircleAlert className="h-4 w-4 text-amber-200" />
+            <AlertTitle className="text-amber-100">
+              يلزم مراجعة بعض الحقول
+            </AlertTitle>
+            <AlertDescription className="space-y-1 text-amber-50/90">
+              {appIssues.slice(0, 3).map(issue => (
+                <p key={issue}>{issue}</p>
+              ))}
+              {appIssues.length > 3 ? (
+                <p>
+                  وهناك {formatNumberEN(appIssues.length - 3)} ملاحظات إضافية.
+                </p>
+              ) : null}
+            </AlertDescription>
+          </Alert>
+        ) : (
+          <Alert className="border-emerald-400/20 bg-emerald-400/10 text-white">
+            <CheckCircle2 className="h-4 w-4 text-emerald-200" />
+            <AlertTitle className="text-emerald-100">
+              الإعدادات جاهزة للحفظ
+            </AlertTitle>
+            <AlertDescription className="text-emerald-50/90">
+              جميع الوحدات الأساسية مكتملة ويمكن ترحيلها مباشرة إلى الإعدادات
+              العامة.
+            </AlertDescription>
+          </Alert>
+        )}
+      </CardContent>
+
+      <CardFooter className="flex-col items-stretch gap-3 border-t border-white/10 pt-5">
+        <Button
+          type="button"
+          variant="outline"
+          className="h-11 border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white"
+          onClick={onReset}
+          disabled={!appDirty || savingApp}
+        >
+          تراجع عن التعديلات
+        </Button>
+
+        <Button
+          type="button"
+          className="h-11 rounded-xl bg-[#F2B705] text-slate-950 hover:bg-[#e0ab00]"
+          onClick={onSave}
+          disabled={!appDirty || savingApp}
+        >
+          {savingApp ? (
+            <>
+              <Spinner className="h-4 w-4" />
+              جاري حفظ التغييرات...
+            </>
+          ) : (
+            <>
+              <Save className="h-4 w-4" />
+              Save Changes
+            </>
+          )}
+        </Button>
+      </CardFooter>
+    </Card>
   );
 }
 
 function Toggle({
   label,
+  description,
   value,
   onChange,
 }: {
   label: string;
+  description?: string;
   value: boolean;
   onChange: (v: boolean) => void;
 }) {
   return (
-    <div className="flex items-center justify-between border rounded-md px-4 py-3">
-      <span className="font-medium">{label}</span>
+    <div
+      className={cn(
+        "flex items-start justify-between gap-4 rounded-[22px] border px-5 py-4 transition-colors",
+        value
+          ? "border-emerald-200 bg-emerald-50/70"
+          : "border-slate-200 bg-slate-50/70"
+      )}
+    >
+      <div className="space-y-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-semibold text-slate-900">{label}</span>
+          <Badge
+            variant="outline"
+            className={cn(
+              "rounded-full px-2.5 py-1 text-[11px] font-semibold shadow-none",
+              value
+                ? "border-emerald-200 bg-emerald-100 text-emerald-700"
+                : "border-slate-200 bg-white text-slate-500"
+            )}
+          >
+            {value ? "Enabled" : "Disabled"}
+          </Badge>
+        </div>
+        {description ? (
+          <p className="max-w-2xl text-sm leading-7 text-slate-600">
+            {description}
+          </p>
+        ) : null}
+      </div>
+
       <Switch checked={value} onCheckedChange={onChange} />
     </div>
   );
@@ -4522,7 +6766,9 @@ function LabelsEditor({
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="font-bold">{title}</h3>
+        <h3 className="text-base font-semibold tracking-tight text-slate-950">
+          {title}
+        </h3>
         <Button variant="outline" onClick={addRow}>
           <Plus className="w-4 h-4 ml-2" /> إضافة
         </Button>
@@ -4532,37 +6778,52 @@ function LabelsEditor({
         {rows.map(([k, val]) => (
           <div
             key={k}
-            className="border rounded-lg p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3"
+            className="rounded-[22px] border border-slate-200 bg-slate-50/60 p-4 shadow-[0_16px_32px_-30px_rgba(15,23,42,0.2)]"
           >
-            <div className="w-full md:w-44">
-              <Label>Key</Label>
-              <Input value={k} readOnly />
-            </div>
-
-            <div className="grid md:grid-cols-2 gap-3 w-full">
-              <div className="space-y-1">
-                <Label>عربي</Label>
+            <div className="grid gap-4 lg:grid-cols-[180px_minmax(0,1fr)_auto] lg:items-end">
+              <div className="space-y-2">
+                <Label className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  Key
+                </Label>
                 <Input
-                  value={val.ar || ""}
-                  onChange={e => updateRow(k, "ar", e.target.value)}
+                  value={k}
+                  readOnly
+                  className="h-11 rounded-xl border-slate-200 bg-white text-slate-600 shadow-none"
                 />
               </div>
-              <div className="space-y-1">
-                <Label>English</Label>
-                <Input
-                  value={val.en || ""}
-                  onChange={e => updateRow(k, "en", e.target.value)}
-                />
-              </div>
-            </div>
 
-            <Button
-              variant="destructive"
-              onClick={() => removeRow(k)}
-              className="md:self-end"
-            >
-              <Trash2 className="w-4 h-4 ml-2" /> حذف
-            </Button>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label className="text-[13px] font-semibold text-slate-900">
+                    عربي
+                  </Label>
+                  <Input
+                    value={val.ar || ""}
+                    onChange={e => updateRow(k, "ar", e.target.value)}
+                    className="h-11 rounded-xl border-slate-200 bg-white shadow-none"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-[13px] font-semibold text-slate-900">
+                    English
+                  </Label>
+                  <Input
+                    value={val.en || ""}
+                    onChange={e => updateRow(k, "en", e.target.value)}
+                    dir="ltr"
+                    className="h-11 rounded-xl border-slate-200 bg-white text-left shadow-none"
+                  />
+                </div>
+              </div>
+
+              <Button
+                variant="destructive"
+                onClick={() => removeRow(k)}
+                className="lg:self-end"
+              >
+                <Trash2 className="w-4 h-4 ml-2" /> حذف
+              </Button>
+            </div>
           </div>
         ))}
       </div>

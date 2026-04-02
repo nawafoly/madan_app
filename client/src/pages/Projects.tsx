@@ -206,6 +206,14 @@ function MobileProjectCarousel({
     setActiveIndex(nextIndex);
   };
 
+  const isInteractiveTarget = (target: EventTarget | null) =>
+    target instanceof Element &&
+    Boolean(
+      target.closest(
+        "a, button, input, textarea, select, label, [role='button'], [data-carousel-ignore-drag='true']"
+      )
+    );
+
   const finishDrag = () => {
     dragStartXRef.current = null;
     setDragOffsetPx(0);
@@ -215,6 +223,7 @@ function MobileProjectCarousel({
   const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (!canNavigate) return;
     if (event.pointerType === "mouse" && event.button !== 0) return;
+    if (isInteractiveTarget(event.target)) return;
 
     dragStartXRef.current = event.clientX;
     setDragOffsetPx(0);

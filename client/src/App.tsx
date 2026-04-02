@@ -150,6 +150,12 @@ function Router() {
         </Route>
 
         {/* ===== Admin: Messages ===== */}
+        <Route path="/admin/messages/:requestId">
+          <RequireAdminPermission permission="messages.view">
+            <MessagesManagement />
+          </RequireAdminPermission>
+        </Route>
+
         <Route path="/admin/messages">
           <RequireAdminPermission permission="messages.view">
             <MessagesManagement />

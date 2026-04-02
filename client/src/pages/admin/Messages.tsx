@@ -4,6 +4,7 @@ import {
   useDeferredValue,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -61,12 +62,19 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import {
   MessageSquare,
@@ -89,6 +97,7 @@ import {
   CalendarDays,
   Wallet,
   RefreshCw,
+  ArrowRight,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -96,6 +105,7 @@ import {
   CLIENT_WORKFLOW_COPY,
   getClientContractStatusLabel,
 } from "@shared/investmentLifecycle";
+import { useLocation, useRoute } from "wouter";
 
 /* =========================
   ✅ Switch: Disable contracts/files now
@@ -118,6 +128,16 @@ const DETAIL_INLINE_LABEL_CLASS =
   "mb-3 text-[11px] font-semibold tracking-[0.14em] text-slate-400";
 const DETAIL_INPUT_ROW_CLASS =
   "grid grid-cols-1 items-start gap-3 rounded-[20px] border border-slate-200/80 bg-slate-50/85 px-4 py-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.88)] md:grid-cols-[120px_1fr] md:gap-4";
+type DetailSecondaryTabKey =
+  | "context"
+  | "timeline"
+  | "documents"
+  | "internal_notes";
+type WorkflowStepKey =
+  | "review_start"
+  | "investment_creation"
+  | "contract_upload"
+  | "request_completion";
 const DETAIL_INPUT_LABEL_CLASS =
   "pt-1 text-right text-[11px] font-semibold tracking-[0.14em] text-slate-400";
 const DETAIL_INPUT_VALUE_CLASS =
@@ -1269,9 +1289,11 @@ export default function MessagesManagement() {
   const [searchQuery, setSearchQuery] = useState("");
 
   const [selectedMessage, setSelectedMessage] = useState<any>(null);
-  const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
 
   const [internalNotes, setInternalNotes] = useState("");
+  const [detailSecondaryTab, setDetailSecondaryTab] =
+    useState<DetailSecondaryTabKey>("context");
+  const workflowAutoNavigationRef = useRef<string | null>(null);
 
   const [approvedAmount, setApprovedAmount] = useState<string>("");
 
@@ -1309,22 +1331,49 @@ export default function MessagesManagement() {
   const deferredSearchQuery = useDeferredValue(
     searchQuery.trim().toLowerCase()
   );
-  const [requestedRequestId, setRequestedRequestId] = useState(() => {
+  const [, setLocation] = useLocation();
+  const [detailRouteMatch, detailRouteParams] = useRoute(
+    "/admin/messages/:requestId"
+  );
+  const routeRequestId = useMemo(() => {
+    if (!detailRouteMatch) return "";
+    const raw = String(detailRouteParams?.requestId || "").trim();
+    if (!raw) return "";
+    try {
+      return decodeURIComponent(raw);
+    } catch {
+      return raw;
+    }
+  }, [detailRouteMatch, detailRouteParams?.requestId]);
+  const isRequestDetailsRouteActive = Boolean(routeRequestId);
+  const [requestedRequestId] = useState(() => {
     if (typeof window === "undefined") return "";
     return (
       new URLSearchParams(window.location.search).get("requestId")?.trim() || ""
     );
   });
 
-  const clearRequestedRequestId = () => {
-    if (typeof window === "undefined") return;
-    const url = new URL(window.location.href);
-    url.searchParams.delete("requestId");
-    window.history.replaceState(
-      window.history.state,
-      "",
-      `${url.pathname}${url.search}${url.hash}`
-    );
+  const navigateToRequestDetails = (requestId: string, replace = false) => {
+    const normalizedId = String(requestId || "").trim();
+    if (!normalizedId) return;
+    setLocation(`/admin/messages/${encodeURIComponent(normalizedId)}`, {
+      replace,
+    });
+  };
+
+  const navigateToMessagesList = () => {
+    setSelectedMessage(null);
+    setInternalNotes("");
+    setApprovedAmount("");
+    setContractDoc(null);
+    setInvestmentDoc(null);
+    setDraftFile(null);
+    setLocalUploadedByKind({});
+    setR2DetectedPathByKind({});
+    setR2ProbeStatusByKind({});
+    setReturnDialogOpen(false);
+    setReturnNote("");
+    setLocation("/admin/messages");
   };
 
   /* =========================
@@ -1700,7 +1749,7 @@ export default function MessagesManagement() {
     }
   };
 
-  const openMessageDetails = async (rawMessage: any) => {
+  const hydrateSelectedMessage = async (rawMessage: any) => {
     const fixed = normalizeForDisplay(rawMessage);
     const normalizedOne = {
       ...fixed,
@@ -1735,8 +1784,6 @@ export default function MessagesManagement() {
     await loadContractDoc(
       pick(hydratedMessage?.contractId, linkedInvestmentDoc?.contractId) || null
     );
-
-    setIsDetailDialogOpen(true);
   };
 
   const activeInvestmentId = pick(
@@ -1749,7 +1796,7 @@ export default function MessagesManagement() {
   );
 
   useEffect(() => {
-    if (!isDetailDialogOpen || !selectedMessage?.id) return;
+    if (!isRequestDetailsRouteActive || !selectedMessage?.id) return;
 
     const unsub = onSnapshot(
       doc(db, REQUESTS_COL, selectedMessage.id),
@@ -1769,11 +1816,11 @@ export default function MessagesManagement() {
     return () => {
       unsub();
     };
-  }, [isDetailDialogOpen, selectedMessage?.id]);
+  }, [isRequestDetailsRouteActive, selectedMessage?.id]);
 
   useEffect(() => {
     if (
-      !isDetailDialogOpen ||
+      !isRequestDetailsRouteActive ||
       !selectedMessage?.id ||
       !canManageMessages ||
       selectedMessage?.adminSeenAt
@@ -1807,7 +1854,7 @@ export default function MessagesManagement() {
   }, [
     REQUESTS_COL,
     canManageMessages,
-    isDetailDialogOpen,
+    isRequestDetailsRouteActive,
     selectedMessage?.id,
     selectedMessage?.adminSeenAt,
     user?.uid,
@@ -1815,7 +1862,7 @@ export default function MessagesManagement() {
   ]);
 
   useEffect(() => {
-    if (!isDetailDialogOpen || !activeInvestmentId) return;
+    if (!isRequestDetailsRouteActive || !activeInvestmentId) return;
 
     const unsub = onSnapshot(
       doc(db, "investments", activeInvestmentId),
@@ -1835,10 +1882,10 @@ export default function MessagesManagement() {
     return () => {
       unsub();
     };
-  }, [isDetailDialogOpen, activeInvestmentId]);
+  }, [isRequestDetailsRouteActive, activeInvestmentId]);
 
   useEffect(() => {
-    if (!isDetailDialogOpen) return;
+    if (!isRequestDetailsRouteActive) return;
     if (!activeContractId) {
       setContractDoc(null);
       return;
@@ -1862,7 +1909,7 @@ export default function MessagesManagement() {
     return () => {
       unsub();
     };
-  }, [isDetailDialogOpen, activeContractId]);
+  }, [isRequestDetailsRouteActive, activeContractId]);
 
   const originalPathFromDocs = pickFirstNonEmptyString(
     resolveDocPath(investmentDoc, [
@@ -1990,22 +2037,52 @@ export default function MessagesManagement() {
   );
 
   useEffect(() => {
-    if (!requestedRequestId || !normalized.length || isDetailDialogOpen) return;
-
-    const target = normalized.find(
-      message => String(message?.id || "").trim() === requestedRequestId
-    );
-    if (!target) return;
-
-    setRequestedRequestId("");
-    clearRequestedRequestId();
-    void openMessageDetails(target);
+    if (!requestedRequestId || isRequestDetailsRouteActive) return;
+    navigateToRequestDetails(requestedRequestId, true);
   }, [
     requestedRequestId,
+    isRequestDetailsRouteActive,
+    navigateToRequestDetails,
+  ]);
+
+  useEffect(() => {
+    if (!isRequestDetailsRouteActive || !routeRequestId) return;
+    if (String(selectedMessage?.id || "").trim() === routeRequestId) return;
+
+    setSelectedMessage(null);
+    setContractDoc(null);
+    setInvestmentDoc(null);
+  }, [isRequestDetailsRouteActive, routeRequestId]);
+
+  useEffect(() => {
+    if (!isRequestDetailsRouteActive) {
+      setSelectedMessage(null);
+      setContractDoc(null);
+      setInvestmentDoc(null);
+      return;
+    }
+    if (!routeRequestId || !normalized.length) return;
+    if (String(selectedMessage?.id || "").trim() === routeRequestId) return;
+
+    const target = normalized.find(
+      message => String(message?.id || "").trim() === routeRequestId
+    );
+    if (!target) {
+      if (!loading) {
+        setSelectedMessage(null);
+        setContractDoc(null);
+        setInvestmentDoc(null);
+      }
+      return;
+    }
+
+    void hydrateSelectedMessage(target);
+  }, [
+    isRequestDetailsRouteActive,
+    routeRequestId,
     normalized,
-    isDetailDialogOpen,
-    clearRequestedRequestId,
-    openMessageDetails,
+    loading,
+    selectedMessage?.id,
   ]);
 
   const requestRows = useMemo(() => {
@@ -2343,7 +2420,7 @@ export default function MessagesManagement() {
                 "h-10 w-full gap-2 rounded-2xl",
                 request.requestKind.ctaClass
               )}
-              onClick={() => void openMessageDetails(request)}
+              onClick={() => navigateToRequestDetails(request.id)}
             >
               <Eye className="h-4 w-4" />
               {request.requestKind.ctaLabel}
@@ -2543,7 +2620,7 @@ export default function MessagesManagement() {
               "h-10 w-full gap-2 rounded-2xl",
               request.requestKind.ctaClass
             )}
-            onClick={() => void openMessageDetails(request)}
+            onClick={() => navigateToRequestDetails(request.id)}
           >
             <Eye className="h-4 w-4" />
             {request.requestKind.ctaLabel}
@@ -3475,7 +3552,6 @@ export default function MessagesManagement() {
       });
 
       toast.success("تم الترحيل النهائي ✅");
-      setIsDetailDialogOpen(false);
       loadMessages();
     } catch (e) {
       console.error(e);
@@ -4046,7 +4122,6 @@ export default function MessagesManagement() {
       });
 
       toast.success("تم اعتماد العقد وتفعيل الاستثمار");
-      setIsDetailDialogOpen(false);
       loadMessages();
     } catch (e: any) {
       console.error(e);
@@ -4113,7 +4188,6 @@ export default function MessagesManagement() {
       });
 
       toast.success("تم رفض الطلب");
-      setIsDetailDialogOpen(false);
       loadMessages();
     } catch (e) {
       console.error(e);
@@ -4160,7 +4234,6 @@ export default function MessagesManagement() {
       });
 
       toast.success("تمت إعادة فتح الطلب");
-      setIsDetailDialogOpen(false);
       loadMessages();
     } catch (e) {
       console.error(e);
@@ -4607,6 +4680,65 @@ export default function MessagesManagement() {
     selectedRequestStatus,
   ]);
 
+  const isArchiveMode = useMemo(() => {
+    if (!selectedMessage) return false;
+
+    if (["completed", "closed", "rejected"].includes(selectedRequestStatus)) {
+      return true;
+    }
+
+    return isSelectedInterestRequest && Boolean(selectedMessage?.adminSeenAt);
+  }, [
+    isSelectedInterestRequest,
+    selectedMessage,
+    selectedMessage?.adminSeenAt,
+    selectedRequestStatus,
+  ]);
+  const isActiveMode = !!selectedMessage && !isArchiveMode;
+
+  const archiveResultMeta = useMemo(() => {
+    if (!selectedMessage) {
+      return {
+        title: "سجل منتهي",
+        helper: "هذا السجل خرج من دائرة المتابعة الحالية.",
+      };
+    }
+
+    if (selectedRequestStatus === "rejected") {
+      return {
+        title: "تم رفض الطلب",
+        helper: "انتقل هذا السجل إلى الأرشيف، ويمكن الرجوع إلى السجل الزمني أو المستندات عند الحاجة.",
+      };
+    }
+
+    if (selectedRequestStatus === "closed") {
+      return {
+        title: "الطلب مغلق",
+        helper: "اكتملت الدورة الحالية لهذا السجل وأصبح مرجعًا تاريخيًا فقط.",
+      };
+    }
+
+    if (isSelectedInterestRequest && selectedMessage?.adminSeenAt) {
+      return {
+        title: "تمت مراجعة الاهتمام",
+        helper:
+          selectedInterestReviewMeta?.helperText ||
+          "لم يعد هذا الاهتمام ضمن المتابعة الفورية، ويمكن الرجوع إليه من السجل عند الحاجة.",
+      };
+    }
+
+    return {
+      title: "اكتملت دورة الطلب",
+      helper: "هذا السجل لم يعد ضمن الواجهة التشغيلية الأساسية، ويظهر هنا كمرجع تاريخي.",
+    };
+  }, [
+    isSelectedInterestRequest,
+    selectedInterestReviewMeta?.helperText,
+    selectedMessage,
+    selectedMessage?.adminSeenAt,
+    selectedRequestStatus,
+  ]);
+
   const openSelectedProject = () => {
     if (!selectedProjectId) {
       toast.warning("لا يوجد مشروع مرتبط بهذا الطلب.");
@@ -4718,12 +4850,1432 @@ export default function MessagesManagement() {
     }
   };
 
+  const detailPrimaryAction = useMemo<{
+    key: string;
+    label: string;
+    onClick: () => void;
+    disabled?: boolean;
+    icon: ReactNode;
+    className: string;
+  } | null>(() => {
+    if (!isActiveMode) return null;
+
+    if (canFinalize) {
+      return {
+        key: "finalize",
+        label: "إكمال الطلب",
+        onClick: activateInvestmentAfterApproval,
+        disabled: isLockedFinal || finalizeBusy,
+        icon: finalizeBusy ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <Building2 className="h-4 w-4" />
+        ),
+        className: `${DETAIL_SOLID_BUTTON_CLASS} bg-emerald-700 hover:bg-emerald-800`,
+      };
+    }
+
+    if (canVerifySignedContract) {
+      return {
+        key: "verify_contract",
+        label: "اعتماد العقد",
+        onClick: verifySignedContract,
+        disabled: isLockedFinal || finalizeBusy,
+        icon: finalizeBusy ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <ShieldCheck className="h-4 w-4" />
+        ),
+        className: `${DETAIL_SOLID_BUTTON_CLASS} bg-amber-700 hover:bg-amber-800`,
+      };
+    }
+
+    if (canCreateInvestmentFromRequest) {
+      return {
+        key: "create_investment",
+        label: "إنشاء الاستثمار",
+        onClick: approveRequestAndCreateInvestment,
+        disabled: approveCreateBusy || isLockedFinal,
+        icon: approveCreateBusy ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <CheckCircle2 className="h-4 w-4" />
+        ),
+        className: `${DETAIL_SOLID_BUTTON_CLASS} bg-blue-700 hover:bg-blue-800`,
+      };
+    }
+
+    if (canInitialApproveRequest) {
+      return {
+        key: "initial_approve",
+        label: "موافقة أولية",
+        onClick: initialApproveRequest,
+        disabled: isLockedFinal,
+        icon: <ShieldCheck className="h-4 w-4" />,
+        className: `${DETAIL_SOLID_BUTTON_CLASS} bg-indigo-700 hover:bg-indigo-800`,
+      };
+    }
+
+    if (canStartRequestReview) {
+      return {
+        key: "start_review",
+        label: "بدء المراجعة",
+        onClick: startRequestReview,
+        disabled: isLockedFinal,
+        icon: <Clock3 className="h-4 w-4" />,
+        className: `${DETAIL_SOLID_BUTTON_CLASS} bg-yellow-700 hover:bg-yellow-800`,
+      };
+    }
+
+    return null;
+  }, [
+    approveCreateBusy,
+    canCreateInvestmentFromRequest,
+    canFinalize,
+    canInitialApproveRequest,
+    canStartRequestReview,
+    canVerifySignedContract,
+    finalizeBusy,
+    isActiveMode,
+    isLockedFinal,
+  ]);
+
+  const detailSecondaryAction = useMemo<{
+    key: string;
+    label: string;
+    onClick: () => void;
+    disabled?: boolean;
+    icon: ReactNode;
+    className: string;
+  } | null>(() => {
+    if (
+      !isActiveMode ||
+      !isSelectedInvestmentRequest ||
+      !canManageMessages ||
+      isArchiveMode
+    ) {
+      return null;
+    }
+
+    return {
+      key: "reject",
+      label: "رفض الطلب",
+      onClick: rejectInvestmentRequest,
+      disabled: isLockedFinal || !canManageMessages,
+      icon: <AlertTriangle className="h-4 w-4" />,
+      className: DETAIL_DANGER_BUTTON_CLASS,
+    };
+  }, [
+    canManageMessages,
+    isActiveMode,
+    isArchiveMode,
+    isLockedFinal,
+    isSelectedInvestmentRequest,
+  ]);
+
+  const showDocumentsTab =
+    isSelectedInvestmentRequest ||
+    !!selectedMessage?.investmentId ||
+    hasOriginalContract ||
+    hasSignedContract;
+  const canEditInternalNotes =
+    canManageMessages && myRole !== "client" && isActiveMode;
+  const hasStoredInternalNotes = Boolean(String(internalNotes || "").trim());
+  const showInternalNotesTab =
+    canManageMessages &&
+    myRole !== "client" &&
+    (canEditInternalNotes || hasStoredInternalNotes);
+  const showArchiveContractUpload =
+    isArchiveMode &&
+    canAdmin &&
+    canManageInvestments &&
+    !!selectedMessage?.investmentId;
+  const showReopenAdvancedAction =
+    isArchiveMode &&
+    isSelectedInvestmentRequest &&
+    myRole === "owner" &&
+    canManageMessages;
+  const showAdvancedActions =
+    showArchiveContractUpload || showReopenAdvancedAction;
+  const availableDetailTabs = useMemo<DetailSecondaryTabKey[]>(
+    () => [
+      "context",
+      "timeline",
+      ...(showDocumentsTab ? (["documents"] as DetailSecondaryTabKey[]) : []),
+      ...(showInternalNotesTab
+        ? (["internal_notes"] as DetailSecondaryTabKey[])
+        : []),
+    ],
+    [showDocumentsTab, showInternalNotesTab]
+  );
+  const resolveDetailTab = (preferred: DetailSecondaryTabKey) => {
+    if (availableDetailTabs.includes(preferred)) return preferred;
+    return isArchiveMode && availableDetailTabs.includes("timeline")
+      ? "timeline"
+      : availableDetailTabs[0] || "context";
+  };
+  const openDetailTab = (preferred: DetailSecondaryTabKey) => {
+    const nextTab = resolveDetailTab(preferred);
+    setDetailSecondaryTab(current => (current === nextTab ? current : nextTab));
+  };
+  const workflowSteps = useMemo(
+    () =>
+      !selectedMessage || !isSelectedInvestmentRequest
+        ? []
+        : [
+            {
+              key: "review_start" as WorkflowStepKey,
+              label: "بدء المراجعة",
+              helper: "استلام الطلب وبدء معالجته داخليًا.",
+              targetTab: "context" as DetailSecondaryTabKey,
+              icon: <Clock3 className="h-4 w-4" />,
+            },
+            {
+              key: "investment_creation" as WorkflowStepKey,
+              label: "إنشاء الاستثمار",
+              helper: "اعتماد الطلب وتجهيز سجل الاستثمار داخل النظام.",
+              targetTab: "context" as DetailSecondaryTabKey,
+              icon: <CheckCircle2 className="h-4 w-4" />,
+            },
+            {
+              key: "contract_upload" as WorkflowStepKey,
+              label: "رفع العقد",
+              helper: "متابعة المستندات ورفع العقد الأصلي من التبويب المخصص.",
+              targetTab: showDocumentsTab
+                ? ("documents" as DetailSecondaryTabKey)
+                : ("context" as DetailSecondaryTabKey),
+              icon: <Upload className="h-4 w-4" />,
+            },
+            {
+              key: "request_completion" as WorkflowStepKey,
+              label: "إكمال الطلب",
+              helper: "اعتماد العقد ثم إقفال الدورة الحالية لهذا الطلب.",
+              targetTab: isArchiveMode
+                ? ("timeline" as DetailSecondaryTabKey)
+                : showDocumentsTab
+                  ? ("documents" as DetailSecondaryTabKey)
+                  : ("timeline" as DetailSecondaryTabKey),
+              icon: <Building2 className="h-4 w-4" />,
+            },
+          ],
+    [isArchiveMode, isSelectedInvestmentRequest, selectedMessage, showDocumentsTab]
+  );
+  const workflowCurrentStepKey = useMemo<WorkflowStepKey | null>(() => {
+    if (!selectedMessage || !isSelectedInvestmentRequest) return null;
+
+    const hasInvestmentRecord = Boolean(selectedMessage?.investmentId);
+    const normalizedStageRole = String(selectedMessage?.stageRole || "")
+      .trim()
+      .toLowerCase();
+    const isCompletionStageData =
+      ["completed", "closed"].includes(selectedRequestStatus) ||
+      selectedInvestmentStatus === "active" ||
+      selectedInvestmentStatus === "signed" ||
+      contractStatusValue === "approved" ||
+      (hasCurrentSignedContract &&
+        ["under_review", "signed", "approved"].includes(contractStatusValue));
+
+    if (selectedRequestStatus === "pending") {
+      return "review_start";
+    }
+
+    if (selectedRequestStatus === "rejected") {
+      if (isCompletionStageData) {
+        return "request_completion";
+      }
+
+      if (hasInvestmentRecord || hasOriginalContract || hasSignedContract) {
+        return "contract_upload";
+      }
+
+      return ["reviewer", "review", "staff", "accountant", "investment"].includes(
+        normalizedStageRole
+      )
+        ? "investment_creation"
+        : "review_start";
+    }
+
+    if (!hasInvestmentRecord) {
+      return "investment_creation";
+    }
+
+    if (isCompletionStageData) {
+      return "request_completion";
+    }
+
+    return "contract_upload";
+  }, [
+    contractStatusValue,
+    hasCurrentSignedContract,
+    hasOriginalContract,
+    hasSignedContract,
+    isSelectedInvestmentRequest,
+    selectedInvestmentStatus,
+    selectedMessage,
+    selectedRequestStatus,
+  ]);
+  const workflowCurrentStepIndex = workflowCurrentStepKey
+    ? workflowSteps.findIndex(step => step.key === workflowCurrentStepKey)
+    : -1;
+  const workflowCurrentStepMeta =
+    workflowCurrentStepIndex >= 0 ? workflowSteps[workflowCurrentStepIndex] : null;
+  const workflowNextStepMeta =
+    workflowCurrentStepIndex >= 0 &&
+    workflowCurrentStepIndex < workflowSteps.length - 1
+      ? workflowSteps[workflowCurrentStepIndex + 1]
+      : null;
+  const workflowPreferredTab = useMemo<DetailSecondaryTabKey>(() => {
+    if (!workflowCurrentStepKey) {
+      return isArchiveMode ? "timeline" : "context";
+    }
+
+    switch (workflowCurrentStepKey) {
+      case "review_start":
+      case "investment_creation":
+        return "context";
+      case "contract_upload":
+        return showDocumentsTab ? "documents" : "context";
+      case "request_completion":
+      default:
+        return isArchiveMode
+          ? "timeline"
+          : showDocumentsTab
+            ? "documents"
+            : "timeline";
+    }
+  }, [isArchiveMode, showDocumentsTab, workflowCurrentStepKey]);
+  const detailFlowSummary = useMemo(() => {
+    if (!isSelectedInvestmentRequest || !workflowCurrentStepKey) {
+      return selectedNextActionSummary;
+    }
+
+    switch (workflowCurrentStepKey) {
+      case "review_start":
+        return {
+          label: "بدء المراجعة",
+          helper: canStartRequestReview
+            ? "هذا الطلب جديد وبانتظار بدء المراجعة الداخلية من الفريق."
+            : "تم فتح الطلب ويمكن متابعة تفاصيله من السياق والسجل.",
+          needsAction: canStartRequestReview,
+        };
+      case "investment_creation":
+        return {
+          label: canCreateInvestmentFromRequest
+            ? "إنشاء الاستثمار"
+            : canInitialApproveRequest
+              ? "استكمال المراجعة"
+              : "إنشاء الاستثمار",
+          helper: canCreateInvestmentFromRequest
+            ? "اكتملت المراجعة الأولية ويمكن الآن إنشاء سجل الاستثمار."
+            : canInitialApproveRequest
+              ? "الطلب في مرحلة المراجعة ويحتاج اعتمادًا تمهيديًا قبل إنشاء الاستثمار."
+              : "الطلب ضمن مرحلة التجهيز لإنشاء الاستثمار ويمكن متابعة السجل والسياق من الصفحة.",
+          needsAction:
+            canCreateInvestmentFromRequest || canInitialApproveRequest,
+        };
+      case "contract_upload":
+        return {
+          label:
+            canAdmin && canManageInvestments
+              ? "رفع العقد"
+              : "متابعة المستندات",
+          helper:
+            canAdmin && canManageInvestments
+              ? "تم إنشاء الاستثمار، والمرحلة الحالية هي رفع العقد من تبويب المستندات."
+              : "تم إنشاء الاستثمار، ويمكن متابعة حالة العقد من تبويب المستندات.",
+          needsAction: canAdmin && canManageInvestments,
+        };
+      case "request_completion":
+        return {
+          label: canFinalize
+            ? "إكمال الطلب"
+            : canVerifySignedContract
+              ? "اعتماد العقد"
+              : isArchiveMode
+                ? "اكتملت الدورة الحالية"
+                : "إكمال الطلب",
+          helper: isArchiveMode
+            ? archiveResultMeta.helper
+            : canFinalize
+              ? "العقد جاهز والمرحلة الأخيرة هي الإقفال النهائي للطلب."
+              : canVerifySignedContract
+                ? "العقد الموقّع جاهز للاعتماد قبل الإقفال النهائي."
+                : "الطلب وصل إلى المرحلة الأخيرة ويمكن مراجعة المستندات أو انتظار إجراء الإكمال حسب الصلاحيات الحالية.",
+          needsAction: canFinalize || canVerifySignedContract,
+        };
+      default:
+        return selectedNextActionSummary;
+    }
+  }, [
+    archiveResultMeta.helper,
+    canAdmin,
+    canCreateInvestmentFromRequest,
+    canFinalize,
+    canInitialApproveRequest,
+    canManageInvestments,
+    canStartRequestReview,
+    canVerifySignedContract,
+    isArchiveMode,
+    isSelectedInvestmentRequest,
+    selectedNextActionSummary,
+    workflowCurrentStepKey,
+  ]);
+  const detailGuidedPrimaryAction =
+    !isActiveMode ||
+    !isSelectedInvestmentRequest ||
+    detailPrimaryAction ||
+    workflowCurrentStepKey !== "contract_upload" ||
+    !selectedMessage?.investmentId
+      ? null
+      : {
+          key: "focus_documents",
+          label:
+            canAdmin && canManageInvestments ? "رفع العقد" : "فتح المستندات",
+          onClick: () => openDetailTab("documents"),
+          icon: <Upload className="h-4 w-4" />,
+          className: `${DETAIL_SOLID_BUTTON_CLASS} bg-sky-700 hover:bg-sky-800`,
+        };
+  const detailVisiblePrimaryAction =
+    detailPrimaryAction || detailGuidedPrimaryAction;
+  const detailHeaderMetrics = [
+    {
+      key: "request_number",
+      label: "رقم الطلب",
+      value: requestNumber(selectedMessage),
+      icon: <FileText className="h-3.5 w-3.5" />,
+      mono: true,
+      strong: true,
+    },
+    {
+      key: "request_kind",
+      label: "نوع الطلب",
+      value: selectedRequestKind?.label || "—",
+      icon: <MessageSquare className="h-3.5 w-3.5" />,
+      strong: true,
+    },
+    {
+      key: "status",
+      label: "الحالة",
+      value: selectedStatusMeta?.label || "—",
+      icon: <Eye className="h-3.5 w-3.5" />,
+      strong: true,
+    },
+    {
+      key: "stage",
+      label: "المرحلة",
+      value: selectedStageMeta?.label || "—",
+      icon: <ShieldCheck className="h-3.5 w-3.5" />,
+    },
+    {
+      key: "project",
+      label: "المشروع",
+      value: selectedProjectTitle,
+      icon: <Building2 className="h-3.5 w-3.5" />,
+      strong: true,
+    },
+    {
+      key: "updated_at",
+      label: "آخر تحديث",
+      value: formatDateTimeAR(selectedUpdatedAtValue),
+      helper: formatRequestTimeLabel(selectedUpdatedAtValue),
+      icon: <RefreshCw className="h-3.5 w-3.5" />,
+    },
+  ];
+  const primaryContactLabel = selectedContactEmail
+    ? "البريد الإلكتروني"
+    : selectedContactPhone
+      ? "رقم الجوال"
+      : "وسيلة التواصل";
+  const primaryContactValue = selectedContactEmail ? (
+    <span dir="ltr" className="break-all">
+      {selectedContactEmail}
+    </span>
+  ) : selectedContactPhone ? (
+    <span dir="ltr">{selectedContactPhone}</span>
+  ) : (
+    "لا توجد وسيلة تواصل مسجلة داخل هذا الطلب."
+  );
+
+  useEffect(() => {
+    if (!isRequestDetailsRouteActive || !selectedMessage?.id) return;
+
+    setDetailSecondaryTab(current => {
+      if (availableDetailTabs.includes(current)) return current;
+      return isArchiveMode && availableDetailTabs.includes("timeline")
+        ? "timeline"
+        : availableDetailTabs[0] || "context";
+    });
+  }, [
+    availableDetailTabs,
+    isArchiveMode,
+    isRequestDetailsRouteActive,
+    selectedMessage?.id,
+  ]);
+  useEffect(() => {
+    if (!isRequestDetailsRouteActive || !selectedMessage?.id || !workflowCurrentStepKey)
+      return;
+
+    const navigationKey = `${selectedMessage.id}:${workflowCurrentStepKey}:${workflowPreferredTab}:${
+      isArchiveMode ? "archive" : "active"
+    }`;
+    if (workflowAutoNavigationRef.current === navigationKey) return;
+    workflowAutoNavigationRef.current = navigationKey;
+
+    const nextTab = availableDetailTabs.includes(workflowPreferredTab)
+      ? workflowPreferredTab
+      : isArchiveMode && availableDetailTabs.includes("timeline")
+        ? "timeline"
+        : availableDetailTabs[0] || "context";
+
+    setDetailSecondaryTab(current => (current === nextTab ? current : nextTab));
+  }, [
+    availableDetailTabs,
+    isArchiveMode,
+    isRequestDetailsRouteActive,
+    selectedMessage?.id,
+    workflowCurrentStepKey,
+    workflowPreferredTab,
+  ]);
+
+  const renderDetailContextRow = () => (
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <Card className={cn("rsg-card", DETAIL_SECTION_CARD_CLASS)}>
+        <CardHeader className={DETAIL_SECTION_HEADER_CLASS}>
+          <div className="flex items-center justify-between gap-3">
+            <div className="space-y-1">
+              <CardTitle className={DETAIL_SECTION_TITLE_CLASS}>العميل</CardTitle>
+              <p className="text-sm leading-7 text-slate-500">
+                جهة التواصل الأساسية المرتبطة بهذا الطلب.
+              </p>
+            </div>
+            <Badge
+              className={cn(
+                DETAIL_PILL_BASE_CLASS,
+                selectedClient?.sourceTone
+              )}
+            >
+              {selectedClient?.sourceLabel || "بيانات الطلب"}
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent className={`${DETAIL_SECTION_CONTENT_CLASS} space-y-4`}>
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="text-lg font-semibold text-slate-950">
+                {selectedClient?.clientName || "مستخدم غير معروف"}
+              </div>
+              <Badge
+                className={cn(
+                  DETAIL_COMPACT_PILL_BASE_CLASS,
+                  "border-slate-200 bg-slate-100 text-slate-700"
+                )}
+              >
+                {selectedClient?.clientRoleLabel || "عميل"}
+              </Badge>
+            </div>
+            <div className="text-sm leading-7 text-slate-600">
+              <span className="text-slate-500">{primaryContactLabel}: </span>
+              {primaryContactValue}
+            </div>
+            {selectedClient?.sourceHelper ? (
+              <p className="text-sm leading-7 text-slate-500">
+                {selectedClient.sourceHelper}
+              </p>
+            ) : null}
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              className={DETAIL_OUTLINE_BUTTON_CLASS}
+              onClick={openSelectedClientProfile}
+            >
+              <FileText className="h-4 w-4" />
+              فتح ملف العميل
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className={cn("rsg-card", DETAIL_SECTION_CARD_CLASS)}>
+        <CardHeader className={DETAIL_SECTION_HEADER_CLASS}>
+          <div className="flex items-center justify-between gap-3">
+            <div className="space-y-1">
+              <CardTitle className={DETAIL_SECTION_TITLE_CLASS}>المشروع</CardTitle>
+              <p className="text-sm leading-7 text-slate-500">
+                مرجع المشروع المرتبط بهذا السجل الآن.
+              </p>
+            </div>
+            {isSelectedInterestRequest ? (
+              <Badge className="border-amber-200 bg-amber-50 text-amber-800">
+                اهتمام
+              </Badge>
+            ) : (
+              <Badge className="border-emerald-200 bg-emerald-50 text-emerald-800">
+                استثمار
+              </Badge>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent className={`${DETAIL_SECTION_CONTENT_CLASS} space-y-4`}>
+          <div className="space-y-2">
+            <div className="text-lg font-semibold text-slate-950">
+              {selectedProjectTitle}
+            </div>
+            <p className="text-sm leading-7 text-slate-600">
+              {isSelectedInvestmentRequest
+                ? `المبلغ الحالي المرتبط بالطلب: ${moneySAR(selectedAmount)}`
+                : "هذا السجل مرتبط بمتابعة اهتمام أولية للمشروع المحدد."}
+            </p>
+            {selectedRemaining != null && isSelectedInvestmentRequest ? (
+              <p className="text-sm leading-7 text-slate-500">
+                المتبقي بالمشروع:{" "}
+                {selectedAmountExceeded
+                  ? `${moneySAR(selectedRemaining)} (تجاوز)`
+                  : moneySAR(selectedRemaining)}
+              </p>
+            ) : null}
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              className={DETAIL_OUTLINE_BUTTON_CLASS}
+              onClick={openSelectedProject}
+            >
+              <ExternalLink className="h-4 w-4" />
+              فتح المشروع
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+
+  const renderDetailWorkflowStepper = () =>
+    workflowSteps.length ? (
+      <DetailSection
+        title="مسار المعالجة"
+        description={
+          isArchiveMode
+            ? "عرض بصري مختصر يوضح أين انتهت دورة الطلب وما الذي اكتمل منها."
+            : "مسار واضح يحدد المرحلة الحالية ويوجهك مباشرة إلى الخطوة التالية."
+        }
+        badge={
+          selectedRequestStatus === "rejected" ? (
+            <Badge className="border-rose-200 bg-rose-50 text-rose-700">
+              متوقف
+            </Badge>
+          ) : isArchiveMode ? (
+            <Badge className="border-slate-200 bg-slate-100 text-slate-700">
+              مؤرشف
+            </Badge>
+          ) : (
+            <Badge className="border-emerald-200 bg-emerald-50 text-emerald-700">
+              Guided Workflow
+            </Badge>
+          )
+        }
+      >
+        <div className="grid grid-cols-1 gap-3 xl:grid-cols-4">
+          {workflowSteps.map((step, index) => {
+            const state =
+              workflowCurrentStepIndex === -1
+                ? "pending"
+                : selectedRequestStatus === "rejected"
+                  ? index < workflowCurrentStepIndex
+                    ? "completed"
+                    : index === workflowCurrentStepIndex
+                      ? "halted"
+                      : "pending"
+                  : index < workflowCurrentStepIndex
+                    ? "completed"
+                    : index === workflowCurrentStepIndex
+                      ? "active"
+                      : "pending";
+            const isTabFocused =
+              detailSecondaryTab === resolveDetailTab(step.targetTab);
+
+            return (
+              <button
+                key={step.key}
+                type="button"
+                onClick={() => openDetailTab(step.targetTab)}
+                className={cn(
+                  "rounded-[24px] border px-4 py-4 text-right transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300",
+                  state === "completed" &&
+                    "border-emerald-200 bg-emerald-50/80 text-emerald-950",
+                  state === "active" &&
+                    "border-slate-900 bg-slate-950 text-white shadow-[0_18px_40px_-30px_rgba(15,23,42,0.42)]",
+                  state === "pending" &&
+                    "border-slate-200/80 bg-white text-slate-700 hover:border-slate-300",
+                  state === "halted" &&
+                    "border-rose-200 bg-rose-50/90 text-rose-900",
+                  isTabFocused && "ring-1 ring-offset-0 ring-slate-300"
+                )}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div
+                    className={cn(
+                      "flex h-10 w-10 items-center justify-center rounded-2xl border text-sm font-semibold",
+                      state === "completed" &&
+                        "border-emerald-300 bg-emerald-100 text-emerald-700",
+                      state === "active" &&
+                        "border-white/15 bg-white/10 text-white",
+                      state === "pending" &&
+                        "border-slate-200 bg-slate-100 text-slate-600",
+                      state === "halted" &&
+                        "border-rose-300 bg-rose-100 text-rose-700"
+                    )}
+                  >
+                    {state === "completed" ? (
+                      <CheckCircle2 className="h-4 w-4" />
+                    ) : (
+                      step.icon
+                    )}
+                  </div>
+
+                  <Badge
+                    className={cn(
+                      DETAIL_COMPACT_PILL_BASE_CLASS,
+                      state === "completed" &&
+                        "border-emerald-200 bg-white/80 text-emerald-700",
+                      state === "active" &&
+                        "border-white/15 bg-white/10 text-white",
+                      state === "pending" &&
+                        "border-slate-200 bg-slate-100 text-slate-600",
+                      state === "halted" &&
+                        "border-rose-200 bg-white/70 text-rose-700"
+                    )}
+                  >
+                    {state === "completed"
+                      ? "مكتملة"
+                      : state === "active"
+                        ? "الحالية"
+                        : state === "halted"
+                          ? "توقفت هنا"
+                          : "قادمة"}
+                  </Badge>
+                </div>
+
+                <div className="mt-4 space-y-2">
+                  <div className="text-base font-semibold">{step.label}</div>
+                  <p
+                    className={cn(
+                      "text-sm leading-7",
+                      state === "active" ? "text-white/80" : "text-current/80"
+                    )}
+                  >
+                    {step.helper}
+                  </p>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        {workflowCurrentStepMeta ? (
+          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/80 px-4 py-4">
+              <div className={DETAIL_INLINE_LABEL_CLASS}>أنت الآن هنا</div>
+              <div className="text-base font-semibold text-slate-950">
+                {workflowCurrentStepMeta.label}
+              </div>
+              <p className="mt-2 text-sm leading-7 text-slate-600">
+                {workflowCurrentStepMeta.helper}
+              </p>
+            </div>
+            <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/80 px-4 py-4">
+              <div className={DETAIL_INLINE_LABEL_CLASS}>الانتقال المقترح</div>
+              <div className="text-base font-semibold text-slate-950">
+                {workflowNextStepMeta?.label ||
+                  (isArchiveMode ? "اكتملت الدورة الحالية" : "المراجعة النهائية")}
+              </div>
+              <p className="mt-2 text-sm leading-7 text-slate-600">
+                {workflowNextStepMeta?.helper ||
+                  (isArchiveMode
+                    ? "يمكن الرجوع الآن إلى السجل أو المستندات فقط عند الحاجة."
+                    : detailFlowSummary.helper)}
+              </p>
+            </div>
+          </div>
+        ) : null}
+      </DetailSection>
+    ) : null;
+
+  const renderDetailPrimaryPanel = () =>
+    isActiveMode ? (
+      <DetailSection
+        title="التشغيل الحالي"
+        description="الحالة الحالية والخطوة التالية فقط، مع CTA سياقي واحد يوجه المسار."
+        badge={
+          detailFlowSummary.needsAction ? (
+            <Badge className="border-amber-200 bg-amber-50 text-amber-800">
+              يتطلب متابعة
+            </Badge>
+          ) : undefined
+        }
+      >
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(220px,0.42fr)]">
+          <div
+            className={cn(
+              "rounded-[24px] border px-5 py-5 shadow-[0_20px_40px_-34px_rgba(15,23,42,0.22)]",
+              isSelectedInterestRequest
+                ? "border-amber-200/80 bg-[linear-gradient(180deg,rgba(255,251,235,0.98)_0%,rgba(255,255,255,0.98)_100%)] text-amber-950"
+                : "border-slate-900/10 bg-[linear-gradient(135deg,rgba(11,23,38,0.98)_0%,rgba(16,32,58,0.96)_70%,rgba(255,255,255,0.06)_135%)] text-white"
+            )}
+          >
+            <div className="flex flex-wrap items-center gap-2.5">
+              {selectedStatusMeta ? (
+                <Badge
+                  className={cn(
+                    DETAIL_PILL_BASE_CLASS,
+                    selectedStatusMeta.tone
+                  )}
+                >
+                  {selectedStatusMeta.label}
+                </Badge>
+              ) : null}
+              {isSelectedInterestRequest ? null : (
+                <Badge className={DETAIL_STAGE_PILL_CLASS}>
+                  {selectedStageMeta?.label || "—"}
+                </Badge>
+              )}
+            </div>
+
+            <div className="mt-5 space-y-3">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <div className="rounded-[20px] border border-white/12 bg-white/5 px-4 py-4">
+                  <div className="text-[11px] font-semibold tracking-[0.14em] text-current/70">
+                    المرحلة الحالية
+                  </div>
+                  <div className="mt-2 text-lg font-semibold leading-8 text-current">
+                    {workflowCurrentStepMeta?.label ||
+                      selectedStageMeta?.label ||
+                      selectedStatusMeta?.label ||
+                      "—"}
+                  </div>
+                  <p className="mt-2 text-sm leading-7 text-current/80">
+                    {workflowCurrentStepMeta?.helper ||
+                      "هذه هي المرحلة التي يعتمد عليها التوجيه الحالي داخل الصفحة."}
+                  </p>
+                </div>
+                <div className="rounded-[20px] border border-white/12 bg-white/5 px-4 py-4">
+                  <div className="text-[11px] font-semibold tracking-[0.14em] text-current/70">
+                    الخطوة التالية
+                  </div>
+                  <div className="mt-2 text-lg font-semibold leading-8 text-current">
+                    {workflowNextStepMeta?.label || detailFlowSummary.label}
+                  </div>
+                  <p className="mt-2 text-sm leading-7 text-current/80">
+                    {workflowNextStepMeta?.helper || detailFlowSummary.helper}
+                  </p>
+                </div>
+              </div>
+
+              {detailVisiblePrimaryAction || detailSecondaryAction ? (
+                <div className="flex flex-wrap gap-3 pt-2">
+                  {detailVisiblePrimaryAction ? (
+                    <Button
+                      className={detailVisiblePrimaryAction.className}
+                      onClick={detailVisiblePrimaryAction.onClick}
+                      disabled={detailVisiblePrimaryAction.disabled}
+                    >
+                      {detailVisiblePrimaryAction.icon}
+                      {detailVisiblePrimaryAction.label}
+                    </Button>
+                  ) : null}
+                  {detailSecondaryAction ? (
+                    <Button
+                      className={detailSecondaryAction.className}
+                      onClick={detailSecondaryAction.onClick}
+                      disabled={detailSecondaryAction.disabled}
+                    >
+                      {detailSecondaryAction.icon}
+                      {detailSecondaryAction.label}
+                    </Button>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3">
+            <DetailSummaryMetric
+              label={
+                isSelectedInterestRequest ? "وضع المتابعة" : "المبلغ الحالي"
+              }
+              value={
+                isSelectedInterestRequest
+                  ? selectedInterestReviewMeta?.label || "جديد"
+                  : moneySAR(selectedAmount)
+              }
+              helper={
+                isSelectedInterestRequest
+                  ? selectedInterestReviewMeta?.helperText
+                  : selectedMessage?.investmentId
+                    ? `سجل الاستثمار ${selectedMessage.investmentId}`
+                    : "لم يتم إنشاء سجل الاستثمار بعد"
+              }
+              icon={<Wallet className="h-3.5 w-3.5" />}
+              strong
+            />
+            <DetailSummaryMetric
+              label="آخر من عدّل"
+              value={selectedLastActor?.name || "—"}
+              helper={selectedLastActor?.roleLabel || undefined}
+              icon={<RefreshCw className="h-3.5 w-3.5" />}
+            />
+          </div>
+        </div>
+      </DetailSection>
+    ) : (
+      <DetailSection
+        title="النتيجة النهائية"
+        description="عرض أرشيفي مختصر يركّز على النتيجة النهائية وما يلزم الرجوع إليه فقط."
+        badge={
+          <Badge className="border-slate-200 bg-slate-100 text-slate-700">
+            أرشيف
+          </Badge>
+        }
+      >
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(220px,0.42fr)]">
+          <div className="rounded-[24px] border border-slate-200/80 bg-[linear-gradient(180deg,#ffffff_0%,rgba(248,250,252,0.96)_100%)] px-5 py-5 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.22)]">
+            <div className="flex flex-wrap items-center gap-2.5">
+              {selectedStatusMeta ? (
+                <Badge
+                  className={cn(
+                    DETAIL_PILL_BASE_CLASS,
+                    selectedStatusMeta.tone
+                  )}
+                >
+                  {selectedStatusMeta.label}
+                </Badge>
+              ) : null}
+              {isSelectedInterestRequest ? (
+                <Badge className="border-slate-200 bg-slate-100 text-slate-700">
+                  انتهاء متابعة الاهتمام
+                </Badge>
+              ) : null}
+            </div>
+
+            <div className="mt-5">
+              <div className="text-2xl font-semibold leading-9 text-slate-950">
+                {archiveResultMeta.title}
+              </div>
+              <p className="mt-2 text-sm leading-8 text-slate-600">
+                {archiveResultMeta.helper}
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3">
+            <DetailSummaryMetric
+              label="الحالة النهائية"
+              value={selectedStatusMeta?.label || "—"}
+              icon={<Eye className="h-3.5 w-3.5" />}
+              strong
+            />
+            <DetailSummaryMetric
+              label="آخر تحديث"
+              value={formatDateTimeAR(selectedUpdatedAtValue)}
+              helper={formatRequestTimeLabel(selectedUpdatedAtValue)}
+              icon={<CalendarDays className="h-3.5 w-3.5" />}
+            />
+          </div>
+        </div>
+      </DetailSection>
+    );
+
+  const renderDetailContextTab = () => (
+    <DetailSection
+      title="السياق المرتبط بالطلب"
+      description="المحتوى الوصفي والتفسيري المرتبط بهذا السجل دون منحه وزنًا تشغيليًا أعلى من اللازم."
+    >
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.08fr)_minmax(0,0.92fr)]">
+        <div className="rounded-[24px] border border-slate-200/80 bg-[linear-gradient(180deg,#ffffff_0%,rgba(248,250,252,0.96)_100%)] p-5 shadow-[0_18px_40px_-36px_rgba(15,23,42,0.18)]">
+          <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-400">
+            رسالة العميل / الوصف
+          </div>
+          <p className="mt-3 text-sm leading-8 text-slate-700">
+            {selectedRequestSummary || "لا توجد رسالة مفصلة مرفقة مع هذا الطلب."}
+          </p>
+        </div>
+
+        <div
+          className={cn(
+            "rounded-[24px] border px-5 py-5 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.22)]",
+            isSelectedInterestRequest
+              ? "border-amber-200/80 bg-[linear-gradient(180deg,rgba(255,251,235,0.98)_0%,rgba(255,255,255,0.98)_100%)]"
+              : "border-emerald-200/80 bg-[linear-gradient(180deg,rgba(236,253,245,0.98)_0%,rgba(255,255,255,0.98)_100%)]"
+          )}
+        >
+          <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-400">
+            {isSelectedInterestRequest ? "قراءة الاهتمام" : "قراءة الاستثمار"}
+          </div>
+          <div className="mt-3 space-y-3">
+            <DetailSummaryMetric
+              label="المشروع"
+              value={selectedProjectTitle}
+              icon={<Building2 className="h-3.5 w-3.5" />}
+              strong
+              className="border-transparent bg-white/85 shadow-none"
+            />
+            {isSelectedInterestRequest ? (
+              <DetailSummaryMetric
+                label="وضع المتابعة"
+                value={selectedInterestReviewMeta?.label || "جديد"}
+                helper={selectedInterestReviewMeta?.helperText}
+                icon={<Eye className="h-3.5 w-3.5" />}
+                className="border-transparent bg-white/85 shadow-none"
+              />
+            ) : (
+              <>
+                <DetailSummaryMetric
+                  label="المبلغ"
+                  value={moneySAR(selectedAmount)}
+                  icon={<Wallet className="h-3.5 w-3.5" />}
+                  strong
+                  className="border-transparent bg-white/85 shadow-none"
+                />
+                <DetailSummaryMetric
+                  label="سجل الاستثمار"
+                  value={
+                    selectedMessage?.investmentId
+                      ? "تم إنشاء سجل الاستثمار"
+                      : "بانتظار إنشاء السجل"
+                  }
+                  helper={
+                    selectedMessage?.investmentId
+                      ? `رقم السجل ${selectedMessage.investmentId}`
+                      : undefined
+                  }
+                  icon={<ShieldCheck className="h-3.5 w-3.5" />}
+                  className="border-transparent bg-white/85 shadow-none"
+                />
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div
+        className={cn(
+          "rounded-[24px] border px-5 py-4 text-sm leading-8 shadow-[0_18px_36px_-34px_rgba(15,23,42,0.2)]",
+          isSelectedInterestRequest
+            ? "border-amber-200/80 bg-[linear-gradient(180deg,rgba(255,251,235,0.98)_0%,rgba(255,255,255,0.98)_100%)] text-amber-950"
+            : "border-emerald-200/80 bg-[linear-gradient(180deg,rgba(236,253,245,0.98)_0%,rgba(255,255,255,0.98)_100%)] text-emerald-950"
+        )}
+      >
+        {isSelectedInterestRequest
+          ? selectedInterestReviewMeta?.helperText || selectedRequestKind?.helperText
+          : selectedMessage?.investmentId
+            ? "تم ربط هذا الطلب بسجل استثمار فعلي، لذلك يظهر هنا كسجل تشغيلي مرتبط بالمستندات والحالة الحالية."
+            : "هذا الطلب ما زال في المرحلة السابقة لإنشاء الاستثمار، لذلك يبقى التركيز على المشروع والمبلغ والقرار المطلوب من الفريق."}
+      </div>
+    </DetailSection>
+  );
+
+  const renderDetailTimelineTab = () => (
+    <DetailSection
+      title="السجل الزمني"
+      description="التحديثات والأنشطة السابقة المرتبطة بهذا السجل."
+    >
+      {selectedTimelineEvents.length ? (
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+          {selectedTimelineEvents.map(item => (
+            <DetailTimelineItem
+              key={item.id}
+              title={item.title}
+              note={item.note}
+              actorName={item.actor.name}
+              actorRole={item.actor.roleLabel}
+              timeLabel={item.timeLabel}
+              dateLabel={item.atLabel}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50/80 px-4 py-8 text-center text-sm leading-7 text-slate-500">
+          لا توجد أنشطة إضافية مسجلة على هذا الطلب حتى الآن.
+        </div>
+      )}
+    </DetailSection>
+  );
+
+  const renderDetailDocumentsTab = () => (
+    <DetailSection
+      title="المستندات المرتبطة"
+      description={
+        isArchiveMode
+          ? "تُعرض المستندات هنا للرجوع والقراءة فقط ضمن وضع الأرشيف."
+          : "ملفات الاستثمار والعقود المرتبطة بهذا الطلب."
+      }
+    >
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <DetailSummaryMetric
+          label="رقم الاستثمار"
+          value={String(selectedMessage?.investmentId || "-")}
+          icon={<Building2 className="h-3.5 w-3.5" />}
+          strong
+        />
+        <DetailSummaryMetric
+          label="حالة العقد"
+          value={getContractStatusLabel(contractStatusValue)}
+          helper={contractFollowupChipLabel || undefined}
+          icon={<ShieldCheck className="h-3.5 w-3.5" />}
+          strong
+        />
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div className={DETAIL_SUBCARD_CLASS}>
+          <div className="flex items-center justify-between gap-2">
+            <div className={DETAIL_SUBCARD_TITLE_CLASS}>العقد الأصلي</div>
+            <span className={getDetailBinaryPillClass(hasOriginalContract)}>
+              {hasOriginalContract ? "مرفوع" : "لا يوجد"}
+            </span>
+          </div>
+
+          {hasOriginalContract ? (
+            <>
+              <div className={DETAIL_SUBCARD_VALUE_CLASS}>
+                {originalContractFileName}
+              </div>
+              <div className="flex flex-wrap gap-2 pt-1">
+                {originalContractViewUrl ? (
+                  <a
+                    href={originalContractViewUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className={DETAIL_OUTLINE_BUTTON_CLASS}
+                    >
+                      <Eye className="w-4 h-4" />
+                      عرض
+                    </Button>
+                  </a>
+                ) : null}
+                {originalContractDownloadUrl ? (
+                  <a
+                    href={originalContractDownloadUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className={DETAIL_OUTLINE_BUTTON_CLASS}
+                    >
+                      <Download className="w-4 h-4" />
+                      تنزيل
+                    </Button>
+                  </a>
+                ) : null}
+              </div>
+              {needsFreshSignedContract ? (
+                <div className={DETAIL_ALERT_CLASS}>
+                  تم تحديث العقد الأصلي، وسيحتاج المستثمر إلى توقيع النسخة
+                  الجديدة.
+                </div>
+              ) : null}
+            </>
+          ) : (
+            <div className={DETAIL_HELP_TEXT_CLASS}>لا يوجد</div>
+          )}
+        </div>
+
+        <div className={DETAIL_SUBCARD_CLASS}>
+          <div className="flex items-center justify-between gap-2">
+            <div className={DETAIL_SUBCARD_TITLE_CLASS}>العقد الموقّع</div>
+            <span className={getDetailBinaryPillClass(hasCurrentSignedContract)}>
+              {hasCurrentSignedContract ? "مرفوع" : "لا يوجد"}
+            </span>
+          </div>
+
+          {hasCurrentSignedContract ? (
+            <>
+              <div className={DETAIL_SUBCARD_VALUE_CLASS}>
+                {signedContractFileName}
+              </div>
+              <div className="flex flex-wrap gap-2 pt-1">
+                {signedContractViewUrl ? (
+                  <a
+                    href={signedContractViewUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className={DETAIL_OUTLINE_BUTTON_CLASS}
+                    >
+                      <Eye className="w-4 h-4" />
+                      عرض
+                    </Button>
+                  </a>
+                ) : null}
+                {signedContractDownloadUrl ? (
+                  <a
+                    href={signedContractDownloadUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className={DETAIL_OUTLINE_BUTTON_CLASS}
+                    >
+                      <Download className="w-4 h-4" />
+                      تنزيل
+                    </Button>
+                  </a>
+                ) : null}
+              </div>
+            </>
+          ) : (
+            <div className={DETAIL_HELP_TEXT_CLASS}>
+              {needsFreshSignedContract
+                ? "لم يتم رفع عقد موقّع من المستثمر بعد."
+                : "لم يتم رفع العقد الموقّع بعد"}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {isActiveMode ? (
+        <div className="border-t border-slate-200/80 pt-5">
+          <div className={DETAIL_INLINE_LABEL_CLASS}>رفع المستندات</div>
+          <div className="space-y-4 rounded-[22px] border border-dashed border-slate-200/80 bg-slate-50/70 px-4 py-4">
+            <ContractFilePicker
+              buttonLabel="رفع العقد الأصلي (PDF)"
+              file={draftFile}
+              onFileChange={setDraftFile}
+              panelClassName="rounded-[18px] border border-slate-200 bg-white px-4 py-4 sm:px-4"
+              buttonClassName={DETAIL_OUTLINE_BUTTON_CLASS}
+              fileNameClassName="text-sm font-semibold text-slate-950"
+              helperTextClassName="text-xs leading-6 text-slate-500"
+              disabled={contractBusy || !selectedMessage?.investmentId}
+            />
+            <Button
+              className={`w-full ${DETAIL_SOLID_BUTTON_CLASS} bg-blue-700 hover:bg-blue-800`}
+              onClick={createContractForInvestment}
+              disabled={
+                contractBusy ||
+                !selectedMessage?.investmentId ||
+                !draftFile ||
+                !canAdmin
+              }
+            >
+              {contractBusy ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Upload className="w-4 h-4" />
+              )}
+              رفع العقد الأصلي
+            </Button>
+          </div>
+        </div>
+      ) : null}
+    </DetailSection>
+  );
+
+  const renderDetailInternalNotesTab = () => (
+    <DetailSection
+      title="الملاحظات الداخلية"
+      description={
+        canEditInternalNotes
+          ? "ملاحظات تنظيمية داخلية يمكن تحديثها ضمن الحالة الحالية."
+          : "ملاحظات داخلية محفوظة للرجوع فقط."
+      }
+    >
+      {canEditInternalNotes ? (
+        <div className="space-y-4">
+          <div className={DETAIL_INLINE_PANEL_CLASS}>
+            <Label className={DETAIL_INLINE_LABEL_CLASS}>ملاحظات داخلية</Label>
+            <Textarea
+              value={internalNotes}
+              onChange={e => setInternalNotes(e.target.value)}
+              placeholder="ملاحظات للإدارة فقط..."
+              className={DETAIL_TEXTAREA_CLASS}
+            />
+            <p className="mt-3 text-xs leading-6 text-slate-500">
+              هذا الحقل مخصص للملاحظات الداخلية والتنظيمية فقط.
+            </p>
+          </div>
+          <Button
+            className={cn(DETAIL_LIGHT_SOLID_BUTTON_CLASS, "w-full sm:w-auto")}
+            onClick={handleSaveNotesOnly}
+          >
+            <CheckCircle2 className="h-4 w-4" />
+            حفظ الملاحظات
+          </Button>
+        </div>
+      ) : (
+        <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/80 px-4 py-4 text-sm leading-8 text-slate-700">
+          {hasStoredInternalNotes
+            ? internalNotes
+            : "لا توجد ملاحظات داخلية محفوظة لهذا السجل."}
+        </div>
+      )}
+    </DetailSection>
+  );
+
+  const renderDetailSecondaryTabs = () => (
+    <Tabs
+      value={detailSecondaryTab}
+      onValueChange={value =>
+        setDetailSecondaryTab(resolveDetailTab(value as DetailSecondaryTabKey))
+      }
+      className="gap-4"
+    >
+      <TabsList className="h-auto w-full justify-start gap-2 overflow-x-auto rounded-2xl bg-slate-100/80 p-1.5">
+        <TabsTrigger
+          value="context"
+          className="shrink-0 rounded-xl px-4 py-2"
+        >
+          السياق
+        </TabsTrigger>
+        <TabsTrigger
+          value="timeline"
+          className="shrink-0 rounded-xl px-4 py-2"
+        >
+          السجل
+        </TabsTrigger>
+        {showDocumentsTab ? (
+          <TabsTrigger
+            value="documents"
+            className="shrink-0 rounded-xl px-4 py-2"
+          >
+            المستندات
+          </TabsTrigger>
+        ) : null}
+        {showInternalNotesTab ? (
+          <TabsTrigger
+            value="internal_notes"
+            className="shrink-0 rounded-xl px-4 py-2"
+          >
+            الملاحظات الداخلية
+          </TabsTrigger>
+        ) : null}
+      </TabsList>
+
+      <TabsContent value="context" className="mt-0 space-y-6">
+        {renderDetailContextTab()}
+      </TabsContent>
+      <TabsContent value="timeline" className="mt-0 space-y-6">
+        {renderDetailTimelineTab()}
+      </TabsContent>
+      {showDocumentsTab ? (
+        <TabsContent value="documents" className="mt-0 space-y-6">
+          {renderDetailDocumentsTab()}
+        </TabsContent>
+      ) : null}
+      {showInternalNotesTab ? (
+        <TabsContent value="internal_notes" className="mt-0 space-y-6">
+          {renderDetailInternalNotesTab()}
+        </TabsContent>
+      ) : null}
+    </Tabs>
+  );
+
+  const renderDetailAdvancedActions = () =>
+    showAdvancedActions ? (
+      <Accordion
+        type="single"
+        collapsible
+        className="rounded-[28px] border border-slate-200/80 bg-white/95 px-5 shadow-[0_20px_50px_-40px_rgba(15,23,42,0.26)]"
+      >
+        <AccordionItem value="advanced-actions" className="border-none">
+          <AccordionTrigger className="py-5 text-right text-base font-semibold text-slate-950 hover:no-underline">
+            إجراءات متقدمة
+          </AccordionTrigger>
+          <AccordionContent className="pb-5">
+            <div className="space-y-4">
+              {showReopenAdvancedAction ? (
+                <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/70 px-4 py-4">
+                  <div className="mb-3 text-sm font-semibold text-slate-950">
+                    إعادة فتح الطلب
+                  </div>
+                  <p className="mb-4 text-sm leading-7 text-slate-600">
+                    إجراء استثنائي عالي الصلاحية لإرجاع السجل إلى دورة المتابعة
+                    مرة أخرى.
+                  </p>
+                  <Button
+                    variant="outline"
+                    className={DETAIL_OUTLINE_BUTTON_CLASS}
+                    onClick={reopenMessage}
+                    disabled={
+                      reopenBusy || myRole !== "owner" || !canManageMessages
+                    }
+                  >
+                    {reopenBusy ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Clock3 className="h-4 w-4" />
+                    )}
+                    إعادة فتح (للمسؤول التقني)
+                  </Button>
+                </div>
+              ) : null}
+
+              {showArchiveContractUpload ? (
+                <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/70 px-4 py-4">
+                  <div className="mb-3 text-sm font-semibold text-slate-950">
+                    رفع عقد بعد الإغلاق
+                  </div>
+                  <p className="mb-4 text-sm leading-7 text-slate-600">
+                    يظل هذا الإجراء متاحًا هنا فقط لأنه خارج التدفق التشغيلي
+                    الأساسي للسجل المؤرشف.
+                  </p>
+                  <div className="space-y-4">
+                    <ContractFilePicker
+                      buttonLabel="رفع العقد الأصلي (PDF)"
+                      file={draftFile}
+                      onFileChange={setDraftFile}
+                      panelClassName="rounded-[18px] border border-slate-200 bg-white px-4 py-4 sm:px-4"
+                      buttonClassName={DETAIL_OUTLINE_BUTTON_CLASS}
+                      fileNameClassName="text-sm font-semibold text-slate-950"
+                      helperTextClassName="text-xs leading-6 text-slate-500"
+                      disabled={contractBusy || !selectedMessage?.investmentId}
+                    />
+                    <Button
+                      className={`w-full sm:w-auto ${DETAIL_SOLID_BUTTON_CLASS} bg-blue-700 hover:bg-blue-800`}
+                      onClick={createContractForInvestment}
+                      disabled={
+                        contractBusy ||
+                        !selectedMessage?.investmentId ||
+                        !draftFile ||
+                        !canAdmin
+                      }
+                    >
+                      {contractBusy ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Upload className="h-4 w-4" />
+                      )}
+                      رفع العقد الأصلي
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </AccordionContent>
+        </AccordionItem>
+      </Accordion>
+    ) : null;
+
   /* =========================
      Render
   ========================= */
   return (
     <DashboardLayout>
       <div className="space-y-6">
+        {!isRequestDetailsRouteActive ? (
+          <>
         <section className="relative overflow-hidden rounded-[30px] border border-slate-200/80 bg-[radial-gradient(circle_at_top_left,rgba(13,148,136,0.12),transparent_28%),radial-gradient(circle_at_top_right,rgba(245,158,11,0.12),transparent_30%),linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] p-6 shadow-[0_20px_70px_-42px_rgba(15,23,42,0.42)]">
           <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.66),transparent_55%)]" />
 
@@ -5366,7 +6918,7 @@ export default function MessagesManagement() {
                                 <Button
                                   size="sm"
                                   className="h-9 justify-center gap-2"
-                                  onClick={() => void openMessageDetails(m)}
+                                  onClick={() => navigateToRequestDetails(m.id)}
                                 >
                                   <Eye className="h-4 w-4" />
                                   مراجعة الطلب
@@ -5430,222 +6982,70 @@ export default function MessagesManagement() {
           </>
         ) : null}
 
-        {/* Detail dialog */}
-        <Dialog open={isDetailDialogOpen} onOpenChange={setIsDetailDialogOpen}>
-          <DialogContent
-            className={`flex max-h-[94vh] w-[98vw] max-w-[1480px] flex-col gap-0 overflow-hidden p-0 2xl:max-w-[1640px] ${DETAIL_DIALOG_PANEL_CLASS}`}
-            dir="rtl"
-          >
-            <DialogHeader className="relative shrink-0 overflow-hidden border-b border-slate-200/80 px-6 py-6 sm:px-8 sm:py-7">
-              <div
-                className={cn(
-                  "absolute inset-x-0 top-0 h-1.5",
-                  selectedStatusMeta?.accent ||
-                    (isSelectedInterestRequest
-                      ? "bg-amber-500"
-                      : "bg-emerald-500")
-                )}
-              />
-              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(242,174,48,0.16),transparent_32%),radial-gradient(circle_at_top_left,rgba(20,35,58,0.08),transparent_35%)]" />
+          </>
+        ) : null}
 
-              <div className="relative space-y-6">
-                <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
-                  <div className="min-w-0 space-y-4">
-                    <div className="flex flex-wrap items-center gap-2.5">
-                      {selectedRequestKind ? (
-                        <Badge
-                          className={cn(
-                            DETAIL_PILL_BASE_CLASS,
-                            selectedRequestKind.badgeTone
-                          )}
-                        >
-                          {selectedRequestKind.label}
-                        </Badge>
-                      ) : null}
-
-                      {selectedStatusMeta ? (
-                        <Badge
-                          className={cn(
-                            DETAIL_PILL_BASE_CLASS,
-                            selectedStatusMeta.tone
-                          )}
-                        >
-                          {selectedStatusMeta.label}
-                        </Badge>
-                      ) : null}
-
-                      {isSelectedInterestRequest ? null : (
-                        <Badge className={DETAIL_STAGE_PILL_CLASS}>
-                          {selectedStageMeta?.label || "—"}
-                        </Badge>
-                      )}
-
-                      {selectedClient?.sourceKey === "live_user" ? (
-                        <Badge
-                          className={cn(
-                            DETAIL_PILL_BASE_CLASS,
-                            "border-emerald-200 bg-emerald-50 text-emerald-700"
-                          )}
-                        >
-                          عميل مرتبط بالنظام
-                        </Badge>
-                      ) : null}
-                    </div>
-
-                    <div className="space-y-2">
-                      <DialogTitle className="text-[2rem] font-semibold tracking-tight text-slate-950 sm:text-[2.25rem]">
-                        تفاصيل الطلب
-                      </DialogTitle>
-                      <p className="max-w-3xl text-sm leading-8 text-slate-600 sm:text-[15px]">
-                        {isSelectedInterestRequest
-                          ? "واجهة متابعة أوضح لطلبات الاهتمام، تركز على العميل والمشروع وحالة المتابعة بدون عناصر استثمارية ثقيلة غير مطلوبة."
-                          : "واجهة تشغيلية أوضح لطلبات الاستثمار، مع قراءة سريعة للمبلغ والحالة والمسار التنفيذي المطلوب داخل النظام."}
-                      </p>
-                    </div>
-
-                    <div className="flex flex-wrap gap-3">
-                      <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/95 px-3.5 py-2 text-sm font-medium text-slate-700 shadow-[0_14px_32px_-28px_rgba(15,23,42,0.28)]">
-                        <FileText className="h-4 w-4 text-slate-400" />
-                        <span className="text-slate-500">رقم الطلب</span>
-                        <span className="font-mono text-[13px] font-semibold text-slate-950">
-                          {requestNumber(selectedMessage)}
-                        </span>
-                      </div>
-
-                      <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/95 px-3.5 py-2 text-sm font-medium text-slate-700 shadow-[0_14px_32px_-28px_rgba(15,23,42,0.28)]">
-                        <CalendarDays className="h-4 w-4 text-slate-400" />
-                        <span>{formatDateTimeAR(selectedCreatedAtValue)}</span>
-                      </div>
-
-                      <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/95 px-3.5 py-2 text-sm font-medium text-slate-700 shadow-[0_14px_32px_-28px_rgba(15,23,42,0.28)]">
-                        <RefreshCw className="h-4 w-4 text-slate-400" />
-                        <span>{formatDateTimeAR(selectedUpdatedAtValue)}</span>
-                      </div>
-
-                      {selectedProjectTitle && selectedProjectTitle !== "—" ? (
-                        <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/95 px-3.5 py-2 text-sm font-medium text-slate-700 shadow-[0_14px_32px_-28px_rgba(15,23,42,0.28)]">
-                          <Building2 className="h-4 w-4 text-slate-400" />
-                          <span className="max-w-[360px] truncate">
-                            {selectedProjectTitle}
-                          </span>
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
-
-                  <div className="grid gap-3 sm:grid-cols-2 xl:w-[430px] xl:grid-cols-2">
-                    <div
-                      className={cn(
-                        "rounded-[26px] border px-5 py-4 shadow-[0_22px_46px_-32px_rgba(15,23,42,0.28)]",
-                        isSelectedInterestRequest
-                          ? "border-amber-200/80 bg-[linear-gradient(135deg,rgba(255,251,235,0.98)_0%,rgba(255,255,255,0.98)_58%,rgba(248,250,252,0.96)_100%)] text-slate-950"
-                          : "border-slate-900/10 bg-[linear-gradient(135deg,rgba(11,23,38,0.98)_0%,rgba(20,35,58,0.96)_58%,rgba(242,174,48,0.24)_145%)] text-white"
-                      )}
-                    >
-                      <div className="text-[11px] font-semibold tracking-[0.14em] text-current/70">
-                        {isSelectedInterestRequest
-                          ? "ملف المتابعة"
-                          : "المشهد الاستثماري"}
-                      </div>
-                      <div className="mt-3 text-[1.8rem] font-semibold leading-none">
-                        {isSelectedInterestRequest
-                          ? selectedStatusMeta?.label || "—"
-                          : moneySAR(selectedAmount)}
-                      </div>
-                      <p className="mt-3 text-sm leading-7 text-current/80">
-                        {isSelectedInterestRequest
-                          ? "هذا السجل يعكس lead أو اهتمامًا أوليًا، لذلك يظهر كحالة متابعة تمهيدية لا كطلب استثماري مكتمل."
-                          : selectedMessage?.investmentId
-                            ? `سجل الاستثمار مرتبط بالطلب برقم ${selectedMessage.investmentId}.`
-                            : "لا يوجد سجل استثمار فعلي حتى الآن، والطلب ما زال داخل مسار المراجعة والتحويل."}
-                      </p>
-                    </div>
-
-                    <div className="rounded-[26px] border border-slate-200/80 bg-white/95 px-5 py-4 shadow-[0_22px_46px_-34px_rgba(15,23,42,0.22)]">
-                      <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-400">
-                        الإجراء التالي
-                      </div>
-                      <div className="mt-3 text-lg font-semibold leading-7 text-slate-950">
-                        {selectedNextActionSummary.label}
-                      </div>
-                      <p className="mt-2 text-sm leading-7 text-slate-600">
-                        {selectedNextActionSummary.helper}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="rounded-[28px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98)_0%,rgba(248,250,252,0.95)_100%)] p-4 shadow-[0_22px_56px_-42px_rgba(15,23,42,0.18)] sm:p-5">
-                  <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <div className="text-sm font-semibold text-slate-950">
-                        ملخص تنفيذي سريع
-                      </div>
-                      <p className="mt-1 text-sm leading-7 text-slate-500">
-                        قراءة فورية للحالة الحالية والمشروع وآخر تعديل وهل يوجد
-                        إجراء مطلوب الآن.
-                      </p>
-                    </div>
-
-                    <div
-                      className={cn(
-                        "inline-flex w-fit items-center rounded-full border px-3 py-1 text-sm font-semibold",
-                        selectedNextActionSummary.needsAction
-                          ? "border-amber-200 bg-amber-50 text-amber-800"
-                          : "border-slate-200 bg-white text-slate-700"
-                      )}
-                    >
-                      {selectedNextActionSummary.needsAction
-                        ? "يتطلب إجراء"
-                        : "وضع مستقر"}
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-6">
-                    <DetailSummaryMetric
-                      label="نوع الطلب"
-                      value={selectedRequestKind?.label || "—"}
-                      icon={<MessageSquare className="h-3.5 w-3.5" />}
-                      strong
-                    />
-                    <DetailSummaryMetric
-                      label="الحالة الحالية"
-                      value={selectedStatusMeta?.label || "—"}
-                      icon={<Eye className="h-3.5 w-3.5" />}
-                      strong
-                    />
-                    <DetailSummaryMetric
-                      label="المشروع"
-                      value={selectedProjectTitle}
-                      icon={<Building2 className="h-3.5 w-3.5" />}
-                      strong
-                    />
-                    <DetailSummaryMetric
-                      label="الإجراء"
-                      value={selectedNextActionSummary.label}
-                      icon={<ShieldCheck className="h-3.5 w-3.5" />}
-                      strong
-                    />
-                    <DetailSummaryMetric
-                      label="آخر من عدّل"
-                      value={selectedLastActor?.name || "—"}
-                      helper={selectedLastActor?.roleLabel || undefined}
-                      icon={<RefreshCw className="h-3.5 w-3.5" />}
-                    />
-                    <DetailSummaryMetric
-                      label="آخر تحديث"
-                      value={formatDateTimeAR(selectedUpdatedAtValue)}
-                      helper={formatRequestTimeLabel(selectedUpdatedAtValue)}
-                      icon={<CalendarDays className="h-3.5 w-3.5" />}
-                    />
-                  </div>
-                </div>
-              </div>
-            </DialogHeader>
-
+        {isRequestDetailsRouteActive ? (
+          <section dir="rtl" className="space-y-6">
             {selectedMessage ? (
-              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-                <div className="space-y-6 p-6 sm:p-7">
+              <div className={DETAIL_DIALOG_PANEL_CLASS}>
+                <div className="relative overflow-hidden border-b border-slate-200/80 px-6 py-6 sm:px-8 sm:py-7">
+                  <div
+                    className={cn(
+                      "absolute inset-x-0 top-0 h-1.5",
+                      selectedStatusMeta?.accent ||
+                        (isSelectedInterestRequest
+                          ? "bg-amber-500"
+                          : "bg-emerald-500")
+                    )}
+                  />
+                  <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(242,174,48,0.16),transparent_32%),radial-gradient(circle_at_top_left,rgba(20,35,58,0.08),transparent_35%)]" />
+
+                  <div className="relative space-y-6">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <Button
+                        variant="outline"
+                        className={DETAIL_OUTLINE_BUTTON_CLASS}
+                        onClick={navigateToMessagesList}
+                      >
+                        <ArrowRight className="h-4 w-4" />
+                        العودة إلى الطلبات
+                      </Button>
+
+                      <Button
+                        variant="outline"
+                        className={DETAIL_OUTLINE_BUTTON_CLASS}
+                        onClick={copySelectedRequestNumber}
+                      >
+                        <Copy className="h-4 w-4" />
+                        نسخ رقم الطلب
+                      </Button>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-6">
+                      {detailHeaderMetrics.map(metric => (
+                        <DetailSummaryMetric
+                          key={metric.key}
+                          label={metric.label}
+                          value={metric.value}
+                          helper={metric.helper}
+                          icon={metric.icon}
+                          mono={metric.mono}
+                          strong={metric.strong}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+              <div className="space-y-6 p-6 sm:p-7">
+                {renderDetailWorkflowStepper()}
+                {renderDetailContextRow()}
+                {renderDetailPrimaryPanel()}
+                {renderDetailSecondaryTabs()}
+                {renderDetailAdvancedActions()}
+
+                {false ? (
                   <div className="grid grid-cols-1 gap-6">
                     <DetailSection
                       title="بيانات العميل"
@@ -6457,40 +7857,42 @@ export default function MessagesManagement() {
                       </Card>
                     ) : null}
                   </div>
-                </div>
+                ) : null}
               </div>
-            ) : null}
-
-            <DialogFooter className="shrink-0 border-t border-slate-200/80 bg-white/90 px-6 py-5 backdrop-blur sm:px-8">
-              <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="text-sm leading-7 text-slate-500">
-                  {isLockedFinal
-                    ? "هذا الطلب مقفل بعد اكتمال الدورة الحالية."
-                    : selectedNextActionSummary.helper}
-                </div>
-
-                <div className="flex flex-wrap gap-2">
+          </div>
+        ) : (
+          <Card className="rsg-card border-slate-200/80 bg-white/95 shadow-[0_22px_70px_-46px_rgba(15,23,42,0.42)]">
+            <CardContent className="flex flex-col items-center justify-center gap-4 px-6 py-16 text-center sm:px-10">
+              {loading ? (
+                <>
+                  <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+                  <div className="text-base font-semibold text-slate-900">
+                    جاري تحميل تفاصيل الطلب...
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="text-lg font-semibold text-slate-900">
+                    تعذر العثور على الطلب المطلوب.
+                  </div>
+                  <p className="max-w-xl text-sm leading-7 text-slate-500">
+                    قد يكون الرابط غير صحيح أو أن الطلب لم يعد متاحًا ضمن السجلات الحالية.
+                  </p>
                   <Button
                     variant="outline"
                     className={DETAIL_OUTLINE_BUTTON_CLASS}
-                    onClick={copySelectedRequestNumber}
+                    onClick={navigateToMessagesList}
                   >
-                    <Copy className="h-4 w-4" />
-                    نسخ رقم الطلب
+                    <ArrowRight className="h-4 w-4" />
+                    العودة إلى الطلبات
                   </Button>
-
-                  <Button
-                    variant="outline"
-                    className={DETAIL_OUTLINE_BUTTON_CLASS}
-                    onClick={() => setIsDetailDialogOpen(false)}
-                  >
-                    إغلاق
-                  </Button>
-                </div>
-              </div>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        )}
+        </section>
+        ) : null}
 
         {/* Return dialog */}
         <Dialog open={returnDialogOpen} onOpenChange={setReturnDialogOpen}>

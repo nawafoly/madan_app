@@ -809,7 +809,7 @@ export default function AdminDashboard() {
     if (!linkedRequestId) return;
 
     setActiveDialog(null);
-    setLocation(`/admin/messages?requestId=${encodeURIComponent(linkedRequestId)}`);
+    setLocation(`/admin/messages/${encodeURIComponent(linkedRequestId)}`);
   };
 
   const handleOpenRequest = async (row: AnyDoc) => {
@@ -820,7 +820,7 @@ export default function AdminDashboard() {
     }
 
     setActiveDialog(null);
-    setLocation(`/admin/messages?requestId=${encodeURIComponent(row.id)}`);
+    setLocation(`/admin/messages/${encodeURIComponent(row.id)}`);
   };
 
   return (
