@@ -7,6 +7,7 @@ export type FileCategory =
   | "project_attachment"
   | "contract_original"
   | "contract_signed"
+  | "investment_settlement"
   | string;
 
 export interface CloudflareFileRecord {
@@ -168,6 +169,10 @@ function expectedUploadPrefix(
 
   if (category === "project_attachment") {
     return `${safeEntityType}s/${safeEntityId}/attachments/`;
+  }
+
+  if (category === "investment_settlement") {
+    return `${safeEntityType}s/${safeEntityId}/settlement/`;
   }
 
   return `${safeEntityType}s/${safeEntityId}/`;

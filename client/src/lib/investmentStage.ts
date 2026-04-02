@@ -6,13 +6,14 @@ export type InvestmentStage =
   | "contract_under_review"
   | "contract_verified"
   | "active"
+  | "stopped"
   | "completed"
   | "rejected"
   | "cancelled";
 
 export type InvestmentTimelineStepKey = Exclude<
   InvestmentStage,
-  "active" | "completed" | "rejected" | "cancelled"
+  "active" | "stopped" | "completed" | "rejected" | "cancelled"
 >;
 
 export type DeriveInvestmentStageInput = {
@@ -48,6 +49,10 @@ export function deriveInvestmentStage(
 
   if (investmentStatus === "active") {
     return "active";
+  }
+
+  if (investmentStatus === "stopped") {
+    return "stopped";
   }
 
   if (investmentStatus === "completed" || investmentStatus === "closed") {

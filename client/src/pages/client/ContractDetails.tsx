@@ -128,6 +128,7 @@ function statusBadge(status: string) {
     under_review: getClientContractStatusMeta("under_review"),
     approved: getClientContractStatusMeta("approved"),
     active: getClientInvestmentStatusMeta("active"),
+    stopped: getClientInvestmentStatusMeta("stopped"),
     resolved: { label: "مكتمل", cls: "bg-gray-700" },
     rejected: { label: "مرفوض", cls: "bg-red-700" },
     closed: { label: "مكتمل", cls: "bg-gray-700" },

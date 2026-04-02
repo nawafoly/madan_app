@@ -555,6 +555,22 @@ export default function InvestmentDetails() {
       });
     }
 
+    const stoppedAt =
+      toDateSafe(investment?.stoppedAt) ||
+      toDateSafe(investment?.actualEndAt) ||
+      toDateSafe(investment?.withdrawnAt);
+    if (stoppedAt && !hasType("investment_stopped", "stop_requested")) {
+      pushEvent({
+        _source: "investment",
+        type: "investment_stopped",
+        title: CLIENT_WORKFLOW_COPY.investmentStopped || "تم إيقاف الاستثمار",
+        note:
+          String(investment?.stopReason || "").trim() ||
+          "تم إيقاف الاستثمار بطلب العميل قبل نهايته الطبيعية.",
+        at: stoppedAt,
+      });
+    }
+
     if (!list.length) {
       pushEvent({
         _source: "investment",
@@ -837,7 +853,13 @@ export default function InvestmentDetails() {
     desc: stageUi.description,
     emphasis: Boolean(stageUi.emphasis),
   };
-  const showProfitCard = stage === "active" || stage === "completed";
+  const isStoppedStage = stage === "stopped";
+  const showProfitCard =
+    stage === "active" || stage === "stopped" || stage === "completed";
+  const expectedProfitLabel = isStoppedStage
+    ? "الربح المحتسب حتى الإيقاف"
+    : "الربح المتوقع";
+  const endDateLabel = isStoppedStage ? "تاريخ الإيقاف" : "تاريخ نهاية المشروع";
   const showInvestmentRequestStepper = Boolean(stageUi.timelineStepKey);
   const investmentRequestStepDates = useMemo(
     () => ({
@@ -1195,7 +1217,9 @@ export default function InvestmentDetails() {
                   </div>
 
                   <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-right">
-                    <div className="text-xs text-muted-foreground">من الربح المتوقع</div>
+                    <div className="text-xs text-muted-foreground">
+                      {isStoppedStage ? "حتى تاريخ الإيقاف" : "من المدة التعاقدية"}
+                    </div>
                     <div className="text-lg font-semibold text-emerald-700 tabular-nums">
                       {formatPercentAR(profitProgressPercent, 2)}
                     </div>
@@ -1214,11 +1238,11 @@ export default function InvestmentDetails() {
 
                 <div className="mt-5 grid gap-3 sm:grid-cols-2">
                   <PerformanceMetric
-                    label="الربح المتوقع"
+                    label={expectedProfitLabel}
                     value={formatMoneyAR(profitMetrics.expectedProfit, 2, 2)}
                   />
                   <PerformanceMetric
-                    label="تاريخ نهاية المشروع"
+                    label={endDateLabel}
                     value={formatDateAR(profitMetrics.displayEndAt)}
                   />
                 </div>
@@ -1353,7 +1377,7 @@ export default function InvestmentDetails() {
               <InfoRow label="المبلغ" value={formatMoneyAR(profitMetrics.principalAmount, 0, 0)} />
               {showProfitCard ? (
                 <>
-                  <InfoRow label="الربح المتوقع" value={formatMoneyAR(profitMetrics.expectedProfit, 2, 2)} />
+                  <InfoRow label={expectedProfitLabel} value={formatMoneyAR(profitMetrics.expectedProfit, 2, 2)} />
                   <InfoRow
                     label="ربحك حتى الآن"
                     value={formatMoneyAR(
@@ -1362,7 +1386,7 @@ export default function InvestmentDetails() {
                       currentProfitDigits
                     )}
                   />
-                  <InfoRow label="تاريخ نهاية المشروع" value={formatDateAR(profitMetrics.displayEndAt)} />
+                  <InfoRow label={endDateLabel} value={formatDateAR(profitMetrics.displayEndAt)} />
                 </>
               ) : (
                 <>

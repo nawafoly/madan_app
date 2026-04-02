@@ -66,7 +66,12 @@ import {
 import { toast } from "sonner";
 
 type AnyDoc = Record<string, any> & { id: string };
-type ReportType = "monthly" | "quarterly" | "yearly";
+type ReportType =
+  | "daily"
+  | "weekly"
+  | "monthly"
+  | "quarterly"
+  | "yearly";
 type TrendKind = "increase" | "decrease" | "flat" | "new";
 type TrendMeta = {
   kind: TrendKind;
@@ -157,9 +162,19 @@ const MONTH_NAMES_AR = [
 ];
 
 function getReportTypeLabel(reportType: ReportType) {
+  if (reportType === "daily") return "يومي";
+  if (reportType === "weekly") return "أسبوعي";
   if (reportType === "monthly") return "شهري";
   if (reportType === "quarterly") return "ربع سنوي";
   return "سنوي";
+}
+
+function formatDayMonthLabel(date: Date) {
+  return `${formatNumberEN(date.getDate())} ${MONTH_NAMES_AR[date.getMonth()]}`;
+}
+
+function formatDailyAxisLabel(date: Date) {
+  return `${formatNumberEN(date.getDate())}/${formatNumberEN(date.getMonth() + 1)}`;
 }
 
 function formatDashboardPercent(value: number) {
@@ -585,6 +600,13 @@ export default function Reports() {
   ========================= */
 
   const timeSeriesData = useMemo<TimeSeriesRow[]>(() => {
+    const yearStart = new Date(yearNum, 0, 1);
+    const yearEnd = new Date(yearNum, 11, 31);
+    const totalDaysInYear = Math.round(
+      (new Date(yearNum + 1, 0, 1).getTime() - yearStart.getTime()) /
+        (1000 * 60 * 60 * 24)
+    );
+
     const addRow = (
       label: string,
       fullLabel: string,
@@ -651,6 +673,70 @@ export default function Reports() {
         return addRow(
           quarter.label,
           quarter.fullLabel,
+          investmentsTotal,
+          returnsTotal,
+          recordCount
+        );
+      });
+    } else if (reportType === "weekly") {
+      const totalWeeks = Math.ceil(totalDaysInYear / 7);
+
+      rows = Array.from({ length: totalWeeks }, (_, weekIndex) => {
+        const rangeStart = new Date(yearNum, 0, 1 + weekIndex * 7);
+        const rangeEndExclusive = new Date(yearNum, 0, 1 + weekIndex * 7 + 7);
+        const rangeEnd = new Date(Math.min(rangeEndExclusive.getTime() - 1, yearEnd.getTime()));
+
+        let investmentsTotal = 0;
+        let returnsTotal = 0;
+        let recordCount = 0;
+
+        for (const investment of investmentsInYear) {
+          const dt = getInvestmentReportDate(investment);
+          if (!dt) continue;
+          if (dt < rangeStart || dt >= rangeEndExclusive) continue;
+
+          investmentsTotal += getInvestmentAmount(investment);
+          returnsTotal += getEstimatedReturnValue(investment);
+          recordCount += 1;
+        }
+
+        return addRow(
+          `أسبوع ${formatNumberEN(weekIndex + 1)}`,
+          `الأسبوع ${formatNumberEN(weekIndex + 1)} - ${formatDayMonthLabel(
+            rangeStart
+          )} - ${formatDayMonthLabel(rangeEnd)} ${yearNum}`,
+          investmentsTotal,
+          returnsTotal,
+          recordCount
+        );
+      });
+    } else if (reportType === "daily") {
+      rows = Array.from({ length: totalDaysInYear }, (_, dayIndex) => {
+        const currentDate = new Date(yearNum, 0, 1 + dayIndex);
+
+        let investmentsTotal = 0;
+        let returnsTotal = 0;
+        let recordCount = 0;
+
+        for (const investment of investmentsInYear) {
+          const dt = getInvestmentReportDate(investment);
+          if (!dt) continue;
+          if (
+            dt.getFullYear() !== currentDate.getFullYear() ||
+            dt.getMonth() !== currentDate.getMonth() ||
+            dt.getDate() !== currentDate.getDate()
+          ) {
+            continue;
+          }
+
+          investmentsTotal += getInvestmentAmount(investment);
+          returnsTotal += getEstimatedReturnValue(investment);
+          recordCount += 1;
+        }
+
+        return addRow(
+          formatDailyAxisLabel(currentDate),
+          `${formatDayMonthLabel(currentDate)} ${yearNum}`,
           investmentsTotal,
           returnsTotal,
           recordCount
@@ -859,6 +945,8 @@ export default function Reports() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="daily">يومي</SelectItem>
+                <SelectItem value="weekly">أسبوعي</SelectItem>
                 <SelectItem value="monthly">شهري</SelectItem>
                 <SelectItem value="quarterly">ربع سنوي</SelectItem>
                 <SelectItem value="yearly">سنوي</SelectItem>
@@ -912,7 +1000,7 @@ export default function Reports() {
             title="عدد المشاريع"
             value={totalProjects}
             description="إجمالي المشاريع الداخلة في التقارير والتحليلات الحالية عبر النظام."
-            helper={`نوع العرض: ${reportType === "monthly" ? "شهري" : reportType === "quarterly" ? "ربع سنوي" : "سنوي"}`}
+            helper={`نوع العرض: ${reportTypeLabel}`}
             icon={<Building2 className="h-5 w-5" />}
             accent="blue"
           />

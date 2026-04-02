@@ -33,7 +33,7 @@ const toNum = (v: any) => {
   return Number.isFinite(n) ? n : 0;
 };
 
-const COUNTED = new Set(["active", "completed"]);
+const COUNTED = new Set(["active", "stopped", "completed"]);
 const PENDING = new Set([
   "pending",
   "pending_contract",

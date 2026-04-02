@@ -33,7 +33,13 @@ export type InvestmentProfitLike = {
   createdAt?: TimestampLike;
   plannedEndAt?: TimestampLike;
   actualEndAt?: TimestampLike;
+  stoppedAt?: TimestampLike;
+  withdrawnAt?: TimestampLike;
   status?: string | null;
+  exitType?: string | null;
+  settlement?: {
+    calculatedProfit?: number | null;
+  } | null;
   legalTermsSnapshot?: LegalTermsSnapshotLike | null;
 };
 
@@ -66,6 +72,7 @@ export type InvestmentProfitSnapshot = {
   status: string;
   freezeReason:
     | "completed"
+    | "stopped"
     | "timeline_ended"
     | "cancelled"
     | "rejected"
@@ -77,7 +84,7 @@ const AVG_DAYS_PER_MONTH = 30.4375;
 const MS_PER_SECOND = 1000;
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
 const TERMINAL_ZERO_STATUSES = new Set(["rejected", "cancelled"]);
-const TERMINAL_FINAL_STATUSES = new Set(["completed", "closed"]);
+const TERMINAL_FINAL_STATUSES = new Set(["stopped", "completed", "closed"]);
 
 export function toDateSafe(value: TimestampLike): Date | null {
   try {
@@ -125,6 +132,7 @@ export function hasReadableInvestmentProfit(
     snapshot.hasPerformanceTerms ||
     snapshot.currentProfit > 0 ||
     snapshot.finalProfit > 0 ||
+    snapshot.freezeReason === "stopped" ||
     snapshot.freezeReason === "completed" ||
     snapshot.freezeReason === "timeline_ended"
   );
@@ -241,7 +249,7 @@ export function getInvestmentProfitSnapshot(
         )
       : 0;
 
-  const expectedProfit = Math.max(
+  const contractualExpectedProfit = Math.max(
     0,
     firstNumber(
       legalTerms?.expectedProfit,
@@ -251,10 +259,26 @@ export function getInvestmentProfitSnapshot(
     ) ?? 0
   );
 
+  const isStoppedEarly =
+    status === "stopped" ||
+    ["early_withdrawal", "client_requested_stop"].includes(
+      normalizeStatus(investment?.exitType)
+    ) ||
+    Boolean(investment?.stoppedAt) ||
+    Boolean(investment?.withdrawnAt);
+
   const finalProfit = Math.max(
     0,
-    firstNumber(investment?.earnedProfit, expectedProfit, 0) ?? 0
+    firstNumber(
+      investment?.settlement?.calculatedProfit,
+      investment?.earnedProfit,
+      contractualExpectedProfit,
+      0
+    ) ?? 0
   );
+
+  const expectedProfit =
+    isStoppedEarly && finalProfit > 0 ? finalProfit : contractualExpectedProfit;
 
   const displayEndAt =
     TERMINAL_FINAL_STATUSES.has(status) && toDateSafe(investment?.actualEndAt)
@@ -328,7 +352,7 @@ export function getInvestmentProfitSnapshot(
         isFrozen: true,
         hasPerformanceTerms,
         status,
-        freezeReason: "completed",
+        freezeReason: isStoppedEarly ? "stopped" : "completed",
       };
     }
 
@@ -414,7 +438,7 @@ export function getInvestmentProfitSnapshot(
       isFrozen: true,
       hasPerformanceTerms,
       status,
-      freezeReason: "completed",
+      freezeReason: isStoppedEarly ? "stopped" : "completed",
     };
   }
 

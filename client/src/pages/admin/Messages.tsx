@@ -5220,7 +5220,16 @@ export default function MessagesManagement() {
     selectedNextActionSummary,
     workflowCurrentStepKey,
   ]);
-  const detailGuidedPrimaryAction =
+  const detailGuidedPrimaryAction:
+    | {
+        key: string;
+        label: string;
+        onClick: () => void;
+        disabled?: boolean;
+        icon: ReactNode;
+        className: string;
+      }
+    | null =
     !isActiveMode ||
     !isSelectedInvestmentRequest ||
     detailPrimaryAction ||
@@ -5232,6 +5241,7 @@ export default function MessagesManagement() {
           label:
             canAdmin && canManageInvestments ? "رفع العقد" : "فتح المستندات",
           onClick: () => openDetailTab("documents"),
+          disabled: false,
           icon: <Upload className="h-4 w-4" />,
           className: `${DETAIL_SOLID_BUTTON_CLASS} bg-sky-700 hover:bg-sky-800`,
         };
@@ -5630,10 +5640,10 @@ export default function MessagesManagement() {
                 <Badge
                   className={cn(
                     DETAIL_PILL_BASE_CLASS,
-                    selectedStatusMeta.tone
+                    selectedStatusMeta?.tone
                   )}
                 >
-                  {selectedStatusMeta.label}
+                  {selectedStatusMeta?.label}
                 </Badge>
               ) : null}
               {isSelectedInterestRequest ? null : (
@@ -5746,10 +5756,10 @@ export default function MessagesManagement() {
                 <Badge
                   className={cn(
                     DETAIL_PILL_BASE_CLASS,
-                    selectedStatusMeta.tone
+                    selectedStatusMeta?.tone
                   )}
                 >
-                  {selectedStatusMeta.label}
+                  {selectedStatusMeta?.label}
                 </Badge>
               ) : null}
               {isSelectedInterestRequest ? (
@@ -7110,7 +7120,7 @@ export default function MessagesManagement() {
                               <div className="mt-3 inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-500">
                                 معرّف العميل:
                                 <span className="mr-1 font-mono text-slate-700">
-                                  {selectedClient.clientId}
+                                  {selectedClient?.clientId}
                                 </span>
                               </div>
                             ) : null}
@@ -7375,10 +7385,10 @@ export default function MessagesManagement() {
                               <Badge
                                 className={cn(
                                   DETAIL_PILL_BASE_CLASS,
-                                  selectedStatusMeta.tone
+                                  selectedStatusMeta?.tone
                                 )}
                               >
-                                {selectedStatusMeta.label}
+                                {selectedStatusMeta?.label}
                               </Badge>
                             ) : null}
 

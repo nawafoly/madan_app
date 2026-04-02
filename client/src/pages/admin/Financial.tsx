@@ -4,6 +4,7 @@ import DashboardLayout from "@/components/DashboardLayout";
 import AdminPanelStatCard from "@/components/AdminPanelStatCard";
 import { hasPermission, useAuth } from "@/_core/hooks/useAuth";
 import {
+  arrayUnion,
   collection,
   doc,
   getDocs,
@@ -25,6 +26,7 @@ import { getClientInvestmentStatusMeta } from "@/lib/workflowStatusMeta";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import ContractFilePicker from "@/components/ContractFilePicker";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -45,7 +47,10 @@ import {
 } from "@/components/ui/table";
 import {
   CheckCircle,
+  Download,
   DollarSign,
+  Eye,
+  Loader2,
   TrendingUp,
   Clock,
   FileText,
@@ -65,10 +70,26 @@ import {
   getProjectDisplayTitleById,
 } from "@/lib/projectDisplay";
 import {
+  buildR2DownloadUrl,
+  listDocumentMetadata,
+  pickLatestFileByCategory,
+  uploadInvestmentDocument,
+  type CloudflareFileRecord,
+} from "@/lib/documentUploadService";
+import {
   buildUserIdentityIndex,
   getLinkedUserDisplayName,
   resolveLinkedUser,
 } from "@/lib/userDisplay";
+import { buildInvestmentReportData as buildDetailedInvestmentReportData } from "@/lib/investmentReportPdf";
+import {
+  buildEarlyStopSettlementPreview,
+  getInvestmentSettlementSnapshot,
+  getInvestmentSettlementStatusLabel,
+  INVESTMENT_SETTLEMENT_FILE_CATEGORY,
+  isInvestmentStoppedEarly,
+  isStopDateBeforePlannedEnd,
+} from "@shared/investmentSettlement";
 
 /* =========================
    helpers
@@ -122,6 +143,43 @@ const fmtMoney = (n: any) => {
 };
 
 const safeFile = (s: string) => String(s || "file").replace(/[^\w\-]+/g, "_");
+
+const toDateInputValue = (value: Date | null | undefined) => {
+  if (!(value instanceof Date) || Number.isNaN(value.getTime())) return "";
+  return value.toISOString().slice(0, 10);
+};
+
+const formatDateTimeValue = (value: any) => {
+  const date = value instanceof Date ? value : toDate(value);
+  return Number.isNaN(date.getTime()) ? "—" : formatDateEN(date, { dateStyle: "medium" } as any);
+};
+
+const formatDetailedDateTime = (value: any) => {
+  const date = value instanceof Date ? value : toDate(value);
+  return Number.isNaN(date.getTime())
+    ? "—"
+    : new Intl.DateTimeFormat("ar-SA", {
+        dateStyle: "medium",
+        timeStyle: "short",
+      }).format(date);
+};
+
+const translateSettlementPreviewError = (code: string) => {
+  switch (code) {
+    case "missing_start_date":
+      return "لا يمكن إيقاف الاستثمار قبل تثبيت تاريخ البداية الفعلي.";
+    case "invalid_stop_date":
+      return "تاريخ الإيقاف غير صالح.";
+    case "stop_before_start":
+      return "تاريخ الإيقاف يجب أن يكون بعد تاريخ بداية الاستثمار.";
+    case "missing_principal_amount":
+      return "قيمة أصل الاستثمار غير متوفرة للحساب.";
+    case "missing_profit_rate":
+      return "نسبة الربح المعتمدة غير متوفرة للحساب.";
+    default:
+      return "تعذر تجهيز معاينة التسوية النهائية.";
+  }
+};
 
 const INVESTMENTS_TABLE_CARD_CLASS =
   "overflow-hidden border border-slate-200/80 bg-white shadow-[0_18px_50px_-30px_rgba(15,23,42,0.18)]";
@@ -1021,12 +1079,127 @@ export default function Financial() {
     const d = new Date();
     return d.toISOString().slice(0, 10); // YYYY-MM-DD
   });
+  const [stopReason, setStopReason] = useState("");
+  const [settlementDocumentFile, setSettlementDocumentFile] = useState<File | null>(null);
+  const [settlementDocuments, setSettlementDocuments] = useState<CloudflareFileRecord[]>([]);
+  const [settlementDocumentsLoading, setSettlementDocumentsLoading] = useState(false);
+  const [settlementDocumentBusy, setSettlementDocumentBusy] = useState(false);
 
   const [rejectionReason, setRejectionReason] = useState("");
   const [customRate, setCustomRate] = useState("");
   const [customDuration, setCustomDuration] = useState("");
   const projectsMap = useMemo(() => buildProjectsMap(projects), [projects]);
   const userIdentityIndex = useMemo(() => buildUserIdentityIndex(users), [users]);
+  const selectedProjectRecord = useMemo(
+    () =>
+      projects.find(
+        project => String(project.id || "") === String(selectedInvestment?.projectId || "")
+      ) || null,
+    [projects, selectedInvestment?.projectId]
+  );
+  const selectedProjectFallback = useMemo(
+    () =>
+      selectedProjectRecord
+        ? {
+            annualReturn: selectedProjectRecord?.annualReturn ?? null,
+            durationMonths:
+              selectedProjectRecord?.durationMonths ?? selectedProjectRecord?.duration ?? null,
+            plannedEndAt: selectedProjectRecord?.plannedEndAt ?? null,
+          }
+        : null,
+    [selectedProjectRecord]
+  );
+  const selectedSettlement = useMemo(
+    () => getInvestmentSettlementSnapshot(selectedInvestment),
+    [selectedInvestment]
+  );
+  const isSelectedInvestmentStoppedEarly = useMemo(
+    () => isInvestmentStoppedEarly(selectedInvestment),
+    [selectedInvestment]
+  );
+  const stopSettlementPreviewState = useMemo(() => {
+    if (!selectedInvestment || isSelectedInvestmentStoppedEarly) {
+      return {
+        preview: selectedSettlement,
+        error: "",
+      };
+    }
+
+    if (String(selectedInvestment.status || "").trim().toLowerCase() !== "active") {
+      return {
+        preview: null,
+        error: "",
+      };
+    }
+
+    try {
+      return {
+        preview: buildEarlyStopSettlementPreview({
+          investment: selectedInvestment,
+          projectFallback: selectedProjectFallback,
+          stopAt: closeDate ? new Date(`${closeDate}T12:00:00`) : new Date(),
+          stopReason,
+        }),
+        error: "",
+      };
+    } catch (error: any) {
+      return {
+        preview: null,
+        error: translateSettlementPreviewError(String(error?.message || "")),
+      };
+    }
+  }, [
+    closeDate,
+    isSelectedInvestmentStoppedEarly,
+    selectedInvestment,
+    selectedProjectFallback,
+    selectedSettlement,
+    stopReason,
+  ]);
+  const latestSettlementDocument = useMemo(
+    () =>
+      pickLatestFileByCategory(
+        settlementDocuments,
+        INVESTMENT_SETTLEMENT_FILE_CATEGORY
+      ),
+    [settlementDocuments]
+  );
+  const latestSettlementDocumentViewUrl = latestSettlementDocument
+    ? latestSettlementDocument.fileUrl ||
+      buildR2DownloadUrl(latestSettlementDocument.filePath, false)
+    : "";
+  const latestSettlementDocumentDownloadUrl = latestSettlementDocument
+    ? buildR2DownloadUrl(latestSettlementDocument.filePath, true) ||
+      latestSettlementDocument.fileUrl
+    : "";
+  const stopPreviewExceedsPlannedEnd = Boolean(
+    stopSettlementPreviewState.preview?.plannedEndDate &&
+      stopSettlementPreviewState.preview?.investmentStopDate &&
+      !isStopDateBeforePlannedEnd(
+        stopSettlementPreviewState.preview.investmentStopDate,
+        stopSettlementPreviewState.preview.plannedEndDate
+      )
+  );
+  const canConfirmStopInvestment = Boolean(
+    canEditFinancial &&
+      !isSelectedInvestmentStoppedEarly &&
+      stopSettlementPreviewState.preview &&
+      !stopSettlementPreviewState.error &&
+      !stopPreviewExceedsPlannedEnd
+  );
+  const settlementPreview = stopSettlementPreviewState.preview;
+  const settlementFormulaParts = useMemo(() => {
+    const raw = String(settlementPreview?.formula || "").trim();
+    if (!raw) return [];
+
+    const parts = raw
+      .split(/\n+/)
+      .flatMap(line => line.split(/\s*=\s*/))
+      .map(part => part.trim())
+      .filter(Boolean);
+
+    return parts.length > 0 ? parts : [raw];
+  }, [settlementPreview?.formula]);
 
   /* =========================
      Load data
@@ -1108,6 +1281,56 @@ export default function Financial() {
     };
   }, []);
 
+  const loadSettlementDocumentsForInvestment = async (investmentId: string) => {
+    const normalizedInvestmentId = String(investmentId || "").trim();
+    if (!normalizedInvestmentId) {
+      setSettlementDocuments([]);
+      return [];
+    }
+
+    setSettlementDocumentsLoading(true);
+    try {
+      const records = await listDocumentMetadata({
+        entityType: "investment",
+        entityId: normalizedInvestmentId,
+        investmentId: normalizedInvestmentId,
+        category: INVESTMENT_SETTLEMENT_FILE_CATEGORY,
+        limit: 20,
+      });
+      setSettlementDocuments(records);
+      return records;
+    } catch (error) {
+      console.error("settlement_documents_load_failed", error);
+      setSettlementDocuments([]);
+      return [];
+    } finally {
+      setSettlementDocumentsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!isCloseDialogOpen || !selectedInvestment?.id) {
+      setSettlementDocuments([]);
+      setSettlementDocumentsLoading(false);
+      return;
+    }
+
+    void loadSettlementDocumentsForInvestment(String(selectedInvestment.id || ""));
+  }, [isCloseDialogOpen, selectedInvestment?.id]);
+
+  useEffect(() => {
+    if (!isCloseDialogOpen || !selectedInvestment) return;
+
+    const effectiveStopDate =
+      selectedSettlement?.investmentStopDate ||
+      toDate(selectedInvestment?.stoppedAt || selectedInvestment?.actualEndAt) ||
+      new Date();
+
+    setCloseDate(toDateInputValue(effectiveStopDate));
+    setStopReason(String(selectedSettlement?.stopReason || selectedInvestment?.stopReason || ""));
+    setSettlementDocumentFile(null);
+  }, [isCloseDialogOpen, selectedInvestment, selectedSettlement]);
+
   /* =========================
      Derived
   ========================= */
@@ -1119,7 +1342,7 @@ export default function Financial() {
   const approvedInvestments = useMemo(
     () =>
       investments.filter(i =>
-        ["active", "completed"].includes(String(i.status || ""))
+        ["active", "stopped", "completed"].includes(String(i.status || ""))
       ),
     [investments]
   );
@@ -1144,16 +1367,24 @@ export default function Financial() {
     return resolveLinkedUser(investment, userIdentityIndex);
   };
 
-  const getStatusBadge = (status: string) => {
-    const meta = getClientInvestmentStatusMeta(status);
-    const normalized = String(status || "")
+  const getDisplayedInvestmentStatusLabel = (investment: any) => {
+    return (
+      getInvestmentSettlementStatusLabel(investment) ||
+      getClientInvestmentStatusMeta(investment?.status).label
+    );
+  };
+
+  const getStatusBadge = (investment: any) => {
+    const normalized = String(investment?.status || "")
       .trim()
       .toLowerCase();
+    const isEarlyStop = isInvestmentStoppedEarly(investment);
 
     const classMap: Record<string, string> = {
       pending: "border-amber-200 bg-amber-50 text-amber-700",
       approved: "border-emerald-200 bg-emerald-50 text-emerald-700",
       active: "border-sky-200 bg-sky-50 text-sky-700",
+      stopped: "border-amber-200 bg-amber-50 text-amber-800",
       completed: "border-slate-200 bg-slate-100 text-slate-700",
       closed: "border-slate-200 bg-slate-100 text-slate-700",
       rejected: "border-rose-200 bg-rose-50 text-rose-700",
@@ -1164,10 +1395,12 @@ export default function Financial() {
       <Badge
         className={cn(
           INVESTMENTS_TABLE_BADGE_BASE_CLASS,
-          classMap[normalized] || "border-slate-200 bg-slate-100 text-slate-700"
+          isEarlyStop
+            ? "border-amber-200 bg-amber-50 text-amber-800"
+            : classMap[normalized] || "border-slate-200 bg-slate-100 text-slate-700"
         )}
       >
-        {meta.label}
+        {getDisplayedInvestmentStatusLabel(investment)}
       </Badge>
     );
   };
@@ -1219,7 +1452,7 @@ export default function Financial() {
     const projectName =
       getProjectDisplayTitle(projectRecord, investment?.projectTitle, "غير معروف") ||
       "غير معروف";
-    const statusLabel = getClientInvestmentStatusMeta(investment.status).label;
+    const statusLabel = getDisplayedInvestmentStatusLabel(investment);
     const reportDate = formatDateEN(new Date(), {
       year: "numeric",
       month: "numeric",
@@ -1349,8 +1582,16 @@ export default function Financial() {
     };
   };
 
-  const getActionStateLabel = (status: string) => {
-    const normalized = String(status || "")
+  const getActionStateLabel = (investment: any) => {
+    const stoppedLabel = getInvestmentSettlementStatusLabel(investment);
+    if (stoppedLabel) {
+      return stoppedLabel;
+    }
+    if (isInvestmentStoppedEarly(investment)) {
+      return "تمت تسوية الإيقاف";
+    }
+
+    const normalized = String(investment?.status || "")
       .trim()
       .toLowerCase();
 
@@ -1457,11 +1698,14 @@ export default function Financial() {
               expectedProfit: null,
               earnedProfit: null,
               withdrawnAt: null,
+              stoppedAt: null,
+              stopReason: null,
               actualEndAt: null,
               exitType: null,
               projectTitleAtSign: null,
               termsLockedAt: null,
               legalTermsSnapshot: null,
+              settlement: null,
               contractId: contractRef.id,
               updatedAt: new Date(),
             };
@@ -1507,22 +1751,86 @@ export default function Financial() {
     }
   };
 
+  const uploadSettlementDocumentForInvestment = async (
+    investmentRecord: any,
+    file: File | null,
+    existingDocuments: CloudflareFileRecord[] = settlementDocuments
+  ) => {
+    if (!file || !investmentRecord?.id) return null;
+
+    const latestVersion = Math.max(
+      0,
+      ...existingDocuments.map(record => Number(record?.version || 0))
+    );
+
+    setSettlementDocumentBusy(true);
+    try {
+      await uploadInvestmentDocument({
+        entityType: "investment",
+        entityId: String(investmentRecord.id || ""),
+        investmentId: String(investmentRecord.id || ""),
+        projectId: String(investmentRecord.projectId || "") || undefined,
+        uploadedBy: String(user?.uid || "") || undefined,
+        category: INVESTMENT_SETTLEMENT_FILE_CATEGORY,
+        file,
+        kind: "attachment",
+        version: latestVersion + 1,
+      });
+
+      const refreshed = await loadSettlementDocumentsForInvestment(
+        String(investmentRecord.id || "")
+      );
+      setSettlementDocumentFile(null);
+      return refreshed;
+    } finally {
+      setSettlementDocumentBusy(false);
+    }
+  };
+
+  const uploadSettlementAttachment = async () => {
+    if (!canEditFinancial) {
+      toast.error("لا تملك صلاحية تعديل الشؤون المالية.");
+      return;
+    }
+    if (!selectedInvestment || !settlementDocumentFile) return;
+
+    try {
+      await uploadSettlementDocumentForInvestment(
+        selectedInvestment,
+        settlementDocumentFile
+      );
+      toast.success("تم رفع مستند التسوية بنجاح.");
+    } catch (error) {
+      console.error(error);
+      toast.error("فشل رفع مستند التسوية.");
+    }
+  };
+
   const closeInvestmentEarlyTx = async () => {
     if (!canEditFinancial) {
       toast.error("لا تملك صلاحية تعديل الشؤون المالية.");
       return;
     }
     if (!selectedInvestment) return;
+    const preview = stopSettlementPreviewState.preview;
+    if (!preview || stopSettlementPreviewState.error) {
+      toast.error(stopSettlementPreviewState.error || "تعذر تجهيز التسوية قبل الحفظ.");
+      return;
+    }
+    if (stopPreviewExceedsPlannedEnd) {
+      toast.error("تاريخ الإيقاف يجب أن يكون قبل تاريخ نهاية الاستثمار المخطط.");
+      return;
+    }
 
     try {
       await runAuditedOperation({
-        action: AUDIT_ACTIONS.INVESTMENT_COMPLETED,
+        action: AUDIT_ACTIONS.INVESTMENT_STOPPED,
         category: "investment",
         entityType: "investment",
         source: buildAuditSource({
           area: "admin",
           page: "Financial",
-          method: "close",
+          method: "stop_investment",
         }),
         relatedIds: {
           investmentId: selectedInvestment.id,
@@ -1532,9 +1840,13 @@ export default function Financial() {
               selectedInvestment.investorUid || selectedInvestment.userId || ""
             ) || undefined,
         },
-        message: `Closed investment ${selectedInvestment.id} early`,
+        message: `Stopped investment ${selectedInvestment.id} early`,
         meta: {
           closeDate,
+          stopReason: preview.stopReason || null,
+          investedDays: preview.investedDays,
+          calculatedProfit: preview.calculatedProfit,
+          totalPayout: preview.totalPayout,
           projectName: getProjectName(
             String(selectedInvestment.projectId || "")
           ),
@@ -1554,75 +1866,134 @@ export default function Financial() {
             const inv: any = invSnap.data();
 
             const st = String(inv.status || "").toLowerCase();
-            if (st === "completed" || st === "closed") {
+            if (st === "stopped" || st === "completed" || st === "closed") {
               throw new Error("investment_already_closed");
             }
             if (st !== "active") {
               throw new Error("invalid_status_for_close");
             }
 
-            const projectId = String(inv.projectId || "");
-            if (!projectId) throw new Error("missing_projectId");
+            const transactionPreview = buildEarlyStopSettlementPreview({
+              investment: inv,
+              projectFallback: selectedProjectFallback,
+              stopAt: preview.investmentStopDate,
+              stopReason: preview.stopReason,
+            });
 
-            const projRef = doc(db, "projects", projectId);
-            const projSnap = await tx.get(projRef);
-            if (!projSnap.exists()) throw new Error("project_not_found");
+            if (
+              transactionPreview.plannedEndDate &&
+              !isStopDateBeforePlannedEnd(
+                transactionPreview.investmentStopDate,
+                transactionPreview.plannedEndDate
+              )
+            ) {
+              throw new Error("stop_after_planned_end");
+            }
 
-            const proj: any = projSnap.data();
-
-            const amount =
-              toNumber(inv.approvedAmount, 0) || toNumber(inv.amount, 0);
-            const startAtValue = inv.startAt || inv.signedAt || inv.createdAt;
-            if (!startAtValue) throw new Error("missing_start_date");
-            const startDate = toDate(startAtValue);
-            const exitDate = closeDate
-              ? new Date(`${closeDate}T00:00:00`)
-              : new Date();
-            if (!Number.isFinite(exitDate.getTime()))
-              throw new Error("invalid_close_date");
-            if (exitDate.getTime() < startDate.getTime())
-              throw new Error("close_before_start");
-
-            const annualReturnAtSign =
-              toNumber(inv.annualReturnAtSign, 0) ||
-              toNumber(inv.customRate, 0) ||
-              toNumber(proj.annualReturn, 0);
-            if (annualReturnAtSign <= 0) throw new Error("missing_frozen_rate");
-
-            const actualDurationMonths = monthsBetween(startDate, exitDate);
-            const earnedProfit = roundMoney(
-              amount * (annualReturnAtSign / 100) * (actualDurationMonths / 12)
+            const closureAt = Timestamp.fromDate(
+              transactionPreview.investmentStopDate
             );
-            const settlementTotal = roundMoney(amount + earnedProfit);
-
-            const closureAt = Timestamp.fromDate(exitDate);
+            const finalizedAt = Timestamp.fromDate(new Date());
 
             tx.update(invRef, {
-              status: "completed",
+              status: "stopped",
+              stoppedAt: closureAt,
+              stopReason: transactionPreview.stopReason,
               actualEndAt: closureAt,
               withdrawnAt: closureAt,
-              exitType: "early_withdrawal",
-              earnedProfit,
-              actualDurationMonths,
-              settlementTotal,
-              settlementPrincipal: amount,
-              settlementAnnualReturnPercent: annualReturnAtSign,
-              settlementFormula:
-                "principal * annualRate * (actualDurationMonths / 12)",
-              settlementLockedAt: closureAt,
+              exitType: "client_requested_stop",
+              stoppedByUid: user?.uid || null,
+              stoppedByEmail: user?.email || null,
+              earnedProfit: transactionPreview.calculatedProfit,
+              actualDurationMonths: transactionPreview.actualDurationMonths,
+              settlementTotal: transactionPreview.totalPayout,
+              settlementPrincipal: transactionPreview.principalAmount,
+              settlementAnnualReturnPercent: transactionPreview.annualProfitRate,
+              settlementFormula: transactionPreview.formula,
+              settlementLockedAt: finalizedAt,
               settlementLocked: true,
               closureLocked: true,
+              finalizedAt,
+              settlement: {
+                kind: transactionPreview.kind,
+                status: transactionPreview.status,
+                policyCode: transactionPreview.policyCode,
+                policyLabel: transactionPreview.policyLabel,
+                principalAmount: transactionPreview.principalAmount,
+                annualProfitRate: transactionPreview.annualProfitRate,
+                investmentStartDate: Timestamp.fromDate(
+                  transactionPreview.investmentStartDate
+                ),
+                plannedEndDate: transactionPreview.plannedEndDate
+                  ? Timestamp.fromDate(transactionPreview.plannedEndDate)
+                  : null,
+                investmentStopDate: closureAt,
+                originalDurationMonths:
+                  transactionPreview.originalDurationMonths ?? null,
+                actualDurationMonths: transactionPreview.actualDurationMonths,
+                investedDays: transactionPreview.investedDays,
+                calculatedProfit: transactionPreview.calculatedProfit,
+                totalPayout: transactionPreview.totalPayout,
+                formula: transactionPreview.formula,
+                stopReason: transactionPreview.stopReason,
+                finalizedAt,
+                finalizedByUid: user?.uid || null,
+                finalizedByEmail: user?.email || null,
+                documentCategory: transactionPreview.documentCategory,
+              },
+              events: arrayUnion(
+                {
+                  type: "stop_requested",
+                  title: "طلب إيقاف الاستثمار",
+                  note: transactionPreview.stopReason || "إيقاف بطلب العميل",
+                  at: finalizedAt,
+                  byUid: user?.uid || null,
+                  byEmail: user?.email || null,
+                  meta: {
+                    requestedBy: "client",
+                    effectiveStopDate: closureAt,
+                  },
+                },
+                {
+                  type: "investment_stopped",
+                  title: "تم إيقاف الاستثمار بطلب العميل",
+                  note: transactionPreview.stopReason || null,
+                  at: closureAt,
+                  byUid: user?.uid || null,
+                  byEmail: user?.email || null,
+                  meta: {
+                    requestedBy: "client",
+                    settlementTotal: transactionPreview.totalPayout,
+                    realizedProfit: transactionPreview.calculatedProfit,
+                  },
+                }
+              ),
               updatedAt: new Date(),
             });
           }),
       });
 
-      toast.success("تم إكمال الاستثمار بنجاح");
+      toast.success("تم إيقاف الاستثمار وتثبيت التسوية بنجاح");
+      if (settlementDocumentFile) {
+        try {
+          await uploadSettlementDocumentForInvestment(
+            selectedInvestment,
+            settlementDocumentFile
+          );
+          toast.success("تم رفع ملف التسوية النهائية.");
+        } catch (uploadError: any) {
+          console.error("settlement_document_upload_failed", uploadError);
+          toast.warning(
+            uploadError?.message ||
+              "تم حفظ التسوية لكن تعذر رفع ملف الـ PDF، ويمكن إعادة رفعه لاحقًا."
+          );
+        }
+      }
       setIsCloseDialogOpen(false);
       loadAll();
     } catch (e) {
       console.error(e);
-      toast.error("فشل إكمال الاستثمار");
+      toast.error("فشل إيقاف الاستثمار");
     }
   };
 
@@ -1685,7 +2056,11 @@ export default function Financial() {
     }
     if (!selectedInvestment) return;
     const currentStatus = String(selectedInvestment.status || "").toLowerCase();
-    if (currentStatus === "completed" || currentStatus === "closed") {
+    if (
+      currentStatus === "stopped" ||
+      currentStatus === "completed" ||
+      currentStatus === "closed"
+    ) {
       toast.error("لا يمكن تعديل الاستثمار بعد الإغلاق.");
       return;
     }
@@ -1737,7 +2112,12 @@ export default function Financial() {
   const exportInvestorPDF = async (inv: any) => {
     try {
       const pdf = await PDFDocument.create();
-      await appendInvestmentReportToPdf(pdf, buildInvestmentReportData(inv));
+      const report = await buildDetailedInvestmentReportData({
+        investment: inv,
+        users,
+        projects,
+      });
+      await appendInvestmentReportToPdf(pdf, report);
 
       const bytes = await pdf.save();
       downloadBytes(
@@ -1762,7 +2142,12 @@ export default function Financial() {
       });
 
       for (const inv of investments) {
-        await appendInvestmentReportToPdf(pdf, buildInvestmentReportData(inv));
+        const report = await buildDetailedInvestmentReportData({
+          investment: inv,
+          users,
+          projects,
+        });
+        await appendInvestmentReportToPdf(pdf, report);
       }
 
       const bytes = await pdf.save();
@@ -1779,7 +2164,12 @@ export default function Financial() {
     try {
       for (const inv of investments) {
         const pdf = await PDFDocument.create();
-        await appendInvestmentReportToPdf(pdf, buildInvestmentReportData(inv));
+        const report = await buildDetailedInvestmentReportData({
+          investment: inv,
+          users,
+          projects,
+        });
+        await appendInvestmentReportToPdf(pdf, report);
 
         const bytes = await pdf.save();
         downloadBytes(
@@ -2036,24 +2426,43 @@ export default function Financial() {
                             {formatCurrencyEN(inv.amount)}
                           </TableCell>
                           <TableCell className={INVESTMENTS_TABLE_CELL_CLASS}>
-                            {getStatusBadge(inv.status)}
+                            {getStatusBadge(inv)}
                           </TableCell>
 
                           <TableCell className={INVESTMENTS_TABLE_CELL_CLASS}>
-                            {inv.status === "active" ? (
+                            {String(inv.status || "").trim().toLowerCase() === "active" ? (
                               <Button
                                 size="sm"
                                 variant="outline"
-                                className={
-                                  INVESTMENTS_TABLE_DANGER_BUTTON_CLASS
-                                }
+                                className={cn(
+                                  INVESTMENTS_TABLE_DANGER_BUTTON_CLASS,
+                                  "text-[0px]"
+                                )}
                                 disabled={!canEditFinancial}
                                 onClick={() => {
                                   setSelectedInvestment(inv);
                                   setIsCloseDialogOpen(true);
                                 }}
                               >
+                                <span className="text-sm">إيقاف الاستثمار</span>
                                 مكتمل
+                              </Button>
+                            ) : isInvestmentStoppedEarly(inv) ? (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className={cn(
+                                  INVESTMENTS_TABLE_OUTLINE_BUTTON_CLASS,
+                                  "text-[0px]"
+                                )}
+                                disabled={!canEditFinancial}
+                                onClick={() => {
+                                  setSelectedInvestment(inv);
+                                  setIsCloseDialogOpen(true);
+                                }}
+                              >
+                                <span className="text-sm">مراجعة الإيقاف</span>
+                                إدارة التسوية
                               </Button>
                             ) : (
                               <span
@@ -2061,7 +2470,7 @@ export default function Financial() {
                                   INVESTMENTS_TABLE_PASSIVE_ACTION_CLASS
                                 }
                               >
-                                {getActionStateLabel(inv.status)}
+                                {getActionStateLabel(inv)}
                               </span>
                             )}
                           </TableCell>
@@ -2070,13 +2479,24 @@ export default function Financial() {
                             <Button
                               size="sm"
                               variant="outline"
-                              className={INVESTMENTS_TABLE_PDF_BUTTON_CLASS}
+                              className={cn(
+                                INVESTMENTS_TABLE_PDF_BUTTON_CLASS,
+                                !isInvestmentStoppedEarly(inv) && "hidden",
+                                "text-[0px]"
+                              )}
                               onClick={() => exportInvestorPDF(inv)}
+                              aria-label="تحميل تقرير PDF"
                               title="تنزيل تقرير الاستثمار المولد من البيانات الحالية"
                             >
                               <FileText className="h-4 w-4" />
+                              <span className="text-sm">تحميل تقرير PDF</span>
                               تصدير تقرير
                             </Button>
+                            {!isInvestmentStoppedEarly(inv) ? (
+                              <span className={INVESTMENTS_TABLE_PASSIVE_ACTION_CLASS}>
+                                يتوفر بعد الإيقاف
+                              </span>
+                            ) : null}
                           </TableCell>
                         </TableRow>
                       ))}
@@ -2178,41 +2598,393 @@ export default function Financial() {
 
       {/* Close Investment */}
       <Dialog open={isCloseDialogOpen} onOpenChange={setIsCloseDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>إكمال الاستثمار</DialogTitle>
+        <DialogContent className="overflow-hidden rounded-[32px] border border-slate-200 bg-white p-0 sm:max-w-5xl xl:max-w-6xl">
+          <DialogHeader className="space-y-3 border-b border-slate-200 bg-gradient-to-b from-white to-slate-50 px-8 py-7 text-right [&>h2]:sr-only">
+            <div className="inline-flex w-fit items-center rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-[11px] font-semibold tracking-[0.16em] text-amber-800">
+              {isSelectedInvestmentStoppedEarly ? "استثمار موقوف" : "طلب إيقاف"}
+            </div>
+            <div className="space-y-2">
+              <div className="text-2xl font-semibold tracking-tight text-slate-950">
+                {isSelectedInvestmentStoppedEarly
+                  ? "بيانات إيقاف الاستثمار"
+                  : "إيقاف الاستثمار بطلب العميل"}
+              </div>
+              <p className="max-w-4xl text-sm leading-7 text-slate-500">
+                راجع الملخص وبيانات الإيقاف والتسوية والمستندات في أقسام واضحة قبل اعتماد الإجراء أو متابعة ملفاته.
+              </p>
+            </div>
+            <DialogTitle>
+              {isSelectedInvestmentStoppedEarly
+                ? "بيانات إيقاف الاستثمار"
+                : "إيقاف الاستثمار بطلب العميل"}
+            </DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-3">
-            <div className="text-sm text-muted-foreground">
-              سيتم احتساب الربح النسبي حسب المدة من تاريخ الاعتماد إلى تاريخ
-              الإكمال.
-            </div>
+          <div className="max-h-[78vh] space-y-8 overflow-y-auto bg-slate-50/70 px-8 py-8">
+            <section className="space-y-5 rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="space-y-1">
+                <div className="text-[11px] font-semibold tracking-[0.16em] text-slate-500">
+                  ملخص
+                </div>
+                <div className="text-sm leading-7 text-slate-500">
+                  نظرة سريعة على السجل الحالي قبل تنفيذ الإيقاف أو متابعة ملفاته.
+                </div>
+              </div>
 
-            <div className="space-y-2">
-              <Label>تاريخ الإكمال</Label>
-              <Input
-                type="date"
-                value={closeDate}
-                onChange={e => setCloseDate(e.target.value)}
-              />
-            </div>
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm leading-7 text-amber-900 shadow-sm">
+                {isSelectedInvestmentStoppedEarly
+                  ? "هذا الاستثمار موقوف بالفعل بطلب العميل. يمكنك مراجعة بيانات الإيقاف ورفع مستندات التسوية المرتبطة به."
+                  : "سيتم إيقاف هذا الاستثمار فورًا بطلب العميل، مع تثبيت تاريخ الإيقاف والأرباح المستحقة وتسجيل العملية بالكامل في سجل التدقيق."}
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                <div className="flex min-h-[136px] flex-col justify-between rounded-2xl border border-slate-200 bg-slate-50/80 px-5 py-4 shadow-sm">
+                  <div className="text-xs font-semibold text-slate-500">
+                    المستثمر
+                  </div>
+                  <div className="mt-4 text-base font-semibold leading-7 text-slate-900">
+                    {selectedInvestment
+                      ? getInvestorDisplayNameLive(selectedInvestment)
+                      : "غير متوفر"}
+                  </div>
+                </div>
+                <div className="flex min-h-[136px] flex-col justify-between rounded-2xl border border-slate-200 bg-slate-50/80 px-5 py-4 shadow-sm">
+                  <div className="text-xs font-semibold text-slate-500">
+                    المشروع
+                  </div>
+                  <div className="mt-4 text-base font-semibold leading-7 text-slate-900">
+                    {selectedInvestment
+                      ? getProjectName(String(selectedInvestment.projectId || ""))
+                      : "غير متوفر"}
+                  </div>
+                </div>
+                <div className="flex min-h-[136px] flex-col justify-between rounded-2xl border border-slate-200 bg-slate-50/80 px-5 py-4 shadow-sm">
+                  <div className="text-xs font-semibold text-slate-500">
+                    الحالة الحالية
+                  </div>
+                  <div className="mt-4 text-base font-semibold leading-7 text-slate-900">
+                    {selectedInvestment
+                      ? getDisplayedInvestmentStatusLabel(selectedInvestment)
+                      : "غير متوفر"}
+                  </div>
+                </div>
+                <div className="flex min-h-[136px] flex-col justify-between rounded-2xl border border-slate-200 bg-slate-50/80 px-5 py-4 shadow-sm">
+                  <div className="text-xs font-semibold text-slate-500">
+                    أصل الاستثمار
+                  </div>
+                  <div className="mt-4 text-base font-semibold leading-7 text-slate-900">
+                    {selectedInvestment
+                      ? formatCurrencyEN(selectedInvestment.amount)
+                      : "غير متوفر"}
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section className="space-y-5 rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="space-y-1">
+                <div className="text-[11px] font-semibold tracking-[0.16em] text-slate-500">
+                  بيانات الإيقاف
+                </div>
+                <div className="text-sm leading-7 text-slate-500">
+                  أدخل تاريخ الإيقاف والملاحظة الإدارية في مساحة أوضح وأكثر راحة للمراجعة.
+                </div>
+              </div>
+
+              <div className="grid gap-5 md:grid-cols-2">
+                <div className="space-y-3">
+                  <Label>تاريخ الإيقاف الفعلي</Label>
+                  <Input
+                    className="h-12 rounded-xl bg-white"
+                    type="date"
+                    value={closeDate}
+                    disabled={isSelectedInvestmentStoppedEarly}
+                    onChange={e => setCloseDate(e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-3">
+                  <Label>منفذ الإجراء الإداري</Label>
+                  <Input
+                    className="h-12 rounded-xl bg-slate-50"
+                    value={String(user?.email || user?.uid || "غير متوفر")}
+                    disabled
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <Label>سبب الإيقاف / الملاحظة الإدارية</Label>
+                <Textarea
+                  className="min-h-[180px] rounded-2xl bg-white px-4 py-3 leading-7"
+                  value={stopReason}
+                  disabled={isSelectedInvestmentStoppedEarly}
+                  onChange={e => setStopReason(e.target.value)}
+                  placeholder="مثال: طلب العميل الخروج المبكر وتسوية الاستثمار حتى تاريخ محدد"
+                  rows={7}
+                />
+              </div>
+
+              {stopSettlementPreviewState.error ? (
+                <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm leading-7 text-rose-800">
+                  {stopSettlementPreviewState.error}
+                </div>
+              ) : null}
+
+              {stopPreviewExceedsPlannedEnd ? (
+                <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm leading-7 text-rose-800">
+                  تاريخ الإيقاف يجب أن يكون قبل تاريخ نهاية الاستثمار المخطط.
+                </div>
+              ) : null}
+            </section>
+
+            {settlementPreview ? (
+              <section className="space-y-5 rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-[11px] font-semibold tracking-[0.16em] text-slate-500">
+                      التسوية
+                    </div>
+                    <div className="mt-2 text-base font-semibold text-slate-900">
+                      ملخص التسوية
+                    </div>
+                    <p className="mt-2 text-sm leading-7 text-slate-500">
+                      هذه القيم مشتقة من منطق التسوية المركزي الحالي وتُثبت داخل سجل الاستثمار عند تنفيذ الإيقاف.
+                    </p>
+                  </div>
+                  <Badge className="border-amber-200 bg-amber-50 text-amber-800">
+                    {settlementPreview.policyLabel || "إيقاف مبكر"}
+                  </Badge>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  <div className="flex min-h-[136px] flex-col justify-between rounded-2xl border border-slate-200 bg-slate-50/80 px-5 py-4 shadow-sm">
+                    <div className="text-xs font-semibold text-slate-500">
+                      تاريخ الدخول
+                    </div>
+                    <div className="mt-4 text-base font-semibold leading-7 text-slate-900">
+                      {formatDetailedDateTime(
+                        settlementPreview.investmentStartDate
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex min-h-[136px] flex-col justify-between rounded-2xl border border-slate-200 bg-slate-50/80 px-5 py-4 shadow-sm">
+                    <div className="text-xs font-semibold text-slate-500">
+                      تاريخ الخروج
+                    </div>
+                    <div className="mt-4 text-base font-semibold leading-7 text-slate-900">
+                      {formatDetailedDateTime(
+                        settlementPreview.investmentStopDate
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex min-h-[136px] flex-col justify-between rounded-2xl border border-slate-200 bg-slate-50/80 px-5 py-4 shadow-sm">
+                    <div className="text-xs font-semibold text-slate-500">
+                      المدة الفعلية
+                    </div>
+                    <div className="mt-4 text-base font-semibold leading-7 text-slate-900">
+                      {formatNumberEN(settlementPreview.investedDays)} يوم
+                    </div>
+                  </div>
+                  <div className="flex min-h-[136px] flex-col justify-between rounded-2xl border border-slate-200 bg-slate-50/80 px-5 py-4 shadow-sm">
+                    <div className="text-xs font-semibold text-slate-500">
+                      أصل المبلغ
+                    </div>
+                    <div className="mt-4 text-base font-semibold leading-7 text-slate-900">
+                      {formatCurrencyEN(settlementPreview.principalAmount)}
+                    </div>
+                  </div>
+                  <div className="flex min-h-[136px] flex-col justify-between rounded-2xl border border-emerald-200 bg-emerald-50/90 px-5 py-4 shadow-sm">
+                    <div className="text-xs font-semibold text-emerald-700">
+                      الربح المستحق
+                    </div>
+                    <div className="mt-4 text-base font-semibold leading-7 text-emerald-800">
+                      {formatCurrencyEN(settlementPreview.calculatedProfit)}
+                    </div>
+                  </div>
+                  <div className="flex min-h-[136px] flex-col justify-between rounded-2xl border border-sky-200 bg-sky-50/90 px-5 py-4 shadow-sm">
+                    <div className="text-xs font-semibold text-sky-700">
+                      إجمالي المستحق
+                    </div>
+                    <div className="mt-4 text-base font-semibold leading-7 text-sky-800">
+                      {formatCurrencyEN(settlementPreview.totalPayout)}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-[24px] border border-slate-200 bg-slate-50/80 p-5">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <div className="text-[11px] font-semibold tracking-[0.16em] text-slate-500">
+                        طريقة الاحتساب
+                      </div>
+                      <div className="mt-2 text-sm font-semibold text-slate-900">
+                        عرض منظم للمراحل التي بُنيت عليها المعادلة
+                      </div>
+                    </div>
+                    <Badge variant="outline" className="rounded-full">
+                      المعادلة المعتمدة
+                    </Badge>
+                  </div>
+
+                  {settlementFormulaParts.length > 0 ? (
+                    <div className="mt-4 grid gap-3">
+                      {settlementFormulaParts.map((part, index) => (
+                        <div
+                          key={`${part}-${index}`}
+                          className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm"
+                        >
+                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-xs font-bold text-slate-700">
+                            {index + 1}
+                          </div>
+                          <div className="min-w-0 flex-1 break-words text-sm leading-7 text-slate-700">
+                            {part}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-3 text-sm text-slate-500">
+                      لا توجد صيغة محفوظة حاليًا.
+                    </div>
+                  )}
+                </div>
+              </section>
+            ) : null}
+
+            <section className="space-y-5 rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <div className="text-[11px] font-semibold tracking-[0.16em] text-slate-500">
+                    المستندات
+                  </div>
+                  <div className="mt-2 text-base font-semibold text-slate-900">
+                    مستند التسوية / مستندات الإيقاف
+                  </div>
+                  <p className="mt-2 text-sm leading-7 text-slate-500">
+                    يمكن إرفاق ملف PDF للتسوية النهائية أو أي مستند داعم متعلق بإيقاف الاستثمار.
+                  </p>
+                </div>
+
+                {latestSettlementDocument ? (
+                  <div className="flex flex-wrap gap-2">
+                    {latestSettlementDocumentViewUrl ? (
+                      <a
+                        href={latestSettlementDocumentViewUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        <Button size="sm" variant="outline" className="h-10 rounded-xl px-4">
+                          <Eye className="ml-1 h-4 w-4" />
+                          عرض آخر ملف
+                        </Button>
+                      </a>
+                    ) : null}
+                    {latestSettlementDocumentDownloadUrl ? (
+                      <a
+                        href={latestSettlementDocumentDownloadUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        <Button size="sm" variant="outline" className="h-10 rounded-xl px-4">
+                          <Download className="ml-1 h-4 w-4" />
+                          تنزيل
+                        </Button>
+                      </a>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="space-y-4">
+                <ContractFilePicker
+                  buttonLabel="اختيار ملف التسوية (PDF)"
+                  file={settlementDocumentFile}
+                  onFileChange={setSettlementDocumentFile}
+                  disabled={!canEditFinancial || settlementDocumentBusy}
+                  panelClassName="rounded-2xl border-slate-200 bg-slate-50/80 px-5 py-4"
+                  buttonClassName="h-11 rounded-xl px-5 text-sm font-semibold"
+                  fileNameClassName="text-base font-semibold text-slate-900"
+                  helperTextClassName="text-sm leading-6"
+                />
+
+                <div className="grid gap-3 lg:grid-cols-2">
+                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-4 py-3">
+                    <div className="text-xs font-semibold text-slate-500">
+                      اسم الملف المحدد
+                    </div>
+                    <div className="mt-2 break-words text-sm font-semibold text-slate-900">
+                      {settlementDocumentFile?.name || "لم يتم اختيار ملف جديد بعد"}
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-4 py-3">
+                    <div className="text-xs font-semibold text-slate-500">
+                      آخر ملف محفوظ
+                    </div>
+                    <div className="mt-2 break-words text-sm font-semibold text-slate-900">
+                      {latestSettlementDocument?.fileName || "لا يوجد ملف محفوظ حتى الآن"}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-4">
+                  <div className="rounded-xl border border-slate-200 bg-white p-2 text-slate-500">
+                    <FileText className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0 space-y-1">
+                    <div className="text-xs font-semibold text-slate-500">
+                      حالة المستندات
+                    </div>
+                    <div className="text-sm leading-7 text-slate-600">
+                      {settlementDocumentsLoading
+                        ? "جارٍ تحميل المستندات المرتبطة بهذا الاستثمار..."
+                        : latestSettlementDocument
+                          ? `آخر ملف محفوظ: ${latestSettlementDocument.fileName || "مستند تسوية"}`
+                          : "لا يوجد مستند تسوية محفوظ حتى الآن."}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="border-t border-slate-200 bg-white px-8 py-5 sm:justify-between">
             <Button
               variant="outline"
+              className="h-11 rounded-xl px-5"
               onClick={() => setIsCloseDialogOpen(false)}
             >
-              إلغاء
+              {isSelectedInvestmentStoppedEarly ? "إغلاق" : "إلغاء"}
             </Button>
-            <Button
-              variant="destructive"
-              disabled={!canEditFinancial}
-              onClick={closeInvestmentEarlyTx}
-            >
-              إكمال
-            </Button>
+            {isSelectedInvestmentStoppedEarly ? (
+              <Button
+                variant="outline"
+                className="h-11 rounded-xl px-5"
+                disabled={
+                  !canEditFinancial ||
+                  !settlementDocumentFile ||
+                  settlementDocumentBusy
+                }
+                onClick={uploadSettlementAttachment}
+              >
+                {settlementDocumentBusy ? (
+                  <Loader2 className="ml-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <FileText className="ml-2 h-4 w-4" />
+                )}
+                رفع مستند التسوية
+              </Button>
+            ) : (
+              <Button
+                variant="destructive"
+                className="h-11 rounded-xl px-5"
+                disabled={!canConfirmStopInvestment}
+                onClick={closeInvestmentEarlyTx}
+              >
+                تأكيد إيقاف الاستثمار
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

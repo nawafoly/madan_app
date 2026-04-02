@@ -758,6 +758,10 @@ function buildUploadPath({ entityType, entityId, category, kind, fileName, conte
     return `${safeEntityType}/${safeEntityId}/attachments/${stamp}-${safeName}${ext}`;
   }
 
+  if (category === "investment_settlement") {
+    return `${safeEntityType}/${safeEntityId}/settlement/${stamp}-${safeName}${ext}`;
+  }
+
   return `${safeEntityType}/${safeEntityId}/${category}/${stamp}-${safeName}${ext}`;
 }
 

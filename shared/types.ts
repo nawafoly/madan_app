@@ -18,6 +18,7 @@ export const OFFICIAL_INVESTMENT_STATUSES = [
   "signing",
   "signed",
   "active",
+  "stopped",
   "completed",
   "rejected",
   "cancelled",
@@ -27,6 +28,7 @@ export type InvestmentStatus = (typeof OFFICIAL_INVESTMENT_STATUSES)[number];
 
 export const COUNTED_INVESTMENT_STATUSES = [
   "active",
+  "stopped",
   "completed",
 ] as const;
 export type CountedInvestmentStatus =
@@ -183,6 +185,33 @@ export interface LegalTermsSnapshot {
   isFrozen?: boolean;
 }
 
+export type InvestmentSettlementKind = "early_stop" | "maturity";
+export type InvestmentSettlementStatus = "draft" | "finalized";
+export type InvestmentSettlementPolicyCode = "prorated_actual_days_v1";
+
+export interface InvestmentSettlementSnapshot {
+  kind: InvestmentSettlementKind;
+  status: InvestmentSettlementStatus;
+  policyCode: InvestmentSettlementPolicyCode;
+  policyLabel: string;
+  principalAmount: number;
+  annualProfitRate: number;
+  investmentStartDate: Timestamp;
+  plannedEndDate?: Timestamp | null;
+  investmentStopDate: Timestamp;
+  originalDurationMonths?: number | null;
+  actualDurationMonths: number;
+  investedDays: number;
+  calculatedProfit: number;
+  totalPayout: number;
+  formula: string;
+  stopReason?: string | null;
+  finalizedAt: Timestamp;
+  finalizedByUid?: string | null;
+  finalizedByEmail?: string | null;
+  documentCategory?: string | null;
+}
+
 export interface InvestmentDoc {
 
 
@@ -238,6 +267,8 @@ export interface InvestmentDoc {
 
   // ✅ لو انسحب مبكر
   withdrawnAt?: Timestamp;
+  stoppedAt?: Timestamp;
+  stopReason?: string | null;
 
   // ✅ نسبة/عائد سنوي وقت التثبيت (Snapshot)
   annualReturnAtSign?: number; // % سنوي
@@ -252,7 +283,9 @@ export interface InvestmentDoc {
   earnedProfit?: number;
 
   // ✅ نوع الإنهاء (اختياري للتقارير)
-  exitType?: "normal" | "early_withdrawal";
+  exitType?: "normal" | "early_withdrawal" | "client_requested_stop";
+  stoppedByUid?: string | null;
+  stoppedByEmail?: string | null;
 
 
   /**
@@ -271,6 +304,7 @@ export interface InvestmentDoc {
   settlementLockedAt?: Timestamp;
   settlementLocked?: boolean;
   closureLocked?: boolean;
+  settlement?: InvestmentSettlementSnapshot | null;
 
   // Delay compensation
   delayPenaltyApplied?: boolean;

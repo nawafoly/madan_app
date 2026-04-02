@@ -164,6 +164,25 @@ export const investmentStageUiMap: Record<InvestmentStage, InvestmentStageUi> =
       },
       timelineStepKey: null,
     },
+    stopped: {
+      title: "تم إيقاف الاستثمار بطلب العميل",
+      description:
+        "أوقف الاستثمار قبل نهايته الطبيعية بناءً على طلب العميل، واعتمدت التسوية النهائية وفق المدة الفعلية والبيانات المثبتة في السجل.",
+      badge: {
+        label: "إيقاف مبكر",
+        className: amberBadge,
+      },
+      investmentStatus: {
+        label: "تم إيقاف الاستثمار بطلب العميل",
+        className: amberBadge,
+      },
+      contractStatus: {
+        label: "العقد معتمد والاستثمار موقوف",
+        className: slateBadge,
+      },
+      timelineStepKey: null,
+      emphasis: true,
+    },
     completed: {
       title: "مكتمل",
       description:

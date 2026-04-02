@@ -24,6 +24,7 @@ export const AUDIT_ACTIONS = {
   INVESTMENT_REJECTED: "investment_rejected",
   INVESTMENT_STATUS_CHANGED: "investment_status_changed",
   INVESTMENT_FINANCIALS_UPDATED: "investment_financials_updated",
+  INVESTMENT_STOPPED: "investment_stopped",
   INVESTMENT_COMPLETED: "investment_completed",
   INVESTMENT_ACTIVATED: "investment_activated",
   REQUEST_CREATED: "request_created",

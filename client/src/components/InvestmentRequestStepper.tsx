@@ -160,7 +160,7 @@ function normalizeStatus(value: string | null | undefined) {
 
 export function shouldShowInvestmentRequestStepper(status?: string | null) {
   const normalizedStatus = normalizeStatus(status);
-  return !["active", "completed", "closed", "rejected", "cancelled"].includes(
+  return !["active", "stopped", "completed", "closed", "rejected", "cancelled"].includes(
     normalizedStatus
   );
 }

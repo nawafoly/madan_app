@@ -62,6 +62,7 @@ type PortfolioTab =
   | "overview"
   | "requests"
   | "active"
+  | "stopped"
   | "completed"
   | "documents";
 
@@ -69,6 +70,7 @@ type BucketKey =
   | "under_review"
   | "awaiting_signature"
   | "active"
+  | "stopped"
   | "completed"
   | "cancelled";
 
@@ -167,6 +169,17 @@ const BUCKET_META: Record<BucketKey, BucketMeta> = {
     accentClassName: "from-emerald-500/15 via-emerald-100/60 to-white",
     icon: TrendingUp,
     tab: "active",
+  },
+  stopped: {
+    title: "الاستثمارات الموقوفة بطلب العميل",
+    shortTitle: "موقوفة",
+    description:
+      "استثمارات بدأت فعليًا ثم أوقفت مبكرًا بطلب العميل مع تثبيت بيانات الخروج والتسوية.",
+    className: "border-amber-300 bg-amber-50 text-amber-800",
+    borderClassName: "border-amber-200/90",
+    accentClassName: "from-amber-500/20 via-amber-100/70 to-white",
+    icon: Clock3,
+    tab: "stopped",
   },
   completed: {
     title: "الاستثمارات المكتملة / المنتهية",
@@ -326,6 +339,9 @@ function getWorkflowPill(status: unknown): StatusPill {
 
   if (key === "active") {
     return { label, className: "border-emerald-200 bg-emerald-50 text-emerald-700" };
+  }
+  if (key === "stopped") {
+    return { label, className: "border-amber-200 bg-amber-50 text-amber-800" };
   }
   if (["completed", "closed", "ended", "finished"].includes(key)) {
     return { label, className: "border-slate-300 bg-slate-100 text-slate-700" };
@@ -492,6 +508,7 @@ function classifyInvestmentBucket(
       contractStatus === "verified",
   });
 
+  if (stage === "stopped") return "stopped";
   if (stage === "completed") return "completed";
   if (stage === "cancelled" || stage === "rejected") return "cancelled";
   if (
@@ -523,6 +540,9 @@ function getBucketSummary(bucketKey: BucketKey, kind: "request" | "investment") 
   }
   if (bucketKey === "active") {
     return "الاستثمار نشط ويمكن متابعة حالته التشغيلية ومستنداته من هذه البطاقة.";
+  }
+  if (bucketKey === "stopped") {
+    return "تم إيقاف هذا الاستثمار مبكرًا بطلب العميل، مع حفظ تاريخ الخروج والتسوية النهائية داخل السجل.";
   }
   if (bucketKey === "completed") {
     return "اكتمل الاستثمار أو تم إغلاقه رسميًا وهو مفصول هنا عن المحفظة الجارية.";
@@ -841,6 +861,9 @@ export default function MyInvestmentsRedesign() {
       active: sortRowsByDate(
         investmentRows.filter((row) => row.bucketKey === "active")
       ),
+      stopped: sortRowsByDate(
+        investmentRows.filter((row) => row.bucketKey === "stopped")
+      ),
       completed: sortRowsByDate(
         investmentRows.filter((row) => row.bucketKey === "completed")
       ),
@@ -1096,6 +1119,13 @@ export default function MyInvestmentsRedesign() {
                 icon={TrendingUp}
               />
               <HeroMetric
+                label="الاستثمارات الموقوفة"
+                value={formatNumberEN(sections.stopped.length)}
+                helper="تم إيقافها مبكرًا بطلب العميل"
+                icon={Clock3}
+                tone="warning"
+              />
+              <HeroMetric
                 label="تحت المعالجة"
                 value={formatNumberEN(processingCount)}
                 helper="طلبات واستثمارات ما قبل التفعيل"
@@ -1140,6 +1170,9 @@ export default function MyInvestmentsRedesign() {
                 <TabsTrigger value="active" className="h-auto min-w-[170px] flex-none items-start justify-start rounded-xl px-4 py-3 text-right">
                   <TabMeta icon={TrendingUp} title="استثماراتي النشطة" count={formatNumberEN(sections.active.length)} />
                 </TabsTrigger>
+                <TabsTrigger value="stopped" className="h-auto min-w-[180px] flex-none items-start justify-start rounded-xl px-4 py-3 text-right">
+                  <TabMeta icon={Clock3} title="الاستثمارات الموقوفة" count={formatNumberEN(sections.stopped.length)} />
+                </TabsTrigger>
                 <TabsTrigger value="completed" className="h-auto min-w-[180px] flex-none items-start justify-start rounded-xl px-4 py-3 text-right">
                   <TabMeta icon={History} title="الاستثمارات المكتملة" count={formatNumberEN(sections.completed.length)} />
                 </TabsTrigger>
@@ -1151,10 +1184,11 @@ export default function MyInvestmentsRedesign() {
           </div>
 
           <TabsContent value="overview" className="space-y-6">
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
               <BucketOverview bucketKey="under_review" count={sections.under_review.length} onOpenTab={(tab) => setActiveTab(tab)} />
               <BucketOverview bucketKey="awaiting_signature" count={sections.awaiting_signature.length} onOpenTab={(tab) => setActiveTab(tab)} />
               <BucketOverview bucketKey="active" count={sections.active.length} onOpenTab={(tab) => setActiveTab(tab)} />
+              <BucketOverview bucketKey="stopped" count={sections.stopped.length} onOpenTab={(tab) => setActiveTab(tab)} />
               <BucketOverview bucketKey="completed" count={sections.completed.length} onOpenTab={(tab) => setActiveTab(tab)} />
               <BucketOverview bucketKey="cancelled" count={sections.cancelled.length} onOpenTab={(tab) => setActiveTab(tab)} />
             </div>
@@ -1239,6 +1273,15 @@ export default function MyInvestmentsRedesign() {
               <Link href="/projects">
                 <Button className="rounded-full px-5">استثمر الآن</Button>
               </Link>
+            )}
+          </TabsContent>
+
+          <TabsContent value="stopped" className="space-y-8">
+            {renderSection(
+              "stopped",
+              sections.stopped,
+              "لا توجد استثمارات موقوفة بطلب العميل",
+              "عند إيقاف أي استثمار نشط بطلب العميل سيظهر هنا بشكل مستقل مع كامل بيانات الخروج والتسوية."
             )}
           </TabsContent>
 

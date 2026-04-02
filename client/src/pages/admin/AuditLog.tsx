@@ -170,6 +170,7 @@ const ACTION_LABELS: Record<string, string> = {
   investment_rejected: "رفض استثمار",
   investment_status_changed: "تغيير حالة استثمار",
   investment_financials_updated: "تحديث بيانات مالية",
+  investment_stopped: "إيقاف استثمار بطلب العميل",
   request_created: "إنشاء طلب",
   request_updated: "تحديث طلب",
   request_status_changed: "تغيير حالة طلب",
@@ -378,6 +379,9 @@ function getActionBadgeClass(action: string) {
   const normalized = action.toLowerCase();
   if (normalized.includes("create") || normalized.includes("approve") || normalized.includes("signed")) {
     return "border-emerald-200 bg-emerald-500/10 text-emerald-700";
+  }
+  if (normalized.includes("stop")) {
+    return "border-amber-200 bg-amber-500/10 text-amber-700";
   }
   if (normalized.includes("delete") || normalized.includes("reject") || normalized.includes("disable")) {
     return "border-rose-200 bg-rose-500/10 text-rose-700";

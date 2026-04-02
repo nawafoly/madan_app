@@ -179,12 +179,12 @@ service cloud.firestore {
     }
 
     function isInvestmentClosedData(d) {
-      return d.status in ["completed", "closed"];
+      return d.status in ["stopped", "completed", "closed"];
     }
 
     function isInvestmentTermsLocked() {
       return ("termsLockedAt" in resource.data)
-        || (resource.data.status in ["approved", "signed", "active", "completed", "closed"]);
+        || (resource.data.status in ["approved", "signed", "active", "stopped", "completed", "closed"]);
     }
 
     function investmentTermsChanged() {
@@ -306,7 +306,7 @@ service cloud.firestore {
         || (status == "signing" && contractStatus in ["sent", "pending_signature"])
         || (status == "signed" && contractStatus in ["under_review", "approved"])
         || (status == "active" && contractStatus == "approved")
-        || (status in ["completed", "closed", "rejected", "cancelled"])
+        || (status in ["stopped", "completed", "closed", "rejected", "cancelled"])
       );
     }
 
@@ -324,7 +324,7 @@ service cloud.firestore {
           || (beforeStatus == "signing" && afterStatus == "signed")
           || (beforeStatus == "signed" && afterStatus == "signing")
           || (beforeStatus == "signed" && afterStatus == "active")
-          || (beforeStatus == "active" && afterStatus in ["completed", "closed"])
+          || (beforeStatus == "active" && afterStatus in ["stopped", "completed", "closed"])
           || (beforeStatus in ["pending_contract", "signing", "signed"] && afterStatus in ["rejected", "cancelled"])
         )
         && (

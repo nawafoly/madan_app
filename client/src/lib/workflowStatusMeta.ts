@@ -21,6 +21,7 @@ const INVESTMENT_STATUS_CLASS_MAP: Record<string, string> = {
   signed: "bg-amber-600",
   approved: "bg-green-700",
   active: "bg-emerald-700",
+  stopped: "bg-amber-600",
   rejected: "bg-red-600",
   completed: "bg-gray-600",
   closed: "bg-gray-600",

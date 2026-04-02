@@ -1,5 +1,6 @@
 export const ACTIVATED_INVESTMENT_STATUSES = [
   "active",
+  "stopped",
   "completed",
   "closed",
 ] as const;
@@ -23,6 +24,9 @@ export function normalizeWorkflowStatus(raw: unknown) {
   const aliases: Record<string, string> = {
     ended: "completed",
     finished: "completed",
+    withdrawn: "stopped",
+    stopped_early: "stopped",
+    stopped_by_client: "stopped",
   };
 
   return aliases[normalized] || normalized;
@@ -43,6 +47,7 @@ export const CLIENT_WORKFLOW_COPY = {
   awaitingFinalReview: "بانتظار المراجعة والاعتماد النهائي",
   contractApproved: "تم اعتماد العقد",
   investmentStarted: "بدأ الاستثمار",
+  investmentStopped: "تم إيقاف الاستثمار بطلب العميل",
 } as const;
 
 export function getClientInvestmentStatusLabel(raw: unknown) {
@@ -60,6 +65,7 @@ export function getClientInvestmentStatusLabel(raw: unknown) {
     signed: CLIENT_WORKFLOW_COPY.awaitingFinalReview,
     approved: CLIENT_WORKFLOW_COPY.contractApproved,
     active: CLIENT_WORKFLOW_COPY.investmentStarted,
+    stopped: CLIENT_WORKFLOW_COPY.investmentStopped,
     completed: "مكتمل",
     closed: "مكتمل",
     ended: "مكتمل",
@@ -100,6 +106,14 @@ export function getInvestorActivationMessage(
 ) {
   const investmentStatus = normalizeWorkflowStatus(investmentStatusRaw);
   const contractStatus = normalizeWorkflowStatus(contractStatusRaw);
+
+  if (investmentStatus === "stopped") {
+    return {
+      title: CLIENT_WORKFLOW_COPY.investmentStopped,
+      description:
+        "تم إيقاف الاستثمار قبل نهايته الطبيعية بناءً على طلب العميل، مع تثبيت التسوية النهائية في السجل.",
+    };
+  }
 
   if (isInvestmentActivatedStatus(investmentStatus)) {
     return {

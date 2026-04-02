@@ -23,7 +23,6 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Card,
   CardContent,
-  CardFooter,
   CardDescription,
   CardHeader,
   CardTitle,
@@ -205,6 +204,21 @@ type NotificationSettings = {
   messages: boolean;
 };
 
+type NotificationFieldKey = keyof NotificationSettings;
+
+type NotificationSectionConfig = {
+  key: "delivery_channels" | "notification_triggers";
+  icon: LucideIcon;
+  eyebrow: string;
+  title: string;
+  description: string;
+  items: Array<{
+    key: NotificationFieldKey;
+    label: string;
+    description: string;
+  }>;
+};
+
 type SecuritySettings = {
   twoFactor: boolean;
 };
@@ -278,6 +292,124 @@ type ContentSettings = {
   contactEmail: string;
   contactPhone: string;
 };
+
+function createDefaultNotificationSettings(): NotificationSettings {
+  return {
+    email: true,
+    sms: false,
+    investments: true,
+    messages: true,
+  };
+}
+
+const NOTIFICATION_SECTION_CONFIG: NotificationSectionConfig[] = [
+  {
+    key: "delivery_channels",
+    icon: Mail,
+    eyebrow: "الوحدة 01",
+    title: "قنوات الإرسال",
+    description:
+      "اختر قنوات الإرسال التي يعتمد عليها النظام عند بث التنبيهات الإدارية.",
+    items: [
+      {
+        key: "email",
+        label: "إشعارات البريد",
+        description:
+          "إرسال التنبيهات الرسمية عبر البريد الإلكتروني المسجل.",
+      },
+      {
+        key: "sms",
+        label: "إشعارات SMS",
+        description:
+          "إرسال تنبيهات نصية مختصرة للرسائل أو الحالات الحرجة.",
+      },
+    ],
+  },
+  {
+    key: "notification_triggers",
+    icon: Bell,
+    eyebrow: "الوحدة 02",
+    title: "محفزات التنبيه",
+    description:
+      "حدد ما إذا كان النظام ينشئ تنبيهات عند وصول استشارات أو رسائل جديدة.",
+    items: [
+      {
+        key: "investments",
+        label: "استشارات جديدة",
+        description:
+          "تنبيه الإدارة عند وصول استشارة أو طلب استثمار جديد.",
+      },
+      {
+        key: "messages",
+        label: "رسائل جديدة",
+        description:
+          "تنبيه الفريق عند استقبال رسالة جديدة من المستخدمين أو العملاء.",
+      },
+    ],
+  },
+];
+
+function createDefaultSecuritySettings(): SecuritySettings {
+  return {
+    twoFactor: false,
+  };
+}
+
+function createDefaultLabelsSettings(): LabelsSettings {
+  return {
+    projectTypes: {
+      sukuk: { ar: "صكوك", en: "Sukuk" },
+      land_development: { ar: "تطوير أراضٍ", en: "Land Development" },
+      vip_exclusive: { ar: "VIP حصري", en: "VIP Exclusive" },
+    },
+    projectStatuses: {
+      draft: { ar: "قريبًا", en: "Draft" },
+      published: { ar: "منشور", en: "Published" },
+      closed: { ar: "مغلق", en: "Closed" },
+      completed: { ar: "مكتمل", en: "Completed" },
+    },
+    investmentStatuses: {
+      pending: { ar: "معلق", en: "Pending" },
+      approved: { ar: "معتمد", en: "Approved" },
+      active: { ar: "نشط", en: "Active" },
+      completed: { ar: "مكتمل", en: "Completed" },
+      rejected: { ar: "مرفوض", en: "Rejected" },
+    },
+    uiRoles: {
+      owner: { ar: "المالك", en: "Owner" },
+      admin: { ar: "أدمن", en: "Admin" },
+      accountant: { ar: "محاسب", en: "Accountant" },
+      staff: { ar: "موظف", en: "Staff" },
+      client: { ar: "عميل", en: "Client" },
+      guest: { ar: "زائر", en: "Guest" },
+    },
+  };
+}
+
+function createDefaultFlagsSettings(): FlagsSettings {
+  return {
+    disableInvestments: false,
+    disableMessages: false,
+    vipOnlyMode: false,
+    hideVipProjects: false,
+    maintenanceMode: false,
+  };
+}
+
+function createDefaultContentSettings(): ContentSettings {
+  return {
+    heroTitleAr: "منصة معدن البناء",
+    heroTitleEn: "MAEDIN Platform",
+    heroSubtitleAr: "استثمر بثقة مع فرص مدروسة",
+    heroSubtitleEn: "Invest with confidence in curated opportunities",
+    footerAboutAr:
+      "معدن البناء منصة لإتاحة فرص استثمارية بشكل احترافي.",
+    footerAboutEn:
+      "MAEDIN is a platform for curated investment opportunities.",
+    contactEmail: "",
+    contactPhone: "",
+  };
+}
 
 type DatabaseServiceKey = "worker" | "d1" | "r2";
 type DatabaseUiStatus = "success" | "failed" | "not_ready" | "checking";
@@ -438,11 +570,11 @@ const DATABASE_ACTION_CARDS: DatabaseActionCard[] = [
 ];
 
 const DATABASE_TECHNICAL_DETAILS: DatabaseDetailRow[] = [
-  { label: "Database", value: "maedin-documents", valueDir: "ltr" },
-  { label: "Bucket", value: "maedin-storage", valueDir: "ltr" },
-  { label: "Worker", value: "upload.maedin.workers.dev", valueDir: "ltr" },
-  { label: "Provider", value: "Cloudflare", valueDir: "ltr" },
-  { label: "Environment", value: "Production", valueDir: "ltr" },
+  { label: "اسم قاعدة البيانات", value: "maedin-documents", valueDir: "ltr" },
+  { label: "اسم الحاوية", value: "maedin-storage", valueDir: "ltr" },
+  { label: "عنوان العامل", value: "upload.maedin.workers.dev", valueDir: "ltr" },
+  { label: "المزوّد", value: "Cloudflare", valueDir: "ltr" },
+  { label: "البيئة", value: "الإنتاج", valueDir: "rtl" },
 ];
 
 const DATABASE_NOTES = [
@@ -782,10 +914,17 @@ export default function Settings() {
     investments: true,
     messages: true,
   });
+  const [savedNotifications, setSavedNotifications] =
+    useState<NotificationSettings>(createDefaultNotificationSettings);
+  const [savingNotifications, setSavingNotifications] = useState(false);
 
   const [security, setSecurity] = useState<SecuritySettings>({
     twoFactor: false,
   });
+  const [savedSecurity, setSavedSecurity] = useState<SecuritySettings>(
+    createDefaultSecuritySettings
+  );
+  const [savingSecurity, setSavingSecurity] = useState(false);
 
   // NEW: roles / admin users / labels / flags / content
   const [roles, setRoles] = useState<RoleDoc[]>([]);
@@ -830,6 +969,10 @@ export default function Settings() {
       guest: { ar: "زائر", en: "Guest" },
     },
   });
+  const [savedLabels, setSavedLabels] = useState<LabelsSettings>(
+    createDefaultLabelsSettings
+  );
+  const [savingLabels, setSavingLabels] = useState(false);
 
   const [flags, setFlags] = useState<FlagsSettings>({
     disableInvestments: false,
@@ -838,6 +981,10 @@ export default function Settings() {
     hideVipProjects: false,
     maintenanceMode: false,
   });
+  const [savedFlags, setSavedFlags] = useState<FlagsSettings>(
+    createDefaultFlagsSettings
+  );
+  const [savingFlags, setSavingFlags] = useState(false);
 
   const [content, setContent] = useState<ContentSettings>({
     heroTitleAr: "منصة معدن البناء",
@@ -849,6 +996,10 @@ export default function Settings() {
     contactEmail: "",
     contactPhone: "",
   });
+  const [savedContent, setSavedContent] = useState<ContentSettings>(
+    createDefaultContentSettings
+  );
+  const [savingContent, setSavingContent] = useState(false);
 
   const [error, setError] = useState<string>("");
   const databaseWorkerUrl = useMemo(() => getDocumentWorkerBaseUrl(), []);
@@ -1069,7 +1220,25 @@ export default function Settings() {
 
   const notificationsEnabledCount =
     Object.values(notifications).filter(Boolean).length;
+  const updateNotificationField = (
+    key: NotificationFieldKey,
+    value: boolean
+  ) => {
+    setNotifications(previous => ({
+      ...previous,
+      [key]: value,
+    }));
+  };
+  const notificationsDirty = useMemo(
+    () =>
+      JSON.stringify(notifications) !== JSON.stringify(savedNotifications),
+    [notifications, savedNotifications]
+  );
   const securityEnabledCount = Object.values(security).filter(Boolean).length;
+  const securityDirty = useMemo(
+    () => JSON.stringify(security) !== JSON.stringify(savedSecurity),
+    [savedSecurity, security]
+  );
   const activeRolesCount = roles.filter(role => role.isActive).length;
   const systemRolesCount = roles.filter(role => role.isSystem).length;
   const activeAdminsCount = adminUsers.filter(user => user.isActive).length;
@@ -1081,10 +1250,22 @@ export default function Settings() {
     Object.keys(labels.projectStatuses || {}).length +
     Object.keys(labels.investmentStatuses || {}).length +
     Object.keys(labels.uiRoles || {}).length;
+  const labelsDirty = useMemo(
+    () => JSON.stringify(labels) !== JSON.stringify(savedLabels),
+    [labels, savedLabels]
+  );
   const enabledFlagsCount = Object.values(flags).filter(Boolean).length;
+  const flagsDirty = useMemo(
+    () => JSON.stringify(flags) !== JSON.stringify(savedFlags),
+    [flags, savedFlags]
+  );
   const contentCompletedCount = Object.values(content).filter(value =>
     String(value || "").trim()
   ).length;
+  const contentDirty = useMemo(
+    () => JSON.stringify(content) !== JSON.stringify(savedContent),
+    [content, savedContent]
+  );
 
   /* =========================
      Load settings (Firestore)
@@ -1119,41 +1300,65 @@ export default function Settings() {
       setApp(nextApp);
       setSavedApp(nextApp);
       setAppSubmitAttempted(false);
-      if (notifSnap.exists()) setNotifications(notifSnap.data() as any);
-      if (secSnap.exists()) setSecurity(secSnap.data() as any);
+      const nextNotifications = notifSnap.exists()
+        ? ({
+            ...createDefaultNotificationSettings(),
+            ...((notifSnap.data() as any) || {}),
+          } as NotificationSettings)
+        : createDefaultNotificationSettings();
+      setNotifications(nextNotifications);
+      setSavedNotifications(nextNotifications);
 
-      if (labelsSnap.exists()) {
-        const d = labelsSnap.data() as any;
-        setLabels(prev => ({
-          ...prev,
-          ...(d || {}),
-          projectTypes: d?.projectTypes ?? prev.projectTypes,
-          projectStatuses: d?.projectStatuses ?? prev.projectStatuses,
-          investmentStatuses: d?.investmentStatuses ?? prev.investmentStatuses,
-          uiRoles: d?.uiRoles ?? prev.uiRoles,
-        }));
-      }
+      const nextSecurity = secSnap.exists()
+        ? ({
+            ...createDefaultSecuritySettings(),
+            ...((secSnap.data() as any) || {}),
+          } as SecuritySettings)
+        : createDefaultSecuritySettings();
+      setSecurity(nextSecurity);
+      setSavedSecurity(nextSecurity);
+
+      const defaultLabels = createDefaultLabelsSettings();
+      const nextLabels = labelsSnap.exists()
+        ? (() => {
+            const d = labelsSnap.data() as any;
+            return {
+              ...defaultLabels,
+              ...(d || {}),
+              projectTypes: d?.projectTypes ?? defaultLabels.projectTypes,
+              projectStatuses:
+                d?.projectStatuses ?? defaultLabels.projectStatuses,
+              investmentStatuses:
+                d?.investmentStatuses ?? defaultLabels.investmentStatuses,
+              uiRoles: d?.uiRoles ?? defaultLabels.uiRoles,
+            } satisfies LabelsSettings;
+          })()
+        : defaultLabels;
+      setLabels(nextLabels);
+      setSavedLabels(nextLabels);
 
       if (rolesSnap.exists()) {
         const d = rolesSnap.data() as any;
         if (Array.isArray(d?.roles)) setRoles(d.roles);
       }
 
-      if (flagsSnap.exists()) {
-        const d = flagsSnap.data() as any;
-        setFlags(prev => ({
-          ...prev,
-          ...d,
-        }));
-      }
+      const nextFlags = flagsSnap.exists()
+        ? ({
+            ...createDefaultFlagsSettings(),
+            ...((flagsSnap.data() as any) || {}),
+          } as FlagsSettings)
+        : createDefaultFlagsSettings();
+      setFlags(nextFlags);
+      setSavedFlags(nextFlags);
 
-      if (contentSnap.exists()) {
-        const d = contentSnap.data() as any;
-        setContent(prev => ({
-          ...prev,
-          ...d,
-        }));
-      }
+      const nextContent = contentSnap.exists()
+        ? ({
+            ...createDefaultContentSettings(),
+            ...((contentSnap.data() as any) || {}),
+          } as ContentSettings)
+        : createDefaultContentSettings();
+      setContent(nextContent);
+      setSavedContent(nextContent);
     } catch (e) {
       console.error(e);
       toast.error("فشل تحميل الإعدادات");
@@ -1218,15 +1423,15 @@ export default function Settings() {
         previous.filter(contractId => rows.some(row => row.id === contractId))
       );
       if (manual) {
-        toast.success("Contract list refreshed.");
+        toast.success("تم تحديث قائمة العقود.");
       }
     } catch (error) {
       console.error("contract export candidates failed:", error);
-      const message =
-        error instanceof Error ? error.message : "Failed to load contracts.";
+        const message =
+          error instanceof Error ? error.message : "فشل تحميل العقود.";
       setContractExportError(message);
       if (manual) {
-        toast.error("Failed to refresh contract list.");
+        toast.error("فشل تحديث قائمة العقود.");
       }
     } finally {
       setContractExportLoading(false);
@@ -1350,72 +1555,112 @@ export default function Settings() {
 
   const saveNotifications = async () => {
     try {
+      setSavingNotifications(true);
       await persistSettingsDoc(
         "notifications",
         notifications as unknown as Record<string, unknown>,
         "Updated notification settings"
       );
+      setSavedNotifications({ ...notifications });
       toast.success("تم حفظ إعدادات الإشعارات");
     } catch (e) {
       console.error(e);
       toast.error("فشل حفظ إعدادات الإشعارات");
+    } finally {
+      setSavingNotifications(false);
     }
+  };
+
+  const resetNotificationsChanges = () => {
+    setNotifications({ ...savedNotifications });
   };
 
   const saveSecurity = async () => {
     try {
+      setSavingSecurity(true);
       await persistSettingsDoc(
         "security",
         security as unknown as Record<string, unknown>,
         "Updated security settings"
       );
+      setSavedSecurity({ ...security });
       toast.success("تم حفظ إعدادات الأمان");
     } catch (e) {
       console.error(e);
       toast.error("فشل حفظ إعدادات الأمان");
+    } finally {
+      setSavingSecurity(false);
     }
+  };
+
+  const resetSecurityChanges = () => {
+    setSecurity(savedSecurity);
   };
 
   const saveLabels = async () => {
     try {
+      setSavingLabels(true);
       await persistSettingsDoc(
         "labels",
         labels as unknown as Record<string, unknown>,
         "Updated labels settings"
       );
+      setSavedLabels(labels);
       toast.success("تم حفظ المسميات");
     } catch (e) {
       console.error(e);
       toast.error("فشل حفظ المسميات");
+    } finally {
+      setSavingLabels(false);
     }
+  };
+
+  const resetLabelsChanges = () => {
+    setLabels(savedLabels);
   };
 
   const saveFlags = async () => {
     try {
+      setSavingFlags(true);
       await persistSettingsDoc(
         "flags",
         flags as unknown as Record<string, unknown>,
         "Updated feature flags"
       );
-      toast.success("تم حفظ Feature Flags");
+      setSavedFlags({ ...flags });
+      toast.success("تم حفظ الميزات التجريبية");
     } catch (e) {
       console.error(e);
-      toast.error("فشل حفظ Feature Flags");
+      toast.error("فشل حفظ الميزات التجريبية");
+    } finally {
+      setSavingFlags(false);
     }
+  };
+
+  const resetFlagsChanges = () => {
+    setFlags(savedFlags);
   };
 
   const saveContent = async () => {
     try {
+      setSavingContent(true);
       await persistSettingsDoc(
         "content",
         content as unknown as Record<string, unknown>,
         "Updated site content settings"
       );
+      setSavedContent({ ...content });
       toast.success("تم حفظ محتوى الموقع");
     } catch (e) {
       console.error(e);
       toast.error("فشل حفظ محتوى الموقع");
+    } finally {
+      setSavingContent(false);
     }
+  };
+
+  const resetContentChanges = () => {
+    setContent(savedContent);
   };
 
   /* =========================
@@ -1478,15 +1723,15 @@ export default function Settings() {
     const key = roleForm.key.trim();
     const nameAr = roleForm.nameAr.trim();
 
-    if (!key) return toast.error("Role Key مطلوب");
+    if (!key) return toast.error("مفتاح الدور مطلوب");
     if (!/^[a-z0-9_]+$/i.test(key))
-      return toast.error("Role Key يجب أن يكون حروف/أرقام/_ فقط");
+      return toast.error("مفتاح الدور يجب أن يتكون من حروف أو أرقام أو `_` فقط");
     if (!nameAr) return toast.error("اسم الدور (عربي) مطلوب");
 
     try {
       const exists = roles.some(r => r.key === key);
       if (!editingRoleKey && exists)
-        return toast.error("Role Key موجود مسبقًا");
+        return toast.error("مفتاح الدور مستخدم مسبقًا");
 
       const nowRole: RoleDoc = {
         ...roleForm,
@@ -1530,7 +1775,7 @@ export default function Settings() {
 
   const handleDeleteRole = async (roleKey: string) => {
     if (SYSTEM_ROLE_KEYS.includes(roleKey)) {
-      return toast.error("لا يمكن حذف Role أساسي");
+      return toast.error("لا يمكن حذف دور أساسي");
     }
     try {
       const next = roles.filter(r => r.key !== roleKey);
@@ -2240,7 +2485,7 @@ export default function Settings() {
   const handleExport = () => {
     const payload = buildExportJson();
     downloadJson(payload, `maedin-settings-${Date.now()}.json`);
-    toast.success("تم تصدير ملف الإعدادات JSON");
+    toast.success("تم تصدير ملف الإعدادات بصيغة JSON");
   };
 
   const applyImport = async (payload: SettingsExport) => {
@@ -2455,7 +2700,7 @@ export default function Settings() {
 
   const handleContractExport = async () => {
     if (!selectedContractIds.length) {
-      toast.error("Please select at least one contract.");
+      toast.error("اختر عقدًا واحدًا على الأقل.");
       return;
     }
 
@@ -2511,7 +2756,7 @@ export default function Settings() {
 
   const handleBusinessExcelExport = async () => {
     if (!selectedContractIds.length) {
-      toast.error("Please select at least one contract.");
+      toast.error("اختر عقدًا واحدًا على الأقل.");
       return;
     }
 
@@ -2720,6 +2965,72 @@ export default function Settings() {
     return notes;
   }, [databaseDashboard.checkedAt, databaseLoaded]);
 
+  const settingsTabs = [
+    {
+      value: "general",
+      label: "عام",
+      helper: "هوية المنصة والإعدادات الأساسية",
+      icon: SettingsIcon,
+    },
+    {
+      value: "notifications",
+      label: "الإشعارات",
+      helper: "القنوات والتنبيهات التشغيلية",
+      icon: Bell,
+    },
+    {
+      value: "security",
+      label: "الأمان",
+      helper: "المصادقة والسياسات الوقائية",
+      icon: Shield,
+    },
+    {
+      value: "roles",
+      label: "الأدوار والصلاحيات",
+      helper: "إدارة الوصول والصلاحيات",
+      icon: KeyRound,
+    },
+    {
+      value: "admins",
+      label: "حسابات الإدارة",
+      helper: "الترقيات والدعوات والحسابات",
+      icon: Users,
+    },
+    {
+      value: "labels",
+      label: "المسميات",
+      helper: "قاموس النصوص المركزية",
+      icon: Tags,
+    },
+    {
+      value: "flags",
+      label: "الميزات التجريبية",
+      helper: "مفاتيح التحكم التشغيلي",
+      icon: SlidersHorizontal,
+    },
+    {
+      value: "content",
+      label: "محتوى الموقع",
+      helper: "النصوص العامة وبيانات التواصل",
+      icon: Type,
+    },
+    {
+      value: "backup",
+      label: "النسخ الاحتياطي",
+      helper: "التصدير والاستيراد وحزم العقود",
+      icon: FileDown,
+    },
+    {
+      value: "database",
+      label: "قاعدة البيانات",
+      helper: "التخزين والمؤشرات الفنية",
+      icon: Database,
+    },
+  ] as const;
+
+  const activeTabMeta =
+    settingsTabs.find(tab => tab.value === activeTab) ?? settingsTabs[0];
+
   const activeTabDescription =
     {
       general:
@@ -2731,11 +3042,11 @@ export default function Settings() {
       roles:
         "إدارة الأدوار والصلاحيات من خلال دليل صلاحيات منظم ومقسّم إلى وحدات قابلة للمراجعة السريعة.",
       admins:
-        "متابعة حسابات الإدارة، الدعوات، وربطها بالأدوار من لوحة موحدة تشبه أنظمة SaaS الحديثة.",
+        "متابعة حسابات الإدارة، الدعوات، وربطها بالأدوار من لوحة موحدة تشبه المنصات الإدارية الحديثة.",
       labels:
         "توحيد مسميات النظام والقوائم المرجعية ضمن محررات منظمة وسهلة القراءة والتحديث.",
       flags:
-        "التحكم في Feature Flags وتجارب الإطلاق التدريجي من تبويب موحد ومتسق مع بقية الإعدادات.",
+        "التحكم في الميزات التجريبية وتجارب الإطلاق التدريجي من تبويب موحد ومتسق مع بقية الإعدادات.",
       content:
         "إدارة محتوى الموقع التشغيلي والتسويقي من وحدات واضحة تحافظ على نفس جودة تجربة الإعدادات.",
       backup:
@@ -2835,7 +3146,7 @@ export default function Settings() {
                       tone: "success",
                     },
                     {
-                      label: "عربي / English",
+                      label: "عربي / إنجليزي",
                       tone: "neutral",
                     },
                     {
@@ -2920,6 +3231,75 @@ export default function Settings() {
     info: "border-sky-200 bg-sky-50 text-sky-700",
   } as const;
 
+  const tabActionConfigs: Partial<
+    Record<
+      string,
+      {
+        tabLabel: string;
+        dirty: boolean;
+        saving: boolean;
+        onSave: () => void;
+        onReset: () => void;
+      }
+    >
+  > = {
+    general: {
+      tabLabel: "الإعدادات العامة",
+      dirty: appDirty,
+      saving: savingApp,
+      onSave: saveApp,
+      onReset: resetAppChanges,
+    },
+    notifications: {
+      tabLabel: "الإشعارات",
+      dirty: notificationsDirty,
+      saving: savingNotifications,
+      onSave: saveNotifications,
+      onReset: resetNotificationsChanges,
+    },
+    security: {
+      tabLabel: "الأمان",
+      dirty: securityDirty,
+      saving: savingSecurity,
+      onSave: saveSecurity,
+      onReset: resetSecurityChanges,
+    },
+    labels: {
+      tabLabel: "المسميات",
+      dirty: labelsDirty,
+      saving: savingLabels,
+      onSave: saveLabels,
+      onReset: resetLabelsChanges,
+    },
+    flags: {
+      tabLabel: "الميزات التجريبية",
+      dirty: flagsDirty,
+      saving: savingFlags,
+      onSave: saveFlags,
+      onReset: resetFlagsChanges,
+    },
+    content: {
+      tabLabel: "محتوى الموقع",
+      dirty: contentDirty,
+      saving: savingContent,
+      onSave: saveContent,
+      onReset: resetContentChanges,
+    },
+  };
+
+  const dirtyActionKeys = Object.entries(tabActionConfigs)
+    .filter(([, config]) => config?.dirty)
+    .map(([key]) => key);
+
+  const prioritizedActionKey =
+    tabActionConfigs[activeTab]?.dirty ? activeTab : dirtyActionKeys[0] ?? null;
+
+  const activeBottomBarAction = prioritizedActionKey
+    ? tabActionConfigs[prioritizedActionKey] ?? null
+    : null;
+
+  const dirtyTabsCount = dirtyActionKeys.length;
+
   /* =========================
      UI
   ========================= */
@@ -2934,119 +3314,130 @@ export default function Settings() {
 
   return (
     <DashboardLayout>
-      <div className="container space-y-8 py-8">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-          <div className="space-y-3">
-            <Badge className="w-fit rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-600 shadow-none">
-              Platform Control Center
-            </Badge>
-            <div className="space-y-2">
-              <h1 className="text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
-                الإعدادات
-              </h1>
-              <p className="max-w-3xl text-sm leading-7 text-slate-600">
-                {activeTabDescription}
-              </p>
-            </div>
-            {error ? (
-              <p className="text-sm font-medium text-red-600">{error}</p>
-            ) : null}
-          </div>
-
-          {activeTabHeaderBadges.length ? (
-            <div className="flex flex-wrap gap-2">
-              {activeTabHeaderBadges.map(badge => (
-                <Badge
-                  key={badge.label}
-                  variant="outline"
-                  className={cn(
-                    "rounded-full px-3 py-1 text-sm font-medium",
-                    headerBadgeToneClassName[badge.tone]
-                  )}
-                >
-                  {badge.label}
-                </Badge>
-              ))}
-            </div>
-          ) : null}
-        </div>
-
+      <div dir="rtl" className="space-y-6 text-right">
         <Tabs
+          dir="rtl"
           value={activeTab}
           onValueChange={setActiveTab}
-          className="space-y-6"
+          className="space-y-0"
         >
-          <TabsList className="h-auto w-full justify-start gap-2 overflow-x-auto rounded-[22px] border border-slate-200/80 bg-white/90 p-2 shadow-[0_18px_45px_-34px_rgba(15,23,42,0.35)] backdrop-blur flex-nowrap whitespace-nowrap">
-            <TabsTrigger
-              value="general"
-              className="shrink-0 whitespace-nowrap rounded-xl px-4 py-2.5 text-slate-600 data-[state=active]:border-slate-950 data-[state=active]:bg-slate-950 data-[state=active]:text-white"
-            >
-              <SettingsIcon className="w-4 h-4 ml-2" /> عام
-            </TabsTrigger>
+          <div className="flex flex-col gap-6 xl:flex-row xl:items-start">
+            <aside className="w-full xl:sticky xl:top-0 xl:h-screen xl:w-[320px] xl:shrink-0">
+              <div className="flex h-full flex-col overflow-hidden rounded-[30px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(8,18,47,0.98),rgba(2,6,23,0.97))] text-white shadow-[0_30px_80px_-46px_rgba(2,6,23,0.82)]">
+                <div className="border-b border-white/10 px-5 py-6">
+                  <Badge className="w-fit rounded-full border border-[#F2B705]/25 bg-[#F2B705]/10 px-3 py-1 text-[11px] font-semibold tracking-[0.16em] text-[#F2B705] shadow-none">
+                    التنقل الداخلي
+                  </Badge>
+                  <h1 className="mt-4 text-2xl font-semibold tracking-tight sm:text-[1.9rem]">
+                    الإعدادات
+                  </h1>
+                  <p className="mt-3 text-sm leading-7 text-white/70">
+                    شريط جانبي ثابت ومستقل لتنظيم جميع أقسام الإعدادات في
+                    واجهة عربية واضحة ومتسقة من اليمين إلى اليسار.
+                  </p>
+                  <div className="mt-5 flex flex-wrap gap-2">
+                    <Badge
+                      variant="outline"
+                      className="rounded-full border-white/15 bg-white/5 px-3 py-1 text-xs font-medium text-white/80 shadow-none"
+                    >
+                      {formatNumberEN(settingsTabs.length)} أقسام
+                    </Badge>
+                    <Badge className="rounded-full border border-[#F2B705]/25 bg-[#F2B705]/12 px-3 py-1 text-xs font-medium text-[#F2B705] shadow-none">
+                      {activeTabMeta.label}
+                    </Badge>
+                  </div>
+                </div>
 
-            <TabsTrigger
-              value="notifications"
-              className="shrink-0 whitespace-nowrap rounded-xl px-4 py-2.5 text-slate-600 data-[state=active]:border-slate-950 data-[state=active]:bg-slate-950 data-[state=active]:text-white"
-            >
-              <Bell className="w-4 h-4 ml-2" /> الإشعارات
-            </TabsTrigger>
+                <TabsList className="h-auto w-full flex-1 flex-col items-stretch justify-start gap-2 overflow-y-auto bg-transparent p-3">
+                  {settingsTabs.map(tab => {
+                    const Icon = tab.icon;
+                    const isActive = activeTab === tab.value;
 
-            <TabsTrigger
-              value="security"
-              className="shrink-0 whitespace-nowrap rounded-xl px-4 py-2.5 text-slate-600 data-[state=active]:border-slate-950 data-[state=active]:bg-slate-950 data-[state=active]:text-white"
-            >
-              <Shield className="w-4 h-4 ml-2" /> الأمان
-            </TabsTrigger>
+                    return (
+                      <TabsTrigger
+                        key={tab.value}
+                        value={tab.value}
+                        className={cn(
+                          "h-auto w-full flex-none items-start justify-between rounded-[24px] border border-transparent px-4 py-4 text-right transition-all",
+                          isActive
+                            ? "border-[#F2B705]/30 bg-white text-slate-950 shadow-[0_18px_40px_-28px_rgba(15,23,42,0.35)]"
+                            : "bg-white/[0.03] text-white/90 hover:bg-white/[0.06] hover:text-white"
+                        )}
+                      >
+                        <div className="flex min-w-0 items-start gap-3">
+                          <div
+                            className={cn(
+                              "rounded-2xl border p-2",
+                              isActive
+                                ? "border-[#F2B705]/30 bg-[#F2B705]/12 text-[#8d6700]"
+                                : "border-white/10 bg-white/[0.05] text-white/75"
+                            )}
+                          >
+                            <Icon className="h-4 w-4" />
+                          </div>
+                          <div className="min-w-0 space-y-1">
+                            <div className="text-sm font-semibold">
+                              {tab.label}
+                            </div>
+                            <div
+                              className={cn(
+                                "text-xs leading-6",
+                                isActive ? "text-slate-600" : "text-white/60"
+                              )}
+                            >
+                              {tab.helper}
+                            </div>
+                          </div>
+                        </div>
+                        <span
+                          className={cn(
+                            "mt-1 h-2.5 w-2.5 shrink-0 rounded-full",
+                            isActive ? "bg-[#F2B705]" : "bg-white/15"
+                          )}
+                        />
+                      </TabsTrigger>
+                    );
+                  })}
+                </TabsList>
+              </div>
+            </aside>
 
-            <TabsTrigger
-              value="roles"
-              className="shrink-0 whitespace-nowrap rounded-xl px-4 py-2.5 text-slate-600 data-[state=active]:border-slate-950 data-[state=active]:bg-slate-950 data-[state=active]:text-white"
-            >
-              <KeyRound className="w-4 h-4 ml-2" /> الأدوار والصلاحيات
-            </TabsTrigger>
+            <div className="min-w-0 flex-1 space-y-8 pb-28 xl:pb-32">
+              <div className="space-y-5 pt-1 xl:pt-4">
+                <div className="space-y-3">
+                  <Badge className="w-fit rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold tracking-[0.16em] text-slate-600 shadow-none">
+                    {activeTabMeta.label}
+                  </Badge>
+                  <div className="space-y-2">
+                    <h2 className="text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
+                      {activeTabMeta.label}
+                    </h2>
+                    <p className="max-w-3xl text-sm leading-7 text-slate-600">
+                      {activeTabDescription}
+                    </p>
+                  </div>
+                  {error ? (
+                    <p className="text-sm font-medium text-red-600">{error}</p>
+                  ) : null}
+                </div>
 
-            <TabsTrigger
-              value="admins"
-              className="shrink-0 whitespace-nowrap rounded-xl px-4 py-2.5 text-slate-600 data-[state=active]:border-slate-950 data-[state=active]:bg-slate-950 data-[state=active]:text-white"
-            >
-              <Users className="w-4 h-4 ml-2" /> حسابات الإدارة
-            </TabsTrigger>
-
-            <TabsTrigger
-              value="labels"
-              className="shrink-0 whitespace-nowrap rounded-xl px-4 py-2.5 text-slate-600 data-[state=active]:border-slate-950 data-[state=active]:bg-slate-950 data-[state=active]:text-white"
-            >
-              <Tags className="w-4 h-4 ml-2" /> المسميات
-            </TabsTrigger>
-
-            <TabsTrigger
-              value="flags"
-              className="shrink-0 whitespace-nowrap rounded-xl px-4 py-2.5 text-slate-600 data-[state=active]:border-slate-950 data-[state=active]:bg-slate-950 data-[state=active]:text-white"
-            >
-              <SlidersHorizontal className="w-4 h-4 ml-2" /> Feature Flags
-            </TabsTrigger>
-
-            <TabsTrigger
-              value="content"
-              className="shrink-0 whitespace-nowrap rounded-xl px-4 py-2.5 text-slate-600 data-[state=active]:border-slate-950 data-[state=active]:bg-slate-950 data-[state=active]:text-white"
-            >
-              <Type className="w-4 h-4 ml-2" /> محتوى الموقع
-            </TabsTrigger>
-
-            <TabsTrigger
-              value="backup"
-              className="shrink-0 whitespace-nowrap rounded-xl px-4 py-2.5 text-slate-600 data-[state=active]:border-slate-950 data-[state=active]:bg-slate-950 data-[state=active]:text-white"
-            >
-              <FileDown className="w-4 h-4 ml-2" /> Backup
-            </TabsTrigger>
-
-            <TabsTrigger
-              value="database"
-              className="shrink-0 whitespace-nowrap rounded-xl px-4 py-2.5 text-slate-600 data-[state=active]:border-slate-950 data-[state=active]:bg-slate-950 data-[state=active]:text-white"
-            >
-              <Database className="w-4 h-4 ml-2" /> قاعدة البيانات
-            </TabsTrigger>
-          </TabsList>
+                {activeTabHeaderBadges.length ? (
+                  <div className="flex flex-wrap gap-2">
+                    {activeTabHeaderBadges.map(badge => (
+                      <Badge
+                        key={badge.label}
+                        variant="outline"
+                        className={cn(
+                          "rounded-full px-3 py-1 text-sm font-medium",
+                          headerBadgeToneClassName[badge.tone]
+                        )}
+                      >
+                        {badge.label}
+                      </Badge>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
 
           {/* =========================
               General
@@ -3059,7 +3450,7 @@ export default function Settings() {
                     <div className="flex flex-wrap items-center gap-2">
                       <Badge className="rounded-full border border-[#F2B705]/30 bg-[#F2B705]/12 px-3 py-1 text-xs font-semibold text-[#8d6700] shadow-none">
                         <Sparkles className="h-3.5 w-3.5" />
-                        Settings Experience
+                        تجربة الإعدادات
                       </Badge>
                       <Badge
                         variant="outline"
@@ -3089,19 +3480,19 @@ export default function Settings() {
                     <div className="grid gap-3 sm:grid-cols-3">
                       <SettingsOverviewStat
                         icon={Building2}
-                        label="Platform"
+                        label="المنصة"
                         value={app.name || "غير محدد"}
                         helper="هوية المنصة في النظام"
                       />
                       <SettingsOverviewStat
                         icon={Landmark}
-                        label="Investment Window"
+                        label="نطاق الاستثمار"
                         value={investmentRangePreview}
                         helper="النطاق المرجعي للاستثمار"
                       />
                       <SettingsOverviewStat
                         icon={TrendingUp}
-                        label="Return Profile"
+                        label="ملف العائد"
                         value={returnProfilePreview}
                         helper="العائد والمدة الافتراضية"
                       />
@@ -3112,7 +3503,7 @@ export default function Settings() {
                     <div className="flex items-start justify-between gap-4">
                       <div>
                         <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/45">
-                          Readiness
+                          ملخص الحالة
                         </p>
                         <h3 className="mt-3 text-xl font-semibold tracking-tight">
                           جاهزية الإعدادات
@@ -3157,19 +3548,19 @@ export default function Settings() {
               </CardContent>
             </Card>
 
-            <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+            <div className="space-y-6">
               <div className="space-y-6">
                 <SettingsSectionCard
                   icon={Building2}
-                  eyebrow="Module 01"
-                  title="Platform Info"
+                  eyebrow="الوحدة 01"
+                  title="معلومات المنصة"
                   description="الهوية الأساسية للمنصة كما تظهر داخليًا وفي الواجهات الرسمية."
                 >
                   <div className="grid gap-5 md:grid-cols-2">
                     <SettingsField
                       label="اسم المنصة"
                       description="الاسم الرسمي المستخدم في التقارير والواجهات."
-                      placeholder="مثال: Maedin Capital"
+                      placeholder="مثال: منصة معدن البناء"
                       value={app.name}
                       onChange={v => setApp({ ...app, name: v })}
                       error={
@@ -3199,8 +3590,8 @@ export default function Settings() {
 
                 <SettingsSectionCard
                   icon={Mail}
-                  eyebrow="Module 02"
-                  title="Contact Details"
+                  eyebrow="الوحدة 02"
+                  title="بيانات التواصل"
                   description="بيانات التواصل الرسمية التي يعتمد عليها المستخدمون والإدارة."
                 >
                   <div className="grid gap-5 md:grid-cols-2">
@@ -3238,8 +3629,8 @@ export default function Settings() {
 
                 <SettingsSectionCard
                   icon={Landmark}
-                  eyebrow="Module 03"
-                  title="Investment Rules"
+                  eyebrow="الوحدة 03"
+                  title="ضوابط الاستثمار"
                   description="الحدود التشغيلية الافتراضية لطلبات الاستثمار الجديدة."
                 >
                   <div className="grid gap-5 md:grid-cols-2">
@@ -3290,8 +3681,8 @@ export default function Settings() {
 
                 <SettingsSectionCard
                   icon={TrendingUp}
-                  eyebrow="Module 04"
-                  title="Financial Defaults"
+                  eyebrow="الوحدة 04"
+                  title="الإعدادات المالية الافتراضية"
                   description="العائد والمدة المرجعية للمشاريع والاستثمارات الجديدة."
                 >
                   <div className="grid gap-5 md:grid-cols-2">
@@ -3341,25 +3732,6 @@ export default function Settings() {
                 </SettingsSectionCard>
               </div>
 
-              <div className="space-y-4 xl:sticky xl:top-24 self-start">
-                <SettingsSavePanel
-                  appDirty={appDirty}
-                  savingApp={savingApp}
-                  appIssues={appIssues}
-                  changedFields={changedAppFields}
-                  onReset={resetAppChanges}
-                  onSave={saveApp}
-                />
-
-                <Alert className="border-slate-200/80 bg-white shadow-[0_16px_40px_-34px_rgba(15,23,42,0.25)]">
-                  <Sparkles className="h-4 w-4" />
-                  <AlertTitle>بدون تغيير في المنطق</AlertTitle>
-                  <AlertDescription className="leading-7">
-                    الحفظ ما زال يستخدم نفس Firestore document ونفس أسماء الحقول
-                    الحالية، والتعديل هنا يقتصر على طبقة UI / UX فقط.
-                  </AlertDescription>
-                </Alert>
-              </div>
             </div>
           </TabsContent>
 
@@ -3368,19 +3740,19 @@ export default function Settings() {
           ========================= */}
           <TabsContent value="notifications" className="space-y-6">
             <SettingsTabHero
-              eyebrow="Notification Center"
+              eyebrow="مركز الإشعارات"
               title="إعدادات الإشعارات"
               description="تحكم في قنوات التنبيه والأحداث التي تستحق إشعارًا داخل النظام، مع فصل واضح بين قنوات الإرسال ومحفزات التنبيه."
               stats={[
                 {
                   icon: Bell,
-                  label: "Enabled",
+                  label: "المفعّل",
                   value: formatNumberEN(notificationsEnabledCount),
                   helper: "عدد الإعدادات المفعلة حاليًا",
                 },
                 {
                   icon: Mail,
-                  label: "Channels",
+                  label: "القنوات",
                   value: formatNumberEN(
                     [notifications.email, notifications.sms].filter(Boolean)
                       .length
@@ -3389,7 +3761,7 @@ export default function Settings() {
                 },
                 {
                   icon: Globe,
-                  label: "Triggers",
+                  label: "المحفزات",
                   value: formatNumberEN(
                     [notifications.investments, notifications.messages].filter(
                       Boolean
@@ -3401,19 +3773,19 @@ export default function Settings() {
               panel={
                 <SettingsHeroPanel
                   status={
-                    notificationsEnabledCount > 0 ? "Operational" : "Muted"
+                    notificationsEnabledCount > 0 ? "نشط" : "هادئ"
                   }
                   title="تنبيهات النظام"
                   description="يمكنك ضبط القنوات ومحفزات التنبيه من دون تغيير أي منطق تشغيلي أو طرق الإرسال."
                   metrics={[
                     {
                       label: "البريد الإلكتروني",
-                      value: notifications.email ? "مفعّل" : "موقوف",
+                      value: notifications.email ? "مفعّل" : "معطّل",
                       helper: "القناة الرسمية الأساسية",
                     },
                     {
                       label: "الرسائل النصية",
-                      value: notifications.sms ? "مفعّل" : "موقوف",
+                      value: notifications.sms ? "مفعّل" : "معطّل",
                       helper: "للتنبيهات الحساسة أو العاجلة",
                     },
                     {
@@ -3422,111 +3794,39 @@ export default function Settings() {
                         notifications.investments || notifications.messages
                           ? "نشطة"
                           : "صامتة",
-                      helper: "الاستثمارات والرسائل الجديدة",
+                      helper: "الاستشارات والرسائل الجديدة",
                     },
                   ]}
                 />
               }
             />
 
-            <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
-              <div className="space-y-6">
+            <div className="space-y-5">
+              {NOTIFICATION_SECTION_CONFIG.map(section => (
                 <SettingsSectionCard
-                  icon={Mail}
-                  eyebrow="Module 01"
-                  title="Delivery Channels"
-                  description="اختر قنوات الإرسال التي يعتمد عليها النظام عند بث التنبيهات الإدارية."
+                  key={section.key}
+                  icon={section.icon}
+                  eyebrow={section.eyebrow}
+                  title={section.title}
+                  description={section.description}
+                  headerClassName="pb-4"
+                  contentClassName="pt-4"
                 >
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <Toggle
-                      label="إشعارات البريد"
-                      description="إرسال التنبيهات الرسمية عبر البريد الإلكتروني المسجل."
-                      value={notifications.email}
-                      onChange={(v: boolean) =>
-                        setNotifications({ ...notifications, email: v })
-                      }
-                    />
-                    <Toggle
-                      label="إشعارات SMS"
-                      description="إرسال تنبيهات نصية مختصرة للرسائل أو الحالات الحرجة."
-                      value={notifications.sms}
-                      onChange={(v: boolean) =>
-                        setNotifications({ ...notifications, sms: v })
-                      }
-                    />
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {section.items.map(item => (
+                      <Toggle
+                        key={item.key}
+                        label={item.label}
+                        description={item.description}
+                        value={notifications[item.key]}
+                        onChange={(value: boolean) =>
+                          updateNotificationField(item.key, value)
+                        }
+                      />
+                    ))}
                   </div>
                 </SettingsSectionCard>
-
-                <SettingsSectionCard
-                  icon={Bell}
-                  eyebrow="Module 02"
-                  title="Event Triggers"
-                  description="حدد ما إذا كان النظام ينشئ تنبيهات عند وصول استثمارات أو رسائل جديدة."
-                >
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <Toggle
-                      label="استثمارات جديدة"
-                      description="تنبيه الإدارة عندما يصل طلب استثمار أو تحديث استثماري جديد."
-                      value={notifications.investments}
-                      onChange={(v: boolean) =>
-                        setNotifications({
-                          ...notifications,
-                          investments: v,
-                        })
-                      }
-                    />
-                    <Toggle
-                      label="رسائل جديدة"
-                      description="تنبيه الفريق عند استقبال رسالة جديدة من المستخدمين أو العملاء."
-                      value={notifications.messages}
-                      onChange={(v: boolean) =>
-                        setNotifications({ ...notifications, messages: v })
-                      }
-                    />
-                  </div>
-                </SettingsSectionCard>
-              </div>
-
-              <div className="space-y-4 xl:sticky xl:top-24 self-start">
-                <SettingsSimpleActionPanel
-                  title="حفظ إعدادات الإشعارات"
-                  description="احفظ تفضيلات الإشعارات الحالية إلى نفس مستند الإعدادات بدون أي تغيير على منطق الإرسال."
-                  metrics={[
-                    {
-                      label: "القنوات المفعلة",
-                      value: formatNumberEN(
-                        [notifications.email, notifications.sms].filter(Boolean)
-                          .length
-                      ),
-                      helper: "Email / SMS",
-                    },
-                    {
-                      label: "الأحداث المفعلة",
-                      value: formatNumberEN(
-                        [
-                          notifications.investments,
-                          notifications.messages,
-                        ].filter(Boolean).length
-                      ),
-                      helper: "Investments / Messages",
-                    },
-                  ]}
-                  primaryLabel="Save Notification Settings"
-                  primaryAction={saveNotifications}
-                  notice={
-                    <Alert className="border-white/10 bg-white/5 text-white">
-                      <Bell className="h-4 w-4 text-[#F2B705]" />
-                      <AlertTitle className="text-white">
-                        تفعيل متوازن
-                      </AlertTitle>
-                      <AlertDescription className="text-white/70">
-                        يفضّل إبقاء قناة واحدة على الأقل مفعلة حتى لا تصبح
-                        المنصة صامتة بالكامل.
-                      </AlertDescription>
-                    </Alert>
-                  }
-                />
-              </div>
+              ))}
             </div>
           </TabsContent>
 
@@ -3535,32 +3835,32 @@ export default function Settings() {
           ========================= */}
           <TabsContent value="security" className="space-y-6">
             <SettingsTabHero
-              eyebrow="Security Controls"
+              eyebrow="ضوابط الأمان"
               title="إعدادات الأمان"
               description="لوحة موحدة للتحكم في إعدادات الأمان العامة للمنصة مع إبراز الحالة الحالية والجاهزية التشغيلية."
               stats={[
                 {
                   icon: Shield,
-                  label: "Policies",
+                  label: "السياسات",
                   value: formatNumberEN(Object.keys(security).length),
                   helper: "سياسات أمنية مرتبطة بالإعدادات",
                 },
                 {
                   icon: CheckCircle2,
-                  label: "Enabled",
+                  label: "المفعّل",
                   value: formatNumberEN(securityEnabledCount),
                   helper: "عدد السياسات المفعلة حاليًا",
                 },
                 {
                   icon: KeyRound,
-                  label: "2FA",
-                  value: security.twoFactor ? "On" : "Off",
+                  label: "التحقق الثنائي",
+                  value: security.twoFactor ? "مفعّل" : "متوقف",
                   helper: "المصادقة الثنائية للإدارة",
                 },
               ]}
               panel={
                 <SettingsHeroPanel
-                  status={security.twoFactor ? "Protected" : "Basic"}
+                  status={security.twoFactor ? "محمي" : "أساسي"}
                   title="حالة الأمان"
                   description="هذا التبويب يحافظ على نفس المنطق الحالي مع تحسين واضح في العرض والقراءة واتخاذ القرار."
                   metrics={[
@@ -3579,12 +3879,12 @@ export default function Settings() {
               }
             />
 
-            <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+            <div className="space-y-6">
               <div className="space-y-6">
                 <SettingsSectionCard
                   icon={Shield}
-                  eyebrow="Module 01"
-                  title="Authentication Policy"
+                  eyebrow="الوحدة 01"
+                  title="سياسة المصادقة"
                   description="التحكم في إعداد التحقق الإضافي للإدارة من داخل لوحة إعدادات موحدة وأكثر وضوحًا."
                 >
                   <div className="grid gap-4">
@@ -3599,8 +3899,8 @@ export default function Settings() {
 
                 <SettingsSectionCard
                   icon={CircleAlert}
-                  eyebrow="Module 02"
-                  title="Security Guidance"
+                  eyebrow="الوحدة 02"
+                  title="إرشادات الأمان"
                   description="توصيات تشغيلية سريعة للحفاظ على مستوى موثوق من الأمان داخل لوحة الإدارة."
                 >
                   <div className="grid gap-4 md:grid-cols-2">
@@ -3624,65 +3924,33 @@ export default function Settings() {
                 </SettingsSectionCard>
               </div>
 
-              <div className="space-y-4 xl:sticky xl:top-24 self-start">
-                <SettingsSimpleActionPanel
-                  title="حفظ إعدادات الأمان"
-                  description="استخدم زر الحفظ لتثبيت الإعداد الحالي على نفس مستند الأمان الموجود بالفعل."
-                  metrics={[
-                    {
-                      label: "السياسات النشطة",
-                      value: formatNumberEN(securityEnabledCount),
-                      helper: "من إجمالي السياسات الحالية",
-                    },
-                    {
-                      label: "المستوى الحالي",
-                      value: security.twoFactor ? "محمي" : "أساسي",
-                      helper: "بحسب حالة المصادقة الثنائية",
-                    },
-                  ]}
-                  primaryLabel="Save Security Settings"
-                  primaryAction={saveSecurity}
-                  notice={
-                    <Alert className="border-white/10 bg-white/5 text-white">
-                      <Shield className="h-4 w-4 text-[#F2B705]" />
-                      <AlertTitle className="text-white">
-                        توصية تشغيلية
-                      </AlertTitle>
-                      <AlertDescription className="text-white/70">
-                        تفعيل المصادقة الثنائية يرفع موثوقية المنصة خصوصًا عند
-                        وجود أكثر من حساب إداري.
-                      </AlertDescription>
-                    </Alert>
-                  }
-                />
-              </div>
             </div>
           </TabsContent>
 
           {/* =========================
-              Roles & Permissions
+              الأدوار والصلاحيات
           ========================= */}
           <TabsContent value="roles" className="space-y-6">
             <SettingsTabHero
-              eyebrow="Roles & Permissions"
+              eyebrow="الأدوار والصلاحيات"
               title="الأدوار والصلاحيات"
               description="إدارة الأدوار وصلاحياتها من خلال لوحة أكثر تنظيمًا، مع إبراز الأدوار الأساسية، الأدوار النشطة، وحجم كتالوج الصلاحيات المتاح."
               stats={[
                 {
                   icon: KeyRound,
-                  label: "Roles",
+                  label: "الأدوار",
                   value: formatNumberEN(roles.length),
                   helper: "إجمالي الأدوار المحفوظة",
                 },
                 {
                   icon: CheckCircle2,
-                  label: "Active",
+                  label: "النشطة",
                   value: formatNumberEN(activeRolesCount),
                   helper: "عدد الأدوار النشطة حاليًا",
                 },
                 {
                   icon: Shield,
-                  label: "Permissions",
+                  label: "الصلاحيات",
                   value: formatNumberEN(DEFAULT_PERMISSIONS.length),
                   helper: "كتالوج الصلاحيات المتاح",
                 },
@@ -3715,15 +3983,15 @@ export default function Settings() {
 
             <SettingsSectionCard
               icon={KeyRound}
-              eyebrow="Module 01"
-              title="Role Directory"
+                  eyebrow="الوحدة 01"
+                  title="دليل الأدوار"
               description="أنشئ أدوارًا جديدة أو راجع الأدوار الحالية وصلاحياتها من بطاقة موحدة لكل دور."
               action={
                 <Button
                   onClick={openCreateRole}
                   className="bg-[#F2B705] text-slate-950 hover:bg-[#e0ab00]"
                 >
-                  <Plus className="w-4 h-4 ml-2" /> Role جديد
+                  <Plus className="w-4 h-4 ml-2" /> دور جديد
                 </Button>
               }
             >
@@ -3776,7 +4044,7 @@ export default function Settings() {
 
                           <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-center">
                             <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
-                              Permissions
+                              الصلاحيات
                             </div>
                             <div className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">
                               {formatNumberEN(r.permissions?.length || 0)}
@@ -3851,15 +4119,15 @@ export default function Settings() {
                 </div>
               ) : (
                 <div className="rounded-[22px] border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-500">
-                  لا توجد أدوار محفوظة بعد. ابدأ بإنشاء Role جديد لإكمال الهيكل.
+                  لا توجد أدوار محفوظة بعد. ابدأ بإنشاء دور جديد لإكمال الهيكل.
                 </div>
               )}
             </SettingsSectionCard>
 
             <SettingsSectionCard
               icon={Shield}
-              eyebrow="Module 02"
-              title="Permission Catalog"
+                  eyebrow="الوحدة 02"
+                  title="دليل الصلاحيات"
               description="مرجع سريع للصلاحيات المتاحة داخل النظام كما يتم استخدامها حاليًا."
             >
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -3885,39 +4153,39 @@ export default function Settings() {
           ========================= */}
           <TabsContent value="admins" className="space-y-6">
             <SettingsTabHero
-              eyebrow="Admin Access"
+              eyebrow="وصول الإدارة"
               title="حسابات الإدارة"
               description="إدارة الترقية، الدعوات، والحسابات الإدارية من تبويب واحد منظم يعرض الحالة الحالية، القنوات المفتوحة، وعدد الحسابات النشطة بوضوح."
               stats={[
                 {
                   icon: Users,
-                  label: "Admins",
+                  label: "الحسابات",
                   value: formatNumberEN(adminUsers.length),
                   helper: "إجمالي حسابات الإدارة",
                 },
                 {
                   icon: CheckCircle2,
-                  label: "Active",
+                  label: "النشطة",
                   value: formatNumberEN(activeAdminsCount),
                   helper: "الحسابات المفعلة حاليًا",
                 },
                 {
                   icon: Mail,
-                  label: "Invites",
+                  label: "الدعوات",
                   value: formatNumberEN(roleInvites.length),
                   helper: "دعوات وربط أدوار عبر البريد",
                 },
               ]}
               panel={
                 <SettingsHeroPanel
-                  status="Access Managed"
+                  status="وصول منظم"
                   title="إدارة الوصول"
                   description="يمكنك هنا الترقية المباشرة، إنشاء دعوات بالدور، وإدارة الحسابات الإدارية القائمة بنفس المنطق الحالي."
                   metrics={[
                     {
                       label: "الدعوات المفعلة",
                       value: formatNumberEN(activeInvitesCount),
-                      helper: "Active role invites",
+                      helper: "الدعوات النشطة للأدوار",
                     },
                     {
                       label: "الحسابات المباشرة",
@@ -3936,8 +4204,8 @@ export default function Settings() {
 
             <SettingsSectionCard
               icon={Users}
-              eyebrow="Module 01"
-              title="Direct Promotion"
+                  eyebrow="الوحدة 01"
+                  title="ترقية مباشرة"
               description="ترقية مستخدم موجود داخل users مباشرةً عبر البريد الإلكتروني، من دون إنشاء حساب جديد."
             >
               <div className="grid gap-5 md:grid-cols-3">
@@ -3990,8 +4258,8 @@ export default function Settings() {
 
             <SettingsSectionCard
               icon={Mail}
-              eyebrow="Module 02"
-              title="Role Invites"
+                  eyebrow="الوحدة 02"
+                  title="دعوات الأدوار"
               description="ربط دور ببريد إلكتروني حتى يتم تطبيقه تلقائيًا عند تسجيل الدخول أو إنشاء الحساب."
             >
               <div className="grid gap-5 md:grid-cols-3">
@@ -4133,8 +4401,8 @@ export default function Settings() {
 
             <SettingsSectionCard
               icon={Users}
-              eyebrow="Module 03"
-              title="Admin Accounts Directory"
+                  eyebrow="الوحدة 03"
+                  title="دليل الحسابات الإدارية"
               description="إدارة الحسابات الإدارية الحالية ومراجعة صلاحياتها الفعلية وحالتها التشغيلية."
               action={
                 <Button
@@ -4308,7 +4576,7 @@ export default function Settings() {
           ========================= */}
           <TabsContent value="labels" className="space-y-6">
             <SettingsTabHero
-              eyebrow="Label Management"
+              eyebrow="إدارة المسميات"
               title="المسميات"
               description="إدارة نصوص العرض المركزية للأنواع والحالات والأدوار من داخل لوحة موحدة، بحيث تبقى الهوية اللغوية للنظام متماسكة وسهلة الصيانة."
               stats={[
@@ -4327,7 +4595,7 @@ export default function Settings() {
                 {
                   icon: Globe,
                   label: "Languages",
-                  value: "AR / EN",
+                  value: "عربي / إنجليزي",
                   helper: "حقول العرض المتاحة",
                 },
               ]}
@@ -4342,37 +4610,37 @@ export default function Settings() {
                       value: formatNumberEN(
                         Object.keys(labels.projectTypes || {}).length
                       ),
-                      helper: "Project Types",
+                      helper: "أنواع المشاريع",
                     },
                     {
                       label: "حالات المشاريع",
                       value: formatNumberEN(
                         Object.keys(labels.projectStatuses || {}).length
                       ),
-                      helper: "Project Statuses",
+                      helper: "حالات المشاريع",
                     },
                     {
                       label: "حالات الاستثمار",
                       value: formatNumberEN(
                         Object.keys(labels.investmentStatuses || {}).length
                       ),
-                      helper: "Investment Statuses / UI Roles",
+                      helper: "حالات الاستثمار ومسميات الأدوار",
                     },
                   ]}
                 />
               }
             />
 
-            <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+            <div className="space-y-6">
               <div className="space-y-6">
                 <SettingsSectionCard
                   icon={Tags}
-                  eyebrow="Module 01"
-                  title="Project Types"
+                  eyebrow="الوحدة 01"
+                  title="أنواع المشاريع"
                   description="مسميات أنواع المشاريع التي تظهر في صفحات الإدارة والعرض."
                 >
                   <LabelsEditor
-                    title="مسميات أنواع المشاريع (Project Types)"
+                    title="مسميات أنواع المشاريع"
                     data={labels.projectTypes}
                     onChange={next =>
                       setLabels(p => ({ ...p, projectTypes: next }))
@@ -4382,12 +4650,12 @@ export default function Settings() {
 
                 <SettingsSectionCard
                   icon={FolderOpen}
-                  eyebrow="Module 02"
-                  title="Project Statuses"
+                  eyebrow="الوحدة 02"
+                  title="حالات المشاريع"
                   description="حالات المشاريع المعروضة في النظام للمستخدمين والإدارة."
                 >
                   <LabelsEditor
-                    title="مسميات حالات المشاريع (Project Statuses)"
+                    title="مسميات حالات المشاريع"
                     data={labels.projectStatuses}
                     onChange={next =>
                       setLabels(p => ({ ...p, projectStatuses: next }))
@@ -4397,12 +4665,12 @@ export default function Settings() {
 
                 <SettingsSectionCard
                   icon={TrendingUp}
-                  eyebrow="Module 03"
-                  title="Investment Statuses"
+                  eyebrow="الوحدة 03"
+                  title="حالات الاستثمار"
                   description="النصوص المستخدمة لوصف مراحل وحالات الاستثمار داخل النظام."
                 >
                   <LabelsEditor
-                    title="مسميات حالات الاستثمارات (Investment Statuses)"
+                    title="مسميات حالات الاستثمارات"
                     data={labels.investmentStatuses}
                     onChange={next =>
                       setLabels(p => ({ ...p, investmentStatuses: next }))
@@ -4412,50 +4680,18 @@ export default function Settings() {
 
                 <SettingsSectionCard
                   icon={Users}
-                  eyebrow="Module 04"
-                  title="UI Roles Labels"
+                  eyebrow="الوحدة 04"
+                  title="مسميات الأدوار في الواجهة"
                   description="مسميات العرض للأدوار المختلفة كما تظهر في واجهات النظام."
                 >
                   <LabelsEditor
-                    title="مسميات الأدوار للعرض (UI Roles Labels)"
+                    title="مسميات الأدوار للعرض"
                     data={labels.uiRoles}
                     onChange={next => setLabels(p => ({ ...p, uiRoles: next }))}
                   />
                 </SettingsSectionCard>
               </div>
 
-              <div className="space-y-4 xl:sticky xl:top-24 self-start">
-                <SettingsSimpleActionPanel
-                  title="حفظ المسميات"
-                  description="بعد مراجعة التعديلات، احفظ كل القواميس اللغوية إلى نفس مستند `settings/labels` الحالي."
-                  metrics={[
-                    {
-                      label: "إجمالي السجلات",
-                      value: formatNumberEN(totalLabelEntries),
-                      helper: "كل المسميات الحالية",
-                    },
-                    {
-                      label: "نطاق التغطية",
-                      value: "4 وحدات",
-                      helper: "Projects / Investments / Roles",
-                    },
-                  ]}
-                  primaryLabel="Save Label Settings"
-                  primaryAction={saveLabels}
-                  notice={
-                    <Alert className="border-white/10 bg-white/5 text-white">
-                      <Tags className="h-4 w-4 text-[#F2B705]" />
-                      <AlertTitle className="text-white">
-                        قاموس مركزي
-                      </AlertTitle>
-                      <AlertDescription className="text-white/70">
-                        هذا التبويب يغيّر نصوص العرض فقط، من دون أي تعديل على
-                        الكود أو المفاتيح المستخدمة في البيانات.
-                      </AlertDescription>
-                    </Alert>
-                  }
-                />
-              </div>
             </div>
           </TabsContent>
 
@@ -4464,39 +4700,39 @@ export default function Settings() {
           ========================= */}
           <TabsContent value="flags" className="space-y-6">
             <SettingsTabHero
-              eyebrow="Feature Flag Center"
-              title="Feature Flags"
+              eyebrow="مركز الميزات التجريبية"
+              title="الميزات التجريبية"
               description="إدارة مفاتيح التحكم التشغيلي بشكل أوضح، مع فصل الإعدادات المتعلقة بالإتاحة العامة عن الإعدادات الخاصة بجمهور VIP."
               stats={[
                 {
                   icon: SlidersHorizontal,
-                  label: "Flags",
+                  label: "المفاتيح",
                   value: formatNumberEN(Object.keys(flags).length),
                   helper: "إجمالي مفاتيح التحكم",
                 },
                 {
                   icon: CheckCircle2,
-                  label: "Enabled",
+                  label: "المفعّل",
                   value: formatNumberEN(enabledFlagsCount),
                   helper: "عدد المفاتيح المفعلة",
                 },
                 {
                   icon: Globe,
-                  label: "Audience",
-                  value: flags.vipOnlyMode ? "VIP" : "Public",
+                  label: "الجمهور",
+                  value: flags.vipOnlyMode ? "VIP" : "عام",
                   helper: "وضع إتاحة المحتوى الحالي",
                 },
               ]}
               panel={
                 <SettingsHeroPanel
-                  status={enabledFlagsCount > 0 ? "Managed" : "Baseline"}
+                  status={enabledFlagsCount > 0 ? "منظّم" : "افتراضي"}
                   title="مفاتيح التحكم"
-                  description="استخدم هذا التبويب لتفعيل أو تعطيل سلوكيات واجهة محددة من دون أي refactor في البزنس لوجك."
+                  description="استخدم هذا التبويب لتفعيل أو تعطيل سلوكيات واجهة محددة من دون أي تغيير في منطق الأعمال."
                   metrics={[
                     {
                       label: "وضع الصيانة",
                       value: flags.maintenanceMode ? "مفعل" : "مغلق",
-                      helper: "Maintenance Mode",
+                      helper: "وضع الصيانة",
                     },
                     {
                       label: "الاستثمارات",
@@ -4506,24 +4742,24 @@ export default function Settings() {
                     {
                       label: "قناة VIP",
                       value: flags.vipOnlyMode ? "حصرية" : "عامة",
-                      helper: "VIP Only / Hide VIP Projects",
+                      helper: "VIP فقط / إخفاء مشاريع VIP",
                     },
                   ]}
                 />
               }
             />
 
-            <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+            <div className="space-y-6">
               <div className="space-y-6">
                 <SettingsSectionCard
                   icon={SlidersHorizontal}
-                  eyebrow="Module 01"
-                  title="Platform Availability"
+                  eyebrow="الوحدة 01"
+                  title="إتاحة المنصة"
                   description="مفاتيح تؤثر على إتاحة أجزاء النظام للعامة أو للإدارة."
                 >
                   <div className="grid gap-4">
                     <Toggle
-                      label="Maintenance Mode"
+                      label="وضع الصيانة"
                       description="إيقاف واجهة الموقع مؤقتًا أو إظهار وضع الصيانة."
                       value={flags.maintenanceMode}
                       onChange={(v: boolean) =>
@@ -4551,13 +4787,13 @@ export default function Settings() {
 
                 <SettingsSectionCard
                   icon={Users}
-                  eyebrow="Module 02"
-                  title="Audience Controls"
+                  eyebrow="الوحدة 02"
+                  title="ضوابط الجمهور"
                   description="مفاتيح التحكم في ظهور المحتوى الخاص بالمستخدمين العامين أو جمهور VIP."
                 >
                   <div className="grid gap-4 md:grid-cols-2">
                     <Toggle
-                      label="VIP Only Mode"
+                      label="وضع VIP فقط"
                       description="عرض محتوى VIP فقط داخل الواجهة العامة."
                       value={flags.vipOnlyMode}
                       onChange={(v: boolean) =>
@@ -4576,38 +4812,6 @@ export default function Settings() {
                 </SettingsSectionCard>
               </div>
 
-              <div className="space-y-4 xl:sticky xl:top-24 self-start">
-                <SettingsSimpleActionPanel
-                  title="حفظ Feature Flags"
-                  description="احفظ مفاتيح التحكم الحالية إلى نفس المستند من دون أي تغيير في الأسماء أو طريقة القراءة داخل النظام."
-                  metrics={[
-                    {
-                      label: "المفاتيح المفعلة",
-                      value: formatNumberEN(enabledFlagsCount),
-                      helper: "من إجمالي مفاتيح التحكم",
-                    },
-                    {
-                      label: "وضع الجمهور",
-                      value: flags.vipOnlyMode ? "VIP" : "عام",
-                      helper: "بحسب حالة VIP Only Mode",
-                    },
-                  ]}
-                  primaryLabel="Save Feature Flags"
-                  primaryAction={saveFlags}
-                  notice={
-                    <Alert className="border-white/10 bg-white/5 text-white">
-                      <CircleAlert className="h-4 w-4 text-[#F2B705]" />
-                      <AlertTitle className="text-white">
-                        تأثير مباشر على الواجهة
-                      </AlertTitle>
-                      <AlertDescription className="text-white/70">
-                        هذه المفاتيح تغير الإتاحة والسلوك الظاهري، لذلك يفضّل
-                        مراجعتها بعناية قبل الحفظ.
-                      </AlertDescription>
-                    </Alert>
-                  }
-                />
-              </div>
             </div>
           </TabsContent>
 
@@ -4616,37 +4820,37 @@ export default function Settings() {
           ========================= */}
           <TabsContent value="content" className="space-y-6">
             <SettingsTabHero
-              eyebrow="Content Management"
+              eyebrow="إدارة المحتوى"
               title="محتوى الموقع"
-              description="إدارة النصوص العامة للواجهة من داخل لوحة منظمة تشبه إعدادات أنظمة SaaS الاحترافية، مع فصل واضح بين Hero وFooter وبيانات التواصل."
+              description="إدارة النصوص العامة للواجهة من داخل لوحة منظمة تشبه الأنظمة الإدارية الاحترافية، مع فصل واضح بين الواجهة الرئيسية والتذييل وبيانات التواصل."
               stats={[
                 {
                   icon: Type,
-                  label: "Fields",
+                  label: "الحقول",
                   value: formatNumberEN(Object.keys(content).length),
                   helper: "إجمالي حقول المحتوى المتاحة",
                 },
                 {
                   icon: CheckCircle2,
-                  label: "Completed",
+                  label: "المكتمل",
                   value: formatNumberEN(contentCompletedCount),
                   helper: "الحقول التي تحتوي على قيمة",
                 },
                 {
                   icon: Globe,
-                  label: "Locales",
-                  value: "AR / EN",
+                  label: "اللغات",
+                  value: "عربي / إنجليزي",
                   helper: "محتوى عربي وإنجليزي",
                 },
               ]}
               panel={
                 <SettingsHeroPanel
-                  status="Editorial"
+                  status="تحرير المحتوى"
                   title="واجهة المحتوى"
                   description="يتم هنا ضبط النصوص العامة للمنصة من دون أي تغيير على بنية الصفحات أو منطق عرضها."
                   metrics={[
                     {
-                      label: "Hero",
+                      label: "الواجهة الرئيسية",
                       value:
                         content.heroTitleAr || content.heroTitleEn
                           ? "مكتمل جزئيًا"
@@ -4654,7 +4858,7 @@ export default function Settings() {
                       helper: "العنوان والوصف الرئيسي",
                     },
                     {
-                      label: "Footer",
+                      label: "التذييل",
                       value:
                         content.footerAboutAr || content.footerAboutEn
                           ? "مكتمل جزئيًا"
@@ -4662,7 +4866,7 @@ export default function Settings() {
                       helper: "نص تعريف المنصة",
                     },
                     {
-                      label: "Contact",
+                      label: "التواصل",
                       value:
                         content.contactEmail || content.contactPhone
                           ? "جاهز"
@@ -4674,17 +4878,17 @@ export default function Settings() {
               }
             />
 
-            <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+            <div className="space-y-6">
               <div className="space-y-6">
                 <SettingsSectionCard
                   icon={Type}
-                  eyebrow="Module 01"
-                  title="Hero Content"
+                  eyebrow="الوحدة 01"
+                  title="محتوى الواجهة الرئيسية"
                   description="النصوص الرئيسية التي تشكل الانطباع الأول داخل الواجهة."
                 >
                   <div className="grid gap-5 md:grid-cols-2">
                     <SettingsField
-                      label="Hero Title (عربي)"
+                      label="العنوان الرئيسي (عربي)"
                       description="العنوان الرئيسي للواجهة باللغة العربية."
                       placeholder="اكتب العنوان العربي"
                       value={content.heroTitleAr}
@@ -4693,9 +4897,9 @@ export default function Settings() {
                       }
                     />
                     <SettingsField
-                      label="Hero Title (English)"
+                      label="العنوان الرئيسي (إنجليزي)"
                       description="العنوان الرئيسي للواجهة باللغة الإنجليزية."
-                      placeholder="Write the English headline"
+                      placeholder="اكتب العنوان الإنجليزي"
                       value={content.heroTitleEn}
                       onChange={value =>
                         setContent(p => ({ ...p, heroTitleEn: value }))
@@ -4704,7 +4908,7 @@ export default function Settings() {
                       inputClassName="text-left"
                     />
                     <SettingsField
-                      label="Hero Subtitle (عربي)"
+                      label="الوصف الرئيسي (عربي)"
                       description="وصف مختصر يشرح القيمة الأساسية للمنصة."
                       placeholder="اكتب الوصف العربي"
                       value={content.heroSubtitleAr}
@@ -4716,9 +4920,9 @@ export default function Settings() {
                       containerClassName="md:col-span-2"
                     />
                     <SettingsField
-                      label="Hero Subtitle (English)"
-                      description="Supporting hero copy in English."
-                      placeholder="Write the English supporting copy"
+                      label="الوصف الرئيسي (إنجليزي)"
+                      description="الوصف الداعم للواجهة باللغة الإنجليزية."
+                      placeholder="اكتب الوصف الإنجليزي"
                       value={content.heroSubtitleEn}
                       onChange={value =>
                         setContent(p => ({ ...p, heroSubtitleEn: value }))
@@ -4734,14 +4938,14 @@ export default function Settings() {
 
                 <SettingsSectionCard
                   icon={Archive}
-                  eyebrow="Module 02"
-                  title="Footer Content"
-                  description="محتوى footer التعريفي بالمنصة باللغتين العربية والإنجليزية."
+                  eyebrow="الوحدة 02"
+                  title="محتوى التذييل"
+                  description="المحتوى التعريفي في تذييل المنصة باللغتين العربية والإنجليزية."
                 >
                   <div className="grid gap-5 md:grid-cols-2">
                     <SettingsField
-                      label="Footer About (عربي)"
-                      description="النص التعريفي العربي المختصر في footer."
+                      label="نبذة التذييل (عربي)"
+                      description="النص التعريفي العربي المختصر في التذييل."
                       placeholder="اكتب وصفًا مختصرًا للمنصة"
                       value={content.footerAboutAr}
                       onChange={value =>
@@ -4751,9 +4955,9 @@ export default function Settings() {
                       rows={4}
                     />
                     <SettingsField
-                      label="Footer About (English)"
-                      description="English footer description."
-                      placeholder="Write a short platform description"
+                      label="نبذة التذييل (إنجليزي)"
+                      description="الوصف الإنجليزي المختصر في التذييل."
+                      placeholder="اكتب وصفًا مختصرًا باللغة الإنجليزية"
                       value={content.footerAboutEn}
                       onChange={value =>
                         setContent(p => ({ ...p, footerAboutEn: value }))
@@ -4768,13 +4972,13 @@ export default function Settings() {
 
                 <SettingsSectionCard
                   icon={Mail}
-                  eyebrow="Module 03"
-                  title="Contact Content"
+                  eyebrow="الوحدة 03"
+                  title="محتوى التواصل"
                   description="بيانات التواصل التي تعرض للمستخدمين داخل واجهة المنصة."
                 >
                   <div className="grid gap-5 md:grid-cols-2">
                     <SettingsField
-                      label="Contact Email"
+                      label="بريد التواصل"
                       description="البريد الظاهر للمستخدمين في الواجهة."
                       placeholder="support@maedin.sa"
                       value={content.contactEmail}
@@ -4785,7 +4989,7 @@ export default function Settings() {
                       inputClassName="text-left"
                     />
                     <SettingsField
-                      label="Contact Phone"
+                      label="هاتف التواصل"
                       description="رقم الهاتف المعروض في بيانات التواصل."
                       placeholder="+966 5X XXX XXXX"
                       value={content.contactPhone}
@@ -4799,38 +5003,6 @@ export default function Settings() {
                 </SettingsSectionCard>
               </div>
 
-              <div className="space-y-4 xl:sticky xl:top-24 self-start">
-                <SettingsSimpleActionPanel
-                  title="حفظ محتوى الموقع"
-                  description="احفظ النصوص الحالية إلى نفس مستند المحتوى من غير أي تغيير في أسماء الحقول أو طريقة استخدامها."
-                  metrics={[
-                    {
-                      label: "الحقول المكتملة",
-                      value: formatNumberEN(contentCompletedCount),
-                      helper: "من إجمالي حقول المحتوى",
-                    },
-                    {
-                      label: "التغطية اللغوية",
-                      value: "عربي / English",
-                      helper: "حقول عرض ثنائية اللغة",
-                    },
-                  ]}
-                  primaryLabel="Save Content Settings"
-                  primaryAction={saveContent}
-                  notice={
-                    <Alert className="border-white/10 bg-white/5 text-white">
-                      <Type className="h-4 w-4 text-[#F2B705]" />
-                      <AlertTitle className="text-white">
-                        توحيد الرسائل
-                      </AlertTitle>
-                      <AlertDescription className="text-white/70">
-                        يفضّل مراجعة النسختين العربية والإنجليزية معًا للحفاظ
-                        على نبرة موحدة للمنتج.
-                      </AlertDescription>
-                    </Alert>
-                  }
-                />
-              </div>
             </div>
           </TabsContent>
 
@@ -4839,25 +5011,25 @@ export default function Settings() {
           ========================= */}
           <TabsContent value="backup" className="space-y-6">
             <SettingsTabHero
-              eyebrow="Backup & Export"
+              eyebrow="النسخ الاحتياطي والتصدير"
               title="النسخ الاحتياطي والتصدير"
               description="واجهة موحدة لحفظ إعدادات المنصة وتصدير حزم العقود والبيانات المرتبطة بها من مصادر النظام الحية."
               stats={[
                 {
                   icon: FileDown,
-                  label: "Selected",
+                  label: "المحدد",
                   value: formatNumberEN(selectedContractIds.length),
                   helper: "العقود المحددة للتصدير",
                 },
                 {
                   icon: Files,
-                  label: "Filtered",
+                  label: "المفلتر",
                   value: formatNumberEN(filteredContractExportItems.length),
                   helper: "العقود المطابقة للفلاتر الحالية",
                 },
                 {
                   icon: Archive,
-                  label: "Exports",
+                  label: "التصدير",
                   value:
                     contractExportSummary || contractExcelExportSummary
                       ? "جاهزة"
@@ -4867,26 +5039,26 @@ export default function Settings() {
               ]}
               panel={
                 <SettingsHeroPanel
-                  status="Portable"
+                  status="جاهز للنقل"
                   title="حركة البيانات"
                   description="هذا التبويب يركّز على نقل إعدادات المنصة وتوليد باقات العقود من دون أي تعديل على بنية البيانات الأصلية."
                   metrics={[
                     {
                       label: "إعدادات المنصة",
-                      value: importing ? "Importing" : "JSON Ready",
-                      helper: "Export / Import settings",
+                      value: importing ? "جارٍ الاستيراد" : "JSON جاهز",
+                      helper: "تصدير واستيراد الإعدادات",
                     },
                     {
-                      label: "System Package",
-                      value: contractExportSummary ? "Generated" : "Pending",
-                      helper: "CSV + attachments + manifest",
+                      label: "حزمة النظام",
+                      value: contractExportSummary ? "جاهزة" : "قيد الانتظار",
+                      helper: "CSV + المرفقات + ملف الوصف",
                     },
                     {
-                      label: "Excel Bundle",
+                      label: "حزمة Excel",
                       value: contractExcelExportSummary
-                        ? "Generated"
-                        : "Pending",
-                      helper: "Human-readable export",
+                        ? "جاهزة"
+                        : "قيد الانتظار",
+                      helper: "تصدير مناسب للمراجعة",
                     },
                   ]}
                 />
@@ -4896,7 +5068,7 @@ export default function Settings() {
             <Card className="overflow-hidden rounded-[26px] border border-slate-200/80 bg-white shadow-[0_24px_54px_-40px_rgba(15,23,42,0.28)]">
               <CardHeader className="border-b border-slate-100/80 pb-6">
                 <CardTitle className="text-[1.1rem] font-semibold tracking-tight text-slate-950">
-                  Backup / Restore
+                  النسخ والاستعادة
                 </CardTitle>
                 <CardDescription className="max-w-2xl text-sm leading-7 text-slate-600">
                   تصدير واستيراد إعدادات المنصة بسرعة من خلال ملف JSON محفوظ.
@@ -4905,7 +5077,7 @@ export default function Settings() {
               <CardContent className="space-y-4 pt-6">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <Button variant="outline" onClick={handleExport}>
-                    <FileDown className="w-4 h-4 ml-2" /> Export JSON
+                    <FileDown className="w-4 h-4 ml-2" /> تصدير JSON
                   </Button>
 
                   <Button
@@ -4914,7 +5086,7 @@ export default function Settings() {
                     disabled={importing}
                   >
                     <FileUp className="w-4 h-4 ml-2" />
-                    {importing ? "جاري الاستيراد..." : "Import JSON"}
+                    {importing ? "جاري الاستيراد..." : "استيراد JSON"}
                   </Button>
 
                   <input
@@ -4933,7 +5105,7 @@ export default function Settings() {
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                   <div className="space-y-2">
                     <CardTitle className="text-[1.1rem] font-semibold tracking-tight text-slate-950">
-                      Contract Export
+                      تصدير العقود
                     </CardTitle>
                     <CardDescription className="max-w-2xl text-sm leading-7 text-slate-600">
                       Generate either the system package or the human-readable
@@ -4944,7 +5116,7 @@ export default function Settings() {
 
                   <div className="flex flex-wrap gap-2">
                     <Badge variant="outline">
-                      {formatNumberEN(selectedContractIds.length)} selected
+                      {formatNumberEN(selectedContractIds.length)} محدد
                     </Badge>
                     <Button
                       variant="outline"
@@ -4964,7 +5136,7 @@ export default function Settings() {
                           contractExportLoading && "animate-spin"
                         )}
                       />
-                      Refresh Contracts
+                      تحديث العقود
                     </Button>
                   </div>
                 </div>
@@ -4974,7 +5146,7 @@ export default function Settings() {
                 {contractExportError ? (
                   <Alert className="border-red-500/40 bg-red-500/5 text-red-700">
                     <CircleAlert className="h-4 w-4" />
-                    <AlertTitle>Contract Export Error</AlertTitle>
+                    <AlertTitle>خطأ في تصدير العقود</AlertTitle>
                     <AlertDescription>{contractExportError}</AlertDescription>
                   </Alert>
                 ) : null}
@@ -4982,7 +5154,7 @@ export default function Settings() {
                 {contractExcelExportError ? (
                   <Alert className="border-red-500/40 bg-red-500/5 text-red-700">
                     <CircleAlert className="h-4 w-4" />
-                    <AlertTitle>Excel Export Error</AlertTitle>
+                    <AlertTitle>خطأ في تصدير Excel</AlertTitle>
                     <AlertDescription>
                       {contractExcelExportError}
                     </AlertDescription>
@@ -4992,21 +5164,21 @@ export default function Settings() {
                 {contractExportSummary ? (
                   <Alert className="border-emerald-500/30 bg-emerald-500/5 text-emerald-700">
                     <CheckCircle2 className="h-4 w-4" />
-                    <AlertTitle>Last System Package Export</AlertTitle>
+                    <AlertTitle>آخر تصدير لحزمة النظام</AlertTitle>
                     <AlertDescription className="space-y-1">
                       <p>
-                        {contractExportSummary.fileName} generated at{" "}
+                        تم إنشاء الملف {contractExportSummary.fileName} في{" "}
                         {formatDatabaseTimestamp(
                           contractExportSummary.generatedAt
                         )}
                         .
                       </p>
                       <p>
-                        Contracts: {contractExportSummary.rowCounts.contracts} |
-                        Investments:{" "}
+                        العقود: {contractExportSummary.rowCounts.contracts} |
+                        الاستثمارات:{" "}
                         {contractExportSummary.rowCounts.investments} |
-                        Attachments: {contractExportSummary.attachmentCount} |
-                        Warnings: {contractExportSummary.warningCount}
+                        المرفقات: {contractExportSummary.attachmentCount} |
+                        التحذيرات: {contractExportSummary.warningCount}
                       </p>
                     </AlertDescription>
                   </Alert>
@@ -5015,21 +5187,21 @@ export default function Settings() {
                 {contractExcelExportSummary ? (
                   <Alert className="border-sky-500/30 bg-sky-500/5 text-sky-700">
                     <CheckCircle2 className="h-4 w-4" />
-                    <AlertTitle>Last Excel Export</AlertTitle>
+                    <AlertTitle>آخر تصدير Excel</AlertTitle>
                     <AlertDescription className="space-y-1">
                       <p>
-                        {contractExcelExportSummary.fileName} generated at{" "}
+                        تم إنشاء الملف {contractExcelExportSummary.fileName} في{" "}
                         {formatDatabaseTimestamp(
                           contractExcelExportSummary.generatedAt
                         )}
                         .
                       </p>
                       <p>
-                        Workbooks: {contractExcelExportSummary.workbookCount} |
-                        Contracts:{" "}
+                        المصنفات: {contractExcelExportSummary.workbookCount} |
+                        العقود:{" "}
                         {contractExcelExportSummary.rowCounts.contracts} |
-                        Files: {contractExcelExportSummary.rowCounts.files} |
-                        Warnings: {contractExcelExportSummary.warningCount}
+                        الملفات: {contractExcelExportSummary.rowCounts.files} |
+                        التحذيرات: {contractExcelExportSummary.warningCount}
                       </p>
                     </AlertDescription>
                   </Alert>
@@ -5038,7 +5210,7 @@ export default function Settings() {
                 <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_220px]">
                   <div className="space-y-2">
                     <Label htmlFor="contract-export-search">
-                      Search contracts
+                      البحث في العقود
                     </Label>
                     <Input
                       id="contract-export-search"
@@ -5051,7 +5223,7 @@ export default function Settings() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Status filter</Label>
+                    <Label>تصفية الحالة</Label>
                     <Select
                       value={contractStatusFilter}
                       onValueChange={setContractStatusFilter}
@@ -5060,10 +5232,10 @@ export default function Settings() {
                         className="h-12 rounded-xl border-slate-200 bg-white px-4 shadow-none"
                         disabled={contractExporting || contractExcelExporting}
                       >
-                        <SelectValue placeholder="All statuses" />
+                        <SelectValue placeholder="جميع الحالات" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="all">All statuses</SelectItem>
+                        <SelectItem value="all">جميع الحالات</SelectItem>
                         {contractStatusOptions.map(status => (
                           <SelectItem key={status} value={status}>
                             {status}
@@ -5088,8 +5260,8 @@ export default function Settings() {
                     }
                   >
                     {allFilteredSelected
-                      ? "Deselect Filtered"
-                      : "Select Filtered"}
+                      ? "إلغاء تحديد المفلتر"
+                      : "تحديد المفلتر"}
                   </Button>
 
                   <Button
@@ -5101,7 +5273,7 @@ export default function Settings() {
                       contractExcelExporting
                     }
                   >
-                    Clear Selection
+                    إلغاء التحديد
                   </Button>
 
                   <Button
@@ -5116,8 +5288,8 @@ export default function Settings() {
                   >
                     <Archive className="mr-2 h-4 w-4" />
                     {contractExporting
-                      ? "Generating System Package..."
-                      : "Contract Export (System Package)"}
+                      ? "جارٍ إنشاء حزمة النظام..."
+                      : "تصدير العقود (حزمة النظام)"}
                   </Button>
 
                   <Button
@@ -5133,15 +5305,15 @@ export default function Settings() {
                   >
                     <Files className="mr-2 h-4 w-4" />
                     {contractExcelExporting
-                      ? "Generating Excel Bundle..."
-                      : "Contract Export (Excel)"}
+                      ? "جارٍ إنشاء حزمة Excel..."
+                      : "تصدير العقود (Excel)"}
                   </Button>
                 </div>
 
                 <div className="rounded-[24px] border border-slate-200 bg-slate-50/40">
                   {contractExportLoading ? (
                     <div className="p-6 text-sm text-muted-foreground">
-                      Loading contracts for export...
+                      جاري تحميل العقود للتصدير...
                     </div>
                   ) : filteredContractExportItems.length ? (
                     <div className="max-h-[420px] divide-y overflow-y-auto">
@@ -5183,7 +5355,7 @@ export default function Settings() {
                               </div>
 
                               <p className="text-sm text-muted-foreground">
-                                Investor: {item.investorName || "Unknown"}{" "}
+                                المستثمر: {item.investorName || "غير معروف"}{" "}
                                 {item.investorEmail
                                   ? `(${item.investorEmail})`
                                   : ""}
@@ -5193,7 +5365,7 @@ export default function Settings() {
                                 <span>
                                   Investment: {item.investmentId || "-"}
                                 </span>
-                                <span>Project: {item.projectId || "-"}</span>
+                                <span>المشروع: {item.projectId || "-"}</span>
                                 <span>
                                   Updated:{" "}
                                   {formatDatabaseTimestamp(
@@ -5216,9 +5388,10 @@ export default function Settings() {
                 </div>
 
                 <p className="text-xs leading-5 text-muted-foreground">
-                  Package contents: investors.csv, projects.csv,
-                  investments.csv, contracts.csv, interest_requests.csv,
-                  files.csv, attachments/, manifest.json, and README.md.
+                  محتويات الحزمة: `investors.csv` و`projects.csv` و
+                  `investments.csv` و`contracts.csv` و
+                  `interest_requests.csv` و`files.csv` ومجلد `attachments/`
+                  وملف `manifest.json` و`README.md`.
                 </p>
               </CardContent>
             </Card>
@@ -5248,13 +5421,13 @@ export default function Settings() {
                 {
                   icon: ServerCog,
                   label: "Status",
-                  value: databaseRefreshing ? "Checking" : "Live",
+                  value: databaseRefreshing ? "جارٍ الفحص" : "مباشر",
                   helper: "فحص حالة الخدمات",
                 },
               ]}
               panel={
                 <SettingsHeroPanel
-                  status={databaseRefreshing ? "Checking" : "Cloudflare"}
+                  status={databaseRefreshing ? "جارٍ الفحص" : "Cloudflare"}
                   title="طبقة التخزين"
                   description="جميع البيانات هنا للعرض والمراجعة التشغيلية فقط، مع إبقاء نفس مصادر القراءة والمنطق القائم."
                   metrics={[
@@ -5265,7 +5438,7 @@ export default function Settings() {
                           ? "checking"
                           : databaseDashboard.services.worker.status
                       ),
-                      helper: "Cloudflare Worker health",
+                      helper: "حالة عامل Cloudflare",
                     },
                     {
                       label: "D1 / R2",
@@ -5278,10 +5451,10 @@ export default function Settings() {
                           ? "checking"
                           : databaseDashboard.services.r2.status
                       )}`,
-                      helper: "Storage layers",
+                      helper: "طبقات التخزين",
                     },
                     {
-                      label: "Last Check",
+                      label: "آخر فحص",
                       value: databaseDashboard.checkedAt
                         ? formatDatabaseTimestamp(databaseDashboard.checkedAt)
                         : "غير متاح",
@@ -5298,7 +5471,7 @@ export default function Settings() {
                   <div className="space-y-2">
                     <div className="flex items-center gap-2 text-sm text-slate-500">
                       <Database className="h-4 w-4" />
-                      <span>Database / Storage</span>
+                      <span>قاعدة البيانات / التخزين</span>
                     </div>
                     <CardTitle className="text-2xl font-semibold tracking-tight text-slate-950">
                       قاعدة البيانات والتخزين
@@ -5310,7 +5483,7 @@ export default function Settings() {
 
                   <div className="flex flex-wrap gap-2">
                     <Badge variant="outline">Cloudflare</Badge>
-                    <Badge variant="secondary">Production</Badge>
+                    <Badge variant="secondary">بيئة الإنتاج</Badge>
                   </div>
                 </div>
               </CardHeader>
@@ -5429,7 +5602,7 @@ export default function Settings() {
                                 )
                               )}
                             >
-                              Worker:{" "}
+                              العامل:{" "}
                               {getDatabaseStatusLabel(
                                 databaseRefreshing
                                   ? "checking"
@@ -5726,7 +5899,7 @@ export default function Settings() {
                 <CardContent className="space-y-4 pt-6">
                   <Alert className="border-dashed border-slate-200 bg-slate-50/60">
                     <CircleAlert className="h-4 w-4" />
-                    <AlertTitle>Cloudflare Only</AlertTitle>
+                    <AlertTitle>بيئة Cloudflare فقط</AlertTitle>
                     <AlertDescription>
                       {databaseNotes.map(note => (
                         <p key={note}>{note}</p>
@@ -5735,14 +5908,52 @@ export default function Settings() {
                   </Alert>
 
                   <div className="flex flex-wrap gap-2">
-                    <Badge variant="outline">No Firebase</Badge>
+                    <Badge variant="outline">بدون Firebase</Badge>
                     <Badge variant="outline">D1 + R2 + Workers</Badge>
-                    <Badge variant="secondary">Advanced Backup Soon</Badge>
+                    <Badge variant="secondary">النسخ الاحتياطي المتقدم قريبًا</Badge>
                   </div>
                 </CardContent>
               </Card>
             </div>
           </TabsContent>
+
+              {activeBottomBarAction ? (
+                <SettingsBottomSaveBar
+                  badgeLabel={activeBottomBarAction.tabLabel}
+                  title={
+                    dirtyTabsCount > 1
+                      ? `لديك تغييرات غير محفوظة في ${formatNumberEN(dirtyTabsCount)} تبويبات`
+                      : "لديك تغييرات غير محفوظة"
+                  }
+                  description={
+                    prioritizedActionKey === activeTab
+                      ? "احفظ التعديلات الحالية أو تجاهلها من الشريط السفلي الموحد."
+                      : `التبويب الأقرب للحفظ الآن: ${activeBottomBarAction.tabLabel}.`
+                  }
+                  primaryLabel={
+                    prioritizedActionKey === activeTab && dirtyTabsCount === 1
+                      ? "حفظ التغييرات"
+                      : `حفظ ${activeBottomBarAction.tabLabel}`
+                  }
+                  primaryBusyLabel="جارٍ حفظ التغييرات..."
+                  onPrimary={activeBottomBarAction.onSave}
+                  isPrimaryBusy={activeBottomBarAction.saving}
+                  secondaryLabel={
+                    prioritizedActionKey === activeTab
+                      ? "إلغاء التعديلات"
+                      : `الانتقال إلى ${activeBottomBarAction.tabLabel}`
+                  }
+                  onSecondary={
+                    prioritizedActionKey === activeTab
+                      ? activeBottomBarAction.onReset
+                      : () => {
+                          if (prioritizedActionKey) setActiveTab(prioritizedActionKey);
+                        }
+                  }
+                />
+              ) : null}
+            </div>
+          </div>
         </Tabs>
       </div>
 
@@ -5753,14 +5964,14 @@ export default function Settings() {
         <DialogContent className="!w-[98vw] !max-w-none h-[92vh] overflow-hidden p-0 sm:!w-[95vw]">
           <DialogHeader className="p-6 pb-0">
             <DialogTitle>
-              {editingRoleKey ? "تعديل Role" : "إنشاء Role جديد"}
+              {editingRoleKey ? "تعديل الدور" : "إنشاء دور جديد"}
             </DialogTitle>
           </DialogHeader>
 
           <div className="flex-1 overflow-y-auto p-6 space-y-4">
             <div className="grid md:grid-cols-2 gap-4">
               <div className="space-y-1">
-                <Label>Role Key (unique)</Label>
+                <Label>مفتاح الدور (فريد)</Label>
                 <Input
                   value={roleForm.key}
                   onChange={e =>
@@ -6005,7 +6216,7 @@ export default function Settings() {
                     {getRoleDefaultPermissionKeys(adminForm.roleKey).length}
                   </Badge>
                   <Badge variant="secondary">
-                    Effective: {adminFormEffectivePermissions.length}
+                    الفعلية: {adminFormEffectivePermissions.length}
                   </Badge>
                   <Badge variant="outline">
                     Overrides: +
@@ -6084,6 +6295,82 @@ export default function Settings() {
 /* =========================
  Small UI helpers
 ========================= */
+
+function SettingsBottomSaveBar({
+  badgeLabel,
+  title,
+  description,
+  primaryLabel,
+  primaryBusyLabel,
+  onPrimary,
+  isPrimaryBusy = false,
+  secondaryLabel,
+  onSecondary,
+}: {
+  badgeLabel: string;
+  title: string;
+  description: string;
+  primaryLabel: string;
+  primaryBusyLabel: string;
+  onPrimary: () => void;
+  isPrimaryBusy?: boolean;
+  secondaryLabel?: string;
+  onSecondary?: () => void;
+}) {
+  return (
+    <div className="pointer-events-none fixed inset-x-3 bottom-4 z-40 sm:inset-x-4 sm:bottom-5 xl:left-8 xl:right-[calc(320px+2rem)]">
+      <div className="pointer-events-auto mx-auto w-full max-w-5xl rounded-[24px] border border-slate-200/90 bg-white/96 px-4 py-3.5 shadow-[0_22px_42px_-24px_rgba(15,23,42,0.3)] backdrop-blur sm:px-5">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="min-w-0 space-y-2">
+            <Badge
+              variant="outline"
+              className="w-fit rounded-full border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600 shadow-none"
+            >
+              {badgeLabel}
+            </Badge>
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-slate-950">{title}</p>
+              <p className="text-sm leading-6 text-slate-500">{description}</p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {secondaryLabel && onSecondary ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="h-10 rounded-2xl border-slate-200 bg-white px-5 text-slate-700 hover:bg-slate-50"
+                onClick={onSecondary}
+                disabled={isPrimaryBusy}
+              >
+                {secondaryLabel}
+              </Button>
+            ) : null}
+
+            <Button
+              type="button"
+              className="h-10 rounded-2xl bg-[#0f172a] px-5 text-white hover:bg-[#111f38]"
+              onClick={onPrimary}
+              disabled={isPrimaryBusy}
+            >
+              {isPrimaryBusy ? (
+                <>
+                  <Spinner className="h-4 w-4" />
+                  {primaryBusyLabel}
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4" />
+                  {primaryLabel}
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function SettingsTabHero({
   eyebrow,
@@ -6164,7 +6451,7 @@ function SettingsHeroPanel({
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/45">
-            Readiness
+            الجاهزية
           </p>
           <h3 className="mt-3 text-xl font-semibold tracking-tight">{title}</h3>
         </div>
@@ -6221,104 +6508,6 @@ function SettingsOverviewStat({
   );
 }
 
-function SettingsSimpleActionPanel({
-  title,
-  description,
-  metrics,
-  primaryLabel,
-  primaryAction,
-  secondaryLabel,
-  secondaryAction,
-  primaryDisabled,
-  primaryBusyLabel,
-  isPrimaryBusy = false,
-  notice,
-}: {
-  title: string;
-  description: string;
-  metrics: Array<{
-    label: string;
-    value: string;
-    helper: string;
-  }>;
-  primaryLabel: string;
-  primaryAction: () => void;
-  secondaryLabel?: string;
-  secondaryAction?: () => void;
-  primaryDisabled?: boolean;
-  primaryBusyLabel?: string;
-  isPrimaryBusy?: boolean;
-  notice?: ReactNode;
-}) {
-  return (
-    <Card className="overflow-hidden rounded-[26px] border-[#17284a] bg-[linear-gradient(180deg,#08122f_0%,#020617_100%)] text-white shadow-[0_26px_60px_-42px_rgba(2,6,23,0.9)]">
-      <CardHeader className="gap-3 border-b border-white/10 pb-6">
-        <div className="flex items-center justify-between gap-4">
-          <div className="rounded-2xl border border-[#F2B705]/25 bg-[#F2B705]/10 p-3 text-[#F2B705]">
-            <Save className="h-5 w-5" />
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          <CardTitle className="text-xl font-semibold text-white">
-            {title}
-          </CardTitle>
-          <CardDescription className="text-sm leading-7 text-white/65">
-            {description}
-          </CardDescription>
-        </div>
-      </CardHeader>
-
-      <CardContent className="space-y-4 pt-6">
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-          {metrics.map(metric => (
-            <SettingsSidebarMetric
-              key={metric.label}
-              label={metric.label}
-              value={metric.value}
-              helper={metric.helper}
-            />
-          ))}
-        </div>
-
-        {notice}
-      </CardContent>
-
-      <CardFooter className="flex-col items-stretch gap-3 border-t border-white/10 pt-5">
-        {secondaryLabel && secondaryAction ? (
-          <Button
-            type="button"
-            variant="outline"
-            className="h-11 border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white"
-            onClick={secondaryAction}
-          >
-            {secondaryLabel}
-          </Button>
-        ) : null}
-
-        <Button
-          type="button"
-          className="h-11 rounded-xl bg-[#F2B705] text-slate-950 hover:bg-[#e0ab00]"
-          onClick={primaryAction}
-          disabled={primaryDisabled || isPrimaryBusy}
-        >
-          {isPrimaryBusy ? (
-            <>
-              <Spinner className="h-4 w-4" />
-              {primaryBusyLabel || primaryLabel}
-            </>
-          ) : (
-            <>
-              <Save className="h-4 w-4" />
-              {primaryLabel}
-            </>
-          )}
-        </Button>
-      </CardFooter>
-    </Card>
-  );
-}
-
 function SettingsSidebarMetric({
   label,
   value,
@@ -6343,6 +6532,9 @@ function SettingsSectionCard({
   title,
   description,
   action,
+  className,
+  headerClassName,
+  contentClassName,
   children,
 }: {
   icon: LucideIcon;
@@ -6350,11 +6542,21 @@ function SettingsSectionCard({
   title: string;
   description: string;
   action?: ReactNode;
+  className?: string;
+  headerClassName?: string;
+  contentClassName?: string;
   children: ReactNode;
 }) {
   return (
-    <Card className="overflow-hidden rounded-[26px] border border-slate-200/80 bg-white shadow-[0_24px_54px_-40px_rgba(15,23,42,0.28)]">
-      <CardHeader className="border-b border-slate-100/80 pb-6">
+    <Card
+      className={cn(
+        "overflow-hidden rounded-[26px] border border-slate-200/80 bg-white shadow-[0_24px_54px_-40px_rgba(15,23,42,0.28)]",
+        className
+      )}
+    >
+      <CardHeader
+        className={cn("border-b border-slate-100/80 pb-6", headerClassName)}
+      >
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-start gap-4">
             <div className="rounded-[22px] border border-slate-200 bg-slate-50 p-3 text-slate-700">
@@ -6375,7 +6577,9 @@ function SettingsSectionCard({
           {action ? <div className="shrink-0">{action}</div> : null}
         </div>
       </CardHeader>
-      <CardContent className="pt-6">{children}</CardContent>
+      <CardContent className={cn("pt-6", contentClassName)}>
+        {children}
+      </CardContent>
     </Card>
   );
 }
@@ -6445,7 +6649,7 @@ function SettingsField({
             statusTone
           )}
         >
-          {error ? "Needs review" : hasValue ? "Ready" : "Pending"}
+          {error ? "يحتاج مراجعة" : hasValue ? "مكتمل" : "بانتظار الإدخال"}
         </div>
       </div>
 
@@ -6526,161 +6730,6 @@ function SettingsSelectField({
   );
 }
 
-function SettingsSavePanel({
-  appDirty,
-  savingApp,
-  appIssues,
-  changedFields,
-  onReset,
-  onSave,
-}: {
-  appDirty: boolean;
-  savingApp: boolean;
-  appIssues: string[];
-  changedFields: Array<keyof AppSettings>;
-  onReset: () => void;
-  onSave: () => void;
-}) {
-  return (
-    <Card className="overflow-hidden rounded-[26px] border-[#17284a] bg-[linear-gradient(180deg,#08122f_0%,#020617_100%)] text-white shadow-[0_26px_60px_-42px_rgba(2,6,23,0.9)]">
-      <CardHeader className="gap-3 border-b border-white/10 pb-6">
-        <div className="flex items-center justify-between gap-4">
-          <div className="rounded-2xl border border-[#F2B705]/25 bg-[#F2B705]/10 p-3 text-[#F2B705]">
-            <Save className="h-5 w-5" />
-          </div>
-          <Badge
-            variant="outline"
-            className={cn(
-              "rounded-full border px-3 py-1 text-[11px] font-semibold shadow-none",
-              appDirty
-                ? "border-amber-400/30 bg-amber-400/10 text-amber-200"
-                : "border-emerald-400/30 bg-emerald-400/10 text-emerald-200"
-            )}
-          >
-            {appDirty ? "Dirty State" : "In Sync"}
-          </Badge>
-        </div>
-
-        <div className="space-y-2">
-          <CardTitle className="text-xl font-semibold text-white">
-            Save Changes
-          </CardTitle>
-          <CardDescription className="text-sm leading-7 text-white/65">
-            راجع الحقول المعدلة ثم احفظها إلى `settings/app` من دون أي تغيير على
-            منطق الحفظ أو بنية البيانات.
-          </CardDescription>
-        </div>
-      </CardHeader>
-
-      <CardContent className="space-y-4 pt-6">
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-          <SettingsSidebarMetric
-            label="الحقول المعدلة"
-            value={formatNumberEN(changedFields.length)}
-            helper="تتبع حي للتغييرات غير المحفوظة"
-          />
-          <SettingsSidebarMetric
-            label="ملاحظات التحقق"
-            value={formatNumberEN(appIssues.length)}
-            helper="راجع الحقول المميزة قبل الحفظ"
-          />
-        </div>
-
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-          <div className="flex items-center justify-between gap-3">
-            <div className="text-sm font-medium text-white/90">
-              سجل التعديلات
-            </div>
-            <span className="text-xs text-white/45">Live</span>
-          </div>
-
-          <div className="mt-4 space-y-2">
-            {changedFields.length > 0 ? (
-              changedFields.map(fieldKey => (
-                <div
-                  key={fieldKey}
-                  className="flex items-center justify-between gap-3 rounded-xl border border-white/8 bg-white/5 px-3 py-2 text-sm"
-                >
-                  <span className="text-white/88">
-                    {APP_SETTINGS_LABELS[fieldKey]}
-                  </span>
-                  <span className="text-xs text-white/45">Modified</span>
-                </div>
-              ))
-            ) : (
-              <div className="rounded-xl border border-dashed border-white/10 px-3 py-4 text-sm text-white/60">
-                لا توجد تعديلات غير محفوظة حاليًا. أي تحديث جديد سيظهر هنا
-                مباشرة.
-              </div>
-            )}
-          </div>
-        </div>
-
-        {appIssues.length > 0 ? (
-          <Alert className="border-amber-400/20 bg-amber-400/10 text-white">
-            <CircleAlert className="h-4 w-4 text-amber-200" />
-            <AlertTitle className="text-amber-100">
-              يلزم مراجعة بعض الحقول
-            </AlertTitle>
-            <AlertDescription className="space-y-1 text-amber-50/90">
-              {appIssues.slice(0, 3).map(issue => (
-                <p key={issue}>{issue}</p>
-              ))}
-              {appIssues.length > 3 ? (
-                <p>
-                  وهناك {formatNumberEN(appIssues.length - 3)} ملاحظات إضافية.
-                </p>
-              ) : null}
-            </AlertDescription>
-          </Alert>
-        ) : (
-          <Alert className="border-emerald-400/20 bg-emerald-400/10 text-white">
-            <CheckCircle2 className="h-4 w-4 text-emerald-200" />
-            <AlertTitle className="text-emerald-100">
-              الإعدادات جاهزة للحفظ
-            </AlertTitle>
-            <AlertDescription className="text-emerald-50/90">
-              جميع الوحدات الأساسية مكتملة ويمكن ترحيلها مباشرة إلى الإعدادات
-              العامة.
-            </AlertDescription>
-          </Alert>
-        )}
-      </CardContent>
-
-      <CardFooter className="flex-col items-stretch gap-3 border-t border-white/10 pt-5">
-        <Button
-          type="button"
-          variant="outline"
-          className="h-11 border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white"
-          onClick={onReset}
-          disabled={!appDirty || savingApp}
-        >
-          تراجع عن التعديلات
-        </Button>
-
-        <Button
-          type="button"
-          className="h-11 rounded-xl bg-[#F2B705] text-slate-950 hover:bg-[#e0ab00]"
-          onClick={onSave}
-          disabled={!appDirty || savingApp}
-        >
-          {savingApp ? (
-            <>
-              <Spinner className="h-4 w-4" />
-              جاري حفظ التغييرات...
-            </>
-          ) : (
-            <>
-              <Save className="h-4 w-4" />
-              Save Changes
-            </>
-          )}
-        </Button>
-      </CardFooter>
-    </Card>
-  );
-}
-
 function Toggle({
   label,
   description,
@@ -6694,15 +6743,16 @@ function Toggle({
 }) {
   return (
     <div
+      dir="rtl"
       className={cn(
-        "flex items-start justify-between gap-4 rounded-[22px] border px-5 py-4 transition-colors",
+        "flex items-start justify-between gap-3 rounded-[20px] border px-4 py-3.5 text-right transition-colors",
         value
           ? "border-emerald-200 bg-emerald-50/70"
           : "border-slate-200 bg-slate-50/70"
       )}
     >
-      <div className="space-y-2">
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="min-w-0 flex-1 space-y-1.5">
+        <div className="flex flex-wrap items-center justify-start gap-2">
           <span className="font-semibold text-slate-900">{label}</span>
           <Badge
             variant="outline"
@@ -6713,17 +6763,24 @@ function Toggle({
                 : "border-slate-200 bg-white text-slate-500"
             )}
           >
-            {value ? "Enabled" : "Disabled"}
+            {value ? "مفعّل" : "معطّل"}
           </Badge>
         </div>
         {description ? (
-          <p className="max-w-2xl text-sm leading-7 text-slate-600">
+          <p className="text-sm leading-6 text-slate-600">
             {description}
           </p>
         ) : null}
       </div>
 
-      <Switch checked={value} onCheckedChange={onChange} />
+      <div className="shrink-0 pt-0.5">
+        <Switch
+          checked={value}
+          onCheckedChange={onChange}
+          aria-label={label}
+          className="h-5 w-9 data-[state=checked]:bg-emerald-500 data-[state=unchecked]:bg-slate-300"
+        />
+      </div>
     </div>
   );
 }
@@ -6783,7 +6840,7 @@ function LabelsEditor({
             <div className="grid gap-4 lg:grid-cols-[180px_minmax(0,1fr)_auto] lg:items-end">
               <div className="space-y-2">
                 <Label className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                  Key
+                  المفتاح
                 </Label>
                 <Input
                   value={k}
@@ -6805,7 +6862,7 @@ function LabelsEditor({
                 </div>
                 <div className="space-y-2">
                   <Label className="text-[13px] font-semibold text-slate-900">
-                    English
+                    إنجليزي
                   </Label>
                   <Input
                     value={val.en || ""}

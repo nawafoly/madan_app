@@ -1,7 +1,11 @@
 const admin = require("firebase-admin");
-const { onDocumentWritten } = require("firebase-functions/v2/firestore");
+const {
+  onDocumentCreated,
+  onDocumentWritten,
+} = require("firebase-functions/v2/firestore");
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { onUserCreated } = require("firebase-functions/v2/auth");
+const { Resend } = require("resend");
 const {
   diffAuditSnapshots,
   safeWriteAuditLog,
@@ -19,9 +23,18 @@ const SYSTEM_ACTOR = {
   email: "",
   role: "system",
 };
+const DEFAULT_NOTIFICATION_SETTINGS = Object.freeze({
+  email: true,
+  sms: false,
+  investments: true,
+  messages: true,
+});
+const ADMIN_MESSAGES_PATH = "/admin/messages";
+const EMAIL_PREVIEW_LIMIT = 220;
+const EMAIL_TIMEZONE = "Asia/Riyadh";
 
-// ✅ vNext Contract: countedStatuses = [active, completed]
-const COUNTED_STATUSES = new Set(["active", "completed"]);
+// ✅ vNext Contract: countedStatuses = [active, stopped, completed]
+const COUNTED_STATUSES = new Set(["active", "stopped", "completed"]);
 
 // (Optional) keep pending tracking if you want it in project doc
 const PENDING_STATUSES = new Set([
@@ -40,6 +53,7 @@ const OFFICIAL_STATUSES = new Set([
   "approved",
   "signed",
   "active",
+  "stopped",
   "completed",
   "rejected",
   "cancelled",
@@ -152,6 +166,215 @@ const CLIENT_ALLOWED_AUDIT_ACTIONS = new Set([
 ]);
 
 const stringOrEmpty = value => String(value || "").trim();
+
+const escapeHtml = value =>
+  String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+
+const truncateText = (value, maxLength = EMAIL_PREVIEW_LIMIT) => {
+  const normalized = stringOrEmpty(value).replace(/\s+/g, " ");
+  if (!normalized) return "لا توجد تفاصيل إضافية.";
+  if (normalized.length <= maxLength) return normalized;
+  return `${normalized.slice(0, maxLength - 1).trim()}…`;
+};
+
+const toDateSafe = value => {
+  if (!value) return null;
+
+  if (value instanceof Date) return value;
+
+  if (typeof value?.toDate === "function") {
+    try {
+      return value.toDate();
+    } catch (error) {
+      console.warn("[notifications] failed to convert timestamp with toDate()", error);
+    }
+  }
+
+  if (typeof value?._seconds === "number") {
+    return new Date(value._seconds * 1000);
+  }
+
+  if (typeof value?.seconds === "number") {
+    return new Date(value.seconds * 1000);
+  }
+
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const formatNotificationDate = value => {
+  const date = toDateSafe(value);
+  if (!date) return "غير متوفر";
+
+  try {
+    return new Intl.DateTimeFormat("ar-SA", {
+      dateStyle: "medium",
+      timeStyle: "short",
+      timeZone: EMAIL_TIMEZONE,
+    }).format(date);
+  } catch (error) {
+    console.warn("[notifications] failed to format date", error);
+    return date.toISOString();
+  }
+};
+
+const normalizeRequestTypeLabel = value => {
+  const normalized = stringOrEmpty(value).toLowerCase();
+  if (!normalized) return "غير محدد";
+  if (normalized === "investment") return "استثمار";
+  if (normalized === "interest") return "إبداء اهتمام";
+  return String(value).trim();
+};
+
+const buildAdminMessagesUrl = () => {
+  const baseUrl = stringOrEmpty(process.env.APP_BASE_URL).replace(/\/+$/, "");
+  if (!baseUrl) {
+    console.log("[notifications] APP_BASE_URL is missing, using relative admin link");
+  }
+  return baseUrl ? `${baseUrl}${ADMIN_MESSAGES_PATH}` : ADMIN_MESSAGES_PATH;
+};
+
+const buildNotificationEmailHtml = ({
+  heading,
+  intro,
+  rows,
+  actionLabel,
+  actionUrl,
+}) => {
+  const renderedRows = rows
+    .map(
+      row => `
+        <tr>
+          <td style="padding:0 0 10px;color:#64748b;font-size:14px;vertical-align:top;white-space:nowrap;">${escapeHtml(
+            row.label
+          )}</td>
+          <td style="padding:0 0 10px 16px;color:#0f172a;font-size:14px;line-height:1.8;">${escapeHtml(
+            row.value
+          )}</td>
+        </tr>
+      `
+    )
+    .join("");
+
+  return `
+    <div dir="rtl" style="margin:0;background:#f8fafc;padding:24px;font-family:Tahoma,Arial,sans-serif;color:#0f172a;">
+      <div style="max-width:680px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:18px;overflow:hidden;">
+        <div style="padding:24px 24px 18px;background:linear-gradient(180deg,#0f172a 0%,#111827 100%);color:#ffffff;">
+          <div style="display:inline-block;background:rgba(242,183,5,0.12);border:1px solid rgba(242,183,5,0.3);color:#f2b705;border-radius:999px;padding:6px 12px;font-size:12px;font-weight:700;">إشعار إداري</div>
+          <h2 style="margin:16px 0 0;font-size:24px;line-height:1.5;">${escapeHtml(
+            heading
+          )}</h2>
+          <p style="margin:12px 0 0;color:rgba(255,255,255,0.78);font-size:14px;line-height:1.8;">${escapeHtml(
+            intro
+          )}</p>
+        </div>
+        <div style="padding:24px;">
+          <table style="width:100%;border-collapse:collapse;">
+            <tbody>${renderedRows}</tbody>
+          </table>
+          <div style="margin-top:24px;">
+            <a href="${escapeHtml(
+              actionUrl
+            )}" style="display:inline-block;background:#0f172a;color:#ffffff;text-decoration:none;border-radius:12px;padding:12px 20px;font-size:14px;font-weight:700;">${escapeHtml(
+              actionLabel
+            )}</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+};
+
+async function getNotificationSettings() {
+  const snap = await db.doc("settings/notifications").get();
+  return {
+    ...DEFAULT_NOTIFICATION_SETTINGS,
+    ...(snap.exists ? snap.data() || {} : {}),
+  };
+}
+
+async function getAdminRecipients() {
+  const snap = await db
+    .collection("users")
+    .where("role", "in", ["owner", "admin"])
+    .get();
+
+  const emails = new Set();
+  snap.forEach(docSnap => {
+    const data = docSnap.data() || {};
+    const email = stringOrEmpty(data.email).toLowerCase();
+    if (!email) return;
+    if (resolveUserActive(data) === false) return;
+    emails.add(email);
+  });
+
+  return Array.from(emails);
+}
+
+async function sendEmailNotification(subject, html, recipients) {
+  const resendApiKey = stringOrEmpty(process.env.RESEND_API_KEY);
+  const fromEmail = stringOrEmpty(process.env.NOTIFICATION_FROM_EMAIL);
+  const resendClient = resendApiKey ? new Resend(resendApiKey) : null;
+  const normalizedRecipients = Array.from(
+    new Set(
+      (Array.isArray(recipients) ? recipients : [])
+        .map(email => stringOrEmpty(email).toLowerCase())
+        .filter(Boolean)
+    )
+  );
+
+  if (!resendClient) {
+    console.log("[notifications] skipped email send: missing RESEND_API_KEY");
+    return { sent: false, reason: "missing_resend_api_key" };
+  }
+
+  if (!fromEmail) {
+    console.log("[notifications] skipped email send: missing NOTIFICATION_FROM_EMAIL");
+    return { sent: false, reason: "missing_from_email" };
+  }
+
+  if (!normalizedRecipients.length) {
+    console.log("[notifications] skipped email send: no admin recipients found");
+    return { sent: false, reason: "no_admin_recipients" };
+  }
+
+  console.log("[notifications] sending email notification", {
+    subject,
+    recipientsCount: normalizedRecipients.length,
+  });
+
+  const response = await resendClient.emails.send({
+    from: fromEmail,
+    to: normalizedRecipients,
+    subject,
+    html,
+  });
+
+  if (response?.error) {
+    throw new Error(
+      typeof response.error === "string"
+        ? response.error
+        : JSON.stringify(response.error)
+    );
+  }
+
+  console.log("[notifications] email notification sent", {
+    subject,
+    emailId: response?.data?.id || null,
+    recipientsCount: normalizedRecipients.length,
+  });
+
+  return {
+    sent: true,
+    emailId: response?.data?.id || null,
+    recipientsCount: normalizedRecipients.length,
+  };
+}
 
 const assertClientOwnedDoc = async (path, predicate, message) => {
   const snap = await db.doc(path).get();
@@ -689,6 +912,186 @@ exports.onInvestmentWrite = onDocumentWritten(
         })
       )
     );
+  }
+);
+
+exports.onMessageCreatedNotification = onDocumentCreated(
+  { region: REGION, document: "messages/{messageId}" },
+  async event => {
+    const messageId = String(event.params?.messageId || "").trim();
+    const data = event.data?.data() || null;
+
+    console.log("[notifications] message trigger fired", { messageId });
+
+    if (!data) {
+      console.log("[notifications] message trigger skipped: empty snapshot", {
+        messageId,
+      });
+      return null;
+    }
+
+    try {
+      const notificationSettings = await getNotificationSettings();
+      if (!notificationSettings.messages || !notificationSettings.email) {
+        console.log(
+          "[notifications] message email skipped بسبب settings",
+          {
+            messageId,
+            emailEnabled: notificationSettings.email,
+            messagesEnabled: notificationSettings.messages,
+          }
+        );
+        return null;
+      }
+
+      const recipients = await getAdminRecipients();
+      const adminUrl = buildAdminMessagesUrl();
+      const clientName =
+        stringOrEmpty(data.name) ||
+        stringOrEmpty(data.investorName) ||
+        stringOrEmpty(data.userSnapshot?.displayName) ||
+        stringOrEmpty(data.email) ||
+        stringOrEmpty(data.createdByEmail) ||
+        "عميل غير معروف";
+      const messagePreview = truncateText(data.message || data.note || "");
+      const createdAtLabel = formatNotificationDate(
+        data.createdAt || data.updatedAt
+      );
+
+      const result = await sendEmailNotification(
+        "[معدن] رسالة جديدة من العميل",
+        buildNotificationEmailHtml({
+          heading: "رسالة جديدة من العميل",
+          intro:
+            "تم تسجيل رسالة جديدة داخل النظام وتحتاج إلى متابعة من فريق الإدارة.",
+          rows: [
+            { label: "اسم العميل", value: clientName },
+            { label: "نص الرسالة", value: messagePreview },
+            { label: "التاريخ", value: createdAtLabel },
+            { label: "الرابط", value: adminUrl },
+          ],
+          actionLabel: "فتح صفحة الرسائل",
+          actionUrl: adminUrl,
+        }),
+        recipients
+      );
+
+      if (!result.sent) {
+        console.log("[notifications] message email not sent", {
+          messageId,
+          reason: result.reason,
+        });
+        return null;
+      }
+
+      console.log("[notifications] message email notification completed", {
+        messageId,
+        emailId: result.emailId,
+        recipientsCount: result.recipientsCount,
+      });
+      return null;
+    } catch (error) {
+      console.error("[notifications] message email notification failed", {
+        messageId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+  }
+);
+
+exports.onInterestRequestCreatedNotification = onDocumentCreated(
+  { region: REGION, document: "interest_requests/{requestId}" },
+  async event => {
+    const requestId = String(event.params?.requestId || "").trim();
+    const data = event.data?.data() || null;
+
+    console.log("[notifications] interest request trigger fired", { requestId });
+
+    if (!data) {
+      console.log(
+        "[notifications] interest request trigger skipped: empty snapshot",
+        { requestId }
+      );
+      return null;
+    }
+
+    try {
+      const notificationSettings = await getNotificationSettings();
+      if (!notificationSettings.investments || !notificationSettings.email) {
+        console.log(
+          "[notifications] request email skipped بسبب settings",
+          {
+            requestId,
+            emailEnabled: notificationSettings.email,
+            investmentsEnabled: notificationSettings.investments,
+          }
+        );
+        return null;
+      }
+
+      const recipients = await getAdminRecipients();
+      const adminUrl = buildAdminMessagesUrl();
+      const clientName =
+        stringOrEmpty(data.investorName) ||
+        stringOrEmpty(data.userSnapshot?.displayName) ||
+        stringOrEmpty(data.name) ||
+        stringOrEmpty(data.email) ||
+        stringOrEmpty(data.investorEmail) ||
+        "عميل غير معروف";
+      const requestType = normalizeRequestTypeLabel(
+        data.type || data.requestType
+      );
+      const projectTitle =
+        stringOrEmpty(data.projectTitle) ||
+        stringOrEmpty(data.projectSnapshot?.titleAr) ||
+        stringOrEmpty(data.projectSnapshot?.title) ||
+        stringOrEmpty(data.projectId) ||
+        "غير محدد";
+      const createdAtLabel = formatNotificationDate(
+        data.createdAt || data.updatedAt
+      );
+
+      const result = await sendEmailNotification(
+        "[معدن] طلب جديد يحتاج مراجعة",
+        buildNotificationEmailHtml({
+          heading: "طلب جديد يحتاج مراجعة",
+          intro:
+            "تم إنشاء طلب جديد في النظام ويحتاج إلى مراجعة من الفريق الإداري.",
+          rows: [
+            { label: "اسم العميل", value: clientName },
+            { label: "نوع الطلب", value: requestType },
+            { label: "المشروع", value: projectTitle },
+            { label: "التاريخ", value: createdAtLabel },
+            { label: "الرابط", value: adminUrl },
+          ],
+          actionLabel: "فتح الطلبات والرسائل",
+          actionUrl: adminUrl,
+        }),
+        recipients
+      );
+
+      if (!result.sent) {
+        console.log("[notifications] request email not sent", {
+          requestId,
+          reason: result.reason,
+        });
+        return null;
+      }
+
+      console.log("[notifications] request email notification completed", {
+        requestId,
+        emailId: result.emailId,
+        recipientsCount: result.recipientsCount,
+      });
+      return null;
+    } catch (error) {
+      console.error("[notifications] request email notification failed", {
+        requestId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
   }
 );
 
