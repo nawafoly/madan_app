@@ -159,35 +159,35 @@ function MobileProjectCarousel({
   const toneMap =
     tone === "dark"
       ? {
-          shell:
-            "border-white/12 bg-[linear-gradient(180deg,rgba(16,33,55,0.96)_0%,rgba(11,26,44,0.92)_100%)] text-white shadow-[0_28px_62px_-40px_rgba(2,12,27,0.62)]",
-          kicker: "text-white/52",
-          title: "text-white",
-          helper: "text-white/68",
-          counter: "border-white/12 bg-white/8 text-white",
-          swipeHint: "border-white/10 bg-white/6 text-white/70",
-          divider: "border-white/10",
-          dotIdle: "bg-white/20",
-          dotActive: "bg-white",
-          arrowEnabled:
-            "border-white/14 bg-white/8 text-white shadow-[0_14px_30px_-24px_rgba(0,0,0,0.55)] hover:bg-white hover:text-slate-950",
-          arrowDisabled: "border-white/10 bg-white/5 text-white/28",
-        }
+        shell:
+          "border-white/12 bg-[linear-gradient(180deg,rgba(16,33,55,0.96)_0%,rgba(11,26,44,0.92)_100%)] text-white shadow-[0_28px_62px_-40px_rgba(2,12,27,0.62)]",
+        kicker: "text-white/52",
+        title: "text-white",
+        helper: "text-white/68",
+        counter: "border-white/12 bg-white/8 text-white",
+        swipeHint: "border-white/10 bg-white/6 text-white/70",
+        divider: "border-white/10",
+        dotIdle: "bg-white/20",
+        dotActive: "bg-white",
+        arrowEnabled:
+          "border-white/14 bg-white/8 text-white shadow-[0_14px_30px_-24px_rgba(0,0,0,0.55)] hover:bg-white hover:text-slate-950",
+        arrowDisabled: "border-white/10 bg-white/5 text-white/28",
+      }
       : {
-          shell:
-            "border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98)_0%,rgba(248,250,252,0.95)_100%)] text-slate-950 shadow-[0_26px_58px_-42px_rgba(15,23,42,0.18)]",
-          kicker: "text-slate-400",
-          title: "text-slate-950",
-          helper: "text-slate-500",
-          counter: "border-slate-200/80 bg-white text-slate-900",
-          swipeHint: "border-slate-200 bg-slate-50/90 text-slate-600",
-          divider: "border-slate-200/80",
-          dotIdle: "bg-slate-300",
-          dotActive: "bg-slate-900",
-          arrowEnabled:
-            "border-slate-200 bg-white text-slate-700 shadow-[0_14px_28px_-24px_rgba(15,23,42,0.18)] hover:bg-slate-50",
-          arrowDisabled: "border-slate-200/80 bg-slate-100 text-slate-300",
-        };
+        shell:
+          "border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98)_0%,rgba(248,250,252,0.95)_100%)] text-slate-950 shadow-[0_26px_58px_-42px_rgba(15,23,42,0.18)]",
+        kicker: "text-slate-400",
+        title: "text-slate-950",
+        helper: "text-slate-500",
+        counter: "border-slate-200/80 bg-white text-slate-900",
+        swipeHint: "border-slate-200 bg-slate-50/90 text-slate-600",
+        divider: "border-slate-200/80",
+        dotIdle: "bg-slate-300",
+        dotActive: "bg-slate-900",
+        arrowEnabled:
+          "border-slate-200 bg-white text-slate-700 shadow-[0_14px_28px_-24px_rgba(15,23,42,0.18)] hover:bg-slate-50",
+        arrowDisabled: "border-slate-200/80 bg-slate-100 text-slate-300",
+      };
 
   useEffect(() => {
     setActiveIndex(currentIndex =>
@@ -238,7 +238,7 @@ function MobileProjectCarousel({
     const rawDelta = event.clientX - startX;
     const dampedDelta =
       (activeIndex === 0 && rawDelta > 0) ||
-      (activeIndex === items.length - 1 && rawDelta < 0)
+        (activeIndex === items.length - 1 && rawDelta < 0)
         ? rawDelta * 0.32
         : rawDelta;
 
@@ -602,9 +602,15 @@ function CurvedProjectsHero({
 }) {
   return (
     <section className="relative z-0 bg-[#050b14] text-white">
+      <div className="pointer-events-none absolute inset-0">
+        <img
+          src="/HOOM-HERO1.jpg"
+          alt="Projects Hero"
+          className="h-full w-full object-cover object-center"
+        />
+      </div>
       {/* الغطاء الداكن */}
-      <div className="pointer-events-none absolute inset-0 bg-zinc-950" />
-
+      <div className="pointer-events-none absolute inset-0 bg-black/55" />
       {/* لمعة */}
       <div className="pointer-events-none absolute inset-0 opacity-40 bg-[radial-gradient(60%_60%_at_50%_18%,rgba(255,255,255,0.18),transparent_60%)]" />
 
@@ -1067,51 +1073,51 @@ export default function ProjectsPage() {
     const modeMeta =
       mode === "published"
         ? {
-            badgeLabel: "مفتوح الآن",
-            badgeClass: "border-emerald-200 bg-emerald-50 text-emerald-700",
-            subline: "فرصة استثمارية نشطة",
-            heroCaption:
-              "العائد الظاهر هنا هو أول عنصر يجب أن يلتقط عين المستثمر عند تقييم الفرصة.",
-            ctaLabel: "ابدأ بالاستثمار",
-            ctaClass:
-              "bg-slate-900 text-white shadow-[0_18px_40px_-24px_rgba(15,23,42,0.55)] hover:bg-slate-800",
-            noteLabel: "جاهز للاستثمار",
-            noteCopy:
-              "الفرصة مفتوحة الآن ويمكن الانتقال من صفحة المشروع مباشرة إلى طلب الاستثمار.",
-            trustCopy:
-              investors > 0
-                ? `انضم ${formatNumberEN(investors)} مستثمرًا حتى الآن`
-                : "فرصة جاهزة للمراجعة والاستثمار",
-          }
+          badgeLabel: "مفتوح الآن",
+          badgeClass: "border-emerald-200 bg-emerald-50 text-emerald-700",
+          subline: "فرصة استثمارية نشطة",
+          heroCaption:
+            "العائد الظاهر هنا هو أول عنصر يجب أن يلتقط عين المستثمر عند تقييم الفرصة.",
+          ctaLabel: "ابدأ بالاستثمار",
+          ctaClass:
+            "bg-slate-900 text-white shadow-[0_18px_40px_-24px_rgba(15,23,42,0.55)] hover:bg-slate-800",
+          noteLabel: "جاهز للاستثمار",
+          noteCopy:
+            "الفرصة مفتوحة الآن ويمكن الانتقال من صفحة المشروع مباشرة إلى طلب الاستثمار.",
+          trustCopy:
+            investors > 0
+              ? `انضم ${formatNumberEN(investors)} مستثمرًا حتى الآن`
+              : "فرصة جاهزة للمراجعة والاستثمار",
+        }
         : mode === "draft"
           ? {
-              badgeLabel: "قريبًا",
-              badgeClass: "border-amber-200 bg-amber-50 text-amber-800",
-              subline: "فرصة قيد الإطلاق",
-              heroCaption:
-                "بطاقة استثمار أولية تمنح نظرة مبكرة على العائد والمدة وهيكل الفرصة القادمة.",
-              ctaLabel: "عرض الخطة والتسجيل",
-              ctaClass:
-                "bg-amber-50 text-amber-900 ring-1 ring-amber-200 hover:bg-amber-100",
-              noteLabel: "مرحلة تمهيد",
-              noteCopy:
-                "لا يوجد اكتتاب مفتوح بعد، لكن يمكنك متابعة الخطة والتسجيل للاهتمام عند الإطلاق.",
-              trustCopy: "تحت التحضير والإتاحة قريبًا",
-            }
+            badgeLabel: "قريبًا",
+            badgeClass: "border-amber-200 bg-amber-50 text-amber-800",
+            subline: "فرصة قيد الإطلاق",
+            heroCaption:
+              "بطاقة استثمار أولية تمنح نظرة مبكرة على العائد والمدة وهيكل الفرصة القادمة.",
+            ctaLabel: "عرض الخطة والتسجيل",
+            ctaClass:
+              "bg-amber-50 text-amber-900 ring-1 ring-amber-200 hover:bg-amber-100",
+            noteLabel: "مرحلة تمهيد",
+            noteCopy:
+              "لا يوجد اكتتاب مفتوح بعد، لكن يمكنك متابعة الخطة والتسجيل للاهتمام عند الإطلاق.",
+            trustCopy: "تحت التحضير والإتاحة قريبًا",
+          }
           : {
-              badgeLabel: "مكتمل",
-              badgeClass: "border-slate-300 bg-slate-100 text-slate-700",
-              subline: "أداء مشروع منجز",
-              heroCaption:
-                "المشروع وصل إلى مرحلته النهائية ويمكن مراجعته كمرجع أداء واستثمار مكتمل.",
-              ctaLabel: "عرض النتائج",
-              ctaClass:
-                "bg-slate-100 text-slate-800 ring-1 ring-slate-200 hover:bg-slate-200",
-              noteLabel: "عرض معلوماتي",
-              noteCopy:
-                "الاكتتاب مغلق لهذا المشروع، وتبقى البطاقة مدخلًا لمراجعة الأداء والنتائج النهائية.",
-              trustCopy: "سجل إنجاز مكتمل داخل المنصة",
-            };
+            badgeLabel: "مكتمل",
+            badgeClass: "border-slate-300 bg-slate-100 text-slate-700",
+            subline: "أداء مشروع منجز",
+            heroCaption:
+              "المشروع وصل إلى مرحلته النهائية ويمكن مراجعته كمرجع أداء واستثمار مكتمل.",
+            ctaLabel: "عرض النتائج",
+            ctaClass:
+              "bg-slate-100 text-slate-800 ring-1 ring-slate-200 hover:bg-slate-200",
+            noteLabel: "عرض معلوماتي",
+            noteCopy:
+              "الاكتتاب مغلق لهذا المشروع، وتبقى البطاقة مدخلًا لمراجعة الأداء والنتائج النهائية.",
+            trustCopy: "سجل إنجاز مكتمل داخل المنصة",
+          };
 
     return (
       <Card
@@ -1586,9 +1592,8 @@ export default function ProjectsPage() {
           <img
             src={cover}
             alt={title}
-            className={`h-full w-full object-cover ${
-              isDone ? "grayscale-[0.15]" : ""
-            }`}
+            className={`h-full w-full object-cover ${isDone ? "grayscale-[0.15]" : ""
+              }`}
             loading="lazy"
             draggable={false}
             onError={e => {

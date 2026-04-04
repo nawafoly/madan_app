@@ -1,11 +1,9 @@
 // client/src/pages/Home.tsx
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
-import VideoModal from "@/components/VideoModal";
 import { Button } from "@/components/ui/button";
 import {
   ArrowRight,
-  Play,
   CheckCircle2,
   Shield,
   TrendingUp,
@@ -109,7 +107,6 @@ function normalizePublicImage(src?: string) {
 export default function Home() {
   const [location] = useLocation();
 
-  const [isVideoOpen, setIsVideoOpen] = useState(false);
 
   // ✅ Projects sections
   const [featured, setFeatured] = useState<HomeProject[]>([]);
@@ -323,9 +320,9 @@ export default function Home() {
             title: String(p.titleAr || p.titleEn || p.title || "مشروع بدون عنوان"),
             location: String(
               p.locationAr ||
-                p.locationEn ||
-                p.location ||
-                "المملكة العربية السعودية"
+              p.locationEn ||
+              p.location ||
+              "المملكة العربية السعودية"
             ),
             categoryKey: typeKey || "unknown",
             image,
@@ -361,19 +358,23 @@ export default function Home() {
           {/* HERO */}
           <section className={`${SECTION} relative w-full overflow-hidden`}>
             <div className="absolute inset-0 z-0">
-              <img
-                src="/HOOM-HERO1.jpg"
-                alt="MAEDIN Hero"
+              <video
                 className="w-full h-full object-cover object-top"
-              />
+                autoPlay
+                muted
+                loop
+                playsInline
+                preload="auto"
+              >
+                <source src="/about-hero.mp4" type="video/mp4" />
+              </video>
             </div>
 
             <div className="absolute inset-0 bg-black/35 z-[1]" />
 
             <div className="container relative z-10 flex items-center justify-center w-full">
               <div className="w-full max-w-3xl text-center pt-[110px] pb-16 space-y-10">
-                <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold text-white">
-                  بناء وجهات
+                <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold text-white leading-[1.8] md:leading-[1.6] lg:leading-[1.7] tracking-wide">                  بناء وجهات
                   <br />
                   الغد الاستثمارية
                 </h1>
@@ -381,16 +382,6 @@ export default function Home() {
                 <p className="text-xl md:text-2xl text-white/85">
                   مع معدن، نحو مستقبل مشرق للاستثمار العقاري.
                 </p>
-
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setIsVideoOpen(true)}
-                  className="h-12 px-7 rounded-full border-white/35 bg-white/10 text-white hover:bg-white hover:text-black"
-                >
-                  <span>شاهد الفيديو</span>
-                  <Play className="w-5 h-5" />
-                </Button>
               </div>
             </div>
           </section>
@@ -479,47 +470,47 @@ export default function Home() {
 
           {/* ✅ Stats */}
           <section className={`${SECTION} section-dark-wave py-16 md:py-20`}>
-  <div className="container text-center w-full">
-    <h2 className="text-4xl md:text-5xl font-bold">أرقام تعكس ثقتنا</h2>
-    <p className="mt-3 text-white/80">
-      مؤشرات مختصرة تساعدك على اتخاذ القرار بسرعة.
-    </p>
+            <div className="container text-center w-full">
+              <h2 className="text-4xl md:text-5xl font-bold">أرقام تعكس ثقتنا</h2>
+              <p className="mt-3 text-white/80">
+                مؤشرات مختصرة تساعدك على اتخاذ القرار بسرعة.
+              </p>
 
-    <div className="rsg-stats mt-12">
-      <div className="rsg-stat">
-        <div className="rsg-stat__value">{stats.totalInvestment}</div>
-        <div className="rsg-stat__label">إجمالي الاستثمارات</div>
-      </div>
+              <div className="rsg-stats mt-12">
+                <div className="rsg-stat">
+                  <div className="rsg-stat__value">{stats.totalInvestment}</div>
+                  <div className="rsg-stat__label">إجمالي الاستثمارات</div>
+                </div>
 
-      <div className="rsg-stat">
-        <div className="rsg-stat__value">{stats.projectsCount}</div>
-        <div className="rsg-stat__label">عدد المشاريع</div>
-      </div>
+                <div className="rsg-stat">
+                  <div className="rsg-stat__value">{stats.projectsCount}</div>
+                  <div className="rsg-stat__label">عدد المشاريع</div>
+                </div>
 
-      <div className="rsg-stat">
-        <div className="rsg-stat__value">{stats.avgReturn}</div>
-        <div className="rsg-stat__label">متوسط العائد</div>
-      </div>
+                <div className="rsg-stat">
+                  <div className="rsg-stat__value">{stats.avgReturn}</div>
+                  <div className="rsg-stat__label">متوسط العائد</div>
+                </div>
 
-      <div className="rsg-stat">
-        <div className="rsg-stat__value">{stats.avgDuration}</div>
-        <div className="rsg-stat__label">متوسط مدة المشروع</div>
-      </div>
-    </div>
-  </div>
+                <div className="rsg-stat">
+                  <div className="rsg-stat__value">{stats.avgDuration}</div>
+                  <div className="rsg-stat__label">متوسط مدة المشروع</div>
+                </div>
+              </div>
+            </div>
 
-  {/* ✅ أضف هذا بالأسفل مباشرة */}
-  <svg
-    className="absolute bottom-[-1px] left-0 w-full h-24 md:h-28 text-white pointer-events-none"
-    viewBox="0 0 1440 120"
-    preserveAspectRatio="none"
-  >
-    <path
-      fill="currentColor"
-      d="M0,64 C240,120 480,120 720,88 C960,56 1200,8 1440,40 L1440,120 L0,120 Z"
-    />
-  </svg>
-</section>
+            {/* ✅ أضف هذا بالأسفل مباشرة */}
+            <svg
+              className="absolute bottom-[-1px] left-0 w-full h-24 md:h-28 text-white pointer-events-none"
+              viewBox="0 0 1440 120"
+              preserveAspectRatio="none"
+            >
+              <path
+                fill="currentColor"
+                d="M0,64 C240,120 480,120 720,88 C960,56 1200,8 1440,40 L1440,120 L0,120 Z"
+              />
+            </svg>
+          </section>
 
 
           {/* ✅ Featured */}
@@ -687,13 +678,6 @@ export default function Home() {
 
         </div>
       </main>
-
-      <VideoModal
-        isOpen={isVideoOpen}
-        onClose={() => setIsVideoOpen(false)}
-        videoUrl="https://www.youtube.com/watch?v=PxzIjQY0qa4"
-        title="فيديو تعريفي عن مايدن"
-      />
     </div>
   );
 }
