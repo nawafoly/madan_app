@@ -158,10 +158,13 @@ const formatDetailedDateTime = (value: any) => {
   const date = value instanceof Date ? value : toDate(value);
   return Number.isNaN(date.getTime())
     ? "—"
-    : new Intl.DateTimeFormat("ar-SA", {
-        dateStyle: "medium",
-        timeStyle: "short",
-      }).format(date);
+    : new Intl.DateTimeFormat("en-GB-u-nu-latn", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(date);
 };
 
 const translateSettlementPreviewError = (code: string) => {
@@ -1101,11 +1104,11 @@ export default function Financial() {
     () =>
       selectedProjectRecord
         ? {
-            annualReturn: selectedProjectRecord?.annualReturn ?? null,
-            durationMonths:
-              selectedProjectRecord?.durationMonths ?? selectedProjectRecord?.duration ?? null,
-            plannedEndAt: selectedProjectRecord?.plannedEndAt ?? null,
-          }
+          annualReturn: selectedProjectRecord?.annualReturn ?? null,
+          durationMonths:
+            selectedProjectRecord?.durationMonths ?? selectedProjectRecord?.duration ?? null,
+          plannedEndAt: selectedProjectRecord?.plannedEndAt ?? null,
+        }
         : null,
     [selectedProjectRecord]
   );
@@ -1143,6 +1146,7 @@ export default function Financial() {
         error: "",
       };
     } catch (error: any) {
+
       return {
         preview: null,
         error: translateSettlementPreviewError(String(error?.message || "")),
@@ -1166,26 +1170,26 @@ export default function Financial() {
   );
   const latestSettlementDocumentViewUrl = latestSettlementDocument
     ? latestSettlementDocument.fileUrl ||
-      buildR2DownloadUrl(latestSettlementDocument.filePath, false)
+    buildR2DownloadUrl(latestSettlementDocument.filePath, false)
     : "";
   const latestSettlementDocumentDownloadUrl = latestSettlementDocument
     ? buildR2DownloadUrl(latestSettlementDocument.filePath, true) ||
-      latestSettlementDocument.fileUrl
+    latestSettlementDocument.fileUrl
     : "";
   const stopPreviewExceedsPlannedEnd = Boolean(
     stopSettlementPreviewState.preview?.plannedEndDate &&
-      stopSettlementPreviewState.preview?.investmentStopDate &&
-      !isStopDateBeforePlannedEnd(
-        stopSettlementPreviewState.preview.investmentStopDate,
-        stopSettlementPreviewState.preview.plannedEndDate
-      )
+    stopSettlementPreviewState.preview?.investmentStopDate &&
+    !isStopDateBeforePlannedEnd(
+      stopSettlementPreviewState.preview.investmentStopDate,
+      stopSettlementPreviewState.preview.plannedEndDate
+    )
   );
   const canConfirmStopInvestment = Boolean(
     canEditFinancial &&
-      !isSelectedInvestmentStoppedEarly &&
-      stopSettlementPreviewState.preview &&
-      !stopSettlementPreviewState.error &&
-      !stopPreviewExceedsPlannedEnd
+    !isSelectedInvestmentStoppedEarly &&
+    stopSettlementPreviewState.preview &&
+    !stopSettlementPreviewState.error &&
+    !stopPreviewExceedsPlannedEnd
   );
   const settlementPreview = stopSettlementPreviewState.preview;
   const settlementFormulaParts = useMemo(() => {
@@ -1200,6 +1204,14 @@ export default function Financial() {
 
     return parts.length > 0 ? parts : [raw];
   }, [settlementPreview?.formula]);
+
+  const humanReadableFormula = settlementPreview
+    ? `${formatNumberEN(settlementPreview.principalAmount)} × (${formatNumberEN(settlementPreview.annualProfitRate)}% ÷ 100) × (${formatNumberEN(settlementPreview.investedDays)} ÷ 365)`
+    : "";
+
+  const humanReadableProfitResult = settlementPreview
+    ? formatCurrencyEN(settlementPreview.calculatedProfit)
+    : "";
 
   /* =========================
      Load data
@@ -1321,15 +1333,24 @@ export default function Financial() {
   useEffect(() => {
     if (!isCloseDialogOpen || !selectedInvestment) return;
 
-    const effectiveStopDate =
-      selectedSettlement?.investmentStopDate ||
-      toDate(selectedInvestment?.stoppedAt || selectedInvestment?.actualEndAt) ||
-      new Date();
+    const effectiveStopDate = isSelectedInvestmentStoppedEarly
+      ? (
+        selectedSettlement?.investmentStopDate ||
+        toDate(selectedInvestment?.stoppedAt || selectedInvestment?.actualEndAt)
+      )
+      : new Date();
 
     setCloseDate(toDateInputValue(effectiveStopDate));
-    setStopReason(String(selectedSettlement?.stopReason || selectedInvestment?.stopReason || ""));
+    setStopReason(
+      String(selectedSettlement?.stopReason || selectedInvestment?.stopReason || "")
+    );
     setSettlementDocumentFile(null);
-  }, [isCloseDialogOpen, selectedInvestment, selectedSettlement]);
+  }, [
+    isCloseDialogOpen,
+    selectedInvestment,
+    selectedSettlement,
+    isSelectedInvestmentStoppedEarly,
+  ]);
 
   /* =========================
      Derived
@@ -1985,7 +2006,7 @@ export default function Financial() {
           console.error("settlement_document_upload_failed", uploadError);
           toast.warning(
             uploadError?.message ||
-              "تم حفظ التسوية لكن تعذر رفع ملف الـ PDF، ويمكن إعادة رفعه لاحقًا."
+            "تم حفظ التسوية لكن تعذر رفع ملف الـ PDF، ويمكن إعادة رفعه لاحقًا."
           );
         }
       }
@@ -2598,7 +2619,7 @@ export default function Financial() {
 
       {/* Close Investment */}
       <Dialog open={isCloseDialogOpen} onOpenChange={setIsCloseDialogOpen}>
-        <DialogContent className="overflow-hidden rounded-[32px] border border-slate-200 bg-white p-0 sm:max-w-5xl xl:max-w-6xl">
+        <DialogContent className="flex h-[90vh] w-[96vw] max-w-[1100px] flex-col overflow-hidden rounded-[24px] border border-slate-200 bg-white p-0">
           <DialogHeader className="space-y-3 border-b border-slate-200 bg-gradient-to-b from-white to-slate-50 px-8 py-7 text-right [&>h2]:sr-only">
             <div className="inline-flex w-fit items-center rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-[11px] font-semibold tracking-[0.16em] text-amber-800">
               {isSelectedInvestmentStoppedEarly ? "استثمار موقوف" : "طلب إيقاف"}
@@ -2648,6 +2669,7 @@ export default function Financial() {
                       : "غير متوفر"}
                   </div>
                 </div>
+
                 <div className="flex min-h-[136px] flex-col justify-between rounded-2xl border border-slate-200 bg-slate-50/80 px-5 py-4 shadow-sm">
                   <div className="text-xs font-semibold text-slate-500">
                     المشروع
@@ -2658,6 +2680,7 @@ export default function Financial() {
                       : "غير متوفر"}
                   </div>
                 </div>
+
                 <div className="flex min-h-[136px] flex-col justify-between rounded-2xl border border-slate-200 bg-slate-50/80 px-5 py-4 shadow-sm">
                   <div className="text-xs font-semibold text-slate-500">
                     الحالة الحالية
@@ -2668,6 +2691,7 @@ export default function Financial() {
                       : "غير متوفر"}
                   </div>
                 </div>
+
                 <div className="flex min-h-[136px] flex-col justify-between rounded-2xl border border-slate-200 bg-slate-50/80 px-5 py-4 shadow-sm">
                   <div className="text-xs font-semibold text-slate-500">
                     أصل الاستثمار
@@ -2676,6 +2700,47 @@ export default function Financial() {
                     {selectedInvestment
                       ? formatCurrencyEN(selectedInvestment.amount)
                       : "غير متوفر"}
+                  </div>
+                </div>
+
+                <div className="flex min-h-[136px] flex-col justify-between rounded-2xl border border-slate-200 bg-slate-50/80 px-5 py-4 shadow-sm">
+                  <div className="text-xs font-semibold text-slate-500">
+                    نسبة الربح السنوية
+                  </div>
+                  <div className="mt-4 text-base font-semibold leading-7 text-slate-900">
+                    {selectedSettlement?.annualProfitRate != null
+                      ? `${formatNumberEN(selectedSettlement.annualProfitRate)}%`
+                      : selectedProjectRecord?.annualReturn != null
+                        ? `${formatNumberEN(selectedProjectRecord.annualReturn)}%`
+                        : "غير متوفر"}
+                  </div>
+                </div>
+
+                <div className="flex min-h-[136px] flex-col justify-between rounded-2xl border border-slate-200 bg-slate-50/80 px-5 py-4 shadow-sm">
+                  <div className="text-xs font-semibold text-slate-500">
+                    مدة المشروع
+                  </div>
+                  <div className="mt-4 text-base font-semibold leading-7 text-slate-900">
+                    {selectedSettlement?.originalDurationMonths != null
+                      ? `${formatNumberEN(selectedSettlement.originalDurationMonths)} شهر`
+                      : selectedProjectFallback?.durationMonths != null
+                        ? `${formatNumberEN(selectedProjectFallback.durationMonths)} شهر`
+                        : "غير متوفر"}
+                  </div>
+                </div>
+
+                <div className="flex min-h-[136px] flex-col justify-between rounded-2xl border border-slate-200 bg-slate-50/80 px-5 py-4 shadow-sm">
+                  <div className="text-xs font-semibold text-slate-500">
+                    نهاية المشروع المخططة
+                  </div>
+                  <div className="mt-4 text-base font-semibold leading-7 text-slate-900">
+                    {selectedSettlement?.plannedEndDate
+                      ? formatDetailedDateTime(selectedSettlement.plannedEndDate)
+                      : selectedInvestment?.plannedEndAt
+                        ? formatDetailedDateTime(selectedInvestment.plannedEndAt)
+                        : selectedProjectFallback?.plannedEndAt
+                          ? formatDetailedDateTime(selectedProjectFallback.plannedEndAt)
+                          : "غير متوفر"}
                   </div>
                 </div>
               </div>
@@ -2696,8 +2761,10 @@ export default function Financial() {
                   <Label>تاريخ الإيقاف الفعلي</Label>
                   <Input
                     className="h-12 rounded-xl bg-white"
-                    type="date"
+                    type="text"
                     value={closeDate}
+                    inputMode="numeric"
+                    placeholder="YYYY-MM-DD"
                     disabled={isSelectedInvestmentStoppedEarly}
                     onChange={e => setCloseDate(e.target.value)}
                   />
@@ -2826,6 +2893,17 @@ export default function Financial() {
                       المعادلة المعتمدة
                     </Badge>
                   </div>
+
+                  {humanReadableFormula ? (
+                    <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4">
+                      <div className="text-sm font-semibold leading-7 text-emerald-900">
+                        {humanReadableFormula}
+                      </div>
+                      <div className="mt-2 text-base font-bold text-emerald-950">
+                        = {humanReadableProfitResult}
+                      </div>
+                    </div>
+                  ) : null}
 
                   {settlementFormulaParts.length > 0 ? (
                     <div className="mt-4 grid gap-3">
