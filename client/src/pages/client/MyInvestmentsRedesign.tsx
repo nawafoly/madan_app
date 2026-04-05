@@ -11,6 +11,10 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { db } from "@/_core/firebase";
 import { buildR2DownloadUrl } from "@/lib/documentUploadService";
 import {
+  getInvestmentBusinessId,
+  getRequestBusinessId,
+} from "@/lib/businessIds";
+import {
   formatCurrencyShort,
   formatDateEN,
   formatDateTimeEN,
@@ -91,6 +95,7 @@ type DocumentLink = {
 type RequestRow = {
   kind: "request";
   id: string;
+  businessId: string;
   projectTitle: string;
   referenceLabel: string;
   bucketKey: BucketKey;
@@ -108,6 +113,7 @@ type RequestRow = {
 type InvestmentRow = {
   kind: "investment";
   id: string;
+  businessId: string;
   projectTitle: string;
   referenceLabel: string;
   bucketKey: BucketKey;
@@ -304,6 +310,7 @@ function isDistinctLabel(a: string, b: string) {
 function formatReference(prefix: string, id: string) {
   const value = String(id || "").trim();
   if (!value) return prefix;
+  if (value.includes("-")) return `${prefix} ${value.toUpperCase()}`;
   return `${prefix} #${value.slice(-6).toUpperCase()}`;
 }
 
@@ -761,14 +768,16 @@ export default function MyInvestmentsRedesign() {
           requestDate
         );
         const linkedInvestmentId = normalizeLinkId(request?.investmentId);
+        const requestBusinessId = getRequestBusinessId(request);
 
         return {
           kind: "request",
           id: String(request?.id || ""),
+          businessId: requestBusinessId,
           projectTitle:
             getProjectDisplayTitle(project, request?.projectTitle, "مشروع غير معروف") ||
             "مشروع غير معروف",
-          referenceLabel: formatReference("طلب", String(request?.id || "")),
+          referenceLabel: formatReference("طلب", requestBusinessId),
           bucketKey,
           statusPill: {
             label: BUCKET_META[bucketKey].shortTitle,
@@ -814,17 +823,19 @@ export default function MyInvestmentsRedesign() {
           ...documents.map((document) => document.uploadedAt),
           requestDate
         );
+        const investmentBusinessId = getInvestmentBusinessId(investment);
 
         return {
           kind: "investment",
           id: String(investment?.id || ""),
+          businessId: investmentBusinessId,
           projectTitle:
             getProjectDisplayTitle(
               project,
               investment?.projectTitle,
               "مشروع غير معروف"
             ) || "مشروع غير معروف",
-          referenceLabel: formatReference("استثمار", String(investment?.id || "")),
+          referenceLabel: formatReference("استثمار", investmentBusinessId),
           bucketKey,
           statusPill: {
             label: BUCKET_META[bucketKey].shortTitle,
@@ -1581,7 +1592,7 @@ function RequestCard({ row }: { row: RequestRow }) {
         </div>
 
         <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <MetaField label="رقم الطلب" value={row.id || EMPTY} breakAll />
+          <MetaField label="رقم الطلب" value={row.businessId || EMPTY} breakAll />
           <MetaField label="تاريخ الطلب" value={formatDateAR(row.requestDate)} />
           <MetaField label="الحالة" value={row.statusPill.label} />
           <MetaField label="آخر تحديث" value={formatDateTimeAR(row.lastUpdatedAt)} />
@@ -1679,7 +1690,7 @@ function InvestmentCard({ row }: { row: InvestmentRow }) {
         </div>
 
         <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-          <MetaField label="رقم الاستثمار" value={row.id || EMPTY} breakAll />
+          <MetaField label="رقم الاستثمار" value={row.businessId || EMPTY} breakAll />
           <MetaField label="تاريخ الطلب" value={formatDateAR(row.requestDate)} />
           <MetaField label="المبلغ" value={formatCurrencyShort(row.amount)} />
           <MetaField label="الحالة" value={row.statusPill.label} />

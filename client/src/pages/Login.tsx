@@ -1,13 +1,16 @@
-﻿// client/src/pages/Login.tsx
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useLocation } from "wouter";
 import {
-  signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   sendPasswordResetEmail,
+  signInWithEmailAndPassword,
   updateProfile,
 } from "firebase/auth";
 import { doc, serverTimestamp } from "firebase/firestore";
+import { Eye, EyeOff } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { auth, db } from "@/_core/firebase";
 import { useAuth } from "@/_core/hooks/useAuth";
 import {
@@ -16,74 +19,101 @@ import {
   buildAuditSource,
   logAuditEvent,
 } from "@/lib/auditLog";
-import { faEye, faEyeSlash } from "@fortawesome/free-solid-svg-icons";
-import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 
 type AppRole = "client" | "owner" | "admin" | "accountant" | "staff";
+type AuthMode = "login" | "register";
 
 function homeForRole(role: AppRole) {
-  if (role === "owner" || role === "admin" || role === "accountant" || role === "staff") {
+  if (
+    role === "owner" ||
+    role === "admin" ||
+    role === "accountant" ||
+    role === "staff"
+  ) {
     return "/dashboard";
   }
+
   return "/client/dashboard";
+}
+
+function FieldLabel({ children }: { children: ReactNode }) {
+  return (
+    <label className="mb-2 block text-sm font-medium text-slate-700">
+      {children}
+    </label>
+  );
+}
+
+function SurfaceAlert({
+  tone,
+  children,
+}: {
+  tone: "error" | "info" | "warning";
+  children: ReactNode;
+}) {
+  const toneClass =
+    tone === "error"
+      ? "border-red-200 bg-red-50/90 text-red-700"
+      : tone === "info"
+        ? "border-emerald-200 bg-emerald-50/90 text-emerald-700"
+        : "border-amber-200 bg-amber-50/90 text-amber-800";
+
+  return (
+    <div
+      className={`rounded-[18px] border px-4 py-3 text-sm leading-7 ${toneClass}`}
+    >
+      {children}
+    </div>
+  );
 }
 
 export default function LoginPage() {
   const { user, loading, error } = useAuth();
-
-  // خذ المسار الحالي + setLocation
   const [location, setLocation] = useLocation();
 
   const [busy, setBusy] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const [localInfo, setLocalInfo] = useState<string | null>(null);
+  const [mode, setMode] = useState<AuthMode>("login");
 
-  // Login/Register mode
-  const [mode, setMode] = useState<"login" | "register">("login");
-
-  // Form
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [fullName, setFullName] = useState("");
+  const [phone, setPhone] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  const [confirmPassword, setConfirmPassword] = useState("");
-
-  // Register extra fields
-  const [fullName, setFullName] = useState("");
-  const [phone, setPhone] = useState("");
-
-  // تحقق مبسط من ENV
   const firebaseConfigured = useMemo(() => {
     const projectId = (import.meta.env.VITE_FB_PROJECT_ID ?? "").trim();
     const apiKey = (import.meta.env.VITE_FB_API_KEY ?? "").trim();
     return Boolean(projectId && apiKey);
   }, []);
 
-  // Redirect ثابت: إذا المستخدم موجود و loading خلص → وده حسب role
   useEffect(() => {
-    if (loading) return;
-    if (!user) return;
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, []);
+
+  useEffect(() => {
+    if (loading || !user) return;
 
     const role = ((user as any).role ?? "client") as AppRole;
     const target = homeForRole(role);
 
-    // امنع إعادة التوجيه لنفس الصفحة
     if (location === target) return;
-
     setLocation(target);
-  }, [user, loading, location, setLocation]);
+  }, [loading, location, setLocation, user]);
 
-  const normalizeEmail = (v: string) => v.trim().toLowerCase();
+  const normalizeEmail = (value: string) => value.trim().toLowerCase();
 
   const friendlyAuthError = (code?: string) => {
     switch (code) {
       case "auth/invalid-email":
         return "البريد الإلكتروني غير صحيح.";
       case "auth/missing-password":
-        return "فضلاً اكتب كلمة المرور.";
+        return "فضلًا اكتب كلمة المرور.";
       case "auth/weak-password":
-        return "كلمة المرور ضعيفة (على الأقل 6 أحرف).";
+        return "كلمة المرور ضعيفة. استخدم 6 أحرف على الأقل.";
       case "auth/user-not-found":
         return "لا يوجد حساب بهذا البريد.";
       case "auth/wrong-password":
@@ -93,7 +123,7 @@ export default function LoginPage() {
       case "auth/email-already-in-use":
         return "هذا البريد مستخدم بالفعل.";
       case "auth/too-many-requests":
-        return "محاولات كثيرة. انتظر قليلاً ثم أعد المحاولة.";
+        return "محاولات كثيرة. انتظر قليلًا ثم أعد المحاولة.";
       case "auth/network-request-failed":
         return "مشكلة اتصال بالإنترنت. حاول مرة أخرى.";
       default:
@@ -101,30 +131,80 @@ export default function LoginPage() {
     }
   };
 
+  const modeCopy = useMemo(
+    () =>
+      mode === "login"
+        ? {
+            badge: "دخول المنصة",
+            title: "تسجيل الدخول",
+            description:
+              "أدخل بياناتك للوصول إلى لوحة العميل أو الإدارة ومتابعة تفاصيل الحساب من واجهة موحدة.",
+            submitLabel: "تسجيل الدخول",
+            toggleLabel: "إنشاء حساب جديد",
+          }
+        : {
+            badge: "إنشاء حساب",
+            title: "إنشاء حساب جديد",
+            description:
+              "أدخل بياناتك الأساسية لإنشاء الحساب والبدء في الوصول إلى لوحة المنصة من نفس الواجهة.",
+            submitLabel: "إنشاء الحساب",
+            toggleLabel: "لدي حساب بالفعل",
+          },
+    [mode]
+  );
+
+  const effectiveError = useMemo(() => {
+    if (localError) return localError;
+    if (typeof error === "string" && error.trim()) return error;
+    if (error) return "تعذر التحقق من حالة الجلسة الحالية. حاول مرة أخرى.";
+    return null;
+  }, [error, localError]);
+
+  const resetTransientState = () => {
+    setLocalError(null);
+    setLocalInfo(null);
+  };
+
+  const switchMode = (nextMode: AuthMode) => {
+    if (busy || mode === nextMode) return;
+
+    resetTransientState();
+    setMode(nextMode);
+    setPassword("");
+    setConfirmPassword("");
+    setShowPassword(false);
+    setShowConfirmPassword(false);
+  };
+
   const handleSubmit = async () => {
     if (!firebaseConfigured || busy) return;
 
     setBusy(true);
-    setLocalError(null);
-    setLocalInfo(null);
+    resetTransientState();
 
-    const e = normalizeEmail(email);
-    const p = password;
+    const normalizedEmail = normalizeEmail(email);
+    const trimmedPassword = password;
 
-    if (!e) {
+    if (!normalizedEmail) {
       setBusy(false);
-      setLocalError("فضلاً اكتب البريد الإلكتروني.");
+      setLocalError("فضلًا اكتب البريد الإلكتروني.");
       return;
     }
-    if (!p) {
+
+    if (!trimmedPassword) {
       setBusy(false);
-      setLocalError("فضلاً اكتب كلمة المرور.");
+      setLocalError("فضلًا اكتب كلمة المرور.");
       return;
     }
 
     try {
       if (mode === "login") {
-        const cred = await signInWithEmailAndPassword(auth, e, p);
+        const cred = await signInWithEmailAndPassword(
+          auth,
+          normalizedEmail,
+          trimmedPassword
+        );
+
         await logAuditEvent({
           action: AUDIT_ACTIONS.USER_LOGIN,
           category: "system",
@@ -144,46 +224,64 @@ export default function LoginPage() {
             loginMode: "password",
           },
         });
-        // redirect يتم من useEffect
+
         return;
       }
 
-      // register
       const name = fullName.trim();
-      const phoneStr = phone.trim();
+      const phoneValue = phone.trim();
 
       if (!name) {
         setBusy(false);
-        setLocalError("فضلاً اكتب الاسم الكامل.");
+        setLocalError("فضلًا اكتب الاسم الكامل.");
         return;
       }
-      if (!phoneStr) {
+
+      if (!phoneValue) {
         setBusy(false);
-        setLocalError("فضلاً اكتب رقم الجوال.");
+        setLocalError("فضلًا اكتب رقم الجوال.");
         return;
       }
 
-      const cred = await createUserWithEmailAndPassword(auth, e, p);
+      if (trimmedPassword.length < 6) {
+        setBusy(false);
+        setLocalError("كلمة المرور يجب أن تكون 6 أحرف على الأقل.");
+        return;
+      }
 
-      // ✅ حدّث Auth profile (مفيد للواجهة + للـ CF إذا احتاج)
+      if (!confirmPassword.trim()) {
+        setBusy(false);
+        setLocalError("فضلًا أكد كلمة المرور.");
+        return;
+      }
+
+      if (confirmPassword !== trimmedPassword) {
+        setBusy(false);
+        setLocalError("كلمة المرور وتأكيدها غير متطابقين.");
+        return;
+      }
+
+      const cred = await createUserWithEmailAndPassword(
+        auth,
+        normalizedEmail,
+        trimmedPassword
+      );
+
       try {
         await updateProfile(cred.user, { displayName: name });
       } catch {
-        // ignore
+        // Ignore profile update errors and continue with document write.
       }
 
       const ref = doc(db, "users", cred.user.uid);
-
-      // ✅ اكتب/ادمج مباشرة — بدون updateDoc ولا race
       const payload: Record<string, any> = {
-        email: e,
+        email: normalizedEmail,
         displayName: name,
-        phone: phoneStr, // نخليه string دائمًا
+        phone: phoneValue,
         updatedAt: serverTimestamp(),
         createdAt: serverTimestamp(),
         source: "ui_signup",
       };
-
 
       await auditedSetDoc({
         ref,
@@ -204,10 +302,8 @@ export default function LoginPage() {
         },
         ignoreFields: ["updatedAt"],
       });
-
-      // redirect يتم من useEffect
-    } catch (err: any) {
-      setLocalError(friendlyAuthError(err?.code));
+    } catch (submitError: any) {
+      setLocalError(friendlyAuthError(submitError?.code));
     } finally {
       setBusy(false);
     }
@@ -216,324 +312,238 @@ export default function LoginPage() {
   const handleForgotPassword = async () => {
     if (!firebaseConfigured || busy) return;
 
-    setLocalError(null);
-    setLocalInfo(null);
+    resetTransientState();
 
-    const e = normalizeEmail(email);
-    if (!e) {
-      setLocalError("اكتب بريدك الإلكتروني أولاً ثم اضغط (نسيت كلمة المرور).");
+    const normalizedEmail = normalizeEmail(email);
+
+    if (!normalizedEmail) {
+      setLocalError(
+        "اكتب بريدك الإلكتروني أولًا ثم اضغط على خيار استعادة كلمة المرور."
+      );
       return;
     }
 
     setBusy(true);
     try {
-      await sendPasswordResetEmail(auth, e);
-      setLocalInfo("تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك.");
-    } catch (err: any) {
-      setLocalError(friendlyAuthError(err?.code));
+      await sendPasswordResetEmail(auth, normalizedEmail);
+      setLocalInfo("تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني.");
+    } catch (submitError: any) {
+      setLocalError(friendlyAuthError(submitError?.code));
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: 16 }}>
-      <div
-        style={{
-          width: "min(460px, 100%)",
-          background: "rgba(255,255,255,0.96)",
-          border: "1px solid rgba(0,0,0,0.08)",
-          borderRadius: 18,
-          padding: 20,
-          boxShadow: "0 12px 40px rgba(0,0,0,0.08)",
-        }}
-      >
-        <h1 style={{ fontSize: 20, fontWeight: 800, margin: 0 }}>
-          {mode === "login" ? "تسجيل الدخول" : "إنشاء حساب"}
-        </h1>
-
-        <p style={{ marginTop: 8, marginBottom: 14, opacity: 0.75, fontSize: 13 }}>
-          تسجيل الدخول يتم عبر البريد وكلمة المرور باستخدام Firebase Auth.
-        </p>
-
-        {!firebaseConfigured && (
-          <div
-            style={{
-              marginBottom: 14,
-              padding: 12,
-              borderRadius: 12,
-              background: "rgba(242,183,5,0.12)",
-              border: "1px solid rgba(242,183,5,0.35)",
-              fontSize: 13,
-            }}
-          >
-            <b>تنبيه:</b> إعدادات Firebase غير مكتملة (ENV).
-          </div>
-        )}
-
-        {(localError || error) && (
-          <div
-            style={{
-              marginBottom: 14,
-              padding: 12,
-              borderRadius: 12,
-              background: "rgba(220,38,38,0.08)",
-              border: "1px solid rgba(220,38,38,0.25)",
-              fontSize: 13,
-            }}
-          >
-            <b>خطأ:</b> {localError ?? "حدث خطأ غير متوقع."}
-          </div>
-        )}
-
-        {localInfo && (
-          <div
-            style={{
-              marginBottom: 14,
-              padding: 12,
-              borderRadius: 12,
-              background: "rgba(16,185,129,0.10)",
-              border: "1px solid rgba(16,185,129,0.25)",
-              fontSize: 13,
-            }}
-          >
-            {localInfo}
-          </div>
-        )}
-
-        {/* Fields */}
-        <div style={{ display: "grid", gap: 10 }}>
-          <div>
-            <label style={{ display: "block", fontSize: 12, opacity: 0.8 }}>البريد الإلكتروني</label>
-            <input
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="name@example.com"
-              autoComplete="email"
-              inputMode="email"
-              disabled={busy}
-              style={{
-                width: "100%",
-                height: 44,
-                borderRadius: 14,
-                border: "1px solid rgba(0,0,0,0.12)",
-                padding: "0 12px",
-                outline: "none",
-                background: "rgba(255,255,255,0.98)",
-              }}
-            />
-          </div>
-
-          {mode === "register" && (
-            <div>
-              <label style={{ display: "block", fontSize: 12, opacity: 0.8 }}>الاسم الكامل</label>
-              <input
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                placeholder="مثال: محمد أحمد"
-                autoComplete="name"
-                disabled={busy}
-                style={{
-                  width: "100%",
-                  height: 44,
-                  borderRadius: 14,
-                  border: "1px solid rgba(0,0,0,0.12)",
-                  padding: "0 12px",
-                  outline: "none",
-                  background: "rgba(255,255,255,0.98)",
-                }}
-              />
-            </div>
-          )}
-
-          {mode === "register" && (
-            <div>
-              <label style={{ display: "block", fontSize: 12, opacity: 0.8 }}>رقم الجوال</label>
-              <input
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="05xxxxxxxx"
-                autoComplete="tel"
-                inputMode="tel"
-                disabled={busy}
-                style={{
-                  width: "100%",
-                  height: 44,
-                  borderRadius: 14,
-                  border: "1px solid rgba(0,0,0,0.12)",
-                  padding: "0 12px",
-                  outline: "none",
-                  background: "rgba(255,255,255,0.98)",
-                }}
-              />
-            </div>
-          )}
-
-<div>
-  <label style={{ display: "block", fontSize: 12, opacity: 0.8 }}>
-    كلمة المرور
-  </label>
-
-  <div style={{ position: "relative" }}>
-    <input
-      value={password}
-      onChange={(e) => setPassword(e.target.value)}
-      placeholder="••••••••"
-      type={showPassword ? "text" : "password"}
-      autoComplete={mode === "login" ? "current-password" : "new-password"}
-      disabled={busy}
-      style={{
-        width: "100%",
-        height: 44,
-        borderRadius: 14,
-        border: "1px solid rgba(0,0,0,0.12)",
-        padding: "0 12px 0 40px", // مساحة للأيقونة يسار
-        outline: "none",
-        background: "rgba(255,255,255,0.98)",
-      }}
-    />
-
-    <button
-      type="button"
-      onClick={() => setShowPassword((v) => !v)}
-      style={{
-        position: "absolute",
-        left: 8,
-        top: "50%",
-        transform: "translateY(-50%)",
-        border: "none",
-        background: "transparent",
-        cursor: "pointer",
-        opacity: 0.65,
-      }}
+    <div
+      dir="rtl"
+      className="bg-[linear-gradient(180deg,#f6f6f7_0%,#ffffff_32%,#f7f7f8_100%)] text-foreground"
     >
-      <FontAwesomeIcon icon={showPassword ? faEyeSlash : faEye} />
-    </button>
-  </div>
-
-  {mode === "register" && (
-    <div style={{ marginTop: 10 }}>
-      <label style={{ display: "block", fontSize: 12, opacity: 0.8 }}>
-        تأكيد كلمة المرور
-      </label>
-
-      <div style={{ position: "relative" }}>
-        <input
-          value={confirmPassword}
-          onChange={(e) => setConfirmPassword(e.target.value)}
-          type={showConfirmPassword ? "text" : "password"}
-          autoComplete="new-password"
-          disabled={busy}
-          style={{
-            width: "100%",
-            height: 44,
-            borderRadius: 14,
-            border: "1px solid rgba(0,0,0,0.12)",
-            padding: "0 12px 0 40px",
-            outline: "none",
-            background: "rgba(255,255,255,0.98)",
-          }}
+      <main className="relative overflow-hidden">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 top-0 h-64 bg-[radial-gradient(circle_at_top,rgba(242,174,48,0.12),transparent_62%)]"
         />
 
-        <button
-          type="button"
-          onClick={() => setShowConfirmPassword((v) => !v)}
-          style={{
-            position: "absolute",
-            left: 8,
-            top: "50%",
-            transform: "translateY(-50%)",
-            border: "none",
-            background: "transparent",
-            cursor: "pointer",
-            opacity: 0.65,
-          }}
-        >
-          <FontAwesomeIcon icon={showConfirmPassword ? faEyeSlash : faEye} />
-        </button>
-      </div>
-    </div>
-  )}
-</div>
+        <section className="px-4 py-10 sm:px-6 sm:py-14 lg:py-16">
+          <div className="container">
+            <div className="mx-auto flex min-h-[calc(100svh-var(--site-header-offset)-11rem)] max-w-[36rem] items-center justify-center">
+              <div className="w-full rounded-[32px] border border-slate-200/80 bg-white/96 p-6 text-right shadow-[0_30px_90px_-48px_rgba(11,23,38,0.24)] backdrop-blur-sm sm:p-8 md:p-10">
+                <div className="space-y-3">
+                  <span className="inline-flex items-center rounded-full bg-[#f7f3ea] px-4 py-1.5 text-xs font-semibold tracking-[0.18em] text-primary/75 ring-1 ring-[#eadfbe]">
+                    {modeCopy.badge}
+                  </span>
 
+                  <h1 className="text-3xl font-semibold tracking-tight text-slate-950 sm:text-[2rem]">
+                    {modeCopy.title}
+                  </h1>
 
-          <button
-            onClick={handleSubmit}
-            disabled={!firebaseConfigured || busy}
-            style={{
-              width: "100%",
-              height: 44,
-              borderRadius: 14,
-              border: "none",
-              background: !firebaseConfigured || busy ? "rgba(0,0,0,0.25)" : "#111",
-              color: "#fff",
-              fontWeight: 800,
-              cursor: !firebaseConfigured || busy ? "not-allowed" : "pointer",
-            }}
-          >
-            {busy ? "جاري التنفيذ..." : mode === "login" ? "تسجيل الدخول" : "إنشاء حساب"}
-          </button>
+                  <p className="text-sm leading-7 text-slate-600 sm:text-[15px]">
+                    {modeCopy.description}
+                  </p>
+                </div>
 
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              gap: 10,
-              alignItems: "center",
-              marginTop: 4,
-              flexWrap: "wrap",
-            }}
-          >
-            <button
-              type="button"
-              onClick={handleForgotPassword}
-              disabled={!firebaseConfigured || busy}
-              style={{
-                border: "none",
-                background: "transparent",
-                padding: 0,
-                color: "#111",
-                fontWeight: 700,
-                opacity: !firebaseConfigured || busy ? 0.5 : 0.85,
-                cursor: !firebaseConfigured || busy ? "not-allowed" : "pointer",
-                textDecoration: "underline",
-              }}
-            >
-              نسيت كلمة المرور؟
-            </button>
+                <div className="mt-6 space-y-4">
+                  {!firebaseConfigured ? (
+                    <SurfaceAlert tone="warning">
+                      <strong>تنبيه:</strong> إعدادات Firebase غير مكتملة.
+                    </SurfaceAlert>
+                  ) : null}
 
-            <button
-              type="button"
-              onClick={() => {
-                if (busy) return;
-                setLocalError(null);
-                setLocalInfo(null);
-                setPassword("");
-                setFullName("");
-                setPhone("");
-                setMode((m) => (m === "login" ? "register" : "login"));
-              }}
-              disabled={busy}
-              style={{
-                border: "none",
-                background: "transparent",
-                padding: 0,
-                color: "#111",
-                fontWeight: 800,
-                opacity: busy ? 0.5 : 0.9,
-                cursor: busy ? "not-allowed" : "pointer",
-              }}
-            >
-              {mode === "login" ? "إنشاء حساب جديد" : "لدي حساب بالفعل"}
-            </button>
+                  {effectiveError ? (
+                    <SurfaceAlert tone="error">
+                      <strong>خطأ:</strong> {effectiveError}
+                    </SurfaceAlert>
+                  ) : null}
+
+                  {localInfo ? (
+                    <SurfaceAlert tone="info">{localInfo}</SurfaceAlert>
+                  ) : null}
+                </div>
+
+                <form
+                  onSubmit={event => {
+                    event.preventDefault();
+                    void handleSubmit();
+                  }}
+                  className="mt-6 space-y-5"
+                >
+                  {mode === "register" ? (
+                    <div className="grid gap-5 sm:grid-cols-2">
+                      <div>
+                        <FieldLabel>الاسم الكامل</FieldLabel>
+                        <Input
+                          value={fullName}
+                          onChange={event => setFullName(event.target.value)}
+                          placeholder="مثال: محمد أحمد"
+                          autoComplete="name"
+                          disabled={busy}
+                          className="h-12 rounded-2xl border-slate-200/80 bg-slate-50/80 px-4 text-base shadow-none"
+                        />
+                      </div>
+
+                      <div>
+                        <FieldLabel>رقم الجوال</FieldLabel>
+                        <Input
+                          value={phone}
+                          onChange={event => setPhone(event.target.value)}
+                          placeholder="05xxxxxxxx"
+                          autoComplete="tel"
+                          inputMode="tel"
+                          dir="ltr"
+                          disabled={busy}
+                          className="h-12 rounded-2xl border-slate-200/80 bg-slate-50/80 px-4 text-base shadow-none"
+                        />
+                      </div>
+                    </div>
+                  ) : null}
+
+                  <div>
+                    <FieldLabel>البريد الإلكتروني</FieldLabel>
+                    <Input
+                      value={email}
+                      onChange={event => setEmail(event.target.value)}
+                      placeholder="example@gmail.com"
+                      autoComplete="email"
+                      inputMode="email"
+                      dir="ltr"
+                      disabled={busy}
+                      className="h-12 rounded-2xl border-slate-200/80 bg-slate-50/80 px-4 text-base shadow-none"
+                    />
+                  </div>
+
+                  <div>
+                    <FieldLabel>كلمة المرور</FieldLabel>
+                    <div className="relative">
+                      <Input
+                        value={password}
+                        onChange={event => setPassword(event.target.value)}
+                        placeholder="••••••"
+                        type={showPassword ? "text" : "password"}
+                        autoComplete={
+                          mode === "login" ? "current-password" : "new-password"
+                        }
+                        disabled={busy}
+                        className="h-12 rounded-2xl border-slate-200/80 bg-slate-50/80 px-4 pl-12 text-base shadow-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(current => !current)}
+                        className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-slate-600"
+                        aria-label={
+                          showPassword
+                            ? "إخفاء كلمة المرور"
+                            : "إظهار كلمة المرور"
+                        }
+                      >
+                        {showPassword ? (
+                          <EyeOff className="h-4 w-4" />
+                        ) : (
+                          <Eye className="h-4 w-4" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {mode === "register" ? (
+                    <div>
+                      <FieldLabel>تأكيد كلمة المرور</FieldLabel>
+                      <div className="relative">
+                        <Input
+                          value={confirmPassword}
+                          onChange={event =>
+                            setConfirmPassword(event.target.value)
+                          }
+                          placeholder="••••••"
+                          type={showConfirmPassword ? "text" : "password"}
+                          autoComplete="new-password"
+                          disabled={busy}
+                          className="h-12 rounded-2xl border-slate-200/80 bg-slate-50/80 px-4 pl-12 text-base shadow-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setShowConfirmPassword(current => !current)
+                          }
+                          className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-slate-600"
+                          aria-label={
+                            showConfirmPassword
+                              ? "إخفاء تأكيد كلمة المرور"
+                              : "إظهار تأكيد كلمة المرور"
+                          }
+                        >
+                          {showConfirmPassword ? (
+                            <EyeOff className="h-4 w-4" />
+                          ) : (
+                            <Eye className="h-4 w-4" />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  <Button
+                    type="submit"
+                    size="lg"
+                    disabled={!firebaseConfigured || busy}
+                    className="h-12 w-full rounded-full text-sm font-semibold"
+                  >
+                    {busy ? "جارٍ التنفيذ..." : modeCopy.submitLabel}
+                  </Button>
+                </form>
+
+                <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200/80 pt-5">
+                  {mode === "login" ? (
+                    <button
+                      type="button"
+                      onClick={() => void handleForgotPassword()}
+                      disabled={!firebaseConfigured || busy}
+                      className="text-sm font-semibold text-primary/82 transition hover:text-primary disabled:cursor-not-allowed disabled:opacity-45"
+                    >
+                      نسيت كلمة المرور؟
+                    </button>
+                  ) : (
+                    <span className="text-sm text-slate-500">
+                      كلمة المرور يجب أن تكون 6 أحرف على الأقل.
+                    </span>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      switchMode(mode === "login" ? "register" : "login")
+                    }
+                    disabled={busy}
+                    className="text-sm font-semibold text-slate-700 transition hover:text-primary disabled:cursor-not-allowed disabled:opacity-45"
+                  >
+                    {modeCopy.toggleLabel}
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
-
-          <div style={{ fontSize: 12, opacity: 0.6, marginTop: 6 }}>
-            ملاحظة: بعد تسجيل الدخول سيتم توجيهك تلقائيًا حسب دورك (Dashboard للإدارة / Client
-            Dashboard للعميل).
-          </div>
-        </div>
-      </div>
+        </section>
+      </main>
     </div>
   );
 }

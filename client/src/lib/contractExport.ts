@@ -42,7 +42,9 @@ type AttachmentEntry = {
 
 export type ContractExportCandidate = {
   id: string;
+  businessId?: string;
   investmentId: string;
+  investmentBusinessId?: string;
   projectId: string;
   projectTitle: string;
   investorName: string;
@@ -424,7 +426,9 @@ function resolveRequestId(
 function buildCandidateItem(record: ExportRecord): ContractExportCandidate {
   return {
     id: record.id,
+    businessId: pickString(record.businessId),
     investmentId: pickString(record.investmentId),
+    investmentBusinessId: pickString(record.investmentBusinessId),
     projectId: pickString(record.projectId),
     projectTitle: pickString(record.projectTitle),
     investorName: pickString(record.investorName),

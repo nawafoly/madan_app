@@ -89,6 +89,10 @@ import {
 import { getRoleDisplayLabel } from "@/lib/ownerAccounts";
 import { cn } from "@/lib/utils";
 import {
+  getContractBusinessId,
+  getInvestmentBusinessId,
+} from "@/lib/businessIds";
+import {
   AUDIT_ACTIONS,
   auditedDeleteDoc,
   auditedSetDoc,
@@ -5337,7 +5341,9 @@ export default function Settings() {
 
                             <div className="min-w-0 flex-1 space-y-2">
                               <div className="flex flex-wrap items-center gap-2">
-                                <p className="font-medium">{item.id}</p>
+                                <p className="font-medium">
+                                  {getContractBusinessId(item) || item.id}
+                                </p>
                                 <Badge
                                   variant="outline"
                                   className="rounded-full"
@@ -5363,7 +5369,7 @@ export default function Settings() {
 
                               <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                                 <span>
-                                  Investment: {item.investmentId || "-"}
+                                  Investment: {getInvestmentBusinessId(item) || item.investmentId || "-"}
                                 </span>
                                 <span>المشروع: {item.projectId || "-"}</span>
                                 <span>

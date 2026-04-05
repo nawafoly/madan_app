@@ -76,7 +76,7 @@ export function SectionCard({
       {status ? <div className={cn("absolute inset-y-0 right-0 w-[3px]", statusAppearance.strip)} /> : null}
       <CardHeader
         className={cn(
-          "gap-4 border-b border-slate-200/70 pb-6",
+          "gap-4 border-b border-slate-200/70 px-6 pb-6 pt-4 md:px-7",
           toneClassName ??
             "bg-[linear-gradient(135deg,rgba(248,250,252,0.95),rgba(255,255,255,0.98))]"
         )}

@@ -1,9 +1,14 @@
 // client/src/pages/admin/EditProject.tsx
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useRoute, useLocation } from "wouter";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, runTransaction, serverTimestamp } from "firebase/firestore";
 import { db } from "@/_core/firebase";
-import { AUDIT_ACTIONS, auditedUpdateDoc, buildAuditSource } from "@/lib/auditLog";
+import {
+  AUDIT_ACTIONS,
+  buildAuditSource,
+  runAuditedOperation,
+} from "@/lib/auditLog";
+import { reserveNextBusinessId } from "@/lib/businessIds";
 import { uploadInvestmentDocument } from "@/lib/documentUploadService";
 
 import DashboardLayout from "@/components/DashboardLayout";
@@ -31,9 +36,11 @@ import {
   buildCompletionContentPayload,
   normalizeProjectBuilderSectionId,
   projectTypeLabels,
+  serializeProjectEditorSnapshot,
   statusLabels,
   vipTierLabels,
   type FormDataState,
+  type ProjectEditorSnapshot,
   type SummaryMetric,
 } from "./create-project/shared";
 
@@ -88,16 +95,6 @@ type ParseResult<T> = { items: T[]; errors: string[] };
 type AttachmentRow = { name: string; url: string; externalUrl: string; uploading?: boolean };
 type MilestoneRow = { title: string; date: string; status: string; description: string };
 type FaqRow = { q: string; a: string };
-type EditorSnapshot = {
-  formData: FormDataState;
-  highlightRows: string[];
-  attachmentRows: AttachmentRow[];
-  milestoneRows: MilestoneRow[];
-  faqRows: FaqRow[];
-  completionResultRows: string[];
-  completionOutputRows: CompletionOutputRow[];
-  completionFinalNoteRows: string[];
-};
 
 const newAttachmentRow = (): AttachmentRow => ({ name: "", url: "", externalUrl: "" });
 const newMilestoneRow = (): MilestoneRow => ({
@@ -255,10 +252,6 @@ function parseCompletionOutputRows(rows: CompletionOutputRow[]): ParseResult<Com
   return { items, errors };
 }
 
-function serializeEditorSnapshot(snapshot: EditorSnapshot) {
-  return JSON.stringify(snapshot);
-}
-
 export default function EditProject() {
   const [, params] = useRoute("/admin/projects/:id/edit");
   const [, setLocation] = useLocation();
@@ -272,6 +265,7 @@ export default function EditProject() {
   const [projectExists, setProjectExists] = useState(true);
   const [activeSection, setActiveSection] = useState(SECTION_DEFINITIONS[0]?.id ?? "basic");
   const [savedSnapshot, setSavedSnapshot] = useState("");
+  const [projectBusinessId, setProjectBusinessId] = useState("");
 
   const [meta, setMeta] = useState<{ createdAt?: any; updatedAt?: any }>({});
 
@@ -486,7 +480,7 @@ export default function EditProject() {
   );
   const currentSnapshot = useMemo(
     () =>
-      serializeEditorSnapshot({
+      serializeProjectEditorSnapshot({
         formData,
         highlightRows,
         attachmentRows,
@@ -511,6 +505,9 @@ export default function EditProject() {
   const projectDisplayName =
     cleanStr(formData.titleAr) || cleanStr(formData.titleEn) || "مشروع بدون عنوان";
 
+  const projectReference =
+    cleanStr(projectBusinessId) || cleanStr(formData.issueNumber) || "سيُولّد عند الحفظ";
+
   useEffect(() => {
     const normalizedActiveSection = normalizeProjectBuilderSectionId(activeSection);
     if (normalizedActiveSection && normalizedActiveSection !== activeSection) {
@@ -523,71 +520,10 @@ export default function EditProject() {
     }
   }, [activeSection, visibleSections]);
 
-  useEffect(() => {
-    const sectionElements = visibleSections
-      .map((section) => document.getElementById(section.id))
-      .filter((element): element is HTMLElement => Boolean(element));
-    if (!sectionElements.length) return;
-
-    let frameId = 0;
-
-    const updateActiveSectionFromScroll = () => {
-      frameId = 0;
-
-      const navElement = document.querySelector<HTMLElement>("[data-project-section-nav]");
-      const probeY = navElement
-        ? navElement.getBoundingClientRect().bottom + 24
-        : Math.min(window.innerHeight * 0.24, 220);
-
-      let nextActiveSection = sectionElements[0]?.id ?? visibleSections[0]?.id ?? "basic";
-
-      for (const section of sectionElements) {
-        if (section.getBoundingClientRect().top <= probeY) {
-          nextActiveSection = section.id;
-          continue;
-        }
-        break;
-      }
-
-      setActiveSection((prev) => (prev === nextActiveSection ? prev : nextActiveSection));
-    };
-
-    const scheduleActiveSectionUpdate = () => {
-      if (frameId) return;
-      frameId = window.requestAnimationFrame(updateActiveSectionFromScroll);
-    };
-
-    const navElement = document.querySelector<HTMLElement>("[data-project-section-nav]");
-    const resizeObserver =
-      typeof ResizeObserver !== "undefined"
-        ? new ResizeObserver(() => {
-            scheduleActiveSectionUpdate();
-          })
-        : null;
-
-    window.addEventListener("scroll", scheduleActiveSectionUpdate, { passive: true });
-    window.addEventListener("resize", scheduleActiveSectionUpdate);
-
-    resizeObserver?.observe(document.body);
-    navElement ? resizeObserver?.observe(navElement) : null;
-    sectionElements.forEach((element) => resizeObserver?.observe(element));
-
-    scheduleActiveSectionUpdate();
-
-    return () => {
-      if (frameId) {
-        window.cancelAnimationFrame(frameId);
-      }
-      window.removeEventListener("scroll", scheduleActiveSectionUpdate);
-      window.removeEventListener("resize", scheduleActiveSectionUpdate);
-      resizeObserver?.disconnect();
-    };
-  }, [visibleSections]);
-
   const restoreSavedState = () => {
     if (!savedSnapshot) return;
 
-    const snapshot = JSON.parse(savedSnapshot) as EditorSnapshot;
+    const snapshot = JSON.parse(savedSnapshot) as ProjectEditorSnapshot;
     setFormData(snapshot.formData);
     setHighlightRows(snapshot.highlightRows);
     setAttachmentRows(snapshot.attachmentRows);
@@ -837,6 +773,7 @@ export default function EditProject() {
           progressMilestonesWeight:
             p.progressMilestonesWeight != null ? String(p.progressMilestonesWeight) : "40",
         };
+        setProjectBusinessId(cleanStr(p.businessId));
         const nextHighlightRows = highlightsArr.length ? highlightsArr : [""];
         const nextAttachmentRows = attachmentRowsFromItems(attachmentsArr);
         const nextMilestoneRows = milestoneRowsFromItems(milestonesArr);
@@ -856,7 +793,7 @@ export default function EditProject() {
         setCompletionOutputRows(nextCompletionOutputRows);
         setCompletionFinalNoteRows(nextCompletionFinalNoteRows);
         setSavedSnapshot(
-          serializeEditorSnapshot({
+          serializeProjectEditorSnapshot({
             formData: nextFormData,
             highlightRows: nextHighlightRows,
             attachmentRows: nextAttachmentRows,
@@ -932,6 +869,7 @@ export default function EditProject() {
 
     try {
       setSaving(true);
+      const projectRef = doc(db, "projects", projectId);
 
       const payload: any = {
         // titles/descriptions
@@ -968,12 +906,10 @@ export default function EditProject() {
         progressMode: formData.progressMode,
         progressFundingWeight: toNumOrZero(formData.progressFundingWeight),
         progressMilestonesWeight: toNumOrZero(formData.progressMilestonesWeight),
-
+        updatedAt: serverTimestamp(),
       };
 
-      await auditedUpdateDoc({
-        ref: doc(db, "projects", projectId),
-        data: payload,
+      const nextBusinessId = await runAuditedOperation<string>({
         action: AUDIT_ACTIONS.PROJECT_UPDATED,
         category: "project",
         entityType: "project",
@@ -983,17 +919,41 @@ export default function EditProject() {
           method: "update",
         }),
         relatedIds: { projectId },
-        message: `Updated project ${cleanStr(formData.titleAr) || cleanStr(formData.titleEn) || projectId}`,
-        meta: {
-          projectName: cleanStr(formData.titleAr) || cleanStr(formData.titleEn) || projectId,
+        message: ({ result }) => `Updated project ${result}`,
+        meta: ({ result }) => ({
+          businessId: result,
+          projectName: cleanStr(formData.titleAr) || cleanStr(formData.titleEn) || result,
           status: formData.status,
           projectType: formData.projectType,
-        },
+        }),
+        targets: [{ ref: projectRef, entityType: "project" }],
         ignoreFields: ["updatedAt"],
+        execute: async () =>
+          runTransaction(db, async (tx) => {
+            const projectSnap = await tx.get(projectRef);
+            if (!projectSnap.exists()) throw new Error("project_not_found");
+
+            const resolvedBusinessId =
+              cleanStr(projectSnap.data()?.businessId) ||
+              cleanStr(projectBusinessId) ||
+              (await reserveNextBusinessId(tx, "projects"));
+
+            tx.set(
+              projectRef,
+              {
+                ...payload,
+                businessId: resolvedBusinessId,
+              },
+              { merge: true }
+            );
+
+            return resolvedBusinessId;
+          }),
       });
 
       const nextUpdatedAt = new Date();
       setMeta((prev) => ({ ...prev, updatedAt: nextUpdatedAt }));
+      setProjectBusinessId(nextBusinessId);
       setSavedSnapshot(currentSnapshot);
       toast.success("تم حفظ التغييرات بنجاح");
     } catch (err) {
@@ -1059,7 +1019,7 @@ export default function EditProject() {
     {
       icon: FolderKanban,
       label: "معرّف المشروع",
-      value: projectId?.slice(0, 8) ?? "—",
+      value: projectReference,
     },
     {
       icon: Clock3,
@@ -1085,9 +1045,9 @@ export default function EditProject() {
       <Badge className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-white">
         {projectTypeLabels[formData.projectType]}
       </Badge>
-      {cleanStr(formData.issueNumber) ? (
+      {projectReference !== "سيُولّد عند الحفظ" ? (
         <Badge className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-white">
-          {cleanStr(formData.issueNumber)}
+          {projectReference}
         </Badge>
       ) : null}
       <Badge
@@ -1174,7 +1134,7 @@ export default function EditProject() {
             رقم المشروع
           </p>
           <p className="mt-1 text-sm font-semibold text-white">
-            {cleanStr(formData.issueNumber) || projectId?.slice(0, 8) || "—"}
+            {projectReference}
           </p>
         </div>
         <div className="rounded-2xl border border-white/15 bg-white/8 px-4 py-3 text-right shadow-sm">
@@ -1228,6 +1188,7 @@ export default function EditProject() {
         headerTitle={headerTitle}
         highlightRows={highlightRows}
         isBusy={isBusy}
+        isDirty={isDirty}
         milestoneRows={milestoneRows}
         primaryActionLabel="حفظ التغييرات"
         primaryActionLoadingLabel="جارٍ حفظ التغييرات..."
@@ -1253,8 +1214,9 @@ export default function EditProject() {
         saving={saving}
         totalAssets={totalAssets}
         workspaceIdLabel="معرّف المشروع"
-        workspaceIdValue={projectId?.slice(0, 8) ?? "—"}
+        workspaceIdValue={projectReference}
       />
     </DashboardLayout>
   );
 }
+

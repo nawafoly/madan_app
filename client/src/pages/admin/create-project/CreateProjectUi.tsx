@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -97,6 +97,7 @@ export function CreateProjectUi({
   hasUploadingAttachment,
   highlightRows,
   isBusy,
+  isDirty = false,
   milestoneRows,
   progressWeightsTotal,
   requiredChecklist,
@@ -136,6 +137,11 @@ export function CreateProjectUi({
   workspaceIdValue = draftProjectId.slice(0, 8),
 }: CreateProjectUiProps) {
   const visibleSections = SECTION_DEFINITIONS;
+  const sectionNavRef = useRef<HTMLDivElement | null>(null);
+  const sectionStripRef = useRef<HTMLDivElement | null>(null);
+  const sectionButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const pendingScrollTargetRef = useRef<string | null>(null);
+  const pendingScrollExpiryRef = useRef(0);
   const resolvedHeaderDescription =
     headerDescription ??
     "إعداد مشروع استثماري جديد بهوية أوضح، وهيكل أقسام منظم، وتجربة إدخال أقرب لمنصات التمويل والاستثمار الاحترافية.";
@@ -829,6 +835,154 @@ export function CreateProjectUi({
     (item) => !item.ready
   ).length;
 
+  useEffect(() => {
+    const stripElement = sectionStripRef.current;
+    const activeButton = sectionButtonRefs.current[activeSection];
+    if (!stripElement || !activeButton) return;
+
+    const stripRect = stripElement.getBoundingClientRect();
+    const buttonRect = activeButton.getBoundingClientRect();
+    const visibilityInset = 16;
+    const isVisibleWithinStrip =
+      buttonRect.left >= stripRect.left + visibilityInset &&
+      buttonRect.right <= stripRect.right - visibilityInset;
+
+    if (!isVisibleWithinStrip) {
+      activeButton.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+        inline: "center",
+      });
+    }
+  }, [activeSection]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const sectionElements = visibleSections
+      .map((section) => document.getElementById(section.id))
+      .filter((element): element is HTMLElement => Boolean(element));
+    if (!sectionElements.length) return;
+
+    let frameId = 0;
+
+    const getProbeY = () => {
+      const navRect = sectionNavRef.current?.getBoundingClientRect();
+      const fallbackProbe = Math.min(window.innerHeight * 0.28, 220);
+      if (!navRect) return fallbackProbe;
+
+      const desiredProbe = navRect.bottom + 20;
+      const minProbe = window.innerHeight * 0.22;
+      const maxProbe = window.innerHeight * 0.42;
+
+      return Math.min(Math.max(desiredProbe, minProbe), maxProbe);
+    };
+
+    const resolveActiveSectionId = () => {
+      const probeY = getProbeY();
+      let fallbackSectionId = sectionElements[0]?.id ?? visibleSections[0]?.id ?? "basic";
+      let smallestDistance = Number.POSITIVE_INFINITY;
+
+      for (const sectionElement of sectionElements) {
+        const rect = sectionElement.getBoundingClientRect();
+
+        if (rect.top <= probeY && rect.bottom >= probeY) {
+          return sectionElement.id;
+        }
+
+        if (rect.bottom <= probeY) {
+          fallbackSectionId = sectionElement.id;
+          continue;
+        }
+
+        const distance = Math.abs(rect.top - probeY);
+        if (distance < smallestDistance) {
+          smallestDistance = distance;
+          fallbackSectionId = sectionElement.id;
+        }
+      }
+
+      return fallbackSectionId;
+    };
+
+    const updateActiveSectionFromViewport = () => {
+      frameId = 0;
+
+      const pendingTargetId = pendingScrollTargetRef.current;
+      if (pendingTargetId) {
+        const targetElement = document.getElementById(pendingTargetId);
+        const probeY = getProbeY();
+        const targetRect = targetElement?.getBoundingClientRect();
+        const targetReached = Boolean(
+          targetRect && targetRect.top <= probeY && targetRect.bottom >= probeY
+        );
+        const pendingExpired = Date.now() > pendingScrollExpiryRef.current;
+
+        if (!targetReached && !pendingExpired) {
+          return;
+        }
+
+        pendingScrollTargetRef.current = null;
+        pendingScrollExpiryRef.current = 0;
+      }
+
+      const nextActiveSection = resolveActiveSectionId();
+      setActiveSection((prev) =>
+        prev === nextActiveSection ? prev : nextActiveSection
+      );
+    };
+
+    const scheduleActiveSectionUpdate = () => {
+      if (frameId) return;
+      frameId = window.requestAnimationFrame(updateActiveSectionFromViewport);
+    };
+
+    const intersectionObserver =
+      typeof IntersectionObserver !== "undefined"
+        ? new IntersectionObserver(
+            () => {
+              scheduleActiveSectionUpdate();
+            },
+            {
+              threshold: [0, 0.12, 0.28, 0.5, 0.72, 1],
+              rootMargin: "-20% 0px -52% 0px",
+            }
+          )
+        : null;
+
+    const resizeObserver =
+      typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(() => {
+            scheduleActiveSectionUpdate();
+          })
+        : null;
+
+    sectionElements.forEach((sectionElement) => {
+      intersectionObserver?.observe(sectionElement);
+      resizeObserver?.observe(sectionElement);
+    });
+    if (sectionNavRef.current) {
+      resizeObserver?.observe(sectionNavRef.current);
+    }
+
+    window.addEventListener("scroll", scheduleActiveSectionUpdate, {
+      passive: true,
+    });
+    window.addEventListener("resize", scheduleActiveSectionUpdate);
+
+    scheduleActiveSectionUpdate();
+
+    return () => {
+      if (frameId) {
+        window.cancelAnimationFrame(frameId);
+      }
+      window.removeEventListener("scroll", scheduleActiveSectionUpdate);
+      window.removeEventListener("resize", scheduleActiveSectionUpdate);
+      intersectionObserver?.disconnect();
+      resizeObserver?.disconnect();
+    };
+  }, [setActiveSection, visibleSections]);
+
   const replaceSectionHash = (sectionId: string) => {
     if (typeof window === "undefined") return;
 
@@ -843,18 +997,27 @@ export function CreateProjectUi({
   };
 
   const scrollToSection = (sectionId: string, behavior: ScrollBehavior = "smooth") => {
-    if (typeof document === "undefined") return;
+    if (typeof document === "undefined" || typeof window === "undefined") return;
 
     const sectionElement = document.getElementById(sectionId);
     if (!sectionElement) return;
 
-    sectionElement.scrollIntoView({ behavior, block: "start" });
+    const navBottom = sectionNavRef.current?.getBoundingClientRect().bottom ?? 0;
+    const nextTop =
+      window.scrollY + sectionElement.getBoundingClientRect().top - navBottom - 24;
+
+    window.scrollTo({
+      top: Math.max(0, nextTop),
+      behavior,
+    });
   };
 
   const handleSectionSelect = (sectionId: string) => {
     const normalizedSectionId = normalizeProjectBuilderSectionId(sectionId);
     if (!visibleSections.some((section) => section.id === normalizedSectionId)) return;
 
+    pendingScrollTargetRef.current = normalizedSectionId;
+    pendingScrollExpiryRef.current = Date.now() + 900;
     setActiveSection(normalizedSectionId);
     replaceSectionHash(normalizedSectionId);
     scrollToSection(normalizedSectionId);
@@ -868,6 +1031,8 @@ export function CreateProjectUi({
     if (!normalizedHashSectionId) return;
     if (!visibleSections.some((section) => section.id === normalizedHashSectionId)) return;
 
+    pendingScrollTargetRef.current = normalizedHashSectionId;
+    pendingScrollExpiryRef.current = Date.now() + 900;
     setActiveSection(normalizedHashSectionId);
     replaceSectionHash(normalizedHashSectionId);
 
@@ -1545,9 +1710,14 @@ export function CreateProjectUi({
 
           <div
             data-project-section-nav
-            className="sticky top-16 z-30 overflow-hidden rounded-[22px] border border-slate-200/80 bg-white/92 p-2 shadow-[0_24px_50px_-34px_rgba(15,23,42,0.38)] backdrop-blur md:top-6"
+            ref={sectionNavRef}
+            className="sticky top-16 z-30 overflow-hidden rounded-[20px] border border-slate-200/80 bg-white/92 p-1.5 shadow-[0_24px_50px_-34px_rgba(15,23,42,0.38)] backdrop-blur md:top-6"
           >
-            <div className="grid grid-cols-[repeat(auto-fit,minmax(148px,1fr))] gap-1.5">
+            <div
+              ref={sectionStripRef}
+              data-project-section-strip
+              className="flex min-w-full flex-nowrap items-stretch gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            >
               {visibleSections.map((section, index) => {
                 const isActive = activeSection === section.id;
                 const sectionStatus = sectionStatuses[section.id];
@@ -1557,10 +1727,14 @@ export function CreateProjectUi({
                   <button
                     type="button"
                     key={section.id}
+                    ref={(element) => {
+                      sectionButtonRefs.current[section.id] = element;
+                    }}
+                    data-project-section-trigger={section.id}
                     aria-controls={section.id}
                     aria-current={isActive ? "step" : undefined}
                     onClick={() => handleSectionSelect(section.id)}
-                    className={`group relative w-full min-w-0 overflow-hidden rounded-[18px] border px-2.5 py-2 text-right transition-all ${
+                    className={`group relative min-w-[116px] shrink-0 snap-center overflow-hidden rounded-[16px] border px-2.5 py-1.5 text-right transition-all sm:min-w-[124px] sm:px-3 sm:py-2 ${
                       isActive
                         ? "border-slate-900 bg-slate-900 text-white shadow-[0_16px_30px_-18px_rgba(15,23,42,0.7)]"
                         : "border-transparent bg-slate-50 text-slate-600 hover:border-slate-200 hover:bg-white"
@@ -1578,7 +1752,7 @@ export function CreateProjectUi({
                     />
                     <div className="flex items-center gap-2">
                       <span
-                        className={`flex size-7 shrink-0 items-center justify-center rounded-lg text-[11px] font-semibold ${
+                        className={`flex size-6 shrink-0 items-center justify-center rounded-lg text-[10px] font-semibold ${
                           isActive
                             ? "bg-white/12 text-white"
                             : "bg-white text-slate-700 shadow-sm"
@@ -1599,18 +1773,11 @@ export function CreateProjectUi({
                             }`}
                           />
                           <p
-                            className={`truncate text-[13px] font-semibold leading-4 ${isActive ? "text-white" : "text-slate-900"}`}
+                            className={`truncate text-[12px] font-semibold leading-4 ${isActive ? "text-white" : "text-slate-900"}`}
                           >
                             {section.shortTitle}
                           </p>
                         </div>
-                        <p
-                          className={`mt-0.5 truncate text-[10px] leading-4 ${
-                            isActive ? "text-slate-200" : "text-slate-500"
-                          }`}
-                        >
-                          {sectionMeta[section.id]}
-                        </p>
                       </div>
                     </div>
                   </button>
@@ -3335,40 +3502,43 @@ export function CreateProjectUi({
           </SectionCard>
           )}
 
-          <div className="sticky bottom-4 z-30 pt-2">
-            <div className="flex flex-col gap-4 rounded-[26px] border border-slate-200/80 bg-white/92 p-4 shadow-[0_24px_60px_-34px_rgba(15,23,42,0.4)] backdrop-blur md:flex-row md:items-center md:justify-between">
-              <div className="flex items-start gap-3">
-                <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-slate-900 text-white shadow-sm">
-                  <Save className="h-4 w-4" />
+          {isDirty ? (
+            <div className="sticky bottom-4 z-30 pt-2">
+              <div className="flex flex-col gap-4 rounded-[26px] border border-slate-200/80 bg-white/92 p-4 shadow-[0_24px_60px_-34px_rgba(15,23,42,0.4)] backdrop-blur md:flex-row md:items-center md:justify-between">
+                <div className="flex items-start gap-3">
+                  <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-slate-900 text-white shadow-sm">
+                    <Save className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-slate-950">{footerTitle}</p>
+                    <div className="text-xs leading-6 text-slate-500">
+                      {resolvedFooterDescription}
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm font-semibold text-slate-950">{footerTitle}</p>
-                  <div className="text-xs leading-6 text-slate-500">{resolvedFooterDescription}</div>
+
+                <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-12 rounded-2xl px-5"
+                    disabled={isBusy}
+                    onClick={() => setLocation(backPath)}
+                  >
+                    {backLabel}
+                  </Button>
+                  <Button
+                    type="submit"
+                    className="h-12 rounded-2xl bg-slate-900 px-6 text-sm font-semibold text-white shadow-[0_18px_30px_-18px_rgba(15,23,42,0.7)] hover:bg-slate-800"
+                    disabled={isBusy}
+                  >
+                    <Save className="ml-2 h-4 w-4" />
+                    {saving ? primaryActionLoadingLabel : primaryActionLabel}
+                  </Button>
                 </div>
-              </div>
-
-              <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-12 rounded-2xl px-5"
-                  disabled={isBusy}
-                  onClick={() => setLocation(backPath)}
-                >
-
-                  {backLabel}
-                </Button>
-                <Button
-                  type="submit"
-                  className="h-12 rounded-2xl bg-slate-900 px-6 text-sm font-semibold text-white shadow-[0_18px_30px_-18px_rgba(15,23,42,0.7)] hover:bg-slate-800"
-                  disabled={isBusy}
-                >
-                  <Save className="ml-2 h-4 w-4" />
-                  {saving ? primaryActionLoadingLabel : primaryActionLabel}
-                </Button>
               </div>
             </div>
-          </div>
+          ) : null}
           </form>
         </main>
 

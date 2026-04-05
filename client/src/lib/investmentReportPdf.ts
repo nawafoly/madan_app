@@ -18,6 +18,10 @@ import {
   type CloudflareFileRecord,
 } from "@/lib/documentUploadService";
 import { buildProjectsMap, getProjectDisplayTitle } from "@/lib/projectDisplay";
+import {
+  getContractBusinessId,
+  getInvestmentBusinessId,
+} from "@/lib/businessIds";
 import { buildUserIdentityIndex, resolveLinkedUser } from "@/lib/userDisplay";
 import { getClientContractStatusMeta, getClientInvestmentStatusMeta } from "@/lib/workflowStatusMeta";
 import { getProjectProfitFallback } from "@/lib/projectProfitFallback";
@@ -593,6 +597,11 @@ export async function buildInvestmentReportData({
 
   const projectName =
     getProjectDisplayTitle(projectRecord, investment.projectTitle, "غير متوفر") || "غير متوفر";
+  const investmentBusinessId = getInvestmentBusinessId(investment) || "غير متوفر";
+  const contractBusinessId =
+    getContractBusinessId(contractRecord) ||
+    pickText(investment.contractBusinessId) ||
+    "غير متوفر";
   const projectFallback =
     projectRecord || localProjects[pickText(investment.projectId)]
       ? getProjectProfitFallback(projectRecord || localProjects[pickText(investment.projectId)])
@@ -780,7 +789,7 @@ export async function buildInvestmentReportData({
         title: "بيانات الاستثمار الأساسية",
         layout: "full",
         items: [
-          { label: "رقم الاستثمار", value: investmentId || "غير متوفر" },
+          { label: "رقم الاستثمار", value: investmentBusinessId },
           { label: "اسم المشروع", value: projectName },
           {
             label: "نوع المشروع",
@@ -847,7 +856,7 @@ export async function buildInvestmentReportData({
         title: "بيانات العقد والمرفقات",
         items: [
           { label: "حالة العقد", value: contractStatusMeta.label },
-          { label: "رقم العقد", value: pickText(contractRecord?.id, investment.contractId) || "غير متوفر" },
+          { label: "رقم العقد", value: contractBusinessId },
           { label: "هل يوجد عقد أصلي", value: formatBool(Boolean(originalContractRecord)) },
           { label: "هل يوجد عقد موقّع", value: formatBool(Boolean(signedContractRecord)) },
           {

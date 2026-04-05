@@ -80,6 +80,7 @@ import {
   buildProjectsMap,
   getProjectDisplayTitleById,
 } from "@/lib/projectDisplay";
+import { getInvestmentBusinessId } from "@/lib/businessIds";
 import { getProjectProfitFallback } from "@/lib/projectProfitFallback";
 import { downloadCorporateClientProfilePdf } from "@/lib/clientProfilePdf";
 import { resolveUserAccountStatus } from "@/lib/userAccountStatus";
@@ -297,7 +298,8 @@ function toSortedDateValue(...values: Array<Date | null | undefined>) {
 
 function formatInvestmentReference(id: string) {
   const raw = String(id || "").trim();
-  if (!raw) return EMPTY_VALUE;
+  if (!raw || raw === EMPTY_VALUE) return EMPTY_VALUE;
+  if (raw.includes("-")) return raw.toUpperCase();
   const compact = raw.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
   return `INV-${(compact || raw.toUpperCase()).slice(0, 8)}`;
 }
@@ -1660,7 +1662,7 @@ export default function ClientProfile() {
           id: inv.id,
           projectId,
           projectTitle: projectName(inv.projectId, projectsMap),
-          referenceLabel: formatInvestmentReference(inv.id),
+          referenceLabel: formatInvestmentReference(getInvestmentBusinessId(inv) || EMPTY_VALUE),
           bucketKey,
           bucketLabel: bucketMeta.shortTitle,
           statusLabel: statusBadge.label,

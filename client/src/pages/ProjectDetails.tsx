@@ -42,10 +42,21 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { doc, getDoc, collection, serverTimestamp } from "firebase/firestore";
+import {
+  doc,
+  getDoc,
+  collection,
+  runTransaction,
+  serverTimestamp,
+} from "firebase/firestore";
 import { db } from "@/_core/firebase";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { AUDIT_ACTIONS, auditedSetDoc, buildAuditSource } from "@/lib/auditLog";
+import {
+  AUDIT_ACTIONS,
+  buildAuditSource,
+  runAuditedOperation,
+} from "@/lib/auditLog";
+import { getProjectBusinessId, reserveNextBusinessId } from "@/lib/businessIds";
 import {
   formatCurrencyEN,
   formatNumberEN,
@@ -238,10 +249,10 @@ function isMilestoneCurrent(status: any) {
     v === "active" ||
     v === "in progress" ||
     v === "ongoing" ||
-    v.includes("ط¬ط§ط±") ||
-    v.includes("ظ‚ظٹط¯") ||
-    v.includes("ط­ط§ظ„ظٹ") ||
-    v.includes("طھظ†ظپظٹط°")
+    v.includes("جاري") ||
+    v.includes("قيد") ||
+    v.includes("حالي") ||
+    v.includes("تنفيذ")
   );
 }
 
@@ -739,6 +750,7 @@ export default function ProjectDetails() {
   const projectTitle = project?.titleAr || project?.title || "—";
   const projectLocation = project?.locationAr || project?.location || "";
   const completedStatusLabel = "مكتمل";
+  const projectBusinessId = getProjectBusinessId(project);
   const hasVipTag =
     Boolean(project?.vipOnly) ||
     Boolean(project?.isVip) ||
@@ -768,10 +780,10 @@ export default function ProjectDetails() {
       [
         typeLabel ? `اندرج المشروع ضمن فئة ${typeLabel}.` : "",
         projectLocation ? `تم تنفيذ المشروع في ${projectLocation}.` : "",
-        project?.issueNumber ? `حمل المشروع الرقم #${project.issueNumber}.` : "",
+        projectBusinessId ? `حمل المشروع الرقم ${projectBusinessId}.` : "",
         projectEndDate ? `اكتمل المشروع في ${formatProjectDate(projectEndDate)}.` : "",
       ].filter(Boolean),
-    [project?.issueNumber, projectEndDate, projectLocation, typeLabel]
+    [projectBusinessId, projectEndDate, projectLocation, typeLabel]
   );
 
   const completedResults = useMemo(() => {
@@ -854,13 +866,13 @@ export default function ProjectDetails() {
         ? toPastTenseNarrative(project.paymentScheduleAr)
         : "",
       project?.risksAr ? toPastTenseNarrative(project.risksAr) : "",
-      project?.issueNumber
-        ? `تم حفظ المشروع تحت الرقم المرجعي #${project.issueNumber} ضمن سجل المشاريع المكتملة.`
+      projectBusinessId
+        ? `تم حفظ المشروع تحت الرقم المرجعي ${projectBusinessId} ضمن سجل المشاريع المكتملة.`
         : "",
     ].filter(Boolean);
 
     return notes.slice(0, 3);
-  }, [project?.issueNumber, project?.paymentScheduleAr, project?.risksAr]);
+  }, [projectBusinessId, project?.paymentScheduleAr, project?.risksAr]);
 
   const completionContent = useMemo(() => {
     const raw = project?.completionContent;
@@ -1124,9 +1136,7 @@ export default function ProjectDetails() {
         updatedAt: serverTimestamp(),
       };
 
-      await auditedSetDoc({
-        ref: requestRef,
-        data: payload,
+      const requestBusinessId = await runAuditedOperation<string>({
         action: AUDIT_ACTIONS.REQUEST_CREATED,
         category: "request",
         entityType: "request",
@@ -1140,14 +1150,31 @@ export default function ProjectDetails() {
           projectId: String(project?.id || projectId || ""),
           userId: user.uid,
         },
-        message: `Created ${requestType} ${requestRef.id}`,
-        meta: {
+        message: ({ result }) => `Created ${requestType} ${result}`,
+        meta: ({ result }) => ({
           projectName: project?.titleAr || project?.title || null,
           amount: requireAmount ? amount : null,
-          requestCode: requestRef.id,
+          requestCode: result,
           requestType,
-        },
+        }),
+        targets: [{ ref: requestRef, entityType: "request" }],
         ignoreFields: ["updatedAt"],
+        execute: async () =>
+          runTransaction(db, async (tx) => {
+            const businessId = await reserveNextBusinessId(tx, "requests");
+            tx.set(requestRef, {
+              ...payload,
+              businessId,
+            });
+            return businessId;
+          }),
+      });
+      setFormMessage({
+        type: "success",
+        text:
+          nextSuccessMode === "investment"
+            ? `تم إرسال الطلب تحت الرقم ${requestBusinessId}.`
+            : `تم تسجيل الاهتمام تحت الرقم ${requestBusinessId}.`,
       });
 
       setSuccessMode(nextSuccessMode);
@@ -1305,9 +1332,9 @@ export default function ProjectDetails() {
                   </Badge>
                 ) : null}
 
-                {project?.issueNumber ? (
+                {projectBusinessId ? (
                   <Badge className="rounded-full border border-white/15 bg-black/20 px-4 py-2 text-white/90 backdrop-blur-sm">
-                    #{project.issueNumber}
+                    {projectBusinessId}
                   </Badge>
                 ) : null}
               </div>
@@ -1352,7 +1379,7 @@ export default function ProjectDetails() {
                 <div className="rounded-[28px] border border-white/12 bg-white/10 p-5 backdrop-blur">
                   <div className="text-sm text-white/58">رقم المشروع</div>
                   <div className="mt-3 text-2xl font-semibold text-white">
-                    {project?.issueNumber ? `#${project.issueNumber}` : "—"}
+                    {projectBusinessId || "—"}
                   </div>
                 </div>
 
@@ -1631,9 +1658,9 @@ export default function ProjectDetails() {
                 </Badge>
               )}
 
-              {project.issueNumber && (
+              {projectBusinessId && (
                 <Badge className="rounded-full border border-white/15 bg-black/20 px-4 py-2 text-white/90 backdrop-blur-sm">
-                  #{project.issueNumber}
+                  {projectBusinessId}
                 </Badge>
               )}
             </div>
@@ -1779,7 +1806,7 @@ export default function ProjectDetails() {
                   <div className="text-sm text-white/55">الخلاصة التنفيذية</div>
                   <p className="mt-4 text-lg leading-8 text-white/88">
                     {overviewContent.lead ||
-                      "لا توجد مقدمة تفصيلية متاحة لهذا المشروع حالياً."}
+                      "لا توجد مقدمة تفصيلية متاحة لهذا المشروع حاليًا."}
                   </p>
                 </div>
 

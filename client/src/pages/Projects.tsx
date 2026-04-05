@@ -55,6 +55,7 @@ import {
 } from "firebase/firestore";
 import type { FirestoreError } from "firebase/firestore";
 import { db } from "@/_core/firebase";
+import { getProjectBusinessId } from "@/lib/businessIds";
 import {
   formatCurrencyEN,
   formatNumberEN,
@@ -105,6 +106,7 @@ type ProjectDoc = {
   projectType?: string;
   status?: string;
 
+  businessId?: string;
   issueNumber?: string;
 
   coverImage?: string;
@@ -736,7 +738,7 @@ export default function ProjectsPage() {
       list = list.filter(p => {
         const t = (p.titleAr || p.titleEn || "").toLowerCase();
         const l = (p.locationAr || p.locationEn || "").toLowerCase();
-        const i = (p.issueNumber || "").toLowerCase();
+        const i = getProjectBusinessId(p).toLowerCase();
         return t.includes(q) || l.includes(q) || i.includes(q);
       });
     }
@@ -965,9 +967,9 @@ export default function ProjectsPage() {
               </Badge>
             </div>
 
-            {project.issueNumber ? (
+            {getProjectBusinessId(project) ? (
               <Badge className="rounded-full border border-white/16 bg-black/25 px-3 py-1 text-[11px] font-semibold text-white/88 backdrop-blur">
-                #{project.issueNumber}
+                {getProjectBusinessId(project)}
               </Badge>
             ) : null}
           </div>
@@ -1135,9 +1137,9 @@ export default function ProjectsPage() {
               ) : null}
             </div>
 
-            {p.issueNumber ? (
+            {getProjectBusinessId(p) ? (
               <Badge className="rounded-full border border-white/15 bg-black/25 px-2.5 py-0.5 text-[10px] text-white backdrop-blur-md md:px-3 md:py-1 md:text-xs">
-                #{p.issueNumber}
+                {getProjectBusinessId(p)}
               </Badge>
             ) : null}
           </div>
@@ -1584,9 +1586,9 @@ export default function ProjectsPage() {
               </Badge>
             )}
 
-            {p.issueNumber && (
+            {getProjectBusinessId(p) && (
               <Badge variant="secondary" className="bg-white/80">
-                #{p.issueNumber}
+                {getProjectBusinessId(p)}
               </Badge>
             )}
           </div>

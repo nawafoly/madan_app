@@ -50,6 +50,7 @@ import {
   Timestamp,
 } from "firebase/firestore";
 import { db } from "@/_core/firebase";
+import { getProjectBusinessId } from "@/lib/businessIds";
 import { formatCurrencyEN, formatNumberEN } from "@/lib/formatters";
 import { cn } from "@/lib/utils";
 
@@ -111,6 +112,7 @@ type ProjectDoc = {
   // meta
   projectType?: string;
   status?: string; // draft/published/closed/completed...
+  businessId?: string;
   issueNumber?: string;
 
   locationAr?: string;
@@ -286,7 +288,7 @@ export default function ProjectsManagement() {
         p.titleEn,
         p.locationAr,
         p.locationEn,
-        p.issueNumber,
+        getProjectBusinessId(p),
         p.projectType,
         p.status,
       ]
@@ -619,9 +621,9 @@ export default function ProjectsManagement() {
                       </div>
                     </div>
 
-                    {p.issueNumber && (
+                    {getProjectBusinessId(p) && (
                       <div className="text-[11px] font-medium tracking-[0.08em] text-slate-500">
-                        رقم الإصدار: #{p.issueNumber}
+                        رقم المشروع: {getProjectBusinessId(p)}
                       </div>
                     )}
                   </CardHeader>

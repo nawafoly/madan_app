@@ -1,10 +1,9 @@
-// client/src/components/Header.tsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
-import { Button } from "@/components/ui/button";
-import { Search, Globe, LogOut } from "lucide-react";
+import { Globe, LogOut, Search } from "lucide-react";
 
 import { NotificationBell } from "@/components/NotificationBell";
+import { Button } from "@/components/ui/button";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useLanguage } from "@/contexts/LanguageContext";
 
@@ -12,24 +11,22 @@ export default function Header() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { language, toggleLanguage } = useLanguage();
-
   const { user, logout } = useAuth();
   const [location, setLocation] = useLocation();
 
+  const currentPath = (location || "/").split("?")[0];
   const isAuthenticated = !!user;
+  const isLoginRoute = currentPath === "/login";
 
-  // ✅ صفحات Hero (النافبار يكون Overlay وما نحتاج Spacer)
   const isHeroRoute = useMemo(() => {
-    const path = (location || "/").split("?")[0];
     return (
-      path === "/" ||
-      path === "/about" ||
-      path === "/projects" ||
-      path.startsWith("/projects/")
+      currentPath === "/" ||
+      currentPath === "/about" ||
+      currentPath === "/projects" ||
+      currentPath.startsWith("/projects/")
     );
-  }, [location]);
+  }, [currentPath]);
 
-  // ✅ Spacer only for non-hero pages
   const shouldReserveSpace = !isHeroRoute;
 
   useEffect(() => {
@@ -78,24 +75,19 @@ export default function Header() {
 
   const navBtnClass = "h-10 px-4 rounded-full text-[14px] font-semibold";
 
-  // ✅ Active detector
   const activeHref = useMemo(() => {
-    const path = (location || "/").split("?")[0];
-
     const isActive = (href: string) => {
-      if (href === "/") return path === "/";
-      return path === href || path.startsWith(href + "/");
+      if (href === "/") return currentPath === "/";
+      return currentPath === href || currentPath.startsWith(href + "/");
     };
 
-    const found = navLinks.find(l => isActive(l.href));
+    const found = navLinks.find(link => isActive(link.href));
     return found?.href ?? "";
-  }, [location, navLinks]);
+  }, [currentPath, navLinks]);
 
-  // ✅ refs for "bulge position"
   const innerRef = useRef<HTMLDivElement | null>(null);
   const linkRefs = useRef<Record<string, HTMLSpanElement | null>>({});
 
-  // ✅ move the bulge above the active link + mark hasActive
   useEffect(() => {
     const inner = innerRef.current;
     if (!inner) return;
@@ -105,7 +97,7 @@ export default function Header() {
 
       if (!el) {
         inner.dataset.hasActive = "false";
-        inner.style.setProperty("--active-x", `50%`);
+        inner.style.setProperty("--active-x", "50%");
         return;
       }
 
@@ -128,18 +120,16 @@ export default function Header() {
 
   return (
     <>
-      {/* ✅ Floating Navbar (always fixed via .rsg-nav CSS) */}
       <header className={`rsg-nav ${isScrolled ? "is-scrolled" : ""}`}>
         <div className="container">
           <div ref={innerRef} className="rsg-nav__inner rsg-nav__inner--bulge">
-            {/* Left (Icons) */}
             <div className="rsg-nav__slot rsg-nav__slot--left flex items-center gap-1">
               <button
                 type="button"
                 className="rsg-burger lg:hidden"
                 aria-label="Open menu"
                 aria-expanded={isMobileMenuOpen}
-                onClick={() => setIsMobileMenuOpen(v => !v)}
+                onClick={() => setIsMobileMenuOpen(value => !value)}
               >
                 <span />
                 <span />
@@ -152,7 +142,7 @@ export default function Header() {
                 className="hidden md:inline-flex"
                 aria-label="Search"
               >
-                <Search className="w-5 h-5" />
+                <Search className="h-5 w-5" />
               </Button>
 
               <Button
@@ -163,17 +153,17 @@ export default function Header() {
                 aria-label="Toggle language"
                 title={language === "ar" ? "English" : "العربية"}
               >
-                <Globe className="w-5 h-5" />
+                <Globe className="h-5 w-5" />
               </Button>
 
-              {isAuthenticated && <NotificationBell />}
+              {isAuthenticated ? <NotificationBell /> : null}
             </div>
 
-            {/* Center (Links + Logo) */}
             <nav className="rsg-nav__links rsg-nav__slot rsg-nav__slot--center">
               <div className="flex items-center justify-center gap-5">
                 {linksLeft.map(link => {
                   const isActive = activeHref === link.href;
+
                   return (
                     <Link key={link.href} href={link.href}>
                       <span
@@ -198,6 +188,7 @@ export default function Header() {
 
                 {linksRight.map(link => {
                   const isActive = activeHref === link.href;
+
                   return (
                     <Link key={link.href} href={link.href}>
                       <span
@@ -214,18 +205,19 @@ export default function Header() {
               </div>
             </nav>
 
-            {/* Right (CTA) */}
             <div className="rsg-nav__slot rsg-nav__slot--right flex items-center gap-2">
               {!isAuthenticated ? (
-                <Link href="/login">
-                  <Button
-                    className={`hidden md:inline-flex rsg-cta ${navBtnClass}`}
-                  >
-                    {language === "ar" ? "تسجيل الدخول" : "Login"}
-                  </Button>
-                </Link>
+                !isLoginRoute ? (
+                  <Link href="/login">
+                    <Button
+                      className={`hidden md:inline-flex rsg-cta ${navBtnClass}`}
+                    >
+                      {language === "ar" ? "تسجيل الدخول" : "Login"}
+                    </Button>
+                  </Link>
+                ) : null
               ) : (
-                <div className="hidden md:flex items-center gap-2">
+                <div className="hidden items-center gap-2 md:flex">
                   <Link href={dashboardHref}>
                     <Button className={`rsg-cta ${navBtnClass}`}>
                       {language === "ar" ? "لوحة التحكم" : "Dashboard"}
@@ -237,7 +229,7 @@ export default function Header() {
                     onClick={handleLogout}
                     className={navBtnClass}
                   >
-                    <LogOut className="w-4 h-4 ml-2" />
+                    <LogOut className="ml-2 h-4 w-4" />
                     {language === "ar" ? "خروج" : "Logout"}
                   </Button>
                 </div>
@@ -245,12 +237,12 @@ export default function Header() {
             </div>
           </div>
 
-          {/* Mobile dropdown */}
-          {isMobileMenuOpen && (
-            <div className="mt-3 rsg-card rsg-card--tight p-4 lg:hidden animate-slide-up">
+          {isMobileMenuOpen ? (
+            <div className="mt-3 animate-slide-up p-4 lg:hidden rsg-card rsg-card--tight">
               <nav className="flex flex-col gap-2">
                 {navLinks.map(link => {
                   const isActive = activeHref === link.href;
+
                   return (
                     <Link key={link.href} href={link.href}>
                       <span
@@ -264,7 +256,7 @@ export default function Header() {
                   );
                 })}
 
-                <div className="mt-3 pt-3 border-t border-border flex flex-col gap-3">
+                <div className="mt-3 flex flex-col gap-3 border-t border-border pt-3">
                   <Button
                     variant="outline"
                     onClick={() => {
@@ -276,14 +268,16 @@ export default function Header() {
                   </Button>
 
                   {!isAuthenticated ? (
-                    <Link href="/login">
-                      <Button
-                        className={`w-full rsg-cta ${navBtnClass}`}
-                        onClick={closeMobile}
-                      >
-                        {language === "ar" ? "تسجيل الدخول" : "Login"}
-                      </Button>
-                    </Link>
+                    !isLoginRoute ? (
+                      <Link href="/login">
+                        <Button
+                          className={`w-full rsg-cta ${navBtnClass}`}
+                          onClick={closeMobile}
+                        >
+                          {language === "ar" ? "تسجيل الدخول" : "Login"}
+                        </Button>
+                      </Link>
+                    ) : null
                   ) : (
                     <>
                       <Link href={dashboardHref}>
@@ -300,7 +294,7 @@ export default function Header() {
                         className={`w-full ${navBtnClass}`}
                         onClick={handleLogout}
                       >
-                        <LogOut className="w-4 h-4 ml-2" />
+                        <LogOut className="ml-2 h-4 w-4" />
                         {language === "ar" ? "تسجيل الخروج" : "Logout"}
                       </Button>
                     </>
@@ -308,14 +302,13 @@ export default function Header() {
                 </div>
               </nav>
             </div>
-          )}
+          ) : null}
         </div>
       </header>
 
-      {/* ✅ Spacer */}
-      {shouldReserveSpace && (
+      {shouldReserveSpace ? (
         <div aria-hidden className="h-[var(--site-header-offset)]" />
-      )}
+      ) : null}
     </>
   );
 }

@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Link } from "wouter";
 import { TrendingUp, Clock, Users, MapPin } from "lucide-react";
+import { getProjectBusinessId } from "@/lib/businessIds";
 import {
   formatCurrencyEN,
   formatNumberEN,
@@ -23,6 +24,7 @@ export type ProjectCardModel = {
 
   projectType: "sukuk" | "land_development" | "vip_exclusive" | string;
 
+  businessId?: string;
   issueNumber?: string | number;
 
   coverImage?: string | null;
@@ -44,6 +46,7 @@ interface ProjectCardProps {
 }
 
 export default function ProjectCard({ project }: ProjectCardProps) {
+  const projectReference = getProjectBusinessId(project);
   const progress = project.targetAmount
     ? (Number(project.currentAmount || 0) / Number(project.targetAmount)) * 100
     : 0;
@@ -103,11 +106,11 @@ export default function ProjectCard({ project }: ProjectCardProps) {
         </div>
 
         {/* Issue Number */}
-        {project.issueNumber != null && (
+        {projectReference && (
           <div className="absolute top-3 right-3">
             <div className="bg-black/70 backdrop-blur-sm px-3 py-1 rounded-full">
-                <span className="text-white text-sm font-semibold">
-                #{normalizeEnglishDigits(project.issueNumber)}
+              <span className="text-white text-sm font-semibold">
+                {normalizeEnglishDigits(projectReference)}
               </span>
             </div>
           </div>

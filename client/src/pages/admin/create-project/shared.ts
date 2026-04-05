@@ -380,6 +380,23 @@ export function cleanStr(v: unknown) {
   return String(v ?? "").trim();
 }
 
+export function serializeProjectEditorSnapshot(snapshot: ProjectEditorSnapshot) {
+  return JSON.stringify({
+    formData: snapshot.formData,
+    highlightRows: snapshot.highlightRows,
+    attachmentRows: snapshot.attachmentRows.map((row) => ({
+      name: row.name,
+      url: row.url,
+      externalUrl: row.externalUrl,
+    })),
+    milestoneRows: snapshot.milestoneRows,
+    faqRows: snapshot.faqRows,
+    completionResultRows: snapshot.completionResultRows,
+    completionOutputRows: snapshot.completionOutputRows,
+    completionFinalNoteRows: snapshot.completionFinalNoteRows,
+  });
+}
+
 export function toNumOrZero(v: unknown) {
   const n = Number(cleanStr(v).replace(/,/g, ""));
   return Number.isFinite(n) ? n : 0;
@@ -624,7 +641,7 @@ export function isSectionComplete(
     case "basic":
       return hasValue(formData.titleAr) && hasValue(formData.descriptionAr);
     case "details":
-      return hasValue(formData.issueNumber) && hasValue(formData.locationAr);
+      return hasValue(formData.locationAr);
     case "media":
       return hasValue(formData.coverImage);
     case "highlights":
@@ -737,6 +754,7 @@ export type CreateProjectUiProps = {
   hasUploadingAttachment: boolean;
   highlightRows: string[];
   isBusy: boolean;
+  isDirty?: boolean;
   milestoneRows: MilestoneRow[];
   progressWeightsTotal: number;
   requiredChecklist: Array<{ label: string; ready: boolean }>;
@@ -774,4 +792,15 @@ export type CreateProjectUiProps = {
   sidebarDescription?: string;
   workspaceIdLabel?: ReactNode;
   workspaceIdValue?: ReactNode;
+};
+
+export type ProjectEditorSnapshot = {
+  formData: FormDataState;
+  highlightRows: string[];
+  attachmentRows: AttachmentRow[];
+  milestoneRows: MilestoneRow[];
+  faqRows: FaqRow[];
+  completionResultRows: string[];
+  completionOutputRows: CompletionOutputRow[];
+  completionFinalNoteRows: string[];
 };

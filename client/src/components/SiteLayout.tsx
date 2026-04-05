@@ -1,16 +1,22 @@
 import type { ReactNode } from "react";
-import Header from "@/components/Header";
+import { useLocation } from "wouter";
+
 import ContactCTA from "@/components/ContactCTA";
 import Footer from "@/components/Footer";
+import Header from "@/components/Header";
 
 export default function SiteLayout({ children }: { children: ReactNode }) {
+  const [location] = useLocation();
+  const currentPath = (location || "/").split("?")[0];
+  const shouldShowContactCTA = currentPath !== "/login";
+
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="flex min-h-screen flex-col">
       <Header />
 
       <div className="flex-1">{children}</div>
 
-      <ContactCTA />
+      {shouldShowContactCTA ? <ContactCTA /> : null}
       <Footer />
     </div>
   );

@@ -16,6 +16,10 @@ import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { db } from "@/_core/firebase";
 import { AUDIT_ACTIONS, auditedUpdateDoc, buildAuditSource } from "@/lib/auditLog";
+import {
+  getInvestmentBusinessId,
+  getProjectBusinessId,
+} from "@/lib/businessIds";
 import { deriveInvestmentStage } from "@/lib/investmentStage";
 import { getInvestmentStageUi } from "@/lib/investmentStageUiMap";
 import {
@@ -627,6 +631,8 @@ export default function InvestmentDetails() {
 
   const status = String(investment?.status || "pending_review");
   const investmentId = String(investment?.id || "").trim();
+  const investmentBusinessId = getInvestmentBusinessId(investment) || "—";
+  const projectBusinessId = getProjectBusinessId(project) || "—";
   const linkedRequestId =
     normalizeLinkId(requestDoc?.id) ||
     normalizeLinkId(investment?.requestId) ||
@@ -1402,8 +1408,8 @@ export default function InvestmentDetails() {
                 </>
               )}
               <InfoRow label="تاريخ الإنشاء" value={investment?.createdAt ? formatDateTimeAR(investment.createdAt) : "—"} />
-              <InfoRow label="Project ID" value={investment?.projectId || "—"} />
-              <InfoRow label="Investment ID" value={investment?.id || "—"} />
+              <InfoRow label="رقم المشروع" value={projectBusinessId} />
+              <InfoRow label="رقم الاستثمار" value={investmentBusinessId} />
 
               <Separator />
 

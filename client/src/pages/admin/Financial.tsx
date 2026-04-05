@@ -70,6 +70,11 @@ import {
   getProjectDisplayTitleById,
 } from "@/lib/projectDisplay";
 import {
+  getContractBusinessId,
+  getInvestmentBusinessId,
+  reserveNextBusinessId,
+} from "@/lib/businessIds";
+import {
   buildR2DownloadUrl,
   listDocumentMetadata,
   pickLatestFileByCategory,
@@ -1704,10 +1709,15 @@ export default function Financial() {
             const contractRef = contractId
               ? doc(db, "contracts", contractId)
               : generatedContractRef;
+            const contractSnap = await tx.get(contractRef);
+            const contractBusinessId =
+              getContractBusinessId(contractSnap.data() as any) ||
+              (await reserveNextBusinessId(tx, "contracts"));
             const now = serverTimestamp();
             const invUpdate: any = {
               status: "pending_contract",
               contractStatus: "draft",
+              contractBusinessId,
               approvedAmount: amount,
               approvedAt: now,
               finalizedAt: null,
@@ -1735,7 +1745,9 @@ export default function Financial() {
             tx.set(
               contractRef,
               {
+                businessId: contractBusinessId,
                 investmentId: inv.id,
+                investmentBusinessId: getInvestmentBusinessId(invData) || null,
                 projectId,
                 projectTitle: String(
                   proj.titleAr || proj.title || invData.projectTitle || ""

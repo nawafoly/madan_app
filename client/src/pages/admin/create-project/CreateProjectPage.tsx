@@ -1,8 +1,13 @@
 ﻿import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useLocation } from "wouter";
-import { collection, doc, serverTimestamp } from "firebase/firestore";
+import { collection, doc, runTransaction, serverTimestamp } from "firebase/firestore";
 import { db } from "@/_core/firebase";
-import { AUDIT_ACTIONS, auditedSetDoc, buildAuditSource } from "@/lib/auditLog";
+import {
+  AUDIT_ACTIONS,
+  buildAuditSource,
+  runAuditedOperation,
+} from "@/lib/auditLog";
+import { reserveNextBusinessId } from "@/lib/businessIds";
 import { uploadInvestmentDocument } from "@/lib/documentUploadService";
 import DashboardLayout from "@/components/DashboardLayout";
 import { toast } from "sonner";
@@ -23,6 +28,7 @@ import {
   parseFaqRows,
   parseMilestoneRows,
   projectTypeLabels,
+  serializeProjectEditorSnapshot,
   splitLines,
   statusLabels,
   toNumOrZero,
@@ -45,7 +51,7 @@ export default function CreateProjectPage() {
     descriptionEn: "",
     projectType: "sukuk",
     status: "draft",
-    issueNumber: `MAE-${Date.now().toString().slice(-6)}`,
+    issueNumber: "",
     locationAr: "",
     locationEn: "",
     coverImage: "",
@@ -231,6 +237,71 @@ export default function CreateProjectPage() {
     ],
     [formData.coverImage, formData.descriptionAr, formData.locationAr, formData.titleAr]
   );
+  const currentSnapshot = useMemo(
+    () =>
+      serializeProjectEditorSnapshot({
+        formData,
+        highlightRows,
+        attachmentRows,
+        milestoneRows,
+        faqRows,
+        completionResultRows,
+        completionOutputRows,
+        completionFinalNoteRows,
+      }),
+    [
+      attachmentRows,
+      completionFinalNoteRows,
+      completionOutputRows,
+      completionResultRows,
+      faqRows,
+      formData,
+      highlightRows,
+      milestoneRows,
+    ]
+  );
+  const initialSnapshot = useMemo(
+    () =>
+      serializeProjectEditorSnapshot({
+        formData: {
+          titleAr: "",
+          titleEn: "",
+          descriptionAr: "",
+          descriptionEn: "",
+          projectType: "sukuk",
+          status: "draft",
+          issueNumber: "",
+          locationAr: "",
+          locationEn: "",
+          coverImage: "",
+          galleryText: "",
+          targetAmount: "",
+          currentAmount: "0",
+          minInvestment: "",
+          annualReturn: "",
+          duration: "",
+          investorsCount: "0",
+          progressMode: "hybrid",
+          progressFundingWeight: "60",
+          progressMilestonesWeight: "40",
+          featured: "false",
+          isVip: "false",
+          vipTier: "none",
+          completionOverviewAr: "",
+          completionSummaryAr: "",
+          completionGalleryText: "",
+        },
+        highlightRows: [""],
+        attachmentRows: [newAttachmentRow()],
+        milestoneRows: [newMilestoneRow()],
+        faqRows: [newFaqRow()],
+        completionResultRows: [""],
+        completionOutputRows: [newCompletionOutputRow()],
+        completionFinalNoteRows: [""],
+      }),
+    []
+  );
+  const isDirty = currentSnapshot !== initialSnapshot;
 
   useEffect(() => {
     const normalizedActiveSection = normalizeProjectBuilderSectionId(activeSection);
@@ -243,67 +314,6 @@ export default function CreateProjectPage() {
       setActiveSection(visibleSections[0]?.id ?? "basic");
     }
   }, [activeSection, visibleSections]);
-
-  useEffect(() => {
-    const sectionElements = visibleSections.map((section) =>
-      document.getElementById(section.id)
-    ).filter((element): element is HTMLElement => Boolean(element));
-    if (!sectionElements.length) return;
-
-    let frameId = 0;
-
-    const updateActiveSectionFromScroll = () => {
-      frameId = 0;
-
-      const navElement = document.querySelector<HTMLElement>("[data-project-section-nav]");
-      const probeY = navElement
-        ? navElement.getBoundingClientRect().bottom + 24
-        : Math.min(window.innerHeight * 0.24, 220);
-
-      let nextActiveSection = sectionElements[0]?.id ?? visibleSections[0]?.id ?? "basic";
-
-      for (const section of sectionElements) {
-        if (section.getBoundingClientRect().top <= probeY) {
-          nextActiveSection = section.id;
-          continue;
-        }
-        break;
-      }
-
-      setActiveSection((prev) => (prev === nextActiveSection ? prev : nextActiveSection));
-    };
-
-    const scheduleActiveSectionUpdate = () => {
-      if (frameId) return;
-      frameId = window.requestAnimationFrame(updateActiveSectionFromScroll);
-    };
-
-    const navElement = document.querySelector<HTMLElement>("[data-project-section-nav]");
-    const resizeObserver =
-      typeof ResizeObserver !== "undefined"
-        ? new ResizeObserver(() => {
-            scheduleActiveSectionUpdate();
-          })
-        : null;
-
-    window.addEventListener("scroll", scheduleActiveSectionUpdate, { passive: true });
-    window.addEventListener("resize", scheduleActiveSectionUpdate);
-
-    resizeObserver?.observe(document.body);
-    navElement ? resizeObserver?.observe(navElement) : null;
-    sectionElements.forEach((element) => resizeObserver?.observe(element));
-
-    scheduleActiveSectionUpdate();
-
-    return () => {
-      if (frameId) {
-        window.cancelAnimationFrame(frameId);
-      }
-      window.removeEventListener("scroll", scheduleActiveSectionUpdate);
-      window.removeEventListener("resize", scheduleActiveSectionUpdate);
-      resizeObserver?.disconnect();
-    };
-  }, [visibleSections]);
 
   const handleAttachmentFileUpload = async (index: number, file?: File | null) => {
     if (!file) return;
@@ -506,7 +516,7 @@ export default function CreateProjectPage() {
     const descEn = cleanStr(formData.descriptionEn);
     const locAr = cleanStr(formData.locationAr);
     const locEn = cleanStr(formData.locationEn);
-    const issueNumber = cleanStr(formData.issueNumber) || `MAE-${Date.now().toString().slice(-6)}`;
+    const issueNumber = cleanStr(formData.issueNumber);
     const isVip = formData.isVip === "true" || formData.projectType === "vip_exclusive";
 
     try {
@@ -551,24 +561,33 @@ export default function CreateProjectPage() {
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       };
-      await auditedSetDoc({
-        ref: projectRef,
-        data: payload,
+      const businessId = await runAuditedOperation<string>({
         action: AUDIT_ACTIONS.PROJECT_CREATED,
         category: "project",
         entityType: "project",
         source: buildAuditSource({ area: "admin", page: "CreateProject", method: "create" }),
         relatedIds: { projectId: draftProjectId },
-        message: `Created project ${titleAr || titleEn || draftProjectId}`,
-        meta: {
-          projectName: titleAr || titleEn || draftProjectId,
-          issueNumber,
+        message: ({ result }) => `Created project ${result}`,
+        meta: ({ result }) => ({
+          businessId: result,
+          projectName: titleAr || titleEn || result,
+          issueNumber: issueNumber || null,
           status: formData.status,
           projectType: formData.projectType,
-        },
+        }),
+        targets: [{ ref: projectRef, entityType: "project" }],
         ignoreFields: ["updatedAt"],
+        execute: async () =>
+          runTransaction(db, async (tx) => {
+            const businessId = await reserveNextBusinessId(tx, "projects");
+            tx.set(projectRef, {
+              ...payload,
+              businessId,
+            });
+            return businessId;
+          }),
       });
-      toast.success("تم إنشاء المشروع بنجاح");
+      toast.success(`تم إنشاء المشروع بنجاح تحت الرقم ${businessId}`);
       setLocation("/admin/projects");
     } catch (error) {
       console.error(error);
@@ -610,6 +629,7 @@ export default function CreateProjectPage() {
         hasUploadingAttachment={hasUploadingAttachment}
         highlightRows={highlightRows}
         isBusy={isBusy}
+        isDirty={isDirty}
         milestoneRows={milestoneRows}
         progressWeightsTotal={progressWeightsTotal}
         requiredChecklist={requiredChecklist}
@@ -627,6 +647,8 @@ export default function CreateProjectPage() {
         setMilestoneRows={setMilestoneRows}
         saving={saving}
         totalAssets={totalAssets}
+        workspaceIdLabel="المعرف التجاري"
+        workspaceIdValue="سيُولّد عند الحفظ"
       />
     </DashboardLayout>
   );
