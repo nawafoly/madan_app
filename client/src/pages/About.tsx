@@ -1,28 +1,20 @@
-// client/src/pages/About.tsx
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "wouter";
+import { Button } from "@/components/ui/button";
 import {
+  ArrowRight,
+  Award,
   Building2,
-  Users,
-  TrendingUp,
-  Shield,
+  CheckCircle2,
+  Landmark,
   ScanSearch,
   ShieldCheck,
-  Award,
-  Banknote,
+  TrendingUp,
+  type LucideIcon,
 } from "lucide-react";
 import { db } from "@/_core/firebase";
 import { doc, getDoc } from "firebase/firestore";
 
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
-
-/* =========================
-   Types
-========================= */
 type AboutStats = {
   projects: string;
   investors: string;
@@ -33,20 +25,103 @@ type AboutStats = {
 type ParsedStat = {
   value: number;
   suffix: string;
+  decimals: number;
 };
 
+type FeatureBlock = {
+  title: string;
+  description: string;
+  icon: LucideIcon;
+};
+
+type FrameworkBlock = {
+  eyebrow: string;
+  title: string;
+  description: string;
+  icon: LucideIcon;
+};
+
+type SectionIntroProps = {
+  eyebrow: string;
+  title: string;
+  description: string;
+  centered?: boolean;
+  invert?: boolean;
+};
+
+const HERO_POINTS = [
+  "فرص مدروسة بعناية",
+  "حوكمة واضحة للمعلومات",
+  "متابعة تشغيلية أكثر اتساقًا",
+];
+
+const PLATFORM_STRENGTHS: FeatureBlock[] = [
+  {
+    title: "فحص دقيق للفرص",
+    description:
+      "نقيّم كل فرصة استثمارية ضمن معايير واضحة توازن بين الجاذبية الاستثمارية والانضباط المهني.",
+    icon: ScanSearch,
+  },
+  {
+    title: "وضوح في العرض",
+    description:
+      "نعرض البيانات الأساسية والمالية والتشغيلية بصيغة منظمة تساعد على القراءة السريعة واتخاذ القرار.",
+    icon: ShieldCheck,
+  },
+  {
+    title: "تنفيذ ومتابعة",
+    description:
+      "لا يتوقف دورنا عند عرض الفرصة، بل يمتد إلى المتابعة المستمرة وبناء صورة أوضح لمسار الاستثمار.",
+    icon: Award,
+  },
+];
+
+const COMPANY_FRAMEWORK: FrameworkBlock[] = [
+  {
+    eyebrow: "الرؤية",
+    title: "حضور مؤسسي يبني الثقة",
+    description:
+      "أن تكون «معدن» مرجعًا أوضح للفرص العقارية، بمنهج يعزز الثقة ويختصر الطريق إلى القرار.",
+    icon: Landmark,
+  },
+  {
+    eyebrow: "الرسالة",
+    title: "تجربة استثمارية أكثر وضوحًا",
+    description:
+      "تقديم فرص عقارية مدروسة ضمن تجربة رقمية متسقة، تنظّم المعلومات وتدعم قراءة المشروع من جميع جوانبه.",
+    icon: Building2,
+  },
+  {
+    eyebrow: "المنهج",
+    title: "اختيار وتحليل ثم متابعة",
+    description:
+      "نعتمد تسلسلًا واضحًا يبدأ بدراسة الفرصة، ثم بناء عرض منظم لها، ثم متابعة مستمرة لما بعد الإطلاق.",
+    icon: TrendingUp,
+  },
+];
+
 function parseStat(input: string): ParsedStat {
-  const s = String(input ?? "").trim();
-  const m = s.match(/(\d+(?:\.\d+)?)/);
-  const num = m ? Number(m[1]) : 0;
-  const suffix = m ? s.slice((m.index ?? 0) + m[0].length).trim() : "";
-  return { value: Number.isFinite(num) ? num : 0, suffix };
+  const value = String(input ?? "").trim();
+  const match = value.match(/(\d+(?:\.\d+)?)/);
+  const numericPart = match?.[1] ?? "0";
+  const decimals = numericPart.includes(".")
+    ? numericPart.split(".")[1]?.length ?? 0
+    : 0;
+
+  return {
+    value: Number.isFinite(Number(numericPart)) ? Number(numericPart) : 0,
+    suffix: match
+      ? value.slice((match.index ?? 0) + match[0].length).trim()
+      : "",
+    decimals,
+  };
 }
 
 function formatCount(value: number, decimals = 0) {
-  if (!Number.isFinite(value)) return "0";
-  const fixed = value.toFixed(decimals);
-  return decimals > 0 ? fixed.replace(/\.0+$/, "") : fixed;
+  return value.toLocaleString("en-US", {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
 }
 
 function useCountUp(
@@ -68,265 +143,221 @@ function useCountUp(
     startRef.current = null;
     setCurrent(0);
 
-    const easeOut = (t: number) => 1 - Math.pow(1 - t, 3);
+    const easeOut = (progress: number) => 1 - Math.pow(1 - progress, 3);
 
-    const tick = (ts: number) => {
-      if (startRef.current == null) startRef.current = ts;
-      const elapsed = ts - startRef.current;
-      const t = Math.min(1, elapsed / durationMs);
-      setCurrent(target * easeOut(t));
-      if (t < 1) rafRef.current = requestAnimationFrame(tick);
+    const tick = (timestamp: number) => {
+      if (startRef.current == null) startRef.current = timestamp;
+
+      const elapsed = timestamp - startRef.current;
+      const progress = Math.min(1, elapsed / durationMs);
+      setCurrent(target * easeOut(progress));
+
+      if (progress < 1) {
+        rafRef.current = requestAnimationFrame(tick);
+      }
     };
 
     rafRef.current = requestAnimationFrame(tick);
+
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
-  }, [start, target, durationMs]);
+  }, [durationMs, start, target]);
 
   return formatCount(current, decimals);
 }
 
+function SectionIntro({
+  eyebrow,
+  title,
+  description,
+  centered = false,
+  invert = false,
+}: SectionIntroProps) {
+  return (
+    <div
+      className={`max-w-3xl space-y-4 ${
+        centered ? "mx-auto text-center" : "text-right"
+      }`}
+    >
+      <span
+        className={`inline-flex items-center rounded-full px-4 py-1.5 text-sm font-semibold ${
+          invert
+            ? "bg-white/10 text-white/75 ring-1 ring-white/15"
+            : "bg-[#f7f3ea] text-primary/75 ring-1 ring-[#eadfbe]"
+        }`}
+      >
+        {eyebrow}
+      </span>
+      <h2
+        className={`text-3xl font-semibold leading-tight sm:text-4xl lg:text-[2.8rem] ${
+          invert ? "text-white" : "text-foreground"
+        }`}
+      >
+        {title}
+      </h2>
+      <p
+        className={`text-base leading-8 sm:text-lg ${
+          invert ? "text-white/72" : "text-muted-foreground"
+        }`}
+      >
+        {description}
+      </p>
+    </div>
+  );
+}
+
 export default function About() {
   const [statsData, setStatsData] = useState<AboutStats>({
-    projects: "50+",
+    projects: "15+",
     investors: "500+",
-    annualReturn: "0%",
-    totalInvestment: "2B+",
+    annualReturn: "12%+",
+    totalInvestment: "120M+",
   });
 
-  /* Load Firestore */
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, []);
+
   useEffect(() => {
     (async () => {
       try {
         const snap = await getDoc(doc(db, "settings", "app", "about", "main"));
         if (snap.exists() && snap.data()?.stats) {
-          setStatsData((p) => ({ ...p, ...snap.data()!.stats }));
+          setStatsData(current => ({ ...current, ...snap.data()!.stats }));
         }
-      } catch { }
+      } catch {
+        // Keep defaults if remote stats are unavailable.
+      }
     })();
   }, []);
 
-  const parsed = useMemo(() => {
-    return {
-      p: parseStat(statsData.projects),
-      i: parseStat(statsData.investors),
-      a: parseStat(statsData.annualReturn),
-      t: parseStat(statsData.totalInvestment),
-    };
-  }, [statsData]);
+  const parsedStats = useMemo(
+    () => ({
+      projects: parseStat(statsData.projects),
+      investors: parseStat(statsData.investors),
+      annualReturn: parseStat(statsData.annualReturn),
+      totalInvestment: parseStat(statsData.totalInvestment),
+    }),
+    [statsData]
+  );
 
   const statsRef = useRef<HTMLElement | null>(null);
   const [statsInView, setStatsInView] = useState(false);
 
   useEffect(() => {
     if (!statsRef.current) return;
-    const io = new IntersectionObserver(
-      ([e]) => {
-        if (e.isIntersecting) {
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
           setStatsInView(true);
-          io.disconnect();
+          observer.disconnect();
         }
       },
-      { threshold: 0.35 }
+      { threshold: 0.3 }
     );
-    io.observe(statsRef.current);
-    return () => io.disconnect();
-  }, []);
 
-  const projectsCount = useCountUp(parsed.p.value, statsInView);
-  const investorsCount = useCountUp(parsed.i.value, statsInView);
-  const annualReturnCount = useCountUp(parsed.a.value, statsInView);
-  const totalInvestmentCount = useCountUp(parsed.t.value, statsInView);
+    observer.observe(statsRef.current);
+
+    return () => observer.disconnect();
+  }, []);
 
   const stats = [
     {
       icon: Building2,
       label: "مشروع",
-      animated: projectsCount,
-      suffix: parsed.p.suffix,
+      animated: useCountUp(parsedStats.projects.value, statsInView, {
+        decimals: parsedStats.projects.decimals,
+      }),
+      suffix: parsedStats.projects.suffix,
     },
     {
-      icon: Users,
+      icon: CheckCircle2,
       label: "مستثمر",
-      animated: investorsCount,
-      suffix: parsed.i.suffix,
+      animated: useCountUp(parsedStats.investors.value, statsInView, {
+        decimals: parsedStats.investors.decimals,
+      }),
+      suffix: parsedStats.investors.suffix,
     },
     {
       icon: TrendingUp,
       label: "عائد سنوي",
-      animated: annualReturnCount,
-      suffix: parsed.a.suffix,
+      animated: useCountUp(parsedStats.annualReturn.value, statsInView, {
+        decimals: parsedStats.annualReturn.decimals,
+      }),
+      suffix: parsedStats.annualReturn.suffix,
     },
     {
-      icon: Shield,
-      label: "ريال استثمارات",
-      animated: totalInvestmentCount,
-      suffix: parsed.t.suffix,
+      icon: Landmark,
+      label: "إجمالي الاستثمارات",
+      animated: useCountUp(parsedStats.totalInvestment.value, statsInView, {
+        decimals: parsedStats.totalInvestment.decimals,
+      }),
+      suffix: parsedStats.totalInvestment.suffix,
     },
   ];
-
-  const values = [
-    {
-      title: "الشفافية",
-      description: "نوفر معلومات واضحة ودقيقة عن جميع المشاريع والعوائد المتوقعة.",
-      icon: ScanSearch,
-    },
-    {
-      title: "الأمان",
-      description: "استثمارات متوافقة مع الشريعة ومدروسة بعناية فائقة.",
-      icon: ShieldCheck,
-    },
-    {
-      title: "الاحترافية",
-      description: "فريق متخصص بخبرات في الاستثمار والتطوير العقاري.",
-      icon: Award,
-    },
-    {
-      title: "العوائد المجزية",
-      description: "نركز على فرص تحقق عوائد مستدامة.",
-      icon: Banknote,
-    },
-  ];
-
-  const faqs = [
-    { q: "وش هي منصة معدن؟", a: "منصة استثمار عقاري متوافق مع الشريعة." },
-    { q: "كيف تختارون المشاريع؟", a: "نقيمها من حيث المخاطر والعائد والتنفيذ." },
-    { q: "هل تدعم العربية و RTL؟", a: "نعم، التصميم عربي Mobile-first." },
-    { q: "كيف التفاعل؟", a: "تفاعل هادئ وفخم بدون إزعاج." },
-  ];
-
-  // ✅ سكشن موحد: يملا الشاشة + سناب + يعوض ارتفاع الهيدر
-  const FULL_SECTION = "min-h-[100svh] snap-start pt-[96px] flex items-center";
 
   return (
-    <div className="w-full">
+    <div
+      dir="rtl"
+      className="min-h-screen bg-[linear-gradient(180deg,#f5f6f8_0%,#ffffff_18%,#f8f8f9_100%)] text-foreground"
+    >
+      <main className="relative overflow-hidden">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 top-0 h-[32rem] bg-[radial-gradient(circle_at_top,rgba(242,174,48,0.12),transparent_56%)]"
+        />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute left-[-10rem] top-[30rem] h-[24rem] w-[24rem] rounded-full bg-[radial-gradient(circle,rgba(11,23,38,0.06),transparent_68%)] blur-3xl"
+        />
 
-      {/* ✅ سناب سكشن سكشن */}
-      <main className="flex-1">
-        {/* HERO */}
-        <section className="relative h-[100svh] pt-[96px] overflow-hidden bg-black snap-start">
-          <img
-            src="/about-poto1.jpg"
-            alt="عن معدن"
-            className="absolute inset-0 w-full h-full object-cover opacity-95"
-          />
-          <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/45 to-black/80" />
-          <div className="relative z-10 h-full flex items-center justify-center text-center text-white px-4">
-            <div className="max-w-3xl">
-              <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold">
-                عن <span style={{ color: "var(--gold)" }}>معدن</span>
-              </h1>
-              <div className="mx-auto mt-4 h-[2px] w-16 bg-white/60" />
-              <p className="mt-6 text-base sm:text-lg text-white/85">
-                منصة رائدة في الاستثمار العقاري المتوافق مع الشريعة الإسلامية.
-              </p>
-            </div>
+        <section className="relative min-h-[100svh] overflow-hidden">
+          <div className="absolute inset-0">
+            <img
+              src="/about-poto1.jpg"
+              alt="عن معدن"
+              className="h-full w-full object-cover object-center"
+            />
           </div>
-        </section>
+          <div className="absolute inset-0 bg-[linear-gradient(112deg,rgba(6,14,24,0.92)_0%,rgba(8,17,28,0.84)_42%,rgba(9,20,33,0.64)_100%)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(242,174,48,0.18),transparent_34%)]" />
 
-        {/* =========================
-            STORY (Light)
-        ========================== */}
-        <section className={`${FULL_SECTION}`}>
-          <div className="container">
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-12 items-center">
-              <div className="lg:col-span-5">
-                <h2 className="text-4xl md:text-5xl font-bold text-amber-600 text-center lg:text-right">
-                  قصتنا
-                </h2>
+          <div className="container relative z-10 flex min-h-[100svh] items-center px-4 sm:px-6">
+            <div className="mx-auto max-w-5xl text-center text-white">
+              <span className="inline-flex items-center rounded-full border border-white/12 bg-white/10 px-4 py-1.5 text-sm font-semibold text-white/78 backdrop-blur-sm">
+                عن معدن
+              </span>
 
+              <h1 className="mt-6 text-4xl font-bold leading-[1.35] tracking-tight sm:text-5xl lg:text-6xl lg:leading-[1.22]">
+                شركة ومنصة استثمارية تنظّم القرار العقاري بوضوح أعلى
+              </h1>
 
+              <p className="mx-auto mt-6 max-w-3xl text-lg leading-8 text-white/76 sm:text-xl">
+                نعمل في «معدن» على تقديم فرص استثمارية عقارية مدروسة، تجمع بين
+                وضوح العرض، الانضباط التشغيلي، والمتابعة المستمرة ضمن تجربة رقمية
+                مؤسسية متسقة.
+              </p>
 
-                <h2 className="mt-3 text-3xl sm:text-4xl md:text-5xl font-bold leading-tight text-foreground text-center lg:text-right">
-                  استثمارٌ عقاريٌ
-                  <span className="text-primary"> برؤية واضحة</span>
-                </h2>
-              </div>
-
-              <div className="lg:col-span-7">
-                <div className="rsg-card p-6 sm:p-8">
-                  <div className="text-muted-foreground leading-relaxed space-y-5 text-[15px] sm:text-base text-center lg:text-right">
-                    <p>
-                      تأسست <b className="text-foreground">معدن</b> بهدف توفير فرص
-                      استثمارية عقارية متميزة للمستثمرين في المملكة العربية السعودية
-                      ودول الخليج، مع التركيز على الاستثمارات المتوافقة مع الشريعة
-                      الإسلامية.
-                    </p>
-                    <p>
-                      يعمل فريقنا على دراسة المشاريع بعناية فائقة لضمان الشفافية وتحقيق
-                      عوائد مجزية ومستدامة، مع تجربة استخدام هادئة ومريحة للمستثمر.
-                    </p>
-
-                    <div className="pt-2 flex justify-center lg:justify-start">
-                      <a
-                        href="/contact"
-                        className="inline-flex items-center justify-center rounded-full border border-primary/35 px-6 py-3 text-sm font-medium text-foreground hover:bg-primary/10 transition"
-                      >
-                        تواصل معنا
-                      </a>
+              <div className="mt-8 grid gap-3 sm:grid-cols-3">
+                {HERO_POINTS.map(point => (
+                  <div
+                    key={point}
+                    className="rounded-[22px] border border-white/12 bg-white/8 px-4 py-4 text-sm font-medium text-white/88 backdrop-blur-sm"
+                  >
+                    <div className="flex items-center justify-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-[#f2ae30]" />
+                      <span>{point}</span>
                     </div>
                   </div>
-                </div>
-
-                <div className="mt-8 h-px w-full bg-gradient-to-r from-transparent via-border to-transparent" />
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* =========================
-            STATS (Dark + CountUp)
-        ========================== */}
-        <section
-          ref={statsRef as any}
-          className={`section-dark-wave ${FULL_SECTION}`}
-        >
-          <div className="container">
-            <h2 className="mb-4 text-3xl sm:text-4xl md:text-5xl font-bold text-center">
-              إنجازاتنا
-            </h2>
-
-            <div className="mx-auto mb-10 h-[2px] w-20 rounded-full bg-white/25" />
-
-            <div className="rounded-[28px] border border-white/10 bg-white/5 backdrop-blur p-6 sm:p-10">
-              <div className="text-center max-w-2xl mx-auto">
-                <p className="mt-4 text-sm sm:text-base text-white/75 leading-relaxed">
-                  مؤشرات مختصرة تعكس نمو المنصة، مع الحفاظ على المعايير والحوكمة.
-                </p>
-              </div>
-
-              <div className="mt-10 grid grid-cols-2 md:grid-cols-4 gap-5 sm:gap-6">
-                {stats.map((stat, i) => {
-                  const Icon = stat.icon;
-                  return (
-                    <div
-                      key={i}
-                      className="rounded-2xl border border-white/10 bg-white/5 px-4 sm:px-5 py-6 text-center hover:bg-white/10 transition"
-                    >
-                      <div className="mx-auto mb-4 flex h-11 w-11 items-center justify-center rounded-full bg-white/10">
-                        <Icon className="h-6 w-6 text-white" />
-                      </div>
-
-                      <div
-                        className="text-2xl sm:text-3xl font-extrabold tabular-nums"
-                        style={{ color: "var(--gold)" }}
-                      >
-                        {stat.animated}
-                        {stat.suffix}
-                      </div>
-
-                      <div className="mt-1 text-sm text-white/70">{stat.label}</div>
-                    </div>
-                  );
-                })}
+                ))}
               </div>
             </div>
           </div>
 
-          {/* ✅ Wave SVG (بديل clip-path) */}
           <svg
-            className="absolute bottom-[-1px] left-0 w-full h-24 md:h-28 text-white pointer-events-none"
+            className="pointer-events-none absolute bottom-0 left-0 h-20 w-full text-white sm:h-24 md:h-28"
             viewBox="0 0 1440 120"
             preserveAspectRatio="none"
             aria-hidden="true"
@@ -338,146 +369,206 @@ export default function About() {
           </svg>
         </section>
 
+        <section className="relative py-16 sm:py-20">
+          <div className="container px-4 sm:px-6">
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)] lg:items-center">
+              <div className="relative min-h-[460px] overflow-hidden rounded-[34px] border border-slate-200/70 bg-slate-950 shadow-[0_30px_90px_-50px_rgba(11,23,38,0.52)]">
+                <img
+                  src="/about-poto1.jpg"
+                  alt="معدن"
+                  className="absolute inset-0 h-full w-full object-cover"
+                />
+                <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(6,14,24,0.16)_0%,rgba(6,14,24,0.3)_24%,rgba(6,14,24,0.92)_100%)]" />
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(242,174,48,0.18),transparent_34%)]" />
 
-        {/* =========================
-            VALUES (Light)
-        ========================== */}
-        <section className={`${FULL_SECTION}`}>
-          <div className="container">
-            <div className="flex flex-col items-center text-center">
-              <h2 className="mt-3 text-2xl sm:text-3xl md:text-4xl font-bold text-foreground">
-                قيمنا الأساسية
-              </h2>
-              <p className="mt-4 max-w-2xl text-sm sm:text-base text-muted-foreground leading-relaxed">
-                مبادئ واضحة تقود قراراتنا وتُشكّل تجربة المستخدم وجودة الفرص الاستثمارية.
-              </p>
-            </div>
+                <div className="relative z-10 flex h-full flex-col justify-between p-6 md:p-8">
+                  <div className="inline-flex w-fit rounded-full border border-white/14 bg-white/8 px-4 py-2 text-[11px] font-semibold tracking-[0.18em] text-white/78 backdrop-blur-sm">
+                    حضور مؤسسي أوضح للفرص والاستثمار
+                  </div>
 
-            <div className="mt-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 sm:gap-6">
-              {values.map((v, i) => {
-                const VIcon = v.icon;
-                return (
-                  <div
-                    key={i}
-                    className="group rounded-3xl border bg-card/80 backdrop-blur px-5 sm:px-6 py-7 hover:bg-card transition text-center"
-                  >
-                    <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full border border-border bg-background/60">
-                      <VIcon className="h-6 w-6 text-primary" />
-                    </div>
-
-                    <h3 className="text-lg sm:text-xl font-bold text-foreground mb-2">
-                      {v.title}
-                    </h3>
-
-                    <p className="text-sm sm:text-[15px] text-muted-foreground leading-relaxed">
-                      {v.description}
-                    </p>
-
-                    <div className="mt-6 h-px w-full bg-gradient-to-r from-transparent via-border to-transparent" />
-                    <div className="mt-4 text-xs text-muted-foreground">
-                      اكتشف المزيد داخل الأسئلة الشائعة
+                  <div className="max-w-[25rem] rounded-[28px] border border-slate-200/85 bg-white/95 p-6 shadow-[0_24px_70px_-44px_rgba(11,23,38,0.35)] backdrop-blur-sm">
+                    <div className="text-right">
+                      <div className="text-xs font-semibold tracking-[0.18em] text-primary/72">
+                        منصة في صيغة أوضح
+                      </div>
+                      <p className="mt-4 text-lg leading-8 text-foreground">
+                        نبني تجربة تجمع بين وضوح العرض والانضباط التشغيلي، لتقديم
+                        فرص عقارية بصيغة أكثر ثقة واتزانًا.
+                      </p>
                     </div>
                   </div>
+                </div>
+              </div>
+
+              <div className="text-right">
+                <SectionIntro
+                  eyebrow="من نحن"
+                  title="معدن تجمع بين خبرة السوق وبناء تجربة استثمارية أكثر تنظيمًا"
+                  description="لسنا مجرد واجهة عرض للفرص، بل منصة تعمل بمنهج مؤسسي يربط بين دراسة المشروع، تنظيم المعلومات، ومتابعة التنفيذ داخل تجربة متسقة وواضحة للمستثمر."
+                />
+
+                <div className="mt-6 space-y-4 text-base leading-8 text-muted-foreground sm:text-lg">
+                  <p>
+                    تأسست «معدن» لتمنح المستثمر مدخلًا أوضح إلى الفرص العقارية،
+                    عبر معلومات منظمة ومسار يساعد على الانتقال من قراءة الفرصة إلى
+                    اتخاذ القرار بثقة أعلى.
+                  </p>
+                  <p>
+                    نعمل على تقديم المحتوى الاستثماري بلغة احترافية متوازنة، بحيث
+                    تكون كل فرصة معروضة ضمن إطار مهني يوازن بين الجاذبية
+                    الاستثمارية والوضوح في التفاصيل الأساسية.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section
+          ref={statsRef as any}
+          className="pb-20 sm:pb-24"
+        >
+          <div className="container px-4 sm:px-6">
+            <div className="overflow-hidden rounded-[36px] bg-[linear-gradient(135deg,#0b1726_0%,#13253b_55%,#1a2f48_100%)] px-6 py-10 text-white shadow-[0_36px_110px_-56px_rgba(11,23,38,0.95)] sm:px-8 lg:px-12 lg:py-12">
+              <SectionIntro
+                eyebrow="الأرقام"
+                title="مؤشرات تعكس الحضور والثقة"
+                description="أرقام مختصرة تساعد على تكوين صورة أولية عن حجم النشاط الاستثماري والحضور المؤسسي الذي تبنيه «معدن»."
+                centered
+                invert
+              />
+
+              <div className="mt-10 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                {stats.map(stat => {
+                  const Icon = stat.icon;
+
+                  return (
+                    <article
+                      key={stat.label}
+                      className="rounded-[26px] border border-white/10 bg-white/6 p-5 text-center backdrop-blur-sm"
+                    >
+                      <div className="mx-auto inline-flex rounded-2xl bg-white/8 p-3 text-[#f2ae30]">
+                        <Icon className="h-5 w-5" />
+                      </div>
+                      <div className="mt-4 text-3xl font-semibold text-[#f2ae30] md:text-[2.4rem]">
+                        {stat.animated}
+                        {stat.suffix}
+                      </div>
+                      <div className="mt-3 text-sm leading-7 text-white/74">
+                        {stat.label}
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="py-20 sm:py-24">
+          <div className="container px-4 sm:px-6">
+            <SectionIntro
+              eyebrow="عرض القيمة"
+              title="ما الذي يميز معدن"
+              description="مرتكزات عملية تنعكس على طريقة اختيار الفرص، تنظيم عرضها، ومتابعتها ضمن تجربة استثمارية أكثر وضوحًا واتزانًا."
+              centered
+            />
+
+            <div className="mt-10 grid gap-5 md:grid-cols-3">
+              {PLATFORM_STRENGTHS.map(item => {
+                const Icon = item.icon;
+
+                return (
+                  <article
+                    key={item.title}
+                    className="flex min-h-[220px] flex-col justify-between rounded-[30px] border border-slate-200/70 bg-white p-6 text-right shadow-[0_24px_80px_-56px_rgba(11,23,38,0.24)]"
+                  >
+                    <div className="inline-flex w-fit rounded-2xl bg-[#f7f3ea] p-3 text-primary">
+                      <Icon className="h-6 w-6" />
+                    </div>
+                    <div className="mt-6 space-y-3">
+                      <h3 className="text-xl font-semibold text-foreground">
+                        {item.title}
+                      </h3>
+                      <p className="text-sm leading-7 text-muted-foreground sm:text-[15px]">
+                        {item.description}
+                      </p>
+                    </div>
+                  </article>
                 );
               })}
             </div>
           </div>
         </section>
 
-        {/* =========================
-            FAQ (Dark)
-        ========================== */}
-        <section id="faq" className={`section-dark-curve ${FULL_SECTION}`}>
-          <div className="container">
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-12 items-center">
-              <div className="lg:col-span-5 text-center lg:text-right">
-                <p className="text-xs sm:text-sm text-white/70 tracking-wide">
-                  الأسئلة الشائعة
-                </p>
-                <h2 className="mt-3 text-3xl sm:text-4xl md:text-5xl font-bold leading-tight">
-                  كل شيء
-                  <span style={{ color: "var(--gold)" }}> واضح</span>
-                </h2>
-                <p className="mt-4 text-sm sm:text-base text-white/75 leading-relaxed">
-                  جمعنا أهم الأسئلة المتكررة بشكل أنيق وسهل القراءة، مع تفاعل هادئ.
-                </p>
+        <section className="pb-20 sm:pb-24">
+          <div className="container px-4 sm:px-6">
+            <div className="grid gap-6 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+              <div className="rounded-[34px] border border-slate-200/70 bg-white p-8 shadow-[0_28px_80px_-52px_rgba(11,23,38,0.28)] sm:p-10">
+                <SectionIntro
+                  eyebrow="الرؤية والرسالة والمنهج"
+                  title="منهج مؤسسي يربط بين الاختيار والتنفيذ والمتابعة"
+                  description="تسلسل العمل في «معدن» لا يعتمد على العرض وحده، بل على إطار متكامل يبدأ بتقييم الفرصة، ويمر بتنظيم المعلومات، وينتهي بمتابعة أكثر اتساقًا لمسار الاستثمار."
+                />
               </div>
 
-              <div className="lg:col-span-7">
-                <div className="rounded-[28px] border border-white/10 bg-white/5 backdrop-blur p-4 sm:p-6">
-                  <Accordion type="single" collapsible className="w-full">
-                    {faqs.map((f, idx) => (
-                      <AccordionItem
-                        key={idx}
-                        value={`faq-${idx}`}
-                        // @ts-ignore
-                        className="border-white/10"
-                      >
-                        <AccordionTrigger className="text-white text-right">
-                          {f.q}
-                        </AccordionTrigger>
-                        <AccordionContent className="text-white/75 leading-relaxed text-right">
-                          {f.a}
-                        </AccordionContent>
-                      </AccordionItem>
-                    ))}
-                  </Accordion>
-                </div>
+              <div className="grid gap-4 md:grid-cols-3">
+                {COMPANY_FRAMEWORK.map(item => {
+                  const Icon = item.icon;
 
-                <div className="mt-8 flex items-center justify-center lg:justify-start gap-3">
-                  <a
-                    href="/contact"
-                    className="inline-flex items-center justify-center rounded-full bg-white px-6 py-3 text-sm font-medium text-[#0a1426] hover:opacity-95 transition"
-                  >
-                    اسألنا مباشرة
-                  </a>
-                  <a
-                    href="/projects"
-                    className="inline-flex items-center justify-center rounded-full border border-white/25 px-6 py-3 text-sm font-medium text-white hover:bg-white/10 transition"
-                  >
-                    شاهد المشاريع
-                  </a>
-                </div>
+                  return (
+                    <article
+                      key={item.eyebrow}
+                      className="rounded-[28px] border border-slate-200/70 bg-white p-6 text-right shadow-[0_22px_70px_-52px_rgba(11,23,38,0.22)]"
+                    >
+                      <div className="inline-flex rounded-2xl bg-[#f7f3ea] p-3 text-primary">
+                        <Icon className="h-5 w-5" />
+                      </div>
+                      <div className="mt-5 text-xs font-semibold tracking-[0.18em] text-primary/68">
+                        {item.eyebrow}
+                      </div>
+                      <h3 className="mt-3 text-lg font-semibold text-foreground">
+                        {item.title}
+                      </h3>
+                      <p className="mt-3 text-sm leading-7 text-muted-foreground">
+                        {item.description}
+                      </p>
+                    </article>
+                  );
+                })}
               </div>
             </div>
           </div>
         </section>
 
-        {/* =========================
-            VISION (Light)
-        ========================== */}
-        <section className={`${FULL_SECTION}`}>
-          <div className="container">
-            <div className="mx-auto max-w-4xl text-center">
-              <p className="mb-6 text-3xl sm:text-4xl md:text-5xl font-bold text-foreground">
-                رؤيتنا
-              </p>
+        <section className="pb-8 sm:pb-10 lg:pb-12">
+          <div className="container px-4 sm:px-6">
+            <div className="relative overflow-hidden rounded-[34px] border border-slate-200/80 bg-[linear-gradient(135deg,#0b1726_0%,#13253b_55%,#1a2f48_100%)] px-6 py-10 text-white shadow-[0_32px_100px_-56px_rgba(11,23,38,0.88)] sm:px-8 lg:px-10 lg:py-12">
+              <div
+                aria-hidden
+                className="pointer-events-none absolute left-0 top-0 h-28 w-28 rounded-full bg-[#f2ae30]/18 blur-3xl"
+              />
 
-              <div className="mx-auto mb-8 h-[2px] w-20 rounded-full bg-border" />
+              <div className="relative z-10 max-w-3xl text-right">
+                <p className="text-sm font-semibold text-[#f2ae30]/88">
+                  الخطوة التالية
+                </p>
+                <h2 className="mt-3 text-3xl font-semibold leading-tight text-white sm:text-4xl">
+                  ابدأ الاطلاع على الفرص من واجهة موحدة وواضحة
+                </h2>
+                <p className="mt-4 text-base leading-8 text-white/72 sm:text-lg">
+                  إذا كنت تبحث عن فرص استثمارية معروضة بوضوح وضمن منطق مهني منظم،
+                  فابدأ من صفحة المشاريع وتابع الفرص المفتوحة من واجهة واحدة.
+                </p>
 
-              <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold leading-tight text-foreground">
-                نعيد تعريف تجربة الاستثمار
-                <span style={{ color: "var(--gold)" }}> بثقة</span>
-              </h2>
-
-              <p className="mt-6 text-base sm:text-lg text-muted-foreground leading-relaxed">
-                أن نكون المنصة الأولى للاستثمار العقاري في المنطقة، ونساهم في تحقيق
-                رؤية المملكة 2030 عبر فرص استثمارية مبتكرة ومستدامة وتجربة رقمية فاخرة.
-              </p>
-
-              <div className="mt-9 flex items-center justify-center gap-3 sm:gap-4">
-                <a
-                  href="/projects"
-                  className="inline-flex items-center justify-center rounded-full bg-primary px-6 py-3 text-sm font-medium text-white hover:opacity-95 transition"
-                >
-                  ابدأ الآن
-                </a>
-                <a
-                  href="/contact"
-                  className="inline-flex items-center justify-center rounded-full border border-primary/30 px-6 py-3 text-sm font-medium text-foreground hover:bg-primary/5 transition"
-                >
-                  تواصل معنا
-                </a>
+                <div className="mt-8">
+                  <Link href="/projects">
+                    <Button className="h-12 rounded-full px-7 text-sm font-semibold">
+                      استعرض الفرص المفتوحة
+                      <ArrowRight className="mr-2 h-4 w-4" />
+                    </Button>
+                  </Link>
+                </div>
               </div>
             </div>
           </div>

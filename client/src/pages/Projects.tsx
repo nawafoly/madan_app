@@ -21,7 +21,6 @@ import {
   AlertTriangle,
   ArrowLeft,
   ArrowRight,
-  ArrowUpRight,
   Building2,
   CheckCircle2,
   ChevronLeft,
@@ -590,58 +589,39 @@ function usePagedProjects(opts: {
 function CurvedProjectsHero({
   title,
   desc,
-  onRefresh,
-  refreshDisabled,
   children,
 }: {
   title: ReactNode;
   desc: string;
-  onRefresh: () => void;
-  refreshDisabled?: boolean;
   children: ReactNode;
 }) {
   return (
-    <section className="relative z-0 bg-[#050b14] text-white">
+    <section className="relative z-0 min-h-[100svh] overflow-hidden bg-[#050b14] text-white">
       <div className="pointer-events-none absolute inset-0">
         <img
-          src="/HOOM-HERO1.jpg"
+          src="/HOOM-HERO7.jpg"
           alt="Projects Hero"
           className="h-full w-full object-cover object-center"
         />
       </div>
       {/* الغطاء الداكن */}
-      <div className="pointer-events-none absolute inset-0 bg-black/55" />
+      <div className="pointer-events-none absolute inset-0 bg-black/44" />
       {/* لمعة */}
-      <div className="pointer-events-none absolute inset-0 opacity-40 bg-[radial-gradient(60%_60%_at_50%_18%,rgba(255,255,255,0.18),transparent_60%)]" />
-
-      {/* نقط خفيفة */}
-      <div className="pointer-events-none absolute inset-0 opacity-[0.08] bg-[radial-gradient(circle_at_1px_1px,#ffffff_1px,transparent_1px)] [background-size:18px_18px]" />
+      <div className="pointer-events-none absolute inset-0 opacity-24 bg-[radial-gradient(60%_60%_at_50%_18%,rgba(255,255,255,0.16),transparent_60%)]" />
 
       {/* محتوى */}
       {/*  270 px + env ( safe - area - inset - top)  كود ثابت ما يتغير  */}
       <div className="pointer-events-none absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-black/35 to-transparent" />
-      <div className="container relative z-10 flex min-h-[clamp(720px,92svh,980px)] items-start pt-[calc(var(--site-header-offset)+2rem)] pb-28 sm:pb-32 md:pt-[calc(var(--site-header-offset)+3rem)]">
-        <div className="w-full space-y-10 md:space-y-12">
-          <div className="flex flex-col gap-4 text-center md:flex-row md:items-end md:justify-between md:text-right">
-            {/* ✅ توسيط الكلام فقط */}
-            <div className="space-y-3">
+      <div className="container relative z-10 flex min-h-[100svh] flex-col justify-center pt-[calc(var(--site-header-offset)+1.25rem)] pb-6 sm:pb-8 md:pt-[calc(var(--site-header-offset)+1.75rem)] md:pb-10">
+        <div className="mx-auto w-full max-w-5xl space-y-7 md:space-y-8">
+          <div className="flex flex-col gap-4 text-center md:text-right">
+            <div className="space-y-2.5">
               <h1 className="flex items-center justify-center gap-2 text-4xl font-bold text-white md:justify-start md:text-5xl">
                 {title}
               </h1>
               <p className="mx-auto max-w-3xl text-lg text-white/75 md:mx-0">
                 {desc}
               </p>
-            </div>
-
-            <div className="hidden md:flex md:shrink-0">
-              <Button
-                variant="outline"
-                onClick={onRefresh}
-                disabled={refreshDisabled}
-                className="h-11 rounded-2xl border-white/20 bg-white/8 px-5 text-white hover:bg-white hover:text-slate-950"
-              >
-                تحديث
-              </Button>
             </div>
           </div>
 
@@ -799,15 +779,6 @@ export default function ProjectsPage() {
     [filteredPublished]
   );
 
-  const totalInvestorsAcrossProjects = useMemo(
-    () =>
-      [...published.items, ...upcoming.items, ...done.items].reduce(
-        (sum, project) => sum + safeNumber(project.investorsCount),
-        0
-      ),
-    [done.items, published.items, upcoming.items]
-  );
-
   const bestPublishedReturn = useMemo(
     () =>
       filteredPublished.reduce(
@@ -816,14 +787,6 @@ export default function ProjectsPage() {
       ),
     [filteredPublished]
   );
-
-  const publishedFundingProgress = useMemo(() => {
-    if (!publishedFundingTarget) return 0;
-    return Math.min(
-      100,
-      (publishedFundingCurrent / publishedFundingTarget) * 100
-    );
-  }, [publishedFundingCurrent, publishedFundingTarget]);
 
   const upcomingFundingTarget = useMemo(
     () =>
@@ -1791,16 +1754,7 @@ export default function ProjectsPage() {
               مشاريعنا الاستثمارية
             </>
           }
-          desc="واجهة استثمارية مبنية حول العائد والتمويل والتغطية الفعلية للفرص المتاحة داخل المنصة."
-          onRefresh={() => setRefreshKey(x => x + 1)}
-          refreshDisabled={
-            published.loading ||
-            published.loadingMore ||
-            upcoming.loading ||
-            upcoming.loadingMore ||
-            done.loading ||
-            done.loadingMore
-          }
+          desc=""
         >
           <div className="space-y-5">
             {blockedReason === "maintenance" && (
@@ -1837,11 +1791,11 @@ export default function ProjectsPage() {
               </Card>
             )}
 
-            <Card className="overflow-hidden border-white/12 bg-[linear-gradient(145deg,rgba(8,19,34,0.94),rgba(13,29,49,0.92))] text-white shadow-[0_40px_120px_-58px_rgba(3,6,18,0.95)] backdrop-blur-xl">
-              <CardContent className="p-5 sm:p-6">
-                <div className="flex flex-col gap-6">
-                  <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-                    <div className="max-w-3xl">
+            <Card className="mx-auto w-full max-w-[56rem] overflow-hidden border border-white/10 bg-[linear-gradient(145deg,rgba(8,18,31,0.78),rgba(11,24,40,0.68))] text-white shadow-[0_28px_72px_-40px_rgba(2,8,18,0.78)] backdrop-blur-[20px]">
+              <CardContent className="p-4 sm:p-[18px]">
+                <div className="flex flex-col gap-4">
+                  <div className="flex flex-col gap-3.5">
+                    <div className="max-w-[42rem]">
                       <div className="flex flex-wrap items-center gap-3">
                         <Badge className="rounded-full border border-white/12 bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/85">
                           Investment Desk
@@ -1851,51 +1805,34 @@ export default function ProjectsPage() {
                         </Badge>
                       </div>
 
-                      <h2 className="mt-4 text-2xl font-semibold tracking-tight text-white sm:text-3xl">
+                      <h2 className="mt-2.5 text-2xl font-semibold tracking-tight text-white sm:text-[1.85rem]">
                         سوق استثماري يضع العائد والتغطية في مقدمة القرار
                       </h2>
-                      <p className="mt-3 max-w-2xl text-sm leading-8 text-white/72 sm:text-base">
-                        ابحث في الفرص المفتوحة، صفّ النتائج حسب نوع المنتج أو
-                        قوة العائد، وراقب حجم التمويل الجاري لحظة بلحظة من نفس
-                        الواجهة.
+                      <p className="mt-2 max-w-[38rem] text-sm leading-7 text-white/76 sm:text-[15px]">
+                        ابحث في الفرص المفتوحة
                       </p>
-                    </div>
-
-                    <div className="hidden rounded-[24px] border border-white/12 bg-white/8 px-4 py-3 text-right shadow-inner backdrop-blur xl:flex xl:min-w-[250px] xl:items-center xl:gap-3">
-                      <div className="rounded-2xl bg-white/10 p-2">
-                        <ArrowUpRight className="h-4 w-4 text-white" />
-                      </div>
-                      <div>
-                        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/55">
-                          Live Allocation
-                        </div>
-                        <div className="mt-1 text-sm font-semibold text-white">
-                          {fmtSAR(publishedFundingCurrent)} تم جمعها عبر الفرص
-                          المفتوحة
-                        </div>
-                      </div>
                     </div>
                   </div>
 
-                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                    <div className="rounded-[26px] border border-white/10 bg-slate-950/45 p-4 backdrop-blur">
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/55">
+                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                    <div className="rounded-[22px] border border-white/10 bg-[rgba(5,12,22,0.42)] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_16px_34px_-28px_rgba(0,0,0,0.72)] backdrop-blur-md">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/62">
                         بحث سريع
                       </div>
-                      <div className="relative mt-3">
-                        <Search className="absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/45" />
+                      <div className="relative mt-2">
+                        <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/52" />
                         <Input
                           value={qText}
                           onChange={e => setQText(e.target.value)}
                           placeholder="ابحث بالعنوان أو الموقع أو رقم الإصدار"
-                          className="h-12 rounded-2xl border-white/10 bg-white/5 pr-11 text-white placeholder:text-white/35 focus-visible:ring-1 focus-visible:ring-white/30"
+                          className="h-9 rounded-xl border-white/10 bg-[rgba(3,9,17,0.52)] pr-9 text-sm text-white placeholder:text-white/42 focus-visible:ring-1 focus-visible:ring-white/20"
                           disabled={flags.maintenanceMode}
                         />
                       </div>
                     </div>
 
-                    <div className="rounded-[26px] border border-white/10 bg-slate-950/45 p-4 backdrop-blur">
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/55">
+                    <div className="rounded-[22px] border border-white/10 bg-[rgba(5,12,22,0.42)] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_16px_34px_-28px_rgba(0,0,0,0.72)] backdrop-blur-md">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/62">
                         نوع الفرصة
                       </div>
                       <Select
@@ -1903,7 +1840,7 @@ export default function ProjectsPage() {
                         onValueChange={setTypeFilter}
                         disabled={flags.maintenanceMode}
                       >
-                        <SelectTrigger className="mt-3 h-12 rounded-2xl border-white/10 bg-white/5 text-white">
+                        <SelectTrigger className="mt-2 h-9 rounded-xl border-white/10 bg-[rgba(3,9,17,0.52)] text-sm text-white">
                           <SelectValue placeholder="كل الأنواع" />
                         </SelectTrigger>
                         <SelectContent>
@@ -1919,8 +1856,8 @@ export default function ProjectsPage() {
                       </Select>
                     </div>
 
-                    <div className="rounded-[26px] border border-white/10 bg-slate-950/45 p-4 backdrop-blur">
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/55">
+                    <div className="rounded-[22px] border border-white/10 bg-[rgba(5,12,22,0.42)] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_16px_34px_-28px_rgba(0,0,0,0.72)] backdrop-blur-md">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/62">
                         ترتيب العرض
                       </div>
                       <Select
@@ -1928,7 +1865,7 @@ export default function ProjectsPage() {
                         onValueChange={setSortBy}
                         disabled={flags.maintenanceMode}
                       >
-                        <SelectTrigger className="mt-3 h-12 rounded-2xl border-white/10 bg-white/5 text-white">
+                        <SelectTrigger className="mt-2 h-9 rounded-xl border-white/10 bg-[rgba(3,9,17,0.52)] text-sm text-white">
                           <SelectValue placeholder="اختر الترتيب" />
                         </SelectTrigger>
                         <SelectContent>
@@ -1942,127 +1879,6 @@ export default function ProjectsPage() {
                     </div>
                   </div>
 
-                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                    <div className="rounded-[24px] border border-white/10 bg-white/8 p-4 shadow-inner backdrop-blur">
-                      <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/55">
-                        <Layers3 className="h-4 w-4" />
-                        <span>الفرص المفتوحة</span>
-                      </div>
-                      <div className="mt-3 text-2xl font-semibold text-white">
-                        {formatNumberEN(filteredPublished.length)}
-                      </div>
-                    </div>
-
-                    <div className="rounded-[24px] border border-white/10 bg-white/8 p-4 shadow-inner backdrop-blur">
-                      <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/55">
-                        <Wallet className="h-4 w-4" />
-                        <span>التمويل الجاري</span>
-                      </div>
-                      <div className="mt-3 text-2xl font-semibold text-white">
-                        {fmtSAR(publishedFundingCurrent)}
-                      </div>
-                    </div>
-
-                    <div className="rounded-[24px] border border-white/10 bg-white/8 p-4 shadow-inner backdrop-blur">
-                      <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/55">
-                        <Target className="h-4 w-4" />
-                        <span>الرأسمال المستهدف</span>
-                      </div>
-                      <div className="mt-3 text-2xl font-semibold text-white">
-                        {fmtSAR(publishedFundingTarget)}
-                      </div>
-                    </div>
-
-                    <div className="rounded-[24px] border border-white/10 bg-[linear-gradient(145deg,rgba(242,174,48,0.18),rgba(255,255,255,0.08))] p-4 shadow-inner backdrop-blur">
-                      <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/60">
-                        <TrendingUp className="h-4 w-4" />
-                        <span>أعلى عائد معلن</span>
-                      </div>
-                      <div className="mt-3 text-3xl font-bold tracking-tight text-white">
-                        {formatPercentEN(bestPublishedReturn, {
-                          minimumFractionDigits: 0,
-                          maximumFractionDigits: 0,
-                        })}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="rounded-[28px] border border-white/10 bg-white/6 p-4 shadow-inner backdrop-blur">
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-                      <div className="min-w-0">
-                        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/55">
-                          تغطية التمويل الحالية
-                        </div>
-                        <div className="mt-2 flex flex-wrap items-end gap-3">
-                          <div className="text-3xl font-semibold text-white">
-                            {formatPercentEN(publishedFundingProgress, {
-                              minimumFractionDigits: 0,
-                              maximumFractionDigits: 1,
-                            })}
-                          </div>
-                          <div className="inline-flex items-center gap-2 pb-1 text-sm text-white/65">
-                            <Users className="h-4 w-4" />
-                            <span>
-                              {formatNumberEN(totalInvestorsAcrossProjects)}{" "}
-                              مستثمرًا عبر المنصة
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="lg:hidden">
-                        <Button
-                          variant="outline"
-                          onClick={() => setRefreshKey(x => x + 1)}
-                          disabled={
-                            published.loading ||
-                            upcoming.loading ||
-                            done.loading ||
-                            published.loadingMore ||
-                            upcoming.loadingMore ||
-                            done.loadingMore
-                          }
-                          className="h-11 rounded-2xl border-white/15 bg-white/5 px-5 text-white hover:bg-white hover:text-slate-950"
-                        >
-                          تحديث البيانات
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div
-                      className="relative mt-4 h-4 overflow-hidden rounded-full border border-white/10 bg-white/10 shadow-inner"
-                      aria-label="aggregate progress"
-                      role="progressbar"
-                      aria-valuenow={Math.round(publishedFundingProgress)}
-                      aria-valuemin={0}
-                      aria-valuemax={100}
-                    >
-                      <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.04),rgba(255,255,255,0.02),rgba(242,174,48,0.1))]" />
-                      <div
-                        className="absolute inset-y-0 right-0 rounded-full transition-[width] duration-700"
-                        style={{
-                          width: `${publishedFundingProgress > 0 ? Math.max(publishedFundingProgress, 6) : 0}%`,
-                          background:
-                            "linear-gradient(90deg, color-mix(in oklab, var(--gold) 88%, white 12%) 0%, color-mix(in oklab, var(--gold) 62%, var(--primary) 38%) 48%, var(--primary) 100%)",
-                          boxShadow:
-                            "0 16px 38px rgba(242,174,48,0.26), 0 0 0 1px rgba(255,255,255,0.12) inset",
-                        }}
-                      />
-                      <div
-                        className="absolute inset-y-0 right-0 opacity-55"
-                        style={{
-                          width: `${publishedFundingProgress}%`,
-                          background:
-                            "linear-gradient(90deg, transparent, rgba(255,255,255,0.45), transparent)",
-                        }}
-                      />
-                    </div>
-
-                    <div className="mt-3 flex items-center justify-between text-xs text-white/60">
-                      <span>{fmtSAR(publishedFundingCurrent)}</span>
-                      <span>{fmtSAR(publishedFundingTarget)}</span>
-                    </div>
-                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -2404,15 +2220,6 @@ export default function ProjectsPage() {
             </>
           }
           desc="استعرض الفرص المتاحة، تفاصيل العوائد، وقدم اهتمامك بسهولة."
-          onRefresh={() => setRefreshKey(x => x + 1)}
-          refreshDisabled={
-            published.loading ||
-            published.loadingMore ||
-            upcoming.loading ||
-            upcoming.loadingMore ||
-            done.loading ||
-            done.loadingMore
-          }
         >
           <div className="space-y-4">
             {blockedReason === "maintenance" && (
@@ -2488,22 +2295,6 @@ export default function ProjectsPage() {
                   </Select>
                 </div>
 
-                <div className="lg:hidden flex justify-center pt-2">
-                  <Button
-                    variant="outline"
-                    onClick={() => setRefreshKey(x => x + 1)}
-                    disabled={
-                      published.loading ||
-                      upcoming.loading ||
-                      done.loading ||
-                      published.loadingMore ||
-                      upcoming.loadingMore ||
-                      done.loadingMore
-                    }
-                  >
-                    تحديث
-                  </Button>
-                </div>
               </CardContent>
             </Card>
           </div>
@@ -2513,7 +2304,7 @@ export default function ProjectsPage() {
       {/* ✅ سناب سكشن سكشن */}
       <main className="flex-1">
         {/* 1) المشاريع الحالية */}
-        <SectionShell className="-mt-10" variant="light">
+        <SectionShell variant="light">
           <div className="flex justify-center">
             <p className="inline-block px-3 py-1 text-[20px] sm:text-[16px] md:text-[30px] font-semibold text-center text-black/90 border border-black/50 rounded-[10px]">
               الحالية

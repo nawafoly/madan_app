@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 
 import { toast } from "sonner";
@@ -162,14 +162,13 @@ export default function Contact() {
             {/* Contact Form */}
             <div className="mt-10 md:mt-14">
               <Card className="max-w-3xl mx-auto rounded-3xl border-border/70 bg-card/70 backdrop-blur supports-[backdrop-filter]:bg-card/60">
-                <CardHeader className="pb-0">
-                  <CardTitle className="text-center text-2xl md:text-3xl">
-                    أرسل لنا رسالة
-                  </CardTitle>
-                </CardHeader>
-
                 <CardContent className="p-6 md:p-10">
-                  <Separator className="mb-8" />
+                  <p className="text-center text-sm md:text-base text-muted-foreground">
+                    نحن هنا للإجابة على استفساراتك ومساعدتك في الوصول إلى الجهة
+                    المناسبة داخل المنصة.
+                  </p>
+
+                  <Separator className="my-8" />
 
                   <form onSubmit={handleSubmit} className="space-y-6">
                     <div className="grid md:grid-cols-2 gap-4 md:gap-6">

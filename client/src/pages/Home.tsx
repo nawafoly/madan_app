@@ -1,36 +1,33 @@
-// client/src/pages/Home.tsx
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import {
   ArrowRight,
+  Building2,
   CheckCircle2,
+  MapPin,
   Shield,
-  TrendingUp,
   Sparkles,
+  TrendingUp,
+  type LucideIcon,
 } from "lucide-react";
 import { useDragScroll } from "@/hooks/useDragScroll";
-
-// 🔥 Firestore
 import {
   collection,
   doc,
+  limit,
   onSnapshot,
   orderBy,
   query,
-  limit,
   where,
 } from "firebase/firestore";
 import { db } from "@/_core/firebase";
 
-/* =========================
-   Types
-========================= */
 type HomeProject = {
   id: string;
   title: string;
   location: string;
-  categoryKey: string; // projectType
+  categoryKey: string;
   image: string;
 };
 
@@ -49,20 +46,34 @@ type FlagsDoc = {
 };
 
 type StatsDoc = {
-  totalInvestment?: string; // مثال: "120M+"
-  projectsCount?: string; // مثال: "15+"
-  avgReturn?: string; // مثال: "12%+"
-  avgDuration?: string; // مثال: "18 شهر"
+  totalInvestment?: string;
+  projectsCount?: string;
+  avgReturn?: string;
+  avgDuration?: string;
+};
+
+type IconFeature = {
+  title: string;
+  description: string;
+  icon: LucideIcon;
+};
+
+type SectionIntroProps = {
+  eyebrow: string;
+  title: string;
+  description: string;
+  centered?: boolean;
+  invert?: boolean;
 };
 
 const DEFAULT_LABELS: Required<LabelsDoc> = {
   projectTypes: {
     sukuk: "استثمار بالصكوك",
-    land_development: "تطوير أراضي",
+    land_development: "تطوير أراضٍ",
     vip_exclusive: "VIP حصري",
   },
   projectStatuses: {
-    draft: "قريباً",
+    draft: "قريبًا",
     published: "منشور",
     closed: "مغلق",
     completed: "مكتمل",
@@ -82,9 +93,55 @@ const DEFAULT_STATS: StatsDoc = {
   avgDuration: "18 شهر",
 };
 
-const FALLBACK_IMG = "/HOOM-HERO.png";
+const OVERVIEW_PILLARS: IconFeature[] = [
+  {
+    title: "اختيار مدروس للفرص",
+    description:
+      "نختار فرصًا عقارية مدروسة بعناية، مع عرض واضح يساعدك على تقييمها بسرعة.",
+    icon: Sparkles,
+  },
+  {
+    title: "حوكمة وشفافية",
+    description:
+      "معلومات موحدة ومنظمة تمنحك وضوحًا كاملًا وثقة أعلى في كل قرار.",
+    icon: Shield,
+  },
+  {
+    title: "نمو قائم على التنفيذ",
+    description:
+      "نركز على تنفيذ فعلي يحقق قيمة مستدامة ونتائج ملموسة للاستثمار.",
+    icon: TrendingUp,
+  },
+];
 
-// ✅ صورة قسم "قصتنا"
+const INVESTMENT_FLOW = [
+  {
+    step: "01",
+    title: "استكشاف الفرص",
+    description:
+      "نقدم لك مجموعة مختارة من الفرص الاستثمارية بعناية، مع رؤية واضحة لأهداف كل مشروع وقيمته المستقبلية.",
+  },
+  {
+    step: "02",
+    title: "فهم التفاصيل",
+    description:
+      "نضع بين يديك جميع المعلومات الجوهرية، من البيانات المالية إلى عناصر المشروع التشغيلية، لضمان رؤية شاملة قبل اتخاذ القرار.",
+  },
+  {
+    step: "03",
+    title: "قرار بثقة",
+    description:
+      "نرافقك في رحلتك الاستثمارية بخطوات واضحة، من البداية وحتى تحقيق العائد، مع متابعة مستمرة لكل استثمار.",
+  },
+];
+
+const HERO_TRUST_POINTS = [
+  "رؤية مؤسسية أوضح للمشاريع",
+  "عرض موحد للمعلومات الأساسية",
+  "تجربة أكثر ترتيبًا عبر جميع الأجهزة",
+];
+
+const FALLBACK_IMG = "/HOOM-HERO.png";
 const STORY_IMG = "/about-poto1.jpg";
 
 function pickLabel(v: unknown, lang: "ar" | "en" = "ar", fallback = "") {
@@ -104,31 +161,64 @@ function normalizePublicImage(src?: string) {
   return `/${s}`;
 }
 
+function SectionIntro({
+  eyebrow,
+  title,
+  description,
+  centered = false,
+  invert = false,
+}: SectionIntroProps) {
+  return (
+    <div
+      className={`max-w-3xl space-y-4 ${
+        centered ? "mx-auto text-center" : "text-right"
+      }`}
+    >
+      <span
+        className={`inline-flex items-center rounded-full px-4 py-1.5 text-sm font-semibold ${
+          invert
+            ? "bg-white/10 text-white/75 ring-1 ring-white/15"
+            : "bg-[#f7f3ea] text-primary/75 ring-1 ring-[#eadfbe]"
+        }`}
+      >
+        {eyebrow}
+      </span>
+      <h2
+        className={`text-3xl font-semibold leading-tight sm:text-4xl lg:text-[2.8rem] ${
+          invert ? "text-white" : "text-foreground"
+        }`}
+      >
+        {title}
+      </h2>
+      <p
+        className={`text-base leading-8 sm:text-lg ${
+          invert ? "text-white/72" : "text-muted-foreground"
+        }`}
+      >
+        {description}
+      </p>
+    </div>
+  );
+}
+
 export default function Home() {
   const [location] = useLocation();
-
-
-  // ✅ Projects sections
   const [featured, setFeatured] = useState<HomeProject[]>([]);
   const [projects, setProjects] = useState<HomeProject[]>([]);
-
   const [isLoading, setIsLoading] = useState(true);
-
   const [labels, setLabels] = useState<Required<LabelsDoc>>(DEFAULT_LABELS);
   const [flags, setFlags] = useState<FlagsDoc>(DEFAULT_FLAGS);
   const [stats, setStats] = useState<StatsDoc>(DEFAULT_STATS);
 
-  // ✅ Drag scroll for home slider
   const { ref: homeSliderRef, bind: homeSliderBind } =
     useDragScroll<HTMLDivElement>();
 
-  // ✅ flags ref to avoid stale closures
   const flagsRef = useRef<FlagsDoc>(DEFAULT_FLAGS);
+
   useEffect(() => {
     flagsRef.current = flags;
   }, [flags]);
 
-  // ✅ scroll top on route change
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
   }, [location]);
@@ -136,109 +226,99 @@ export default function Home() {
   const categoryLabel = (key: string) =>
     pickLabel(labels.projectTypes[key], "ar", key || "مشروع");
 
-  // ✅ سكشن موحّد: نفس حجم الشاشة + snap
-  const SECTION = "min-h-screen snap-start flex items-center";
+  const metrics = [
+    {
+      value: stats.totalInvestment || DEFAULT_STATS.totalInvestment,
+      label: "إجمالي الاستثمارات",
+    },
+    {
+      value: stats.projectsCount || DEFAULT_STATS.projectsCount,
+      label: "عدد المشاريع",
+    },
+    {
+      value: stats.avgReturn || DEFAULT_STATS.avgReturn,
+      label: "متوسط العائد",
+    },
+    {
+      value: stats.avgDuration || DEFAULT_STATS.avgDuration,
+      label: "متوسط مدة المشروع",
+    },
+  ];
 
-  /**
-   * ✅ Card style we agreed:
-   * - Clickable
-   * - Flip on laptop only (CSS media query)
-   * - Mobile: no flip
-   * - FIX: Removed nested <a> inside <Link> to fix Hydration error.
-   */
-  const projectCard = (p: HomeProject | undefined, isFeatured = false) => {
-    if (!p) return null;
-
-    const href = `/projects/${p.id}`;
+  const projectCard = (project: HomeProject | undefined, isFeatured = false) => {
+    if (!project) return null;
+    const href = `/projects/${project.id}`;
     const aspect = isFeatured
-      ? "aspect-[4/5] md:aspect-[16/10]"
-      : "aspect-[4/5] md:aspect-[16/13]";
+      ? "aspect-[5/6] md:aspect-[16/11]"
+      : "aspect-[5/6] md:aspect-[4/5] xl:aspect-[16/15]";
 
     return (
-      <Link href={href}>
-        <div
-          className={`rsg-flip group block relative overflow-hidden rounded-[28px] cursor-pointer ${aspect}`}
-          aria-label={p.title}
+      <Link href={href} className="block h-full">
+        <article
+          className={`rsg-flip group relative h-full overflow-hidden rounded-[30px] border border-slate-200/10 bg-slate-950 shadow-[0_32px_90px_-38px_rgba(11,23,38,0.7)] ${aspect}`}
+          aria-label={project.title}
         >
           <div className="rsg-flip__inner">
-            {/* FRONT */}
             <div className="rsg-flip__face">
               <img
-                src={p.image}
-                alt={p.title}
-                className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                src={project.image}
+                alt={project.title}
+                className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
                 loading="lazy"
                 draggable={false}
-                onError={(e) => {
-                  const img = e.currentTarget;
-                  if (img.src.includes(FALLBACK_IMG)) return;
-                  img.src = FALLBACK_IMG;
+                onError={(event) => {
+                  const image = event.currentTarget;
+                  if (image.src.includes(FALLBACK_IMG)) return;
+                  image.src = FALLBACK_IMG;
                 }}
               />
-
-              {/* Overlay */}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/15 to-transparent opacity-90 transition-opacity" />
-
-              {/* Badge */}
-              <div className="absolute top-4 right-4 md:top-5 md:right-5">
-                <span className="inline-flex items-center px-3 py-1 rounded-full text-[11px] md:text-xs font-bold bg-white/14 text-white border border-white/22 backdrop-blur-md">
-                  {isFeatured ? "مشروع مميز" : categoryLabel(p.categoryKey)}
+              <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(6,14,24,0.16)_0%,rgba(6,14,24,0.22)_24%,rgba(6,14,24,0.88)_100%)]" />
+              <div className="absolute inset-x-0 top-0 flex items-center justify-between p-5 md:p-6">
+                <span className="inline-flex items-center rounded-full border border-white/18 bg-white/12 px-3 py-1 text-[11px] font-semibold text-white backdrop-blur-md md:text-xs">
+                  {isFeatured ? "مشروع مميز" : categoryLabel(project.categoryKey)}
+                </span>
+                <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/16 bg-white/10 text-white backdrop-blur-md transition-transform duration-300 group-hover:translate-x-[-4px]">
+                  <ArrowRight className="h-4 w-4" />
                 </span>
               </div>
-
-              {/* Bottom text */}
-              <div className="absolute bottom-0 right-0 p-6 md:p-7 w-full text-white">
-                <h3 className="text-2xl md:text-3xl font-bold leading-snug drop-shadow">
-                  {p.title}
-                </h3>
-
-                <p className="mt-2 text-white/85 text-sm flex items-center gap-2">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-                    <circle cx="12" cy="10" r="3" />
-                  </svg>
-                  {p.location}
+              <div className="absolute inset-x-0 bottom-0 p-6 text-white md:p-7">
+                <p className="text-xs font-medium tracking-[0.24em] text-white/65">
+                  فرصة منشورة
                 </p>
+                <h3 className="mt-3 text-2xl font-semibold leading-snug md:text-3xl">
+                  {project.title}
+                </h3>
+                <div className="mt-4 flex items-center gap-2 text-sm text-white/78">
+                  <MapPin className="h-4 w-4 shrink-0" />
+                  <span>{project.location}</span>
+                </div>
               </div>
             </div>
-
-            {/* BACK */}
             <div className="rsg-flip__face rsg-flip__back">
-              <div className="absolute inset-0 bg-black/72" />
-              <div className="absolute inset-0 p-6 md:p-8 flex flex-col justify-end text-white">
-                <span className="inline-flex w-fit items-center px-3 py-1 rounded-full text-[11px] md:text-xs font-bold bg-white/14 border border-white/22 backdrop-blur-md">
-                  {isFeatured ? "مشروع مميز" : categoryLabel(p.categoryKey)}
+              <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(7,14,24,0.96)_0%,rgba(15,32,52,0.96)_100%)]" />
+              <div className="absolute inset-0 flex flex-col justify-end p-6 text-white md:p-7">
+                <span className="inline-flex w-fit items-center rounded-full border border-white/14 bg-white/8 px-3 py-1 text-[11px] font-semibold text-white/90 backdrop-blur md:text-xs">
+                  {isFeatured ? "مشروع مميز" : categoryLabel(project.categoryKey)}
                 </span>
-
-                <h3 className="mt-3 text-2xl md:text-3xl font-bold leading-snug">
-                  {p.title}
+                <h3 className="mt-4 text-2xl font-semibold leading-snug md:text-3xl">
+                  {project.title}
                 </h3>
-
-                <p className="mt-3 text-white/85 text-sm md:text-base leading-relaxed">
-                  نبذة مختصرة عن المشروع بشكل بسيط وجذاب، تساعدك تعرف الفكرة بسرعة
-                  قبل الدخول للتفاصيل.
+                <p className="mt-3 text-sm leading-7 text-white/72 md:text-base">
+                  عرض استثماري مرتب يوضح الفكرة العامة للمشروع بسرعة قبل الانتقال
+                  إلى التفاصيل الكاملة.
                 </p>
-
-                <p className="mt-3 text-white/70 text-xs">اضغط لعرض التفاصيل</p>
+                <div className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-[#f2ae30]">
+                  عرض التفاصيل
+                  <ArrowRight className="h-4 w-4" />
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        </article>
       </Link>
     );
   };
 
-  // ✅ Live load: labels + flags + stats + projects + featured
   useEffect(() => {
     setIsLoading(true);
 
@@ -261,18 +341,22 @@ export default function Home() {
     });
 
     const unsubFlags = onSnapshot(doc(db, "settings", "flags"), (snap) => {
-      if (snap.exists())
+      if (snap.exists()) {
         setFlags({ ...DEFAULT_FLAGS, ...(snap.data() as FlagsDoc) });
-      else setFlags(DEFAULT_FLAGS);
+      } else {
+        setFlags(DEFAULT_FLAGS);
+      }
     });
 
     const unsubStats = onSnapshot(doc(db, "settings", "homeStats"), (snap) => {
-      if (snap.exists())
+      if (snap.exists()) {
         setStats({ ...DEFAULT_STATS, ...(snap.data() as StatsDoc) });
-      else setStats(DEFAULT_STATS);
+      } else {
+        setStats(DEFAULT_STATS);
+      }
     });
 
-    const qy = query(
+    const projectsQuery = query(
       collection(db, "projects"),
       where("status", "==", "published"),
       orderBy("createdAt", "desc"),
@@ -280,49 +364,45 @@ export default function Home() {
     );
 
     const unsubProjects = onSnapshot(
-      qy,
+      projectsQuery,
       (snap) => {
-        const f = flagsRef.current || DEFAULT_FLAGS;
-
+        const currentFlags = flagsRef.current || DEFAULT_FLAGS;
         const published = snap.docs
-          .map((d) => ({ id: d.id, ...(d.data() as any) }))
-          .filter((p: any) => {
-            const status = String(p.status || "").trim();
-            const type = String(p.projectType || p.category || "").trim();
-
+          .map((projectDoc) => ({ id: projectDoc.id, ...(projectDoc.data() as any) }))
+          .filter((project: any) => {
+            const status = String(project.status || "").trim();
+            const type = String(project.projectType || project.category || "").trim();
             if (status !== "published") return false;
-
-            if (f.vipOnlyMode) return type === "vip_exclusive";
-            if (f.hideVipProjects && type === "vip_exclusive") return false;
-
+            if (currentFlags.vipOnlyMode) return type === "vip_exclusive";
+            if (currentFlags.hideVipProjects && type === "vip_exclusive") return false;
             return true;
           });
 
-        const picked = published
-          .filter((p: any) => !!p.homeFeatured)
+        const pickedFeatured = published
+          .filter((project: any) => !!project.homeFeatured)
           .slice(0, 2);
-        const finalFeatured = (picked.length ? picked : published).slice(0, 2);
-
-        const featuredIds = new Set(finalFeatured.map((x: any) => String(x.id)));
-
-        const nonFeatured = published.filter(
-          (p: any) => !featuredIds.has(String(p.id))
+        const finalFeatured = (pickedFeatured.length ? pickedFeatured : published).slice(
+          0,
+          2
         );
-        const latest4 = nonFeatured.slice(0, 4);
+        const featuredIds = new Set(finalFeatured.map((project: any) => String(project.id)));
 
-        const mapToHomeProject = (p: any): HomeProject => {
-          const typeKey = String(p.projectType || p.category || "").trim();
-          const rawImg = String(p.coverImage || p.image || "").trim();
+        const latestProjects = published
+          .filter((project: any) => !featuredIds.has(String(project.id)))
+          .slice(0, 4);
+
+        const mapToHomeProject = (project: any): HomeProject => {
+          const typeKey = String(project.projectType || project.category || "").trim();
+          const rawImg = String(project.coverImage || project.image || "").trim();
           const image = rawImg ? normalizePublicImage(rawImg) : FALLBACK_IMG;
-
           return {
-            id: String(p.id),
-            title: String(p.titleAr || p.titleEn || p.title || "مشروع بدون عنوان"),
+            id: String(project.id),
+            title: String(project.titleAr || project.titleEn || project.title || "مشروع"),
             location: String(
-              p.locationAr ||
-              p.locationEn ||
-              p.location ||
-              "المملكة العربية السعودية"
+              project.locationAr ||
+                project.locationEn ||
+                project.location ||
+                "المملكة العربية السعودية"
             ),
             categoryKey: typeKey || "unknown",
             image,
@@ -330,11 +410,11 @@ export default function Home() {
         };
 
         setFeatured(finalFeatured.map(mapToHomeProject));
-        setProjects(latest4.map(mapToHomeProject));
+        setProjects(latestProjects.map(mapToHomeProject));
         setIsLoading(false);
       },
-      (err) => {
-        console.error("Failed to live load home projects:", err);
+      (error) => {
+        console.error("Failed to live load home projects:", error);
         setFeatured([]);
         setProjects([]);
         setIsLoading(false);
@@ -350,208 +430,401 @@ export default function Home() {
   }, []);
 
   return (
-    <div className="rsg-page min-h-screen flex flex-col text-foreground">
+    <div
+      dir="rtl"
+      className="min-h-screen bg-[linear-gradient(180deg,#f5f6f8_0%,#ffffff_18%,#f8f8f9_100%)] text-foreground"
+    >
+      <main className="relative overflow-hidden">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 top-0 h-[34rem] bg-[radial-gradient(circle_at_top,rgba(242,174,48,0.16),transparent_55%)]"
+        />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute right-[-8rem] top-[28rem] h-[28rem] w-[28rem] rounded-full bg-[radial-gradient(circle,rgba(11,23,38,0.08),transparent_68%)] blur-3xl"
+        />
 
-      {/* ✅ scroll-snap container */}
-      <main className="flex-grow relative z-0">
-        <div className="relative z-10">
-          {/* HERO */}
-          <section className={`${SECTION} relative w-full overflow-hidden`}>
-            <div className="absolute inset-0 z-0">
-              <video
-                className="w-full h-full object-cover object-top"
-                autoPlay
-                muted
-                loop
-                playsInline
-                preload="auto"
-              >
-                <source src="/about-hero.mp4" type="video/mp4" />
-              </video>
-            </div>
+        <section className="relative h-screen min-h-screen min-h-[100svh] overflow-hidden">
+          <div className="absolute inset-0">
+            <video
+              className="h-full w-full object-cover object-top"
+              autoPlay
+              muted
+              loop
+              playsInline
+              preload="auto"
+            >
+              <source src="/about-hero.mp4" type="video/mp4" />
+            </video>
+          </div>
 
-            <div className="absolute inset-0 bg-black/35 z-[1]" />
+          <div className="absolute inset-0 bg-[linear-gradient(112deg,rgba(6,14,24,0.92)_0%,rgba(8,17,28,0.82)_42%,rgba(9,20,33,0.56)_100%)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(242,174,48,0.22),transparent_34%)]" />
 
-            <div className="container relative z-10 flex items-center justify-center w-full">
-              <div className="w-full max-w-3xl text-center pt-[110px] pb-16 space-y-10">
-                <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold text-white leading-[1.8] md:leading-[1.6] lg:leading-[1.7] tracking-wide">                  بناء وجهات
-                  <br />
-                  الغد الاستثمارية
+          <div className="container relative z-10 h-full px-4 sm:px-6">
+            <div className="flex h-full items-center justify-center pt-[calc(var(--site-header-offset)+1.5rem)]">
+              <div className="mx-auto max-w-4xl text-center text-white">
+                <h1 className="text-4xl font-bold leading-[1.35] tracking-tight sm:text-5xl lg:text-6xl lg:leading-[1.25]">
+                  بناء وجهات الغد الاستثمارية
                 </h1>
 
-                <p className="text-xl md:text-2xl text-white/85">
-                  مع معدن، نحو مستقبل مشرق للاستثمار العقاري.
+                <p className="mx-auto mt-6 max-w-3xl text-lg leading-8 text-white/78 sm:text-xl">
+                  مع معدن، نحو مستقبل أكثر وضوحًا في الاستثمار العقاري عبر
+                  واجهة مرتبة، موثوقة، ومصممة لتقديم الفرص بصورة احترافية.
                 </p>
               </div>
             </div>
-          </section>
+          </div>
+        </section>
 
-          {/* ✅ قصتنا */}
-          <section className={`${SECTION} py-16 md:py-20`}>
-            <div className="container w-full">
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
-                <div className="text-center lg:text-right">
-                  <div className="flex items-center justify-center lg:justify-start gap-3">
-                    <span className="text-4xl md:text-5xl font-bold text-amber-600">
-                      من نحن
-                    </span>
-                    <span className="text-4xl md:text-5xl font-bold text-foreground">
-                      قصتنا
-                    </span>
+        <section className="relative py-16 sm:py-20">
+          <div className="container px-4 sm:px-6">
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(360px,0.88fr)] lg:items-stretch">
+              <div className="rounded-[34px] border border-slate-200/80 bg-white p-8 shadow-[0_28px_85px_-56px_rgba(11,23,38,0.32)] sm:p-10">
+                <div className="max-w-2xl text-right">
+                  <p className="text-sm font-semibold text-primary/70">
+                    نظرة سريعة
+                  </p>
+                  <h2 className="mt-3 text-3xl font-semibold leading-tight text-foreground sm:text-4xl">
+                    مدخل مختصر إلى المنصة وتجربة التصفح
+                  </h2>
+                  <p className="mt-4 text-base leading-8 text-muted-foreground sm:text-lg">
+                    نقلنا العناصر الداعمة إلى هذا السكشن ليبقى الهيرو نظيفًا
+                    ورسميًا، بينما تبقى المؤشرات وأزرار الانتقال ونقاط الثقة في
+                    مساحة مستقلة وواضحة بصريًا.
+                  </p>
+                </div>
+
+                <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-start">
+                  <Link href="/projects">
+                    <Button className="h-12 rounded-full bg-[#f2ae30] px-7 text-sm font-semibold text-primary hover:bg-[#f6b63f]">
+                      استعرض المشاريع
+                      <ArrowRight className="mr-2 h-4 w-4" />
+                    </Button>
+                  </Link>
+
+                  <Link href="/about">
+                    <Button
+                      variant="outline"
+                      className="h-12 rounded-full px-7 text-sm font-semibold"
+                    >
+                      المزيد عنا
+                    </Button>
+                  </Link>
+                </div>
+
+                <div className="mt-8 grid gap-3 sm:grid-cols-3">
+                  {HERO_TRUST_POINTS.map((point) => (
+                    <div
+                      key={point}
+                      className="rounded-[24px] border border-slate-200/80 bg-slate-50/85 px-4 py-4 text-sm leading-7 text-muted-foreground"
+                    >
+                      {point}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="overflow-hidden rounded-[34px] bg-[linear-gradient(135deg,#0b1726_0%,#13253b_55%,#1a2f48_100%)] p-6 text-white shadow-[0_36px_100px_-46px_rgba(0,0,0,0.75)] sm:p-7">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="text-right">
+                    <p className="text-sm font-medium text-white/70">
+                      مؤشرات أساسية
+                    </p>
+                    <h2 className="mt-2 text-2xl font-semibold leading-tight">
+                      صورة سريعة عن المنصة
+                    </h2>
                   </div>
-
-                  <p className="mt-6 text-base md:text-lg text-muted-foreground leading-relaxed">
-                    بجذور راسخة وطموح لا يحده أفق، انطلقت معدن لتكون منارة في عالم
-                    الاستثمار العقاري.
-                  </p>
-
-                  <p className="mt-4 text-base md:text-lg text-muted-foreground leading-relaxed">
-                    نحن نؤمن بأن العقار ليس مجرد بناء، بل هو مساحة للحياة والنمو،
-                    ورؤيتنا تتجاوز المألوف لخلق بيئات سكنية وتجارية تلهم قاطنيها
-                    وتوفر عوائد استثمارية مستدامة لشركائنا.
-                  </p>
-
-                  <p className="mt-4 text-base md:text-lg text-muted-foreground leading-relaxed">
-                    من خلال دمج التصميم العصري مع الأصالة والابتكار مع الخبرة،
-                    نسعى لبناء إرث يدوم للأجيال القادمة.
-                  </p>
-
-                  <div className="mt-8">
-                    <Link href="/about">
-                      <Button className="rounded-full h-11 px-7">
-                        المزيد عنا
-                        <ArrowRight className="mr-2 w-5 h-5" />
-                      </Button>
-                    </Link>
+                  <div className="rounded-2xl border border-white/12 bg-white/8 p-3">
+                    <Building2 className="h-6 w-6 text-[#f2ae30]" />
                   </div>
                 </div>
 
-                <div className="relative">
-                  <div className="relative overflow-hidden rounded-[28px] shadow-[0_24px_80px_rgba(0,0,0,0.12)]">
-                    <img
-                      src={STORY_IMG}
-                      alt="قصتنا"
-                      className="w-full h-[420px] md:h-[520px] object-cover"
-                      onError={(e) => {
-                        e.currentTarget.src = "/HOOM-HERO1.jpg";
-                      }}
-                    />
-                  </div>
-
-                  <div className="absolute -bottom-8 md:-bottom-10 left-1/2 -translate-x-1/2 w-[92%] sm:w-[360px]">
-                    <div className="bg-white/95 backdrop-blur-xl border border-border rounded-2xl shadow-lg p-5">
-                      <div className="flex items-start gap-4">
-                        <div className="flex-1 text-center">
-                          <div className="text-2xl font-bold text-foreground">
-                            15+
-                          </div>
-                          <div className="text-xs text-muted-foreground mt-1">
-                            عاماً من الخبرة
-                          </div>
-                        </div>
-
-                        <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
-                          <CheckCircle2 className="w-5 h-5 text-amber-700" />
-                        </div>
+                <div className="mt-8 grid grid-cols-2 gap-4">
+                  {metrics.map((metric) => (
+                    <div
+                      key={metric.label}
+                      className="rounded-[24px] border border-white/12 bg-[#08111d]/48 p-4"
+                    >
+                      <div className="text-2xl font-semibold text-white sm:text-3xl">
+                        {metric.value}
                       </div>
+                      <div className="mt-2 text-sm text-white/68">
+                        {metric.label}
+                      </div>
+                    </div>
+                  ))}
+                </div>
 
-                      <p className="mt-3 text-sm text-muted-foreground text-center leading-relaxed">
-                        سجل حافل بالإنجازات في تطوير وإدارة المشاريع العقارية
-                        الفاخرة.
+                <div className="mt-6 rounded-[26px] border border-white/12 bg-[#08111d]/58 p-5">
+                  <div className="flex items-start gap-3">
+                    <div className="rounded-full bg-[#f2ae30]/18 p-2.5">
+                      <CheckCircle2 className="h-5 w-5 text-[#f2ae30]" />
+                    </div>
+                    <div className="text-right">
+                      <h3 className="text-base font-semibold">
+                        سجل تشغيلي ممتد
+                      </h3>
+                      <p className="mt-2 text-sm leading-7 text-white/72">
+                        أكثر من 15 عامًا من الخبرة في تطوير وإدارة المشاريع
+                        العقارية الفاخرة، مع تركيز واضح على الجودة والاستدامة.
                       </p>
                     </div>
                   </div>
                 </div>
               </div>
-
-              <div className="h-10 md:h-12" />
             </div>
-          </section>
+          </div>
+        </section>
 
-          {/* ✅ Stats */}
-          <section className={`${SECTION} section-dark-wave py-16 md:py-20`}>
-            <div className="container text-center w-full">
-              <h2 className="text-4xl md:text-5xl font-bold">أرقام تعكس ثقتنا</h2>
-              <p className="mt-3 text-white/80">
-                مؤشرات مختصرة تساعدك على اتخاذ القرار بسرعة.
-              </p>
+        <section className="relative py-20 sm:py-24 lg:py-28">
+          <div className="container px-4 sm:px-6">
+            <div className="grid gap-10 lg:grid-cols-[minmax(0,0.96fr)_minmax(0,1.04fr)] lg:items-start lg:gap-14">
+              <div className="relative">
+                <div className="relative overflow-hidden rounded-[34px] border border-slate-200/70 bg-[#0b1726] shadow-[0_32px_90px_-48px_rgba(11,23,38,0.35)]">
+                  <img
+                    src={STORY_IMG}
+                    alt="قصتنا"
+                    className="absolute inset-0 h-full w-full object-cover"
+                    onError={(event) => {
+                      event.currentTarget.src = "/HOOM-HERO1.jpg";
+                    }}
+                  />
+                  <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(11,23,38,0.32)_0%,rgba(11,23,38,0.46)_36%,rgba(11,23,38,0.88)_100%)]" />
+                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(242,174,48,0.18),transparent_34%)]" />
 
-              <div className="rsg-stats mt-12">
-                <div className="rsg-stat">
-                  <div className="rsg-stat__value">{stats.totalInvestment}</div>
-                  <div className="rsg-stat__label">إجمالي الاستثمارات</div>
-                </div>
+                  <div className="relative z-10 flex min-h-[560px] flex-col justify-between items-end p-6 md:min-h-[640px] md:p-8">
+                    <div className="w-full max-w-[28rem] text-right text-white">
+                      <p className="text-xs font-medium tracking-[0.24em] text-white/65">
+                        من نحن
+                      </p>
+                      <p className="mt-3 text-lg leading-8 text-white/88 md:text-[1.375rem] md:leading-9">
+                        نبني بيئات سكنية وتجارية تلهم قاطنيها وتمنح شركاءنا وضوحًا
+                        أكبر في تقييم الفرص الاستثمارية.
+                      </p>
+                    </div>
 
-                <div className="rsg-stat">
-                  <div className="rsg-stat__value">{stats.projectsCount}</div>
-                  <div className="rsg-stat__label">عدد المشاريع</div>
-                </div>
-
-                <div className="rsg-stat">
-                  <div className="rsg-stat__value">{stats.avgReturn}</div>
-                  <div className="rsg-stat__label">متوسط العائد</div>
-                </div>
-
-                <div className="rsg-stat">
-                  <div className="rsg-stat__value">{stats.avgDuration}</div>
-                  <div className="rsg-stat__label">متوسط مدة المشروع</div>
-                </div>
-              </div>
-            </div>
-
-            {/* ✅ أضف هذا بالأسفل مباشرة */}
-            <svg
-              className="absolute bottom-[-1px] left-0 w-full h-24 md:h-28 text-white pointer-events-none"
-              viewBox="0 0 1440 120"
-              preserveAspectRatio="none"
-            >
-              <path
-                fill="currentColor"
-                d="M0,64 C240,120 480,120 720,88 C960,56 1200,8 1440,40 L1440,120 L0,120 Z"
-              />
-            </svg>
-          </section>
-
-
-          {/* ✅ Featured */}
-          <section className={`${SECTION} section-light py-16 md:py-20`}>
-            <div className="container w-full">
-              <div className="text-center max-w-2xl mx-auto">
-                <h2 className="text-4xl md:text-5xl font-semibold text-foreground">
-                  مشاريع مميزة
-                </h2>
-                <div className="mx-auto mt-3 h-[2px] w-16 rounded-full bg-primary/60" />
-                <p className="mt-4 text-base md:text-lg text-muted-foreground">
-                  اخترنا لك فرصتين استثماريتين بعناية — اضغط على الكرت لعرض التفاصيل.
-                </p>
-              </div>
-
-              <div className="mt-10 grid grid-cols-1 lg:grid-cols-2 gap-7 md:gap-8">
-                {featured.length ? (
-                  featured.map((p) => <div key={p.id}>{projectCard(p, true)}</div>)
-                ) : (
-                  <div className="col-span-full text-center text-muted-foreground py-10">
-                    لا توجد مشاريع مميزة حالياً.
+                    <div className="w-full max-w-[28rem] rounded-[28px] border border-slate-200/85 bg-white/98 p-6 shadow-[0_24px_70px_-44px_rgba(11,23,38,0.35)] backdrop-blur-sm">
+                      <div className="flex items-start gap-4">
+                        <div className="rounded-full bg-[#f7edd7] p-3">
+                          <CheckCircle2 className="h-5 w-5 text-[#b57919]" />
+                        </div>
+                        <div className="text-right">
+                          <div className="text-3xl font-semibold text-foreground">
+                            15+
+                          </div>
+                          <div className="mt-1 text-sm text-muted-foreground">
+                            عامًا من الخبرة
+                          </div>
+                          <p className="mt-4 text-sm leading-7 text-muted-foreground">
+                            سجل حافل بالإنجازات في تطوير وإدارة المشاريع العقارية
+                            الفاخرة وبناء قيمة مستدامة على المدى الطويل.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                )}
+                </div>
+              </div>
+
+              <div className="text-right">
+                <SectionIntro
+                  eyebrow="قصتنا"
+                  title="حضور مؤسسي يجمع بين الأصالة، الخبرة، والطموح"
+                  description="نعيد صياغة الصفحة الرئيسية بأسلوب يعبّر عن شركة استثمار عقاري احترافية، واضحة في رسالتها، ومنظمة في عرض محتواها."
+                />
+
+                <div className="mt-6 space-y-4 text-base leading-8 text-muted-foreground sm:text-lg">
+                  <p>
+                    بجذور راسخة وطموح لا يحده أفق، انطلقت معدن لتكون منارة في عالم
+                    الاستثمار العقاري.
+                  </p>
+                  <p>
+                    نحن نؤمن بأن العقار ليس مجرد بناء، بل هو مساحة للحياة والنمو،
+                    ورؤيتنا تتجاوز المألوف لخلق بيئات سكنية وتجارية تلهم قاطنيها
+                    وتوفر عوائد استثمارية مستدامة لشركائنا.
+                  </p>
+                  <p>
+                    من خلال دمج التصميم العصري مع الأصالة والابتكار مع الخبرة،
+                    نسعى لبناء إرث يدوم للأجيال القادمة.
+                  </p>
+                </div>
+
+                <div className="mt-8">
+                  <Link href="/about">
+                    <Button className="h-12 rounded-full px-7 text-sm font-semibold">
+                      المزيد عنا
+                      <ArrowRight className="mr-2 h-4 w-4" />
+                    </Button>
+                  </Link>
+                </div>
               </div>
             </div>
-          </section>
+          </div>
+        </section>
 
-          {/* ✅ Projects */}
-          <section className={`${SECTION} rsg-projects-curveCenter py-16 md:py-20`}>
-            <div className="container rsg-projects-curveCenter__inner w-full">
-              <div className="text-center max-w-2xl mx-auto">
-                <h2 className="text-4xl md:text-5xl font-semibold">مشاريعنا</h2>
-                <div className="rsg-projects-curve__line" />
-                <p className="mt-4 text-white/75 text-base md:text-lg">
-                  استعرض مشاريعنا واطّلع على تفاصيل كل مشروع بخطوة واحدة.
-                </p>
+        <section className="pb-20 sm:pb-24">
+          <div className="container px-4 sm:px-6">
+            <div className="overflow-hidden rounded-[36px] bg-[linear-gradient(135deg,#0b1726_0%,#13253b_55%,#1a2f48_100%)] px-6 py-10 text-white shadow-[0_36px_110px_-56px_rgba(11,23,38,0.95)] sm:px-8 lg:px-12 lg:py-12">
+              <SectionIntro
+                eyebrow="الأرقام"
+                title="مؤشرات تعكس الثقة والاتساق"
+                description="مؤشرات مختصرة تساعد المستثمر على تكوين صورة أولية سريعة عن حجم الحضور وفرص النمو داخل المنصة."
+                invert
+              />
+
+              <div className="mt-10 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                {metrics.map((metric) => (
+                  <article
+                    key={metric.label}
+                    className="rounded-[26px] border border-white/10 bg-white/6 p-5 backdrop-blur-sm"
+                  >
+                    <div className="text-3xl font-semibold text-[#f2ae30] md:text-[2.4rem]">
+                      {metric.value}
+                    </div>
+                    <div className="mt-3 text-sm leading-7 text-white/74">
+                      {metric.label}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="py-20 sm:py-24">
+          <div className="container px-4 sm:px-6">
+            <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+              <SectionIntro
+                eyebrow="المشاريع المميزة"
+                title="فرص مختارة تعكس أسلوب العرض المؤسسي"
+                description="مشاريع بارزة تظهر في الصفحة الرئيسية بهيكل بصري أوضح، وكروت موحدة، ومسافات أكثر انضباطًا."
+              />
+
+              <Link href="/projects">
+                <Button
+                  variant="outline"
+                  className="h-12 rounded-full px-6 text-sm font-semibold"
+                >
+                  عرض كل المشاريع
+                </Button>
+              </Link>
+            </div>
+
+            <div className="mt-10 grid gap-6 lg:grid-cols-2">
+              {featured.length ? (
+                featured.map((project) => (
+                  <div key={project.id}>{projectCard(project, true)}</div>
+                ))
+              ) : (
+                <div className="col-span-full rounded-[30px] border border-dashed border-slate-300 bg-white/75 px-6 py-16 text-center text-muted-foreground shadow-[0_24px_80px_-60px_rgba(11,23,38,0.25)]">
+                  لا توجد مشاريع مميزة حاليًا.
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+
+        <section className="py-20 sm:py-24">
+          <div className="container px-4 sm:px-6">
+            <div className="mx-auto max-w-4xl rounded-[34px] border border-slate-200/70 bg-white p-8 shadow-[0_28px_80px_-52px_rgba(11,23,38,0.28)] sm:p-10 lg:p-12">
+              <div className="max-w-3xl text-right">
+                <SectionIntro
+                  eyebrow="لماذا معدن"
+                  title="مسار استثماري أوضح… من الفرصة إلى القرار"
+                  description="نعمل في «معدن» على تقديم فرص استثمارية مدروسة بوضوح، تساعدك على فهم المشروع من جميع جوانبه، وتقليل عدم اليقين، لاتخاذ قرارات استثمارية مبنية على أسس قوية وثقة عالية."
+                />
+              </div>
+
+              <div className="mt-8 space-y-4">
+                {INVESTMENT_FLOW.map((item) => (
+                  <div
+                    key={item.step}
+                    className="rounded-[24px] border border-slate-200/80 bg-slate-50/80 p-5"
+                  >
+                    <div className="flex items-start gap-4">
+                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary text-sm font-semibold text-white">
+                        {item.step}
+                      </div>
+                      <div className="text-right">
+                        <h3 className="text-lg font-semibold text-foreground">
+                          {item.title}
+                        </h3>
+                        <p className="mt-2 text-sm leading-7 text-muted-foreground">
+                          {item.description}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="pb-20 sm:pb-24">
+          <div className="container px-4 sm:px-6">
+            <div className="rounded-[34px] border border-slate-200/70 bg-white/85 p-8 shadow-[0_24px_80px_-56px_rgba(11,23,38,0.24)] sm:p-10">
+              <div className="max-w-3xl text-right">
+                <SectionIntro
+                  eyebrow="ما الذي يميز معدن"
+                  title="مرتكزات العمل في معدن"
+                  description="ثلاثة مرتكزات واضحة تنظم طريقة اختيار الفرص وعرضها وتنفيذها، بما يعزز وضوح التجربة وثقة المستثمر."
+                />
+              </div>
+
+              <div className="mt-8 grid gap-5 md:grid-cols-3">
+                {OVERVIEW_PILLARS.map((pillar) => {
+                  const Icon = pillar.icon;
+                  return (
+                    <article
+                      key={`${pillar.title}-support`}
+                      className="flex min-h-[180px] flex-col justify-between rounded-[30px] border border-slate-200/80 bg-[linear-gradient(180deg,#ffffff_0%,#f7f8fa_100%)] p-6 text-right shadow-[0_24px_80px_-56px_rgba(11,23,38,0.22)]"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#f7f3ea] text-primary">
+                          <Icon className="h-5 w-5" />
+                        </div>
+                        <div className="h-px flex-1 bg-slate-200/80" />
+                      </div>
+
+                      <div className="mt-6 flex flex-1 flex-col gap-3">
+                        <h3 className="line-clamp-1 text-lg font-semibold text-foreground">
+                          {pillar.title}
+                        </h3>
+                        <p className="line-clamp-2 overflow-hidden text-sm leading-7 text-muted-foreground">
+                          {pillar.description}
+                        </p>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="py-20 sm:py-24 lg:py-28">
+          <div className="container px-4 sm:px-6">
+            <div className="rounded-[36px] border border-slate-200/70 bg-white px-6 py-8 shadow-[0_30px_90px_-54px_rgba(11,23,38,0.32)] sm:px-8 sm:py-10 lg:px-10 lg:py-12">
+              <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+                <SectionIntro
+                  eyebrow="مشاريعنا"
+                  title="فرص منشورة بواجهة أوضح وتسلسل أبسط"
+                  description="استعراض أحدث المشاريع ضمن شبكة موحدة من الكروت والعناوين والمسافات، مع تجربة مناسبة للجوال والتابلت والديسكتوب."
+                />
+
+                <Link href="/projects">
+                  <Button className="h-12 rounded-full px-7 text-sm font-semibold">
+                    عرض جميع المشاريع
+                    <ArrowRight className="mr-2 h-4 w-4" />
+                  </Button>
+                </Link>
               </div>
 
               <div className="mt-10">
                 {isLoading ? (
-                  <div className="text-center text-white/70 py-16">
+                  <div className="rounded-[28px] border border-dashed border-slate-300 bg-slate-50/80 px-6 py-16 text-center text-muted-foreground">
                     جاري تحميل المشاريع...
                   </div>
                 ) : projects.length ? (
@@ -560,123 +833,79 @@ export default function Home() {
                       ref={homeSliderRef}
                       {...homeSliderBind}
                       dir="ltr"
-                      className="
-                        lg:hidden
-                        flex gap-5 overflow-x-auto overflow-y-hidden pb-4
-                        snap-x snap-mandatory
-                        scroll-smooth
-                        select-none
-                        [-ms-overflow-style:none] [scrollbar-width:none]
-                        [&::-webkit-scrollbar]:hidden
-                        cursor-grab active:cursor-grabbing
-                      "
+                      className="flex gap-5 overflow-x-auto overflow-y-hidden pb-4 lg:hidden [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden cursor-grab snap-x snap-mandatory scroll-smooth select-none active:cursor-grabbing"
                       style={{ WebkitOverflowScrolling: "touch" }}
                     >
-                      {projects.map((p) => (
+                      {projects.map((project) => (
                         <div
-                          key={p.id}
+                          key={project.id}
                           dir="rtl"
-                          className="snap-start shrink-0 w-[86%] sm:w-[420px]"
+                          className="w-[86%] shrink-0 snap-start sm:w-[420px]"
                         >
-                          {projectCard(p, false)}
+                          {projectCard(project)}
                         </div>
                       ))}
                     </div>
 
-                    <div className="hidden lg:grid grid-cols-2 xl:grid-cols-4 gap-8">
-                      {projects.slice(0, 4).map((p) => (
-                        <div key={p.id}>{projectCard(p, false)}</div>
+                    <div className="hidden gap-6 lg:grid lg:grid-cols-2 xl:grid-cols-4">
+                      {projects.slice(0, 4).map((project) => (
+                        <div key={project.id}>{projectCard(project)}</div>
                       ))}
                     </div>
                   </>
                 ) : (
-                  <div className="text-center text-white/70 py-16">
-                    لا توجد مشاريع حالياً.
+                  <div className="rounded-[28px] border border-dashed border-slate-300 bg-slate-50/80 px-6 py-16 text-center text-muted-foreground">
+                    لا توجد مشاريع حاليًا.
                   </div>
                 )}
               </div>
-
-              <div className="mt-14 flex justify-center">
-                <Link href="/projects">
-                  <Button className="rsg-cta rsg-cta--gold">
-                    عرض جميع المشاريع
-                    <ArrowRight className="mr-2 w-5 h-5" />
-                  </Button>
-                </Link>
-              </div>
             </div>
-          </section>
+          </div>
+        </section>
 
-          {/* ✅ Why */}
-          <section className={`${SECTION} py-16 md:py-20`}>
-            <div className="container w-full">
-              <div className="rsg-card p-8 md:p-10">
-                <div className="text-center max-w-2xl mx-auto">
-                  <h2 className="text-4xl md:text-5xl font-semibold text-foreground">
-                    لماذا الاستثمار مع معدن؟
+        <section className="pb-8 sm:pb-10 lg:pb-12">
+          <div className="container px-4 sm:px-6">
+            <div className="relative overflow-hidden rounded-[34px] border border-slate-200/80 bg-[linear-gradient(135deg,rgba(255,255,255,0.96)_0%,rgba(247,248,250,0.98)_65%,rgba(242,174,48,0.12)_100%)] px-6 py-10 shadow-[0_28px_85px_-56px_rgba(11,23,38,0.3)] sm:px-8 lg:px-10">
+              <div
+                aria-hidden
+                className="pointer-events-none absolute left-0 top-0 h-28 w-28 rounded-full bg-[#f2ae30]/18 blur-3xl"
+              />
+
+              <div className="relative z-10 flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+                <div className="max-w-2xl text-right">
+                  <p className="text-sm font-semibold text-primary/70">
+                    الخطوة التالية
+                  </p>
+                  <h2 className="mt-3 text-3xl font-semibold leading-tight text-foreground sm:text-4xl">
+                    واجهة أوضح اليوم، وانتقال أسلس إلى قسم التواصل أسفل الصفحة.
                   </h2>
-                  <p className="mt-4 text-base md:text-lg text-muted-foreground">
-                    رحلة واضحة من اختيار المشروع إلى متابعة الأداء… بكل شفافية.
+                  <p className="mt-4 text-base leading-8 text-muted-foreground sm:text-lg">
+                    ابدأ من المشاريع المنشورة أو تعرّف أكثر على معدن، ثم أكمل
+                    رحلتك مباشرة إلى قسم التواصل والفوتر بتسلسل بصري أكثر اتزانًا.
                   </p>
                 </div>
 
-                <div className="mt-10 grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <div className="rounded-2xl border border-border bg-white/70 backdrop-blur p-6 text-center">
-                    <div className="mx-auto w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center">
-                      <Sparkles className="w-6 h-6 text-amber-700" />
-                    </div>
-                    <h3 className="mt-4 text-lg font-bold text-foreground">
-                      اختيار ذكي للمشاريع
-                    </h3>
-                    <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
-                      مشاريع مدروسة بعناية مع عرض واضح للموقع والنوع والصور.
-                    </p>
-                  </div>
-
-                  <div className="rounded-2xl border border-border bg-white/70 backdrop-blur p-6 text-center">
-                    <div className="mx-auto w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center">
-                      <Shield className="w-6 h-6 text-amber-700" />
-                    </div>
-                    <h3 className="mt-4 text-lg font-bold text-foreground">
-                      شفافية وموثوقية
-                    </h3>
-                    <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
-                      معلومات موحدة، وإظهار المشاريع المنشورة فقط حسب إعدادات الإدارة.
-                    </p>
-                  </div>
-
-                  <div className="rounded-2xl border border-border bg-white/70 backdrop-blur p-6 text-center">
-                    <div className="mx-auto w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center">
-                      <TrendingUp className="w-6 h-6 text-amber-700" />
-                    </div>
-                    <h3 className="mt-4 text-lg font-bold text-foreground">
-                      خطوات استثمار واضحة
-                    </h3>
-                    <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
-                      ابدأ بمشاهدة المشاريع، ثم تفاصيل كل مشروع، ثم اتخاذ قرار الاستثمار.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-3">
+                <div className="flex flex-col gap-3 sm:flex-row">
                   <Link href="/projects">
-                    <Button className="rounded-full h-11 px-7">
-                      استعرض المشاريع الآن
-                      <ArrowRight className="mr-2 w-5 h-5" />
+                    <Button className="h-12 rounded-full px-7 text-sm font-semibold">
+                      استعرض المشاريع
+                      <ArrowRight className="mr-2 h-4 w-4" />
                     </Button>
                   </Link>
 
                   <Link href="/about">
-                    <Button variant="outline" className="rounded-full h-11 px-7">
+                    <Button
+                      variant="outline"
+                      className="h-12 rounded-full px-7 text-sm font-semibold"
+                    >
                       تعرّف على معدن
                     </Button>
                   </Link>
                 </div>
               </div>
             </div>
-          </section>
-
-        </div>
+          </div>
+        </section>
       </main>
     </div>
   );
