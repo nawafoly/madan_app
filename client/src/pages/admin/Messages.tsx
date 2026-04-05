@@ -708,6 +708,45 @@ function requestNumber(m: any) {
   );
 }
 
+function resolveRequestBusinessId(source: any) {
+  return pick(
+    source?.businessId,
+    source?.requestBusinessId,
+    source?.request?.businessId,
+    source?.requestSnapshot?.businessId,
+    source?.issueNumber,
+    source?.requestNumber,
+    source?.mk
+  );
+}
+
+function resolveProjectBusinessId(source: any, projectRecord?: any) {
+  return pick(
+    projectRecord?.businessId,
+    source?.projectBusinessId,
+    source?.projectSnapshot?.businessId,
+    source?.project?.businessId
+  );
+}
+
+function resolveInvestmentBusinessId(source: any, investmentRecord?: any) {
+  return pick(
+    investmentRecord?.businessId,
+    source?.investmentBusinessId,
+    source?.investmentSnapshot?.businessId,
+    source?.investment?.businessId
+  );
+}
+
+function resolveContractBusinessId(source: any, contractRecord?: any) {
+  return pick(
+    contractRecord?.businessId,
+    source?.contractBusinessId,
+    source?.contractSnapshot?.businessId,
+    source?.contract?.businessId
+  );
+}
+
 function lastTouchedBy(m: any) {
   // ✅ أفضلية: آخر تحديث محفوظ
   const v = pick(
@@ -2124,16 +2163,34 @@ export default function MessagesManagement() {
       );
       const updatedAtValue = getLastUpdatedAtValue(message);
       const projectTitle = getProjectTitle(projectId);
+      const requestBusinessId = resolveRequestBusinessId(message);
+      const projectBusinessId = resolveProjectBusinessId(
+        message,
+        projectsMap[String(projectId || "")]
+      );
+      const investmentBusinessId = resolveInvestmentBusinessId(
+        message,
+        String(selectedMessage?.id || "").trim() === String(message?.id || "").trim()
+          ? investmentDoc
+          : undefined
+      );
+      const contractBusinessId = resolveContractBusinessId(
+        message,
+        String(selectedMessage?.id || "").trim() === String(message?.id || "").trim()
+          ? contractDoc
+          : undefined
+      );
 
       return {
         ...message,
         client,
         projectId,
+        projectBusinessId,
         projectTitle,
         amount,
         remaining,
         exceeded: remaining != null ? amount > remaining : false,
-        requestIdLabel: requestNumber(message),
+        requestIdLabel: requestBusinessId || "—",
         requestDateValue,
         requestDateLabel: formatDateTimeAR(requestDateValue),
         requestTimeLabel: formatRequestTimeLabel(requestDateValue),
@@ -2149,6 +2206,10 @@ export default function MessagesManagement() {
         interestReviewMeta,
         summary: getRequestSummary(message),
         searchIndex: normalizeSearchValue(
+          requestBusinessId,
+          projectBusinessId,
+          investmentBusinessId,
+          contractBusinessId,
           client.clientName,
           client.clientEmail,
           client.clientPhone,
@@ -2177,7 +2238,14 @@ export default function MessagesManagement() {
         b.requestDateValue instanceof Date ? b.requestDateValue.getTime() : 0;
       return bCreated - aCreated;
     });
-  }, [normalized, userIdentityIndex, projectsMap]);
+  }, [
+    contractDoc,
+    investmentDoc,
+    normalized,
+    projectsMap,
+    selectedMessage?.id,
+    userIdentityIndex,
+  ]);
 
   const filtered = useMemo(() => {
     const matchesView = (message: any) => {
@@ -2372,9 +2440,16 @@ export default function MessagesManagement() {
           <div className="mt-4 rounded-[18px] border border-amber-200/80 bg-white/80 p-3">
             <div className="flex items-start gap-2 text-[13px] text-slate-700">
               <Building2 className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
-              <span className="min-w-0 break-words font-medium leading-6">
-                {projectTitle}
-              </span>
+              <div className="min-w-0">
+                <div className="break-words font-medium leading-6">
+                  {projectTitle}
+                </div>
+                {request.projectBusinessId ? (
+                  <div className="mt-1 text-[11px] font-medium text-amber-700/80">
+                    رقم المشروع {request.projectBusinessId}
+                  </div>
+                ) : null}
+              </div>
             </div>
 
             <div className="mt-3 rounded-[16px] border border-amber-200/70 bg-amber-50/70 px-3 py-3 text-sm leading-7 text-amber-950">
@@ -2523,9 +2598,16 @@ export default function MessagesManagement() {
         >
           <div className="flex items-start gap-2 text-[13px] text-slate-700">
             <Building2 className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
-            <span className="min-w-0 break-words font-medium leading-6">
-              {request.projectTitle}
-            </span>
+            <div className="min-w-0">
+              <div className="break-words font-medium leading-6">
+                {request.projectTitle}
+              </div>
+              {request.projectBusinessId ? (
+                <div className="mt-1 text-[11px] font-medium text-slate-500">
+                  رقم المشروع {request.projectBusinessId}
+                </div>
+              ) : null}
+            </div>
           </div>
 
           <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -2680,6 +2762,23 @@ export default function MessagesManagement() {
     selectedMessage?.projectId,
     selectedMessage?.project_id,
     selectedMessage?.project?.id
+  );
+  const selectedProjectRecord = selectedProjectId
+    ? projectsMap[String(selectedProjectId || "")]
+    : null;
+  const selectedRequestBusinessId =
+    resolveRequestBusinessId(selectedMessage) || "—";
+  const selectedProjectBusinessId = resolveProjectBusinessId(
+    selectedMessage,
+    selectedProjectRecord
+  );
+  const selectedInvestmentBusinessId = resolveInvestmentBusinessId(
+    selectedMessage,
+    investmentDoc
+  );
+  const selectedContractBusinessId = resolveContractBusinessId(
+    selectedMessage,
+    contractDoc
   );
   const selectedProjectTitle = getProjectTitle(selectedProjectId);
   const selectedAmount =
@@ -4765,7 +4864,7 @@ export default function MessagesManagement() {
   };
 
   const copySelectedRequestNumber = async () => {
-    const value = requestNumber(selectedMessage);
+    const value = selectedRequestBusinessId;
     if (!value || value === "—") {
       toast.warning("لا يوجد رقم طلب متاح للنسخ.");
       return;
@@ -5251,7 +5350,7 @@ export default function MessagesManagement() {
     {
       key: "request_number",
       label: "رقم الطلب",
-      value: requestNumber(selectedMessage),
+      value: selectedRequestBusinessId,
       icon: <FileText className="h-3.5 w-3.5" />,
       mono: true,
       strong: true,
@@ -5280,6 +5379,9 @@ export default function MessagesManagement() {
       key: "project",
       label: "المشروع",
       value: selectedProjectTitle,
+      helper: selectedProjectBusinessId
+        ? `رقم المشروع ${selectedProjectBusinessId}`
+        : undefined,
       icon: <Building2 className="h-3.5 w-3.5" />,
       strong: true,
     },
@@ -5432,6 +5534,11 @@ export default function MessagesManagement() {
             <div className="text-lg font-semibold text-slate-950">
               {selectedProjectTitle}
             </div>
+            {selectedProjectBusinessId ? (
+              <div className="text-xs font-medium text-slate-500">
+                رقم المشروع {selectedProjectBusinessId}
+              </div>
+            ) : null}
             <p className="text-sm leading-7 text-slate-600">
               {isSelectedInvestmentRequest
                 ? `المبلغ الحالي المرتبط بالطلب: ${moneySAR(selectedAmount)}`
@@ -5724,7 +5831,9 @@ export default function MessagesManagement() {
                 isSelectedInterestRequest
                   ? selectedInterestReviewMeta?.helperText
                   : selectedMessage?.investmentId
-                    ? `سجل الاستثمار ${selectedMessage.investmentId}`
+                    ? selectedInvestmentBusinessId
+                      ? `سجل الاستثمار ${selectedInvestmentBusinessId}`
+                      : "تم إنشاء سجل الاستثمار"
                     : "لم يتم إنشاء سجل الاستثمار بعد"
               }
               icon={<Wallet className="h-3.5 w-3.5" />}
@@ -5827,6 +5936,11 @@ export default function MessagesManagement() {
             <DetailSummaryMetric
               label="المشروع"
               value={selectedProjectTitle}
+              helper={
+                selectedProjectBusinessId
+                  ? `رقم المشروع ${selectedProjectBusinessId}`
+                  : undefined
+              }
               icon={<Building2 className="h-3.5 w-3.5" />}
               strong
               className="border-transparent bg-white/85 shadow-none"
@@ -5857,7 +5971,9 @@ export default function MessagesManagement() {
                   }
                   helper={
                     selectedMessage?.investmentId
-                      ? `رقم السجل ${selectedMessage.investmentId}`
+                      ? selectedInvestmentBusinessId
+                        ? `رقم السجل ${selectedInvestmentBusinessId}`
+                        : "رقم السجل غير متاح حاليًا"
                       : undefined
                   }
                   icon={<ShieldCheck className="h-3.5 w-3.5" />}
@@ -5925,14 +6041,27 @@ export default function MessagesManagement() {
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <DetailSummaryMetric
           label="رقم الاستثمار"
-          value={String(selectedMessage?.investmentId || "-")}
+          value={
+            selectedMessage?.investmentId
+              ? selectedInvestmentBusinessId || "غير متاح"
+              : "-"
+          }
           icon={<Building2 className="h-3.5 w-3.5" />}
           strong
         />
         <DetailSummaryMetric
           label="حالة العقد"
           value={getContractStatusLabel(contractStatusValue)}
-          helper={contractFollowupChipLabel || undefined}
+          helper={
+            [
+              selectedContractBusinessId
+                ? `رقم العقد ${selectedContractBusinessId}`
+                : "",
+              contractFollowupChipLabel || "",
+            ]
+              .filter(Boolean)
+              .join(" • ") || undefined
+          }
           icon={<ShieldCheck className="h-3.5 w-3.5" />}
           strong
         />
