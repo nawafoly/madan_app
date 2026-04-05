@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { formatCurrencyShort, formatNumberEN } from "@/lib/formatters";
 import { getClientInvestmentStatusMeta } from "@/lib/workflowStatusMeta";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 import { useAuth } from "@/_core/hooks/useAuth";
 import { db } from "@/_core/firebase";
@@ -38,12 +39,15 @@ type Project = any;
 ========================= */
 export default function MyDashboard() {
   const { user, logout } = useAuth();
+  const { language } = useLanguage();
 
   const [investments, setInvestments] = useState<Investment[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
 
   const isClient = user?.role === "client";
+  const pageDir: "rtl" | "ltr" = language === "ar" ? "rtl" : "ltr";
+  const pageTextAlignClass = language === "ar" ? "text-right" : "text-left";
 
   /* =========================
      Load client data
@@ -157,7 +161,10 @@ export default function MyDashboard() {
   if (!user) {
     return (
       <ClientLayout className="py-12">
-        <Card className="max-w-xl mx-auto">
+        <Card
+          dir={pageDir}
+          className={`max-w-xl mx-auto ${pageTextAlignClass}`}
+        >
           <CardHeader>
             <CardTitle>لوحة العميل</CardTitle>
           </CardHeader>
@@ -175,7 +182,10 @@ export default function MyDashboard() {
   if (!isClient) {
     return (
       <ClientLayout className="py-12">
-        <Card className="max-w-2xl mx-auto">
+        <Card
+          dir={pageDir}
+          className={`max-w-2xl mx-auto ${pageTextAlignClass}`}
+        >
           <CardHeader>
             <CardTitle>حسابك ليس عميل حالياً</CardTitle>
           </CardHeader>
@@ -203,7 +213,7 @@ export default function MyDashboard() {
 
   return (
     <ClientLayout className="py-12">
-      <div className="space-y-8">
+      <div dir={pageDir} className={`space-y-8 ${pageTextAlignClass}`}>
 
         <div>
           <h1 className="text-4xl font-bold mb-2">
