@@ -1,36 +1,9 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
-
-import { toast } from "sonner";
 import { Mail, Phone, MapPin, Clock } from "lucide-react";
 
-// Firestore
-import { addDoc, collection, serverTimestamp } from "firebase/firestore";
-import { db } from "@/_core/firebase";
-
-type ContactForm = {
-  name: string;
-  email: string;
-  phone: string;
-  subject: string;
-  message: string;
-};
-
 export default function Contact() {
-  const [loading, setLoading] = useState(false);
-  const [formData, setFormData] = useState<ContactForm>({
-    name: "",
-    email: "",
-    phone: "",
-    subject: "",
-    message: "",
-  });
-
   const contactInfo = useMemo(
     () => [
       {
@@ -60,48 +33,6 @@ export default function Contact() {
     ],
     []
   );
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (
-      !formData.name.trim() ||
-      !formData.email.trim() ||
-      !formData.message.trim()
-    ) {
-      toast.error("الرجاء تعبئة الحقول المطلوبة");
-      return;
-    }
-
-    try {
-      setLoading(true);
-
-      await addDoc(collection(db, "contact_messages"), {
-        name: formData.name.trim(),
-        email: formData.email.trim(),
-        phone: formData.phone.trim() || null,
-        subject: formData.subject.trim() || null,
-        message: formData.message.trim(),
-        status: "new",
-        createdAt: serverTimestamp(),
-      });
-
-      toast.success("تم إرسال رسالتك بنجاح! سنتواصل معك قريباً.");
-
-      setFormData({
-        name: "",
-        email: "",
-        phone: "",
-        subject: "",
-        message: "",
-      });
-    } catch (err) {
-      console.error(err);
-      toast.error("فشل إرسال الرسالة، حاول مرة أخرى");
-    } finally {
-      setLoading(false);
-    }
-  };
 
   return (
     <div className="w-full bg-transparent">
@@ -157,122 +88,6 @@ export default function Contact() {
                   <div key={index}>{CardInner}</div>
                 );
               })}
-            </div>
-
-            {/* Contact Form */}
-            <div className="mt-10 md:mt-14">
-              <Card className="max-w-3xl mx-auto rounded-3xl border-border/70 bg-card/70 backdrop-blur supports-[backdrop-filter]:bg-card/60">
-                <CardContent className="p-6 md:p-10">
-                  <p className="text-center text-sm md:text-base text-muted-foreground">
-                    نحن هنا للإجابة على استفساراتك ومساعدتك في الوصول إلى الجهة
-                    المناسبة داخل المنصة.
-                  </p>
-
-                  <Separator className="my-8" />
-
-                  <form onSubmit={handleSubmit} className="space-y-6">
-                    <div className="grid md:grid-cols-2 gap-4 md:gap-6">
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium">
-                          الاسم الكامل
-                        </label>
-                        <Input
-                          placeholder="مثال: أحمد محمد"
-                          value={formData.name}
-                          onChange={(e) =>
-                            setFormData({
-                              ...formData,
-                              name: e.target.value,
-                            })
-                          }
-                          required
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium">
-                          البريد الإلكتروني
-                        </label>
-                        <Input
-                          type="email"
-                          placeholder="name@example.com"
-                          value={formData.email}
-                          onChange={(e) =>
-                            setFormData({
-                              ...formData,
-                              email: e.target.value,
-                            })
-                          }
-                          required
-                          dir="ltr"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid md:grid-cols-2 gap-4 md:gap-6">
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium">
-                          رقم الهاتف
-                        </label>
-                        <Input
-                          placeholder="0549010366"
-                          value={formData.phone}
-                          onChange={(e) =>
-                            setFormData({
-                              ...formData,
-                              phone: e.target.value,
-                            })
-                          }
-                          dir="ltr"
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium">الموضوع</label>
-                        <Input
-                          placeholder="مثال: استفسار عن الاستثمار"
-                          value={formData.subject}
-                          onChange={(e) =>
-                            setFormData({
-                              ...formData,
-                              subject: e.target.value,
-                            })
-                          }
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">الرسالة</label>
-                      <Textarea
-                        rows={7}
-                        placeholder="اكتب رسالتك هنا..."
-                        value={formData.message}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            message: e.target.value,
-                          })
-                        }
-                        required
-                      />
-                    </div>
-
-                    <Button
-                      type="submit"
-                      size="lg"
-                      disabled={loading}
-                      className="w-full rounded-2xl"
-                    >
-                      {loading ? "جاري الإرسال..." : "إرسال الرسالة"}
-                    </Button>
-
-                    <p className="text-center text-xs text-muted-foreground">
-                      بالإرسال أنت توافق على استخدام بياناتك للتواصل معك فقط.
-                    </p>
-                  </form>
-                </CardContent>
-              </Card>
             </div>
           </div>
         </section>
