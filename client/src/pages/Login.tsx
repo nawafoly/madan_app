@@ -138,7 +138,7 @@ export default function LoginPage() {
             badge: "دخول المنصة",
             title: "تسجيل الدخول",
             description:
-              "أدخل بياناتك للوصول إلى لوحة العميل أو الإدارة ومتابعة تفاصيل الحساب من واجهة موحدة.",
+              "",
             submitLabel: "تسجيل الدخول",
             toggleLabel: "إنشاء حساب جديد",
           }
@@ -146,7 +146,7 @@ export default function LoginPage() {
             badge: "إنشاء حساب",
             title: "إنشاء حساب جديد",
             description:
-              "أدخل بياناتك الأساسية لإنشاء الحساب والبدء في الوصول إلى لوحة المنصة من نفس الواجهة.",
+              "",
             submitLabel: "إنشاء الحساب",
             toggleLabel: "لدي حساب بالفعل",
           },
