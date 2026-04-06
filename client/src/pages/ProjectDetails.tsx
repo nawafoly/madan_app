@@ -46,7 +46,7 @@ import {
   doc,
   getDoc,
   collection,
-  runTransaction,
+  setDoc,
   serverTimestamp,
 } from "firebase/firestore";
 import { db } from "@/_core/firebase";
@@ -56,7 +56,7 @@ import {
   buildAuditSource,
   runAuditedOperation,
 } from "@/lib/auditLog";
-import { getProjectBusinessId, reserveNextBusinessId } from "@/lib/businessIds";
+import { getProjectBusinessId } from "@/lib/businessIds";
 import {
   formatCurrencyEN,
   formatNumberEN,
@@ -1095,6 +1095,9 @@ export default function ProjectDetails() {
       }
 
       const requestRef = doc(collection(db, "interest_requests"));
+      // Client create flow should not depend on counters/requests reads because
+      // that path is intentionally blocked by Firestore rules.
+      const requestBusinessId = `REQ-${requestRef.id.slice(0, 8).toUpperCase()}`;
       const payload = {
         requestId: requestRef.id,
         type: requestType,
@@ -1136,7 +1139,7 @@ export default function ProjectDetails() {
         updatedAt: serverTimestamp(),
       };
 
-      const requestBusinessId = await runAuditedOperation<string>({
+      await runAuditedOperation<string>({
         action: AUDIT_ACTIONS.REQUEST_CREATED,
         category: "request",
         entityType: "request",
@@ -1157,17 +1160,16 @@ export default function ProjectDetails() {
           requestCode: result,
           requestType,
         }),
-        targets: [{ ref: requestRef, entityType: "request" }],
+        targets: [{ ref: requestRef, entityType: "request", captureBefore: false }],
         ignoreFields: ["updatedAt"],
-        execute: async () =>
-          runTransaction(db, async (tx) => {
-            const businessId = await reserveNextBusinessId(tx, "requests");
-            tx.set(requestRef, {
-              ...payload,
-              businessId,
-            });
-            return businessId;
-          }),
+        execute: async () => {
+          await setDoc(requestRef, {
+            ...payload,
+            businessId: requestBusinessId,
+            requestNumber: requestBusinessId,
+          });
+          return requestBusinessId;
+        },
       });
       setFormMessage({
         type: "success",

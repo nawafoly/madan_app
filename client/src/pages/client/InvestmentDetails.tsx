@@ -1628,25 +1628,34 @@ function InvestmentDocumentCard({
 }: InvestmentDocumentCardProps) {
   const hasDocumentAction = Boolean(viewHref || downloadHref);
   const defaultFooter = (
-    <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="text-xs text-slate-400">
         {hasDocumentAction ? sourceLabel : "لا يوجد ملف جاهز للعرض حالياً"}
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
         {viewHref ? (
-          <Button asChild variant="outline" size="sm" className="rounded-full px-4">
+          <Button
+            asChild
+            variant="outline"
+            size="sm"
+            className="h-10 w-full rounded-full border border-primary bg-white px-4 text-primary shadow-sm hover:bg-primary/10 hover:text-primary sm:w-auto"
+          >
             <a href={viewHref} target="_blank" rel="noreferrer">
-              <Eye className="h-4 w-4" />
+              <Eye className="h-4 w-4 text-current" />
               عرض
             </a>
           </Button>
         ) : null}
 
         {downloadHref ? (
-          <Button asChild variant="outline" size="sm" className="rounded-full px-4">
+          <Button
+            asChild
+            size="sm"
+            className="h-10 w-full rounded-full bg-primary px-4 text-primary-foreground shadow-[0_14px_28px_-16px_rgba(15,23,42,0.4)] hover:bg-primary/90 sm:w-auto"
+          >
             <a href={downloadHref} rel="noreferrer" download={downloadFileName || true}>
-              <Download className="h-4 w-4" />
+              <Download className="h-4 w-4 text-current" />
               تنزيل
             </a>
           </Button>

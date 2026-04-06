@@ -24,6 +24,7 @@ import {
   query,
   orderBy,
   where,
+  writeBatch,
 } from "firebase/firestore";
 import { db } from "@/_core/firebase";
 import {
@@ -51,7 +52,11 @@ import {
   runAuditedOperation,
 } from "@/lib/auditLog";
 import {
+  buildR2DownloadUrl,
+  listDocumentMetadata,
+  pickLatestFileByCategory,
   uploadInvestmentDocument,
+  type CloudflareFileRecord,
   type UploadDocumentResult,
 } from "@/lib/documentUploadService";
 
@@ -105,6 +110,13 @@ import {
   CLIENT_WORKFLOW_COPY,
   getClientContractStatusLabel,
 } from "@shared/investmentLifecycle";
+import {
+  buildEarlyStopSettlementPreview,
+  getInvestmentSettlementSnapshot,
+  INVESTMENT_SETTLEMENT_FILE_CATEGORY,
+  isInvestmentStoppedEarly,
+  isStopDateBeforePlannedEnd,
+} from "@shared/investmentSettlement";
 import { useLocation, useRoute } from "wouter";
 
 /* =========================
@@ -164,6 +176,15 @@ const DETAIL_OUTLINE_BUTTON_CLASS = `${DETAIL_BUTTON_BASE_CLASS} h-11 border bor
 const DETAIL_LIGHT_SOLID_BUTTON_CLASS = `${DETAIL_BUTTON_BASE_CLASS} h-11 bg-slate-950 text-white shadow-[0_18px_38px_-26px_rgba(15,23,42,0.48)] hover:bg-[#10203a]`;
 const DETAIL_SOLID_BUTTON_CLASS = `${DETAIL_BUTTON_BASE_CLASS} h-11 text-white shadow-[0_18px_38px_-24px_rgba(15,23,42,0.3)]`;
 const DETAIL_DANGER_BUTTON_CLASS = `${DETAIL_BUTTON_BASE_CLASS} h-11 bg-rose-600 text-white shadow-[0_18px_38px_-24px_rgba(225,29,72,0.38)] hover:bg-rose-500`;
+const TRACKING_MESSAGES_COL = "messages";
+
+type AdminHandledAction =
+  | "approve"
+  | "reject"
+  | "reply"
+  | "close"
+  | "archive"
+  | "mark_done";
 
 /* =========================
   helpers
@@ -184,6 +205,41 @@ const toDateSafe = (v: any) => {
 
 function formatDateTimeAR(v: any) {
   return formatDateTimeEN(toDateSafe(v));
+}
+
+function toDateInputValue(value: Date | null | undefined) {
+  if (!(value instanceof Date) || Number.isNaN(value.getTime())) return "";
+  return value.toISOString().slice(0, 10);
+}
+
+function formatDetailedDateTime(value: any) {
+  const date = value instanceof Date ? value : toDateSafe(value);
+  return !date || Number.isNaN(date.getTime())
+    ? "—"
+    : new Intl.DateTimeFormat("en-GB-u-nu-latn", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      }).format(date);
+}
+
+function translateSettlementPreviewError(code: string) {
+  switch (code) {
+    case "missing_start_date":
+      return "لا يمكن إيقاف الاستثمار قبل تثبيت تاريخ البداية الفعلي.";
+    case "invalid_stop_date":
+      return "تاريخ الإيقاف غير صالح.";
+    case "stop_before_start":
+      return "تاريخ الإيقاف يجب أن يكون بعد تاريخ بداية الاستثمار.";
+    case "missing_principal_amount":
+      return "قيمة أصل الاستثمار غير متوفرة للحساب.";
+    case "missing_profit_rate":
+      return "نسبة الربح المعتمدة غير متوفرة للحساب.";
+    default:
+      return "تعذر تجهيز معاينة التسوية النهائية.";
+  }
 }
 
 function formatRequestTimeLabel(value: any) {
@@ -237,6 +293,80 @@ const pick = (...vals: any[]) => {
   }
   return "";
 };
+
+const buildHandledTrackingPatch = (action: AdminHandledAction) => ({
+  adminHandledAt: serverTimestamp(),
+  adminAction: action,
+});
+
+const buildHandledTrackingResetPatch = () => ({
+  adminHandledAt: deleteField(),
+  adminAction: deleteField(),
+});
+
+async function syncRelatedMessageTracking(
+  requestId: string,
+  action: AdminHandledAction | null
+) {
+  const normalizedRequestId = String(requestId || "").trim();
+  if (!normalizedRequestId) return;
+
+  try {
+    const messagesRef = collection(db, TRACKING_MESSAGES_COL);
+    const [requestMatches, parentRequestMatches, parentMessageMatches] =
+      await Promise.all([
+        getDocs(query(messagesRef, where("requestId", "==", normalizedRequestId))),
+        getDocs(
+          query(messagesRef, where("parentRequestId", "==", normalizedRequestId))
+        ),
+        getDocs(
+          query(messagesRef, where("parentMessageId", "==", normalizedRequestId))
+        ),
+      ]);
+
+    const relatedDocs = new Map<string, any>();
+    [requestMatches, parentRequestMatches, parentMessageMatches].forEach(
+      (snapshot) => {
+        snapshot.docs.forEach((row) => {
+          relatedDocs.set(row.id, row);
+        });
+      }
+    );
+
+    if (!relatedDocs.size) return;
+
+    const batch = writeBatch(db);
+    relatedDocs.forEach((row) => {
+      if (action) {
+        batch.set(
+          row.ref,
+          {
+            adminReadAt: serverTimestamp(),
+            adminHandledAt: serverTimestamp(),
+            adminAction: action,
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
+        return;
+      }
+
+      batch.update(row.ref, {
+        adminHandledAt: deleteField(),
+        adminAction: deleteField(),
+        updatedAt: serverTimestamp(),
+      });
+    });
+
+    await batch.commit();
+  } catch (error) {
+    console.error("Failed to sync linked message tracking state", {
+      requestId: normalizedRequestId,
+      action,
+      error,
+    });
+  }
+}
 
 const pickFirstNonEmptyString = (...vals: any[]) => {
   for (const v of vals) {
@@ -464,9 +594,9 @@ function buildRequestTimelineEvents(input: {
   const requestSummary = getRequestSummary(request);
   const requestCreatedAt = toDateSafe(
     request?.createdAt ||
-      request?.created_at ||
-      request?.submittedAt ||
-      request?.timestamp
+    request?.created_at ||
+    request?.submittedAt ||
+    request?.timestamp
   );
 
   const baseEvents = Array.isArray(request?.events) ? request.events : [];
@@ -556,22 +686,22 @@ function resolveRequestClient(source: any, userIdentityIndex: any) {
   const sourceMeta =
     sourceKey === "live_user"
       ? {
-          label: "ملف المستخدم الحالي",
-          tone: "border-emerald-200 bg-emerald-50 text-emerald-700",
-          helper: "الاسم والبريد معروضان مباشرة من users في Firestore.",
-        }
+        label: "ملف المستخدم الحالي",
+        tone: "border-emerald-200 bg-emerald-50 text-emerald-700",
+        helper: "الاسم والبريد معروضان مباشرة من users في Firestore.",
+      }
       : sourceKey === "request_snapshot"
         ? {
-            label: "بيانات الطلب",
-            tone: "border-amber-200 bg-amber-50 text-amber-700",
-            helper:
-              "تعذر ربط الطلب بملف عميل حالي، لذلك يتم العرض من البيانات المحفوظة داخل الطلب نفسه.",
-          }
+          label: "بيانات الطلب",
+          tone: "border-amber-200 bg-amber-50 text-amber-700",
+          helper:
+            "تعذر ربط الطلب بملف عميل حالي، لذلك يتم العرض من البيانات المحفوظة داخل الطلب نفسه.",
+        }
         : {
-            label: "بيانات غير مكتملة",
-            tone: "border-slate-200 bg-slate-100 text-slate-600",
-            helper: "لا توجد بيانات كافية لربط الطلب بملف عميل حالي.",
-          };
+          label: "بيانات غير مكتملة",
+          tone: "border-slate-200 bg-slate-100 text-slate-600",
+          helper: "لا توجد بيانات كافية لربط الطلب بملف عميل حالي.",
+        };
 
   return {
     linkedUser,
@@ -708,45 +838,6 @@ function requestNumber(m: any) {
   );
 }
 
-function resolveRequestBusinessId(source: any) {
-  return pick(
-    source?.businessId,
-    source?.requestBusinessId,
-    source?.request?.businessId,
-    source?.requestSnapshot?.businessId,
-    source?.issueNumber,
-    source?.requestNumber,
-    source?.mk
-  );
-}
-
-function resolveProjectBusinessId(source: any, projectRecord?: any) {
-  return pick(
-    projectRecord?.businessId,
-    source?.projectBusinessId,
-    source?.projectSnapshot?.businessId,
-    source?.project?.businessId
-  );
-}
-
-function resolveInvestmentBusinessId(source: any, investmentRecord?: any) {
-  return pick(
-    investmentRecord?.businessId,
-    source?.investmentBusinessId,
-    source?.investmentSnapshot?.businessId,
-    source?.investment?.businessId
-  );
-}
-
-function resolveContractBusinessId(source: any, contractRecord?: any) {
-  return pick(
-    contractRecord?.businessId,
-    source?.contractBusinessId,
-    source?.contractSnapshot?.businessId,
-    source?.contract?.businessId
-  );
-}
-
 function lastTouchedBy(m: any) {
   // ✅ أفضلية: آخر تحديث محفوظ
   const v = pick(
@@ -775,11 +866,11 @@ function getLastUpdatedAtValue(m: any) {
   return (
     toDateSafe(
       m?.updatedAt ||
-        m?.updated_at ||
-        m?.lastUpdatedAt ||
-        m?.lastActivityAt ||
-        m?.processedAt ||
-        lastEventAt
+      m?.updated_at ||
+      m?.lastUpdatedAt ||
+      m?.lastActivityAt ||
+      m?.processedAt ||
+      lastEventAt
     ) ||
     toDateSafe(m?.createdAt || m?.created_at || m?.submittedAt || m?.timestamp)
   );
@@ -826,34 +917,6 @@ function getFileNameFromPath(path: any): string {
   const normalized = p.replace(/\\/g, "/");
   const last = normalized.split("/").pop();
   return String(last || "-").trim() || "-";
-}
-
-function buildR2DownloadUrl(path: any, forceDownload = false) {
-  const objectPath = String(path || "").trim();
-  if (!objectPath) return "";
-
-  const explicitDownloadBase = String(
-    import.meta.env.VITE_R2_DOWNLOAD_WORKER_URL || ""
-  ).trim();
-  const uploadWorkerUrl = String(
-    import.meta.env.VITE_R2_UPLOAD_WORKER_URL || ""
-  ).trim();
-  const baseUrl = explicitDownloadBase || uploadWorkerUrl;
-  if (!baseUrl) return "";
-
-  try {
-    const url = new URL(baseUrl);
-    url.pathname = "/download";
-    url.search = "";
-    url.hash = "";
-    url.searchParams.set("path", objectPath);
-    if (forceDownload) {
-      url.searchParams.set("download", "1");
-    }
-    return url.toString();
-  } catch {
-    return "";
-  }
 }
 
 function expectedContractPath(
@@ -1195,6 +1258,156 @@ function getInterestReviewMeta(request: any) {
   };
 }
 
+const REQUEST_TRACKING_SLA_HOURS = 24;
+const REQUEST_TRACKING_CRITICAL_HOURS = 48;
+
+type RequestTrackingState = "new" | "seen" | "handled" | "needsAction";
+
+function getRequestTrackingStartedAt(request: any) {
+  return (
+    toDateSafe(request?.adminSeenAt) ||
+    getLastUpdatedAtValue(request) ||
+    toDateSafe(
+      request?.createdAt ||
+      request?.created_at ||
+      request?.submittedAt ||
+      request?.timestamp
+    )
+  );
+}
+
+function getRequestTrackingState(
+  request: any,
+  requestKindKey?: string
+): RequestTrackingState {
+  const normalizedStatus = normalizeRequestStatus(request?.status);
+  if (
+    request?.adminHandledAt ||
+    ["completed", "closed", "rejected"].includes(normalizedStatus)
+  ) {
+    return "handled";
+  }
+  if (!request?.adminSeenAt) return "new";
+
+  if (requestKindKey === "interest") {
+    return "seen";
+  }
+
+  const seenAt = toDateSafe(request?.adminSeenAt);
+  if (seenAt instanceof Date) {
+    const ageHours = (Date.now() - seenAt.getTime()) / (60 * 60 * 1000);
+    if (ageHours >= REQUEST_TRACKING_SLA_HOURS) {
+      return "needsAction";
+    }
+  }
+
+  return "seen";
+}
+
+function getRequestTrackingMeta(request: any, requestKindKey?: string) {
+  const trackingState = getRequestTrackingState(request, requestKindKey);
+
+  switch (trackingState) {
+    case "handled":
+      return {
+        key: trackingState,
+        label: "تم التعامل",
+        tone: "border-emerald-200 bg-emerald-50 text-emerald-800",
+        accent: "bg-emerald-500",
+      };
+    case "needsAction":
+      return {
+        key: trackingState,
+        label: "يحتاج إجراء",
+        tone: "border-rose-200 bg-rose-50 text-rose-800",
+        accent: "bg-rose-500",
+      };
+    case "seen":
+      return {
+        key: trackingState,
+        label: "تم الاطلاع",
+        tone: "border-slate-200 bg-slate-100 text-slate-700",
+        accent: "bg-slate-500",
+      };
+    default:
+      return {
+        key: "new" as const,
+        label: "جديد",
+        tone: "border-amber-200 bg-amber-50 text-amber-800",
+        accent: "bg-amber-500",
+      };
+  }
+}
+
+function getRequestTrackingSlaMeta(request: any, requestKindKey?: string) {
+  if (getRequestTrackingState(request, requestKindKey) !== "needsAction") {
+    return null;
+  }
+
+  const startedAt = getRequestTrackingStartedAt(request);
+  if (!(startedAt instanceof Date)) return null;
+
+  const ageHours = (Date.now() - startedAt.getTime()) / (60 * 60 * 1000);
+  if (ageHours >= REQUEST_TRACKING_CRITICAL_HOURS) {
+    return {
+      label: "متأخر جدًا",
+      className: "border-rose-300 bg-rose-100 text-rose-900",
+    };
+  }
+
+  if (ageHours >= REQUEST_TRACKING_SLA_HOURS) {
+    return {
+      label: "متأخر",
+      className: "border-amber-300 bg-amber-100 text-amber-900",
+    };
+  }
+
+  return null;
+}
+
+function getRequestTrackingPriority(request: any, requestKindKey?: string) {
+  const rankMap: Record<RequestTrackingState, number> = {
+    needsAction: 0,
+    new: 1,
+    seen: 2,
+    handled: 3,
+  };
+
+  return rankMap[getRequestTrackingState(request, requestKindKey)];
+}
+
+function getInterestTrackingMeta(request: any) {
+  const trackingMeta = getRequestTrackingMeta(request, "interest");
+
+  if (trackingMeta.key === "handled") {
+    return {
+      ...trackingMeta,
+      cardClass:
+        "border-emerald-300/80 bg-[linear-gradient(180deg,rgba(236,253,245,0.96)_0%,#ffffff_42%,#ffffff_100%)]",
+      helperText:
+        "تم التعامل مع طلب الاهتمام على مستوى المتابعة الإدارية، ويمكن الرجوع إليه من السجل عند الحاجة.",
+    };
+  }
+
+  if (trackingMeta.key === "seen") {
+    return {
+      ...trackingMeta,
+      cardClass:
+        "border-slate-300/80 bg-[linear-gradient(180deg,rgba(248,250,252,0.98)_0%,#ffffff_44%,#ffffff_100%)]",
+      helperText:
+        "تم تسجيل الاطلاع على طلب الاهتمام، ويمكن متابعة العميل أو المشروع لاحقًا عند الحاجة.",
+    };
+  }
+
+  return {
+    ...trackingMeta,
+    cardClass:
+      "border-amber-300/80 bg-[linear-gradient(180deg,rgba(255,251,235,0.96)_0%,#ffffff_42%,#ffffff_100%)]",
+    helperText:
+      "هذا طلب اهتمام جديد بانتظار الاطلاع الأول فقط، بدون دورة إجراءات استثمارية كاملة.",
+  };
+}
+
 function isArchivedRequestRecord(request: any) {
   const normalizedStatus = normalizeRequestStatus(request?.status);
   if (normalizedStatus === "completed" || normalizedStatus === "rejected") {
@@ -1220,13 +1433,13 @@ type ContractFile = {
 type ContractDoc = {
   id: string;
   status?:
-    | "draft"
-    | "sent"
-    | "pending_signature"
-    | "signed"
-    | "under_review"
-    | "approved"
-    | "returned";
+  | "draft"
+  | "sent"
+  | "pending_signature"
+  | "signed"
+  | "under_review"
+  | "approved"
+  | "returned";
   files?: ContractFile[];
   createdAt?: any;
   updatedAt?: any;
@@ -1358,6 +1571,20 @@ export default function MessagesManagement() {
   // ✅ إرجاع مع ملاحظة
   const [returnDialogOpen, setReturnDialogOpen] = useState(false);
   const [returnNote, setReturnNote] = useState("");
+  const [stopInvestmentDialogOpen, setStopInvestmentDialogOpen] =
+    useState(false);
+  const [stopCloseDate, setStopCloseDate] = useState<string>(() =>
+    toDateInputValue(new Date())
+  );
+  const [stopReason, setStopReason] = useState("");
+  const [settlementDocumentFile, setSettlementDocumentFile] =
+    useState<File | null>(null);
+  const [settlementDocuments, setSettlementDocuments] = useState<
+    CloudflareFileRecord[]
+  >([]);
+  const [settlementDocumentsLoading, setSettlementDocumentsLoading] =
+    useState(false);
+  const [settlementDocumentBusy, setSettlementDocumentBusy] = useState(false);
 
   const [view, setView] = useState<
     "all" | "new" | "archived" | "open" | "completed" | "rejected"
@@ -1412,6 +1639,13 @@ export default function MessagesManagement() {
     setR2ProbeStatusByKind({});
     setReturnDialogOpen(false);
     setReturnNote("");
+    setStopInvestmentDialogOpen(false);
+    setStopCloseDate(toDateInputValue(new Date()));
+    setStopReason("");
+    setSettlementDocumentFile(null);
+    setSettlementDocuments([]);
+    setSettlementDocumentsLoading(false);
+    setSettlementDocumentBusy(false);
     setLocation("/admin/messages");
   };
 
@@ -1518,6 +1752,7 @@ export default function MessagesManagement() {
 
   const canManageMessages = hasPermission(user as any, "messages.manage");
   const canManageInvestments = hasPermission(user as any, "investments.manage");
+  const canEditFinancial = hasPermission(user as any, "financial.edit");
   const canOwnerAccountantActions =
     canManageMessages && (myRole === "owner" || myRole === "accountant");
   const canStaffActions =
@@ -1801,13 +2036,13 @@ export default function MessagesManagement() {
     );
     const hydratedMessage = linkedInvestmentDoc
       ? {
-          ...normalizedOne,
-          investmentId: linkedInvestmentDoc.id,
-          contractId: pick(
-            normalizedOne?.contractId,
-            linkedInvestmentDoc?.contractId
-          ),
-        }
+        ...normalizedOne,
+        investmentId: linkedInvestmentDoc.id,
+        contractId: pick(
+          normalizedOne?.contractId,
+          linkedInvestmentDoc?.contractId
+        ),
+      }
       : normalizedOne;
 
     setSelectedMessage(hydratedMessage);
@@ -2153,44 +2388,35 @@ export default function MessagesManagement() {
         projectStatus,
         amount,
       });
+      const trackingMeta = getRequestTrackingMeta(message, requestKind.key);
+      const trackingSlaMeta = getRequestTrackingSlaMeta(
+        message,
+        requestKind.key
+      );
+      const trackingPriority = getRequestTrackingPriority(
+        message,
+        requestKind.key
+      );
       const interestReviewMeta =
-        requestKind.key === "interest" ? getInterestReviewMeta(message) : null;
+        requestKind.key === "interest" ? getInterestTrackingMeta(message) : null;
       const requestDateValue = toDateSafe(
         message.createdAt ||
-          message.created_at ||
-          message.submittedAt ||
-          message.timestamp
+        message.created_at ||
+        message.submittedAt ||
+        message.timestamp
       );
       const updatedAtValue = getLastUpdatedAtValue(message);
       const projectTitle = getProjectTitle(projectId);
-      const requestBusinessId = resolveRequestBusinessId(message);
-      const projectBusinessId = resolveProjectBusinessId(
-        message,
-        projectsMap[String(projectId || "")]
-      );
-      const investmentBusinessId = resolveInvestmentBusinessId(
-        message,
-        String(selectedMessage?.id || "").trim() === String(message?.id || "").trim()
-          ? investmentDoc
-          : undefined
-      );
-      const contractBusinessId = resolveContractBusinessId(
-        message,
-        String(selectedMessage?.id || "").trim() === String(message?.id || "").trim()
-          ? contractDoc
-          : undefined
-      );
 
       return {
         ...message,
         client,
         projectId,
-        projectBusinessId,
         projectTitle,
         amount,
         remaining,
         exceeded: remaining != null ? amount > remaining : false,
-        requestIdLabel: requestBusinessId || "—",
+        requestIdLabel: requestNumber(message),
         requestDateValue,
         requestDateLabel: formatDateTimeAR(requestDateValue),
         requestTimeLabel: formatRequestTimeLabel(requestDateValue),
@@ -2200,22 +2426,23 @@ export default function MessagesManagement() {
           updatedAtValue || requestDateValue
         ),
         touchedBy: lastTouchedBy(message),
+        trackingMeta,
+        trackingSlaMeta,
+        trackingPriority,
         statusMeta,
         stageMeta,
         requestKind,
         interestReviewMeta,
         summary: getRequestSummary(message),
         searchIndex: normalizeSearchValue(
-          requestBusinessId,
-          projectBusinessId,
-          investmentBusinessId,
-          contractBusinessId,
           client.clientName,
           client.clientEmail,
           client.clientPhone,
           projectTitle,
           requestNumber(message),
           statusMeta.label,
+          trackingMeta.label,
+          trackingSlaMeta?.label,
           stageMeta.label,
           client.sourceLabel,
           requestKind.label,
@@ -2226,6 +2453,9 @@ export default function MessagesManagement() {
     });
 
     return rows.sort((a, b) => {
+      const rankDiff = (a.trackingPriority || 0) - (b.trackingPriority || 0);
+      if (rankDiff !== 0) return rankDiff;
+
       const aTime =
         a.updatedAtValue instanceof Date ? a.updatedAtValue.getTime() : 0;
       const bTime =
@@ -2238,14 +2468,7 @@ export default function MessagesManagement() {
         b.requestDateValue instanceof Date ? b.requestDateValue.getTime() : 0;
       return bCreated - aCreated;
     });
-  }, [
-    contractDoc,
-    investmentDoc,
-    normalized,
-    projectsMap,
-    selectedMessage?.id,
-    userIdentityIndex,
-  ]);
+  }, [normalized, userIdentityIndex, projectsMap]);
 
   const filtered = useMemo(() => {
     const matchesView = (message: any) => {
@@ -2364,7 +2587,11 @@ export default function MessagesManagement() {
   const renderRequestCard = (request: any) => {
     if (request.requestKind?.key === "interest") {
       const reviewMeta =
-        request.interestReviewMeta || getInterestReviewMeta(request);
+        request.interestReviewMeta || getInterestTrackingMeta(request);
+      const trackingMeta =
+        request.trackingMeta || getRequestTrackingMeta(request, "interest");
+      const trackingSlaMeta =
+        request.trackingSlaMeta || getRequestTrackingSlaMeta(request, "interest");
       const narrative = request.summary || reviewMeta.helperText;
       const projectTitle =
         request.projectTitle && request.projectTitle !== "—"
@@ -2427,29 +2654,34 @@ export default function MessagesManagement() {
               </div>
             </div>
 
-            <Badge
-              className={cn(
-                "border px-3 py-1 text-[11px] font-semibold shadow-none",
-                reviewMeta.tone
-              )}
-            >
-              {reviewMeta.label}
-            </Badge>
+            <div className="flex shrink-0 flex-col items-end gap-2">
+              <Badge
+                className={cn(
+                  "border px-3 py-1 text-[11px] font-semibold shadow-none",
+                  trackingMeta.tone
+                )}
+              >
+                {trackingMeta.label}
+              </Badge>
+              {trackingSlaMeta ? (
+                <Badge
+                  className={cn(
+                    "border px-2.5 py-0.5 text-[10px] font-semibold shadow-none",
+                    trackingSlaMeta.className
+                  )}
+                >
+                  {trackingSlaMeta.label}
+                </Badge>
+              ) : null}
+            </div>
           </div>
 
           <div className="mt-4 rounded-[18px] border border-amber-200/80 bg-white/80 p-3">
             <div className="flex items-start gap-2 text-[13px] text-slate-700">
               <Building2 className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
-              <div className="min-w-0">
-                <div className="break-words font-medium leading-6">
-                  {projectTitle}
-                </div>
-                {request.projectBusinessId ? (
-                  <div className="mt-1 text-[11px] font-medium text-amber-700/80">
-                    رقم المشروع {request.projectBusinessId}
-                  </div>
-                ) : null}
-              </div>
+              <span className="min-w-0 break-words font-medium leading-6">
+                {projectTitle}
+              </span>
             </div>
 
             <div className="mt-3 rounded-[16px] border border-amber-200/70 bg-amber-50/70 px-3 py-3 text-sm leading-7 text-amber-950">
@@ -2523,6 +2755,12 @@ export default function MessagesManagement() {
       userIdentityIndex,
       request.client
     );
+    const trackingMeta =
+      request.trackingMeta ||
+      getRequestTrackingMeta(request, request.requestKind?.key);
+    const trackingSlaMeta =
+      request.trackingSlaMeta ||
+      getRequestTrackingSlaMeta(request, request.requestKind?.key);
 
     return (
       <article
@@ -2580,14 +2818,26 @@ export default function MessagesManagement() {
             </div>
           </div>
 
-          <Badge
-            className={cn(
-              "border px-3 py-1 text-[11px] font-semibold shadow-none",
-              request.statusMeta.tone
-            )}
-          >
-            {request.statusMeta.label}
-          </Badge>
+          <div className="flex shrink-0 flex-col items-end gap-2">
+            <Badge
+              className={cn(
+                "border px-3 py-1 text-[11px] font-semibold shadow-none",
+                trackingMeta.tone
+              )}
+            >
+              {trackingMeta.label}
+            </Badge>
+            {trackingSlaMeta ? (
+              <Badge
+                className={cn(
+                  "border px-2.5 py-0.5 text-[10px] font-semibold shadow-none",
+                  trackingSlaMeta.className
+                )}
+              >
+                {trackingSlaMeta.label}
+              </Badge>
+            ) : null}
+          </div>
         </div>
 
         <div
@@ -2598,16 +2848,9 @@ export default function MessagesManagement() {
         >
           <div className="flex items-start gap-2 text-[13px] text-slate-700">
             <Building2 className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
-            <div className="min-w-0">
-              <div className="break-words font-medium leading-6">
-                {request.projectTitle}
-              </div>
-              {request.projectBusinessId ? (
-                <div className="mt-1 text-[11px] font-medium text-slate-500">
-                  رقم المشروع {request.projectBusinessId}
-                </div>
-              ) : null}
-            </div>
+            <span className="min-w-0 break-words font-medium leading-6">
+              {request.projectTitle}
+            </span>
           </div>
 
           <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -2618,6 +2861,14 @@ export default function MessagesManagement() {
               )}
             >
               {request.stageMeta.label}
+            </Badge>
+            <Badge
+              className={cn(
+                "border px-3 py-1 text-[11px] font-semibold shadow-none",
+                request.statusMeta.tone
+              )}
+            >
+              {request.statusMeta.label}
             </Badge>
             <Badge
               className={cn(
@@ -2753,7 +3004,7 @@ export default function MessagesManagement() {
   const selectedInterestReviewMeta = useMemo(
     () =>
       selectedRequestKind?.key === "interest" && selectedMessage
-        ? getInterestReviewMeta(selectedMessage)
+        ? getInterestTrackingMeta(selectedMessage)
         : null,
     [selectedMessage, selectedRequestKind]
   );
@@ -2762,23 +3013,6 @@ export default function MessagesManagement() {
     selectedMessage?.projectId,
     selectedMessage?.project_id,
     selectedMessage?.project?.id
-  );
-  const selectedProjectRecord = selectedProjectId
-    ? projectsMap[String(selectedProjectId || "")]
-    : null;
-  const selectedRequestBusinessId =
-    resolveRequestBusinessId(selectedMessage) || "—";
-  const selectedProjectBusinessId = resolveProjectBusinessId(
-    selectedMessage,
-    selectedProjectRecord
-  );
-  const selectedInvestmentBusinessId = resolveInvestmentBusinessId(
-    selectedMessage,
-    investmentDoc
-  );
-  const selectedContractBusinessId = resolveContractBusinessId(
-    selectedMessage,
-    contractDoc
   );
   const selectedProjectTitle = getProjectTitle(selectedProjectId);
   const selectedAmount =
@@ -2797,11 +3031,25 @@ export default function MessagesManagement() {
     selectedClient?.clientPhone || getClientPhone(selectedMessage);
   const selectedCreatedAtValue = toDateSafe(
     selectedMessage?.createdAt ||
-      selectedMessage?.created_at ||
-      selectedMessage?.submittedAt ||
-      selectedMessage?.timestamp
+    selectedMessage?.created_at ||
+    selectedMessage?.submittedAt ||
+    selectedMessage?.timestamp
   );
   const selectedUpdatedAtValue = getLastUpdatedAtValue(selectedMessage);
+  const selectedTrackingMeta = useMemo(
+    () =>
+      selectedMessage
+        ? getRequestTrackingMeta(selectedMessage, selectedRequestKind?.key)
+        : null,
+    [selectedMessage, selectedRequestKind?.key]
+  );
+  const selectedTrackingSlaMeta = useMemo(
+    () =>
+      selectedMessage
+        ? getRequestTrackingSlaMeta(selectedMessage, selectedRequestKind?.key)
+        : null,
+    [selectedMessage, selectedRequestKind?.key]
+  );
 
   const selectedStatusMeta = useMemo(() => {
     if (!selectedMessage) return null;
@@ -2835,11 +3083,11 @@ export default function MessagesManagement() {
     () =>
       selectedMessage && selectedClient && selectedRequestKind
         ? buildRequestTimelineEvents({
-            request: selectedMessage,
-            userIdentityIndex,
-            client: selectedClient,
-            requestKind: selectedRequestKind.key,
-          })
+          request: selectedMessage,
+          userIdentityIndex,
+          client: selectedClient,
+          requestKind: selectedRequestKind.key,
+        })
         : [],
     [selectedClient, selectedMessage, selectedRequestKind, userIdentityIndex]
   );
@@ -2856,6 +3104,152 @@ export default function MessagesManagement() {
   )
     .trim()
     .toLowerCase();
+  const isSelectedInvestmentStoppedEarly = useMemo(
+    () => isInvestmentStoppedEarly(investmentDoc),
+    [investmentDoc]
+  );
+  const selectedInvestmentStartedAt = useMemo(
+    () =>
+      toDateSafe(
+        investmentDoc?.startAt ||
+          investmentDoc?.activatedAt ||
+          selectedMessage?.startAt ||
+          selectedMessage?.activatedAt ||
+          selectedMessage?.investmentStartAt
+      ),
+    [
+      investmentDoc?.activatedAt,
+      investmentDoc?.startAt,
+      selectedMessage?.activatedAt,
+      selectedMessage?.investmentStartAt,
+      selectedMessage?.startAt,
+    ]
+  );
+  const hasOperationalInvestmentStarted =
+    Boolean(selectedInvestmentStartedAt) ||
+    isSelectedInvestmentStoppedEarly ||
+    ["active", "started", "in_progress", "completed", "closed"].includes(
+      selectedInvestmentStatus
+    );
+  const stopDialogProjectId = pick(
+    investmentDoc?.projectId,
+    selectedMessage?.projectId,
+    selectedMessage?.project_id
+  );
+  const stopDialogProjectRecord =
+    projectsMap[String(stopDialogProjectId || "").trim()] || null;
+  const stopDialogProjectFallback = useMemo(
+    () =>
+      stopDialogProjectRecord
+        ? {
+            annualReturn: stopDialogProjectRecord?.annualReturn ?? null,
+            durationMonths:
+              stopDialogProjectRecord?.durationMonths ??
+              stopDialogProjectRecord?.duration ??
+              null,
+            plannedEndAt: stopDialogProjectRecord?.plannedEndAt ?? null,
+          }
+        : null,
+    [stopDialogProjectRecord]
+  );
+  const selectedSettlement = useMemo(
+    () => getInvestmentSettlementSnapshot(investmentDoc),
+    [investmentDoc]
+  );
+  const stopSettlementPreviewState = useMemo(() => {
+    if (!investmentDoc || isSelectedInvestmentStoppedEarly) {
+      return {
+        preview: selectedSettlement,
+        error: "",
+      };
+    }
+
+    if (selectedInvestmentStatus !== "active") {
+      return {
+        preview: null,
+        error: "",
+      };
+    }
+
+    try {
+      return {
+        preview: buildEarlyStopSettlementPreview({
+          investment: investmentDoc,
+          projectFallback: stopDialogProjectFallback,
+          stopAt: stopCloseDate
+            ? new Date(`${stopCloseDate}T12:00:00`)
+            : new Date(),
+          stopReason,
+        }),
+        error: "",
+      };
+    } catch (error: any) {
+      return {
+        preview: null,
+        error: translateSettlementPreviewError(String(error?.message || "")),
+      };
+    }
+  }, [
+    investmentDoc,
+    isSelectedInvestmentStoppedEarly,
+    selectedInvestmentStatus,
+    selectedSettlement,
+    stopCloseDate,
+    stopDialogProjectFallback,
+    stopReason,
+  ]);
+  const settlementPreview = stopSettlementPreviewState.preview;
+  const settlementFormulaParts = useMemo(() => {
+    const raw = String(settlementPreview?.formula || "").trim();
+    if (!raw) return [];
+
+    const parts = raw
+      .split(/\n+/)
+      .flatMap((line) => line.split(/\s*=\s*/))
+      .map((part) => part.trim())
+      .filter(Boolean);
+
+    return parts.length > 0 ? parts : [raw];
+  }, [settlementPreview?.formula]);
+  const humanReadableFormula = settlementPreview
+    ? `${formatNumberEN(settlementPreview.principalAmount)} × (${formatNumberEN(
+        settlementPreview.annualProfitRate
+      )}% ÷ 100) × (${formatNumberEN(settlementPreview.investedDays)} ÷ 365)`
+    : "";
+  const humanReadableProfitResult = settlementPreview
+    ? formatCurrencyEN(settlementPreview.calculatedProfit)
+    : "";
+  const stopPreviewExceedsPlannedEnd = Boolean(
+    stopSettlementPreviewState.preview?.plannedEndDate &&
+      stopSettlementPreviewState.preview?.investmentStopDate &&
+      !isStopDateBeforePlannedEnd(
+        stopSettlementPreviewState.preview.investmentStopDate,
+        stopSettlementPreviewState.preview.plannedEndDate
+      )
+  );
+  const canConfirmStopInvestment = Boolean(
+    canEditFinancial &&
+      !isSelectedInvestmentStoppedEarly &&
+      stopSettlementPreviewState.preview &&
+      !stopSettlementPreviewState.error &&
+      !stopPreviewExceedsPlannedEnd
+  );
+  const latestSettlementDocument = useMemo(
+    () =>
+      pickLatestFileByCategory(
+        settlementDocuments,
+        INVESTMENT_SETTLEMENT_FILE_CATEGORY
+      ),
+    [settlementDocuments]
+  );
+  const latestSettlementDocumentViewUrl = latestSettlementDocument
+    ? latestSettlementDocument.fileUrl ||
+      buildR2DownloadUrl(latestSettlementDocument.filePath, false)
+    : "";
+  const latestSettlementDocumentDownloadUrl = latestSettlementDocument
+    ? buildR2DownloadUrl(latestSettlementDocument.filePath, true) ||
+      latestSettlementDocument.fileUrl
+    : "";
 
   const isLockedFinal =
     String(selectedMessage?.status || "") === "completed" ||
@@ -2905,10 +3299,10 @@ export default function MessagesManagement() {
       setSelectedMessage((prev: any) =>
         prev
           ? {
-              ...prev,
-              internalNotes: internalNotes || null,
-              events: Array.isArray(prev.events) ? [...prev.events, ev] : [ev],
-            }
+            ...prev,
+            internalNotes: internalNotes || null,
+            events: Array.isArray(prev.events) ? [...prev.events, ev] : [ev],
+          }
           : prev
       );
     } catch (e) {
@@ -2916,6 +3310,63 @@ export default function MessagesManagement() {
       toast.error("فشل حفظ الملاحظات");
     }
   };
+
+  const loadSettlementDocumentsForInvestment = async (investmentId: string) => {
+    const normalizedInvestmentId = String(investmentId || "").trim();
+    if (!normalizedInvestmentId) {
+      setSettlementDocuments([]);
+      return [];
+    }
+
+    setSettlementDocumentsLoading(true);
+    try {
+      const records = await listDocumentMetadata({
+        entityType: "investment",
+        entityId: normalizedInvestmentId,
+        investmentId: normalizedInvestmentId,
+        category: INVESTMENT_SETTLEMENT_FILE_CATEGORY,
+        limit: 20,
+      });
+      setSettlementDocuments(records);
+      return records;
+    } catch (error) {
+      console.error("settlement_documents_load_failed", error);
+      setSettlementDocuments([]);
+      return [];
+    } finally {
+      setSettlementDocumentsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!stopInvestmentDialogOpen || !investmentDoc?.id) {
+      setSettlementDocuments([]);
+      setSettlementDocumentsLoading(false);
+      return;
+    }
+
+    void loadSettlementDocumentsForInvestment(String(investmentDoc.id || ""));
+  }, [stopInvestmentDialogOpen, investmentDoc?.id]);
+
+  useEffect(() => {
+    if (!stopInvestmentDialogOpen || !investmentDoc) return;
+
+    const effectiveStopDate = isSelectedInvestmentStoppedEarly
+      ? selectedSettlement?.investmentStopDate ||
+        toDateSafe(investmentDoc?.stoppedAt || investmentDoc?.actualEndAt)
+      : new Date();
+
+    setStopCloseDate(toDateInputValue(effectiveStopDate));
+    setStopReason(
+      String(selectedSettlement?.stopReason || investmentDoc?.stopReason || "")
+    );
+    setSettlementDocumentFile(null);
+  }, [
+    investmentDoc,
+    isSelectedInvestmentStoppedEarly,
+    selectedSettlement,
+    stopInvestmentDialogOpen,
+  ]);
 
   /* =========================
     moveTo step helper
@@ -2925,6 +3376,7 @@ export default function MessagesManagement() {
     stageRole: StageRole;
     note?: string;
     notifyClientText?: string;
+    handledAction?: AdminHandledAction;
   }) => {
     if (!canManageMessages) return toast.error("لا تملك صلاحية إدارة الطلبات.");
     if (!selectedMessage) return;
@@ -2963,6 +3415,9 @@ export default function MessagesManagement() {
         updatedByUid: user?.uid || null,
         updatedByEmail: user?.email || null,
         events: arrayUnion(ev),
+        ...(next.handledAction
+          ? buildHandledTrackingPatch(next.handledAction)
+          : {}),
         ...actionMeta(user, myRole),
       },
       action: AUDIT_ACTIONS.REQUEST_STATUS_CHANGED,
@@ -2977,14 +3432,18 @@ export default function MessagesManagement() {
       },
     });
 
+    if (next.handledAction) {
+      await syncRelatedMessageTracking(selectedMessage.id, next.handledAction);
+    }
+
     setSelectedMessage((prev: any) =>
       prev
         ? {
-            ...prev,
-            status: next.status,
-            stageRole: next.stageRole,
-            events: Array.isArray(prev.events) ? [...prev.events, ev] : [ev],
-          }
+          ...prev,
+          status: next.status,
+          stageRole: next.stageRole,
+          events: Array.isArray(prev.events) ? [...prev.events, ev] : [ev],
+        }
         : prev
     );
 
@@ -3000,6 +3459,7 @@ export default function MessagesManagement() {
     await moveTo({
       status: "needs_account",
       stageRole: "accountant",
+      handledAction: "mark_done",
       note: "ترحيل مبدئي من المراجع إلى المحاسب",
       notifyClientText: "تمت مراجعة طلبك مبدئيًا وهو الآن عند المحاسب.",
     });
@@ -3014,6 +3474,7 @@ export default function MessagesManagement() {
     await moveTo({
       status: "waiting_client_confirmation",
       stageRole: "client",
+      handledAction: "mark_done",
       note: "تمت مراجعة الحساب وترحيل الطلب للعميل للتعميد",
       notifyClientText: "تمت مراجعة الحساب. الرجاء الدخول لتعميد الطلب.",
     });
@@ -3042,6 +3503,7 @@ export default function MessagesManagement() {
     await moveTo({
       status: "completed",
       stageRole: "completed",
+      handledAction: "close",
       note: "تعميد نهائي وإقفال الطلب",
       notifyClientText: "تم إقفال الطلب نهائيًا. شكرًا لك.",
     });
@@ -3073,6 +3535,7 @@ export default function MessagesManagement() {
             status: "no_account",
             stageRole: "client" as StageRole,
             events: arrayUnion(ev),
+            ...buildHandledTrackingPatch("mark_done"),
             ...actionMeta(user, myRole),
           },
           action: AUDIT_ACTIONS.REQUEST_STATUS_CHANGED,
@@ -3087,6 +3550,7 @@ export default function MessagesManagement() {
         });
 
         toast.warning("هذا الطلب بدون حساب — تم تحويله إلى: بدون حساب");
+        await syncRelatedMessageTracking(selectedMessage.id, "mark_done");
         loadMessages();
         return;
       }
@@ -3348,6 +3812,7 @@ export default function MessagesManagement() {
               updatedByUid: user?.uid || null,
               updatedByEmail: user?.email || null,
               events: arrayUnion(ev),
+              ...buildHandledTrackingPatch("approve"),
               ...actionMeta(user, myRole),
             });
           }),
@@ -3357,17 +3822,18 @@ export default function MessagesManagement() {
       setSelectedMessage((prev: any) =>
         prev
           ? {
-              ...prev,
-              status: "approved",
-              stageRole: "investment",
-              stage: "investment",
-              approvedAmount: amount,
-              investmentId: finalInvestmentId,
-              investmentStatus: "pending_contract",
-              contractStatus: "draft",
-            }
+            ...prev,
+            status: "approved",
+            stageRole: "investment",
+            stage: "investment",
+            approvedAmount: amount,
+            investmentId: finalInvestmentId,
+            investmentStatus: "pending_contract",
+            contractStatus: "draft",
+          }
           : prev
       );
+      await syncRelatedMessageTracking(requestId, "approve");
       loadMessages();
     } catch (e: any) {
       console.error(e);
@@ -3487,8 +3953,8 @@ export default function MessagesManagement() {
             const now = serverTimestamp();
             const currentVersion = toPositiveInt(
               inv?.contractVersion ??
-                inv?.originalContract?.version ??
-                inv?.contractFile?.version
+              inv?.originalContract?.version ??
+              inv?.contractFile?.version
             );
             const nextContractVersion =
               currentVersion > 0 ? currentVersion + 1 : 1;
@@ -3546,6 +4012,7 @@ export default function MessagesManagement() {
                 updatedAt: now,
                 updatedByUid: user?.uid || null,
                 updatedByEmail: user?.email || null,
+                ...buildHandledTrackingPatch("mark_done"),
                 ...staleSignedPatch,
               },
               { merge: true }
@@ -3573,6 +4040,7 @@ export default function MessagesManagement() {
       });
 
       toast.success("تم رفع العقد الأصلي بنجاح");
+      await syncRelatedMessageTracking(selectedMessage.id, "mark_done");
       await loadInvestmentDoc(investmentId);
       await loadMessages();
     } catch (e: any) {
@@ -3645,12 +4113,14 @@ export default function MessagesManagement() {
                   meta: { messageId: selectedMessage.id },
                 })
               ),
+              ...buildHandledTrackingPatch("close"),
               ...actionMeta(user, myRole),
             });
           }),
       });
 
       toast.success("تم الترحيل النهائي ✅");
+      await syncRelatedMessageTracking(selectedMessage.id, "close");
       loadMessages();
     } catch (e) {
       console.error(e);
@@ -3767,18 +4237,18 @@ export default function MessagesManagement() {
 
             const originalVersion = toPositiveInt(
               invData?.contractVersion ??
-                invData?.originalContract?.version ??
-                invData?.contractFile?.version
+              invData?.originalContract?.version ??
+              invData?.contractFile?.version
             );
             const signedForVersion = toPositiveInt(
               invData?.signedAgainstContractVersion ??
-                invData?.signedContract?.signedForVersion ??
-                invData?.signedContract?.originalVersion
+              invData?.signedContract?.signedForVersion ??
+              invData?.signedContract?.originalVersion
             );
             const outdatedFlag = toBooleanSafe(
               invData?.signedContractOutdated ??
-                invData?.requiresResign ??
-                invData?.signedContract?.isOutdated
+              invData?.requiresResign ??
+              invData?.signedContract?.isOutdated
             );
             const isSignedOutdated =
               outdatedFlag ||
@@ -3819,6 +4289,57 @@ export default function MessagesManagement() {
               {
                 ...(shouldBackfillSignedDoc
                   ? {
+                    signedContract: {
+                      fileName: fallbackSignedFileName,
+                      path: fallbackSignedPath,
+                      storagePath: fallbackSignedPath,
+                      uploadedAt: invData?.signedAt || verifiedAt,
+                      uploadedBy:
+                        invData?.lastDocumentUploadBy ||
+                        invData?.investorUid ||
+                        null,
+                      signedForVersion: resolvedSignedForVersion,
+                      originalVersion: resolvedSignedForVersion,
+                      isOutdated: false,
+                      outdatedAt: null,
+                      outdatedByOriginalVersion: null,
+                    },
+                    signedContractFile: {
+                      fileName: fallbackSignedFileName,
+                      path: fallbackSignedPath,
+                      storagePath: fallbackSignedPath,
+                      uploadedAt: invData?.signedAt || verifiedAt,
+                      uploadedBy:
+                        invData?.lastDocumentUploadBy ||
+                        invData?.investorUid ||
+                        null,
+                      signedForVersion: resolvedSignedForVersion,
+                    },
+                    signedAgainstContractVersion: resolvedSignedForVersion,
+                    signedContractOutdated: false,
+                    requiresResign: false,
+                    signedContractOutdatedAt: null,
+                  }
+                  : {}),
+                status: "signed",
+                contractStatus: "approved",
+                signedAt: invData?.signedAt || verifiedAt,
+                verifiedAt,
+                verifiedByUid: user?.uid || null,
+                verifiedByEmail: user?.email || null,
+                updatedAt: verifiedAt,
+                updatedByUid: user?.uid || null,
+                updatedByEmail: user?.email || null,
+              },
+              { merge: true }
+            );
+
+            if (contractRef) {
+              tx.set(
+                contractRef,
+                {
+                  ...(shouldBackfillSignedDoc
+                    ? {
                       signedContract: {
                         fileName: fallbackSignedFileName,
                         path: fallbackSignedPath,
@@ -3850,57 +4371,6 @@ export default function MessagesManagement() {
                       requiresResign: false,
                       signedContractOutdatedAt: null,
                     }
-                  : {}),
-                status: "signed",
-                contractStatus: "approved",
-                signedAt: invData?.signedAt || verifiedAt,
-                verifiedAt,
-                verifiedByUid: user?.uid || null,
-                verifiedByEmail: user?.email || null,
-                updatedAt: verifiedAt,
-                updatedByUid: user?.uid || null,
-                updatedByEmail: user?.email || null,
-              },
-              { merge: true }
-            );
-
-            if (contractRef) {
-              tx.set(
-                contractRef,
-                {
-                  ...(shouldBackfillSignedDoc
-                    ? {
-                        signedContract: {
-                          fileName: fallbackSignedFileName,
-                          path: fallbackSignedPath,
-                          storagePath: fallbackSignedPath,
-                          uploadedAt: invData?.signedAt || verifiedAt,
-                          uploadedBy:
-                            invData?.lastDocumentUploadBy ||
-                            invData?.investorUid ||
-                            null,
-                          signedForVersion: resolvedSignedForVersion,
-                          originalVersion: resolvedSignedForVersion,
-                          isOutdated: false,
-                          outdatedAt: null,
-                          outdatedByOriginalVersion: null,
-                        },
-                        signedContractFile: {
-                          fileName: fallbackSignedFileName,
-                          path: fallbackSignedPath,
-                          storagePath: fallbackSignedPath,
-                          uploadedAt: invData?.signedAt || verifiedAt,
-                          uploadedBy:
-                            invData?.lastDocumentUploadBy ||
-                            invData?.investorUid ||
-                            null,
-                          signedForVersion: resolvedSignedForVersion,
-                        },
-                        signedAgainstContractVersion: resolvedSignedForVersion,
-                        signedContractOutdated: false,
-                        requiresResign: false,
-                        signedContractOutdatedAt: null,
-                      }
                     : {}),
                   status: "approved",
                   verifiedAt,
@@ -3938,12 +4408,14 @@ export default function MessagesManagement() {
                   },
                 })
               ),
+              ...buildHandledTrackingPatch("approve"),
               ...actionMeta(user, myRole),
             });
           }),
       });
 
       toast.success("تم التحقق من العقد الموقّع.");
+      await syncRelatedMessageTracking(selectedMessage.id, "approve");
       await loadInvestmentDoc(investmentId);
       await loadMessages();
     } catch (e: any) {
@@ -4215,12 +4687,14 @@ export default function MessagesManagement() {
                   },
                 })
               ),
+              ...buildHandledTrackingPatch("close"),
               ...actionMeta(user, myRole),
             });
           }),
       });
 
       toast.success("تم اعتماد العقد وتفعيل الاستثمار");
+      await syncRelatedMessageTracking(selectedMessage.id, "close");
       loadMessages();
     } catch (e: any) {
       console.error(e);
@@ -4246,6 +4720,292 @@ export default function MessagesManagement() {
       }
     } finally {
       setFinalizeBusy(false);
+    }
+  };
+
+  const openStopInvestmentDialog = () => {
+    const investmentId = String(
+      pick(investmentDoc?.id, selectedMessage?.investmentId)
+    ).trim();
+
+    if (!investmentId) {
+      toast.error("لا يوجد استثمار مرتبط بهذا الطلب.");
+      return;
+    }
+
+    if (!investmentDoc?.id) {
+      toast.warning("جاري تحميل بيانات الاستثمار، حاول مرة أخرى بعد لحظة.");
+      return;
+    }
+
+    setStopInvestmentDialogOpen(true);
+  };
+
+  const uploadSettlementDocumentForInvestment = async (
+    investmentRecord: any,
+    file: File | null,
+    existingDocuments: CloudflareFileRecord[] = settlementDocuments
+  ) => {
+    if (!file || !investmentRecord?.id) return null;
+
+    const latestVersion = Math.max(
+      0,
+      ...existingDocuments.map((record) => Number(record?.version || 0))
+    );
+
+    setSettlementDocumentBusy(true);
+    try {
+      await uploadInvestmentDocument({
+        entityType: "investment",
+        entityId: String(investmentRecord.id || ""),
+        investmentId: String(investmentRecord.id || ""),
+        projectId: String(investmentRecord.projectId || "") || undefined,
+        uploadedBy: String(user?.uid || "") || undefined,
+        category: INVESTMENT_SETTLEMENT_FILE_CATEGORY,
+        file,
+        kind: "attachment",
+        version: latestVersion + 1,
+      });
+
+      const refreshed = await loadSettlementDocumentsForInvestment(
+        String(investmentRecord.id || "")
+      );
+      setSettlementDocumentFile(null);
+      return refreshed;
+    } finally {
+      setSettlementDocumentBusy(false);
+    }
+  };
+
+  const uploadSettlementAttachment = async () => {
+    if (!canEditFinancial) {
+      toast.error("لا تملك صلاحية تعديل الشؤون المالية.");
+      return;
+    }
+    if (!investmentDoc || !settlementDocumentFile) return;
+
+    try {
+      await uploadSettlementDocumentForInvestment(
+        investmentDoc,
+        settlementDocumentFile
+      );
+      toast.success("تم رفع مستند التسوية بنجاح.");
+    } catch (error) {
+      console.error(error);
+      toast.error("فشل رفع مستند التسوية.");
+    }
+  };
+
+  const closeInvestmentEarlyTx = async () => {
+    if (!canEditFinancial) {
+      toast.error("لا تملك صلاحية تعديل الشؤون المالية.");
+      return;
+    }
+    if (!investmentDoc) return;
+
+    const preview = stopSettlementPreviewState.preview;
+    if (!preview || stopSettlementPreviewState.error) {
+      toast.error(
+        stopSettlementPreviewState.error || "تعذر تجهيز التسوية قبل الحفظ."
+      );
+      return;
+    }
+
+    if (stopPreviewExceedsPlannedEnd) {
+      toast.error(
+        "تاريخ الإيقاف يجب أن يكون قبل تاريخ نهاية الاستثمار المخطط."
+      );
+      return;
+    }
+
+    try {
+      await runAuditedOperation({
+        action: AUDIT_ACTIONS.INVESTMENT_STOPPED,
+        category: "investment",
+        entityType: "investment",
+        source: buildAuditSource({
+          area: "admin",
+          page: "Messages",
+          method: "stop_investment_dialog",
+        }),
+        relatedIds: {
+          requestId: String(selectedMessage?.id || "") || undefined,
+          investmentId: investmentDoc.id,
+          projectId: String(investmentDoc.projectId || "") || undefined,
+          userId:
+            String(investmentDoc.investorUid || investmentDoc.userId || "") ||
+            undefined,
+        },
+        message: `Stopped investment ${investmentDoc.id} early from messages dialog`,
+        meta: {
+          closeDate: stopCloseDate,
+          stopReason: preview.stopReason || null,
+          investedDays: preview.investedDays,
+          calculatedProfit: preview.calculatedProfit,
+          totalPayout: preview.totalPayout,
+          projectName: getProjectTitle(String(investmentDoc.projectId || "")),
+        },
+        targets: [
+          {
+            ref: doc(db, "investments", investmentDoc.id),
+            entityType: "investment",
+          },
+        ],
+        execute: async () =>
+          runTransaction(db, async (tx) => {
+            const invRef = doc(db, "investments", investmentDoc.id);
+            const invSnap = await tx.get(invRef);
+            if (!invSnap.exists()) throw new Error("investment_not_found");
+
+            const inv: any = invSnap.data();
+            const status = String(inv.status || "").trim().toLowerCase();
+
+            if (["stopped", "completed", "closed"].includes(status)) {
+              throw new Error("investment_already_closed");
+            }
+            if (status !== "active") {
+              throw new Error("invalid_status_for_close");
+            }
+
+            const transactionPreview = buildEarlyStopSettlementPreview({
+              investment: inv,
+              projectFallback: stopDialogProjectFallback,
+              stopAt: preview.investmentStopDate,
+              stopReason: preview.stopReason,
+            });
+
+            if (
+              transactionPreview.plannedEndDate &&
+              !isStopDateBeforePlannedEnd(
+                transactionPreview.investmentStopDate,
+                transactionPreview.plannedEndDate
+              )
+            ) {
+              throw new Error("stop_after_planned_end");
+            }
+
+            const closureAt = Timestamp.fromDate(
+              transactionPreview.investmentStopDate
+            );
+            const finalizedAt = Timestamp.fromDate(new Date());
+
+            tx.update(invRef, {
+              status: "stopped",
+              stoppedAt: closureAt,
+              stopReason: transactionPreview.stopReason,
+              actualEndAt: closureAt,
+              withdrawnAt: closureAt,
+              exitType: "client_requested_stop",
+              stoppedByUid: user?.uid || null,
+              stoppedByEmail: user?.email || null,
+              earnedProfit: transactionPreview.calculatedProfit,
+              actualDurationMonths: transactionPreview.actualDurationMonths,
+              settlementTotal: transactionPreview.totalPayout,
+              settlementPrincipal: transactionPreview.principalAmount,
+              settlementAnnualReturnPercent:
+                transactionPreview.annualProfitRate,
+              settlementFormula: transactionPreview.formula,
+              settlementLockedAt: finalizedAt,
+              settlementLocked: true,
+              closureLocked: true,
+              finalizedAt,
+              settlement: {
+                kind: transactionPreview.kind,
+                status: transactionPreview.status,
+                policyCode: transactionPreview.policyCode,
+                policyLabel: transactionPreview.policyLabel,
+                principalAmount: transactionPreview.principalAmount,
+                annualProfitRate: transactionPreview.annualProfitRate,
+                investmentStartDate: Timestamp.fromDate(
+                  transactionPreview.investmentStartDate
+                ),
+                plannedEndDate: transactionPreview.plannedEndDate
+                  ? Timestamp.fromDate(transactionPreview.plannedEndDate)
+                  : null,
+                investmentStopDate: closureAt,
+                originalDurationMonths:
+                  transactionPreview.originalDurationMonths ?? null,
+                actualDurationMonths:
+                  transactionPreview.actualDurationMonths,
+                investedDays: transactionPreview.investedDays,
+                calculatedProfit: transactionPreview.calculatedProfit,
+                totalPayout: transactionPreview.totalPayout,
+                formula: transactionPreview.formula,
+                stopReason: transactionPreview.stopReason,
+                finalizedAt,
+                finalizedByUid: user?.uid || null,
+                finalizedByEmail: user?.email || null,
+                documentCategory: transactionPreview.documentCategory,
+              },
+              events: arrayUnion(
+                {
+                  type: "stop_requested",
+                  title: "طلب إيقاف الاستثمار",
+                  note:
+                    transactionPreview.stopReason || "إيقاف بطلب العميل",
+                  at: finalizedAt,
+                  byUid: user?.uid || null,
+                  byEmail: user?.email || null,
+                  meta: {
+                    requestedBy: "client",
+                    effectiveStopDate: closureAt,
+                  },
+                },
+                {
+                  type: "investment_stopped",
+                  title: "تم إيقاف الاستثمار بطلب العميل",
+                  note: transactionPreview.stopReason || null,
+                  at: closureAt,
+                  byUid: user?.uid || null,
+                  byEmail: user?.email || null,
+                  meta: {
+                    requestedBy: "client",
+                    settlementTotal: transactionPreview.totalPayout,
+                    realizedProfit: transactionPreview.calculatedProfit,
+                  },
+                }
+              ),
+              updatedAt: new Date(),
+            });
+          }),
+      });
+
+      toast.success("تم إيقاف الاستثمار وتثبيت التسوية بنجاح");
+      if (settlementDocumentFile) {
+        try {
+          await uploadSettlementDocumentForInvestment(
+            investmentDoc,
+            settlementDocumentFile
+          );
+          toast.success("تم رفع ملف التسوية النهائية.");
+        } catch (uploadError) {
+          console.error("settlement_document_upload_failed", uploadError);
+          toast.error("تم الإيقاف لكن فشل رفع ملف التسوية.");
+        }
+      }
+      setStopInvestmentDialogOpen(false);
+    } catch (error: any) {
+      console.error(error);
+
+      switch (String(error?.message || "")) {
+        case "investment_not_found":
+          toast.error("سجل الاستثمار غير موجود.");
+          break;
+        case "investment_already_closed":
+          toast.error("الاستثمار مغلق أو موقوف مسبقًا.");
+          break;
+        case "invalid_status_for_close":
+          toast.error("لا يمكن إيقاف الاستثمار قبل تفعيله.");
+          break;
+        case "stop_after_planned_end":
+          toast.error(
+            "تاريخ الإيقاف يجب أن يكون قبل تاريخ نهاية الاستثمار المخطط."
+          );
+          break;
+        default:
+          toast.error("فشل إيقاف الاستثمار");
+          break;
+      }
     }
   };
 
@@ -4276,6 +5036,7 @@ export default function MessagesManagement() {
           rejectedByUid: user?.uid || null,
           rejectedByEmail: user?.email || null,
           events: arrayUnion(ev),
+          ...buildHandledTrackingPatch("reject"),
           ...actionMeta(user, myRole),
         },
         action: AUDIT_ACTIONS.REQUEST_REJECTED,
@@ -4287,6 +5048,7 @@ export default function MessagesManagement() {
       });
 
       toast.success("تم رفض الطلب");
+      await syncRelatedMessageTracking(selectedMessage.id, "reject");
       loadMessages();
     } catch (e) {
       console.error(e);
@@ -4322,6 +5084,7 @@ export default function MessagesManagement() {
           reopenedByUid: user?.uid || null,
           reopenedByEmail: user?.email || null,
           events: arrayUnion(ev),
+          ...buildHandledTrackingResetPatch(),
           ...actionMeta(user, myRole),
         },
         action: AUDIT_ACTIONS.REQUEST_REOPENED,
@@ -4333,6 +5096,7 @@ export default function MessagesManagement() {
       });
 
       toast.success("تمت إعادة فتح الطلب");
+      await syncRelatedMessageTracking(selectedMessage.id, null);
       loadMessages();
     } catch (e) {
       console.error(e);
@@ -4608,8 +5372,8 @@ export default function MessagesManagement() {
     : !hasCurrentSignedContract;
   const contractFollowupChipLabel =
     hasOriginalContract &&
-    !hasCurrentSignedContract &&
-    contractStatusValue !== "pending_signature"
+      !hasCurrentSignedContract &&
+      contractStatusValue !== "pending_signature"
       ? CLIENT_WORKFLOW_COPY.awaitingContractSignature
       : "";
 
@@ -4650,16 +5414,16 @@ export default function MessagesManagement() {
     !needsNewSignedContract;
   const canFinalize = CONTRACTS_DISABLED
     ? canManageInvestments &&
-      isSelectedInvestmentRequest &&
-      !!selectedMessage?.investmentId &&
-      selectedInvestmentStatus === "signed"
+    isSelectedInvestmentRequest &&
+    !!selectedMessage?.investmentId &&
+    selectedInvestmentStatus === "signed"
     : isInvestment &&
-      canManageInvestments &&
-      !!selectedMessage?.investmentId &&
-      selectedInvestmentStatus === "signed" &&
-      contractStatusValue === "approved" &&
-      hasCurrentSignedContract &&
-      !needsNewSignedContract;
+    canManageInvestments &&
+    !!selectedMessage?.investmentId &&
+    selectedInvestmentStatus === "signed" &&
+    contractStatusValue === "approved" &&
+    hasCurrentSignedContract &&
+    !needsNewSignedContract;
 
   const canApproveAndCreateInvestment = canCreateInvestmentFromRequest;
 
@@ -4864,7 +5628,7 @@ export default function MessagesManagement() {
   };
 
   const copySelectedRequestNumber = async () => {
-    const value = selectedRequestBusinessId;
+    const value = requestNumber(selectedMessage);
     if (!value || value === "—") {
       toast.warning("لا يوجد رقم طلب متاح للنسخ.");
       return;
@@ -4886,6 +5650,7 @@ export default function MessagesManagement() {
     await moveTo({
       status: "reviewing",
       stageRole: "review",
+      handledAction: "mark_done",
       note: "تم بدء مراجعة طلب الاستثمار.",
     });
   };
@@ -4920,6 +5685,7 @@ export default function MessagesManagement() {
           updatedByUid: user?.uid || null,
           updatedByEmail: user?.email || null,
           events: arrayUnion(ev),
+          ...buildHandledTrackingPatch("approve"),
           ...actionMeta(user, myRole),
         },
         action: AUDIT_ACTIONS.REQUEST_INITIAL_APPROVED,
@@ -4930,14 +5696,15 @@ export default function MessagesManagement() {
         message: `Initially approved request ${selectedMessage.id}`,
       });
 
+      await syncRelatedMessageTracking(selectedMessage.id, "approve");
       setSelectedMessage((prev: any) =>
         prev
           ? {
-              ...prev,
-              status: "approved",
-              stageRole: "investment",
-              events: Array.isArray(prev.events) ? [...prev.events, ev] : [ev],
-            }
+            ...prev,
+            status: "approved",
+            stageRole: "investment",
+            events: Array.isArray(prev.events) ? [...prev.events, ev] : [ev],
+          }
           : prev
       );
 
@@ -5088,14 +5855,21 @@ export default function MessagesManagement() {
     isArchiveMode &&
     canAdmin &&
     canManageInvestments &&
-    !!selectedMessage?.investmentId;
+    !!selectedMessage?.investmentId &&
+    !hasOperationalInvestmentStarted;
+  const showStopInvestmentAdvancedAction =
+    isArchiveMode &&
+    !!selectedMessage?.investmentId &&
+    hasOperationalInvestmentStarted;
   const showReopenAdvancedAction =
     isArchiveMode &&
     isSelectedInvestmentRequest &&
     myRole === "owner" &&
     canManageMessages;
   const showAdvancedActions =
-    showArchiveContractUpload || showReopenAdvancedAction;
+    showArchiveContractUpload ||
+    showReopenAdvancedAction ||
+    showStopInvestmentAdvancedAction;
   const availableDetailTabs = useMemo<DetailSecondaryTabKey[]>(
     () => [
       "context",
@@ -5122,41 +5896,41 @@ export default function MessagesManagement() {
       !selectedMessage || !isSelectedInvestmentRequest
         ? []
         : [
-            {
-              key: "review_start" as WorkflowStepKey,
-              label: "بدء المراجعة",
-              helper: "استلام الطلب وبدء معالجته داخليًا.",
-              targetTab: "context" as DetailSecondaryTabKey,
-              icon: <Clock3 className="h-4 w-4" />,
-            },
-            {
-              key: "investment_creation" as WorkflowStepKey,
-              label: "إنشاء الاستثمار",
-              helper: "اعتماد الطلب وتجهيز سجل الاستثمار داخل النظام.",
-              targetTab: "context" as DetailSecondaryTabKey,
-              icon: <CheckCircle2 className="h-4 w-4" />,
-            },
-            {
-              key: "contract_upload" as WorkflowStepKey,
-              label: "رفع العقد",
-              helper: "متابعة المستندات ورفع العقد الأصلي من التبويب المخصص.",
-              targetTab: showDocumentsTab
+          {
+            key: "review_start" as WorkflowStepKey,
+            label: "بدء المراجعة",
+            helper: "استلام الطلب وبدء معالجته داخليًا.",
+            targetTab: "context" as DetailSecondaryTabKey,
+            icon: <Clock3 className="h-4 w-4" />,
+          },
+          {
+            key: "investment_creation" as WorkflowStepKey,
+            label: "إنشاء الاستثمار",
+            helper: "اعتماد الطلب وتجهيز سجل الاستثمار داخل النظام.",
+            targetTab: "context" as DetailSecondaryTabKey,
+            icon: <CheckCircle2 className="h-4 w-4" />,
+          },
+          {
+            key: "contract_upload" as WorkflowStepKey,
+            label: "رفع العقد",
+            helper: "متابعة المستندات ورفع العقد الأصلي من التبويب المخصص.",
+            targetTab: showDocumentsTab
+              ? ("documents" as DetailSecondaryTabKey)
+              : ("context" as DetailSecondaryTabKey),
+            icon: <Upload className="h-4 w-4" />,
+          },
+          {
+            key: "request_completion" as WorkflowStepKey,
+            label: "إكمال الطلب",
+            helper: "اعتماد العقد ثم إقفال الدورة الحالية لهذا الطلب.",
+            targetTab: isArchiveMode
+              ? ("timeline" as DetailSecondaryTabKey)
+              : showDocumentsTab
                 ? ("documents" as DetailSecondaryTabKey)
-                : ("context" as DetailSecondaryTabKey),
-              icon: <Upload className="h-4 w-4" />,
-            },
-            {
-              key: "request_completion" as WorkflowStepKey,
-              label: "إكمال الطلب",
-              helper: "اعتماد العقد ثم إقفال الدورة الحالية لهذا الطلب.",
-              targetTab: isArchiveMode
-                ? ("timeline" as DetailSecondaryTabKey)
-                : showDocumentsTab
-                  ? ("documents" as DetailSecondaryTabKey)
-                  : ("timeline" as DetailSecondaryTabKey),
-              icon: <Building2 className="h-4 w-4" />,
-            },
-          ],
+                : ("timeline" as DetailSecondaryTabKey),
+            icon: <Building2 className="h-4 w-4" />,
+          },
+        ],
     [isArchiveMode, isSelectedInvestmentRequest, selectedMessage, showDocumentsTab]
   );
   const workflowCurrentStepKey = useMemo<WorkflowStepKey | null>(() => {
@@ -5220,7 +5994,7 @@ export default function MessagesManagement() {
     workflowCurrentStepIndex >= 0 ? workflowSteps[workflowCurrentStepIndex] : null;
   const workflowNextStepMeta =
     workflowCurrentStepIndex >= 0 &&
-    workflowCurrentStepIndex < workflowSteps.length - 1
+      workflowCurrentStepIndex < workflowSteps.length - 1
       ? workflowSteps[workflowCurrentStepIndex + 1]
       : null;
   const workflowPreferredTab = useMemo<DetailSecondaryTabKey>(() => {
@@ -5321,36 +6095,36 @@ export default function MessagesManagement() {
   ]);
   const detailGuidedPrimaryAction:
     | {
-        key: string;
-        label: string;
-        onClick: () => void;
-        disabled?: boolean;
-        icon: ReactNode;
-        className: string;
-      }
+      key: string;
+      label: string;
+      onClick: () => void;
+      disabled?: boolean;
+      icon: ReactNode;
+      className: string;
+    }
     | null =
     !isActiveMode ||
-    !isSelectedInvestmentRequest ||
-    detailPrimaryAction ||
-    workflowCurrentStepKey !== "contract_upload" ||
-    !selectedMessage?.investmentId
+      !isSelectedInvestmentRequest ||
+      detailPrimaryAction ||
+      workflowCurrentStepKey !== "contract_upload" ||
+      !selectedMessage?.investmentId
       ? null
       : {
-          key: "focus_documents",
-          label:
-            canAdmin && canManageInvestments ? "رفع العقد" : "فتح المستندات",
-          onClick: () => openDetailTab("documents"),
-          disabled: false,
-          icon: <Upload className="h-4 w-4" />,
-          className: `${DETAIL_SOLID_BUTTON_CLASS} bg-sky-700 hover:bg-sky-800`,
-        };
+        key: "focus_documents",
+        label:
+          canAdmin && canManageInvestments ? "رفع العقد" : "فتح المستندات",
+        onClick: () => openDetailTab("documents"),
+        disabled: false,
+        icon: <Upload className="h-4 w-4" />,
+        className: `${DETAIL_SOLID_BUTTON_CLASS} bg-sky-700 hover:bg-sky-800`,
+      };
   const detailVisiblePrimaryAction =
     detailPrimaryAction || detailGuidedPrimaryAction;
   const detailHeaderMetrics = [
     {
       key: "request_number",
       label: "رقم الطلب",
-      value: selectedRequestBusinessId,
+      value: requestNumber(selectedMessage),
       icon: <FileText className="h-3.5 w-3.5" />,
       mono: true,
       strong: true,
@@ -5379,9 +6153,6 @@ export default function MessagesManagement() {
       key: "project",
       label: "المشروع",
       value: selectedProjectTitle,
-      helper: selectedProjectBusinessId
-        ? `رقم المشروع ${selectedProjectBusinessId}`
-        : undefined,
       icon: <Building2 className="h-3.5 w-3.5" />,
       strong: true,
     },
@@ -5427,9 +6198,8 @@ export default function MessagesManagement() {
     if (!isRequestDetailsRouteActive || !selectedMessage?.id || !workflowCurrentStepKey)
       return;
 
-    const navigationKey = `${selectedMessage.id}:${workflowCurrentStepKey}:${workflowPreferredTab}:${
-      isArchiveMode ? "archive" : "active"
-    }`;
+    const navigationKey = `${selectedMessage.id}:${workflowCurrentStepKey}:${workflowPreferredTab}:${isArchiveMode ? "archive" : "active"
+      }`;
     if (workflowAutoNavigationRef.current === navigationKey) return;
     workflowAutoNavigationRef.current = navigationKey;
 
@@ -5534,11 +6304,6 @@ export default function MessagesManagement() {
             <div className="text-lg font-semibold text-slate-950">
               {selectedProjectTitle}
             </div>
-            {selectedProjectBusinessId ? (
-              <div className="text-xs font-medium text-slate-500">
-                رقم المشروع {selectedProjectBusinessId}
-              </div>
-            ) : null}
             <p className="text-sm leading-7 text-slate-600">
               {isSelectedInvestmentRequest
                 ? `المبلغ الحالي المرتبط بالطلب: ${moneySAR(selectedAmount)}`
@@ -5621,13 +6386,13 @@ export default function MessagesManagement() {
                 className={cn(
                   "rounded-[24px] border px-4 py-4 text-right transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300",
                   state === "completed" &&
-                    "border-emerald-200 bg-emerald-50/80 text-emerald-950",
+                  "border-emerald-200 bg-emerald-50/80 text-emerald-950",
                   state === "active" &&
-                    "border-slate-900 bg-slate-950 text-white shadow-[0_18px_40px_-30px_rgba(15,23,42,0.42)]",
+                  "border-slate-900 bg-slate-950 text-white shadow-[0_18px_40px_-30px_rgba(15,23,42,0.42)]",
                   state === "pending" &&
-                    "border-slate-200/80 bg-white text-slate-700 hover:border-slate-300",
+                  "border-slate-200/80 bg-white text-slate-700 hover:border-slate-300",
                   state === "halted" &&
-                    "border-rose-200 bg-rose-50/90 text-rose-900",
+                  "border-rose-200 bg-rose-50/90 text-rose-900",
                   isTabFocused && "ring-1 ring-offset-0 ring-slate-300"
                 )}
               >
@@ -5636,13 +6401,13 @@ export default function MessagesManagement() {
                     className={cn(
                       "flex h-10 w-10 items-center justify-center rounded-2xl border text-sm font-semibold",
                       state === "completed" &&
-                        "border-emerald-300 bg-emerald-100 text-emerald-700",
+                      "border-emerald-300 bg-emerald-100 text-emerald-700",
                       state === "active" &&
-                        "border-white/15 bg-white/10 text-white",
+                      "border-white/15 bg-white/10 text-white",
                       state === "pending" &&
-                        "border-slate-200 bg-slate-100 text-slate-600",
+                      "border-slate-200 bg-slate-100 text-slate-600",
                       state === "halted" &&
-                        "border-rose-300 bg-rose-100 text-rose-700"
+                      "border-rose-300 bg-rose-100 text-rose-700"
                     )}
                   >
                     {state === "completed" ? (
@@ -5656,13 +6421,13 @@ export default function MessagesManagement() {
                     className={cn(
                       DETAIL_COMPACT_PILL_BASE_CLASS,
                       state === "completed" &&
-                        "border-emerald-200 bg-white/80 text-emerald-700",
+                      "border-emerald-200 bg-white/80 text-emerald-700",
                       state === "active" &&
-                        "border-white/15 bg-white/10 text-white",
+                      "border-white/15 bg-white/10 text-white",
                       state === "pending" &&
-                        "border-slate-200 bg-slate-100 text-slate-600",
+                      "border-slate-200 bg-slate-100 text-slate-600",
                       state === "halted" &&
-                        "border-rose-200 bg-white/70 text-rose-700"
+                      "border-rose-200 bg-white/70 text-rose-700"
                     )}
                   >
                     {state === "completed"
@@ -5726,10 +6491,24 @@ export default function MessagesManagement() {
         title="التشغيل الحالي"
         description="الحالة الحالية والخطوة التالية فقط، مع CTA سياقي واحد يوجه المسار."
         badge={
-          detailFlowSummary.needsAction ? (
-            <Badge className="border-amber-200 bg-amber-50 text-amber-800">
-              يتطلب متابعة
-            </Badge>
+          selectedTrackingMeta ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge
+                className={cn(DETAIL_PILL_BASE_CLASS, selectedTrackingMeta.tone)}
+              >
+                {selectedTrackingMeta.label}
+              </Badge>
+              {selectedTrackingSlaMeta ? (
+                <Badge
+                  className={cn(
+                    DETAIL_COMPACT_PILL_BASE_CLASS,
+                    selectedTrackingSlaMeta.className
+                  )}
+                >
+                  {selectedTrackingSlaMeta.label}
+                </Badge>
+              ) : null}
+            </div>
           ) : undefined
         }
       >
@@ -5743,7 +6522,27 @@ export default function MessagesManagement() {
             )}
           >
             <div className="flex flex-wrap items-center gap-2.5">
-              {selectedStatusMeta ? (
+              {selectedTrackingMeta ? (
+                <Badge
+                  className={cn(
+                    DETAIL_PILL_BASE_CLASS,
+                    selectedTrackingMeta?.tone
+                  )}
+                >
+                  {selectedTrackingMeta?.label}
+                </Badge>
+              ) : null}
+              {selectedTrackingSlaMeta ? (
+                <Badge
+                  className={cn(
+                    DETAIL_COMPACT_PILL_BASE_CLASS,
+                    selectedTrackingSlaMeta.className
+                  )}
+                >
+                  {selectedTrackingSlaMeta.label}
+                </Badge>
+              ) : null}
+              {!isSelectedInterestRequest && selectedStatusMeta ? (
                 <Badge
                   className={cn(
                     DETAIL_PILL_BASE_CLASS,
@@ -5831,9 +6630,7 @@ export default function MessagesManagement() {
                 isSelectedInterestRequest
                   ? selectedInterestReviewMeta?.helperText
                   : selectedMessage?.investmentId
-                    ? selectedInvestmentBusinessId
-                      ? `سجل الاستثمار ${selectedInvestmentBusinessId}`
-                      : "تم إنشاء سجل الاستثمار"
+                    ? `سجل الاستثمار ${selectedMessage.investmentId}`
                     : "لم يتم إنشاء سجل الاستثمار بعد"
               }
               icon={<Wallet className="h-3.5 w-3.5" />}
@@ -5936,11 +6733,6 @@ export default function MessagesManagement() {
             <DetailSummaryMetric
               label="المشروع"
               value={selectedProjectTitle}
-              helper={
-                selectedProjectBusinessId
-                  ? `رقم المشروع ${selectedProjectBusinessId}`
-                  : undefined
-              }
               icon={<Building2 className="h-3.5 w-3.5" />}
               strong
               className="border-transparent bg-white/85 shadow-none"
@@ -5971,9 +6763,7 @@ export default function MessagesManagement() {
                   }
                   helper={
                     selectedMessage?.investmentId
-                      ? selectedInvestmentBusinessId
-                        ? `رقم السجل ${selectedInvestmentBusinessId}`
-                        : "رقم السجل غير متاح حاليًا"
+                      ? `رقم السجل ${selectedMessage.investmentId}`
                       : undefined
                   }
                   icon={<ShieldCheck className="h-3.5 w-3.5" />}
@@ -6029,6 +6819,112 @@ export default function MessagesManagement() {
     </DetailSection>
   );
 
+  const renderDocumentsSectionBody = ({ showUpload }: { showUpload: boolean }) => (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <DetailDocumentsMetricCard
+          label="رقم الاستثمار"
+          icon={<Building2 className="h-4 w-4" />}
+        >
+          <div className="break-words text-base font-semibold text-slate-950">
+            {String(selectedMessage?.investmentId || "-")}
+          </div>
+        </DetailDocumentsMetricCard>
+
+        <DetailDocumentsMetricCard
+          label="حالة العقد"
+          icon={<ShieldCheck className="h-4 w-4" />}
+        >
+          <DetailContractStatusBadges
+            status={contractStatusValue}
+            followupLabel={contractFollowupChipLabel || undefined}
+          />
+        </DetailDocumentsMetricCard>
+
+        <DetailDocumentsMetricCard
+          label="العقد الأصلي"
+          icon={<FileText className="h-4 w-4" />}
+        >
+          <DetailBinaryBadge
+            active={hasOriginalContract}
+            activeLabel="مرفوع"
+            inactiveLabel="لا يوجد"
+          />
+        </DetailDocumentsMetricCard>
+
+        <DetailDocumentsMetricCard
+          label="العقد الموقّع"
+          icon={<CheckCircle2 className="h-4 w-4" />}
+        >
+          <DetailBinaryBadge
+            active={hasCurrentSignedContract}
+            activeLabel="مرفوع"
+            inactiveLabel="لا يوجد"
+          />
+        </DetailDocumentsMetricCard>
+      </div>
+
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+        <DetailDocumentFileCard
+          title="العقد الأصلي"
+          available={hasOriginalContract}
+          fileName={originalContractFileName}
+          viewUrl={originalContractViewUrl}
+          downloadUrl={originalContractDownloadUrl}
+          emptyTitle="لا يوجد عقد أصلي مرفوع"
+          emptyDescription="سيظهر العقد الأصلي هنا بعد رفعه وربطه بهذا الاستثمار."
+          alertText={
+            needsFreshSignedContract
+              ? "تم تحديث العقد الأصلي، وسيحتاج المستثمر إلى توقيع النسخة الجديدة."
+              : undefined
+          }
+        />
+
+        <DetailDocumentFileCard
+          title="العقد الموقّع"
+          available={hasCurrentSignedContract}
+          fileName={signedContractFileName}
+          viewUrl={signedContractViewUrl}
+          downloadUrl={signedContractDownloadUrl}
+          emptyTitle={
+            needsFreshSignedContract
+              ? "النسخة الموقّعة الحالية غير متوفرة"
+              : "لم يتم رفع العقد الموقّع بعد"
+          }
+          emptyDescription={
+            needsFreshSignedContract
+              ? "تم تحديث العقد الأصلي، وينتظر النظام رفع النسخة الموقّعة الجديدة من المستثمر."
+              : "سيظهر العقد الموقّع هنا بعد أن يرفعه المستثمر ويُربط بهذا الاستثمار."
+          }
+        />
+      </div>
+
+      {showUpload ? (
+        <div className="space-y-4 border-t border-slate-200/80 pt-6">
+          <div className="space-y-1">
+            <div className={DETAIL_INLINE_LABEL_CLASS}>رفع المستندات</div>
+            <p className="text-sm leading-7 text-slate-600">
+              ارفع العقد الأصلي بصيغة PDF ليظهر ضمن المستندات المرتبطة ويصبح جاهزًا
+              للمتابعة.
+            </p>
+          </div>
+
+          <DetailContractUploadPanel
+            file={draftFile}
+            onFileChange={setDraftFile}
+            disabled={contractBusy || !selectedMessage?.investmentId}
+            busy={contractBusy}
+            buttonLabel="رفع العقد الأصلي"
+            onSubmit={createContractForInvestment}
+            submitDisabled={
+              contractBusy || !selectedMessage?.investmentId || !draftFile || !canAdmin
+            }
+          />
+        </div>
+      ) : null}
+    </div>
+  );
+
   const renderDetailDocumentsTab = () => (
     <DetailSection
       title="المستندات المرتبطة"
@@ -6038,187 +6934,7 @@ export default function MessagesManagement() {
           : "ملفات الاستثمار والعقود المرتبطة بهذا الطلب."
       }
     >
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        <DetailSummaryMetric
-          label="رقم الاستثمار"
-          value={
-            selectedMessage?.investmentId
-              ? selectedInvestmentBusinessId || "غير متاح"
-              : "-"
-          }
-          icon={<Building2 className="h-3.5 w-3.5" />}
-          strong
-        />
-        <DetailSummaryMetric
-          label="حالة العقد"
-          value={getContractStatusLabel(contractStatusValue)}
-          helper={
-            [
-              selectedContractBusinessId
-                ? `رقم العقد ${selectedContractBusinessId}`
-                : "",
-              contractFollowupChipLabel || "",
-            ]
-              .filter(Boolean)
-              .join(" • ") || undefined
-          }
-          icon={<ShieldCheck className="h-3.5 w-3.5" />}
-          strong
-        />
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <div className={DETAIL_SUBCARD_CLASS}>
-          <div className="flex items-center justify-between gap-2">
-            <div className={DETAIL_SUBCARD_TITLE_CLASS}>العقد الأصلي</div>
-            <span className={getDetailBinaryPillClass(hasOriginalContract)}>
-              {hasOriginalContract ? "مرفوع" : "لا يوجد"}
-            </span>
-          </div>
-
-          {hasOriginalContract ? (
-            <>
-              <div className={DETAIL_SUBCARD_VALUE_CLASS}>
-                {originalContractFileName}
-              </div>
-              <div className="flex flex-wrap gap-2 pt-1">
-                {originalContractViewUrl ? (
-                  <a
-                    href={originalContractViewUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className={DETAIL_OUTLINE_BUTTON_CLASS}
-                    >
-                      <Eye className="w-4 h-4" />
-                      عرض
-                    </Button>
-                  </a>
-                ) : null}
-                {originalContractDownloadUrl ? (
-                  <a
-                    href={originalContractDownloadUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className={DETAIL_OUTLINE_BUTTON_CLASS}
-                    >
-                      <Download className="w-4 h-4" />
-                      تنزيل
-                    </Button>
-                  </a>
-                ) : null}
-              </div>
-              {needsFreshSignedContract ? (
-                <div className={DETAIL_ALERT_CLASS}>
-                  تم تحديث العقد الأصلي، وسيحتاج المستثمر إلى توقيع النسخة
-                  الجديدة.
-                </div>
-              ) : null}
-            </>
-          ) : (
-            <div className={DETAIL_HELP_TEXT_CLASS}>لا يوجد</div>
-          )}
-        </div>
-
-        <div className={DETAIL_SUBCARD_CLASS}>
-          <div className="flex items-center justify-between gap-2">
-            <div className={DETAIL_SUBCARD_TITLE_CLASS}>العقد الموقّع</div>
-            <span className={getDetailBinaryPillClass(hasCurrentSignedContract)}>
-              {hasCurrentSignedContract ? "مرفوع" : "لا يوجد"}
-            </span>
-          </div>
-
-          {hasCurrentSignedContract ? (
-            <>
-              <div className={DETAIL_SUBCARD_VALUE_CLASS}>
-                {signedContractFileName}
-              </div>
-              <div className="flex flex-wrap gap-2 pt-1">
-                {signedContractViewUrl ? (
-                  <a
-                    href={signedContractViewUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className={DETAIL_OUTLINE_BUTTON_CLASS}
-                    >
-                      <Eye className="w-4 h-4" />
-                      عرض
-                    </Button>
-                  </a>
-                ) : null}
-                {signedContractDownloadUrl ? (
-                  <a
-                    href={signedContractDownloadUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className={DETAIL_OUTLINE_BUTTON_CLASS}
-                    >
-                      <Download className="w-4 h-4" />
-                      تنزيل
-                    </Button>
-                  </a>
-                ) : null}
-              </div>
-            </>
-          ) : (
-            <div className={DETAIL_HELP_TEXT_CLASS}>
-              {needsFreshSignedContract
-                ? "لم يتم رفع عقد موقّع من المستثمر بعد."
-                : "لم يتم رفع العقد الموقّع بعد"}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {isActiveMode ? (
-        <div className="border-t border-slate-200/80 pt-5">
-          <div className={DETAIL_INLINE_LABEL_CLASS}>رفع المستندات</div>
-          <div className="space-y-4 rounded-[22px] border border-dashed border-slate-200/80 bg-slate-50/70 px-4 py-4">
-            <ContractFilePicker
-              buttonLabel="رفع العقد الأصلي (PDF)"
-              file={draftFile}
-              onFileChange={setDraftFile}
-              panelClassName="rounded-[18px] border border-slate-200 bg-white px-4 py-4 sm:px-4"
-              buttonClassName={DETAIL_OUTLINE_BUTTON_CLASS}
-              fileNameClassName="text-sm font-semibold text-slate-950"
-              helperTextClassName="text-xs leading-6 text-slate-500"
-              disabled={contractBusy || !selectedMessage?.investmentId}
-            />
-            <Button
-              className={`w-full ${DETAIL_SOLID_BUTTON_CLASS} bg-blue-700 hover:bg-blue-800`}
-              onClick={createContractForInvestment}
-              disabled={
-                contractBusy ||
-                !selectedMessage?.investmentId ||
-                !draftFile ||
-                !canAdmin
-              }
-            >
-              {contractBusy ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Upload className="w-4 h-4" />
-              )}
-              رفع العقد الأصلي
-            </Button>
-          </div>
-        </div>
-      ) : null}
+      {renderDocumentsSectionBody({ showUpload: isActiveMode })}
     </DetailSection>
   );
 
@@ -6401,6 +7117,35 @@ export default function MessagesManagement() {
                   </div>
                 </div>
               ) : null}
+
+              {showStopInvestmentAdvancedAction ? (
+                <div className="rounded-[22px] border border-rose-200/80 bg-rose-50/40 px-4 py-4">
+                  <div className="mb-3 text-sm font-semibold text-slate-950">
+                    {isSelectedInvestmentStoppedEarly
+                      ? "إيقاف الاستثمار بطلب العميل"
+                      : "إيقاف الاستثمار"}
+                  </div>
+                  <p className="mb-4 text-sm leading-7 text-slate-600">
+                    بدأ هذا الاستثمار فعليًا، لذلك لم يعد رفع العقد الأصلي إجراءً صحيحًا في
+                    هذا القسم. متابعة الإيقاف المبكر والتسوية تتم من المسار المالي الحالي
+                    المرتبط بالاستثمار.
+                  </p>
+                  <Button
+                    className={
+                      isSelectedInvestmentStoppedEarly
+                        ? DETAIL_OUTLINE_BUTTON_CLASS
+                        : DETAIL_DANGER_BUTTON_CLASS
+                    }
+                    onClick={openStopInvestmentDialog}
+                    disabled={!canEditFinancial || !investmentDoc?.id}
+                  >
+                    <AlertTriangle className="h-4 w-4" />
+                    {isSelectedInvestmentStoppedEarly
+                      ? "مراجعة إيقاف الاستثمار"
+                      : "إيقاف الاستثمار بطلب العميل"}
+                  </Button>
+                </div>
+              ) : null}
             </div>
           </AccordionContent>
         </AccordionItem>
@@ -6415,448 +7160,400 @@ export default function MessagesManagement() {
       <div className="space-y-6">
         {!isRequestDetailsRouteActive ? (
           <>
-        <section className="relative overflow-hidden rounded-[30px] border border-slate-200/80 bg-[radial-gradient(circle_at_top_left,rgba(13,148,136,0.12),transparent_28%),radial-gradient(circle_at_top_right,rgba(245,158,11,0.12),transparent_30%),linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] p-6 shadow-[0_20px_70px_-42px_rgba(15,23,42,0.42)]">
-          <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.66),transparent_55%)]" />
+            <section className="relative overflow-hidden rounded-[30px] border border-slate-200/80 bg-[radial-gradient(circle_at_top_left,rgba(13,148,136,0.12),transparent_28%),radial-gradient(circle_at_top_right,rgba(245,158,11,0.12),transparent_30%),linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] p-6 shadow-[0_20px_70px_-42px_rgba(15,23,42,0.42)]">
+              <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.66),transparent_55%)]" />
 
-          <div className="relative flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
-            <div className="max-w-3xl space-y-3">
-              <div className="inline-flex w-fit items-center rounded-full border border-teal-200 bg-teal-50 px-3 py-1 text-[11px] font-semibold tracking-[0.16em] text-teal-700">
-                سجل تشغيلي مباشر
-              </div>
+              <div className="relative flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
+                <div className="max-w-3xl space-y-3">
+                  <div className="inline-flex w-fit items-center rounded-full border border-teal-200 bg-teal-50 px-3 py-1 text-[11px] font-semibold tracking-[0.16em] text-teal-700">
+                    سجل تشغيلي مباشر
+                  </div>
 
-              <div className="space-y-2">
-                <h1 className="text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
-                  سجل طلبات الاستثمار
-                </h1>
-                <p className="max-w-2xl text-sm leading-7 text-slate-600 sm:text-base">
-                  عرض مؤسسي سريع القراءة يعتمد على سجل الطلب الحالي وبيانات
-                  العميل المحدثة مباشرة من ملف المستخدم في Firestore.
-                </p>
-              </div>
-            </div>
-
-            <div className="xl:min-w-[220px]">
-              <div className="rounded-[22px] border border-slate-200 bg-white/85 p-4 shadow-sm shadow-slate-200/70 backdrop-blur">
-                <div className="text-[11px] font-semibold tracking-[0.16em] text-slate-500">
-                  النتائج في العرض الحالي
+                  <div className="space-y-2">
+                    <h1 className="text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
+                      سجل طلبات الاستثمار
+                    </h1>
+                  </div>
+                  <p>
+                    عرض شامل لجميع طلبات الاستثمار مع تتبع حالتها والإجراءات المرتبطة بها.              </p>
                 </div>
-                <div className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">
-                  {formatNumberEN(filtered.length)}
+
+                <div className="xl:min-w-[220px]">
+                  <div className="rounded-[22px] border border-slate-200 bg-white/85 p-4 shadow-sm shadow-slate-200/70 backdrop-blur">
+                    <div className="text-[11px] font-semibold tracking-[0.16em] text-slate-500">
+                      النتائج في العرض الحالي
+                    </div>
+                    <div className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">
+                      {formatNumberEN(filtered.length)}
+                    </div>
+                    <p className="mt-1 text-xs leading-6 text-slate-500">
+                      من أصل {formatNumberEN(stats.all)} سجل طلب في السجل.
+                    </p>
+                  </div>
                 </div>
-                <p className="mt-1 text-xs leading-6 text-slate-500">
-                  من أصل {formatNumberEN(stats.all)} سجل طلب في السجل.
-                </p>
               </div>
-            </div>
-          </div>
 
-          {roleDocMissing && myRole !== "owner" ? (
-            <div className="relative mt-5 rounded-2xl border border-amber-200 bg-amber-50/90 px-4 py-3 text-sm leading-7 text-amber-900">
-              ملاحظة: لم يتم العثور على ملف الصلاحيات للحساب داخل{" "}
-              <code>users/{user?.uid}</code> وقد تظهر بعض الإجراءات بصلاحية عرض
-              فقط.
-            </div>
-          ) : null}
-        </section>
-
-        {false ? (
-          <>
-            <div>
-              <h1 className="text-4xl font-bold mb-2">سجل طلبات الاستثمار</h1>
-              <p className="text-muted-foreground text-lg">
-                إدارة ومتابعة طلبات الاستثمار الواردة
-              </p>
-
-              {/* ✅ تنبيه للحسابات القديمة (doc ناقص / role ناقص) */}
               {roleDocMissing && myRole !== "owner" ? (
-                <div className="mt-3 p-3 rounded-lg bg-amber-50 border text-sm">
-                  ملاحظة: لم يتم العثور على ملف صلاحيات لحسابك في{" "}
-                  <code>users/{user?.uid}</code>. قد تظهر لك بعض الصلاحيات كعرض
+                <div className="relative mt-5 rounded-2xl border border-amber-200 bg-amber-50/90 px-4 py-3 text-sm leading-7 text-amber-900">
+                  ملاحظة: لم يتم العثور على ملف الصلاحيات للحساب داخل{" "}
+                  <code>users/{user?.uid}</code> وقد تظهر بعض الإجراءات بصلاحية عرض
                   فقط.
                 </div>
               ) : null}
-            </div>
-          </>
-        ) : null}
+            </section>
 
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <RequestSummaryTile
-            title="إجمالي الطلبات"
-            value={stats.all}
-            helper={`${formatNumberEN(filtered.length)} سجل ضمن نتائج العرض الحالية`}
-            icon={<FileText className="h-4 w-4" />}
-            tone="amber"
-          />
-          <RequestSummaryTile
-            title="الطلبات المفتوحة"
-            value={stats.open}
-            helper="تشمل الطلبات قيد المعالجة أو الانتظار"
-            icon={<Clock3 className="h-4 w-4" />}
-            tone="blue"
-          />
-          <RequestSummaryTile
-            title="مربوطة بملف حي"
-            value={clientSourceCounters.live}
-            helper="الاسم والبريد من مستند المستخدم الحالي"
-            icon={<RefreshCw className="h-4 w-4" />}
-            tone="emerald"
-          />
-          <RequestSummaryTile
-            title="تحتاج مراجعة ربط"
-            value={
-              clientSourceCounters.requestSnapshot +
-              clientSourceCounters.unknown
-            }
-            helper="تعتمد على بيانات الطلب أو بيانات ناقصة"
-            icon={<AlertTriangle className="h-4 w-4" />}
-            tone="rose"
-          />
-        </div>
-
-        <section className="overflow-hidden rounded-[30px] border border-slate-200/80 bg-white/95 shadow-[0_24px_70px_-46px_rgba(15,23,42,0.42)]">
-          <div className="border-b border-slate-200/70 px-4 py-5 sm:px-6">
-            <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
-              <div className="space-y-4 xl:max-w-3xl">
+            {false ? (
+              <>
                 <div>
-                  <h2 className="text-xl font-semibold tracking-tight text-slate-950 sm:text-2xl">
-                    عرض مؤسسي سريع القراءة
-                  </h2>
-                </div>
-
-                <div className="relative w-full xl:max-w-xl">
-                  <Search className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                  <Input
-                    value={searchQuery}
-                    onChange={e => setSearchQuery(e.target.value)}
-                    placeholder="ابحث باسم العميل أو البريد أو المشروع أو رقم الطلب"
-                    className="h-11 rounded-2xl border-slate-200 bg-slate-50/80 pr-11 text-sm shadow-none placeholder:text-slate-400"
-                  />
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2">
-                  {[
-                    { key: "all", label: "الكل", count: stats.all },
-                    { key: "open", label: "مفتوح", count: stats.open },
-                    { key: "completed", label: "مقفل", count: stats.completed },
-                    { key: "rejected", label: "مرفوض", count: stats.rejected },
-                  ].map(option => (
-                    <Button
-                      key={option.key}
-                      variant="outline"
-                      className={cn(
-                        "h-10 rounded-2xl border px-4 text-sm shadow-none",
-                        view === option.key
-                          ? "border-slate-950 bg-slate-950 text-white hover:bg-slate-900"
-                          : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                      )}
-                      onClick={() => setView(option.key as typeof view)}
-                    >
-                      {getRequestViewLabel(String(option.key))}
-                      <span
-                        className={cn(
-                          "mr-2 rounded-full px-2 py-0.5 text-[11px] font-semibold",
-                          view === option.key
-                            ? "bg-white/15 text-white"
-                            : "bg-black/5 text-slate-700"
-                        )}
-                      >
-                        {formatNumberEN(option.count)}
-                      </span>
-                    </Button>
-                  ))}
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-xs font-semibold tracking-[0.14em] text-slate-400">
-                    نوع الطلب
-                  </span>
-                  {[
-                    { key: "all", label: "الكل", count: stats.all },
-                    {
-                      key: "investment",
-                      label: "طلبات استثمار",
-                      count: requestKindCounters.investment,
-                    },
-                    {
-                      key: "interest",
-                      label: "طلبات اهتمام",
-                      count: requestKindCounters.interest,
-                    },
-                  ].map(option => (
-                    <Button
-                      key={option.key}
-                      variant="outline"
-                      className={cn(
-                        "h-9 rounded-2xl border px-4 text-xs shadow-none",
-                        requestKindView === option.key
-                          ? option.key === "interest"
-                            ? "border-amber-200 bg-amber-50 text-amber-900 hover:bg-amber-100"
-                            : "border-slate-950 bg-slate-950 text-white hover:bg-slate-900"
-                          : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                      )}
-                      onClick={() =>
-                        setRequestKindView(
-                          option.key as typeof requestKindView
-                        )
-                      }
-                    >
-                      {option.label}
-                      <span
-                        className={cn(
-                          "mr-2 rounded-full px-2 py-0.5 text-[10px] font-semibold",
-                          requestKindView === option.key
-                            ? option.key === "interest"
-                              ? "bg-amber-900/10 text-amber-900"
-                              : "bg-white/15 text-white"
-                            : "bg-black/5 text-slate-700"
-                        )}
-                      >
-                        {formatNumberEN(option.count)}
-                      </span>
-                    </Button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-3 xl:min-w-[420px]">
-                <div className="rounded-[22px] border border-slate-200 bg-slate-50/80 p-4">
-                  <div className="text-[11px] font-semibold tracking-[0.16em] text-slate-500">
-                    نتائج العرض
-                  </div>
-                  <div className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">
-                    {formatNumberEN(filtered.length)}
-                  </div>
-                  <p className="mt-1 text-xs leading-6 text-slate-500">
-                    من أصل {formatNumberEN(stats.all)} سجل طلب.
+                  <h1 className="text-4xl font-bold mb-2">سجل طلبات الاستثمار</h1>
+                  <p className="text-muted-foreground text-lg">
+                    إدارة ومتابعة طلبات الاستثمار الواردة
                   </p>
-                </div>
 
-                <div className="rounded-[22px] border border-emerald-200 bg-emerald-50/70 p-4">
-                  <div className="text-[11px] font-semibold tracking-[0.16em] text-emerald-700">
-                    ربط مباشر
-                  </div>
-                  <div className="mt-2 text-2xl font-semibold tracking-tight text-emerald-950">
-                    {formatNumberEN(clientSourceCounters.live)}
-                  </div>
-                  <p className="mt-1 text-xs leading-6 text-emerald-800/80">
-                    طلبات مرتبطة حاليًا بملف المستخدم الحالي.
-                  </p>
-                </div>
-
-                <div className="rounded-[22px] border border-amber-200 bg-amber-50/70 p-4">
-                  <div className="text-[11px] font-semibold tracking-[0.16em] text-amber-700">
-                    تنبيه بيانات
-                  </div>
-                  <div className="mt-2 text-2xl font-semibold tracking-tight text-amber-950">
-                    {formatNumberEN(
-                      clientSourceCounters.requestSnapshot +
-                        clientSourceCounters.unknown
-                    )}
-                  </div>
-                  <p className="mt-1 text-xs leading-6 text-amber-900/75">
-                    حالات تحتاج مراجعة الربط أو بياناتها ناقصة.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-4 flex flex-wrap gap-2">
-              {[
-                {
-                  key: "pending",
-                  label: "بانتظار المراجعة",
-                  count: statusCounters.pending,
-                  tone: "border-amber-200 bg-amber-50 text-amber-800",
-                },
-                {
-                  key: "reviewing",
-                  label: "قيد المراجعة",
-                  count: statusCounters.reviewing,
-                  tone: "border-sky-200 bg-sky-50 text-sky-800",
-                },
-                {
-                  key: "approved",
-                  label: "موافقة أولية",
-                  count: statusCounters.approved,
-                  tone: "border-emerald-200 bg-emerald-50 text-emerald-800",
-                },
-                {
-                  key: "completed",
-                  label: "مكتمل أو مغلق",
-                  count: statusCounters.completed,
-                  tone: "border-slate-200 bg-slate-100 text-slate-700",
-                },
-              ].map(item => (
-                <div
-                  key={item.key}
-                  className={cn(
-                    "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold",
-                    item.tone
-                  )}
-                >
-                  <span>{item.label}</span>
-                  <span className="rounded-full bg-white/85 px-2 py-0.5 text-[11px] text-slate-700">
-                    {formatNumberEN(item.count)}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="px-4 py-5 sm:px-6 sm:py-6" dir="rtl">
-            <div className="mb-5 flex flex-col gap-3 border-b border-slate-100 pb-5 lg:flex-row lg:items-center lg:justify-between">
-              <div>
-                <div className="flex items-center gap-2 text-slate-950">
-                  <MessageSquare className="h-5 w-5" />
-                  <h3 className="text-lg font-semibold tracking-tight">
-                    سجل طلبات الاستثمار
-                  </h3>
-                </div>
-                <p className="mt-2 text-sm leading-7 text-slate-500">
-                  بطاقات مختصرة تعرض العميل، البريد، المشروع، الحالة، نوع
-                  الطلب، تاريخ الطلب، آخر تحديث، والإجراء الأساسي دون ازدحام
-                  بصري.
-                </p>
-              </div>
-
-              <div className="inline-flex w-fit items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm font-medium text-slate-600">
-                {formatNumberEN(filtered.length)} سجل
-              </div>
-            </div>
-
-            {loading ? (
-              <div className="flex items-center justify-center gap-2 py-16 text-muted-foreground">
-                <Loader2 className="h-5 w-5 animate-spin" />
-                جاري تحميل الطلبات...
-              </div>
-            ) : filtered.length ? (
-              <div className="space-y-6">
-                <RequestCollectionSection
-                  title="الطلبات الجديدة"
-                  description="طلبات تحتاج متابعة مباشرة الآن. طلبات الاستثمار تبقى هنا حتى تُرفض أو تكتمل، وطلبات الاهتمام تبقى هنا حتى يتم الاطلاع عليها."
-                  count={newRequests.length}
-                  tone="new"
-                >
-                  {newRequests.length ? (
-                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                      {newRequests.map(request => renderRequestCard(request))}
+                  {/* ✅ تنبيه للحسابات القديمة (doc ناقص / role ناقص) */}
+                  {roleDocMissing && myRole !== "owner" ? (
+                    <div className="mt-3 p-3 rounded-lg bg-amber-50 border text-sm">
+                      ملاحظة: لم يتم العثور على ملف صلاحيات لحسابك في{" "}
+                      <code>users/{user?.uid}</code>. قد تظهر لك بعض الصلاحيات كعرض
+                      فقط.
                     </div>
                   ) : null}
-                </RequestCollectionSection>
-
-                <RequestCollectionSection
-                  title="الطلبات القديمة / المنتهية"
-                  description="يشمل الطلبات التي خرجت من دائرة المتابعة الفورية: الاستثمارات المرفوضة أو المكتملة، وطلبات الاهتمام التي تم الاطلاع عليها."
-                  count={archivedRequests.length}
-                  tone="archived"
-                >
-                  {archivedRequests.length ? (
-                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                      {archivedRequests.map(request => renderRequestCard(request))}
-                    </div>
-                  ) : null}
-                </RequestCollectionSection>
-              </div>
-            ) : (
-              <div className="rounded-[24px] border border-dashed border-slate-300 bg-slate-50/80 px-6 py-14 text-center">
-                <div className="text-base font-semibold text-slate-900">
-                  لا توجد طلبات مطابقة للبحث أو الفلتر الحالي
                 </div>
-                <p className="mt-2 text-sm leading-7 text-slate-500">
-                  جرّب تغيير الفلتر أو البحث باسم العميل أو البريد أو المشروع.
-                </p>
-              </div>
-            )}
-          </div>
-        </section>
+              </>
+            ) : null}
 
-        {false ? (
-          <>
-            {/* Filters */}
-            <Card className="rsg-card">
-              <CardContent className="py-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button
-                    variant={view === "open" ? "default" : "outline"}
-                    onClick={() => setView("open")}
-                  >
-                    مفتوح
-                  </Button>
-                  <Button
-                    variant={view === "completed" ? "default" : "outline"}
-                    onClick={() => setView("completed")}
-                  >
-                    مقفل
-                  </Button>
-                  <Button
-                    variant={view === "rejected" ? "default" : "outline"}
-                    onClick={() => setView("rejected")}
-                  >
-                    مرفوض
-                  </Button>
-                  <Button
-                    variant={view === "all" ? "default" : "outline"}
-                    onClick={() => setView("all")}
-                  >
-                    الكل
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </>
-        ) : null}
-
-        <Card className="hidden rsg-card border-slate-200/80 bg-white/95 shadow-[0_22px_70px_-46px_rgba(15,23,42,0.42)]">
-          <CardHeader className="gap-4 border-b border-slate-200/70 pb-5">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-              <CardTitle className="flex items-center gap-2 text-xl font-semibold text-slate-950">
-                <MessageSquare className="h-5 w-5" />
-                سجل طلبات الاستثمار
-              </CardTitle>
-
-              <div className="inline-flex w-fit items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm font-medium text-slate-600">
-                {formatNumberEN(filtered.length)} سجل
-              </div>
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <RequestSummaryTile
+                title="إجمالي الطلبات"
+                value={stats.all}
+                helper={`${formatNumberEN(filtered.length)} سجل ضمن نتائج العرض الحالية`}
+                icon={<FileText className="h-4 w-4" />}
+                tone="amber"
+              />
+              <RequestSummaryTile
+                title="الطلبات المفتوحة"
+                value={stats.open}
+                helper="تشمل الطلبات قيد المعالجة أو الانتظار"
+                icon={<Clock3 className="h-4 w-4" />}
+                tone="blue"
+              />
+              <RequestSummaryTile
+                title="مربوطة بملف حي"
+                value={clientSourceCounters.live}
+                helper="الاسم والبريد من مستند المستخدم الحالي"
+                icon={<RefreshCw className="h-4 w-4" />}
+                tone="emerald"
+              />
+              <RequestSummaryTile
+                title="تحتاج مراجعة ربط"
+                value={
+                  clientSourceCounters.requestSnapshot +
+                  clientSourceCounters.unknown
+                }
+                helper="تعتمد على بيانات الطلب أو بيانات ناقصة"
+                icon={<AlertTriangle className="h-4 w-4" />}
+                tone="rose"
+              />
             </div>
 
-            <p className="text-sm leading-7 text-slate-500">
-              الاسم والبريد في هذه البطاقات يتم تحديثهما من ملف المستخدم الحالي،
-              مع استخدام بيانات الطلب كبديل فقط عند غياب الربط، ومع تمييز بصري
-              واضح بين الاستثمار الفعلي والاهتمام التمهيدي.
-            </p>
-          </CardHeader>
+            <section className="overflow-hidden rounded-[30px] border border-slate-200/80 bg-white/95 shadow-[0_24px_70px_-46px_rgba(15,23,42,0.42)]">
+              <div className="border-b border-slate-200/70 px-4 py-5 sm:px-6">
+                <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+                  <div className="space-y-4 xl:max-w-3xl">
+                    <div>
+                      <h2 className="text-xl font-semibold tracking-tight text-slate-950 sm:text-2xl">
+                        عرض مؤسسي سريع القراءة
+                      </h2>
+                    </div>
 
-          <CardContent className="pt-6" dir="rtl">
-            {loading ? (
-              <div className="flex items-center justify-center gap-2 py-12 text-muted-foreground">
-                <Loader2 className="h-5 w-5 animate-spin" />
-                جاري تحميل الطلبات...
-              </div>
-            ) : filtered.length ? (
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                {filtered.map(request => renderRequestCard(request))}
-              </div>
-            ) : (
-              <div className="rounded-[24px] border border-dashed border-slate-300 bg-slate-50/80 px-6 py-14 text-center">
-                <div className="text-base font-semibold text-slate-900">
-                  لا توجد طلبات مطابقة للبحث أو الفلتر الحالي
+                    <div className="relative w-full xl:max-w-xl">
+                      <Search className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                      <Input
+                        value={searchQuery}
+                        onChange={e => setSearchQuery(e.target.value)}
+                        placeholder="ابحث باسم العميل أو البريد أو المشروع أو رقم الطلب"
+                        className="h-11 rounded-2xl border-slate-200 bg-slate-50/80 pr-11 text-sm shadow-none placeholder:text-slate-400"
+                      />
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      {[
+                        { key: "all", label: "الكل", count: stats.all },
+                        { key: "open", label: "مفتوح", count: stats.open },
+                        { key: "completed", label: "مقفل", count: stats.completed },
+                        { key: "rejected", label: "مرفوض", count: stats.rejected },
+                      ].map(option => (
+                        <Button
+                          key={option.key}
+                          variant="outline"
+                          className={cn(
+                            "h-10 rounded-2xl border px-4 text-sm shadow-none",
+                            view === option.key
+                              ? "border-slate-950 bg-slate-950 text-white hover:bg-slate-900"
+                              : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                          )}
+                          onClick={() => setView(option.key as typeof view)}
+                        >
+                          {getRequestViewLabel(String(option.key))}
+                          <span
+                            className={cn(
+                              "mr-2 rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                              view === option.key
+                                ? "bg-white/15 text-white"
+                                : "bg-black/5 text-slate-700"
+                            )}
+                          >
+                            {formatNumberEN(option.count)}
+                          </span>
+                        </Button>
+                      ))}
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs font-semibold tracking-[0.14em] text-slate-400">
+                        نوع الطلب
+                      </span>
+                      {[
+                        { key: "all", label: "الكل", count: stats.all },
+                        {
+                          key: "investment",
+                          label: "طلبات استثمار",
+                          count: requestKindCounters.investment,
+                        },
+                        {
+                          key: "interest",
+                          label: "طلبات اهتمام",
+                          count: requestKindCounters.interest,
+                        },
+                      ].map(option => (
+                        <Button
+                          key={option.key}
+                          variant="outline"
+                          className={cn(
+                            "h-9 rounded-2xl border px-4 text-xs shadow-none",
+                            requestKindView === option.key
+                              ? option.key === "interest"
+                                ? "border-amber-200 bg-amber-50 text-amber-900 hover:bg-amber-100"
+                                : "border-slate-950 bg-slate-950 text-white hover:bg-slate-900"
+                              : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                          )}
+                          onClick={() =>
+                            setRequestKindView(
+                              option.key as typeof requestKindView
+                            )
+                          }
+                        >
+                          {option.label}
+                          <span
+                            className={cn(
+                              "mr-2 rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                              requestKindView === option.key
+                                ? option.key === "interest"
+                                  ? "bg-amber-900/10 text-amber-900"
+                                  : "bg-white/15 text-white"
+                                : "bg-black/5 text-slate-700"
+                            )}
+                          >
+                            {formatNumberEN(option.count)}
+                          </span>
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-3 xl:min-w-[420px]">
+                    <div className="rounded-[22px] border border-slate-200 bg-slate-50/80 p-4">
+                      <div className="text-[11px] font-semibold tracking-[0.16em] text-slate-500">
+                        نتائج العرض
+                      </div>
+                      <div className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">
+                        {formatNumberEN(filtered.length)}
+                      </div>
+                      <p className="mt-1 text-xs leading-6 text-slate-500">
+                        من أصل {formatNumberEN(stats.all)} سجل طلب.
+                      </p>
+                    </div>
+
+                    <div className="rounded-[22px] border border-emerald-200 bg-emerald-50/70 p-4">
+                      <div className="text-[11px] font-semibold tracking-[0.16em] text-emerald-700">
+                        ربط مباشر
+                      </div>
+                      <div className="mt-2 text-2xl font-semibold tracking-tight text-emerald-950">
+                        {formatNumberEN(clientSourceCounters.live)}
+                      </div>
+                      <p className="mt-1 text-xs leading-6 text-emerald-800/80">
+                        طلبات مرتبطة حاليًا بملف المستخدم الحالي.
+                      </p>
+                    </div>
+
+                    <div className="rounded-[22px] border border-amber-200 bg-amber-50/70 p-4">
+                      <div className="text-[11px] font-semibold tracking-[0.16em] text-amber-700">
+                        تنبيه بيانات
+                      </div>
+                      <div className="mt-2 text-2xl font-semibold tracking-tight text-amber-950">
+                        {formatNumberEN(
+                          clientSourceCounters.requestSnapshot +
+                          clientSourceCounters.unknown
+                        )}
+                      </div>
+                      <p className="mt-1 text-xs leading-6 text-amber-900/75">
+                        حالات تحتاج مراجعة الربط أو بياناتها ناقصة.
+                      </p>
+                    </div>
+                  </div>
                 </div>
-                <p className="mt-2 text-sm leading-7 text-slate-500">
-                  جرّب تغيير الفلتر أو البحث باسم العميل أو البريد أو المشروع.
-                </p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
 
-        {false ? (
-          <>
-            {/* Messages list */}
-            <Card className="rsg-card border-slate-200/80">
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {[
+                    {
+                      key: "pending",
+                      label: "بانتظار المراجعة",
+                      count: statusCounters.pending,
+                      tone: "border-amber-200 bg-amber-50 text-amber-800",
+                    },
+                    {
+                      key: "reviewing",
+                      label: "قيد المراجعة",
+                      count: statusCounters.reviewing,
+                      tone: "border-sky-200 bg-sky-50 text-sky-800",
+                    },
+                    {
+                      key: "approved",
+                      label: "موافقة أولية",
+                      count: statusCounters.approved,
+                      tone: "border-emerald-200 bg-emerald-50 text-emerald-800",
+                    },
+                    {
+                      key: "completed",
+                      label: "مكتمل أو مغلق",
+                      count: statusCounters.completed,
+                      tone: "border-slate-200 bg-slate-100 text-slate-700",
+                    },
+                  ].map(item => (
+                    <div
+                      key={item.key}
+                      className={cn(
+                        "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold",
+                        item.tone
+                      )}
+                    >
+                      <span>{item.label}</span>
+                      <span className="rounded-full bg-white/85 px-2 py-0.5 text-[11px] text-slate-700">
+                        {formatNumberEN(item.count)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="px-4 py-5 sm:px-6 sm:py-6" dir="rtl">
+                <div className="mb-5 flex flex-col gap-3 border-b border-slate-100 pb-5 lg:flex-row lg:items-center lg:justify-between">
+                  <div>
+                    <div className="flex items-center gap-2 text-slate-950">
+                      <MessageSquare className="h-5 w-5" />
+                      <h3 className="text-lg font-semibold tracking-tight">
+                        سجل طلبات الاستثمار
+                      </h3>
+                    </div>
+                    <p className="mt-2 text-sm leading-7 text-slate-500">
+                      بطاقات مختصرة تعرض العميل، البريد، المشروع، الحالة، نوع
+                      الطلب، تاريخ الطلب، آخر تحديث، والإجراء الأساسي دون ازدحام
+                      بصري.
+                    </p>
+                  </div>
+
+                  <div className="inline-flex w-fit items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm font-medium text-slate-600">
+                    {formatNumberEN(filtered.length)} سجل
+                  </div>
+                </div>
+
+                {loading ? (
+                  <div className="flex items-center justify-center gap-2 py-16 text-muted-foreground">
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                    جاري تحميل الطلبات...
+                  </div>
+                ) : filtered.length ? (
+                  <div className="space-y-6">
+                    <RequestCollectionSection
+                      title="الطلبات الجديدة"
+                      description="طلبات تحتاج متابعة مباشرة الآن. طلبات الاستثمار تبقى هنا حتى تُرفض أو تكتمل، وطلبات الاهتمام تبقى هنا حتى يتم الاطلاع عليها."
+                      count={newRequests.length}
+                      tone="new"
+                    >
+                      {newRequests.length ? (
+                        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                          {newRequests.map(request => renderRequestCard(request))}
+                        </div>
+                      ) : null}
+                    </RequestCollectionSection>
+
+                    <RequestCollectionSection
+                      title="الطلبات القديمة / المنتهية"
+                      description="يشمل الطلبات التي خرجت من دائرة المتابعة الفورية: الاستثمارات المرفوضة أو المكتملة، وطلبات الاهتمام التي تم الاطلاع عليها."
+                      count={archivedRequests.length}
+                      tone="archived"
+                    >
+                      {archivedRequests.length ? (
+                        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                          {archivedRequests.map(request => renderRequestCard(request))}
+                        </div>
+                      ) : null}
+                    </RequestCollectionSection>
+                  </div>
+                ) : (
+                  <div className="rounded-[24px] border border-dashed border-slate-300 bg-slate-50/80 px-6 py-14 text-center">
+                    <div className="text-base font-semibold text-slate-900">
+                      لا توجد طلبات مطابقة للبحث أو الفلتر الحالي
+                    </div>
+                    <p className="mt-2 text-sm leading-7 text-slate-500">
+                      جرّب تغيير الفلتر أو البحث باسم العميل أو البريد أو المشروع.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </section>
+
+            {false ? (
+              <>
+                {/* Filters */}
+                <Card className="rsg-card">
+                  <CardContent className="py-4">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        variant={view === "open" ? "default" : "outline"}
+                        onClick={() => setView("open")}
+                      >
+                        مفتوح
+                      </Button>
+                      <Button
+                        variant={view === "completed" ? "default" : "outline"}
+                        onClick={() => setView("completed")}
+                      >
+                        مقفل
+                      </Button>
+                      <Button
+                        variant={view === "rejected" ? "default" : "outline"}
+                        onClick={() => setView("rejected")}
+                      >
+                        مرفوض
+                      </Button>
+                      <Button
+                        variant={view === "all" ? "default" : "outline"}
+                        onClick={() => setView("all")}
+                      >
+                        الكل
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              </>
+            ) : null}
+
+            <Card className="hidden rsg-card border-slate-200/80 bg-white/95 shadow-[0_22px_70px_-46px_rgba(15,23,42,0.42)]">
               <CardHeader className="gap-4 border-b border-slate-200/70 pb-5">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                  <CardTitle className="flex items-center gap-2">
-                    <MessageSquare className="w-5 h-5" />
+                  <CardTitle className="flex items-center gap-2 text-xl font-semibold text-slate-950">
+                    <MessageSquare className="h-5 w-5" />
                     سجل طلبات الاستثمار
                   </CardTitle>
 
@@ -6865,261 +7562,307 @@ export default function MessagesManagement() {
                   </div>
                 </div>
 
-                <p className="text-sm text-muted-foreground">
-                  عرض مرن وواضح للطلبات بدون أي تمرير أفقي داخل القسم.
+                <p className="text-sm leading-7 text-slate-500">
+                  الاسم والبريد في هذه البطاقات يتم تحديثهما من ملف المستخدم الحالي،
+                  مع استخدام بيانات الطلب كبديل فقط عند غياب الربط، ومع تمييز بصري
+                  واضح بين الاستثمار الفعلي والاهتمام التمهيدي.
                 </p>
               </CardHeader>
+
               <CardContent className="pt-6" dir="rtl">
                 {loading ? (
-                  <div className="py-10 flex items-center justify-center gap-2 text-muted-foreground">
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    جاري التحميل...
+                  <div className="flex items-center justify-center gap-2 py-12 text-muted-foreground">
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                    جاري تحميل الطلبات...
                   </div>
                 ) : filtered.length ? (
-                  <div className="space-y-4">
-                    {filtered.map(m => {
-                      const badge = getStatusBadge(m.status);
-                      const pid = pick(
-                        m?.projectId,
-                        m?.project_id,
-                        m?.project?.id
-                      );
-                      const projectTitle = getProjectTitle(pid);
-                      const amount =
-                        toNum(m?.approvedAmount) ||
-                        toNum(m?.amount) ||
-                        toNum(m?.requestedAmount) ||
-                        toNum(m?.estimatedAmount) ||
-                        0;
-                      const remaining = getProjectRemaining(pid);
-                      const exceeded =
-                        remaining != null ? amount > remaining : false;
-                      const invState = m?.investmentId
-                        ? { label: "تم الإنشاء", cls: "bg-emerald-700" }
-                        : { label: "بانتظار الإنشاء", cls: "bg-slate-600" };
-                      const touchedBy = lastTouchedBy(m);
-                      const requestDate = formatDateTimeAR(
-                        m.createdAt ||
-                          m.created_at ||
-                          m.submittedAt ||
-                          m.timestamp
-                      );
-                      const summary = getRequestSummary(m);
-                      const clientName = getClientName(m) || "—";
-                      const clientEmail = getClientEmail(m);
-                      const clientPhone = getClientPhone(m);
-
-                      return (
-                        <article
-                          key={m.id}
-                          className="rounded-lg border border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-md/40"
-                        >
-                          <div className="border-b border-slate-200 px-4 py-4 sm:px-5">
-                            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                              <div className="min-w-0 space-y-2">
-                                <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-500">
-                                  طلب استثمار
-                                </div>
-
-                                <div className="space-y-1">
-                                  <h3 className="break-words text-lg font-semibold text-slate-950">
-                                    {clientName}
-                                  </h3>
-
-                                  <div className="flex items-start gap-2 text-sm text-slate-600">
-                                    <Building2 className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
-                                    <span className="min-w-0 break-words">
-                                      {projectTitle}
-                                    </span>
-                                  </div>
-                                </div>
-
-                                {(clientEmail || clientPhone) && (
-                                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-500">
-                                    {clientEmail ? (
-                                      <span className="break-all">
-                                        {clientEmail}
-                                      </span>
-                                    ) : null}
-                                    {clientPhone ? (
-                                      <span>{clientPhone}</span>
-                                    ) : null}
-                                  </div>
-                                )}
-                              </div>
-
-                              <div className="flex flex-wrap items-center gap-2">
-                                <Badge className={badge.cls}>
-                                  {badge.label}
-                                </Badge>
-                                <Badge
-                                  variant="outline"
-                                  className="border-slate-300 bg-white text-slate-700"
-                                >
-                                  {stageLabel(m.stageRole)}
-                                </Badge>
-                                <Badge
-                                  className={`${invState.cls} border-transparent shadow-none`}
-                                >
-                                  {invState.label}
-                                </Badge>
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="space-y-4 px-4 py-4 sm:px-5">
-                            <div className="grid gap-3 sm:grid-cols-2">
-                              <div className="min-w-0 rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-3 shadow-sm">
-                                <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-500">
-                                  رقم الطلب
-                                </div>
-                                <div className="mt-2 break-all font-mono text-xs font-semibold text-slate-900 sm:text-sm">
-                                  {requestNumber(m)}
-                                </div>
-                              </div>
-
-                              <div className="min-w-0 rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-3 shadow-sm">
-                                <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-500">
-                                  المبلغ
-                                </div>
-                                <div className="mt-2 break-words text-sm font-semibold text-slate-900">
-                                  {moneySAR(amount)}
-                                </div>
-                              </div>
-
-                              <div className="min-w-0 rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-3 shadow-sm">
-                                <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-500">
-                                  المتبقي
-                                </div>
-                                <div className="mt-2 text-sm font-semibold text-slate-900">
-                                  {remaining == null ? (
-                                    <span className="text-slate-400">—</span>
-                                  ) : (
-                                    <span
-                                      className={
-                                        exceeded ? "text-rose-700" : ""
-                                      }
-                                    >
-                                      {moneySAR(remaining)}
-                                      {exceeded ? " (تجاوز)" : ""}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-
-                              <div className="min-w-0 rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-3 shadow-sm">
-                                <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-500">
-                                  التاريخ
-                                </div>
-                                <div className="mt-2 break-words text-sm font-semibold leading-6 text-slate-900">
-                                  {requestDate}
-                                </div>
-                              </div>
-
-                              <div className="min-w-0 rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-3 shadow-sm">
-                                <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-500">
-                                  آخر تعديل
-                                </div>
-                                <div className="mt-2 break-all text-sm font-semibold leading-6 text-slate-900">
-                                  {touchedBy}
-                                </div>
-                              </div>
-
-                              <div className="min-w-0 rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-3 shadow-sm">
-                                <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-500">
-                                  المشروع
-                                </div>
-                                <div className="mt-2 break-words text-sm font-semibold leading-6 text-slate-900">
-                                  {projectTitle}
-                                </div>
-                              </div>
-                            </div>
-
-                            {summary ? (
-                              <div className="rounded-lg border border-slate-200 bg-slate-50/70 px-4 py-4">
-                                <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-500">
-                                  ملخص الرسالة
-                                </div>
-                                <p className="mt-2 break-words text-sm leading-7 text-slate-700">
-                                  {summary}
-                                </p>
-                              </div>
-                            ) : null}
-                          </div>
-
-                          <div className="border-t border-slate-200 px-4 py-4 sm:px-5">
-                            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-                              <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-500">
-                                الإجراءات
-                              </div>
-
-                              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-                                <Button
-                                  size="sm"
-                                  className="h-9 justify-center gap-2"
-                                  onClick={() => navigateToRequestDetails(m.id)}
-                                >
-                                  <Eye className="h-4 w-4" />
-                                  مراجعة الطلب
-                                </Button>
-
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-9 justify-center gap-2"
-                                  onClick={() => {
-                                    if (!pid) {
-                                      toast.warning(
-                                        "لا يوجد مشروع مرتبط بهذا الطلب."
-                                      );
-                                      return;
-                                    }
-                                    window.location.href = `/admin/projects/${pid}/edit`;
-                                  }}
-                                >
-                                  <ExternalLink className="h-4 w-4" />
-                                  فتح المشروع
-                                </Button>
-
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-9 justify-center gap-2"
-                                  onClick={() => {
-                                    const clientId = pick(
-                                      m?.createdByUid,
-                                      m?.investorUid,
-                                      m?.userId,
-                                      m?.userSnapshot?.uid
-                                    );
-                                    if (!clientId) {
-                                      toast.warning(
-                                        "لا يوجد حساب عميل مرتبط بهذا الطلب."
-                                      );
-                                      return;
-                                    }
-                                    window.location.href = `/admin/client-profile?id=${clientId}`;
-                                  }}
-                                >
-                                  <FileText className="h-4 w-4" />
-                                  ملف العميل
-                                </Button>
-                              </div>
-                            </div>
-                          </div>
-                        </article>
-                      );
-                    })}
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                    {filtered.map(request => renderRequestCard(request))}
                   </div>
                 ) : (
-                  <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/80 py-12 text-center text-muted-foreground">
-                    لا توجد رسائل مطابقة للفلاتر الحالية
+                  <div className="rounded-[24px] border border-dashed border-slate-300 bg-slate-50/80 px-6 py-14 text-center">
+                    <div className="text-base font-semibold text-slate-900">
+                      لا توجد طلبات مطابقة للبحث أو الفلتر الحالي
+                    </div>
+                    <p className="mt-2 text-sm leading-7 text-slate-500">
+                      جرّب تغيير الفلتر أو البحث باسم العميل أو البريد أو المشروع.
+                    </p>
                   </div>
                 )}
               </CardContent>
             </Card>
-          </>
-        ) : null}
+
+            {false ? (
+              <>
+                {/* Messages list */}
+                <Card className="rsg-card border-slate-200/80">
+                  <CardHeader className="gap-4 border-b border-slate-200/70 pb-5">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                      <CardTitle className="flex items-center gap-2">
+                        <MessageSquare className="w-5 h-5" />
+                        سجل طلبات الاستثمار
+                      </CardTitle>
+
+                      <div className="inline-flex w-fit items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm font-medium text-slate-600">
+                        {formatNumberEN(filtered.length)} سجل
+                      </div>
+                    </div>
+
+                    <p className="text-sm text-muted-foreground">
+                      عرض مرن وواضح للطلبات بدون أي تمرير أفقي داخل القسم.
+                    </p>
+                  </CardHeader>
+                  <CardContent className="pt-6" dir="rtl">
+                    {loading ? (
+                      <div className="py-10 flex items-center justify-center gap-2 text-muted-foreground">
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        جاري التحميل...
+                      </div>
+                    ) : filtered.length ? (
+                      <div className="space-y-4">
+                        {filtered.map(m => {
+                          const badge = getStatusBadge(m.status);
+                          const pid = pick(
+                            m?.projectId,
+                            m?.project_id,
+                            m?.project?.id
+                          );
+                          const projectTitle = getProjectTitle(pid);
+                          const amount =
+                            toNum(m?.approvedAmount) ||
+                            toNum(m?.amount) ||
+                            toNum(m?.requestedAmount) ||
+                            toNum(m?.estimatedAmount) ||
+                            0;
+                          const remaining = getProjectRemaining(pid);
+                          const exceeded =
+                            remaining != null ? amount > remaining : false;
+                          const invState = m?.investmentId
+                            ? { label: "تم الإنشاء", cls: "bg-emerald-700" }
+                            : { label: "بانتظار الإنشاء", cls: "bg-slate-600" };
+                          const touchedBy = lastTouchedBy(m);
+                          const requestDate = formatDateTimeAR(
+                            m.createdAt ||
+                            m.created_at ||
+                            m.submittedAt ||
+                            m.timestamp
+                          );
+                          const summary = getRequestSummary(m);
+                          const clientName = getClientName(m) || "—";
+                          const clientEmail = getClientEmail(m);
+                          const clientPhone = getClientPhone(m);
+
+                          return (
+                            <article
+                              key={m.id}
+                              className="rounded-lg border border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-md/40"
+                            >
+                              <div className="border-b border-slate-200 px-4 py-4 sm:px-5">
+                                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                                  <div className="min-w-0 space-y-2">
+                                    <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                                      طلب استثمار
+                                    </div>
+
+                                    <div className="space-y-1">
+                                      <h3 className="break-words text-lg font-semibold text-slate-950">
+                                        {clientName}
+                                      </h3>
+
+                                      <div className="flex items-start gap-2 text-sm text-slate-600">
+                                        <Building2 className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
+                                        <span className="min-w-0 break-words">
+                                          {projectTitle}
+                                        </span>
+                                      </div>
+                                    </div>
+
+                                    {(clientEmail || clientPhone) && (
+                                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-500">
+                                        {clientEmail ? (
+                                          <span className="break-all">
+                                            {clientEmail}
+                                          </span>
+                                        ) : null}
+                                        {clientPhone ? (
+                                          <span>{clientPhone}</span>
+                                        ) : null}
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <Badge className={badge.cls}>
+                                      {badge.label}
+                                    </Badge>
+                                    <Badge
+                                      variant="outline"
+                                      className="border-slate-300 bg-white text-slate-700"
+                                    >
+                                      {stageLabel(m.stageRole)}
+                                    </Badge>
+                                    <Badge
+                                      className={`${invState.cls} border-transparent shadow-none`}
+                                    >
+                                      {invState.label}
+                                    </Badge>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="space-y-4 px-4 py-4 sm:px-5">
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                  <div className="min-w-0 rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-3 shadow-sm">
+                                    <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                                      رقم الطلب
+                                    </div>
+                                    <div className="mt-2 break-all font-mono text-xs font-semibold text-slate-900 sm:text-sm">
+                                      {requestNumber(m)}
+                                    </div>
+                                  </div>
+
+                                  <div className="min-w-0 rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-3 shadow-sm">
+                                    <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                                      المبلغ
+                                    </div>
+                                    <div className="mt-2 break-words text-sm font-semibold text-slate-900">
+                                      {moneySAR(amount)}
+                                    </div>
+                                  </div>
+
+                                  <div className="min-w-0 rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-3 shadow-sm">
+                                    <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                                      المتبقي
+                                    </div>
+                                    <div className="mt-2 text-sm font-semibold text-slate-900">
+                                      {remaining == null ? (
+                                        <span className="text-slate-400">—</span>
+                                      ) : (
+                                        <span
+                                          className={
+                                            exceeded ? "text-rose-700" : ""
+                                          }
+                                        >
+                                          {moneySAR(remaining)}
+                                          {exceeded ? " (تجاوز)" : ""}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  <div className="min-w-0 rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-3 shadow-sm">
+                                    <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                                      التاريخ
+                                    </div>
+                                    <div className="mt-2 break-words text-sm font-semibold leading-6 text-slate-900">
+                                      {requestDate}
+                                    </div>
+                                  </div>
+
+                                  <div className="min-w-0 rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-3 shadow-sm">
+                                    <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                                      آخر تعديل
+                                    </div>
+                                    <div className="mt-2 break-all text-sm font-semibold leading-6 text-slate-900">
+                                      {touchedBy}
+                                    </div>
+                                  </div>
+
+                                  <div className="min-w-0 rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-3 shadow-sm">
+                                    <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                                      المشروع
+                                    </div>
+                                    <div className="mt-2 break-words text-sm font-semibold leading-6 text-slate-900">
+                                      {projectTitle}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {summary ? (
+                                  <div className="rounded-lg border border-slate-200 bg-slate-50/70 px-4 py-4">
+                                    <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                                      ملخص الرسالة
+                                    </div>
+                                    <p className="mt-2 break-words text-sm leading-7 text-slate-700">
+                                      {summary}
+                                    </p>
+                                  </div>
+                                ) : null}
+                              </div>
+
+                              <div className="border-t border-slate-200 px-4 py-4 sm:px-5">
+                                <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+                                  <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                                    الإجراءات
+                                  </div>
+
+                                  <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                                    <Button
+                                      size="sm"
+                                      className="h-9 justify-center gap-2"
+                                      onClick={() => navigateToRequestDetails(m.id)}
+                                    >
+                                      <Eye className="h-4 w-4" />
+                                      مراجعة الطلب
+                                    </Button>
+
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-9 justify-center gap-2"
+                                      onClick={() => {
+                                        if (!pid) {
+                                          toast.warning(
+                                            "لا يوجد مشروع مرتبط بهذا الطلب."
+                                          );
+                                          return;
+                                        }
+                                        window.location.href = `/admin/projects/${pid}/edit`;
+                                      }}
+                                    >
+                                      <ExternalLink className="h-4 w-4" />
+                                      فتح المشروع
+                                    </Button>
+
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-9 justify-center gap-2"
+                                      onClick={() => {
+                                        const clientId = pick(
+                                          m?.createdByUid,
+                                          m?.investorUid,
+                                          m?.userId,
+                                          m?.userSnapshot?.uid
+                                        );
+                                        if (!clientId) {
+                                          toast.warning(
+                                            "لا يوجد حساب عميل مرتبط بهذا الطلب."
+                                          );
+                                          return;
+                                        }
+                                        window.location.href = `/admin/client-profile?id=${clientId}`;
+                                      }}
+                                    >
+                                      <FileText className="h-4 w-4" />
+                                      ملف العميل
+                                    </Button>
+                                  </div>
+                                </div>
+                              </div>
+                            </article>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/80 py-12 text-center text-muted-foreground">
+                        لا توجد رسائل مطابقة للفلاتر الحالية
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </>
+            ) : null}
 
           </>
         ) : null}
@@ -7133,9 +7876,9 @@ export default function MessagesManagement() {
                     className={cn(
                       "absolute inset-x-0 top-0 h-1.5",
                       selectedStatusMeta?.accent ||
-                        (isSelectedInterestRequest
-                          ? "bg-amber-500"
-                          : "bg-emerald-500")
+                      (isSelectedInterestRequest
+                        ? "bg-amber-500"
+                        : "bg-emerald-500")
                     )}
                   />
                   <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(242,174,48,0.16),transparent_32%),radial-gradient(circle_at_top_left,rgba(20,35,58,0.08),transparent_35%)]" />
@@ -7177,861 +7920,1094 @@ export default function MessagesManagement() {
                   </div>
                 </div>
 
-              <div className="space-y-6 p-6 sm:p-7">
-                {renderDetailWorkflowStepper()}
-                {renderDetailContextRow()}
-                {renderDetailPrimaryPanel()}
-                {renderDetailSecondaryTabs()}
-                {renderDetailAdvancedActions()}
+                <div className="space-y-6 p-6 sm:p-7">
+                  {renderDetailWorkflowStepper()}
+                  {renderDetailContextRow()}
+                  {renderDetailPrimaryPanel()}
+                  {renderDetailSecondaryTabs()}
+                  {renderDetailAdvancedActions()}
 
-                {false ? (
-                  <div className="grid grid-cols-1 gap-6">
-                    <DetailSection
-                      title="بيانات العميل"
-                      description="عرض مرتب لبيانات العميل وجهة الربط وقنوات التواصل المتاحة داخل النظام."
-                      badge={
-                        <Badge
-                          className={cn(
-                            DETAIL_PILL_BASE_CLASS,
-                            selectedClient?.sourceTone
-                          )}
-                        >
-                          {selectedClient?.sourceLabel || "بيانات الطلب"}
-                        </Badge>
-                      }
-                    >
-                      <div className="flex flex-col gap-5 rounded-[24px] border border-slate-200/80 bg-[linear-gradient(135deg,rgba(255,255,255,0.98)_0%,rgba(248,250,252,0.96)_100%)] p-5 shadow-[0_20px_40px_-34px_rgba(15,23,42,0.2)] lg:flex-row lg:items-start lg:justify-between">
-                        <div className="flex min-w-0 items-start gap-4">
-                          <div
+                  {false ? (
+                    <div className="grid grid-cols-1 gap-6">
+                      <DetailSection
+                        title="بيانات العميل"
+                        description="عرض مرتب لبيانات العميل وجهة الربط وقنوات التواصل المتاحة داخل النظام."
+                        badge={
+                          <Badge
                             className={cn(
-                              "flex h-16 w-16 shrink-0 items-center justify-center rounded-[22px] text-2xl font-semibold shadow-[0_18px_34px_-24px_rgba(15,23,42,0.2)]",
-                              isSelectedInterestRequest
-                                ? "border border-amber-200 bg-amber-50 text-amber-900"
-                                : "bg-slate-950 text-white"
+                              DETAIL_PILL_BASE_CLASS,
+                              selectedClient?.sourceTone
                             )}
                           >
-                            {String(selectedClient?.clientName || "ع")
-                              .trim()
-                              .charAt(0) || "ع"}
-                          </div>
+                            {selectedClient?.sourceLabel || "بيانات الطلب"}
+                          </Badge>
+                        }
+                      >
+                        <div className="flex flex-col gap-5 rounded-[24px] border border-slate-200/80 bg-[linear-gradient(135deg,rgba(255,255,255,0.98)_0%,rgba(248,250,252,0.96)_100%)] p-5 shadow-[0_20px_40px_-34px_rgba(15,23,42,0.2)] lg:flex-row lg:items-start lg:justify-between">
+                          <div className="flex min-w-0 items-start gap-4">
+                            <div
+                              className={cn(
+                                "flex h-16 w-16 shrink-0 items-center justify-center rounded-[22px] text-2xl font-semibold shadow-[0_18px_34px_-24px_rgba(15,23,42,0.2)]",
+                                isSelectedInterestRequest
+                                  ? "border border-amber-200 bg-amber-50 text-amber-900"
+                                  : "bg-slate-950 text-white"
+                              )}
+                            >
+                              {String(selectedClient?.clientName || "ع")
+                                .trim()
+                                .charAt(0) || "ع"}
+                            </div>
 
-                          <div className="min-w-0">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <h3 className="break-words text-xl font-semibold text-slate-950">
-                                {selectedClient?.clientName ||
-                                  "مستخدم غير معروف"}
-                              </h3>
-                              <Badge
-                                className={cn(
-                                  DETAIL_COMPACT_PILL_BASE_CLASS,
-                                  "border-slate-200 bg-slate-100 text-slate-700"
-                                )}
-                              >
-                                {selectedClient?.clientRoleLabel || "عميل"}
-                              </Badge>
-                              {selectedClient?.sourceKey === "live_user" ? (
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <h3 className="break-words text-xl font-semibold text-slate-950">
+                                  {selectedClient?.clientName ||
+                                    "مستخدم غير معروف"}
+                                </h3>
                                 <Badge
                                   className={cn(
                                     DETAIL_COMPACT_PILL_BASE_CLASS,
-                                    "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                    "border-slate-200 bg-slate-100 text-slate-700"
                                   )}
                                 >
-                                  موثق بالنظام
+                                  {selectedClient?.clientRoleLabel || "عميل"}
                                 </Badge>
+                                {selectedClient?.sourceKey === "live_user" ? (
+                                  <Badge
+                                    className={cn(
+                                      DETAIL_COMPACT_PILL_BASE_CLASS,
+                                      "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                    )}
+                                  >
+                                    موثق بالنظام
+                                  </Badge>
+                                ) : null}
+                              </div>
+
+                              <p className="mt-2 max-w-3xl text-sm leading-7 text-slate-600">
+                                {selectedClient?.sourceHelper}
+                              </p>
+
+                              {selectedClient?.clientId ? (
+                                <div className="mt-3 inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-500">
+                                  معرّف العميل:
+                                  <span className="mr-1 font-mono text-slate-700">
+                                    {selectedClient?.clientId}
+                                  </span>
+                                </div>
                               ) : null}
                             </div>
+                          </div>
 
-                            <p className="mt-2 max-w-3xl text-sm leading-7 text-slate-600">
-                              {selectedClient?.sourceHelper}
-                            </p>
-
-                            {selectedClient?.clientId ? (
-                              <div className="mt-3 inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-500">
-                                معرّف العميل:
-                                <span className="mr-1 font-mono text-slate-700">
-                                  {selectedClient?.clientId}
-                                </span>
-                              </div>
-                            ) : null}
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              variant="outline"
+                              className={DETAIL_OUTLINE_BUTTON_CLASS}
+                              onClick={openSelectedClientProfile}
+                            >
+                              <FileText className="h-4 w-4" />
+                              فتح ملف العميل
+                            </Button>
+                            <Button
+                              variant="outline"
+                              className={DETAIL_OUTLINE_BUTTON_CLASS}
+                              onClick={openSelectedProject}
+                            >
+                              <ExternalLink className="h-4 w-4" />
+                              فتح المشروع
+                            </Button>
+                            <Button
+                              variant="outline"
+                              className={DETAIL_OUTLINE_BUTTON_CLASS}
+                              onClick={copySelectedRequestNumber}
+                            >
+                              <Copy className="h-4 w-4" />
+                              نسخ رقم الطلب
+                            </Button>
                           </div>
                         </div>
 
-                        <div className="flex flex-wrap gap-2">
-                          <Button
-                            variant="outline"
-                            className={DETAIL_OUTLINE_BUTTON_CLASS}
-                            onClick={openSelectedClientProfile}
-                          >
-                            <FileText className="h-4 w-4" />
-                            فتح ملف العميل
-                          </Button>
-                          <Button
-                            variant="outline"
-                            className={DETAIL_OUTLINE_BUTTON_CLASS}
-                            onClick={openSelectedProject}
-                          >
-                            <ExternalLink className="h-4 w-4" />
-                            فتح المشروع
-                          </Button>
-                          <Button
-                            variant="outline"
-                            className={DETAIL_OUTLINE_BUTTON_CLASS}
-                            onClick={copySelectedRequestNumber}
-                          >
-                            <Copy className="h-4 w-4" />
-                            نسخ رقم الطلب
-                          </Button>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-                        <DetailSummaryMetric
-                          label="البريد الإلكتروني"
-                          value={
-                            selectedContactEmail ? (
-                              <span dir="ltr" className="break-all">
-                                {selectedContactEmail}
-                              </span>
-                            ) : (
-                              "—"
-                            )
-                          }
-                          icon={<Mail className="h-3.5 w-3.5" />}
-                        />
-                        <DetailSummaryMetric
-                          label="رقم الجوال"
-                          value={
-                            selectedContactPhone ? (
-                              <span dir="ltr">{selectedContactPhone}</span>
-                            ) : (
-                              "—"
-                            )
-                          }
-                          icon={<Phone className="h-3.5 w-3.5" />}
-                        />
-                        <DetailSummaryMetric
-                          label="مصدر البيانات"
-                          value={selectedClient?.sourceLabel || "—"}
-                          helper={selectedClient?.sourceHelper || undefined}
-                          icon={<MessageSquare className="h-3.5 w-3.5" />}
-                        />
-                        <DetailSummaryMetric
-                          label="حالة الملف"
-                          value={
-                            selectedClient?.sourceKey === "live_user"
-                              ? "ملف مرتبط وموثق"
-                              : "بيانات محفوظة داخل الطلب"
-                          }
-                          icon={<ShieldCheck className="h-3.5 w-3.5" />}
-                          strong
-                        />
-                      </div>
-                    </DetailSection>
-
-                    <DetailSection
-                      title="بيانات الطلب"
-                      description="ملخص منظم للطلب مع الرسالة أو الوصف والمشروع المرتبط وطبيعة المسار الحالي."
-                      badge={
-                        <Badge
-                          className={cn(
-                            DETAIL_PILL_BASE_CLASS,
-                            "border-slate-200 bg-slate-100 text-slate-700"
-                          )}
-                        >
-                          {selectedRequestKind?.shortLabel || "طلب"}
-                        </Badge>
-                      }
-                    >
-                      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-                        <DetailSummaryMetric
-                          label="رقم الطلب"
-                          value={requestNumber(selectedMessage)}
-                          icon={<FileText className="h-3.5 w-3.5" />}
-                          mono
-                          strong
-                        />
-                        <DetailSummaryMetric
-                          label="نوع الطلب"
-                          value={selectedRequestKind?.label || "—"}
-                          icon={<MessageSquare className="h-3.5 w-3.5" />}
-                        />
-                        <DetailSummaryMetric
-                          label="الحالة"
-                          value={selectedStatusMeta?.label || "—"}
-                          icon={<Eye className="h-3.5 w-3.5" />}
-                          strong
-                        />
-                        <DetailSummaryMetric
-                          label="تاريخ الإنشاء"
-                          value={formatDateTimeAR(selectedCreatedAtValue)}
-                          icon={<CalendarDays className="h-3.5 w-3.5" />}
-                        />
-                        <DetailSummaryMetric
-                          label="آخر تحديث"
-                          value={formatDateTimeAR(selectedUpdatedAtValue)}
-                          helper={formatRequestTimeLabel(selectedUpdatedAtValue)}
-                          icon={<RefreshCw className="h-3.5 w-3.5" />}
-                        />
-                        <DetailSummaryMetric
-                          label="مصدر الطلب"
-                          value={pick(
-                            selectedMessage?.source,
-                            selectedClient?.sourceLabel,
-                            "—"
-                          )}
-                          icon={<MessageSquare className="h-3.5 w-3.5" />}
-                        />
-                      </div>
-
-                      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.08fr)_minmax(0,0.92fr)]">
-                        <div className="rounded-[24px] border border-slate-200/80 bg-[linear-gradient(180deg,#ffffff_0%,rgba(248,250,252,0.96)_100%)] p-5 shadow-[0_18px_40px_-36px_rgba(15,23,42,0.18)]">
-                          <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-400">
-                            رسالة العميل / الوصف
-                          </div>
-                          <p className="mt-3 text-sm leading-8 text-slate-700">
-                            {selectedRequestSummary ||
-                              "لا توجد رسالة مفصلة مرفقة مع هذا الطلب."}
-                          </p>
-                        </div>
-
-                        <div
-                          className={cn(
-                            "rounded-[24px] border px-5 py-5 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.22)]",
-                            isSelectedInterestRequest
-                              ? "border-amber-200/80 bg-[linear-gradient(180deg,rgba(255,251,235,0.98)_0%,rgba(255,255,255,0.98)_100%)]"
-                              : "border-emerald-200/80 bg-[linear-gradient(180deg,rgba(236,253,245,0.98)_0%,rgba(255,255,255,0.98)_100%)]"
-                          )}
-                        >
-                          <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-400">
-                            {isSelectedInterestRequest
-                              ? "قراءة الاهتمام"
-                              : "قراءة الاستثمار"}
-                          </div>
-                          <div className="mt-3 space-y-3">
-                            <DetailSummaryMetric
-                              label="المشروع"
-                              value={selectedProjectTitle}
-                              icon={<Building2 className="h-3.5 w-3.5" />}
-                              strong
-                              className="border-transparent bg-white/85 shadow-none"
-                            />
-                            {isSelectedInterestRequest ? (
-                              <DetailSummaryMetric
-                                label="وضع المتابعة"
-                                value={selectedInterestReviewMeta?.label || "جديد"}
-                                helper={selectedInterestReviewMeta?.helperText}
-                                icon={<Eye className="h-3.5 w-3.5" />}
-                                className="border-transparent bg-white/85 shadow-none"
-                              />
-                            ) : (
-                              <>
-                                <DetailSummaryMetric
-                                  label="المبلغ"
-                                  value={moneySAR(selectedAmount)}
-                                  icon={<Wallet className="h-3.5 w-3.5" />}
-                                  strong
-                                  className="border-transparent bg-white/85 shadow-none"
-                                />
-                                <DetailSummaryMetric
-                                  label="المتبقي بالمشروع"
-                                  value={
-                                    selectedRemaining == null
-                                      ? "—"
-                                      : selectedAmountExceeded
-                                        ? `${moneySAR(selectedRemaining)} (تجاوز)`
-                                        : moneySAR(selectedRemaining)
-                                  }
-                                  icon={<Building2 className="h-3.5 w-3.5" />}
-                                  className="border-transparent bg-white/85 shadow-none"
-                                />
-                                <DetailSummaryMetric
-                                  label="سجل الاستثمار"
-                                  value={
-                                    selectedMessage?.investmentId
-                                      ? "تم إنشاء سجل الاستثمار"
-                                      : "بانتظار إنشاء السجل"
-                                  }
-                                  helper={
-                                    selectedMessage?.investmentId
-                                      ? `رقم السجل ${selectedMessage.investmentId}`
-                                      : undefined
-                                  }
-                                  icon={<ShieldCheck className="h-3.5 w-3.5" />}
-                                  className="border-transparent bg-white/85 shadow-none"
-                                />
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div
-                        className={cn(
-                          "rounded-[24px] border px-5 py-4 text-sm leading-8 shadow-[0_18px_36px_-34px_rgba(15,23,42,0.2)]",
-                          isSelectedInterestRequest
-                            ? "border-amber-200/80 bg-[linear-gradient(180deg,rgba(255,251,235,0.98)_0%,rgba(255,255,255,0.98)_100%)] text-amber-950"
-                            : "border-emerald-200/80 bg-[linear-gradient(180deg,rgba(236,253,245,0.98)_0%,rgba(255,255,255,0.98)_100%)] text-emerald-950"
-                        )}
-                      >
-                        {isSelectedInterestRequest
-                          ? selectedInterestReviewMeta?.helperText ||
-                            selectedRequestKind?.helperText
-                          : selectedMessage?.investmentId
-                            ? "تم ربط هذا الطلب بسجل استثمار فعلي، لذلك يظهر هنا كطلب استثماري تشغيلي بمرحلة أوضح ومستندات مرتبطة."
-                            : "هذا الطلب ما زال في المرحلة السابقة لإنشاء الاستثمار، لذلك يتم التركيز على المشروع والمبلغ والقرار المطلوب من الفريق."}
-                      </div>
-                    </DetailSection>
-
-                    <DetailSection
-                      title="ملخص القرار والنشاط والإجراءات"
-                      description="لوحة تشغيلية تجمع القرار الحالي، سجل الحركة، والملاحظات الداخلية مع الإجراءات المناسبة حسب نوع الطلب."
-                      badge={
-                        <Badge
-                          className={cn(
-                            DETAIL_PILL_BASE_CLASS,
-                            selectedNextActionSummary.needsAction
-                              ? "border-amber-200 bg-amber-50 text-amber-800"
-                              : "border-slate-200 bg-slate-100 text-slate-700"
-                          )}
-                        >
-                          {selectedNextActionSummary.needsAction
-                            ? "أولوية تنفيذ"
-                            : "متابعة هادئة"}
-                        </Badge>
-                      }
-                    >
-                      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.08fr)_minmax(0,0.92fr)]">
-                        <div
-                          className={cn(
-                            "rounded-[24px] border px-5 py-5 shadow-[0_20px_40px_-34px_rgba(15,23,42,0.22)]",
-                            isSelectedInterestRequest
-                              ? "border-amber-200/80 bg-[linear-gradient(180deg,rgba(255,251,235,0.98)_0%,rgba(255,255,255,0.98)_100%)] text-amber-950"
-                              : "border-slate-900/10 bg-[linear-gradient(135deg,rgba(11,23,38,0.98)_0%,rgba(16,32,58,0.96)_70%,rgba(255,255,255,0.06)_135%)] text-white"
-                          )}
-                        >
-                          <div className="flex flex-wrap items-center gap-2.5">
-                            {selectedStatusMeta ? (
-                              <Badge
-                                className={cn(
-                                  DETAIL_PILL_BASE_CLASS,
-                                  selectedStatusMeta?.tone
-                                )}
-                              >
-                                {selectedStatusMeta?.label}
-                              </Badge>
-                            ) : null}
-
-                            {isSelectedInterestRequest ? null : (
-                              <Badge className={DETAIL_STAGE_PILL_CLASS}>
-                                {selectedStageMeta?.label || "—"}
-                              </Badge>
-                            )}
-                          </div>
-
-                          <div className="mt-4 text-xl font-semibold leading-8 text-current">
-                            {selectedNextActionSummary.label}
-                          </div>
-                          <p className="mt-2 text-sm leading-8 text-current/80">
-                            {selectedNextActionSummary.helper}
-                          </p>
-                        </div>
-
-                        <div className="grid grid-cols-1 gap-3">
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
                           <DetailSummaryMetric
-                            label="آخر من عدّل"
-                            value={selectedLastActor?.name || "—"}
-                            helper={selectedLastActor?.roleLabel || undefined}
-                            icon={<RefreshCw className="h-3.5 w-3.5" />}
+                            label="البريد الإلكتروني"
+                            value={
+                              selectedContactEmail ? (
+                                <span dir="ltr" className="break-all">
+                                  {selectedContactEmail}
+                                </span>
+                              ) : (
+                                "—"
+                              )
+                            }
+                            icon={<Mail className="h-3.5 w-3.5" />}
+                          />
+                          <DetailSummaryMetric
+                            label="رقم الجوال"
+                            value={
+                              selectedContactPhone ? (
+                                <span dir="ltr">{selectedContactPhone}</span>
+                              ) : (
+                                "—"
+                              )
+                            }
+                            icon={<Phone className="h-3.5 w-3.5" />}
+                          />
+                          <DetailSummaryMetric
+                            label="مصدر البيانات"
+                            value={selectedClient?.sourceLabel || "—"}
+                            helper={selectedClient?.sourceHelper || undefined}
+                            icon={<MessageSquare className="h-3.5 w-3.5" />}
+                          />
+                          <DetailSummaryMetric
+                            label="حالة الملف"
+                            value={
+                              selectedClient?.sourceKey === "live_user"
+                                ? "ملف مرتبط وموثق"
+                                : "بيانات محفوظة داخل الطلب"
+                            }
+                            icon={<ShieldCheck className="h-3.5 w-3.5" />}
                             strong
+                          />
+                        </div>
+                      </DetailSection>
+
+                      <DetailSection
+                        title="بيانات الطلب"
+                        description="ملخص منظم للطلب مع الرسالة أو الوصف والمشروع المرتبط وطبيعة المسار الحالي."
+                        badge={
+                          <Badge
+                            className={cn(
+                              DETAIL_PILL_BASE_CLASS,
+                              "border-slate-200 bg-slate-100 text-slate-700"
+                            )}
+                          >
+                            {selectedRequestKind?.shortLabel || "طلب"}
+                          </Badge>
+                        }
+                      >
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                          <DetailSummaryMetric
+                            label="رقم الطلب"
+                            value={requestNumber(selectedMessage)}
+                            icon={<FileText className="h-3.5 w-3.5" />}
+                            mono
+                            strong
+                          />
+                          <DetailSummaryMetric
+                            label="نوع الطلب"
+                            value={selectedRequestKind?.label || "—"}
+                            icon={<MessageSquare className="h-3.5 w-3.5" />}
+                          />
+                          <DetailSummaryMetric
+                            label="الحالة"
+                            value={selectedStatusMeta?.label || "—"}
+                            icon={<Eye className="h-3.5 w-3.5" />}
+                            strong
+                          />
+                          <DetailSummaryMetric
+                            label="تاريخ الإنشاء"
+                            value={formatDateTimeAR(selectedCreatedAtValue)}
+                            icon={<CalendarDays className="h-3.5 w-3.5" />}
                           />
                           <DetailSummaryMetric
                             label="آخر تحديث"
                             value={formatDateTimeAR(selectedUpdatedAtValue)}
                             helper={formatRequestTimeLabel(selectedUpdatedAtValue)}
-                            icon={<CalendarDays className="h-3.5 w-3.5" />}
+                            icon={<RefreshCw className="h-3.5 w-3.5" />}
+                          />
+                          <DetailSummaryMetric
+                            label="مصدر الطلب"
+                            value={pick(
+                              selectedMessage?.source,
+                              selectedClient?.sourceLabel,
+                              "—"
+                            )}
+                            icon={<MessageSquare className="h-3.5 w-3.5" />}
                           />
                         </div>
-                      </div>
 
-                      <div className={DETAIL_INLINE_PANEL_CLASS}>
-                        <Label className={DETAIL_INLINE_LABEL_CLASS}>
-                          ملاحظات داخلية
-                        </Label>
-                        <Textarea
-                          value={internalNotes}
-                          onChange={e => setInternalNotes(e.target.value)}
-                          placeholder="ملاحظات للإدارة فقط..."
-                          disabled={isLockedFinal || myRole === "client"}
-                          className={DETAIL_TEXTAREA_CLASS}
-                        />
-                        <p className="mt-3 text-xs leading-6 text-slate-500">
-                          هذا الحقل مخصص للملاحظات الداخلية والتنظيمية فقط.
-                        </p>
-                      </div>
+                        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.08fr)_minmax(0,0.92fr)]">
+                          <div className="rounded-[24px] border border-slate-200/80 bg-[linear-gradient(180deg,#ffffff_0%,rgba(248,250,252,0.96)_100%)] p-5 shadow-[0_18px_40px_-36px_rgba(15,23,42,0.18)]">
+                            <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-400">
+                              رسالة العميل / الوصف
+                            </div>
+                            <p className="mt-3 text-sm leading-8 text-slate-700">
+                              {selectedRequestSummary ||
+                                "لا توجد رسالة مفصلة مرفقة مع هذا الطلب."}
+                            </p>
+                          </div>
 
-                      {isSelectedInterestRequest ? (
-                        <div className={DETAIL_ALERT_CLASS}>
-                          {selectedInterestReviewMeta?.helperText ||
-                            "يتم التعامل مع هذا السجل كطلب اهتمام تمهيدي، لذلك تكفي القراءة والتوثيق والتواصل دون دورة استثمار كاملة."}
-                        </div>
-                      ) : null}
-
-                      <div className="space-y-3">
-                        <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-400">
-                          السجل الزمني / آخر التحديثات
-                        </div>
-                        {selectedTimelineEvents.length ? (
-                          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-                            {selectedTimelineEvents.slice(0, 4).map(item => (
-                              <DetailTimelineItem
-                                key={item.id}
-                                title={item.title}
-                                note={item.note}
-                                actorName={item.actor.name}
-                                actorRole={item.actor.roleLabel}
-                                timeLabel={item.timeLabel}
-                                dateLabel={item.atLabel}
+                          <div
+                            className={cn(
+                              "rounded-[24px] border px-5 py-5 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.22)]",
+                              isSelectedInterestRequest
+                                ? "border-amber-200/80 bg-[linear-gradient(180deg,rgba(255,251,235,0.98)_0%,rgba(255,255,255,0.98)_100%)]"
+                                : "border-emerald-200/80 bg-[linear-gradient(180deg,rgba(236,253,245,0.98)_0%,rgba(255,255,255,0.98)_100%)]"
+                            )}
+                          >
+                            <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-400">
+                              {isSelectedInterestRequest
+                                ? "قراءة الاهتمام"
+                                : "قراءة الاستثمار"}
+                            </div>
+                            <div className="mt-3 space-y-3">
+                              <DetailSummaryMetric
+                                label="المشروع"
+                                value={selectedProjectTitle}
+                                icon={<Building2 className="h-3.5 w-3.5" />}
+                                strong
+                                className="border-transparent bg-white/85 shadow-none"
                               />
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50/80 px-4 py-8 text-center text-sm leading-7 text-slate-500">
-                            لا توجد أنشطة إضافية مسجلة على هذا الطلب حتى الآن.
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                        <Button
-                          className={cn(
-                            DETAIL_LIGHT_SOLID_BUTTON_CLASS,
-                            "w-full"
-                          )}
-                          onClick={handleSaveNotesOnly}
-                          disabled={isLockedFinal || myRole === "client"}
-                        >
-                          <CheckCircle2 className="w-4 h-4" />
-                          حفظ الملاحظات
-                        </Button>
-                        {canStartRequestReview ? (
-                          <Button
-                            className={`${DETAIL_SOLID_BUTTON_CLASS} w-full bg-yellow-700 hover:bg-yellow-800`}
-                            onClick={startRequestReview}
-                            disabled={isLockedFinal}
-                          >
-                            <Clock3 className="w-4 h-4" />
-                            بدء المراجعة
-                          </Button>
-                        ) : null}
-
-                        {canInitialApproveRequest ? (
-                          <Button
-                            className={`${DETAIL_SOLID_BUTTON_CLASS} w-full bg-indigo-700 hover:bg-indigo-800`}
-                            onClick={initialApproveRequest}
-                            disabled={isLockedFinal}
-                          >
-                            <ShieldCheck className="w-4 h-4" />
-                            موافقة أولية
-                          </Button>
-                        ) : null}
-
-                        {canCreateInvestmentFromRequest ? (
-                          <Button
-                            className={`${DETAIL_SOLID_BUTTON_CLASS} w-full bg-blue-700 hover:bg-blue-800`}
-                            onClick={approveRequestAndCreateInvestment}
-                            disabled={approveCreateBusy || isLockedFinal}
-                          >
-                            {approveCreateBusy ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                              <CheckCircle2 className="w-4 h-4" />
-                            )}
-                            إنشاء الاستثمار
-                          </Button>
-                        ) : null}
-
-                        {canVerifySignedContract ? (
-                          <Button
-                            className={`${DETAIL_SOLID_BUTTON_CLASS} w-full bg-amber-700 hover:bg-amber-800`}
-                            onClick={verifySignedContract}
-                            disabled={isLockedFinal || finalizeBusy}
-                          >
-                            {finalizeBusy ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                              <ShieldCheck className="w-4 h-4" />
-                            )}
-                            اعتماد العقد الموقّع
-                          </Button>
-                        ) : null}
-
-                        {canFinalize ? (
-                          <Button
-                            className={`${DETAIL_SOLID_BUTTON_CLASS} w-full bg-emerald-700 hover:bg-emerald-800`}
-                            onClick={activateInvestmentAfterApproval}
-                            disabled={isLockedFinal || finalizeBusy}
-                          >
-                            {finalizeBusy ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                              <Building2 className="w-4 h-4" />
-                            )}
-                            إقفال نهائي
-                          </Button>
-                        ) : null}
-
-                        {isSelectedInvestmentRequest ? (
-                          <>
-                            <Button
-                              className={cn(
-                                DETAIL_DANGER_BUTTON_CLASS,
-                                "w-full"
-                              )}
-                              onClick={rejectInvestmentRequest}
-                              disabled={isLockedFinal || !canManageMessages}
-                            >
-                              <AlertTriangle className="w-4 h-4" />
-                              رفض الطلب
-                            </Button>
-
-                            <Button
-                              variant="outline"
-                              className={cn(
-                                DETAIL_OUTLINE_BUTTON_CLASS,
-                                "w-full"
-                              )}
-                              onClick={reopenMessage}
-                              disabled={
-                                reopenBusy ||
-                                myRole !== "owner" ||
-                                !canManageMessages
-                              }
-                            >
-                              {reopenBusy ? (
-                                <Loader2 className="w-4 h-4 animate-spin" />
+                              {isSelectedInterestRequest ? (
+                                <DetailSummaryMetric
+                                  label="وضع المتابعة"
+                                  value={selectedInterestReviewMeta?.label || "جديد"}
+                                  helper={selectedInterestReviewMeta?.helperText}
+                                  icon={<Eye className="h-3.5 w-3.5" />}
+                                  className="border-transparent bg-white/85 shadow-none"
+                                />
                               ) : (
-                                <Clock3 className="w-4 h-4" />
+                                <>
+                                  <DetailSummaryMetric
+                                    label="المبلغ"
+                                    value={moneySAR(selectedAmount)}
+                                    icon={<Wallet className="h-3.5 w-3.5" />}
+                                    strong
+                                    className="border-transparent bg-white/85 shadow-none"
+                                  />
+                                  <DetailSummaryMetric
+                                    label="المتبقي بالمشروع"
+                                    value={
+                                      selectedRemaining == null
+                                        ? "—"
+                                        : selectedAmountExceeded
+                                          ? `${moneySAR(selectedRemaining)} (تجاوز)`
+                                          : moneySAR(selectedRemaining)
+                                    }
+                                    icon={<Building2 className="h-3.5 w-3.5" />}
+                                    className="border-transparent bg-white/85 shadow-none"
+                                  />
+                                  <DetailSummaryMetric
+                                    label="سجل الاستثمار"
+                                    value={
+                                      selectedMessage?.investmentId
+                                        ? "تم إنشاء سجل الاستثمار"
+                                        : "بانتظار إنشاء السجل"
+                                    }
+                                    helper={
+                                      selectedMessage?.investmentId
+                                        ? `رقم السجل ${selectedMessage.investmentId}`
+                                        : undefined
+                                    }
+                                    icon={<ShieldCheck className="h-3.5 w-3.5" />}
+                                    className="border-transparent bg-white/85 shadow-none"
+                                  />
+                                </>
                               )}
-                              إعادة فتح (للمسؤول التقني)
-                            </Button>
-                          </>
-                        ) : null}
-                      </div>
+                            </div>
+                          </div>
+                        </div>
 
-                      <div className="border-t border-slate-200/80 pt-4">
-                        <div className="mb-3 text-[11px] font-semibold tracking-[0.14em] text-slate-400">
-                          أدوات سريعة
+                        <div
+                          className={cn(
+                            "rounded-[24px] border px-5 py-4 text-sm leading-8 shadow-[0_18px_36px_-34px_rgba(15,23,42,0.2)]",
+                            isSelectedInterestRequest
+                              ? "border-amber-200/80 bg-[linear-gradient(180deg,rgba(255,251,235,0.98)_0%,rgba(255,255,255,0.98)_100%)] text-amber-950"
+                              : "border-emerald-200/80 bg-[linear-gradient(180deg,rgba(236,253,245,0.98)_0%,rgba(255,255,255,0.98)_100%)] text-emerald-950"
+                          )}
+                        >
+                          {isSelectedInterestRequest
+                            ? selectedInterestReviewMeta?.helperText ||
+                            selectedRequestKind?.helperText
+                            : selectedMessage?.investmentId
+                              ? "تم ربط هذا الطلب بسجل استثمار فعلي، لذلك يظهر هنا كطلب استثماري تشغيلي بمرحلة أوضح ومستندات مرتبطة."
+                              : "هذا الطلب ما زال في المرحلة السابقة لإنشاء الاستثمار، لذلك يتم التركيز على المشروع والمبلغ والقرار المطلوب من الفريق."}
+                        </div>
+                      </DetailSection>
+
+                      <DetailSection
+                        title="ملخص القرار والنشاط والإجراءات"
+                        description="لوحة تشغيلية تجمع القرار الحالي، سجل الحركة، والملاحظات الداخلية مع الإجراءات المناسبة حسب نوع الطلب."
+                        badge={
+                          selectedTrackingMeta ? (
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Badge
+                                className={cn(
+                                  DETAIL_PILL_BASE_CLASS,
+                                  selectedTrackingMeta?.tone
+                                )}
+                              >
+                                {selectedTrackingMeta?.label}
+                              </Badge>
+                              {selectedTrackingSlaMeta ? (
+                                <Badge
+                                  className={cn(
+                                    DETAIL_COMPACT_PILL_BASE_CLASS,
+                                    selectedTrackingSlaMeta?.className
+                                  )}
+                                >
+                                  {selectedTrackingSlaMeta?.label}
+                                </Badge>
+                              ) : null}
+                            </div>
+                          ) : undefined
+                        }
+                      >
+                        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.08fr)_minmax(0,0.92fr)]">
+                          <div
+                            className={cn(
+                              "rounded-[24px] border px-5 py-5 shadow-[0_20px_40px_-34px_rgba(15,23,42,0.22)]",
+                              isSelectedInterestRequest
+                                ? "border-amber-200/80 bg-[linear-gradient(180deg,rgba(255,251,235,0.98)_0%,rgba(255,255,255,0.98)_100%)] text-amber-950"
+                                : "border-slate-900/10 bg-[linear-gradient(135deg,rgba(11,23,38,0.98)_0%,rgba(16,32,58,0.96)_70%,rgba(255,255,255,0.06)_135%)] text-white"
+                            )}
+                          >
+                            <div className="flex flex-wrap items-center gap-2.5">
+                              {selectedTrackingMeta ? (
+                                <Badge
+                                  className={cn(
+                                    DETAIL_PILL_BASE_CLASS,
+                                    selectedTrackingMeta?.tone
+                                  )}
+                                >
+                                  {selectedTrackingMeta?.label}
+                                </Badge>
+                              ) : null}
+                              {selectedTrackingSlaMeta ? (
+                                <Badge
+                                  className={cn(
+                                    DETAIL_COMPACT_PILL_BASE_CLASS,
+                                    selectedTrackingSlaMeta?.className
+                                  )}
+                                >
+                                  {selectedTrackingSlaMeta?.label}
+                                </Badge>
+                              ) : null}
+                              {!isSelectedInterestRequest && selectedStatusMeta ? (
+                                <Badge
+                                  className={cn(
+                                    DETAIL_PILL_BASE_CLASS,
+                                    selectedStatusMeta?.tone
+                                  )}
+                                >
+                                  {selectedStatusMeta?.label}
+                                </Badge>
+                              ) : null}
+
+                              {isSelectedInterestRequest ? null : (
+                                <Badge className={DETAIL_STAGE_PILL_CLASS}>
+                                  {selectedStageMeta?.label || "—"}
+                                </Badge>
+                              )}
+                            </div>
+
+                            <div className="mt-4 text-xl font-semibold leading-8 text-current">
+                              {selectedNextActionSummary.label}
+                            </div>
+                            <p className="mt-2 text-sm leading-8 text-current/80">
+                              {selectedNextActionSummary.helper}
+                            </p>
+                          </div>
+
+                          <div className="grid grid-cols-1 gap-3">
+                            <DetailSummaryMetric
+                              label="آخر من عدّل"
+                              value={selectedLastActor?.name || "—"}
+                              helper={selectedLastActor?.roleLabel || undefined}
+                              icon={<RefreshCw className="h-3.5 w-3.5" />}
+                              strong
+                            />
+                            <DetailSummaryMetric
+                              label="آخر تحديث"
+                              value={formatDateTimeAR(selectedUpdatedAtValue)}
+                              helper={formatRequestTimeLabel(selectedUpdatedAtValue)}
+                              icon={<CalendarDays className="h-3.5 w-3.5" />}
+                            />
+                          </div>
+                        </div>
+
+                        <div className={DETAIL_INLINE_PANEL_CLASS}>
+                          <Label className={DETAIL_INLINE_LABEL_CLASS}>
+                            ملاحظات داخلية
+                          </Label>
+                          <Textarea
+                            value={internalNotes}
+                            onChange={e => setInternalNotes(e.target.value)}
+                            placeholder="ملاحظات للإدارة فقط..."
+                            disabled={isLockedFinal || myRole === "client"}
+                            className={DETAIL_TEXTAREA_CLASS}
+                          />
+                          <p className="mt-3 text-xs leading-6 text-slate-500">
+                            هذا الحقل مخصص للملاحظات الداخلية والتنظيمية فقط.
+                          </p>
+                        </div>
+
+                        {isSelectedInterestRequest ? (
+                          <div className={DETAIL_ALERT_CLASS}>
+                            {selectedInterestReviewMeta?.helperText ||
+                              "يتم التعامل مع هذا السجل كطلب اهتمام تمهيدي، لذلك تكفي القراءة والتوثيق والتواصل دون دورة استثمار كاملة."}
+                          </div>
+                        ) : null}
+
+                        <div className="space-y-3">
+                          <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-400">
+                            السجل الزمني / آخر التحديثات
+                          </div>
+                          {selectedTimelineEvents.length ? (
+                            <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                              {selectedTimelineEvents.slice(0, 4).map(item => (
+                                <DetailTimelineItem
+                                  key={item.id}
+                                  title={item.title}
+                                  note={item.note}
+                                  actorName={item.actor.name}
+                                  actorRole={item.actor.roleLabel}
+                                  timeLabel={item.timeLabel}
+                                  dateLabel={item.atLabel}
+                                />
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50/80 px-4 py-8 text-center text-sm leading-7 text-slate-500">
+                              لا توجد أنشطة إضافية مسجلة على هذا الطلب حتى الآن.
+                            </div>
+                          )}
                         </div>
 
                         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                           <Button
-                            variant="outline"
-                            className={DETAIL_OUTLINE_BUTTON_CLASS}
-                            onClick={openSelectedClientProfile}
+                            className={cn(
+                              DETAIL_LIGHT_SOLID_BUTTON_CLASS,
+                              "w-full"
+                            )}
+                            onClick={handleSaveNotesOnly}
+                            disabled={isLockedFinal || myRole === "client"}
                           >
-                            <FileText className="h-4 w-4" />
-                            فتح ملف العميل
+                            <CheckCircle2 className="w-4 h-4" />
+                            حفظ الملاحظات
                           </Button>
-
-                          <Button
-                            variant="outline"
-                            className={DETAIL_OUTLINE_BUTTON_CLASS}
-                            onClick={openSelectedProject}
-                          >
-                            <ExternalLink className="h-4 w-4" />
-                            فتح المشروع
-                          </Button>
-
-                          {selectedContactEmail ? (
-                            <a
-                              className="inline-flex"
-                              href={`mailto:${selectedContactEmail}`}
+                          {canStartRequestReview ? (
+                            <Button
+                              className={`${DETAIL_SOLID_BUTTON_CLASS} w-full bg-yellow-700 hover:bg-yellow-800`}
+                              onClick={startRequestReview}
+                              disabled={isLockedFinal}
                             >
-                              <Button
-                                variant="outline"
-                                className={`${DETAIL_OUTLINE_BUTTON_CLASS} w-full`}
-                              >
-                                <Mail className="h-4 w-4" />
-                                إرسال بريد
-                              </Button>
-                            </a>
+                              <Clock3 className="w-4 h-4" />
+                              بدء المراجعة
+                            </Button>
                           ) : null}
 
-                          {selectedContactPhone ? (
-                            <a
-                              className="inline-flex"
-                              href={`tel:${selectedContactPhone}`}
+                          {canInitialApproveRequest ? (
+                            <Button
+                              className={`${DETAIL_SOLID_BUTTON_CLASS} w-full bg-indigo-700 hover:bg-indigo-800`}
+                              onClick={initialApproveRequest}
+                              disabled={isLockedFinal}
                             >
-                              <Button
-                                variant="outline"
-                                className={`${DETAIL_OUTLINE_BUTTON_CLASS} w-full`}
-                              >
-                                <Phone className="h-4 w-4" />
-                                اتصال مباشر
-                              </Button>
-                            </a>
+                              <ShieldCheck className="w-4 h-4" />
+                              موافقة أولية
+                            </Button>
                           ) : null}
 
-                          <Button
-                            variant="outline"
-                            className={DETAIL_OUTLINE_BUTTON_CLASS}
-                            onClick={copySelectedRequestNumber}
-                          >
-                            <Copy className="h-4 w-4" />
-                            نسخ رقم الطلب
-                          </Button>
-                        </div>
-                      </div>
-                    </DetailSection>
-
-                    {isSelectedInvestmentRequest ? (
-                      <Card className={`rsg-card ${DETAIL_SECTION_CARD_CLASS}`}>
-                      <CardHeader className={DETAIL_SECTION_HEADER_CLASS}>
-                        <CardTitle className={DETAIL_SECTION_TITLE_CLASS}>
-                          مستندات الاستثمار
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent
-                        className={`${DETAIL_SECTION_CONTENT_CLASS} space-y-5`}
-                      >
-                        <InfoRow
-                          label="رقم الاستثمار"
-                          value={String(selectedMessage?.investmentId || "-")}
-                        />
-
-                        <div className={DETAIL_INLINE_PANEL_CLASS}>
-                          <div className={DETAIL_INLINE_LABEL_CLASS}>
-                            حالة العقد
-                          </div>
-                          <div className="flex items-center flex-wrap gap-2">
-                            <span
-                              className={`${DETAIL_PILL_BASE_CLASS} ${getContractStatusClass(
-                                contractStatusValue
-                              )}`}
+                          {canCreateInvestmentFromRequest ? (
+                            <Button
+                              className={`${DETAIL_SOLID_BUTTON_CLASS} w-full bg-blue-700 hover:bg-blue-800`}
+                              onClick={approveRequestAndCreateInvestment}
+                              disabled={approveCreateBusy || isLockedFinal}
                             >
-                              {getContractStatusLabel(contractStatusValue)}
-                            </span>
-                            {contractFollowupChipLabel ? (
-                              <span
-                                className={`${DETAIL_PILL_BASE_CLASS} border-amber-200 bg-amber-50 text-amber-800`}
-                              >
-                                {contractFollowupChipLabel}
-                              </span>
-                            ) : null}
-                          </div>
-                        </div>
+                              {approveCreateBusy ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <CheckCircle2 className="w-4 h-4" />
+                              )}
+                              إنشاء الاستثمار
+                            </Button>
+                          ) : null}
 
-                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                          <div className={DETAIL_SUBCARD_CLASS}>
-                            <div className="flex items-center justify-between gap-2">
-                              <div className={DETAIL_SUBCARD_TITLE_CLASS}>
-                                العقد الأصلي
-                              </div>
-                              <span
-                                className={getDetailBinaryPillClass(
-                                  hasOriginalContract
-                                )}
-                              >
-                                {hasOriginalContract ? "مرفوع" : "لا يوجد"}
-                              </span>
-                            </div>
+                          {canVerifySignedContract ? (
+                            <Button
+                              className={`${DETAIL_SOLID_BUTTON_CLASS} w-full bg-amber-700 hover:bg-amber-800`}
+                              onClick={verifySignedContract}
+                              disabled={isLockedFinal || finalizeBusy}
+                            >
+                              {finalizeBusy ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <ShieldCheck className="w-4 h-4" />
+                              )}
+                              اعتماد العقد الموقّع
+                            </Button>
+                          ) : null}
 
-                            {hasOriginalContract ? (
-                              <>
-                                <div className={DETAIL_SUBCARD_VALUE_CLASS}>
-                                  {originalContractFileName}
-                                </div>
-                                <div className="flex flex-wrap gap-2 pt-1">
-                                  {originalContractViewUrl ? (
-                                    <a
-                                      href={originalContractViewUrl}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                    >
-                                      <Button
-                                        variant="outline"
-                                        size="sm"
-                                        className={DETAIL_OUTLINE_BUTTON_CLASS}
-                                      >
-                                        <Eye className="w-4 h-4" />
-                                        عرض
-                                      </Button>
-                                    </a>
-                                  ) : null}
-                                  {originalContractDownloadUrl ? (
-                                    <a
-                                      href={originalContractDownloadUrl}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                    >
-                                      <Button
-                                        variant="outline"
-                                        size="sm"
-                                        className={DETAIL_OUTLINE_BUTTON_CLASS}
-                                      >
-                                        <Download className="w-4 h-4" />
-                                        تنزيل
-                                      </Button>
-                                    </a>
-                                  ) : null}
-                                </div>
-                                {needsFreshSignedContract ? (
-                                  <div className={DETAIL_ALERT_CLASS}>
-                                    تم تحديث العقد الأصلي، وسيحتاج المستثمر إلى
-                                    توقيع النسخة الجديدة.
-                                  </div>
-                                ) : null}
-                              </>
-                            ) : (
-                              <div className={DETAIL_HELP_TEXT_CLASS}>
-                                لا يوجد
-                              </div>
-                            )}
-                          </div>
+                          {canFinalize ? (
+                            <Button
+                              className={`${DETAIL_SOLID_BUTTON_CLASS} w-full bg-emerald-700 hover:bg-emerald-800`}
+                              onClick={activateInvestmentAfterApproval}
+                              disabled={isLockedFinal || finalizeBusy}
+                            >
+                              {finalizeBusy ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <Building2 className="w-4 h-4" />
+                              )}
+                              إقفال نهائي
+                            </Button>
+                          ) : null}
 
-                          <div className={DETAIL_SUBCARD_CLASS}>
-                            <div className="flex items-center justify-between gap-2">
-                              <div className={DETAIL_SUBCARD_TITLE_CLASS}>
-                                العقد الموقّع
-                              </div>
-                              <span
-                                className={getDetailBinaryPillClass(
-                                  hasCurrentSignedContract
-                                )}
-                              >
-                                {hasCurrentSignedContract ? "مرفوع" : "لا يوجد"}
-                              </span>
-                            </div>
-
-                            {hasCurrentSignedContract ? (
-                              <>
-                                <div className={DETAIL_SUBCARD_VALUE_CLASS}>
-                                  {signedContractFileName}
-                                </div>
-                                <div className="flex flex-wrap gap-2 pt-1">
-                                  {signedContractViewUrl ? (
-                                    <a
-                                      href={signedContractViewUrl}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                    >
-                                      <Button
-                                        variant="outline"
-                                        size="sm"
-                                        className={DETAIL_OUTLINE_BUTTON_CLASS}
-                                      >
-                                        <Eye className="w-4 h-4" />
-                                        عرض
-                                      </Button>
-                                    </a>
-                                  ) : null}
-                                  {signedContractDownloadUrl ? (
-                                    <a
-                                      href={signedContractDownloadUrl}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                    >
-                                      <Button
-                                        variant="outline"
-                                        size="sm"
-                                        className={DETAIL_OUTLINE_BUTTON_CLASS}
-                                      >
-                                        <Download className="w-4 h-4" />
-                                        تنزيل
-                                      </Button>
-                                    </a>
-                                  ) : null}
-                                </div>
-                              </>
-                            ) : (
-                              <div className={DETAIL_HELP_TEXT_CLASS}>
-                                {needsFreshSignedContract
-                                  ? "لم يتم رفع عقد موقّع من المستثمر بعد."
-                                  : "لم يتم رفع العقد الموقّع بعد"}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="border-t border-slate-200/80 pt-5">
-                          <div className={DETAIL_INLINE_LABEL_CLASS}>
-                            رفع المستندات
-                          </div>
-
-                          <div className="grid grid-cols-1 gap-4">
-                            <div className="space-y-4 rounded-[22px] border border-dashed border-slate-200/80 bg-slate-50/70 px-4 py-4">
-                              <ContractFilePicker
-                                buttonLabel="رفع العقد الأصلي (PDF)"
-                                file={draftFile}
-                                onFileChange={setDraftFile}
-                                panelClassName="rounded-[18px] border border-slate-200 bg-white px-4 py-4 sm:px-4"
-                                buttonClassName={DETAIL_OUTLINE_BUTTON_CLASS}
-                                fileNameClassName="text-sm font-semibold text-slate-950"
-                                helperTextClassName="text-xs leading-6 text-slate-500"
-                                disabled={
-                                  contractBusy || !selectedMessage?.investmentId
-                                }
-                              />
+                          {isSelectedInvestmentRequest ? (
+                            <>
                               <Button
-                                className={`w-full ${DETAIL_SOLID_BUTTON_CLASS} bg-blue-700 hover:bg-blue-800`}
-                                onClick={createContractForInvestment}
+                                className={cn(
+                                  DETAIL_DANGER_BUTTON_CLASS,
+                                  "w-full"
+                                )}
+                                onClick={rejectInvestmentRequest}
+                                disabled={isLockedFinal || !canManageMessages}
+                              >
+                                <AlertTriangle className="w-4 h-4" />
+                                رفض الطلب
+                              </Button>
+
+                              <Button
+                                variant="outline"
+                                className={cn(
+                                  DETAIL_OUTLINE_BUTTON_CLASS,
+                                  "w-full"
+                                )}
+                                onClick={reopenMessage}
                                 disabled={
-                                  contractBusy ||
-                                  !selectedMessage?.investmentId ||
-                                  !draftFile ||
-                                  !canAdmin
+                                  reopenBusy ||
+                                  myRole !== "owner" ||
+                                  !canManageMessages
                                 }
                               >
-                                {contractBusy ? (
+                                {reopenBusy ? (
                                   <Loader2 className="w-4 h-4 animate-spin" />
                                 ) : (
-                                  <Upload className="w-4 h-4" />
+                                  <Clock3 className="w-4 h-4" />
                                 )}
-                                رفع العقد الأصلي
+                                إعادة فتح (للمسؤول التقني)
                               </Button>
-                            </div>
+                            </>
+                          ) : null}
+                        </div>
+
+                        <div className="border-t border-slate-200/80 pt-4">
+                          <div className="mb-3 text-[11px] font-semibold tracking-[0.14em] text-slate-400">
+                            أدوات سريعة
+                          </div>
+
+                          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                            <Button
+                              variant="outline"
+                              className={DETAIL_OUTLINE_BUTTON_CLASS}
+                              onClick={openSelectedClientProfile}
+                            >
+                              <FileText className="h-4 w-4" />
+                              فتح ملف العميل
+                            </Button>
+
+                            <Button
+                              variant="outline"
+                              className={DETAIL_OUTLINE_BUTTON_CLASS}
+                              onClick={openSelectedProject}
+                            >
+                              <ExternalLink className="h-4 w-4" />
+                              فتح المشروع
+                            </Button>
+
+                            {selectedContactEmail ? (
+                              <a
+                                className="inline-flex"
+                                href={`mailto:${selectedContactEmail}`}
+                              >
+                                <Button
+                                  variant="outline"
+                                  className={`${DETAIL_OUTLINE_BUTTON_CLASS} w-full`}
+                                >
+                                  <Mail className="h-4 w-4" />
+                                  إرسال بريد
+                                </Button>
+                              </a>
+                            ) : null}
+
+                            {selectedContactPhone ? (
+                              <a
+                                className="inline-flex"
+                                href={`tel:${selectedContactPhone}`}
+                              >
+                                <Button
+                                  variant="outline"
+                                  className={`${DETAIL_OUTLINE_BUTTON_CLASS} w-full`}
+                                >
+                                  <Phone className="h-4 w-4" />
+                                  اتصال مباشر
+                                </Button>
+                              </a>
+                            ) : null}
+
+                            <Button
+                              variant="outline"
+                              className={DETAIL_OUTLINE_BUTTON_CLASS}
+                              onClick={copySelectedRequestNumber}
+                            >
+                              <Copy className="h-4 w-4" />
+                              نسخ رقم الطلب
+                            </Button>
                           </div>
                         </div>
-                      </CardContent>
-                      </Card>
+                      </DetailSection>
+
+                      {isSelectedInvestmentRequest ? (
+                        <Card className={`rsg-card ${DETAIL_SECTION_CARD_CLASS}`}>
+                          <CardHeader className={DETAIL_SECTION_HEADER_CLASS}>
+                            <CardTitle className={DETAIL_SECTION_TITLE_CLASS}>
+                              مستندات الاستثمار
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent
+                            className={`${DETAIL_SECTION_CONTENT_CLASS} space-y-5`}
+                          >
+                            {renderDocumentsSectionBody({ showUpload: true })}
+                          </CardContent>
+                        </Card>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            ) : (
+              <Card className="rsg-card border-slate-200/80 bg-white/95 shadow-[0_22px_70px_-46px_rgba(15,23,42,0.42)]">
+                <CardContent className="flex flex-col items-center justify-center gap-4 px-6 py-16 text-center sm:px-10">
+                  {loading ? (
+                    <>
+                      <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+                      <div className="text-base font-semibold text-slate-900">
+                        جاري تحميل تفاصيل الطلب...
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="text-lg font-semibold text-slate-900">
+                        تعذر العثور على الطلب المطلوب.
+                      </div>
+                      <p className="max-w-xl text-sm leading-7 text-slate-500">
+                        قد يكون الرابط غير صحيح أو أن الطلب لم يعد متاحًا ضمن السجلات الحالية.
+                      </p>
+                      <Button
+                        variant="outline"
+                        className={DETAIL_OUTLINE_BUTTON_CLASS}
+                        onClick={navigateToMessagesList}
+                      >
+                        <ArrowRight className="h-4 w-4" />
+                        العودة إلى الطلبات
+                      </Button>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+          </section>
+        ) : null}
+
+        <Dialog
+          open={stopInvestmentDialogOpen}
+          onOpenChange={setStopInvestmentDialogOpen}
+        >
+          <DialogContent className="flex h-[90vh] w-[96vw] max-w-[1100px] flex-col overflow-hidden rounded-[24px] border border-slate-200 bg-white p-0">
+            <DialogHeader className="space-y-3 border-b border-slate-200 bg-gradient-to-b from-white to-slate-50 px-8 py-7 text-right [&>h2]:sr-only">
+              <div className="flex items-start justify-between gap-4">
+                <div className="space-y-2 text-right">
+                  <div className="inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-[11px] font-semibold tracking-[0.16em] text-rose-700">
+                    {isSelectedInvestmentStoppedEarly
+                      ? "استثمار موقوف"
+                      : "طلب إيقاف"}
+                  </div>
+                  <div className="space-y-1">
+                    <div className="text-2xl font-semibold tracking-tight text-slate-950">
+                      {isSelectedInvestmentStoppedEarly
+                        ? "بيانات إيقاف الاستثمار"
+                        : "إيقاف الاستثمار بطلب العميل"}
+                    </div>
+                    <p className="max-w-3xl text-sm leading-7 text-slate-500">
+                      {isSelectedInvestmentStoppedEarly
+                        ? "هذه النافذة تعرض بيانات الإيقاف المبكر المسجلة سابقًا، مع إمكانية إرفاق مستندات التسوية من نفس الصفحة."
+                        : "نفّذ إيقاف الاستثمار من هنا مباشرة بدون الانتقال إلى صفحة أخرى، مع معاينة مدة الاستثمار والتسوية النهائية قبل التأكيد."}
+                    </p>
+                  </div>
+                </div>
+                <DialogTitle>
+                  {isSelectedInvestmentStoppedEarly
+                    ? "بيانات إيقاف الاستثمار"
+                    : "إيقاف الاستثمار بطلب العميل"}
+                </DialogTitle>
+              </div>
+            </DialogHeader>
+
+            <div className="flex-1 overflow-y-auto bg-slate-50/60 px-8 py-7">
+              <div className="space-y-6">
+                <section className="space-y-5 rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div>
+                      <div className="text-[11px] font-semibold tracking-[0.16em] text-slate-500">
+                        تفاصيل الإيقاف
+                      </div>
+                      <div className="mt-2 text-base font-semibold text-slate-900">
+                        {String(
+                          investmentDoc?.projectTitle ||
+                            getProjectTitle(
+                              pick(
+                                investmentDoc?.projectId,
+                                selectedMessage?.projectId,
+                                selectedMessage?.project_id
+                              )
+                            )
+                        ).trim() || "استثمار"}
+                      </div>
+                      <p className="mt-2 text-sm leading-7 text-slate-500">
+                        أدخل تاريخ الإيقاف والملاحظة الإدارية في نفس هذه الصفحة، وسيتم احتساب التسوية المعتمدة قبل التنفيذ النهائي.
+                      </p>
+                    </div>
+
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-right">
+                      <div className="text-xs font-semibold text-slate-500">
+                        رقم الاستثمار
+                      </div>
+                      <div className="mt-2 text-sm font-semibold text-slate-900">
+                        {String(
+                          investmentDoc?.id || selectedMessage?.investmentId || "—"
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-5 md:grid-cols-2">
+                    <div className="space-y-3">
+                      <Label>تاريخ الإيقاف الفعلي</Label>
+                      <Input
+                        className="h-12 rounded-xl bg-white"
+                        type="text"
+                        value={stopCloseDate}
+                        inputMode="numeric"
+                        placeholder="YYYY-MM-DD"
+                        disabled={isSelectedInvestmentStoppedEarly}
+                        onChange={(e) => setStopCloseDate(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="space-y-3">
+                      <Label>منفذ الإجراء الإداري</Label>
+                      <Input
+                        className="h-12 rounded-xl bg-slate-50"
+                        value={String(
+                          user?.email || user?.uid || "غير متوفر"
+                        )}
+                        disabled
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <Label>سبب الإيقاف / الملاحظة الإدارية</Label>
+                    <Textarea
+                      className="min-h-[180px] rounded-2xl bg-white px-4 py-3 leading-7"
+                      value={stopReason}
+                      disabled={isSelectedInvestmentStoppedEarly}
+                      onChange={(e) => setStopReason(e.target.value)}
+                      placeholder="مثال: طلب العميل الخروج المبكر وتسوية الاستثمار حتى تاريخ محدد"
+                      rows={7}
+                    />
+                  </div>
+
+                  {stopSettlementPreviewState.error ? (
+                    <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm leading-7 text-rose-800">
+                      {stopSettlementPreviewState.error}
+                    </div>
+                  ) : null}
+
+                  {stopPreviewExceedsPlannedEnd ? (
+                    <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm leading-7 text-rose-800">
+                      تاريخ الإيقاف يجب أن يكون قبل تاريخ نهاية الاستثمار المخطط.
+                    </div>
+                  ) : null}
+                </section>
+
+                {settlementPreview ? (
+                  <section className="space-y-5 rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="text-[11px] font-semibold tracking-[0.16em] text-slate-500">
+                          التسوية
+                        </div>
+                        <div className="mt-2 text-base font-semibold text-slate-900">
+                          ملخص التسوية
+                        </div>
+                        <p className="mt-2 text-sm leading-7 text-slate-500">
+                          هذه القيم مشتقة من منطق التسوية المركزي الحالي وتُثبّت داخل سجل الاستثمار عند تنفيذ الإيقاف.
+                        </p>
+                      </div>
+                      <Badge className="border-amber-200 bg-amber-50 text-amber-800">
+                        {settlementPreview.policyLabel || "إيقاف مبكر"}
+                      </Badge>
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                      <div className="flex min-h-[136px] flex-col justify-between rounded-2xl border border-slate-200 bg-slate-50/80 px-5 py-4 shadow-sm">
+                        <div className="text-xs font-semibold text-slate-500">
+                          تاريخ الدخول
+                        </div>
+                        <div className="mt-4 text-base font-semibold leading-7 text-slate-900">
+                          {formatDetailedDateTime(
+                            settlementPreview.investmentStartDate
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex min-h-[136px] flex-col justify-between rounded-2xl border border-slate-200 bg-slate-50/80 px-5 py-4 shadow-sm">
+                        <div className="text-xs font-semibold text-slate-500">
+                          تاريخ الخروج
+                        </div>
+                        <div className="mt-4 text-base font-semibold leading-7 text-slate-900">
+                          {formatDetailedDateTime(
+                            settlementPreview.investmentStopDate
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex min-h-[136px] flex-col justify-between rounded-2xl border border-slate-200 bg-slate-50/80 px-5 py-4 shadow-sm">
+                        <div className="text-xs font-semibold text-slate-500">
+                          المدة الفعلية
+                        </div>
+                        <div className="mt-4 text-base font-semibold leading-7 text-slate-900">
+                          {formatNumberEN(settlementPreview.investedDays)} يوم
+                        </div>
+                      </div>
+                      <div className="flex min-h-[136px] flex-col justify-between rounded-2xl border border-slate-200 bg-slate-50/80 px-5 py-4 shadow-sm">
+                        <div className="text-xs font-semibold text-slate-500">
+                          أصل المبلغ
+                        </div>
+                        <div className="mt-4 text-base font-semibold leading-7 text-slate-900">
+                          {formatCurrencyEN(settlementPreview.principalAmount)}
+                        </div>
+                      </div>
+                      <div className="flex min-h-[136px] flex-col justify-between rounded-2xl border border-emerald-200 bg-emerald-50/90 px-5 py-4 shadow-sm">
+                        <div className="text-xs font-semibold text-emerald-700">
+                          الربح المستحق
+                        </div>
+                        <div className="mt-4 text-base font-semibold leading-7 text-emerald-800">
+                          {formatCurrencyEN(
+                            settlementPreview.calculatedProfit
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex min-h-[136px] flex-col justify-between rounded-2xl border border-sky-200 bg-sky-50/90 px-5 py-4 shadow-sm">
+                        <div className="text-xs font-semibold text-sky-700">
+                          إجمالي المستحق
+                        </div>
+                        <div className="mt-4 text-base font-semibold leading-7 text-sky-800">
+                          {formatCurrencyEN(settlementPreview.totalPayout)}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-[24px] border border-slate-200 bg-slate-50/80 p-5">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <div className="text-[11px] font-semibold tracking-[0.16em] text-slate-500">
+                            طريقة الاحتساب
+                          </div>
+                          <div className="mt-2 text-sm font-semibold text-slate-900">
+                            عرض منظم للمراحل التي بُنيت عليها المعادلة
+                          </div>
+                        </div>
+                        <Badge variant="outline" className="rounded-full">
+                          المعادلة المعتمدة
+                        </Badge>
+                      </div>
+
+                      {humanReadableFormula ? (
+                        <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4">
+                          <div className="text-sm font-semibold leading-7 text-emerald-900">
+                            {humanReadableFormula}
+                          </div>
+                          <div className="mt-2 text-base font-bold text-emerald-950">
+                            = {humanReadableProfitResult}
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {settlementFormulaParts.length > 0 ? (
+                        <div className="mt-4 grid gap-3">
+                          {settlementFormulaParts.map((part, index) => (
+                            <div
+                              key={`${part}-${index}`}
+                              className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm"
+                            >
+                              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-xs font-bold text-slate-700">
+                                {index + 1}
+                              </div>
+                              <div className="min-w-0 flex-1 break-words text-sm leading-7 text-slate-700">
+                                {part}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-3 text-sm text-slate-500">
+                          لا توجد صيغة محفوظة حاليًا.
+                        </div>
+                      )}
+                    </div>
+                  </section>
+                ) : null}
+
+                <section className="space-y-5 rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <div className="text-[11px] font-semibold tracking-[0.16em] text-slate-500">
+                        المستندات
+                      </div>
+                      <div className="mt-2 text-base font-semibold text-slate-900">
+                        مستند التسوية / مستندات الإيقاف
+                      </div>
+                      <p className="mt-2 text-sm leading-7 text-slate-500">
+                        يمكن إرفاق ملف PDF للتسوية النهائية أو أي مستند داعم متعلق بإيقاف الاستثمار.
+                      </p>
+                    </div>
+
+                    {latestSettlementDocument ? (
+                      <div className="flex flex-wrap gap-2">
+                        {latestSettlementDocumentViewUrl ? (
+                          <a
+                            href={latestSettlementDocumentViewUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-10 rounded-xl px-4"
+                            >
+                              <Eye className="ml-1 h-4 w-4" />
+                              عرض آخر ملف
+                            </Button>
+                          </a>
+                        ) : null}
+                        {latestSettlementDocumentDownloadUrl ? (
+                          <a
+                            href={latestSettlementDocumentDownloadUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-10 rounded-xl px-4"
+                            >
+                              <Download className="ml-1 h-4 w-4" />
+                              تنزيل
+                            </Button>
+                          </a>
+                        ) : null}
+                      </div>
                     ) : null}
                   </div>
-                ) : null}
+
+                  <div className="space-y-4">
+                    <ContractFilePicker
+                      buttonLabel="اختيار ملف التسوية (PDF)"
+                      file={settlementDocumentFile}
+                      onFileChange={setSettlementDocumentFile}
+                      disabled={!canEditFinancial || settlementDocumentBusy}
+                      panelClassName="rounded-2xl border-slate-200 bg-slate-50/80 px-5 py-4"
+                      buttonClassName="h-11 rounded-xl px-5 text-sm font-semibold"
+                      fileNameClassName="text-base font-semibold text-slate-900"
+                      helperTextClassName="text-sm leading-6"
+                    />
+
+                    <div className="grid gap-3 lg:grid-cols-2">
+                      <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-4 py-3">
+                        <div className="text-xs font-semibold text-slate-500">
+                          اسم الملف المحدد
+                        </div>
+                        <div className="mt-2 break-words text-sm font-semibold text-slate-900">
+                          {settlementDocumentFile?.name ||
+                            "لم يتم اختيار ملف جديد بعد"}
+                        </div>
+                      </div>
+
+                      <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-4 py-3">
+                        <div className="text-xs font-semibold text-slate-500">
+                          آخر ملف محفوظ
+                        </div>
+                        <div className="mt-2 break-words text-sm font-semibold text-slate-900">
+                          {latestSettlementDocument?.fileName ||
+                            "لا يوجد ملف محفوظ حتى الآن"}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-4">
+                      <div className="rounded-xl border border-slate-200 bg-white p-2 text-slate-500">
+                        <FileText className="h-4 w-4" />
+                      </div>
+                      <div className="min-w-0 space-y-1">
+                        <div className="text-xs font-semibold text-slate-500">
+                          حالة المستندات
+                        </div>
+                        <div className="text-sm leading-7 text-slate-600">
+                          {settlementDocumentsLoading
+                            ? "جارٍ تحميل مستندات التسوية المرتبطة بهذا الاستثمار..."
+                            : latestSettlementDocument
+                            ? `آخر ملف محفوظ: ${
+                                latestSettlementDocument.fileName ||
+                                "مستند تسوية"
+                              }`
+                            : "لا يوجد مستند تسوية محفوظ حتى الآن."}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </section>
               </div>
-          </div>
-        ) : (
-          <Card className="rsg-card border-slate-200/80 bg-white/95 shadow-[0_22px_70px_-46px_rgba(15,23,42,0.42)]">
-            <CardContent className="flex flex-col items-center justify-center gap-4 px-6 py-16 text-center sm:px-10">
-              {loading ? (
-                <>
-                  <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
-                  <div className="text-base font-semibold text-slate-900">
-                    جاري تحميل تفاصيل الطلب...
-                  </div>
-                </>
+            </div>
+
+            <DialogFooter className="border-t border-slate-200 bg-white px-8 py-5 sm:justify-between">
+              <Button
+                variant="outline"
+                className="h-11 rounded-xl px-5"
+                onClick={() => setStopInvestmentDialogOpen(false)}
+              >
+                {isSelectedInvestmentStoppedEarly ? "إغلاق" : "إلغاء"}
+              </Button>
+              {isSelectedInvestmentStoppedEarly ? (
+                <Button
+                  variant="outline"
+                  className="h-11 rounded-xl px-5"
+                  disabled={
+                    !canEditFinancial ||
+                    !settlementDocumentFile ||
+                    settlementDocumentBusy
+                  }
+                  onClick={uploadSettlementAttachment}
+                >
+                  {settlementDocumentBusy ? (
+                    <Loader2 className="ml-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <FileText className="ml-2 h-4 w-4" />
+                  )}
+                  رفع مستند التسوية
+                </Button>
               ) : (
-                <>
-                  <div className="text-lg font-semibold text-slate-900">
-                    تعذر العثور على الطلب المطلوب.
-                  </div>
-                  <p className="max-w-xl text-sm leading-7 text-slate-500">
-                    قد يكون الرابط غير صحيح أو أن الطلب لم يعد متاحًا ضمن السجلات الحالية.
-                  </p>
-                  <Button
-                    variant="outline"
-                    className={DETAIL_OUTLINE_BUTTON_CLASS}
-                    onClick={navigateToMessagesList}
-                  >
-                    <ArrowRight className="h-4 w-4" />
-                    العودة إلى الطلبات
-                  </Button>
-                </>
+                <Button
+                  variant="destructive"
+                  className="h-11 rounded-xl px-5"
+                  disabled={!canConfirmStopInvestment}
+                  onClick={closeInvestmentEarlyTx}
+                >
+                  تأكيد إيقاف الاستثمار
+                </Button>
               )}
-            </CardContent>
-          </Card>
-        )}
-        </section>
-        ) : null}
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* Return dialog */}
         <Dialog open={returnDialogOpen} onOpenChange={setReturnDialogOpen}>
@@ -8274,6 +9250,313 @@ function DetailSummaryMetric({
       {helper ? (
         <p className="mt-2 text-xs leading-6 text-slate-500">{helper}</p>
       ) : null}
+    </div>
+  );
+}
+
+function DetailDocumentsMetricCard({
+  label,
+  icon,
+  children,
+}: {
+  label: string;
+  icon?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <div className="rounded-xl border border-slate-200/80 bg-white p-5 shadow-[0_18px_36px_-30px_rgba(15,23,42,0.22)]">
+      <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+        {icon ? (
+          <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-500">
+            {icon}
+          </span>
+        ) : null}
+        <span>{label}</span>
+      </div>
+
+      <div className="mt-3 min-h-[2.75rem]">{children}</div>
+    </div>
+  );
+}
+
+function DetailBinaryBadge({
+  active,
+  activeLabel,
+  inactiveLabel,
+}: {
+  active: boolean;
+  activeLabel: string;
+  inactiveLabel: string;
+}) {
+  return (
+    <Badge
+      className={cn(
+        "inline-flex rounded-full border px-2.5 py-1 text-xs font-medium shadow-none",
+        active
+          ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+          : "border-gray-200 bg-gray-100 text-gray-500"
+      )}
+    >
+      {active ? activeLabel : inactiveLabel}
+    </Badge>
+  );
+}
+
+function DetailContractStatusBadges({
+  status,
+  followupLabel,
+}: {
+  status: any;
+  followupLabel?: string;
+}) {
+  const normalizedStatus = String(status || "")
+    .trim()
+    .toLowerCase();
+
+  const statusIcon =
+    normalizedStatus === "under_review" ? (
+      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+    ) : normalizedStatus === "approved" ||
+      normalizedStatus === "signed" ||
+      normalizedStatus === "signed_uploaded" ? (
+      <ShieldCheck className="h-3.5 w-3.5" />
+    ) : (
+      <Clock3 className="h-3.5 w-3.5" />
+    );
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <Badge
+        className={cn(
+          "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold shadow-none",
+          getContractStatusClass(status)
+        )}
+      >
+        {statusIcon}
+        <span>{getContractStatusLabel(status)}</span>
+      </Badge>
+
+      {followupLabel ? (
+        <Badge className="rounded-full border border-amber-200 bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700 shadow-none">
+          {followupLabel}
+        </Badge>
+      ) : null}
+    </div>
+  );
+}
+
+function DetailDocumentFileCard({
+  title,
+  available,
+  fileName,
+  viewUrl,
+  downloadUrl,
+  emptyTitle,
+  emptyDescription,
+  alertText,
+}: {
+  title: string;
+  available: boolean;
+  fileName: string;
+  viewUrl?: string | null;
+  downloadUrl?: string | null;
+  emptyTitle: string;
+  emptyDescription: string;
+  alertText?: string;
+}) {
+  const isSignedDocument = title.includes("الموق");
+  const description = isSignedDocument
+    ? "نسخة العقد بعد التوقيع لمراجعتها واستكمال التفعيل"
+    : "نسخة معتمدة للمراجعة قبل التوقيع";
+  const footerLabel = isSignedDocument
+    ? available
+      ? "مرفوع من المستثمر"
+      : "بانتظار رفع المستثمر"
+    : "داخل المنصة";
+
+  return (
+    <div className="relative overflow-hidden rounded-3xl border border-slate-200/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.995)_0%,rgba(248,250,252,0.96)_100%)] p-6 shadow-[0_28px_60px_-40px_rgba(15,23,42,0.28)]">
+      <div className="absolute left-6 top-6">
+        <span
+          className={cn(
+            "inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-semibold leading-none",
+            available
+              ? "border-slate-200 bg-slate-50 text-slate-500"
+              : "border-gray-200 bg-gray-100 text-gray-500"
+          )}
+        >
+          {available ? "PDF" : "لا يوجد"}
+        </span>
+      </div>
+
+      <div className="absolute right-6 top-5 flex h-11 w-11 -translate-y-0.5 items-center justify-center rounded-full bg-slate-950 text-white shadow-[0_20px_34px_-20px_rgba(15,23,42,0.55)]">
+        <FileText className="h-5 w-5" />
+      </div>
+
+      <div className="flex min-h-[300px] flex-col pt-12">
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <div className="text-xl font-semibold tracking-tight text-slate-950">{title}</div>
+            <div className="text-sm leading-6 text-slate-500">{description}</div>
+          </div>
+
+          {available ? (
+            <div className="break-words text-[15px] font-medium leading-7 text-slate-700">
+              {fileName}
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-slate-200/80 bg-slate-50/70 px-4 py-5">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-slate-400 shadow-sm ring-1 ring-slate-200/80">
+                <FileText className="h-[18px] w-[18px]" />
+              </div>
+              <div className="mt-3 text-sm font-semibold text-slate-900">{emptyTitle}</div>
+              <div className="mt-1 text-xs leading-6 text-slate-500">{emptyDescription}</div>
+            </div>
+          )}
+
+          {alertText ? <div className={cn(DETAIL_ALERT_CLASS, "!rounded-2xl")}>{alertText}</div> : null}
+        </div>
+
+        <div className="mt-auto pt-6">
+          <div className="mb-4 h-px bg-slate-200/80" />
+
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-xs text-slate-500">{footerLabel}</div>
+
+            {available ? (
+              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                {viewUrl ? (
+                  <a href={viewUrl} target="_blank" rel="noreferrer" className="w-full sm:w-auto">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-10 w-full rounded-full border border-primary bg-white px-4 text-primary shadow-sm hover:bg-primary/10 hover:text-primary sm:w-auto"
+                    >
+                      <Eye className="h-4 w-4 text-current" />
+                      عرض
+                    </Button>
+                  </a>
+                ) : null}
+
+                {downloadUrl ? (
+                  <a
+                    href={downloadUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="w-full sm:w-auto"
+                  >
+                    <Button
+                      size="sm"
+                      className="h-10 w-full rounded-full bg-primary px-4 text-primary-foreground shadow-[0_14px_28px_-16px_rgba(15,23,42,0.4)] hover:bg-primary/90 sm:w-auto"
+                    >
+                      <Download className="h-4 w-4 text-current" />
+                      تنزيل
+                    </Button>
+                  </a>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DetailContractUploadPanel({
+  file,
+  onFileChange,
+  disabled = false,
+  busy = false,
+  buttonLabel,
+  onSubmit,
+  submitDisabled = false,
+}: {
+  file: File | null;
+  onFileChange: (file: File | null) => void;
+  disabled?: boolean;
+  busy?: boolean;
+  buttonLabel: string;
+  onSubmit: () => void;
+  submitDisabled?: boolean;
+}) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const fileName = String(file?.name || "").trim();
+  const hasFile = Boolean(fileName);
+
+  useEffect(() => {
+    if (!file && inputRef.current) {
+      inputRef.current.value = "";
+    }
+  }, [file]);
+
+  return (
+    <div className="space-y-4 rounded-xl border border-slate-200/80 bg-white p-5 shadow-[0_18px_36px_-30px_rgba(15,23,42,0.22)]">
+      <input
+        ref={inputRef}
+        type="file"
+        accept="application/pdf"
+        className="sr-only"
+        disabled={disabled}
+        onChange={e => onFileChange(e.target.files?.[0] ?? null)}
+      />
+
+      <button
+        type="button"
+        className={cn(
+          "group w-full rounded-xl border-2 border-dashed p-6 text-center transition-colors",
+          hasFile
+            ? "border-emerald-200 bg-emerald-50/40"
+            : "border-slate-300/80 bg-muted/30",
+          disabled
+            ? "cursor-not-allowed opacity-70"
+            : "hover:border-primary hover:bg-muted/10"
+        )}
+        onClick={() => {
+          if (disabled) return;
+          if (inputRef.current) {
+            inputRef.current.value = "";
+            inputRef.current.click();
+          }
+        }}
+        disabled={disabled}
+      >
+        <div
+          className={cn(
+            "mx-auto flex h-14 w-14 items-center justify-center rounded-full border bg-white shadow-sm",
+            hasFile
+              ? "border-emerald-200 text-emerald-700"
+              : "border-slate-200 text-slate-600 group-hover:border-primary group-hover:text-primary"
+          )}
+        >
+          {hasFile ? (
+            <FileText className="h-7 w-7" />
+          ) : (
+            <Upload className="h-7 w-7" />
+          )}
+        </div>
+
+        <div className="mt-4 break-words text-base font-semibold text-slate-950">
+          {hasFile ? fileName : "اسحب الملف هنا أو اضغط للاختيار"}
+        </div>
+
+        <div className="mt-1 text-sm text-slate-500">
+          {hasFile ? "ملف PDF جاهز للرفع. اضغط لتغييره." : "PDF فقط"}
+        </div>
+      </button>
+
+      <Button
+        className={`w-full sm:w-auto ${DETAIL_SOLID_BUTTON_CLASS} bg-blue-700 hover:bg-blue-800`}
+        onClick={onSubmit}
+        disabled={submitDisabled}
+      >
+        {busy ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <Upload className="h-4 w-4" />
+        )}
+        {buttonLabel}
+      </Button>
     </div>
   );
 }

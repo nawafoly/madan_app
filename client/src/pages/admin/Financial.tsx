@@ -1247,6 +1247,40 @@ export default function Financial() {
   }, []);
 
   useEffect(() => {
+    if (typeof window === "undefined" || !investments.length) return;
+
+    const params = new URLSearchParams(window.location.search);
+    const investmentId = String(params.get("investmentId") || "").trim();
+    const action = String(params.get("action") || "").trim().toLowerCase();
+    if (!investmentId || !["stop", "review_stop"].includes(action)) return;
+
+    const matchedInvestment =
+      investments.find(
+        investment => String(investment?.id || "").trim() === investmentId
+      ) || null;
+    if (!matchedInvestment) return;
+
+    const normalizedStatus = String(matchedInvestment?.status || "")
+      .trim()
+      .toLowerCase();
+    const canOpenStopDialog =
+      normalizedStatus === "active" || isInvestmentStoppedEarly(matchedInvestment);
+
+    if (!canOpenStopDialog) return;
+
+    setSelectedInvestment(matchedInvestment);
+    setIsCloseDialogOpen(true);
+
+    params.delete("investmentId");
+    params.delete("action");
+    const nextQuery = params.toString();
+    const nextUrl = `${window.location.pathname}${
+      nextQuery ? `?${nextQuery}` : ""
+    }`;
+    window.history.replaceState({}, "", nextUrl);
+  }, [investments]);
+
+  useEffect(() => {
     const unsub = onSnapshot(
       collection(db, "projects"),
       snap => {

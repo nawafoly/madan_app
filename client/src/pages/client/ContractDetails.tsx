@@ -402,6 +402,21 @@ export default function ClientContractDetails() {
           setMessageDoc(msg);
 
           const invId = safeStr(msg.investmentId);
+          const requestId = pickLinkId(msg.parentRequestId, msg.requestId);
+
+          if (user?.uid && requestId) {
+            const linkedRequest = (await findInterestRequestForInvestor({
+              investorUid: user.uid,
+              requestIds: [requestId],
+              investmentIds: [invId],
+            })) as AnyDoc | null;
+
+            if (linkedRequest) {
+              setRequestDoc(linkedRequest);
+              attachRequestSnapshot(linkedRequest.id, invId);
+            }
+          }
+
           if (invId) {
             const ref = doc(db, "investments", invId);
             unsubInv = onSnapshot(
@@ -719,18 +734,24 @@ export default function ClientContractDetails() {
     if (!text) return toast.error("اكتب رسالتك أولاً");
 
     const parentRequestId =
-      requestDoc?.id ||
-      safeStr(investmentDoc?.requestId) ||
-      safeStr(contractDoc?.requestId) ||
-      null;
+      pickLinkId(
+        requestDoc?.id,
+        messageDoc?.parentRequestId,
+        messageDoc?.requestId,
+        investmentDoc?.requestId,
+        investmentDoc?.sourceRequestId,
+        contractDoc?.requestId,
+        contractDoc?.sourceRequestId
+      ) || null;
     const parentMessageId =
-      messageDoc?.id ||
-      parentRequestId ||
-      safeStr(investmentDoc?.sourceMessageId) ||
-      safeStr(contractDoc?.messageId || contractDoc?.sourceMessageId) ||
-      null;
+      pickLinkId(
+        messageDoc?.id,
+        investmentDoc?.sourceMessageId,
+        contractDoc?.messageId,
+        contractDoc?.sourceMessageId
+      ) || null;
 
-    if (!parentMessageId && !parentRequestId) {
+    if (!parentRequestId) {
       toast.error("لا يمكن ربط المتابعة بالطلب حالياً");
       return;
     }

@@ -459,3 +459,179 @@ For CI servers and headless environments, generate a new token with firebase log
     at process.processTimers (node:internal/timers:541:7)
 [error] 
 [error] Error: An unexpected error has occurred.
+[debug] [2026-04-06T07:55:22.748Z] ----------------------------------------------------------------------
+[debug] [2026-04-06T07:55:22.750Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\nawaf\AppData\Local\npm-cache\_npx\7750544ccf494d8b\node_modules\firebase-tools\lib\bin\firebase.js projects:list --json
+[debug] [2026-04-06T07:55:22.750Z] CLI Version:   15.13.0
+[debug] [2026-04-06T07:55:22.750Z] Platform:      win32
+[debug] [2026-04-06T07:55:22.750Z] Node Version:  v24.14.1
+[debug] [2026-04-06T07:55:22.750Z] Time:          Mon Apr 06 2026 10:55:22 GMT+0300 (التوقيت العربي الرسمي)
+[debug] [2026-04-06T07:55:22.750Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-04-06T07:55:22.752Z] >>> [apiv2][query] GET https://firebase-public.firebaseio.com/cli.json [none]
+[debug] [2026-04-06T07:55:22.885Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-04-06T07:55:22.886Z] > authorizing via signed-in user (nawafaaa0@gmail.com)
+[debug] [2026-04-06T07:55:22.888Z] Checked if tokens are valid: false, expires at: 1773621017083
+[debug] [2026-04-06T07:55:22.888Z] Checked if tokens are valid: false, expires at: 1773621017083
+[debug] [2026-04-06T07:55:22.888Z] > refreshing access token with scopes: []
+[debug] [2026-04-06T07:55:22.890Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2026-04-06T07:55:22.890Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-04-06T07:55:23.158Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 200
+[debug] [2026-04-06T07:55:23.159Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-04-06T07:55:23.165Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects pageSize=1000
+[debug] [2026-04-06T07:55:23.357Z] <<< [apiv2][status] GET https://firebase-public.firebaseio.com/cli.json 200
+[debug] [2026-04-06T07:55:23.357Z] <<< [apiv2][body] GET https://firebase-public.firebaseio.com/cli.json {"cloudBuildErrorAfter":1594252800000,"cloudBuildWarnAfter":1590019200000,"defaultNode10After":1594252800000,"minVersion":"3.0.5","node8DeploysDisabledAfter":1613390400000,"node8RuntimeDisabledAfter":1615809600000,"node8WarnAfter":1600128000000}
+[debug] [2026-04-06T07:55:23.778Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects 200
+[debug] [2026-04-06T07:55:39.723Z] ----------------------------------------------------------------------
+[debug] [2026-04-06T07:55:39.725Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\nawaf\AppData\Local\npm-cache\_npx\7750544ccf494d8b\node_modules\firebase-tools\lib\bin\firebase.js projects:list --json
+[debug] [2026-04-06T07:55:39.725Z] CLI Version:   15.13.0
+[debug] [2026-04-06T07:55:39.725Z] Platform:      win32
+[debug] [2026-04-06T07:55:39.725Z] Node Version:  v24.14.1
+[debug] [2026-04-06T07:55:39.725Z] Time:          Mon Apr 06 2026 10:55:39 GMT+0300 (التوقيت العربي الرسمي)
+[debug] [2026-04-06T07:55:39.725Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-04-06T07:55:39.842Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-04-06T07:55:39.842Z] > authorizing via signed-in user (nawafaaa0@gmail.com)
+[debug] [2026-04-06T07:55:39.844Z] Checked if tokens are valid: true, expires at: 1775465722159
+[debug] [2026-04-06T07:55:39.844Z] Checked if tokens are valid: true, expires at: 1775465722159
+[debug] [2026-04-06T07:55:39.844Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects pageSize=1000
+[debug] [2026-04-06T07:55:40.470Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects 200
+[debug] [2026-04-06T07:55:56.940Z] ----------------------------------------------------------------------
+[debug] [2026-04-06T07:55:56.943Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\nawaf\AppData\Local\npm-cache\_npx\7750544ccf494d8b\node_modules\firebase-tools\lib\bin\firebase.js projects:list --json
+[debug] [2026-04-06T07:55:56.943Z] CLI Version:   15.13.0
+[debug] [2026-04-06T07:55:56.943Z] Platform:      win32
+[debug] [2026-04-06T07:55:56.943Z] Node Version:  v24.14.1
+[debug] [2026-04-06T07:55:56.943Z] Time:          Mon Apr 06 2026 10:55:56 GMT+0300 (التوقيت العربي الرسمي)
+[debug] [2026-04-06T07:55:56.944Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-04-06T07:55:57.058Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-04-06T07:55:57.059Z] > authorizing via signed-in user (nawafaaa0@gmail.com)
+[debug] [2026-04-06T07:55:57.060Z] Checked if tokens are valid: true, expires at: 1775465722159
+[debug] [2026-04-06T07:55:57.060Z] Checked if tokens are valid: true, expires at: 1775465722159
+[debug] [2026-04-06T07:55:57.061Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects pageSize=1000
+[debug] [2026-04-06T07:55:57.653Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects 200
+[debug] [2026-04-06T07:56:15.851Z] ----------------------------------------------------------------------
+[debug] [2026-04-06T07:56:15.853Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\nawaf\AppData\Local\npm-cache\_npx\7750544ccf494d8b\node_modules\firebase-tools\lib\bin\firebase.js projects:list --json
+[debug] [2026-04-06T07:56:15.853Z] CLI Version:   15.13.0
+[debug] [2026-04-06T07:56:15.853Z] Platform:      win32
+[debug] [2026-04-06T07:56:15.853Z] Node Version:  v24.14.1
+[debug] [2026-04-06T07:56:15.853Z] Time:          Mon Apr 06 2026 10:56:15 GMT+0300 (التوقيت العربي الرسمي)
+[debug] [2026-04-06T07:56:15.853Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-04-06T07:56:15.971Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-04-06T07:56:15.971Z] > authorizing via signed-in user (nawafaaa0@gmail.com)
+[debug] [2026-04-06T07:56:15.973Z] Checked if tokens are valid: true, expires at: 1775465722159
+[debug] [2026-04-06T07:56:15.973Z] Checked if tokens are valid: true, expires at: 1775465722159
+[debug] [2026-04-06T07:56:15.974Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects pageSize=1000
+[debug] [2026-04-06T07:56:16.599Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects 200
+[debug] [2026-04-06T07:56:38.254Z] ----------------------------------------------------------------------
+[debug] [2026-04-06T07:56:38.257Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\nawaf\AppData\Local\npm-cache\_npx\7750544ccf494d8b\node_modules\firebase-tools\lib\bin\firebase.js projects:list --json
+[debug] [2026-04-06T07:56:38.257Z] CLI Version:   15.13.0
+[debug] [2026-04-06T07:56:38.257Z] Platform:      win32
+[debug] [2026-04-06T07:56:38.258Z] Node Version:  v24.14.1
+[debug] [2026-04-06T07:56:38.258Z] Time:          Mon Apr 06 2026 10:56:38 GMT+0300 (التوقيت العربي الرسمي)
+[debug] [2026-04-06T07:56:38.258Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-04-06T07:56:38.375Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-04-06T07:56:38.375Z] > authorizing via signed-in user (nawafaaa0@gmail.com)
+[debug] [2026-04-06T07:56:38.377Z] Checked if tokens are valid: true, expires at: 1775465722159
+[debug] [2026-04-06T07:56:38.377Z] Checked if tokens are valid: true, expires at: 1775465722159
+[debug] [2026-04-06T07:56:38.378Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects pageSize=1000
+[debug] [2026-04-06T07:56:39.025Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects 200
+[debug] [2026-04-06T07:57:03.993Z] ----------------------------------------------------------------------
+[debug] [2026-04-06T07:57:03.995Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\nawaf\AppData\Local\npm-cache\_npx\7750544ccf494d8b\node_modules\firebase-tools\lib\bin\firebase.js projects:list --json
+[debug] [2026-04-06T07:57:03.996Z] CLI Version:   15.13.0
+[debug] [2026-04-06T07:57:03.996Z] Platform:      win32
+[debug] [2026-04-06T07:57:03.996Z] Node Version:  v24.14.1
+[debug] [2026-04-06T07:57:03.996Z] Time:          Mon Apr 06 2026 10:57:03 GMT+0300 (التوقيت العربي الرسمي)
+[debug] [2026-04-06T07:57:03.996Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-04-06T07:57:04.126Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-04-06T07:57:04.126Z] > authorizing via signed-in user (nawafaaa0@gmail.com)
+[debug] [2026-04-06T07:57:04.129Z] Checked if tokens are valid: true, expires at: 1775465722159
+[debug] [2026-04-06T07:57:04.129Z] Checked if tokens are valid: true, expires at: 1775465722159
+[debug] [2026-04-06T07:57:04.130Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects pageSize=1000
+[debug] [2026-04-06T07:57:04.765Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects 200
+[debug] [2026-04-06T07:57:33.270Z] ----------------------------------------------------------------------
+[debug] [2026-04-06T07:57:33.272Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\nawaf\AppData\Local\npm-cache\_npx\7750544ccf494d8b\node_modules\firebase-tools\lib\bin\firebase.js projects:list --json
+[debug] [2026-04-06T07:57:33.272Z] CLI Version:   15.13.0
+[debug] [2026-04-06T07:57:33.272Z] Platform:      win32
+[debug] [2026-04-06T07:57:33.272Z] Node Version:  v24.14.1
+[debug] [2026-04-06T07:57:33.272Z] Time:          Mon Apr 06 2026 10:57:33 GMT+0300 (التوقيت العربي الرسمي)
+[debug] [2026-04-06T07:57:33.272Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-04-06T07:57:33.393Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-04-06T07:57:33.393Z] > authorizing via signed-in user (nawafaaa0@gmail.com)
+[debug] [2026-04-06T07:57:33.395Z] Checked if tokens are valid: true, expires at: 1775465722159
+[debug] [2026-04-06T07:57:33.396Z] Checked if tokens are valid: true, expires at: 1775465722159
+[debug] [2026-04-06T07:57:33.396Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects pageSize=1000
+[debug] [2026-04-06T07:57:34.060Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects 200
+[debug] [2026-04-06T07:58:08.887Z] ----------------------------------------------------------------------
+[debug] [2026-04-06T07:58:08.888Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\nawaf\AppData\Local\npm-cache\_npx\7750544ccf494d8b\node_modules\firebase-tools\lib\bin\firebase.js projects:list --json
+[debug] [2026-04-06T07:58:08.889Z] CLI Version:   15.13.0
+[debug] [2026-04-06T07:58:08.889Z] Platform:      win32
+[debug] [2026-04-06T07:58:08.889Z] Node Version:  v24.14.1
+[debug] [2026-04-06T07:58:08.889Z] Time:          Mon Apr 06 2026 10:58:08 GMT+0300 (التوقيت العربي الرسمي)
+[debug] [2026-04-06T07:58:08.889Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-04-06T07:58:09.011Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-04-06T07:58:09.011Z] > authorizing via signed-in user (nawafaaa0@gmail.com)
+[debug] [2026-04-06T07:58:09.013Z] Checked if tokens are valid: true, expires at: 1775465722159
+[debug] [2026-04-06T07:58:09.013Z] Checked if tokens are valid: true, expires at: 1775465722159
+[debug] [2026-04-06T07:58:09.014Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects pageSize=1000
+[debug] [2026-04-06T07:58:09.643Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects 200
+[debug] [2026-04-06T07:58:36.401Z] ----------------------------------------------------------------------
+[debug] [2026-04-06T07:58:36.403Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\nawaf\AppData\Local\npm-cache\_npx\7750544ccf494d8b\node_modules\firebase-tools\lib\bin\firebase.js projects:list --json
+[debug] [2026-04-06T07:58:36.403Z] CLI Version:   15.13.0
+[debug] [2026-04-06T07:58:36.403Z] Platform:      win32
+[debug] [2026-04-06T07:58:36.403Z] Node Version:  v24.14.1
+[debug] [2026-04-06T07:58:36.403Z] Time:          Mon Apr 06 2026 10:58:36 GMT+0300 (التوقيت العربي الرسمي)
+[debug] [2026-04-06T07:58:36.404Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-04-06T07:58:36.522Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-04-06T07:58:36.522Z] > authorizing via signed-in user (nawafaaa0@gmail.com)
+[debug] [2026-04-06T07:58:36.524Z] Checked if tokens are valid: true, expires at: 1775465722159
+[debug] [2026-04-06T07:58:36.524Z] Checked if tokens are valid: true, expires at: 1775465722159
+[debug] [2026-04-06T07:58:36.525Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects pageSize=1000
+[debug] [2026-04-06T07:58:37.158Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects 200
+[debug] [2026-04-06T07:59:50.130Z] ----------------------------------------------------------------------
+[debug] [2026-04-06T07:59:50.132Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\nawaf\AppData\Local\npm-cache\_npx\7750544ccf494d8b\node_modules\firebase-tools\lib\bin\firebase.js projects:list --json
+[debug] [2026-04-06T07:59:50.132Z] CLI Version:   15.13.0
+[debug] [2026-04-06T07:59:50.132Z] Platform:      win32
+[debug] [2026-04-06T07:59:50.132Z] Node Version:  v24.14.1
+[debug] [2026-04-06T07:59:50.132Z] Time:          Mon Apr 06 2026 10:59:50 GMT+0300 (التوقيت العربي الرسمي)
+[debug] [2026-04-06T07:59:50.132Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-04-06T07:59:50.265Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-04-06T07:59:50.265Z] > authorizing via signed-in user (nawafaaa0@gmail.com)
+[debug] [2026-04-06T07:59:50.267Z] Checked if tokens are valid: true, expires at: 1775465722159
+[debug] [2026-04-06T07:59:50.267Z] Checked if tokens are valid: true, expires at: 1775465722159
+[debug] [2026-04-06T07:59:50.268Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects pageSize=1000
+[debug] [2026-04-06T07:59:50.912Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects 200
+[debug] [2026-04-06T08:00:52.806Z] ----------------------------------------------------------------------
+[debug] [2026-04-06T08:00:52.808Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\nawaf\AppData\Local\npm-cache\_npx\7750544ccf494d8b\node_modules\firebase-tools\lib\bin\firebase.js projects:list --json
+[debug] [2026-04-06T08:00:52.808Z] CLI Version:   15.13.0
+[debug] [2026-04-06T08:00:52.809Z] Platform:      win32
+[debug] [2026-04-06T08:00:52.809Z] Node Version:  v24.14.1
+[debug] [2026-04-06T08:00:52.809Z] Time:          Mon Apr 06 2026 11:00:52 GMT+0300 (التوقيت العربي الرسمي)
+[debug] [2026-04-06T08:00:52.809Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-04-06T08:00:52.927Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-04-06T08:00:52.927Z] > authorizing via signed-in user (nawafaaa0@gmail.com)
+[debug] [2026-04-06T08:00:52.929Z] Checked if tokens are valid: true, expires at: 1775465722159
+[debug] [2026-04-06T08:00:52.929Z] Checked if tokens are valid: true, expires at: 1775465722159
+[debug] [2026-04-06T08:00:52.930Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects pageSize=1000
+[debug] [2026-04-06T08:00:53.523Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects 200
+[debug] [2026-04-06T08:01:38.563Z] ----------------------------------------------------------------------
+[debug] [2026-04-06T08:01:38.565Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\nawaf\AppData\Local\npm-cache\_npx\7750544ccf494d8b\node_modules\firebase-tools\lib\bin\firebase.js projects:list --json
+[debug] [2026-04-06T08:01:38.565Z] CLI Version:   15.13.0
+[debug] [2026-04-06T08:01:38.565Z] Platform:      win32
+[debug] [2026-04-06T08:01:38.565Z] Node Version:  v24.14.1
+[debug] [2026-04-06T08:01:38.565Z] Time:          Mon Apr 06 2026 11:01:38 GMT+0300 (التوقيت العربي الرسمي)
+[debug] [2026-04-06T08:01:38.566Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-04-06T08:01:38.683Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-04-06T08:01:38.683Z] > authorizing via signed-in user (nawafaaa0@gmail.com)
+[debug] [2026-04-06T08:01:38.685Z] Checked if tokens are valid: true, expires at: 1775465722159
+[debug] [2026-04-06T08:01:38.685Z] Checked if tokens are valid: true, expires at: 1775465722159
+[debug] [2026-04-06T08:01:38.686Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects pageSize=1000
+[debug] [2026-04-06T08:01:39.316Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects 200

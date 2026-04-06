@@ -110,6 +110,15 @@ type RequestRow = {
   summary: string;
 };
 
+type FutureInterestRow = {
+  kind: "future_interest";
+  id: string;
+  projectTitle: string;
+  requestDate: Date | null;
+  lastUpdatedAt: Date | null;
+  sortDate: Date | null;
+};
+
 type InvestmentRow = {
   kind: "investment";
   id: string;
@@ -328,15 +337,15 @@ function getAccountBadge(user: any) {
   const { isActive } = resolveUserAccountStatus(user);
   return isActive
     ? {
-        label: "الحساب نشط",
-        className: "border-emerald-200 bg-emerald-50 text-emerald-700",
-        icon: ShieldCheck,
-      }
+      label: "الحساب نشط",
+      className: "border-emerald-200 bg-emerald-50 text-emerald-700",
+      icon: ShieldCheck,
+    }
     : {
-        label: "الحساب غير نشط",
-        className: "border-slate-200 bg-slate-100 text-slate-700",
-        icon: CircleOff,
-      };
+      label: "الحساب غير نشط",
+      className: "border-slate-200 bg-slate-100 text-slate-700",
+      icon: CircleOff,
+    };
 }
 
 function getWorkflowPill(status: unknown): StatusPill {
@@ -398,69 +407,69 @@ function resolveDocument(
   const path =
     kind === "original"
       ? resolveDocPath(investment, [
-          "originalContract.path",
-          "contractFile.path",
-          "originalContractPath",
-          "documentPath",
-        ])
+        "originalContract.path",
+        "contractFile.path",
+        "originalContractPath",
+        "documentPath",
+      ])
       : resolveDocPath(investment, [
-          "signedContract.path",
-          "signedContractFile.path",
-          "signedContractPath",
-        ]);
+        "signedContract.path",
+        "signedContractFile.path",
+        "signedContractPath",
+      ]);
 
   const url =
     kind === "original"
       ? pickText(
-          resolveDocValue(investment, [
-            "originalContract.url",
-            "contractFile.url",
-            "originalContractUrl",
-            "contractUrl",
-          ]),
-          investment?.originalContractUrl,
-          investment?.contractUrl
-        )
+        resolveDocValue(investment, [
+          "originalContract.url",
+          "contractFile.url",
+          "originalContractUrl",
+          "contractUrl",
+        ]),
+        investment?.originalContractUrl,
+        investment?.contractUrl
+      )
       : pickText(
-          resolveDocValue(investment, [
-            "signedContract.url",
-            "signedContractFile.url",
-            "signedContractUrl",
-          ]),
-          investment?.signedContractUrl
-        );
+        resolveDocValue(investment, [
+          "signedContract.url",
+          "signedContractFile.url",
+          "signedContractUrl",
+        ]),
+        investment?.signedContractUrl
+      );
 
   const fileName =
     kind === "original"
       ? pickText(
-          resolveDocValue(investment, [
-            "originalContract.fileName",
-            "contractFile.fileName",
-          ]),
-          getFileNameFromPath(path),
-          "original.pdf"
-        )
+        resolveDocValue(investment, [
+          "originalContract.fileName",
+          "contractFile.fileName",
+        ]),
+        getFileNameFromPath(path),
+        "original.pdf"
+      )
       : pickText(
-          resolveDocValue(investment, [
-            "signedContract.fileName",
-            "signedContractFile.fileName",
-          ]),
-          getFileNameFromPath(path),
-          "signed.pdf"
-        );
+        resolveDocValue(investment, [
+          "signedContract.fileName",
+          "signedContractFile.fileName",
+        ]),
+        getFileNameFromPath(path),
+        "signed.pdf"
+      );
 
   const viewUrl = pickText(url, buildR2DownloadUrl(path, false));
   const downloadUrl = pickText(buildR2DownloadUrl(path, true), url, viewUrl);
   const uploadedAt = toDateSafe(
     kind === "original"
       ? resolveDocValue(investment, [
-          "originalContract.uploadedAt",
-          "contractFile.uploadedAt",
-        ])
+        "originalContract.uploadedAt",
+        "contractFile.uploadedAt",
+      ])
       : resolveDocValue(investment, [
-          "signedContract.uploadedAt",
-          "signedContractFile.uploadedAt",
-        ])
+        "signedContract.uploadedAt",
+        "signedContractFile.uploadedAt",
+      ])
   );
 
   if (!viewUrl && !downloadUrl) return null;
@@ -494,6 +503,43 @@ function classifyRequestBucket(request: InterestRequest): BucketKey {
   }
 
   return "under_review";
+}
+
+function normalizeProjectLifecycleForRequest(status: unknown) {
+  const value = String(status || "")
+    .trim()
+    .toLowerCase();
+
+  if (["draft", "upcoming", "comingsoon", "coming_soon"].includes(value)) {
+    return "upcoming";
+  }
+  if (["published", "active", "available", "open"].includes(value)) {
+    return "active";
+  }
+  if (["closed", "completed", "done"].includes(value)) {
+    return "closed";
+  }
+  return "";
+}
+
+function isFutureInterestRequest(request: InterestRequest, project?: Project) {
+  const normalizedType = String(request?.type || request?.requestType || "")
+    .trim()
+    .toLowerCase();
+  const normalizedSource = String(request?.source || "")
+    .trim()
+    .toLowerCase();
+  const projectLifecycle = normalizeProjectLifecycleForRequest(
+    project?.status ?? request?.projectSnapshot?.status ?? request?.projectStatus
+  );
+
+  return (
+    normalizedType === "launch_interest" ||
+    normalizedType === "interest_request" ||
+    normalizedType === "prelaunch_interest" ||
+    normalizedSource.includes("prelaunch") ||
+    projectLifecycle === "upcoming"
+  );
 }
 
 function classifyInvestmentBucket(
@@ -754,10 +800,32 @@ export default function MyInvestmentsRedesign() {
     [investments]
   );
 
+  const { investmentFlowRequests, futureInterestRequests } = useMemo(() => {
+    return visibleRequests.reduce<{
+      investmentFlowRequests: Array<{ request: InterestRequest; project?: Project }>;
+      futureInterestRequests: Array<{ request: InterestRequest; project?: Project }>;
+    }>(
+      (groups, request: any) => {
+        const project = projectsMap[String(request?.projectId || "").trim()];
+
+        if (isFutureInterestRequest(request, project)) {
+          groups.futureInterestRequests.push({ request, project });
+        } else {
+          groups.investmentFlowRequests.push({ request, project });
+        }
+
+        return groups;
+      },
+      {
+        investmentFlowRequests: [],
+        futureInterestRequests: [],
+      }
+    );
+  }, [projectsMap, visibleRequests]);
+
   const requestRows = useMemo<RequestRow[]>(() => {
     return sortRowsByDate(
-      visibleRequests.map((request: any) => {
-        const project = projectsMap[String(request?.projectId || "").trim()];
+      investmentFlowRequests.map(({ request, project }) => {
         const bucketKey = classifyRequestBucket(request);
         const requestDate = toDateSafe(request?.createdAt);
         const lastUpdatedAt = latestDate(
@@ -798,7 +866,32 @@ export default function MyInvestmentsRedesign() {
         };
       })
     );
-  }, [projectsMap, visibleRequests]);
+  }, [investmentFlowRequests]);
+
+  const futureInterestRows = useMemo<FutureInterestRow[]>(() => {
+    return sortRowsByDate(
+      futureInterestRequests.map(({ request, project }) => {
+        const requestDate = toDateSafe(request?.createdAt);
+        const lastUpdatedAt = latestDate(
+          request?.updatedAt,
+          request?.reviewedAt,
+          request?.approvedAt,
+          requestDate
+        );
+
+        return {
+          kind: "future_interest",
+          id: String(request?.id || ""),
+          projectTitle:
+            getProjectDisplayTitle(project, request?.projectTitle, "مشروع غير معروف") ||
+            "مشروع غير معروف",
+          requestDate,
+          lastUpdatedAt,
+          sortDate: latestDate(lastUpdatedAt, requestDate),
+        };
+      })
+    );
+  }, [futureInterestRequests]);
 
   const investmentRows = useMemo<InvestmentRow[]>(() => {
     return sortRowsByDate(
@@ -975,17 +1068,17 @@ export default function MyInvestmentsRedesign() {
       <ClientLayout className="bg-[linear-gradient(180deg,#f8fafc_0%,#eef4f8_100%)] py-10">
         <div dir="rtl" className="text-right">
           <Card className="mx-auto max-w-xl border-slate-200 shadow-sm">
-          <CardHeader>
-            <CardTitle>لوحة المستثمر</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-muted-foreground">
-              الرجاء تسجيل الدخول أولًا للوصول إلى ملفك الاستثماري.
-            </p>
-            <Link href="/login">
-              <Button className="w-full">تسجيل الدخول</Button>
-            </Link>
-          </CardContent>
+            <CardHeader>
+              <CardTitle>لوحة المستثمر</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-muted-foreground">
+                الرجاء تسجيل الدخول أولًا للوصول إلى ملفك الاستثماري.
+              </p>
+              <Link href="/login">
+                <Button className="w-full">تسجيل الدخول</Button>
+              </Link>
+            </CardContent>
           </Card>
         </div>
       </ClientLayout>
@@ -997,46 +1090,46 @@ export default function MyInvestmentsRedesign() {
       <ClientLayout className="bg-[linear-gradient(180deg,#f8fafc_0%,#eef4f8_100%)] py-10">
         <div dir="rtl" className="text-right">
           <Card className="mx-auto max-w-2xl border-slate-200 shadow-sm">
-          <CardHeader>
-            <CardTitle>لوحة المستثمر</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-5">
-            <div className="flex flex-wrap gap-2">
-              <Badge variant="outline">{getRoleDisplayLabel(role) || role || EMPTY}</Badge>
-              <Badge variant="outline">{user.email || EMPTY}</Badge>
-            </div>
+            <CardHeader>
+              <CardTitle>لوحة المستثمر</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <div className="flex flex-wrap gap-2">
+                <Badge variant="outline">{getRoleDisplayLabel(role) || role || EMPTY}</Badge>
+                <Badge variant="outline">{user.email || EMPTY}</Badge>
+              </div>
 
-            <p className="leading-8 text-muted-foreground">
-              الحساب مسجل دخول، لكن الدور الحالي ليس <b>client</b>.
-              {isGuest ? (
-                <>
-                  <br />
-                  أنت الآن <b>Guest</b> ويمكنك تصفح المشاريع، لكن صفحة الاستثمارات
-                  الكاملة مخصصة لحسابات المستثمرين فقط.
-                </>
-              ) : null}
-              <br />
-              إذا كان هذا الحساب يجب أن يكون مستثمرًا، حدّث الدور في:
-              <br />
-              <b>users/{user.uid}.role = "client"</b>
-            </p>
+              <p className="leading-8 text-muted-foreground">
+                الحساب مسجل دخول، لكن الدور الحالي ليس <b>client</b>.
+                {isGuest ? (
+                  <>
+                    <br />
+                    أنت الآن <b>Guest</b> ويمكنك تصفح المشاريع، لكن صفحة الاستثمارات
+                    الكاملة مخصصة لحسابات المستثمرين فقط.
+                  </>
+                ) : null}
+                <br />
+                إذا كان هذا الحساب يجب أن يكون مستثمرًا، حدّث الدور في:
+                <br />
+                <b>users/{user.uid}.role = "client"</b>
+              </p>
 
-            <div className="grid gap-3">
-              <Link href="/projects">
-                <Button className="w-full">تصفح المشاريع</Button>
-              </Link>
+              <div className="grid gap-3">
+                <Link href="/projects">
+                  <Button className="w-full">تصفح المشاريع</Button>
+                </Link>
 
-              <Button
-                variant="destructive"
-                className="w-full"
-                onClick={async () => {
-                  await logout();
-                }}
-              >
-                تسجيل الخروج
-              </Button>
-            </div>
-          </CardContent>
+                <Button
+                  variant="destructive"
+                  className="w-full"
+                  onClick={async () => {
+                    await logout();
+                  }}
+                >
+                  تسجيل الخروج
+                </Button>
+              </div>
+            </CardContent>
           </Card>
         </div>
       </ClientLayout>
@@ -1048,12 +1141,12 @@ export default function MyInvestmentsRedesign() {
       <ClientLayout className="bg-[linear-gradient(180deg,#f8fafc_0%,#eef4f8_100%)] py-10">
         <div dir="rtl" className="text-right">
           <div className="rounded-[32px] border border-slate-200 bg-white p-10 text-center shadow-sm">
-          <div className="text-lg font-semibold text-slate-950">
-            جاري تجهيز ملفك الاستثماري...
-          </div>
-          <p className="mt-2 text-sm leading-7 text-slate-500">
-            نرتب الطلبات والاستثمارات والعقود في عرض موحّد وواضح.
-          </p>
+            <div className="text-lg font-semibold text-slate-950">
+              جاري تجهيز ملفك الاستثماري...
+            </div>
+            <p className="mt-2 text-sm leading-7 text-slate-500">
+              نرتب الطلبات والاستثمارات والعقود في عرض موحّد وواضح.
+            </p>
           </div>
         </div>
       </ClientLayout>
@@ -1083,11 +1176,6 @@ export default function MyInvestmentsRedesign() {
                 <h1 className="mt-3 text-3xl font-semibold tracking-tight text-slate-950 sm:text-[2.4rem] lg:text-[2.65rem]">
                   {displayName}
                 </h1>
-                <p className="mt-5 max-w-xl text-sm leading-7 text-slate-600 sm:text-[15px] sm:leading-8">
-                  ملف استثماري موحّد يوضح لك مباشرة ما الذي لا يزال تحت المعالجة،
-                  وما الذي ينتظر التوقيع، وما الذي أصبح نشطًا، وما الذي اكتمل أو
-                  أُلغي.
-                </p>
               </div>
 
               <div className="grid gap-3.5 sm:grid-cols-2">
@@ -1177,37 +1265,36 @@ export default function MyInvestmentsRedesign() {
             <div className="flex flex-col gap-4">
               <div>
                 <h2 className="text-2xl font-semibold text-slate-950">
-                  تنظيم واضح للمحفظة الاستثمارية
+                  إدارة محفظتك الاستثمارية برؤية موحّدة
                 </h2>
                 <p className="mt-2 text-sm leading-7 text-slate-500">
-                  كل العدادات والتقسيمات هنا تعتمد على نفس التصنيف الموحّد للحالات.
-                </p>
+                  جميع المؤشرات والتصنيفات تعتمد على نظام حالات مركزي يضمن دقة البيانات ووضوح الأداء في كل مرحلة.                </p>
               </div>
 
               <div dir="rtl" className="w-full overflow-hidden">
-              <TabsList
-                dir="rtl"
-                className="flex h-auto w-full items-center justify-start gap-3 overflow-x-auto rounded-2xl bg-slate-100/80 p-2 scroll-smooth"
-              >
-                <TabsTrigger value="overview" className="h-auto min-h-[72px] min-w-[176px] flex-none shrink-0 basis-auto items-center justify-start rounded-xl px-4 py-3 text-right">
-                  <TabMeta icon={LayoutGrid} title="نظرة عامة" count={formatNumberEN(allRows.length)} />
-                </TabsTrigger>
-                <TabsTrigger value="requests" className="h-auto min-h-[72px] min-w-[176px] flex-none shrink-0 basis-auto items-center justify-start rounded-xl px-4 py-3 text-right">
-                  <TabMeta icon={BriefcaseBusiness} title="طلباتي الاستثمارية" count={formatNumberEN(requestTabCount)} />
-                </TabsTrigger>
-                <TabsTrigger value="active" className="h-auto min-h-[72px] min-w-[176px] flex-none shrink-0 basis-auto items-center justify-start rounded-xl px-4 py-3 text-right">
-                  <TabMeta icon={TrendingUp} title="استثماراتي النشطة" count={formatNumberEN(sections.active.length)} />
-                </TabsTrigger>
-                <TabsTrigger value="stopped" className="h-auto min-h-[72px] min-w-[176px] flex-none shrink-0 basis-auto items-center justify-start rounded-xl px-4 py-3 text-right">
-                  <TabMeta icon={Clock3} title="الاستثمارات الموقوفة" count={formatNumberEN(sections.stopped.length)} />
-                </TabsTrigger>
-                <TabsTrigger value="completed" className="h-auto min-h-[72px] min-w-[176px] flex-none shrink-0 basis-auto items-center justify-start rounded-xl px-4 py-3 text-right">
-                  <TabMeta icon={History} title="الاستثمارات المكتملة" count={formatNumberEN(sections.completed.length)} />
-                </TabsTrigger>
-                <TabsTrigger value="documents" className="h-auto min-h-[72px] min-w-[176px] flex-none shrink-0 basis-auto items-center justify-start rounded-xl px-4 py-3 text-right">
-                  <TabMeta icon={FileText} title="المستندات والعقود" count={formatNumberEN(documentedRows.length)} />
-                </TabsTrigger>
-              </TabsList>
+                <TabsList
+                  dir="rtl"
+                  className="flex h-auto w-full items-center justify-start gap-3 overflow-x-auto rounded-2xl bg-slate-100/80 p-2 scroll-smooth"
+                >
+                  <TabsTrigger value="overview" className="h-auto min-h-[72px] min-w-[176px] flex-none shrink-0 basis-auto items-center justify-start rounded-xl px-4 py-3 text-right">
+                    <TabMeta icon={LayoutGrid} title="نظرة عامة" count={formatNumberEN(allRows.length)} />
+                  </TabsTrigger>
+                  <TabsTrigger value="requests" className="h-auto min-h-[72px] min-w-[176px] flex-none shrink-0 basis-auto items-center justify-start rounded-xl px-4 py-3 text-right">
+                    <TabMeta icon={BriefcaseBusiness} title="طلباتي الاستثمارية" count={formatNumberEN(requestTabCount)} />
+                  </TabsTrigger>
+                  <TabsTrigger value="active" className="h-auto min-h-[72px] min-w-[176px] flex-none shrink-0 basis-auto items-center justify-start rounded-xl px-4 py-3 text-right">
+                    <TabMeta icon={TrendingUp} title="استثماراتي النشطة" count={formatNumberEN(sections.active.length)} />
+                  </TabsTrigger>
+                  <TabsTrigger value="stopped" className="h-auto min-h-[72px] min-w-[176px] flex-none shrink-0 basis-auto items-center justify-start rounded-xl px-4 py-3 text-right">
+                    <TabMeta icon={Clock3} title="الاستثمارات الموقوفة" count={formatNumberEN(sections.stopped.length)} />
+                  </TabsTrigger>
+                  <TabsTrigger value="completed" className="h-auto min-h-[72px] min-w-[176px] flex-none shrink-0 basis-auto items-center justify-start rounded-xl px-4 py-3 text-right">
+                    <TabMeta icon={History} title="الاستثمارات المكتملة" count={formatNumberEN(sections.completed.length)} />
+                  </TabsTrigger>
+                  <TabsTrigger value="documents" className="h-auto min-h-[72px] min-w-[176px] flex-none shrink-0 basis-auto items-center justify-start rounded-xl px-4 py-3 text-right">
+                    <TabMeta icon={FileText} title="المستندات والعقود" count={formatNumberEN(documentedRows.length)} />
+                  </TabsTrigger>
+                </TabsList>
               </div>
             </div>
           </div>
@@ -1280,6 +1367,10 @@ export default function MyInvestmentsRedesign() {
                 </Card>
               </div>
             </div>
+
+            {futureInterestRows.length > 0 ? (
+              <FutureInterestsSection rows={futureInterestRows} />
+            ) : null}
           </TabsContent>
 
           <TabsContent value="requests" className="space-y-8">
@@ -1850,6 +1941,83 @@ function DocumentsCard({ row }: { row: InvestmentRow }) {
           ))}
         </div>
       )}
+    </article>
+  );
+}
+
+function FutureInterestsSection({ rows }: { rows: FutureInterestRow[] }) {
+  return (
+    <section className="space-y-4">
+      <div className="rounded-[30px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0">
+            <div className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">
+              <Mail className="h-3.5 w-3.5" />
+              اهتمامات مستقبلية
+            </div>
+            <h2 className="mt-4 text-xl font-semibold text-slate-950">
+              اهتماماتي المستقبلية
+            </h2>
+            <p className="mt-2 max-w-3xl text-sm leading-7 text-slate-500">
+              مشاريع قادمة أبدَيت اهتمامك بها، ولم تُطرح بعد. سيتم إشعارك عند
+              توفرها لبدء الاستثمار.
+            </p>
+          </div>
+
+          <div className="inline-flex items-center rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700">
+            {formatNumberEN(rows.length)} اهتمام مسجل
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-2">
+        {rows.map((row) => (
+          <FutureInterestCard key={`future-interest-${row.id}`} row={row} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function FutureInterestCard({ row }: { row: FutureInterestRow }) {
+  return (
+    <article className="rounded-[28px] border border-slate-200/90 bg-[linear-gradient(180deg,#ffffff_0%,#fbfdff_100%)] p-5 shadow-sm sm:p-6">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge
+              variant="outline"
+              className="border-amber-200 bg-amber-50 text-amber-800"
+            >
+              لم يُطرح بعد
+            </Badge>
+            <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
+              اهتمام مستقبلي
+            </span>
+          </div>
+
+          <h3 className="mt-4 text-lg font-semibold text-slate-950 break-words">
+            {row.projectTitle}
+          </h3>
+          <p className="mt-2 text-sm leading-7 text-slate-500">
+            سجّلت اهتمامك بهذه الفرصة قبل الإطلاق، وسنبلغك فور فتح باب
+            الاستثمار.
+          </p>
+        </div>
+
+        <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700">
+          <Mail className="h-4 w-4 text-amber-700" />
+          سيتم إشعارك عند الإطلاق
+        </div>
+      </div>
+
+      <div className="mt-5 grid gap-3 sm:grid-cols-2">
+        <MetaField label="الحالة" value="لم يُطرح بعد" />
+        <MetaField
+          label="تاريخ تسجيل الاهتمام"
+          value={formatDateAR(row.requestDate)}
+        />
+      </div>
     </article>
   );
 }

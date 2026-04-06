@@ -32,9 +32,6 @@ import {
   Building2,
   MessageSquare,
   DollarSign,
-  CheckCircle,
-  Clock,
-  AlertCircle,
   Minus,
 } from "lucide-react";
 import { useAuth, hasPermission } from "@/_core/hooks/useAuth";
@@ -64,6 +61,10 @@ import {
   buildUserIdentityIndex,
   getLinkedUserDisplayName,
 } from "@/lib/userDisplay";
+import {
+  buildAdminInboxItems,
+  type AdminInboxViewModel,
+} from "@/lib/adminInbox";
 import { normalizeWorkflowStatus } from "@shared/investmentLifecycle";
 import {
   Area,
@@ -80,7 +81,7 @@ import {
 } from "recharts";
 
 type AnyDoc = Record<string, any> & { id: string };
-type InboxDialogKind = "messages" | "requests" | null;
+type InboxFilterKey = "needsAction" | "new" | "seen" | "handled";
 type ProjectDistributionStatusKey = "published" | "draft" | "completed" | "closed" | "other";
 type InvestmentDistributionKey =
   | "processing"
@@ -227,6 +228,16 @@ const MONTH_NAMES_AR = [
   "ديسمبر",
 ];
 
+const INBOX_FILTER_META: Array<{ key: InboxFilterKey; label: string }> = [
+  { key: "needsAction", label: "يحتاج إجراء" },
+  { key: "new", label: "جديد" },
+  { key: "seen", label: "تم الاطلاع" },
+  { key: "handled", label: "تم التعامل" },
+];
+
+const INBOX_SLA_LATE_HOURS = 24;
+const INBOX_SLA_CRITICAL_HOURS = 48;
+
 function toDateSafe(value: any): Date | null {
   if (!value) return null;
   if (value instanceof Timestamp) return value.toDate();
@@ -247,6 +258,67 @@ function pickText(...values: unknown[]) {
     if (text && text !== "undefined" && text !== "null") return text;
   }
   return "";
+}
+
+function getInboxFilterKey(item: AdminInboxViewModel): InboxFilterKey {
+  if (item.needsAction) return "needsAction";
+  if (item.isNew) return "new";
+  if (item.isSeen || item.isInProgress) return "seen";
+  return "handled";
+}
+
+function getInboxSortTimestamp(item: AdminInboxViewModel) {
+  return item.updatedAt?.getTime() || item.createdAt?.getTime() || 0;
+}
+
+function sortInboxItems(items: AdminInboxViewModel[]) {
+  return [...items].sort((a, b) => {
+    const rankDiff =
+      INBOX_FILTER_META.findIndex((entry) => entry.key === getInboxFilterKey(a)) -
+      INBOX_FILTER_META.findIndex((entry) => entry.key === getInboxFilterKey(b));
+
+    if (rankDiff !== 0) return rankDiff;
+    return getInboxSortTimestamp(b) - getInboxSortTimestamp(a);
+  });
+}
+
+function buildInboxFilterCounts(items: AdminInboxViewModel[]) {
+  return items.reduce<Record<InboxFilterKey, number>>(
+    (acc, item) => {
+      acc[getInboxFilterKey(item)] += 1;
+      return acc;
+    },
+    {
+      needsAction: 0,
+      new: 0,
+      seen: 0,
+      handled: 0,
+    }
+  );
+}
+
+function getInboxSlaMeta(item: AdminInboxViewModel) {
+  if (getInboxFilterKey(item) !== "needsAction") return null;
+
+  const startedAt = item.adminSeenAt || item.adminReadAt || item.updatedAt || item.createdAt;
+  if (!(startedAt instanceof Date)) return null;
+
+  const ageHours = (Date.now() - startedAt.getTime()) / (60 * 60 * 1000);
+  if (ageHours >= INBOX_SLA_CRITICAL_HOURS) {
+    return {
+      label: "متأخر جدًا",
+      className: "border-rose-300 bg-rose-100 text-rose-900",
+    };
+  }
+
+  if (ageHours >= INBOX_SLA_LATE_HOURS) {
+    return {
+      label: "متأخر",
+      className: "border-amber-300 bg-amber-100 text-amber-900",
+    };
+  }
+
+  return null;
 }
 
 function getProjectDistributionStatusKey(status: unknown): ProjectDistributionStatusKey {
@@ -341,37 +413,6 @@ function getInvestmentDistributionKey(status: unknown): InvestmentDistributionKe
   return "other";
 }
 
-function sortByCreatedAtDesc(rows: AnyDoc[]) {
-  return [...rows].sort((a, b) => {
-    const aTime = toDateSafe(a?.createdAt)?.getTime() ?? 0;
-    const bTime = toDateSafe(b?.createdAt)?.getTime() ?? 0;
-    return bTime - aTime;
-  });
-}
-
-function normalizeRequestStatus(raw: unknown) {
-  const status = String(raw ?? "").trim().toLowerCase();
-  const legacyMap: Record<string, string> = {
-    new: "pending",
-    in_progress: "reviewing",
-    pending_review: "reviewing",
-    needs_account: "reviewing",
-    waiting_client_confirmation: "reviewing",
-    resolved: "approved",
-    closed: "completed",
-  };
-  return legacyMap[status] || status || "pending";
-}
-
-function isUnreadMessage(row: AnyDoc) {
-  return String(row?.status || "").trim().toLowerCase() === "new" && !row?.adminReadAt;
-}
-
-function isUnreadRequest(row: AnyDoc) {
-  const status = normalizeRequestStatus(row?.status);
-  return ["pending", "reviewing"].includes(status) && !row?.adminSeenAt;
-}
-
 function getClientDisplayName(row: AnyDoc) {
   return pickText(
     row?.name,
@@ -406,13 +447,15 @@ export default function AdminDashboard() {
   const canSeeMessages = hasPermission(user, "messages.view");
   const canManageMessages = hasPermission(user, "messages.manage");
   const canSeeRequests = canSeeMessages;
+  const canAccessInbox = canSeeRequests || canSeeMessages;
 
   const [projects, setProjects] = useState<AnyDoc[]>([]);
   const [investments, setInvestments] = useState<AnyDoc[]>([]);
   const [usersRows, setUsersRows] = useState<AnyDoc[]>([]);
   const [requests, setRequests] = useState<AnyDoc[]>([]);
   const [messages, setMessages] = useState<AnyDoc[]>([]);
-  const [activeDialog, setActiveDialog] = useState<InboxDialogKind>(null);
+  const [isInboxDialogOpen, setIsInboxDialogOpen] = useState(false);
+  const [inboxFilter, setInboxFilter] = useState<InboxFilterKey>("needsAction");
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -497,30 +540,6 @@ export default function AdminDashboard() {
     return Number.isFinite(numberValue) ? numberValue : 0;
   };
 
-  const unreadMessageRows = useMemo(
-    () => sortByCreatedAtDesc(messages.filter(isUnreadMessage)),
-    [messages]
-  );
-
-  const unreadRequestRows = useMemo(
-    () => sortByCreatedAtDesc(requests.filter(isUnreadRequest)),
-    [requests]
-  );
-
-  const stats = useMemo(
-    () => ({
-      totalProjects: projects.length,
-      publishedProjects: projects.filter((row) => row.status === "published").length,
-      totalInvestments: investments.length,
-      totalUsers: usersRows.length,
-      vipUsers: usersRows.filter((row) => row.vipStatus === "vip").length,
-      pendingRequests: unreadRequestRows.length,
-      newMessages: unreadMessageRows.length,
-      totalMessages: messages.length,
-    }),
-    [projects, investments, usersRows, unreadRequestRows.length, unreadMessageRows.length, messages.length]
-  );
-
   const totalInvestedAmount = useMemo(
     () => investments.reduce((sum, inv) => sum + toNumberSafe(inv.amount), 0),
     [investments]
@@ -529,6 +548,54 @@ export default function AdminDashboard() {
   const userIdentityIndex = useMemo(
     () => buildUserIdentityIndex(usersRows),
     [usersRows]
+  );
+
+  const inboxItems = useMemo(
+    () =>
+      buildAdminInboxItems({
+        requests,
+        messages,
+        projectsMap,
+        userIdentityIndex,
+      }),
+    [messages, projectsMap, requests, userIdentityIndex]
+  );
+
+  const unifiedInboxItems = useMemo(() => sortInboxItems(inboxItems), [inboxItems]);
+
+  const inboxCounts = useMemo(
+    () => buildInboxFilterCounts(unifiedInboxItems),
+    [unifiedInboxItems]
+  );
+
+  const filteredInboxItems = useMemo(
+    () => unifiedInboxItems.filter((item) => getInboxFilterKey(item) === inboxFilter),
+    [unifiedInboxItems, inboxFilter]
+  );
+
+  const inboxAttentionCount = inboxCounts.needsAction + inboxCounts.new;
+
+  const stats = useMemo(
+    () => ({
+      totalProjects: projects.length,
+      publishedProjects: projects.filter((row) => row.status === "published").length,
+      totalInvestments: investments.length,
+      totalUsers: usersRows.length,
+      vipUsers: usersRows.filter((row) => row.vipStatus === "vip").length,
+      pendingRequests: inboxCounts.new,
+      newMessages: inboxCounts.new,
+      totalInboxItems: unifiedInboxItems.length,
+      newInboxItems: inboxCounts.new,
+      attentionInboxItems: inboxAttentionCount,
+    }),
+    [
+      inboxAttentionCount,
+      inboxCounts.new,
+      investments.length,
+      projects,
+      unifiedInboxItems.length,
+      usersRows,
+    ]
   );
 
   const resolveProjectDisplayName = (row: AnyDoc) =>
@@ -738,12 +805,12 @@ export default function AdminDashboard() {
     };
   }, [projects]);
 
-  const markMessageAsRead = async (row: AnyDoc) => {
+  const markMessageAsRead = async (item: AdminInboxViewModel) => {
     if (!canManageMessages) return;
-    if (row.adminReadAt) return;
+    if (!item.messageId || !item.isUnread) return;
 
     await auditedUpdateDoc({
-      ref: doc(db, "messages", row.id),
+      ref: doc(db, "messages", item.messageId),
       data: {
         adminReadAt: serverTimestamp(),
         adminReadByUid: user?.uid || null,
@@ -759,21 +826,23 @@ export default function AdminDashboard() {
         page: "Dashboard",
         method: "mark_read",
       }),
-      message: `Marked message ${row.id} as read`,
-      relatedIds: { requestId: row.id },
+      message: `Marked message ${item.messageId} as read`,
+      relatedIds: {
+        requestId: item.requestId || undefined,
+      },
       meta: {
-        messageType: row.type || null,
+        inboxKind: item.kind,
       },
       ignoreFields: [],
     });
   };
 
-  const markRequestAsSeen = async (row: AnyDoc) => {
+  const markRequestAsSeen = async (item: AdminInboxViewModel) => {
     if (!canManageMessages) return;
-    if (row.adminSeenAt) return;
+    if (!item.requestId || !item.isUnread) return;
 
     await auditedUpdateDoc({
-      ref: doc(db, "interest_requests", row.id),
+      ref: doc(db, "interest_requests", item.requestId),
       data: {
         adminSeenAt: serverTimestamp(),
         adminSeenByUid: user?.uid || null,
@@ -788,40 +857,171 @@ export default function AdminDashboard() {
         page: "Dashboard",
         method: "mark_seen",
       }),
-      message: `Marked request ${row.id} as seen`,
-      relatedIds: { requestId: row.id },
+      message: `Marked request ${item.requestId} as seen`,
+      relatedIds: { requestId: item.requestId },
       meta: {
-        requestStatus: row.status || null,
+        inboxKind: item.kind,
       },
       ignoreFields: [],
     });
   };
 
-  const handleOpenMessage = async (row: AnyDoc) => {
-    const linkedRequestId = getLinkedRequestId(row);
-
+  const handleOpenInboxItem = async (item: AdminInboxViewModel) => {
     try {
-      await markMessageAsRead(row);
+      if (item.sourceCollection === "messages") {
+        await markMessageAsRead(item);
+      } else {
+        await markRequestAsSeen(item);
+      }
     } catch (error) {
-      console.error("mark message as read failed", error);
+      console.error("mark inbox item failed", error);
     }
 
-    if (!linkedRequestId) return;
-
-    setActiveDialog(null);
-    setLocation(`/admin/messages/${encodeURIComponent(linkedRequestId)}`);
+    setIsInboxDialogOpen(false);
+    if (item.actionHref) {
+      setLocation(item.actionHref);
+    }
   };
 
-  const handleOpenRequest = async (row: AnyDoc) => {
-    try {
-      await markRequestAsSeen(row);
-    } catch (error) {
-      console.error("mark request as seen failed", error);
+  const openInboxDialog = (_scope?: "messages" | "requests") => {
+    setInboxFilter("needsAction");
+    setIsInboxDialogOpen(true);
+  };
+
+  const getInboxKindMeta = (kind: AdminInboxViewModel["kind"]) => {
+    if (kind === "investment_request") {
+      return {
+        label: "طلب استثماري",
+        className: "border-emerald-200 bg-emerald-50 text-emerald-800",
+      };
     }
 
-    setActiveDialog(null);
-    setLocation(`/admin/messages/${encodeURIComponent(row.id)}`);
+    if (kind === "interest_request") {
+      return {
+        label: "طلب اهتمام",
+        className: "border-amber-200 bg-amber-50 text-amber-800",
+      };
+    }
+
+    if (kind === "request_followup") {
+      return {
+        label: "متابعة عميل",
+        className: "border-sky-200 bg-sky-50 text-sky-800",
+      };
+    }
+
+    return {
+      label: "سجل ناقص",
+      className: "border-rose-200 bg-rose-50 text-rose-800",
+    };
   };
+
+  const getInboxTrackingMeta = (item: AdminInboxViewModel) => {
+    if (item.isHandled) {
+      return {
+        label: "تم التعامل",
+        className: "border-emerald-200 bg-emerald-50 text-emerald-800",
+      };
+    }
+
+    if (item.isInProgress) {
+      return {
+        label: "تحت الإجراء",
+        className: "border-sky-200 bg-sky-50 text-sky-800",
+      };
+    }
+
+    if (item.isSeen) {
+      return {
+        label: "تم الاطلاع",
+        className: "border-slate-200 bg-slate-100 text-slate-700",
+      };
+    }
+
+    return {
+      label: "جديد",
+      className: "border-amber-200 bg-amber-50 text-amber-800",
+    };
+  };
+
+  const renderInboxCard = (item: AdminInboxViewModel) => {
+    const kindMeta = getInboxKindMeta(item.kind);
+    const trackingMeta = getInboxTrackingMeta(item);
+    const slaMeta = getInboxSlaMeta(item);
+    const projectTitle =
+      item.projectTitle === "سجل مشروع غير مكتمل" ? "غير محدد" : item.projectTitle;
+    const clientMeta = item.clientEmail || item.clientPhone || "لا توجد بيانات تواصل";
+    const timeLabel = formatDateTimeAR(item.createdAt);
+
+    return (
+      <div
+        key={item.entityId}
+        className="rounded-[24px] border border-slate-200/80 bg-white px-4 py-4 shadow-[0_14px_36px_-28px_rgba(15,23,42,0.28)] transition-colors hover:border-slate-300/90"
+      >
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0 flex-1 space-y-3">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0 space-y-1.5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="text-sm font-semibold text-slate-950">{item.clientName}</div>
+                  <span
+                    className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium ${trackingMeta.className}`}
+                  >
+                    {trackingMeta.label}
+                  </span>
+                  <span
+                    className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium ${kindMeta.className}`}
+                  >
+                    {kindMeta.label}
+                  </span>
+                  {slaMeta ? (
+                    <span
+                      className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium ${slaMeta.className}`}
+                    >
+                      {slaMeta.label}
+                    </span>
+                  ) : null}
+                </div>
+                <div className="text-xs text-slate-500">{clientMeta}</div>
+              </div>
+
+
+              <div className="flex flex-wrap gap-2 text-[11px] text-slate-500">
+                <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">
+                  المشروع: {projectTitle}
+                </span>
+                <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">
+                  الوقت: {timeLabel}
+                </span>
+              </div>
+            </div>
+
+            <div className="space-y-2 rounded-[18px] border border-slate-100 bg-slate-50/70 px-3.5 py-3">
+              <div className="text-[11px] font-medium text-slate-500">العنوان</div>
+              <div className="text-sm font-semibold leading-6 text-slate-950">{item.title}</div>
+              <div className="text-[11px] font-medium text-slate-500">الوصف</div>
+              <div className="text-sm leading-6 whitespace-pre-line break-words text-slate-600">
+                {item.preview}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex shrink-0 justify-end lg:min-w-[132px] lg:self-stretch lg:items-end">
+            <Button
+              size="sm"
+              className="h-10 min-w-[120px] rounded-xl bg-[#F2B705] text-black shadow-sm hover:bg-[#d9a305]"
+              onClick={() => void handleOpenInboxItem(item)}
+            >
+              {item.actionLabel}
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const activeFilterMeta =
+    INBOX_FILTER_META.find((entry) => entry.key === inboxFilter) || INBOX_FILTER_META[0];
 
   return (
     <DashboardLayout>
@@ -841,7 +1041,7 @@ export default function AdminDashboard() {
           </Card>
         ) : null}
 
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {canSeeProjects && (
             <AdminPanelStatCard
               title="إجمالي المشاريع"
@@ -874,18 +1074,77 @@ export default function AdminDashboard() {
               accent="blue"
             />
           )}
-
-          {canSeeMessages && (
-            <AdminPanelStatCard
-              title="الرسائل"
-              value={stats.totalMessages}
-              description="طلبات ورسائل المستثمرين الواردة إلى فريق التشغيل والمراجعة."
-              helper={`${formatNumberEN(stats.newMessages)} رسائل غير مقروءة تحتاج متابعة`}
-              icon={<MessageSquare className="h-5 w-5" />}
-              accent="rose"
-            />
-          )}
         </div>
+
+        <button
+          type="button"
+          dir="rtl"
+          className="group block w-full rounded-[32px] text-right focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F2B705]/70 focus-visible:ring-offset-2"
+          onClick={() => openInboxDialog()}
+        >
+          <Card className="overflow-hidden rounded-[32px] border border-slate-200/80 bg-[linear-gradient(135deg,rgba(255,255,255,0.99)_0%,rgba(248,250,252,0.96)_54%,rgba(242,183,5,0.08)_100%)] shadow-[0_24px_70px_-40px_rgba(15,23,42,0.3)] transition-all duration-200 group-hover:-translate-y-0.5 group-hover:border-[#F2B705]/35 group-hover:shadow-[0_30px_80px_-42px_rgba(15,23,42,0.34)]">
+            <CardContent className="flex flex-col gap-6 p-6 text-right lg:flex-row-reverse lg:items-center lg:justify-between">
+              <div className="space-y-4 lg:flex-1">
+                <div className="flex justify-start">
+                  <div className="inline-flex items-center gap-2 rounded-full border border-[#F2B705]/20 bg-[#F2B705]/10 px-3 py-1 text-xs font-medium text-[#7a5b00]">
+                    <MessageSquare className="h-4 w-4 text-[#030640]" />
+                    مدخل تشغيلي
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <h2 className="text-2xl font-semibold tracking-tight text-slate-950">
+                    الوارد
+                  </h2>
+                  <p className="max-w-2xl text-sm leading-6 text-slate-500">
+                    {canAccessInbox
+                      ? "نافذة موحدة لمتابعة الطلبات والمتابعات من مكان واحد، مع التركيز على العناصر التي تحتاج إجراء أو ما زالت جديدة."
+                      : "المدخل متاح دائمًا داخل اللوحة، وفتح الوارد يعرض لك حالة الوصول والمحتوى المتاح حسب صلاحياتك الحالية."}
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap justify-start gap-2">
+                  <span className="inline-flex items-center gap-2 rounded-full border border-amber-200/80 bg-amber-50 px-3 py-1.5 text-sm font-medium text-amber-800">
+                    <span className="text-amber-600">يحتاج إجراء</span>
+                    <span>{formatNumberEN(stats.attentionInboxItems)}</span>
+                  </span>
+                  <span className="inline-flex items-center gap-2 rounded-full border border-sky-200/80 bg-sky-50 px-3 py-1.5 text-sm font-medium text-sky-800">
+                    <span className="text-sky-700">جديد</span>
+                    <span>{formatNumberEN(stats.newInboxItems)}</span>
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-3 text-right lg:min-w-[280px] lg:max-w-[320px]">
+                <div className="rounded-[24px] border border-slate-200/80 bg-white/90 px-5 py-4 shadow-[0_18px_42px_-34px_rgba(15,23,42,0.4)]">
+                  <div className="text-xs font-medium text-slate-500">
+                    {canAccessInbox ? "إجمالي العناصر" : "حالة الوصول"}
+                  </div>
+                  <div className="mt-1 text-3xl font-semibold tracking-tight text-slate-950">
+                    {canAccessInbox ? formatNumberEN(stats.totalInboxItems) : "—"}
+                  </div>
+                  <div className="mt-2 text-sm text-slate-500">
+                    {canAccessInbox
+                      ? `${formatNumberEN(inboxCounts.handled)} تم التعامل معه`
+                      : "يمكنك فتح الوارد لمعرفة العناصر المتاحة لك"}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between rounded-[22px] bg-[#030640] px-4 py-3 text-right text-white shadow-[0_18px_42px_-30px_rgba(3,6,64,0.7)]">
+                  <div className="space-y-1 text-right">
+                    <div className="text-sm font-semibold">فتح الوارد</div>
+                    <div className="text-xs text-white/70">
+                      {canAccessInbox ? "مراجعة العناصر الحالية" : "عرض حالة الصلاحية"}
+                    </div>
+                  </div>
+                  <span className="rounded-full border border-white/12 bg-white/10 px-3 py-1 text-xs font-medium text-white/90">
+                    {canAccessInbox ? "عرض التفاصيل" : "فتح النافذة"}
+                  </span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </button>
 
         {canSeeInvestments && (
           <Card>
@@ -923,6 +1182,108 @@ export default function AdminDashboard() {
             </CardContent>
           </Card>
         )}
+
+
+        <Dialog open={isInboxDialogOpen} onOpenChange={setIsInboxDialogOpen}>
+          <DialogContent
+            dir="rtl"
+            className="grid max-h-[88vh] w-[min(94vw,68rem)] max-w-4xl grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-[32px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.985)_0%,rgba(248,250,252,0.96)_100%)] p-0 text-right shadow-[0_40px_120px_-42px_rgba(15,23,42,0.42)]"
+          >
+            <div className="shrink-0 border-b border-slate-200/80 bg-white/92 px-6 pb-4 pt-6">
+              <DialogHeader className="gap-3 text-right">
+                <DialogTitle className="text-xl tracking-tight text-slate-950">
+                  الوارد
+                </DialogTitle>
+                <div className="text-sm leading-6 text-slate-500">
+                  جميع الطلبات والمتابعات المرتبطة بها داخل نافذة واحدة، مع الفرز حسب
+                  حالة المتابعة فقط.
+                </div>
+              </DialogHeader>
+
+              <div className="mt-5 grid gap-3 md:grid-cols-3">
+                <div className="rounded-[20px] border border-slate-200/80 bg-slate-50/80 px-4 py-3">
+                  <div className="text-[11px] font-medium text-slate-500">إجمالي الوارد</div>
+                  <div className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">
+                    {formatNumberEN(stats.totalInboxItems)}
+                  </div>
+                </div>
+                <div className="rounded-[20px] border border-amber-200/80 bg-amber-50/80 px-4 py-3">
+                  <div className="text-[11px] font-medium text-amber-700">يحتاج متابعة</div>
+                  <div className="mt-1 text-2xl font-semibold tracking-tight text-amber-900">
+                    {formatNumberEN(stats.attentionInboxItems)}
+                  </div>
+                </div>
+                <div className="rounded-[20px] border border-slate-200/80 bg-white px-4 py-3">
+                  <div className="text-[11px] font-medium text-slate-500">معروض الآن</div>
+                  <div className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">
+                    {formatNumberEN(filteredInboxItems.length)}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-5 flex flex-wrap gap-2">
+                {INBOX_FILTER_META.map((filter) => {
+                  const isActive = filter.key === inboxFilter;
+                  return (
+                    <Button
+                      key={filter.key}
+                      type="button"
+                      variant="outline"
+                      className={
+                        isActive
+                          ? "h-11 rounded-2xl border-[#F2B705] bg-[#F2B705]/15 px-4 text-[#7a5b00] shadow-[0_12px_26px_-20px_rgba(242,183,5,0.8)] hover:bg-[#F2B705]/20"
+                          : "h-11 rounded-2xl border-slate-200 bg-white px-4 text-slate-700 hover:bg-slate-50"
+                      }
+                      onClick={() => setInboxFilter(filter.key)}
+                    >
+                      <span>{filter.label}</span>
+                      <span className="mr-2 rounded-full bg-white/90 px-2.5 py-0.5 text-[11px] text-slate-700">
+                        {inboxCounts[filter.key]}
+                      </span>
+                    </Button>
+                  );
+                })}
+              </div>
+
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+                <span>{`الحالة الحالية: ${activeFilterMeta.label}`}</span>
+                <span>{`${formatNumberEN(filteredInboxItems.length)} عنصر`}</span>
+              </div>
+            </div>
+
+            <div className="min-h-0 overflow-hidden bg-slate-50/55">
+              <ScrollArea
+                dir="rtl"
+                className="h-full min-h-0 [&>[data-slot=scroll-area-viewport]]:h-full"
+              >
+                <div className="space-y-3 px-6 py-5 text-right">
+                  {canAccessInbox && filteredInboxItems.length > 0 ? (
+                    filteredInboxItems.map((item) => renderInboxCard(item))
+                  ) : (
+                    <Empty className="min-h-[300px] rounded-[24px] border border-dashed border-slate-200 bg-white/70">
+                      <EmptyHeader>
+                        <EmptyMedia
+                          variant="icon"
+                          className="bg-[#F2B705]/12 text-[#030640]"
+                        >
+                          <MessageSquare className="size-5" />
+                        </EmptyMedia>
+                        <EmptyTitle>
+                          {canAccessInbox ? "لا توجد عناصر ضمن هذه الحالة" : "لا توجد صلاحية لعرض الوارد"}
+                        </EmptyTitle>
+                        <EmptyDescription>
+                          {canAccessInbox
+                            ? "جرّب تبديل الفلتر من الأعلى لعرض العناصر الجديدة أو العناصر التي تم التعامل معها."
+                            : "يبقى مدخل الوارد ظاهرًا داخل اللوحة، لكن عرض العناصر يتطلب صلاحية الوصول المناسبة."}
+                        </EmptyDescription>
+                      </EmptyHeader>
+                    </Empty>
+                  )}
+                </div>
+              </ScrollArea>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         <div className="grid md:grid-cols-2 gap-6">
           {canSeeInvestments && (
@@ -1288,130 +1649,6 @@ export default function AdminDashboard() {
           )}
         </div>
 
-        <div className="grid md:grid-cols-2 gap-6">
-          {canSeeRequests && (
-            <AlertCard
-              title="استشارات معلقة"
-              count={stats.pendingRequests}
-              okText="لا توجد استشارات جديدة"
-              warnText="طلب يحتاج مراجعة"
-              icon={<Clock />}
-              onClick={() => setActiveDialog("requests")}
-            />
-          )}
-
-          {canSeeMessages && (
-            <AlertCard
-              title="رسائل جديدة"
-              count={stats.newMessages}
-              okText="لا توجد رسائل جديدة"
-              warnText="رسالة جديدة"
-              icon={<MessageSquare />}
-              onClick={() => setActiveDialog("messages")}
-            />
-          )}
-        </div>
-
-        <Dialog
-          open={activeDialog !== null}
-          onOpenChange={(open) => {
-            if (!open) setActiveDialog(null);
-          }}
-        >
-          <DialogContent dir="rtl" className="sm:max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>
-                {activeDialog === "messages" ? "الرسائل الجديدة" : "الاستشارات الجديدة"}
-              </DialogTitle>
-            </DialogHeader>
-
-            {activeDialog === "messages" ? (
-              unreadMessageRows.length > 0 ? (
-                <ScrollArea className="max-h-[65vh]">
-                  <div className="space-y-3 pr-1">
-                    {unreadMessageRows.map((row) => {
-                      const linkedRequestId = getLinkedRequestId(row);
-
-                      return (
-                        <div key={row.id} className="rounded-xl border p-4 space-y-3">
-                          <div className="flex flex-wrap items-start justify-between gap-3">
-                            <div className="space-y-1">
-                              <div className="font-semibold">{resolveClientDisplayName(row)}</div>
-                              <div className="text-xs text-muted-foreground">
-                                {formatDateTimeAR(row.createdAt)}
-                              </div>
-                            </div>
-
-                            <Button
-                              size="sm"
-                              className="bg-[#F2B705] text-black hover:bg-[#d9a305]"
-                              onClick={() => void handleOpenMessage(row)}
-                            >
-                              {linkedRequestId ? "فتح الطلب" : "تعليم كمقروء"}
-                            </Button>
-                          </div>
-
-                          <div className="text-sm leading-7 whitespace-pre-line">
-                            {pickText(row.message, row.note, "لا يوجد محتوى للرسالة")}
-                          </div>
-
-                          <div className="text-xs text-muted-foreground">
-                            المشروع: {resolveProjectDisplayName(row)}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </ScrollArea>
-              ) : (
-                <div className="py-10 text-center text-muted-foreground">
-                  لا توجد رسائل غير مقروءة
-                </div>
-              )
-            ) : unreadRequestRows.length > 0 ? (
-              <ScrollArea className="max-h-[65vh]">
-                <div className="space-y-3 pr-1">
-                  {unreadRequestRows.map((row) => (
-                    <div key={row.id} className="rounded-xl border p-4 space-y-3">
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div className="space-y-1">
-                          <div className="font-semibold">{resolveClientDisplayName(row)}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {formatDateTimeAR(row.createdAt)}
-                          </div>
-                        </div>
-
-                        <Button
-                          size="sm"
-                          className="bg-[#F2B705] text-black hover:bg-[#d9a305]"
-                          onClick={() => void handleOpenRequest(row)}
-                        >
-                          فتح الطلب
-                        </Button>
-                      </div>
-
-                      <div className="text-sm text-muted-foreground">
-                        المشروع: {resolveProjectDisplayName(row)}
-                      </div>
-
-                      <div className="text-sm text-muted-foreground">
-                        المبلغ: {formatCurrencyEN(toNumberSafe(row.amount))}
-                      </div>
-
-                      <div className="text-sm leading-7 whitespace-pre-line">
-                        {pickText(row.note, "بدون ملاحظة من العميل")}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </ScrollArea>
-            ) : (
-              <div className="py-10 text-center text-muted-foreground">
-                لا توجد استشارات غير مقروءة
-              </div>
-            )}
-          </DialogContent>
-        </Dialog>
       </div>
     </DashboardLayout>
   );
@@ -1513,53 +1750,3 @@ function Metric({ label, value }: { label: string; value: string }) {
   );
 }
 
-function AlertCard({
-  title,
-  count,
-  okText,
-  warnText,
-  icon,
-  onClick,
-}: {
-  title: string;
-  count: number;
-  okText: string;
-  warnText: string;
-  icon: React.ReactNode;
-  onClick?: () => void;
-}) {
-  const isInteractive = typeof onClick === "function" && count > 0;
-  const displayCount = formatNumberEN(count);
-  const statusNode =
-    count > 0 ? (
-      <div className="flex items-center gap-2 text-orange-600">
-        <AlertCircle className="w-5 h-5" />
-        {displayCount} {warnText}
-      </div>
-    ) : (
-      <div className="flex items-center gap-2 text-green-600">
-        <CheckCircle className="w-5 h-5" />
-        {okText}
-      </div>
-    );
-
-  return (
-    <Card className={isInteractive ? "transition-colors hover:border-[#F2B705]/50" : ""}>
-      <CardHeader>
-        <CardTitle className="flex gap-2 items-center">
-          {icon} {title}
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        {isInteractive ? (
-          <button type="button" className="w-full text-right space-y-3" onClick={onClick}>
-            {statusNode}
-            <div className="text-xs text-muted-foreground">اضغط لعرض العناصر الجديدة</div>
-          </button>
-        ) : (
-          statusNode
-        )}
-      </CardContent>
-    </Card>
-  );
-}
