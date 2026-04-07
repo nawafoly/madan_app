@@ -133,6 +133,8 @@ export default function Careers() {
       return;
     }
 
+    let submitStage: "upload_files" | "save_application" = "upload_files";
+
     try {
       setSubmitting(true);
 
@@ -157,6 +159,7 @@ export default function Careers() {
         });
       }
 
+      submitStage = "save_application";
       await setDoc(applicationRef, {
         formId: RECRUITMENT_SETTINGS_DOC_ID,
         status: "submitted",
@@ -176,8 +179,15 @@ export default function Careers() {
       setErrors({});
       toast.success("تم استلام طلبك بنجاح، وسنراجعه في أقرب وقت.");
     } catch (error) {
-      console.error("job application submit failed:", error);
-      toast.error("تعذر إرسال الطلب حاليًا. حاول مرة أخرى بعد قليل.");
+      console.error("job application submit failed:", {
+        stage: submitStage,
+        error,
+      });
+      toast.error(
+        submitStage === "save_application"
+          ? "تم رفع الملفات لكن تعذر حفظ طلب التوظيف حاليًا."
+          : "تعذر إرسال الطلب حاليًا. حاول مرة أخرى بعد قليل."
+      );
     } finally {
       setSubmitting(false);
     }
@@ -198,22 +208,42 @@ export default function Careers() {
           className="pointer-events-none absolute left-[-8rem] top-[18rem] h-[22rem] w-[22rem] rounded-full bg-[radial-gradient(circle,rgba(3,6,64,0.08),transparent_68%)] blur-3xl"
         />
 
+        <section className="relative z-10 h-screen min-h-screen min-h-[100svh] overflow-hidden bg-slate-950">
+          <div className="absolute inset-0">
+            <video
+              className="h-full w-full object-cover object-center"
+              autoPlay
+              muted
+              loop
+              playsInline
+              preload="auto"
+            >
+              <source src="/about-hero.mp4" type="video/mp4" />
+            </video>
+          </div>
+
+          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(7,11,18,0.72)_0%,rgba(7,11,18,0.45)_38%,rgba(7,11,18,0.72)_100%)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(242,183,5,0.18),transparent_40%)]" />
+
+          <div className="container relative z-10 h-full px-4 sm:px-6">
+            <div className="flex h-full items-center justify-center pt-[calc(var(--site-header-offset)+1.5rem)]">
+              <div className="mx-auto max-w-4xl text-center text-white">
+                <h1 className="text-4xl font-semibold leading-tight tracking-tight sm:text-5xl lg:text-[4.25rem]">
+                  انضم إلى فريق معدن
+                </h1>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <section className="relative py-16 sm:py-20 lg:py-24">
           <div className="container px-4 sm:px-6">
             <div className="mx-auto max-w-4xl text-center">
-              <Badge className="rounded-full border border-[#F2B705]/30 bg-[#F2B705]/12 px-4 py-1.5 text-sm font-semibold text-[#8d6700] shadow-none">
-                فرص التوظيف
-              </Badge>
 
               <h1 className="mt-6 text-4xl font-semibold leading-tight text-slate-950 sm:text-5xl lg:text-[3.4rem]">
                 انضم إلى فريق معدن
               </h1>
 
-              <p className="mt-5 text-base leading-8 text-slate-600 sm:text-lg">
-                هذه الصفحة مرتبطة مباشرة بإعدادات نموذج التوظيف داخل الداشبورد،
-                لذلك تظهر هنا الحقول والمرفقات المطلوبة بنفس الترتيب وبنفس
-                التعريفات المحفوظة.
-              </p>
             </div>
           </div>
         </section>

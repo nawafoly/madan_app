@@ -155,7 +155,7 @@ function sanitizeStorageFolder(value: unknown) {
   return normalized || "attachments";
 }
 
-function expectedUploadPrefix(
+function expectedUploadPrefixes(
   entityType: FileEntityType,
   entityId: string,
   category: FileCategory,
@@ -165,34 +165,41 @@ function expectedUploadPrefix(
   const safeEntityId = sanitizeKeyPart(entityId);
 
   if (category === "career_attachment") {
-    return `careers/${safeEntityId}/${sanitizeStorageFolder(storageFolder)}/`;
+    const prefixes = [`careers/${safeEntityId}/${sanitizeStorageFolder(storageFolder)}/`];
+    const legacyCategoryPrefix = `careers/${safeEntityId}/${sanitizeKeyPart(category)}/`;
+
+    if (!prefixes.includes(legacyCategoryPrefix)) {
+      prefixes.push(legacyCategoryPrefix);
+    }
+
+    return prefixes;
   }
 
   if (category === "contract_original") {
-    return `${safeEntityType}s/${safeEntityId}/contracts/original`;
+    return [`${safeEntityType}s/${safeEntityId}/contracts/original`];
   }
 
   if (category === "contract_signed") {
-    return `${safeEntityType}s/${safeEntityId}/contracts/signed`;
+    return [`${safeEntityType}s/${safeEntityId}/contracts/signed`];
   }
 
   if (category === "project_cover") {
-    return `${safeEntityType}s/${safeEntityId}/cover/`;
+    return [`${safeEntityType}s/${safeEntityId}/cover/`];
   }
 
   if (category === "project_gallery") {
-    return `${safeEntityType}s/${safeEntityId}/gallery/`;
+    return [`${safeEntityType}s/${safeEntityId}/gallery/`];
   }
 
   if (category === "project_attachment") {
-    return `${safeEntityType}s/${safeEntityId}/attachments/`;
+    return [`${safeEntityType}s/${safeEntityId}/attachments/`];
   }
 
   if (category === "investment_settlement") {
-    return `${safeEntityType}s/${safeEntityId}/settlement/`;
+    return [`${safeEntityType}s/${safeEntityId}/settlement/`];
   }
 
-  return `${safeEntityType}s/${safeEntityId}/`;
+  return [`${safeEntityType}s/${safeEntityId}/`];
 }
 
 function normalizeUploadErrorMessage(raw: any) {
@@ -328,13 +335,21 @@ function normalizeUploadResponse(
     version: input.version ?? null,
   });
 
-  const expectedPrefix = expectedUploadPrefix(
+  const expectedPrefixes = expectedUploadPrefixes(
     input.entityType,
     input.entityId,
     input.category,
     input.storageFolder
   );
-  if (!normalized.filePath.startsWith(expectedPrefix)) {
+  if (!expectedPrefixes.some((prefix) => normalized.filePath.startsWith(prefix))) {
+    console.warn("[upload] unexpected file path prefix", {
+      filePath: normalized.filePath,
+      expectedPrefixes,
+      entityType: input.entityType,
+      entityId: input.entityId,
+      category: input.category,
+      storageFolder: input.storageFolder || null,
+    });
     throw new Error("Upload failed");
   }
 
