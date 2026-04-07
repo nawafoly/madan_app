@@ -7171,7 +7171,7 @@ export default function MessagesManagement() {
 
                   <div className="space-y-2">
                     <h1 className="text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
-                      سجل طلبات الاستثمار
+                      طلبات الاستثمار
                     </h1>
                   </div>
                   <p>
@@ -7205,7 +7205,7 @@ export default function MessagesManagement() {
             {false ? (
               <>
                 <div>
-                  <h1 className="text-4xl font-bold mb-2">سجل طلبات الاستثمار</h1>
+                  <h1 className="text-4xl font-bold mb-2">طلبات الاستثمار</h1>
                   <p className="text-muted-foreground text-lg">
                     إدارة ومتابعة طلبات الاستثمار الواردة
                   </p>
@@ -7452,7 +7452,7 @@ export default function MessagesManagement() {
                     <div className="flex items-center gap-2 text-slate-950">
                       <MessageSquare className="h-5 w-5" />
                       <h3 className="text-lg font-semibold tracking-tight">
-                        سجل طلبات الاستثمار
+                        طلبات الاستثمار
                       </h3>
                     </div>
                     <p className="mt-2 text-sm leading-7 text-slate-500">
@@ -7554,7 +7554,7 @@ export default function MessagesManagement() {
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                   <CardTitle className="flex items-center gap-2 text-xl font-semibold text-slate-950">
                     <MessageSquare className="h-5 w-5" />
-                    سجل طلبات الاستثمار
+                    طلبات الاستثمار
                   </CardTitle>
 
                   <div className="inline-flex w-fit items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm font-medium text-slate-600">
@@ -7600,7 +7600,7 @@ export default function MessagesManagement() {
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                       <CardTitle className="flex items-center gap-2">
                         <MessageSquare className="w-5 h-5" />
-                        سجل طلبات الاستثمار
+                        طلبات الاستثمار
                       </CardTitle>
 
                       <div className="inline-flex w-fit items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm font-medium text-slate-600">

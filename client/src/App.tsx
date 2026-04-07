@@ -13,6 +13,7 @@ import SiteLayout from "@/components/SiteLayout";
 import Home from "./pages/Home";
 import ProjectsPage from "./pages/Projects";
 import About from "./pages/About";
+import Careers from "./pages/Careers";
 import Contact from "./pages/Contact";
 import ProjectDetails from "./pages/ProjectDetails";
 
@@ -31,6 +32,7 @@ import FinancialManagement from "./pages/admin/Financial";
 import ClientsManagement from "./pages/admin/Clients";
 import ClientProfile from "@/pages/admin/ClientProfile";
 import MessagesManagement from "./pages/admin/Messages";
+import RecruitmentApplicationsPage from "./pages/admin/RecruitmentApplications";
 import AuditLogPage from "./pages/admin/AuditLog";
 import DebugAuthPage from "./pages/admin/DebugAuth";
 import Vip from "./pages/admin/Vip";
@@ -69,6 +71,12 @@ function Router() {
         <Route path="/about">
           <SiteLayout>
             <About />
+          </SiteLayout>
+        </Route>
+
+        <Route path="/careers">
+          <SiteLayout>
+            <Careers />
           </SiteLayout>
         </Route>
 
@@ -159,6 +167,12 @@ function Router() {
         <Route path="/admin/messages">
           <RequireAdminPermission permission="messages.view">
             <MessagesManagement />
+          </RequireAdminPermission>
+        </Route>
+
+        <Route path="/admin/recruitment-applications">
+          <RequireAdminPermission permission="messages.view">
+            <RecruitmentApplicationsPage />
           </RequireAdminPermission>
         </Route>
 

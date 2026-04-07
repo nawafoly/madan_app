@@ -413,6 +413,24 @@ service cloud.firestore {
       );
     }
 
+    function isValidJobApplicationCreate() {
+      return request.resource.data.formId == "recruitment"
+        && lower(request.resource.data.status) == "submitted"
+        && request.resource.data.source == "public_careers_page"
+        && request.resource.data.fieldsSnapshot is list
+        && request.resource.data.fieldsSnapshot.size() > 0
+        && request.resource.data.fieldsSnapshot.size() <= 50
+        && request.resource.data.answers is list
+        && request.resource.data.answers.size() <= 50
+        && (
+          !("attachments" in request.resource.data)
+          || (
+            request.resource.data.attachments is list
+            && request.resource.data.attachments.size() <= 20
+          )
+        );
+    }
+
     /* =========================
        settings
     ========================= */
@@ -614,6 +632,15 @@ match /admin_users/{docId} {
        - Client writes are blocked; audit entries are created via trusted server code
        - Append-only from the application's point of view
     ========================= */
+    /* =========================
+       job_applications
+    ========================= */
+    match /job_applications/{id} {
+      allow create: if isValidJobApplicationCreate();
+      allow read: if canReadMessagesAdmin() || hasAdminPermission("settings.manage");
+      allow update, delete: if canManageMessagesAdmin() || hasAdminPermission("settings.manage");
+    }
+
     match /audit_logs/{id} {
       allow read: if hasAdminPermission("settings.manage");
       allow create, update, delete: if false;

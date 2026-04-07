@@ -8,6 +8,8 @@ import {
   type ReactNode,
 } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
+import RecruitmentFormFields from "@/components/recruitment/RecruitmentFormFields";
+import RecruitmentSettingsEditor from "@/components/recruitment/RecruitmentSettingsEditor";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,6 +51,7 @@ import { toast } from "sonner";
 import {
   Settings as SettingsIcon,
   Bell,
+  BriefcaseBusiness,
   Shield,
   Database,
   Users,
@@ -77,6 +80,8 @@ import {
   Sparkles,
   ServerCog,
   TrendingUp,
+  ArrowUp,
+  ArrowDown,
   type LucideIcon,
 } from "lucide-react";
 
@@ -86,6 +91,18 @@ import {
   formatFileSizeEN,
   formatNumberEN,
 } from "@/lib/formatters";
+import {
+  createRecruitmentField,
+  createRecruitmentOption,
+  getRecruitmentFieldHint,
+  getRecruitmentFieldTypeLabel,
+  getRecruitmentNumberModeLabel,
+  moveItem,
+  normalizeRecruitmentField,
+  normalizeRecruitmentSettings,
+  syncRecruitmentValuesWithFields,
+  validateRecruitmentSettings,
+} from "@/lib/recruitment";
 import { getRoleDisplayLabel } from "@/lib/ownerAccounts";
 import { cn } from "@/lib/utils";
 import {
@@ -139,6 +156,14 @@ import {
   ROLE_DEFAULT_PERMS,
   type Permission,
 } from "@/_core/hooks/useAuth";
+import {
+  DEFAULT_RECRUITMENT_SETTINGS,
+  RECRUITMENT_SETTINGS_DOC_ID,
+  type RecruitmentFieldDefinition,
+  type RecruitmentFieldType,
+  type RecruitmentFormValues,
+  type RecruitmentSettingsDoc,
+} from "@shared/recruitment";
 
 /* =========================
    Types
@@ -899,6 +924,7 @@ type SettingsExport = {
     labels: LabelsSettings;
     flags: FlagsSettings;
     content: ContentSettings;
+    recruitment: RecruitmentSettingsDoc;
   };
 };
 
@@ -1004,6 +1030,17 @@ export default function Settings() {
     createDefaultContentSettings
   );
   const [savingContent, setSavingContent] = useState(false);
+
+  const [recruitment, setRecruitment] = useState<RecruitmentSettingsDoc>(
+    normalizeRecruitmentSettings(DEFAULT_RECRUITMENT_SETTINGS)
+  );
+  const [savedRecruitment, setSavedRecruitment] =
+    useState<RecruitmentSettingsDoc>(
+      normalizeRecruitmentSettings(DEFAULT_RECRUITMENT_SETTINGS)
+    );
+  const [savingRecruitment, setSavingRecruitment] = useState(false);
+  const [recruitmentPreviewValues, setRecruitmentPreviewValues] =
+    useState<RecruitmentFormValues>({});
 
   const [error, setError] = useState<string>("");
   const databaseWorkerUrl = useMemo(() => getDocumentWorkerBaseUrl(), []);
@@ -1270,6 +1307,33 @@ export default function Settings() {
     () => JSON.stringify(content) !== JSON.stringify(savedContent),
     [content, savedContent]
   );
+  const recruitmentDirty = useMemo(
+    () => JSON.stringify(recruitment) !== JSON.stringify(savedRecruitment),
+    [recruitment, savedRecruitment]
+  );
+  const requiredRecruitmentFieldsCount = useMemo(
+    () => recruitment.fields.filter((field) => field.required).length,
+    [recruitment.fields]
+  );
+  const selectRecruitmentFieldsCount = useMemo(
+    () => recruitment.fields.filter((field) => field.type === "select").length,
+    [recruitment.fields]
+  );
+  const recruitmentValidation = useMemo(
+    () => validateRecruitmentSettings(recruitment),
+    [recruitment]
+  );
+  const recruitmentFieldIssuesCount = Object.values(
+    recruitmentValidation.fieldErrors
+  ).reduce((sum, issues) => sum + issues.length, 0);
+  const recruitmentIssuesCount =
+    recruitmentValidation.formErrors.length + recruitmentFieldIssuesCount;
+
+  useEffect(() => {
+    setRecruitmentPreviewValues((current) =>
+      syncRecruitmentValuesWithFields(recruitment.fields, current)
+    );
+  }, [recruitment.fields]);
 
   /* =========================
      Load settings (Firestore)
@@ -1285,6 +1349,7 @@ export default function Settings() {
         rolesSnap,
         flagsSnap,
         contentSnap,
+        recruitmentSnap,
       ] = await Promise.all([
         getDoc(doc(db, "settings", "app")),
         getDoc(doc(db, "settings", "notifications")),
@@ -1293,6 +1358,7 @@ export default function Settings() {
         getDoc(doc(db, "settings", "roles")),
         getDoc(doc(db, "settings", "flags")),
         getDoc(doc(db, "settings", "content")),
+        getDoc(doc(db, "settings", RECRUITMENT_SETTINGS_DOC_ID)),
       ]);
 
       const nextApp = appSnap.exists()
@@ -1363,6 +1429,11 @@ export default function Settings() {
         : createDefaultContentSettings();
       setContent(nextContent);
       setSavedContent(nextContent);
+      const nextRecruitment = recruitmentSnap.exists()
+        ? normalizeRecruitmentSettings(recruitmentSnap.data())
+        : normalizeRecruitmentSettings(DEFAULT_RECRUITMENT_SETTINGS);
+      setRecruitment(nextRecruitment);
+      setSavedRecruitment(nextRecruitment);
     } catch (e) {
       console.error(e);
       toast.error("فشل تحميل الإعدادات");
@@ -1665,6 +1736,174 @@ export default function Settings() {
 
   const resetContentChanges = () => {
     setContent(savedContent);
+  };
+
+  const saveRecruitment = async () => {
+    if (recruitmentIssuesCount > 0) {
+      toast.error("يرجى معالجة ملاحظات نموذج التوظيف قبل الحفظ.");
+      return;
+    }
+
+    const normalized = normalizeRecruitmentSettings(recruitment);
+
+    try {
+      setSavingRecruitment(true);
+      await persistSettingsDoc(
+        RECRUITMENT_SETTINGS_DOC_ID,
+        normalized as unknown as Record<string, unknown>,
+        "Updated recruitment settings"
+      );
+      setRecruitment(normalized);
+      setSavedRecruitment(normalized);
+      toast.success("تم حفظ إعدادات نموذج التوظيف");
+    } catch (e) {
+      console.error(e);
+      toast.error("فشل حفظ إعدادات نموذج التوظيف");
+    } finally {
+      setSavingRecruitment(false);
+    }
+  };
+
+  const resetRecruitmentChanges = () => {
+    setRecruitment(savedRecruitment);
+    setRecruitmentPreviewValues(
+      syncRecruitmentValuesWithFields(savedRecruitment.fields)
+    );
+  };
+
+  const addRecruitmentField = (type: RecruitmentFieldType = "text") => {
+    setRecruitment((current) => ({
+      ...current,
+      fields: [...current.fields, createRecruitmentField(type)],
+    }));
+  };
+
+  const updateRecruitmentField = (
+    fieldId: string,
+    patch: Partial<RecruitmentFieldDefinition>
+  ) => {
+    setRecruitment((current) => ({
+      ...current,
+      fields: current.fields.map((field, index) => {
+        if (field.id !== fieldId) return field;
+
+        if (patch.type && patch.type !== field.type) {
+          const nextTypeTemplate = createRecruitmentField(patch.type);
+          return normalizeRecruitmentField(
+            {
+              ...field,
+              ...nextTypeTemplate,
+              ...patch,
+              id: field.id,
+              label: String(patch.label ?? field.label).trim() || field.label,
+              required:
+                typeof patch.required === "boolean"
+                  ? patch.required
+                  : field.required,
+              placeholder:
+                patch.type === "date" || patch.type === "file"
+                  ? ""
+                  : typeof patch.placeholder === "string"
+                  ? patch.placeholder
+                  : field.placeholder,
+            },
+            index
+          );
+        }
+
+        return normalizeRecruitmentField(
+          {
+            ...field,
+            ...patch,
+          },
+          index
+        );
+      }),
+    }));
+  };
+
+  const moveRecruitmentFieldBy = (fieldId: string, direction: "up" | "down") => {
+    setRecruitment((current) => {
+      const index = current.fields.findIndex((field) => field.id === fieldId);
+      if (index === -1) return current;
+
+      const targetIndex = direction === "up" ? index - 1 : index + 1;
+      return {
+        ...current,
+        fields: moveItem(current.fields, index, targetIndex),
+      };
+    });
+  };
+
+  const removeRecruitmentField = (fieldId: string) => {
+    setRecruitment((current) => ({
+      ...current,
+      fields: current.fields.filter((field) => field.id !== fieldId),
+    }));
+  };
+
+  const addRecruitmentOption = (fieldId: string) => {
+    setRecruitment((current) => ({
+      ...current,
+      fields: current.fields.map((field, index) =>
+        field.id === fieldId
+          ? normalizeRecruitmentField(
+              {
+                ...field,
+                options: [...(field.options || []), createRecruitmentOption()],
+              },
+              index
+            )
+          : field
+      ),
+    }));
+  };
+
+  const updateRecruitmentOption = (
+    fieldId: string,
+    optionId: string,
+    label: string
+  ) => {
+    setRecruitment((current) => ({
+      ...current,
+      fields: current.fields.map((field, index) => {
+        if (field.id !== fieldId) return field;
+
+        return normalizeRecruitmentField(
+          {
+            ...field,
+            options: (field.options || []).map((option) =>
+              option.id === optionId
+                ? createRecruitmentOption({
+                    id: option.id,
+                    label,
+                  })
+                : option
+            ),
+          },
+          index
+        );
+      }),
+    }));
+  };
+
+  const removeRecruitmentOption = (fieldId: string, optionId: string) => {
+    setRecruitment((current) => ({
+      ...current,
+      fields: current.fields.map((field, index) => {
+        if (field.id !== fieldId) return field;
+
+        return normalizeRecruitmentField(
+          {
+            ...field,
+            options: (field.options || []).filter(
+              (option) => option.id !== optionId
+            ),
+          },
+          index
+        );
+      }),
+    }));
   };
 
   /* =========================
@@ -2471,6 +2710,7 @@ export default function Settings() {
       labels,
       flags,
       content,
+      recruitment,
     },
   });
 
@@ -2510,6 +2750,7 @@ export default function Settings() {
           "labels",
           "flags",
           "content",
+          "recruitment",
         ],
         roleCount: s.roles.length,
       },
@@ -2549,6 +2790,11 @@ export default function Settings() {
           entityType: "settings",
           label: "content",
         },
+        {
+          ref: doc(db, "settings", RECRUITMENT_SETTINGS_DOC_ID),
+          entityType: "settings",
+          label: "recruitment",
+        },
       ],
       execute: async () => {
         await Promise.all([
@@ -2587,6 +2833,13 @@ export default function Settings() {
             importedAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
           }),
+          setDoc(doc(db, "settings", RECRUITMENT_SETTINGS_DOC_ID), {
+            ...normalizeRecruitmentSettings(
+              s.recruitment ?? DEFAULT_RECRUITMENT_SETTINGS
+            ),
+            importedAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          }),
         ]);
       },
     });
@@ -2598,6 +2851,11 @@ export default function Settings() {
     setLabels(s.labels);
     setFlags(s.flags);
     setContent(s.content);
+    const nextRecruitment = normalizeRecruitmentSettings(
+      s.recruitment ?? DEFAULT_RECRUITMENT_SETTINGS
+    );
+    setRecruitment(nextRecruitment);
+    setSavedRecruitment(nextRecruitment);
   };
 
   const handlePickImportFile = () => fileInputRef.current?.click();
@@ -3019,6 +3277,12 @@ export default function Settings() {
       icon: Type,
     },
     {
+      value: "recruitment",
+      label: "التوظيف",
+      helper: "محرر الحقول ونموذج التقديم العام",
+      icon: BriefcaseBusiness,
+    },
+    {
       value: "backup",
       label: "النسخ الاحتياطي",
       helper: "التصدير والاستيراد وحزم العقود",
@@ -3053,6 +3317,8 @@ export default function Settings() {
         "التحكم في الميزات التجريبية وتجارب الإطلاق التدريجي من تبويب موحد ومتسق مع بقية الإعدادات.",
       content:
         "إدارة محتوى الموقع التشغيلي والتسويقي من وحدات واضحة تحافظ على نفس جودة تجربة الإعدادات.",
+      recruitment:
+        "إدارة نموذج التوظيف العام من نفس مركز الإعدادات، مع ترتيب واضح للحقول، وأنواع منظمة، ومعاينة مباشرة لما سيظهر للزائر في الصفحة العامة.",
       backup:
         "إدارة النسخ، الاستيراد، وحزم التصدير التشغيلية من تجربة منظمة تحافظ على وضوح الحالة والإجراءات.",
       database:
@@ -3188,6 +3454,31 @@ export default function Settings() {
                           tone: "info",
                         },
                       ]
+                    : activeTab === "recruitment"
+                      ? [
+                          {
+                            label: recruitment.isPublished
+                              ? "النموذج منشور"
+                              : "النموذج غير منشور",
+                            tone: recruitment.isPublished
+                              ? "success"
+                              : "warning",
+                          },
+                          {
+                            label: `${formatNumberEN(recruitment.fields.length)} حقول`,
+                            tone: "neutral",
+                          },
+                          {
+                            label:
+                              recruitmentIssuesCount === 0
+                                ? "جاهز للعرض العام"
+                                : `${formatNumberEN(recruitmentIssuesCount)} ملاحظات`,
+                            tone:
+                              recruitmentIssuesCount === 0
+                                ? "info"
+                                : "warning",
+                          },
+                        ]
                     : activeTab === "backup"
                       ? [
                           {
@@ -3288,6 +3579,13 @@ export default function Settings() {
       saving: savingContent,
       onSave: saveContent,
       onReset: resetContentChanges,
+    },
+    recruitment: {
+      tabLabel: "التوظيف",
+      dirty: recruitmentDirty,
+      saving: savingRecruitment,
+      onSave: saveRecruitment,
+      onReset: resetRecruitmentChanges,
     },
   };
 
@@ -5008,6 +5306,577 @@ export default function Settings() {
               </div>
 
             </div>
+          </TabsContent>
+
+          {/* =========================
+              Recruitment
+          ========================= */}
+          <TabsContent value="recruitment" className="space-y-6">
+            <RecruitmentSettingsEditor
+              recruitment={recruitment}
+              recruitmentPreviewValues={recruitmentPreviewValues}
+              requiredRecruitmentFieldsCount={requiredRecruitmentFieldsCount}
+              selectRecruitmentFieldsCount={selectRecruitmentFieldsCount}
+              recruitmentIssuesCount={recruitmentIssuesCount}
+              recruitmentValidation={recruitmentValidation}
+              onPublishedChange={(value) =>
+                setRecruitment((current) => ({
+                  ...current,
+                  isPublished: value,
+                }))
+              }
+              onAddField={addRecruitmentField}
+              onUpdateField={updateRecruitmentField}
+              onMoveField={moveRecruitmentFieldBy}
+              onRemoveField={removeRecruitmentField}
+              onAddOption={addRecruitmentOption}
+              onUpdateOption={updateRecruitmentOption}
+              onRemoveOption={removeRecruitmentOption}
+              onPreviewValueChange={(fieldId, value) =>
+                setRecruitmentPreviewValues((current) => ({
+                  ...current,
+                  [fieldId]: value,
+                }))
+              }
+            />
+            {false ? (
+              <>
+            <SettingsTabHero
+              eyebrow="محرر نموذج التوظيف"
+              title="إعدادات نموذج التوظيف العام"
+              description="أضف الحقول المطلوبة، اختر نوع كل حقل، وحدد ما إذا كان إلزاميًا، ثم ستظهر نفس الحقول تلقائيًا في صفحة التوظيف العامة بنفس الترتيب ومن دون أي تعديل يدوي إضافي."
+              stats={[
+                {
+                  icon: BriefcaseBusiness,
+                  label: "الحقول",
+                  value: formatNumberEN(recruitment.fields.length),
+                  helper: "إجمالي الحقول الحالية في النموذج",
+                },
+                {
+                  icon: CheckCircle2,
+                  label: "المطلوب",
+                  value: formatNumberEN(requiredRecruitmentFieldsCount),
+                  helper: "الحقول الإلزامية للمتقدّم",
+                },
+                {
+                  icon: Type,
+                  label: "القوائم",
+                  value: formatNumberEN(selectRecruitmentFieldsCount),
+                  helper: "حقول Select التي تحتوي على خيارات",
+                },
+              ]}
+              panel={
+                <SettingsHeroPanel
+                  status={recruitment.isPublished ? "منشور" : "متوقف"}
+                  title="الربط مباشر مع الصفحة العامة"
+                  description="يعتمد هذا القسم على المستند settings/recruitment، لذلك أي حفظ هنا ينعكس مباشرة على صفحة /careers ويغيّر ترتيب الحقول ونوعها كما هو."
+                  metrics={[
+                    {
+                      label: "مسار الصفحة",
+                      value: "/careers",
+                      helper: "الصفحة العامة الظاهرة للزوار",
+                    },
+                    {
+                      label: "الحالة",
+                      value: recruitment.isPublished
+                        ? "استقبال الطلبات مفعل"
+                        : "استقبال الطلبات متوقف",
+                      helper: "يمكن إيقاف الاستقبال دون حذف الحقول",
+                    },
+                    {
+                      label: "سلامة الإعدادات",
+                      value:
+                        recruitmentIssuesCount === 0
+                          ? "جاهز للحفظ"
+                          : `${formatNumberEN(recruitmentIssuesCount)} ملاحظات`,
+                      helper: "مراجعة الحقول قبل نشر التعديلات",
+                    },
+                  ]}
+                />
+              }
+            />
+
+            <div className="space-y-6">
+              <SettingsSectionCard
+                icon={BriefcaseBusiness}
+                eyebrow="الوحدة 01"
+                title="حالة النموذج"
+                description="تحكم سريع في إتاحة صفحة التوظيف العامة، مع ملخص فوري عن جودة الإعدادات وعدد الملاحظات التي تحتاج مراجعة."
+              >
+                <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+                  <div className="space-y-4">
+                    <Toggle
+                      label="استقبال طلبات التوظيف"
+                      description="عند الإيقاف ستبقى الصفحة العامة موجودة، لكن سيظهر للزائر أن استقبال الطلبات متوقف مؤقتًا."
+                      value={recruitment.isPublished}
+                      onChange={(value) =>
+                        setRecruitment((current) => ({
+                          ...current,
+                          isPublished: value,
+                        }))
+                      }
+                    />
+
+                    {recruitmentValidation.formErrors.length > 0 ? (
+                      <Alert className="border-amber-200 bg-amber-50 text-amber-900">
+                        <CircleAlert className="h-4 w-4" />
+                        <AlertTitle>ملاحظات عامة على النموذج</AlertTitle>
+                        <AlertDescription className="space-y-1 pt-2 leading-7">
+                          {recruitmentValidation.formErrors.map((issue) => (
+                            <p key={issue}>{issue}</p>
+                          ))}
+                        </AlertDescription>
+                      </Alert>
+                    ) : null}
+
+                    <Alert className="border-slate-200 bg-slate-50">
+                      <Globe className="h-4 w-4" />
+                      <AlertTitle>آلية الانعكاس المباشر</AlertTitle>
+                      <AlertDescription className="leading-7">
+                        يتم حفظ تعريف الحقول في مستند إعدادات واحد، والصفحة
+                        العامة تقرأه مباشرة من Firestore. هذا يجعل الداشبورد
+                        هو محرر النموذج، والصفحة العامة هي مكان التعبئة فقط.
+                      </AlertDescription>
+                    </Alert>
+                  </div>
+
+                  <div className="rounded-[26px] border border-slate-200/80 bg-slate-50/70 p-5">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                      Snapshot
+                    </div>
+
+                    <div className="mt-5 space-y-3">
+                      <div className="rounded-2xl border border-white/90 bg-white px-4 py-3 shadow-sm">
+                        <div className="text-xs text-slate-500">الحقول الحالية</div>
+                        <div className="mt-2 text-xl font-semibold text-slate-950">
+                          {formatNumberEN(recruitment.fields.length)}
+                        </div>
+                      </div>
+
+                      <div className="rounded-2xl border border-white/90 bg-white px-4 py-3 shadow-sm">
+                        <div className="text-xs text-slate-500">حقول Select</div>
+                        <div className="mt-2 text-xl font-semibold text-slate-950">
+                          {formatNumberEN(selectRecruitmentFieldsCount)}
+                        </div>
+                      </div>
+
+                      <div className="rounded-2xl border border-white/90 bg-white px-4 py-3 shadow-sm">
+                        <div className="text-xs text-slate-500">ملاحظات تحتاج مراجعة</div>
+                        <div className="mt-2 text-xl font-semibold text-slate-950">
+                          {formatNumberEN(recruitmentIssuesCount)}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </SettingsSectionCard>
+
+              <SettingsSectionCard
+                icon={Type}
+                eyebrow="الوحدة 02"
+                title="محرر الحقول"
+                description="أضف الحقول الأساسية من هنا، ثم عدّل عنوان الحقل ونوعه وخصائصه. الترتيب الحالي هو نفسه الذي سيظهر للزائر في الصفحة العامة."
+              >
+                <div className="space-y-5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => addRecruitmentField("text")}
+                    >
+                      <Plus className="ml-2 h-4 w-4" />
+                      حقل نصي
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => addRecruitmentField("number")}
+                    >
+                      <Plus className="ml-2 h-4 w-4" />
+                      حقل رقمي
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => addRecruitmentField("date")}
+                    >
+                      <Plus className="ml-2 h-4 w-4" />
+                      حقل تاريخ
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => addRecruitmentField("select")}
+                    >
+                      <Plus className="ml-2 h-4 w-4" />
+                      قائمة خيارات
+                    </Button>
+                  </div>
+
+                  {recruitment.fields.length ? (
+                    <div className="space-y-4">
+                      {recruitment.fields.map((field, index) => {
+                        const fieldIssues =
+                          recruitmentValidation.fieldErrors[field.id] || [];
+
+                        return (
+                          <div
+                            key={field.id}
+                            className="rounded-[26px] border border-slate-200/80 bg-slate-50/70 p-5 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.24)]"
+                          >
+                            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                              <div className="space-y-3">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <Badge variant="outline" className="rounded-full">
+                                    الحقل {formatNumberEN(index + 1)}
+                                  </Badge>
+                                  <Badge
+                                    variant="outline"
+                                    className="rounded-full border-sky-200 bg-sky-50 text-sky-700"
+                                  >
+                                    {getRecruitmentFieldTypeLabel(field.type)}
+                                  </Badge>
+                                  {field.type === "number" ? (
+                                    <Badge
+                                      variant="outline"
+                                      className="rounded-full border-amber-200 bg-amber-50 text-amber-700"
+                                    >
+                                      {getRecruitmentNumberModeLabel(
+                                        field.numberMode || "default"
+                                      )}
+                                    </Badge>
+                                  ) : null}
+                                  <Badge
+                                    variant="outline"
+                                    className={cn(
+                                      "rounded-full",
+                                      field.required
+                                        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                        : "border-slate-200 bg-white text-slate-500"
+                                    )}
+                                  >
+                                    {field.required ? "مطلوب" : "اختياري"}
+                                  </Badge>
+                                </div>
+
+                                <div>
+                                  <div className="text-lg font-semibold text-slate-950">
+                                    {field.label || "حقل بدون عنوان"}
+                                  </div>
+                                  <div className="mt-1 text-sm leading-7 text-slate-500">
+                                    {getRecruitmentFieldHint(field)}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="icon"
+                                  onClick={() =>
+                                    moveRecruitmentFieldBy(field.id, "up")
+                                  }
+                                  disabled={index === 0}
+                                  title="نقل للأعلى"
+                                >
+                                  <ArrowUp className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="icon"
+                                  onClick={() =>
+                                    moveRecruitmentFieldBy(field.id, "down")
+                                  }
+                                  disabled={index === recruitment.fields.length - 1}
+                                  title="نقل للأسفل"
+                                >
+                                  <ArrowDown className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="destructive"
+                                  size="icon"
+                                  onClick={() => removeRecruitmentField(field.id)}
+                                  title="حذف الحقل"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </div>
+
+                            <div className="mt-5 grid gap-5 md:grid-cols-2">
+                              <SettingsField
+                                label="عنوان الحقل"
+                                description="الاسم الظاهر للمتقدّم في الصفحة العامة."
+                                value={field.label}
+                                onChange={(value) =>
+                                  updateRecruitmentField(field.id, {
+                                    label: value,
+                                  })
+                                }
+                                placeholder="مثال: الاسم"
+                              />
+
+                              <SettingsSelectField
+                                label="نوع الحقل"
+                                description="حدد نوع الإدخال المناسب لهذا الحقل."
+                              >
+                                <Select
+                                  value={field.type}
+                                  onValueChange={(value) =>
+                                    updateRecruitmentField(field.id, {
+                                      type: value as RecruitmentFieldType,
+                                    })
+                                  }
+                                >
+                                  <SelectTrigger className="h-12 rounded-xl border-slate-200 bg-white shadow-none">
+                                    <SelectValue placeholder="اختر النوع" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="text">نصي</SelectItem>
+                                    <SelectItem value="email">
+                                      بريد إلكتروني
+                                    </SelectItem>
+                                    <SelectItem value="number">رقمي</SelectItem>
+                                    <SelectItem value="date">تاريخ</SelectItem>
+                                    <SelectItem value="select">قائمة</SelectItem>
+                                    <SelectItem value="textarea">
+                                      نص طويل
+                                    </SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </SettingsSelectField>
+
+                              {field.type !== "date" ? (
+                                <SettingsField
+                                  label="Placeholder"
+                                  description="نص إرشادي داخل الحقل عند الحاجة."
+                                  value={field.placeholder || ""}
+                                  onChange={(value) =>
+                                    updateRecruitmentField(field.id, {
+                                      placeholder: value,
+                                    })
+                                  }
+                                  placeholder="مثال: اكتب الإجابة"
+                                />
+                              ) : (
+                                <div className="space-y-3">
+                                  <Label className="text-[13px] font-semibold text-slate-900">
+                                    Placeholder
+                                  </Label>
+                                  <div className="rounded-[20px] border border-slate-200 bg-slate-50/70 px-4 py-4 text-sm leading-7 text-slate-500">
+                                    حقول التاريخ تستخدم Date Picker مباشر، لذلك
+                                    لا يظهر الـ Placeholder عادة في الواجهة.
+                                  </div>
+                                </div>
+                              )}
+
+                              <div className="space-y-3">
+                                <Label className="text-[13px] font-semibold text-slate-900">
+                                  خصائص الحقل
+                                </Label>
+
+                                <div className="rounded-[20px] border border-slate-200 bg-white px-4 py-4">
+                                  <div className="flex items-center justify-between gap-4">
+                                    <div className="space-y-1">
+                                      <div className="font-semibold text-slate-900">
+                                        هل الحقل مطلوب؟
+                                      </div>
+                                      <p className="text-sm leading-6 text-slate-500">
+                                        إذا كان مطلوبًا فلن يتم إرسال الطلب قبل
+                                        تعبئته.
+                                      </p>
+                                    </div>
+
+                                    <Checkbox
+                                      checked={field.required}
+                                      onCheckedChange={(checked) =>
+                                        updateRecruitmentField(field.id, {
+                                          required: Boolean(checked),
+                                        })
+                                      }
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {field.type === "number" ? (
+                              <div className="mt-5">
+                                <SettingsSelectField
+                                  label="نمط الرقم"
+                                  description="اختر ما إذا كان هذا الحقل رقمًا عامًا أو رقم جوال."
+                                >
+                                  <Select
+                                    value={field.numberMode || "default"}
+                                    onValueChange={(value) =>
+                                      updateRecruitmentField(field.id, {
+                                        numberMode: value as
+                                          | "default"
+                                          | "phone",
+                                      })
+                                    }
+                                  >
+                                    <SelectTrigger className="h-12 rounded-xl border-slate-200 bg-white shadow-none">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="default">
+                                        رقم عادي
+                                      </SelectItem>
+                                      <SelectItem value="phone">
+                                        رقم جوال
+                                      </SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </SettingsSelectField>
+                              </div>
+                            ) : null}
+
+                            {field.type === "select" ? (
+                              <div className="mt-5 space-y-4">
+                                <div className="flex items-center justify-between gap-3">
+                                  <div>
+                                    <div className="text-sm font-semibold text-slate-950">
+                                      خيارات القائمة
+                                    </div>
+                                    <div className="text-sm text-slate-500">
+                                      هذه الخيارات ستظهر كما هي داخل القائمة
+                                      المنسدلة في الصفحة العامة.
+                                    </div>
+                                  </div>
+
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => addRecruitmentOption(field.id)}
+                                  >
+                                    <Plus className="ml-2 h-4 w-4" />
+                                    خيار جديد
+                                  </Button>
+                                </div>
+
+                                <div className="space-y-3">
+                                  {(field.options || []).map((option, optionIndex) => (
+                                    <div
+                                      key={option.id}
+                                      className="flex items-center gap-3 rounded-[20px] border border-slate-200 bg-white px-4 py-3"
+                                    >
+                                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-600">
+                                        {formatNumberEN(optionIndex + 1)}
+                                      </div>
+
+                                      <Input
+                                        value={option.label}
+                                        onChange={(event) =>
+                                          updateRecruitmentOption(
+                                            field.id,
+                                            option.id,
+                                            event.target.value
+                                          )
+                                        }
+                                        placeholder="اكتب اسم الخيار"
+                                        className="h-11 rounded-xl border-slate-200 bg-white shadow-none"
+                                      />
+
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        className="text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+                                        onClick={() =>
+                                          removeRecruitmentOption(
+                                            field.id,
+                                            option.id
+                                          )
+                                        }
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </Button>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : null}
+
+                            {fieldIssues.length ? (
+                              <Alert className="mt-5 border-amber-200 bg-amber-50 text-amber-900">
+                                <CircleAlert className="h-4 w-4" />
+                                <AlertTitle>هذا الحقل يحتاج مراجعة</AlertTitle>
+                                <AlertDescription className="space-y-1 pt-2 leading-7">
+                                  {fieldIssues.map((issue) => (
+                                    <p key={issue}>{issue}</p>
+                                  ))}
+                                </AlertDescription>
+                              </Alert>
+                            ) : null}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="rounded-[26px] border border-dashed border-slate-300 bg-slate-50/80 px-6 py-14 text-center text-slate-500">
+                      أضف أول حقل ليبدأ تكوين نموذج التوظيف العام.
+                    </div>
+                  )}
+                </div>
+              </SettingsSectionCard>
+
+              <SettingsSectionCard
+                icon={Globe}
+                eyebrow="الوحدة 03"
+                title="معاينة الصفحة العامة"
+                description="معاينة سريعة لنفس الحقول التي ستظهر للزائر في صفحة /careers، مع الحفاظ على الترتيب الحالي للنموذج."
+              >
+                {recruitment.fields.length ? (
+                  <div className="rounded-[30px] border border-slate-200/80 bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] p-6 shadow-[0_20px_52px_-40px_rgba(15,23,42,0.25)] sm:p-8">
+                    <div className="flex flex-col gap-2 border-b border-slate-100 pb-6 text-right">
+                      <div className="text-sm font-semibold text-[#8d6700]">
+                        صفحة التوظيف العامة
+                      </div>
+                      <div className="text-2xl font-semibold tracking-tight text-slate-950">
+                        نموذج التقديم كما سيظهر للزائر
+                      </div>
+                      <div className="text-sm leading-7 text-slate-500">
+                        يمكن اختبار ترتيب الحقول والسلوك العام مباشرة من هنا قبل
+                        الحفظ النهائي.
+                      </div>
+                    </div>
+
+                    <div className="mt-8 space-y-8">
+                      <RecruitmentFormFields
+                        idPrefix="recruitment-preview"
+                        fields={recruitment.fields}
+                        values={recruitmentPreviewValues}
+                        onValueChange={(fieldId, value) =>
+                          setRecruitmentPreviewValues((current) => ({
+                            ...current,
+                            [fieldId]: value,
+                          }))
+                        }
+                      />
+
+                      <div className="flex justify-end">
+                        <Button
+                          type="button"
+                          className="h-12 rounded-full bg-[#0f172a] px-8 text-sm font-semibold text-white hover:bg-[#111f38]"
+                          disabled
+                        >
+                          إرسال الطلب
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-[26px] border border-dashed border-slate-300 bg-slate-50/80 px-6 py-14 text-center text-slate-500">
+                    ستظهر المعاينة هنا بعد إضافة الحقول إلى النموذج.
+                  </div>
+                )}
+              </SettingsSectionCard>
+            </div>
+              </>
+            ) : null}
           </TabsContent>
 
           {/* =========================

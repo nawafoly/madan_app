@@ -39,6 +39,7 @@ import {
   Crown,
   BarChart3,
   Home,
+  BriefcaseBusiness,
 } from "lucide-react";
 import { CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
@@ -100,8 +101,16 @@ const menuItems: MenuItem[] = [
 
   {
     icon: MessageSquare,
-    label: "سجل طلبات الاستثمار",
+    label: "طلبات الاستثمار",
     path: "/admin/messages",
+    allow: ["owner", "admin", "staff"],
+    permission: "messages.view",
+  },
+
+  {
+    icon: BriefcaseBusiness,
+    label: "طلبات التوظيف",
+    path: "/admin/recruitment-applications",
     allow: ["owner", "admin", "staff"],
     permission: "messages.view",
   },

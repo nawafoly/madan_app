@@ -8,6 +8,7 @@ export type FileCategory =
   | "contract_original"
   | "contract_signed"
   | "investment_settlement"
+  | "career_attachment"
   | string;
 
 export interface CloudflareFileRecord {
@@ -45,6 +46,7 @@ export interface UploadDocumentInput {
   uploadedBy?: string;
   status?: string;
   version?: number | null;
+  storageFolder?: string;
 }
 
 export interface UploadDocumentResult extends CloudflareFileRecord {
@@ -143,13 +145,28 @@ function sanitizeKeyPart(value: string) {
     .replace(/[^A-Za-z0-9_-]/g, "_");
 }
 
+function sanitizeStorageFolder(value: unknown) {
+  const normalized = String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_")
+    .replace(/[^a-z0-9_-]/g, "");
+
+  return normalized || "attachments";
+}
+
 function expectedUploadPrefix(
   entityType: FileEntityType,
   entityId: string,
-  category: FileCategory
+  category: FileCategory,
+  storageFolder?: string
 ) {
   const safeEntityType = sanitizeKeyPart(entityType);
   const safeEntityId = sanitizeKeyPart(entityId);
+
+  if (category === "career_attachment") {
+    return `careers/${safeEntityId}/${sanitizeStorageFolder(storageFolder)}/`;
+  }
 
   if (category === "contract_original") {
     return `${safeEntityType}s/${safeEntityId}/contracts/original`;
@@ -311,7 +328,12 @@ function normalizeUploadResponse(
     version: input.version ?? null,
   });
 
-  const expectedPrefix = expectedUploadPrefix(input.entityType, input.entityId, input.category);
+  const expectedPrefix = expectedUploadPrefix(
+    input.entityType,
+    input.entityId,
+    input.category,
+    input.storageFolder
+  );
   if (!normalized.filePath.startsWith(expectedPrefix)) {
     throw new Error("Upload failed");
   }
@@ -593,6 +615,7 @@ export async function uploadDocumentToCloudflare(
     if (input.requestId) form.append("requestId", input.requestId);
     if (input.uploadedBy) form.append("uploadedBy", input.uploadedBy);
     if (input.status) form.append("status", input.status);
+    if (input.storageFolder) form.append("storageFolder", input.storageFolder);
     if (input.version !== undefined && input.version !== null) {
       form.append("version", String(input.version));
     }

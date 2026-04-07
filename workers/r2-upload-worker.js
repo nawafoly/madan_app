@@ -146,11 +146,13 @@ async function handleUpload(request, bucket, db) {
   }
 
   const uploadedAt = new Date().toISOString();
+  const storageFolder = normalizeSlug(form.get("storageFolder")) || "attachments";
   const filePath = buildUploadPath({
     entityType,
     entityId,
     category,
     kind,
+    storageFolder,
     fileName: file.name,
     contentType: normalizedType,
   });
@@ -199,6 +201,7 @@ async function handleUpload(request, bucket, db) {
         entityId,
         category,
         kind,
+        storageFolder,
         uploadedAt,
         originalFileName: sanitizeFileName(file.name),
       },
@@ -730,9 +733,25 @@ function mapDbRowToFileRecord(row, requestUrl) {
   };
 }
 
-function buildUploadPath({ entityType, entityId, category, kind, fileName, contentType }) {
+function buildUploadPath({
+  entityType,
+  entityId,
+  category,
+  kind,
+  storageFolder,
+  fileName,
+  contentType,
+}) {
   const safeEntityType = `${entityType}s`;
   const safeEntityId = entityId;
+
+  if (category === "career_attachment") {
+    const safeFolder = normalizeSlug(storageFolder) || "attachments";
+    const safeName = sanitizeFileName(fileName || "attachment");
+    const ext = safeName.includes(".") ? "" : inferExtensionFromType(contentType);
+    const stamp = Date.now();
+    return `careers/${safeEntityId}/${safeFolder}/${stamp}-${safeName}${ext}`;
+  }
 
   if (category === "contract_original" && kind === "original") {
     return `${safeEntityType}/${safeEntityId}/contracts/original.pdf`;

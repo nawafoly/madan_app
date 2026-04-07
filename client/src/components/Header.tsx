@@ -23,6 +23,7 @@ export default function Header() {
       currentPath === "/" ||
       currentPath === "/about" ||
       currentPath === "/projects" ||
+      currentPath === "/careers" ||
       currentPath.startsWith("/projects/")
     );
   }, [currentPath]);
@@ -42,12 +43,14 @@ export default function Header() {
           { label: "الرئيسية", href: "/" },
           { label: "المشاريع", href: "/projects" },
           { label: "عن معدن", href: "/about" },
+          { label: "التوظيف", href: "/careers" },
           { label: "تواصل معنا", href: "/contact" },
         ]
       : [
           { label: "Home", href: "/" },
           { label: "Projects", href: "/projects" },
           { label: "About", href: "/about" },
+          { label: "Careers", href: "/careers" },
           { label: "Contact", href: "/contact" },
         ];
 
@@ -81,7 +84,7 @@ export default function Header() {
       return currentPath === href || currentPath.startsWith(href + "/");
     };
 
-    const found = navLinks.find(link => isActive(link.href));
+    const found = navLinks.find((link) => isActive(link.href));
     return found?.href ?? "";
   }, [currentPath, navLinks]);
 
@@ -129,7 +132,7 @@ export default function Header() {
                 className="rsg-burger lg:hidden"
                 aria-label="Open menu"
                 aria-expanded={isMobileMenuOpen}
-                onClick={() => setIsMobileMenuOpen(value => !value)}
+                onClick={() => setIsMobileMenuOpen((value) => !value)}
               >
                 <span />
                 <span />
@@ -161,13 +164,13 @@ export default function Header() {
 
             <nav className="rsg-nav__links rsg-nav__slot rsg-nav__slot--center">
               <div className="flex items-center justify-center gap-5">
-                {linksLeft.map(link => {
+                {linksLeft.map((link) => {
                   const isActive = activeHref === link.href;
 
                   return (
                     <Link key={link.href} href={link.href}>
                       <span
-                        ref={el => {
+                        ref={(el) => {
                           linkRefs.current[link.href] = el;
                         }}
                         className={`rsg-nav__link ${isActive ? "is-active" : ""}`}
@@ -186,13 +189,13 @@ export default function Header() {
                   />
                 </Link>
 
-                {linksRight.map(link => {
+                {linksRight.map((link) => {
                   const isActive = activeHref === link.href;
 
                   return (
                     <Link key={link.href} href={link.href}>
                       <span
-                        ref={el => {
+                        ref={(el) => {
                           linkRefs.current[link.href] = el;
                         }}
                         className={`rsg-nav__link ${isActive ? "is-active" : ""}`}
@@ -209,9 +212,7 @@ export default function Header() {
               {!isAuthenticated ? (
                 !isLoginRoute ? (
                   <Link href="/login">
-                    <Button
-                      className={`hidden md:inline-flex rsg-cta ${navBtnClass}`}
-                    >
+                    <Button className={`hidden md:inline-flex rsg-cta ${navBtnClass}`}>
                       {language === "ar" ? "تسجيل الدخول" : "Login"}
                     </Button>
                   </Link>
@@ -240,7 +241,7 @@ export default function Header() {
           {isMobileMenuOpen ? (
             <div className="mt-3 animate-slide-up p-4 lg:hidden rsg-card rsg-card--tight">
               <nav className="flex flex-col gap-2">
-                {navLinks.map(link => {
+                {navLinks.map((link) => {
                   const isActive = activeHref === link.href;
 
                   return (
