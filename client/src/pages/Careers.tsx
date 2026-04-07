@@ -218,7 +218,7 @@ export default function Careers() {
               playsInline
               preload="auto"
             >
-              <source src="/about-hero.mp4" type="video/mp4" />
+              <source src="/about-hero1.mp4" type="video/mp4" />
             </video>
           </div>
 
@@ -239,11 +239,6 @@ export default function Careers() {
         <section className="relative py-16 sm:py-20 lg:py-24">
           <div className="container px-4 sm:px-6">
             <div className="mx-auto max-w-4xl text-center">
-
-              <h1 className="mt-6 text-4xl font-semibold leading-tight text-slate-950 sm:text-5xl lg:text-[3.4rem]">
-                انضم إلى فريق معدن
-              </h1>
-
             </div>
           </div>
         </section>
