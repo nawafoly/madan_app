@@ -1043,7 +1043,7 @@ export default function ProjectsPage() {
           subline: "فرصة استثمارية نشطة",
           heroCaption:
             "العائد الظاهر هنا هو أول عنصر يجب أن يلتقط عين المستثمر عند تقييم الفرصة.",
-          ctaLabel: "ابدأ بالاستثمار",
+          ctaLabel: "التفاصيل",
           ctaClass:
             "bg-slate-900 text-white shadow-[0_18px_40px_-24px_rgba(15,23,42,0.55)] hover:bg-slate-800",
           noteLabel: "جاهز للاستثمار",
@@ -1608,7 +1608,6 @@ export default function ProjectsPage() {
           <div className="space-y-2">
             <div className="flex items-center justify-between text-sm">
               <span className="text-muted-foreground">التقدم</span>
-
               <span className="inline-flex items-center gap-2 font-semibold">
                 <span
                   className="h-2 w-2 rounded-full"

@@ -12,29 +12,14 @@ import { Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { auth, db } from "@/_core/firebase";
-import { useAuth } from "@/_core/hooks/useAuth";
+import { getHomePathForUser, useAuth } from "@/_core/hooks/useAuth";
 import {
   AUDIT_ACTIONS,
   auditedSetDoc,
   buildAuditSource,
   logAuditEvent,
 } from "@/lib/auditLog";
-
-type AppRole = "client" | "owner" | "admin" | "accountant" | "staff";
 type AuthMode = "login" | "register";
-
-function homeForRole(role: AppRole) {
-  if (
-    role === "owner" ||
-    role === "admin" ||
-    role === "accountant" ||
-    role === "staff"
-  ) {
-    return "/dashboard";
-  }
-
-  return "/client/dashboard";
-}
 
 function FieldLabel({ children }: { children: ReactNode }) {
   return (
@@ -97,8 +82,7 @@ export default function LoginPage() {
   useEffect(() => {
     if (loading || !user) return;
 
-    const role = ((user as any).role ?? "client") as AppRole;
-    const target = homeForRole(role);
+    const target = getHomePathForUser(user);
 
     if (location === target) return;
     setLocation(target);

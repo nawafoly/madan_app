@@ -612,7 +612,7 @@ export default function AdminDashboard() {
     getLinkedUserDisplayName(
       row,
       userIdentityIndex,
-      "ط¹ظ…ظٹظ„ ط؛ظٹط± ظ…ط­ط¯ط¯"
+      "عميل غير محدد"
     );
 
   const approvedInvestments = useMemo(

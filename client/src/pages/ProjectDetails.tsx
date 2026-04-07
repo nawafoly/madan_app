@@ -229,14 +229,36 @@ function isMilestoneDone(status: any) {
   );
 }
 
-type Attachment = { name?: string; url?: string; externalUrl?: string };
+type Attachment = {
+  name?: string;
+  title?: string;
+  label?: string;
+  fileName?: string;
+  url?: string;
+  fileUrl?: string;
+  href?: string;
+  link?: string;
+  externalUrl?: string;
+  externalLink?: string;
+};
 type Milestone = {
   title?: string;
+  name?: string;
+  label?: string;
   date?: string;
+  state?: string;
   status?: string;
   description?: string;
+  details?: string;
 };
-type Faq = { q?: string; a?: string };
+type Faq = {
+  q?: string;
+  a?: string;
+  question?: string;
+  answer?: string;
+  title?: string;
+  description?: string;
+};
 
 type ProgressMode = "funding" | "milestones" | "hybrid";
 
@@ -352,6 +374,217 @@ function getAttachmentKind(attachment: Attachment) {
   if (/\.(xls|xlsx|csv)(\?|$)/.test(source)) return "Sheet";
   if (/\.(jpg|jpeg|png|webp|gif)(\?|$)/.test(source)) return "صورة";
   return "ملف";
+}
+
+function pickTextValue(...values: unknown[]) {
+  for (const value of values) {
+    const normalized = String(value ?? "").trim();
+    if (normalized) return normalized;
+  }
+  return "";
+}
+
+function pickNumberValue(...values: unknown[]) {
+  for (const value of values) {
+    if (value == null || value === "") continue;
+    const normalized = Number(value);
+    if (Number.isFinite(normalized)) return normalized;
+  }
+  return 0;
+}
+
+function normalizeStringList(...sources: unknown[]) {
+  const values: string[] = [];
+
+  for (const source of sources) {
+    if (!source) continue;
+
+    if (Array.isArray(source)) {
+      source.forEach((item) => {
+        if (typeof item === "string") {
+          const normalized = item.trim();
+          if (normalized) values.push(normalized);
+          return;
+        }
+
+        if (item && typeof item === "object") {
+          const normalized = pickTextValue(
+            (item as any).title,
+            (item as any).label,
+            (item as any).name,
+            (item as any).descriptionAr,
+            (item as any).description,
+            (item as any).text,
+            (item as any).value
+          );
+          if (normalized) values.push(normalized);
+        }
+      });
+      continue;
+    }
+
+    const normalized = String(source).trim();
+    if (normalized) values.push(normalized);
+  }
+
+  return Array.from(new Set(values));
+}
+
+function normalizeImageCollection(...sources: unknown[]) {
+  const images: string[] = [];
+
+  for (const source of sources) {
+    if (!source) continue;
+
+    if (Array.isArray(source)) {
+      source.forEach((item) => {
+        if (typeof item === "string") {
+          const normalized = normalizeCover(item);
+          if (normalized) images.push(normalized);
+          return;
+        }
+
+        if (item && typeof item === "object") {
+          const normalized = normalizeCover(
+            pickTextValue(
+              (item as any).url,
+              (item as any).src,
+              (item as any).image,
+              (item as any).fileUrl,
+              (item as any).downloadUrl,
+              (item as any).path
+            )
+          );
+          if (normalized) images.push(normalized);
+        }
+      });
+      continue;
+    }
+
+    const normalized = normalizeCover(String(source));
+    if (normalized) images.push(normalized);
+  }
+
+  return Array.from(new Set(images));
+}
+
+function normalizeAttachmentList(...sources: unknown[]): Attachment[] {
+  const attachments: Attachment[] = [];
+
+  for (const source of sources) {
+    if (!Array.isArray(source)) continue;
+
+    source.forEach((item, index) => {
+      if (typeof item === "string") {
+        const link = item.trim();
+        if (!link) return;
+        attachments.push({
+          name: `مرفق ${attachments.length + index + 1}`,
+          url: link,
+        });
+        return;
+      }
+
+      if (!item || typeof item !== "object") return;
+
+      const attachment: Attachment = {
+        name: pickTextValue(
+          (item as any).name,
+          (item as any).title,
+          (item as any).label,
+          (item as any).fileName
+        ),
+        url: pickTextValue(
+          (item as any).url,
+          (item as any).fileUrl,
+          (item as any).href,
+          (item as any).link,
+          (item as any).downloadUrl,
+          (item as any).path
+        ),
+        externalUrl: pickTextValue(
+          (item as any).externalUrl,
+          (item as any).externalLink,
+          (item as any).externalHref
+        ),
+      };
+
+      if (attachment.name || attachment.url || attachment.externalUrl) {
+        attachments.push(attachment);
+      }
+    });
+  }
+
+  return attachments;
+}
+
+function normalizeMilestones(...sources: unknown[]): Milestone[] {
+  for (const source of sources) {
+    if (!Array.isArray(source)) continue;
+
+    const items = source
+      .map((item) => {
+        if (!item || typeof item !== "object") return null;
+
+        const normalized: Milestone = {
+          title: pickTextValue(
+            (item as any).title,
+            (item as any).name,
+            (item as any).label
+          ),
+          date: pickTextValue((item as any).date, (item as any).at),
+          status: pickTextValue((item as any).status, (item as any).state),
+          description: pickTextValue(
+            (item as any).description,
+            (item as any).details,
+            (item as any).summary
+          ),
+        };
+
+        return normalized.title ||
+          normalized.date ||
+          normalized.status ||
+          normalized.description
+          ? normalized
+          : null;
+      })
+      .filter(Boolean) as Milestone[];
+
+    if (items.length > 0) return items;
+  }
+
+  return [];
+}
+
+function normalizeFaqList(...sources: unknown[]): Faq[] {
+  for (const source of sources) {
+    if (!Array.isArray(source)) continue;
+
+    const items = source
+      .map((item) => {
+        if (!item || typeof item !== "object") return null;
+
+        const normalized: Faq = {
+          q: pickTextValue(
+            (item as any).q,
+            (item as any).question,
+            (item as any).title
+          ),
+          a: pickTextValue(
+            (item as any).a,
+            (item as any).answer,
+            (item as any).description
+          ),
+        };
+
+        return normalized.q || normalized.a ? normalized : null;
+      })
+      .filter(Boolean) as Faq[];
+
+    if (items.length > 0) return items;
+  }
+
+  return [];
 }
 
 export default function ProjectDetails() {
@@ -489,7 +722,93 @@ export default function ProjectDetails() {
           return;
         }
 
-        setProject({ id: snap.id, ...(snap.data() as any) });
+        const raw = snap.data() as any;
+        setProject({
+          id: snap.id,
+          ...raw,
+          titleAr:
+            pickTextValue(raw?.titleAr, raw?.titleEn, raw?.title, raw?.name) ||
+            raw?.titleAr,
+          locationAr:
+            pickTextValue(raw?.locationAr, raw?.locationEn, raw?.location) ||
+            raw?.locationAr,
+          projectType: raw?.projectType || raw?.category || raw?.type,
+          status: raw?.status || raw?.projectStatus,
+          coverImage:
+            pickTextValue(raw?.coverImage, raw?.image) || raw?.coverImage,
+          paymentScheduleAr:
+            pickTextValue(
+              raw?.paymentScheduleAr,
+              raw?.paymentSchedule,
+              raw?.distributionScheduleAr,
+              raw?.distributionSchedule
+            ) || raw?.paymentScheduleAr,
+          risksAr:
+            pickTextValue(
+              raw?.risksAr,
+              raw?.risks,
+              raw?.riskDisclosureAr,
+              raw?.riskDisclosure
+            ) || raw?.risksAr,
+          annualReturn:
+            pickNumberValue(
+              raw?.annualReturn,
+              raw?.investmentReturn,
+              raw?.returnPercent,
+              raw?.annualYield
+            ) || raw?.annualReturn,
+          duration:
+            pickNumberValue(
+              raw?.durationMonths,
+              raw?.duration,
+              raw?.durationInMonths
+            ) || raw?.duration,
+          minInvestment:
+            pickNumberValue(raw?.minInvestment, raw?.minimumInvestment) ||
+            raw?.minInvestment,
+          targetAmount:
+            pickNumberValue(raw?.targetAmount, raw?.goalAmount) ||
+            raw?.targetAmount,
+          currentAmount:
+            pickNumberValue(
+              raw?.currentAmount,
+              raw?.raisedAmount,
+              raw?.collectedAmount
+            ) || raw?.currentAmount,
+          gallery:
+            Array.isArray(raw?.gallery) && raw.gallery.length > 0
+              ? raw.gallery
+              : Array.isArray(raw?.galleryImages) && raw.galleryImages.length > 0
+                ? raw.galleryImages
+                : Array.isArray(raw?.images)
+                  ? raw.images
+                  : raw?.gallery,
+          attachments:
+            Array.isArray(raw?.attachments) && raw.attachments.length > 0
+              ? raw.attachments
+              : Array.isArray(raw?.attachmentLinks) &&
+                  raw.attachmentLinks.length > 0
+                ? raw.attachmentLinks
+                : Array.isArray(raw?.files)
+                  ? raw.files
+                  : raw?.attachments,
+          faq:
+            Array.isArray(raw?.faq) && raw.faq.length > 0
+              ? raw.faq
+              : Array.isArray(raw?.faqs)
+                ? raw.faqs
+                : raw?.faq,
+          highlights:
+            Array.isArray(raw?.highlights) && raw.highlights.length > 0
+              ? raw.highlights
+              : Array.isArray(raw?.features) && raw.features.length > 0
+                ? raw.features
+                : Array.isArray(raw?.advantages) && raw.advantages.length > 0
+                  ? raw.advantages
+                  : Array.isArray(raw?.benefits)
+                    ? raw.benefits
+                    : raw?.highlights,
+        });
       } catch (e) {
         console.error(e);
         toast.error("فشل تحميل المشروع");
@@ -505,7 +824,10 @@ export default function ProjectDetails() {
   ========================= */
   const blockedReason = useMemo(() => {
     if (!project) return null;
-    const isVip = project.projectType === "vip_exclusive";
+    const isVip =
+      String(project.projectType || project.category || project.type || "")
+        .trim()
+        .toLowerCase() === "vip_exclusive";
 
     if (flags.maintenanceMode) return "maintenance";
     if (flags.hideVipProjects && isVip) return "vip_hidden";
@@ -520,47 +842,51 @@ export default function ProjectDetails() {
 
   // Optional sections (render only if present)
   const gallery: string[] = useMemo(() => {
-    const raw = project?.gallery;
-    if (!raw) return [];
-    if (Array.isArray(raw))
-      return raw.map(x => normalizeCover(String(x || ""))).filter(Boolean);
-    return [];
-  }, [project?.gallery]);
+    return normalizeImageCollection(
+      project?.gallery,
+      project?.galleryImages,
+      project?.images
+    );
+  }, [project?.gallery, project?.galleryImages, project?.images]);
 
   const attachments: Attachment[] = useMemo(() => {
-    const raw = project?.attachments;
-    if (!raw) return [];
-    if (Array.isArray(raw)) return raw as Attachment[];
-    return [];
-  }, [project?.attachments]);
+    return normalizeAttachmentList(
+      project?.attachments,
+      project?.attachmentLinks,
+      project?.files
+    );
+  }, [project?.attachments, project?.attachmentLinks, project?.files]);
 
   const milestones: Milestone[] = useMemo(() => {
-    const raw = project?.milestones;
-    if (!raw) return [];
-    if (Array.isArray(raw)) return raw as Milestone[];
-    return [];
-  }, [project?.milestones]);
+    return normalizeMilestones(
+      project?.milestones,
+      project?.timeline,
+      project?.phases
+    );
+  }, [project?.milestones, project?.timeline, project?.phases]);
 
   const faq: Faq[] = useMemo(() => {
-    const raw = project?.faq;
-    if (!raw) return [];
-    if (Array.isArray(raw)) return raw as Faq[];
-    return [];
-  }, [project?.faq]);
+    return normalizeFaqList(project?.faq, project?.faqs);
+  }, [project?.faq, project?.faqs]);
 
   const highlights: string[] = useMemo(() => {
-    const raw = project?.highlights;
-    if (!raw) return [];
-    if (Array.isArray(raw))
-      return raw.map(x => String(x || "").trim()).filter(Boolean);
-    return [];
-  }, [project?.highlights]);
+    return normalizeStringList(
+      project?.highlights,
+      project?.features,
+      project?.advantages,
+      project?.benefits
+    );
+  }, [project?.highlights, project?.features, project?.advantages, project?.benefits]);
 
   /** =========================
    * ✅ NEW Progress Calculation (funding + milestones + hybrid)
    ========================= */
-  const targetAmount = safeNumber(project?.targetAmount);
-  const currentAmount = safeNumber(project?.currentAmount);
+  const targetAmount = pickNumberValue(project?.targetAmount, project?.goalAmount);
+  const currentAmount = pickNumberValue(
+    project?.currentAmount,
+    project?.raisedAmount,
+    project?.collectedAmount
+  );
 
   const fundingProgress = useMemo(() => {
     if (!targetAmount) return 0;
@@ -608,34 +934,60 @@ export default function ProjectDetails() {
 
   // ✅ HERO MEDIA: صورة أولاً، وإذا ما فيه يرجع للفيديو
   const coverImage = useMemo(
-    () => normalizeCover(project?.coverImage),
-    [project?.coverImage]
+    () => normalizeCover(pickTextValue(project?.coverImage, project?.image)),
+    [project?.coverImage, project?.image]
   );
 
   const heroVideo =
     project?.videoUrl ||
     "https://cdn.coverr.co/videos/coverr-modern-architecture-1604/1080p.mp4";
 
+  const projectTypeKey = String(
+    project?.projectType || project?.category || project?.type || ""
+  )
+    .trim()
+    .toLowerCase();
+  const projectStatusValue = String(
+    project?.status || project?.projectStatus || ""
+  )
+    .trim();
+
   // ✅ FIX: labels ممكن تكون {ar,en} فلازم نحولها لنص
-  const typeLabel = project?.projectType
+  const typeLabel = projectTypeKey
     ? pickLabel(
-        labels.projectTypes[project.projectType],
+        labels.projectTypes[projectTypeKey],
         "ar",
-        project.projectType
+        projectTypeKey
       )
     : "";
 
-  const statusLabel = project?.status
-    ? pickLabel(labels.projectStatuses[project.status], "ar", project.status)
+  const statusLabel = projectStatusValue
+    ? pickLabel(
+        labels.projectStatuses[projectStatusValue],
+        "ar",
+        projectStatusValue
+      )
     : "";
 
   const overviewSource = useMemo(
     () =>
-      project?.overviewAr ||
-      project?.descriptionAr ||
-      project?.description ||
+      pickTextValue(
+        project?.overviewAr,
+        project?.descriptionAr,
+        project?.overview,
+        project?.description,
+        project?.summaryAr,
+        project?.descriptionEn
+      ) ||
       "",
-    [project?.overviewAr, project?.descriptionAr, project?.description]
+    [
+      project?.overviewAr,
+      project?.descriptionAr,
+      project?.overview,
+      project?.description,
+      project?.summaryAr,
+      project?.descriptionEn,
+    ]
   );
 
   const overviewContent = useMemo(
@@ -643,26 +995,67 @@ export default function ProjectDetails() {
     [overviewSource]
   );
 
-  const durationValue = safeNumber(project?.duration);
+  const fullDescriptionText = useMemo(
+    () =>
+      pickTextValue(
+        project?.descriptionAr,
+        project?.overviewAr,
+        project?.overview,
+        project?.description,
+        project?.summaryAr,
+        project?.descriptionEn
+      ),
+    [
+      project?.descriptionAr,
+      project?.overviewAr,
+      project?.overview,
+      project?.description,
+      project?.summaryAr,
+      project?.descriptionEn,
+    ]
+  );
+  const showFullDescription =
+    Boolean(fullDescriptionText) &&
+    (fullDescriptionText !== overviewContent.lead ||
+      fullDescriptionText.includes("\n") ||
+      fullDescriptionText.length > 220);
+
+  const durationValue = pickNumberValue(
+    project?.durationMonths,
+    project?.duration,
+    project?.durationInMonths
+  );
   const durationText =
     durationValue > 0 ? `${formatNumberEN(durationValue)} شهر` : "يحدد لاحقًا";
+  const annualReturnValue = pickNumberValue(
+    project?.annualReturn,
+    project?.investmentReturn,
+    project?.returnPercent,
+    project?.annualYield
+  );
   const annualReturnText =
-    safeNumber(project?.annualReturn) > 0
-      ? formatPercentEN(safeNumber(project?.annualReturn), {
+    annualReturnValue > 0
+      ? formatPercentEN(annualReturnValue, {
           maximumFractionDigits: 0,
         })
       : "—";
-  const targetAmountText = fmtSAR(project?.targetAmount);
-  const currentAmountText = fmtSAR(project?.currentAmount);
-  const minimumInvestmentText = fmtSAR(project?.minInvestment);
+  const targetAmountText = fmtSAR(targetAmount);
+  const currentAmountText = fmtSAR(currentAmount);
+  const minimumInvestmentValue = pickNumberValue(
+    project?.minInvestment,
+    project?.minimumInvestment
+  );
+  const minimumInvestmentText = fmtSAR(minimumInvestmentValue);
   const remainingAmountText = fmtSAR(Math.max(targetAmount - currentAmount, 0));
   const progressPercentageText = `${progress.toFixed(1)}%`;
   const investorsCountText = formatNumberEN(
-    safeNumber(project?.investorsCount)
+    pickNumberValue(project?.investorsCount, project?.investorCount)
   );
   const projectEndDate =
     project?.plannedEndAt ||
+    project?.plannedEndDate ||
     project?.actualEndAt ||
+    project?.actualEndDate ||
     project?.endDate ||
     project?.endAt ||
     null;
@@ -679,11 +1072,15 @@ export default function ProjectDetails() {
 
     return [
       typeLabel ? `نوع الاستثمار: ${typeLabel}` : "",
-      project?.locationAr || project?.location
-        ? `الموقع: ${project?.locationAr || project?.location}`
+      pickTextValue(project?.locationAr, project?.locationEn, project?.location)
+        ? `الموقع: ${pickTextValue(
+            project?.locationAr,
+            project?.locationEn,
+            project?.location
+          )}`
         : "",
       durationValue > 0 ? `مدة الاستثمار: ${durationText}` : "",
-      safeNumber(project?.minInvestment) > 0
+      minimumInvestmentValue > 0
         ? `الحد الأدنى للمشاركة: ${minimumInvestmentText}`
         : "",
     ].filter(Boolean);
@@ -691,10 +1088,11 @@ export default function ProjectDetails() {
     durationText,
     durationValue,
     minimumInvestmentText,
+    minimumInvestmentValue,
     overviewContent.bullets,
-    project?.location,
     project?.locationAr,
-    project?.minInvestment,
+    project?.locationEn,
+    project?.location,
     typeLabel,
   ]);
 
@@ -740,21 +1138,43 @@ export default function ProjectDetails() {
     "تقارير دورية",
   ] as const;
 
-  const projectStatusKey = String(project?.status || "")
+  const projectStatusKey = String(projectStatusValue || "")
     .trim()
     .toLowerCase();
   const isActiveProject = projectStatusKey === "published";
   const isUpcomingProject = projectStatusKey === "draft";
   const isClosedProject =
     projectStatusKey === "closed" || projectStatusKey === "completed";
-  const projectTitle = project?.titleAr || project?.title || "—";
-  const projectLocation = project?.locationAr || project?.location || "";
+  const projectTitle =
+    pickTextValue(
+      project?.titleAr,
+      project?.titleEn,
+      project?.title,
+      project?.name
+    ) || "—";
+  const projectLocation = pickTextValue(
+    project?.locationAr,
+    project?.locationEn,
+    project?.location
+  );
   const completedStatusLabel = "مكتمل";
+  const paymentScheduleText = pickTextValue(
+    project?.paymentScheduleAr,
+    project?.paymentSchedule,
+    project?.distributionScheduleAr,
+    project?.distributionSchedule
+  );
+  const projectRisksText = pickTextValue(
+    project?.risksAr,
+    project?.risks,
+    project?.riskDisclosureAr,
+    project?.riskDisclosure
+  );
   const projectBusinessId = getProjectBusinessId(project);
   const hasVipTag =
     Boolean(project?.vipOnly) ||
     Boolean(project?.isVip) ||
-    project?.projectType === "vip_exclusive";
+    projectTypeKey === "vip_exclusive";
 
   const completedMedia = useMemo(() => {
     const seen = new Set<string>();
@@ -862,17 +1282,15 @@ export default function ProjectDetails() {
 
   const completedFinalNotes = useMemo(() => {
     const notes = [
-      project?.paymentScheduleAr
-        ? toPastTenseNarrative(project.paymentScheduleAr)
-        : "",
-      project?.risksAr ? toPastTenseNarrative(project.risksAr) : "",
+      paymentScheduleText ? toPastTenseNarrative(paymentScheduleText) : "",
+      projectRisksText ? toPastTenseNarrative(projectRisksText) : "",
       projectBusinessId
         ? `تم حفظ المشروع تحت الرقم المرجعي ${projectBusinessId} ضمن سجل المشاريع المكتملة.`
         : "",
     ].filter(Boolean);
 
     return notes.slice(0, 3);
-  }, [projectBusinessId, project?.paymentScheduleAr, project?.risksAr]);
+  }, [paymentScheduleText, projectBusinessId, projectRisksText]);
 
   const completionContent = useMemo(() => {
     const raw = project?.completionContent;
@@ -1102,7 +1520,7 @@ export default function ProjectDetails() {
         requestId: requestRef.id,
         type: requestType,
         projectId: project?.id || projectId,
-        projectTitle: project?.titleAr || project?.title || "",
+        projectTitle: projectTitle === "â€”" ? "" : projectTitle,
 
         investorUid: user.uid,
         userId: user.uid,
@@ -1119,12 +1537,12 @@ export default function ProjectDetails() {
         note,
 
         projectSnapshot: {
-          titleAr: project?.titleAr || null,
-          title: project?.title || null,
-          status: project?.status || null,
-          minInvestment: project?.minInvestment ?? null,
-          annualReturn: project?.annualReturn ?? null,
-          duration: project?.duration ?? null,
+          titleAr: pickTextValue(project?.titleAr, project?.titleEn, project?.title, project?.name) || null,
+          title: pickTextValue(project?.title, project?.titleEn, project?.titleAr, project?.name) || null,
+          status: projectStatusValue || null,
+          minInvestment: minimumInvestmentValue > 0 ? minimumInvestmentValue : null,
+          annualReturn: annualReturnValue > 0 ? annualReturnValue : null,
+          duration: durationValue > 0 ? durationValue : null,
         },
         userSnapshot: {
           uid: user.uid,
@@ -1155,7 +1573,7 @@ export default function ProjectDetails() {
         },
         message: ({ result }) => `Created ${requestType} ${result}`,
         meta: ({ result }) => ({
-          projectName: project?.titleAr || project?.title || null,
+          projectName: projectTitle === "â€”" ? null : projectTitle,
           amount: requireAmount ? amount : null,
           requestCode: result,
           requestType,
@@ -1628,7 +2046,7 @@ export default function ProjectDetails() {
           {coverImage ? (
             <img
               src={coverImage}
-              alt={project.titleAr || project.title || "Project"}
+              alt={projectTitle === "â€”" ? "Project" : projectTitle}
               className="h-full w-full object-cover opacity-20 mix-blend-screen"
             />
           ) : (
@@ -1671,10 +2089,10 @@ export default function ProjectDetails() {
               {project.titleAr || project.title || "—"}
             </h1>
 
-            {(project.locationAr || project.location) && (
+            {projectLocation && (
               <div className="flex items-center gap-2 text-base text-white/78 md:text-lg">
                 <MapPin className="h-5 w-5" />
-                <span>{project.locationAr || project.location}</span>
+                <span>{projectLocation}</span>
               </div>
             )}
 
@@ -1804,12 +2222,22 @@ export default function ProjectDetails() {
                 </div>
               </CardHeader>
               <CardContent className="grid gap-6 pt-6 lg:grid-cols-[1.1fr_0.9fr]">
-                <div className="rounded-[28px] bg-[#0f172a] p-6 text-white">
+                <div className="space-y-4">
+                  <div className="rounded-[28px] bg-[#0f172a] p-6 text-white">
                   <div className="text-sm text-white/55">الخلاصة التنفيذية</div>
                   <p className="mt-4 text-lg leading-8 text-white/88">
                     {overviewContent.lead ||
                       "لا توجد مقدمة تفصيلية متاحة لهذا المشروع حاليًا."}
                   </p>
+                  </div>
+
+                  {showFullDescription && (
+                    <div className="rounded-[28px] border border-slate-200 bg-slate-50/70 p-6">
+                      <p className="whitespace-pre-line text-base leading-8 text-slate-700">
+                        {fullDescriptionText}
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid gap-3">
@@ -1882,8 +2310,8 @@ export default function ProjectDetails() {
                   <div className="rounded-[28px] border border-slate-200 bg-white p-5">
                     <div className="text-sm text-slate-500">جدول العوائد</div>
                     <div className="mt-3 text-base font-semibold leading-8 text-slate-900">
-                      {project.paymentScheduleAr
-                        ? String(project.paymentScheduleAr)
+                      {paymentScheduleText
+                        ? String(paymentScheduleText)
                         : "سيتم عرض آلية توزيع العوائد هنا عند توفرها في بيانات المشروع."}
                     </div>
                   </div>
@@ -2070,7 +2498,7 @@ export default function ProjectDetails() {
             )}
 
             {/* Risks (optional) */}
-            {project.risksAr && (
+            {projectRisksText && (
               <Card className="border-destructive/20">
                 <CardHeader>
                   <CardTitle className="text-3xl flex items-center gap-2">
@@ -2080,7 +2508,7 @@ export default function ProjectDetails() {
                 </CardHeader>
                 <CardContent>
                   <p className="text-lg text-muted-foreground whitespace-pre-line">
-                    {project.risksAr}
+                    {projectRisksText}
                   </p>
                 </CardContent>
               </Card>

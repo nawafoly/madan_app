@@ -118,6 +118,7 @@ const ROLE_LABELS: Record<string, string> = {
   owner: getOwnerRoleLabel(),
   admin: "مدير",
   accountant: "محاسب",
+  hr: "الموارد البشرية",
   staff: "موظف",
   client: "عميل",
   system: "نظام",

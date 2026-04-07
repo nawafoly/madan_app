@@ -48,7 +48,7 @@ import { Button } from "./ui/button";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { cn } from "@/lib/utils";
 
-type RoleKey = "owner" | "admin" | "accountant" | "staff";
+type RoleKey = "owner" | "admin" | "accountant" | "hr";
 
 type MenuItem = {
   icon: any;
@@ -63,7 +63,7 @@ const menuItems: MenuItem[] = [
     icon: LayoutDashboard,
     label: "لوحة التحكم",
     path: "/dashboard",
-    allow: ["owner", "admin", "accountant", "staff"],
+    allow: ["owner", "admin", "accountant"],
     permission: "dashboard.view",
   },
 
@@ -103,7 +103,7 @@ const menuItems: MenuItem[] = [
     icon: MessageSquare,
     label: "طلبات الاستثمار",
     path: "/admin/messages",
-    allow: ["owner", "admin", "staff"],
+    allow: ["owner", "admin"],
     permission: "messages.view",
   },
 
@@ -111,8 +111,16 @@ const menuItems: MenuItem[] = [
     icon: BriefcaseBusiness,
     label: "طلبات التوظيف",
     path: "/admin/recruitment-applications",
-    allow: ["owner", "admin", "staff"],
-    permission: "messages.view",
+    allow: ["owner", "admin", "hr"],
+    permission: "recruitment.view",
+  },
+
+  {
+    icon: BriefcaseBusiness,
+    label: "إدارة الموظفين",
+    path: "/admin/employees",
+    allow: ["owner", "admin", "hr"],
+    permission: "employees.view",
   },
 
   {

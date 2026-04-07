@@ -1,0 +1,351 @@
+import { buildR2DownloadUrl } from "@/lib/documentUploadService";
+import { formatNumberEN, toDateSafe } from "@/lib/formatters";
+import { resolveUserAccountStatus } from "@/lib/userAccountStatus";
+import {
+  EMPLOYEE_AVATAR_CATEGORY,
+  type EmployeeAvatarDoc,
+  type EmployeeEmploymentStatus,
+  type EmployeeProfileDoc,
+} from "@shared/employee";
+
+const EMPTY_VALUE = "غير محدد";
+
+export type EmployeeProfileUserDoc = EmployeeProfileDoc & {
+  employeeProfile?: EmployeeProfileDoc | null;
+  uid?: string;
+  email?: string | null;
+  displayName?: string | null;
+  name?: string | null;
+  fullName?: string | null;
+  phone?: string | null;
+  mobile?: string | null;
+  phoneNumber?: string | null;
+  title?: string | null;
+  department?: string | null;
+  employeeCode?: string | null;
+  employeeId?: string | null;
+  leaveBalance?: number | string | null;
+  adminNotes?: string | null;
+  startDate?: unknown;
+  hireDate?: unknown;
+  joinedAt?: unknown;
+  active?: unknown;
+  isActive?: unknown;
+  status?: unknown;
+  photoURL?: string | null;
+  profile?: Record<string, any> | null;
+  contact?: Record<string, any> | null;
+  employment?: Record<string, any> | null;
+};
+
+export type EmployeeProfileViewModel = {
+  personal: {
+    name: string;
+    email: string;
+    phone: string;
+    avatar: EmployeeAvatarDoc | null;
+    avatarUrl: string;
+  };
+  employment: {
+    title: string;
+    department: string;
+    startDate: Date | null;
+    leaveBalance: number | null;
+    leaveBalanceLabel: string;
+    statusKey: string;
+    statusLabel: string;
+    statusTone: "success" | "warning" | "muted";
+    employeeCode: string;
+    isActive: boolean;
+  };
+};
+
+function pickText(...values: unknown[]) {
+  for (const value of values) {
+    const text = String(value ?? "").trim();
+    if (text) return text;
+  }
+  return "";
+}
+
+function toNullableNumber(...values: unknown[]) {
+  for (const value of values) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
+function firstDate(...values: unknown[]) {
+  for (const value of values) {
+    const date = toDateSafe(value);
+    if (date) return date;
+  }
+  return null;
+}
+
+function normalizeAvatar(
+  value: unknown,
+  fallbackPhotoUrl?: string | null
+): { avatar: EmployeeAvatarDoc | null; avatarUrl: string } {
+  if (typeof value === "string") {
+    const avatarUrl = String(value || "").trim();
+    return {
+      avatar: avatarUrl ? { fileUrl: avatarUrl } : null,
+      avatarUrl,
+    };
+  }
+
+  if (value && typeof value === "object") {
+    const raw = value as Record<string, any>;
+    const filePath = pickText(raw.filePath, raw.path);
+    const fileUrl = pickText(
+      raw.fileUrl,
+      raw.url,
+      raw.photoURL,
+      filePath ? buildR2DownloadUrl(filePath, false) : ""
+    );
+
+    const avatar: EmployeeAvatarDoc = {
+      id: pickText(raw.id) || null,
+      fileName: pickText(raw.fileName, raw.name) || null,
+      filePath: filePath || null,
+      fileUrl: fileUrl || null,
+      contentType: pickText(raw.contentType, raw.type) || null,
+      fileSize: toNullableNumber(raw.fileSize, raw.size),
+      uploadedAt: raw.uploadedAt ?? null,
+    };
+
+    if (avatar.fileUrl || avatar.filePath) {
+      return {
+        avatar,
+        avatarUrl: avatar.fileUrl || "",
+      };
+    }
+  }
+
+  const normalizedFallback = String(fallbackPhotoUrl || "").trim();
+  return {
+    avatar: normalizedFallback ? { fileUrl: normalizedFallback } : null,
+    avatarUrl: normalizedFallback,
+  };
+}
+
+function normalizeEmploymentStatus(input: {
+  rawStatus: unknown;
+  isActive: boolean;
+}): {
+  key: string;
+  label: string;
+  tone: "success" | "warning" | "muted";
+} {
+  const normalized = String(input.rawStatus || "")
+    .trim()
+    .toLowerCase();
+
+  const resolved =
+    normalized ||
+    (input.isActive ? "active" : "inactive");
+
+  const map: Record<
+    string,
+    {
+      label: string;
+      tone: "success" | "warning" | "muted";
+    }
+  > = {
+    active: { label: "على رأس العمل", tone: "success" },
+    probation: { label: "فترة تجربة", tone: "warning" },
+    on_leave: { label: "في إجازة", tone: "warning" },
+    onleave: { label: "في إجازة", tone: "warning" },
+    inactive: { label: "غير نشط", tone: "muted" },
+    suspended: { label: "موقوف", tone: "muted" },
+    terminated: { label: "منتهي الارتباط الوظيفي", tone: "muted" },
+  };
+
+  const matched = map[resolved];
+  if (matched) {
+    return {
+      key: resolved,
+      label: matched.label,
+      tone: matched.tone,
+    };
+  }
+
+  return {
+    key: resolved || "unknown",
+    label: String(input.rawStatus || EMPTY_VALUE).trim() || EMPTY_VALUE,
+    tone: input.isActive ? "success" : "muted",
+  };
+}
+
+export function normalizeEmployeeProfile(
+  source: EmployeeProfileUserDoc | null | undefined,
+  authFallback?: {
+    displayName?: string | null;
+    email?: string | null;
+    photoURL?: string | null;
+  }
+): EmployeeProfileViewModel {
+  const user = source || {};
+  const employeeProfile = user.employeeProfile || {};
+  const personal = (employeeProfile.personal || user.personal || {}) as Record<
+    string,
+    any
+  >;
+  const employment = (employeeProfile.employment || user.employment || {}) as Record<
+    string,
+    any
+  >;
+  const accountStatus = resolveUserAccountStatus(user);
+
+  const name =
+    pickText(
+      user.displayName,
+      user.name,
+      user.fullName,
+      user.profile?.name,
+      user.profile?.displayName,
+      authFallback?.displayName
+    ) || EMPTY_VALUE;
+
+  const email =
+    pickText(user.email, user.profile?.email, authFallback?.email) || EMPTY_VALUE;
+
+  const phone =
+    pickText(
+      personal.phone,
+      user.phone,
+      user.mobile,
+      user.phoneNumber,
+      user.contact?.phone,
+      user.profile?.phone
+    ) || "";
+
+  const { avatar, avatarUrl } = normalizeAvatar(
+    personal.avatar ?? user.profile?.avatar ?? user.photoURL,
+    authFallback?.photoURL
+  );
+
+  const title =
+    pickText(
+      employment.title,
+      user.title,
+      employment.jobTitle,
+      user.profile?.title
+    ) || EMPTY_VALUE;
+
+  const department =
+    pickText(
+      employment.department,
+      user.department,
+      employment.team,
+      employment.division,
+      user.profile?.department
+    ) || EMPTY_VALUE;
+
+  const startDate = firstDate(
+    employment.startDate,
+    user.startDate,
+    employment.hireDate,
+    user.hireDate,
+    user.joinedAt
+  );
+
+  const leaveBalance = toNullableNumber(
+    employment.leaveBalance,
+    user.leaveBalance,
+    employment.leaveDaysBalance
+  );
+
+  const leaveBalanceLabel =
+    leaveBalance === null ? EMPTY_VALUE : `${formatNumberEN(leaveBalance)} يوم`;
+
+  const employeeCode =
+    pickText(
+      employment.employeeCode,
+      user.employeeCode,
+      user.employeeId,
+      user.profile?.employeeCode
+    ) || EMPTY_VALUE;
+
+  const employmentStatus = normalizeEmploymentStatus({
+    rawStatus:
+      (employment.employmentStatus as EmployeeEmploymentStatus | null | undefined) ??
+      (employment.status as EmployeeEmploymentStatus | null | undefined) ??
+      user.status,
+    isActive: accountStatus.isActive,
+  });
+
+  return {
+    personal: {
+      name,
+      email,
+      phone,
+      avatar,
+      avatarUrl,
+    },
+    employment: {
+      title,
+      department,
+      startDate,
+      leaveBalance,
+      leaveBalanceLabel,
+      statusKey: employmentStatus.key,
+      statusLabel: employmentStatus.label,
+      statusTone: employmentStatus.tone,
+      employeeCode,
+      isActive: accountStatus.isActive,
+    },
+  };
+}
+
+export function buildEmployeePhonePatch(phone: string) {
+  const normalizedPhone = String(phone || "").trim();
+  return {
+    phone: normalizedPhone,
+    profile: {
+      phone: normalizedPhone,
+    },
+    employeeProfile: {
+      personal: {
+        phone: normalizedPhone,
+      },
+    },
+  };
+}
+
+export function buildEmployeeAvatarPatch(avatar: EmployeeAvatarDoc | null) {
+  const filePath = String(avatar?.filePath || "").trim();
+  const fileUrl = pickText(
+    avatar?.fileUrl,
+    filePath ? buildR2DownloadUrl(filePath, false) : ""
+  );
+
+  return {
+    photoURL: fileUrl || null,
+    profile: {
+      photoURL: fileUrl || null,
+      avatar:
+        avatar && (avatar.filePath || avatar.fileUrl)
+          ? {
+              ...avatar,
+              fileUrl: fileUrl || null,
+            }
+          : null,
+    },
+    employeeProfile: {
+      personal: {
+        avatar:
+          avatar && (avatar.filePath || avatar.fileUrl)
+            ? {
+                ...avatar,
+                fileUrl: fileUrl || null,
+              }
+            : null,
+      },
+    },
+  };
+}
+
+export { EMPLOYEE_AVATAR_CATEGORY, EMPTY_VALUE as EMPLOYEE_EMPTY_VALUE };

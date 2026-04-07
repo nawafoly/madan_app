@@ -19,6 +19,7 @@ export type AppRole =
   | "owner"
   | "admin"
   | "accountant"
+  | "hr"
   | "staff"
   | "client"
   | "guest";
@@ -34,6 +35,10 @@ export type Permission =
   | "users.manage"
   | "messages.view"
   | "messages.manage"
+  | "recruitment.view"
+  | "recruitment.manage"
+  | "employees.view"
+  | "employees.manage"
   | "reports.view"
   | "financial.view"
   | "financial.edit"
@@ -51,6 +56,10 @@ export const ROLE_DEFAULT_PERMS: Record<AppRole, Permission[]> = {
     "users.manage",
     "messages.view",
     "messages.manage",
+    "recruitment.view",
+    "recruitment.manage",
+    "employees.view",
+    "employees.manage",
     "reports.view",
     "financial.view",
     "financial.edit",
@@ -67,6 +76,10 @@ export const ROLE_DEFAULT_PERMS: Record<AppRole, Permission[]> = {
     "users.manage",
     "messages.view",
     "messages.manage",
+    "recruitment.view",
+    "recruitment.manage",
+    "employees.view",
+    "employees.manage",
     "reports.view",
     "settings.manage",
   ],
@@ -78,12 +91,18 @@ export const ROLE_DEFAULT_PERMS: Record<AppRole, Permission[]> = {
     "financial.edit",
     "reports.view",
   ],
-  staff: ["dashboard.view", "projects.view", "messages.view"],
+  hr: [
+    "recruitment.view",
+    "recruitment.manage",
+    "employees.view",
+    "employees.manage",
+  ],
+  staff: [],
   client: ["projects.view"],
   guest: ["projects.view"],
 };
 
-export const OPS_ROLES: AppRole[] = ["owner", "admin", "accountant", "staff"];
+export const OPS_ROLES: AppRole[] = ["owner", "admin", "accountant", "hr"];
 
 export type AppUser = {
   uid: string;
@@ -105,10 +124,19 @@ function normalizeRole(role: any): AppRole {
     r === "owner" ||
     r === "admin" ||
     r === "accountant" ||
+    r === "hr" ||
     r === "staff" ||
     r === "client"
   ) {
     return r;
+  }
+
+  if (
+    r === "human_resources" ||
+    r === "human-resources" ||
+    r === "human resources"
+  ) {
+    return "hr";
   }
   return "guest";
 }
@@ -133,6 +161,7 @@ function isRoleLikeDisplayName(name: string) {
     nl === "owner" ||
     nl === "admin" ||
     nl === "accountant" ||
+    nl === "hr" ||
     nl === "staff" ||
     nl === "client" ||
     nl === "guest"
@@ -141,21 +170,21 @@ function isRoleLikeDisplayName(name: string) {
   }
 
   if (
-    n === "ط£ظˆظ†ط±" ||
-    n === "ط§ظˆظ†ط±" ||
-    n === "ط§ظ„ط£ظˆظ†ط±" ||
-    n === "ط§ظ„ط§ظˆظ†ط±"
+    n === "أونر" ||
+    n === "اونر" ||
+    n === "الأونر" ||
+    n === "الاونر"
   )
     return true;
-  if (n === "ط£ط¯ظ…ظ†" || n === "ط§ط¯ظ…ظ†") return true;
+  if (n === "أدمن" || n === "ادمن") return true;
   if (
-    n === "ظ…ط­ط§ط³ط¨" ||
-    n === "ظ…ظˆط¸ظپ" ||
-    n === "ط¹ظ…ظٹظ„" ||
-    n === "ط²ط§ط¦ط±"
+    n === "محاسب" ||
+    n === "موظف" ||
+    n === "عميل" ||
+    n === "زائر"
   )
     return true;
-  if (n === "ظ…ط§ظ„ظƒ" || n === "ط§ظ„ظ…ط§ظ„ظƒ") return true;
+  if (n === "مالك" || n === "المالك") return true;
 
   return false;
 }
@@ -187,7 +216,7 @@ function getFallbackRuntime(fb: FbUser): UserRuntimeData {
   };
 }
 
-function getRuntimeFromDocData(fb: FbUser, data: any): UserRuntimeData {
+function getRuntimeFromUserDocData(fb: FbUser, data: any): UserRuntimeData {
   void fb;
   const rawRole = normalizeText(data?.role ?? data?.roleKey).toLowerCase();
   const role = rawRole ? normalizeRole(rawRole) : "client";
@@ -203,6 +232,64 @@ function getRuntimeFromDocData(fb: FbUser, data: any): UserRuntimeData {
     isActive: accountStatus.isActive,
     title: title || undefined,
     displayName: displayName || undefined,
+  };
+}
+
+function getRuntimeFromAdminUserDocData(
+  fb: FbUser,
+  data: any
+): UserRuntimeData {
+  void fb;
+  const rawRole = normalizeText(data?.roleKey ?? data?.role).toLowerCase();
+  const role = rawRole ? normalizeRole(rawRole) : "client";
+
+  const displayName = normalizeText(data?.displayName ?? data?.name);
+  const title = normalizeText(data?.title);
+  const accountStatus = resolveUserAccountStatus(data);
+
+  return {
+    role,
+    permissionsAllow: normalizePerms(data?.permissionsAllow),
+    permissionsDeny: normalizePerms(data?.permissionsDeny),
+    isActive: accountStatus.isActive,
+    title: title || undefined,
+    displayName: displayName || undefined,
+  };
+}
+
+function getAdminUserDocId(email: string | null | undefined) {
+  const normalizedEmail = normalizeText(email).toLowerCase();
+  return normalizedEmail || "";
+}
+
+function mergeRuntimeData(
+  fb: FbUser,
+  userRuntime: UserRuntimeData | null,
+  adminRuntime: UserRuntimeData | null
+): UserRuntimeData {
+  const base = userRuntime ?? getFallbackRuntime(fb);
+  if (!adminRuntime) return base;
+
+  const adminHasPrivilegedRole =
+    adminRuntime.role !== "client" && adminRuntime.role !== "guest";
+  const shouldUseAdminRole =
+    adminHasPrivilegedRole &&
+    (base.role === "client" || base.role === "guest");
+  const shouldUseAdminPermissions =
+    adminHasPrivilegedRole &&
+    (shouldUseAdminRole || adminRuntime.role === base.role);
+
+  return {
+    role: shouldUseAdminRole ? adminRuntime.role : base.role,
+    permissionsAllow: shouldUseAdminPermissions
+      ? adminRuntime.permissionsAllow
+      : base.permissionsAllow,
+    permissionsDeny: shouldUseAdminPermissions
+      ? adminRuntime.permissionsDeny
+      : base.permissionsDeny,
+    isActive: base.isActive && adminRuntime.isActive,
+    title: base.title || adminRuntime.title,
+    displayName: base.displayName || adminRuntime.displayName,
   };
 }
 
@@ -269,13 +356,35 @@ async function ensureUserDocExists(fb: FbUser) {
 async function ensureUserDocAndGetRuntime(
   fb: FbUser
 ): Promise<UserRuntimeData> {
+  const userRef = doc(db, "users", fb.uid);
+  const adminUserDocId = getAdminUserDocId(fb.email);
+  const adminUserRef = adminUserDocId
+    ? doc(db, "admin_users", adminUserDocId)
+    : null;
+
   try {
     await ensureUserDocExists(fb);
-    const snap = await getDoc(doc(db, "users", fb.uid));
-    if (snap.exists()) {
-      return getRuntimeFromDocData(fb, snap.data());
+  } catch (e: any) {
+    if (!isPermissionDenied(e)) {
+      return getFallbackRuntime(fb);
     }
-    return getFallbackRuntime(fb);
+  }
+
+  try {
+    const [userSnap, adminUserSnap] = await Promise.all([
+      getDoc(userRef),
+      adminUserRef ? getDoc(adminUserRef) : Promise.resolve(null),
+    ]);
+
+    const userRuntime = userSnap.exists()
+      ? getRuntimeFromUserDocData(fb, userSnap.data())
+      : getFallbackRuntime(fb);
+    const adminRuntime =
+      adminUserSnap && adminUserSnap.exists()
+        ? getRuntimeFromAdminUserDocData(fb, adminUserSnap.data())
+        : null;
+
+    return mergeRuntimeData(fb, userRuntime, adminRuntime);
   } catch (e: any) {
     if (isPermissionDenied(e)) {
       return getFallbackRuntime(fb);
@@ -287,6 +396,11 @@ async function ensureUserDocAndGetRuntime(
 export function isOpsRole(role: AppRole | null | undefined) {
   return !!role && OPS_ROLES.includes(role);
 }
+
+type PermissionSubject = Pick<
+  AppUser,
+  "role" | "permissionsAllow" | "permissionsDeny" | "isActive"
+>;
 
 export function getEffectivePermissions(
   user:
@@ -314,7 +428,7 @@ export function getEffectivePermissions(
 }
 
 export function hasPermission(
-  user: AppUser | null | undefined,
+  user: PermissionSubject | null | undefined,
   perm: Permission
 ): boolean {
   if (!user) return false;
@@ -328,6 +442,63 @@ export function hasPermission(
 
   const baseline = ROLE_DEFAULT_PERMS[user.role] ?? [];
   return baseline.includes(perm);
+}
+
+export function getHomePathForRole(role: AppRole | null | undefined) {
+  if (!role) return "/login";
+  if (role === "owner" || role === "admin" || role === "accountant") {
+    return "/dashboard";
+  }
+  if (role === "hr") return "/admin/recruitment-applications";
+  if (role === "staff") return "/employee/profile";
+  if (role === "client" || role === "guest") return "/client/dashboard";
+  return "/projects";
+}
+
+export function getHomePathForUser(user: PermissionSubject | null | undefined) {
+  if (!user) return "/login";
+
+  if (user.role === "staff") return "/employee/profile";
+  if (user.role === "client" || user.role === "guest") return "/client/dashboard";
+
+  if (user.role === "hr") {
+    if (
+      hasPermission(user, "recruitment.view") ||
+      hasPermission(user, "recruitment.manage")
+    ) {
+      return "/admin/recruitment-applications";
+    }
+    if (
+      hasPermission(user, "employees.view") ||
+      hasPermission(user, "employees.manage")
+    ) {
+      return "/admin/employees";
+    }
+  }
+
+  if (isOpsRole(user.role)) {
+    if (hasPermission(user, "dashboard.view")) return "/dashboard";
+    if (
+      hasPermission(user, "recruitment.view") ||
+      hasPermission(user, "recruitment.manage")
+    ) {
+      return "/admin/recruitment-applications";
+    }
+    if (
+      hasPermission(user, "employees.view") ||
+      hasPermission(user, "employees.manage")
+    ) {
+      return "/admin/employees";
+    }
+    if (hasPermission(user, "messages.view")) return "/admin/messages";
+    if (hasPermission(user, "users.view")) return "/admin/clients";
+    if (hasPermission(user, "projects.manage")) return "/admin/projects";
+    if (hasPermission(user, "financial.view")) return "/admin/financial";
+    if (hasPermission(user, "reports.view")) return "/admin/reports";
+  }
+
+  if (hasPermission(user, "projects.view")) return "/projects";
+  return getHomePathForRole(user.role);
 }
 
 function buildAppUserState(fb: FbUser, runtime: UserRuntimeData): AppUser {
@@ -402,11 +573,16 @@ export function useAuth() {
   useEffect(() => {
     aliveRef.current = true;
     let unsubUserDoc: (() => void) | null = null;
+    let unsubAdminUserDoc: (() => void) | null = null;
 
     const cleanupUserDoc = () => {
       if (unsubUserDoc) {
         unsubUserDoc();
         unsubUserDoc = null;
+      }
+      if (unsubAdminUserDoc) {
+        unsubAdminUserDoc();
+        unsubAdminUserDoc = null;
       }
     };
 
@@ -430,32 +606,80 @@ export function useAuth() {
         setUser(buildAppUserState(fb, runtime));
         setError(null);
 
+        const adminUserDocId = getAdminUserDocId(fb.email);
+        const adminUserRef = adminUserDocId
+          ? doc(db, "admin_users", adminUserDocId)
+          : null;
+        let latestUserDocData: any | null | undefined = undefined;
+        let latestAdminUserDocData: any | null | undefined = adminUserRef
+          ? undefined
+          : null;
+
+        const publishRuntime = () => {
+          if (!aliveRef.current) return;
+          if (latestUserDocData === undefined) return;
+          if (adminUserRef && latestAdminUserDocData === undefined) return;
+
+          const nextUserRuntime = latestUserDocData
+            ? getRuntimeFromUserDocData(fb, latestUserDocData)
+            : getFallbackRuntime(fb);
+          const nextAdminRuntime = latestAdminUserDocData
+            ? getRuntimeFromAdminUserDocData(fb, latestAdminUserDocData)
+            : null;
+
+          setUser(
+            buildAppUserState(
+              fb,
+              mergeRuntimeData(fb, nextUserRuntime, nextAdminRuntime)
+            )
+          );
+          setError(null);
+          setLoading(false);
+        };
+
         unsubUserDoc = onSnapshot(
           doc(db, "users", fb.uid),
           snap => {
             if (!aliveRef.current) return;
 
-            const nextRuntime = snap.exists()
-              ? getRuntimeFromDocData(fb, snap.data())
-              : getFallbackRuntime(fb);
-
-            setUser(buildAppUserState(fb, nextRuntime));
-            setError(null);
-            setLoading(false);
+            latestUserDocData = snap.exists() ? snap.data() : null;
+            publishRuntime();
           },
           snapshotError => {
             if (!aliveRef.current) return;
 
             if (isPermissionDenied(snapshotError)) {
-              setUser(buildAppUserState(fb, getFallbackRuntime(fb)));
-              setError(null);
+              latestUserDocData = null;
+              publishRuntime();
             } else {
               setError(snapshotError);
+              latestUserDocData = null;
+              publishRuntime();
             }
-
-            setLoading(false);
           }
         );
+
+        if (adminUserRef) {
+          unsubAdminUserDoc = onSnapshot(
+            adminUserRef,
+            snap => {
+              if (!aliveRef.current) return;
+
+              latestAdminUserDocData = snap.exists() ? snap.data() : null;
+              publishRuntime();
+            },
+            snapshotError => {
+              if (!aliveRef.current) return;
+
+              if (!isPermissionDenied(snapshotError)) {
+                setError(snapshotError);
+              }
+
+              latestAdminUserDocData = null;
+              publishRuntime();
+            }
+          );
+        }
       } catch (e) {
         if (!aliveRef.current) return;
         setError(e);

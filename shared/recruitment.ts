@@ -5,11 +5,9 @@ export const RECRUITMENT_DEFAULT_FILE_FOLDER = "attachments";
 
 export const RECRUITMENT_FIELD_TYPES = [
   "text",
-  "email",
   "number",
   "date",
   "select",
-  "textarea",
   "file",
 ] as const;
 
@@ -26,15 +24,26 @@ export type RecruitmentFieldOption = {
   value: string;
 };
 
-export type RecruitmentFieldDefinition = {
+export type RecruitmentFieldInputDefinition = {
   id: string;
-  label: string;
   type: RecruitmentFieldType;
   required: boolean;
   placeholder?: string;
   options?: RecruitmentFieldOption[];
   numberMode?: RecruitmentNumberMode;
   fileFolder?: string;
+};
+
+export type RecruitmentFieldItemDefinition = RecruitmentFieldInputDefinition;
+
+export type RecruitmentFieldDefinition = RecruitmentFieldInputDefinition & {
+  label: string;
+  /**
+   * Legacy only: older experiments stored multiple inputs inside one field.
+   * The current builder normalizes these into standalone fields and does not
+   * edit or create `items` anymore.
+   */
+  items?: RecruitmentFieldItemDefinition[];
 };
 
 export type RecruitmentSettingsDoc = {
@@ -49,7 +58,10 @@ export type RecruitmentApplicationStatus = "submitted";
 
 export type RecruitmentApplicationAnswer = {
   fieldId: string;
+  itemId?: string;
   label: string;
+  fieldLabel?: string;
+  itemLabel?: string;
   type: RecruitmentFieldType;
   value: string;
   valueLabel?: string;
@@ -58,7 +70,10 @@ export type RecruitmentApplicationAnswer = {
 
 export type RecruitmentApplicationAttachment = {
   fieldId: string;
+  itemId?: string;
   label: string;
+  fieldLabel?: string;
+  itemLabel?: string;
   fileId: string;
   category: typeof RECRUITMENT_FILE_CATEGORY;
   storageFolder: string;

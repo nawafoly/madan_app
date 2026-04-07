@@ -97,6 +97,8 @@ import {
   getRecruitmentFieldHint,
   getRecruitmentFieldTypeLabel,
   getRecruitmentNumberModeLabel,
+  hasRecruitmentFieldType,
+  isRecruitmentFieldRequired,
   moveItem,
   normalizeRecruitmentField,
   normalizeRecruitmentSettings,
@@ -286,7 +288,7 @@ type AdminUserDoc = {
 type RoleInviteDoc = {
   id: string; // doc id = email lower
   email: string;
-  roleKey: string; // owner/admin/accountant/staff
+  roleKey: string; // owner/admin/accountant/hr/staff
   isActive: boolean;
   notes?: string;
   createdAt?: any;
@@ -408,6 +410,7 @@ function createDefaultLabelsSettings(): LabelsSettings {
       owner: { ar: "المالك", en: "Owner" },
       admin: { ar: "أدمن", en: "Admin" },
       accountant: { ar: "محاسب", en: "Accountant" },
+      hr: { ar: "الموارد البشرية", en: "HR" },
       staff: { ar: "موظف", en: "Staff" },
       client: { ar: "عميل", en: "Client" },
       guest: { ar: "زائر", en: "Guest" },
@@ -780,6 +783,10 @@ const DEFAULT_PERMISSIONS: Array<{ key: string; label: string }> = [
   { key: "users.manage", label: "إدارة العملاء (VIP/ملاحظات)" },
   { key: "messages.view", label: "عرض الرسائل" },
   { key: "messages.manage", label: "إدارة الرسائل" },
+  { key: "recruitment.view", label: "عرض طلبات التوظيف" },
+  { key: "recruitment.manage", label: "إدارة طلبات التوظيف" },
+  { key: "employees.view", label: "عرض الموظفين" },
+  { key: "employees.manage", label: "إدارة الموظفين" },
   { key: "reports.view", label: "عرض التقارير" },
   { key: "financial.view", label: "عرض المالية" },
   { key: "financial.edit", label: "تعديل المالية" },
@@ -791,6 +798,7 @@ const SYSTEM_ROLE_KEYS = [
   "owner",
   "admin",
   "accountant",
+  "hr",
   "staff",
   "client",
   "guest",
@@ -800,17 +808,19 @@ type AppRoleKey =
   | "owner"
   | "admin"
   | "accountant"
+  | "hr"
   | "staff"
   | "client"
   | "guest";
 
-const ADMIN_ROLE_KEYS = ["owner", "admin", "accountant", "staff"] as const;
+const ADMIN_ROLE_KEYS = ["owner", "admin", "accountant", "hr", "staff"] as const;
 type AdminRoleKey = (typeof ADMIN_ROLE_KEYS)[number];
 
 const ADMIN_ROLE_LABELS: Record<AdminRoleKey, string> = {
   owner: "المالك",
   admin: "أدمن",
   accountant: "محاسب",
+  hr: "الموارد البشرية",
   staff: "موظف",
 };
 
@@ -963,12 +973,12 @@ export default function Settings() {
   // ✅ NEW: role invites
   const [promoteEmail, setPromoteEmail] = useState("");
   const [promoteRoleKey, setPromoteRoleKey] =
-    useState<AdminRoleKey>("accountant");
+    useState<AdminRoleKey>("staff");
   const [promoting, setPromoting] = useState(false);
   const [roleInvites, setRoleInvites] = useState<RoleInviteDoc[]>([]);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRoleKey, setInviteRoleKey] =
-    useState<AdminRoleKey>("accountant");
+    useState<AdminRoleKey>("staff");
   const [inviteNotes, setInviteNotes] = useState("");
 
   const [labels, setLabels] = useState<LabelsSettings>({
@@ -994,6 +1004,7 @@ export default function Settings() {
       owner: { ar: "المالك", en: "Owner" },
       admin: { ar: "أدمن", en: "Admin" },
       accountant: { ar: "محاسب", en: "Accountant" },
+      hr: { ar: "الموارد البشرية", en: "HR" },
       staff: { ar: "موظف", en: "Staff" },
       client: { ar: "عميل", en: "Client" },
       guest: { ar: "زائر", en: "Guest" },
@@ -1308,15 +1319,17 @@ export default function Settings() {
     [content, savedContent]
   );
   const recruitmentDirty = useMemo(
-    () => JSON.stringify(recruitment) !== JSON.stringify(savedRecruitment),
+    () =>
+      JSON.stringify(normalizeRecruitmentSettings(recruitment)) !==
+      JSON.stringify(normalizeRecruitmentSettings(savedRecruitment)),
     [recruitment, savedRecruitment]
   );
   const requiredRecruitmentFieldsCount = useMemo(
-    () => recruitment.fields.filter((field) => field.required).length,
+    () => recruitment.fields.filter((field) => isRecruitmentFieldRequired(field)).length,
     [recruitment.fields]
   );
   const selectRecruitmentFieldsCount = useMemo(
-    () => recruitment.fields.filter((field) => field.type === "select").length,
+    () => recruitment.fields.filter((field) => hasRecruitmentFieldType(field, "select")).length,
     [recruitment.fields]
   );
   const recruitmentValidation = useMemo(
@@ -1815,6 +1828,7 @@ export default function Settings() {
           {
             ...field,
             ...patch,
+            items: undefined,
           },
           index
         );
@@ -1845,17 +1859,17 @@ export default function Settings() {
   const addRecruitmentOption = (fieldId: string) => {
     setRecruitment((current) => ({
       ...current,
-      fields: current.fields.map((field, index) =>
-        field.id === fieldId
-          ? normalizeRecruitmentField(
-              {
-                ...field,
-                options: [...(field.options || []), createRecruitmentOption()],
-              },
-              index
-            )
-          : field
-      ),
+      fields: current.fields.map((field, index) => {
+        if (field.id !== fieldId) return field;
+
+        return normalizeRecruitmentField(
+          {
+            ...field,
+            options: [...(field.options || []), createRecruitmentOption()],
+          },
+          index
+        );
+      }),
     }));
   };
 
@@ -1887,7 +1901,10 @@ export default function Settings() {
     }));
   };
 
-  const removeRecruitmentOption = (fieldId: string, optionId: string) => {
+  const removeRecruitmentOption = (
+    fieldId: string,
+    optionId: string
+  ) => {
     setRecruitment((current) => ({
       ...current,
       fields: current.fields.map((field, index) => {
@@ -2602,7 +2619,7 @@ export default function Settings() {
         `تمت الترقية + إضافته لحسابات الإدارة: ${email} → ${getRoleDisplayLabel(roleKey) || roleKey}`
       );
       setPromoteEmail("");
-      setPromoteRoleKey("accountant");
+      setPromoteRoleKey("staff");
     } catch (e) {
       console.error(e);
       toast.error("فشل ترقية المستخدم");
@@ -2645,7 +2662,7 @@ export default function Settings() {
 
       toast.success("تم حفظ الدعوة — سيتم تطبيق الدور عند أول تسجيل دخول");
       setInviteEmail("");
-      setInviteRoleKey("accountant");
+      setInviteRoleKey("staff");
       setInviteNotes("");
     } catch (e) {
       console.error(e);
@@ -4536,10 +4553,13 @@ export default function Settings() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="staff">موظف (staff)</SelectItem>
+                      <SelectItem value="hr">
+                        الموارد البشرية (hr)
+                      </SelectItem>
                       <SelectItem value="accountant">
                         محاسب (accountant)
                       </SelectItem>
-                      <SelectItem value="staff">موظف (staff)</SelectItem>
                       <SelectItem value="admin">أدمن (admin)</SelectItem>
                       <SelectItem value="owner">المالك (owner)</SelectItem>
                     </SelectContent>
@@ -4590,10 +4610,13 @@ export default function Settings() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="staff">موظف (staff)</SelectItem>
+                      <SelectItem value="hr">
+                        الموارد البشرية (hr)
+                      </SelectItem>
                       <SelectItem value="accountant">
                         محاسب (accountant)
                       </SelectItem>
-                      <SelectItem value="staff">موظف (staff)</SelectItem>
                       <SelectItem value="admin">أدمن (admin)</SelectItem>
                       <SelectItem value="owner">المالك (owner)</SelectItem>
                     </SelectContent>

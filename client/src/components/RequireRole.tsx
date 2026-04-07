@@ -1,25 +1,11 @@
 // client/src/components/RequireRole.tsx
 import { useEffect, useMemo, type ReactNode } from "react";
 import { useLocation } from "wouter";
-import { useAuth, type AppRole } from "@/_core/hooks/useAuth";
-
-function homeForRole(role: AppRole) {
-  // ✅ Admin dashboard roles
-  if (
-    role === "owner" ||
-    role === "admin" ||
-    role === "accountant" ||
-    role === "staff"
-  ) {
-    return "/dashboard";
-  }
-
-  // ✅ Client area
-  if (role === "client") return "/client/dashboard";
-
-  // ✅ Guest (نفس صفحة العميل لكن بواجهة Guest داخلها)
-  return "/client/dashboard";
-}
+import {
+  getHomePathForUser,
+  useAuth,
+  type AppRole,
+} from "@/_core/hooks/useAuth";
 
 
 type Props = {
@@ -47,7 +33,7 @@ export default function RequireRole({ allow, children }: Props) {
 
     // ✅ role not allowed -> go to its home
     if (!allow.includes(role)) {
-      const target = homeForRole(role);
+      const target = getHomePathForUser(user);
       if (location !== target) setLocation(target);
     }
   }, [user, loading, allowKey, location, setLocation]);

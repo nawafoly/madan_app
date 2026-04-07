@@ -9,6 +9,7 @@ export type FileCategory =
   | "contract_signed"
   | "investment_settlement"
   | "career_attachment"
+  | "employee_avatar"
   | string;
 
 export interface CloudflareFileRecord {
@@ -197,6 +198,22 @@ function expectedUploadPrefixes(
 
   if (category === "investment_settlement") {
     return [`${safeEntityType}s/${safeEntityId}/settlement/`];
+  }
+
+  if (category === "employee_avatar") {
+    const prefixes = [
+      `employees/${safeEntityId}/profile/avatar/`,
+      `employees/${safeEntityId}/avatars/`,
+      `employees/${safeEntityId}/${sanitizeKeyPart(category)}/`,
+      `employees/${safeEntityId}/`,
+    ];
+
+    const safeFolder = sanitizeStorageFolder(storageFolder);
+    if (safeFolder) {
+      prefixes.push(`employees/${safeEntityId}/${safeFolder}/`);
+    }
+
+    return Array.from(new Set(prefixes));
   }
 
   return [`${safeEntityType}s/${safeEntityId}/`];

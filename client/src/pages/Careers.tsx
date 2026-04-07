@@ -22,6 +22,10 @@ import { uploadDocumentToCloudflare, type UploadDocumentResult } from "@/lib/doc
 import {
   buildRecruitmentApplicationAttachments,
   buildRecruitmentApplicationAnswers,
+  getRecruitmentFieldItems,
+  getRecruitmentFieldValueKey,
+  hasRecruitmentFieldType,
+  isRecruitmentFieldRequired,
   normalizeRecruitmentSettings,
   syncRecruitmentFilesWithFields,
   syncRecruitmentValuesWithFields,
@@ -71,22 +75,28 @@ export default function Careers() {
   useEffect(() => {
     setValues((current) => syncRecruitmentValuesWithFields(settings.fields, current));
     setFiles((current) => syncRecruitmentFilesWithFields(settings.fields, current));
-    setErrors((current) =>
-      Object.fromEntries(
-        Object.entries(current).filter(([fieldId]) =>
-          settings.fields.some((field) => field.id === fieldId)
-        )
-      )
-    );
+    setErrors((current) => {
+      const validKeys = new Set<string>();
+
+      settings.fields.forEach((field) => {
+        getRecruitmentFieldItems(field).forEach((item) => {
+          validKeys.add(getRecruitmentFieldValueKey(field, item));
+        });
+      });
+
+      return Object.fromEntries(
+        Object.entries(current).filter(([fieldId]) => validKeys.has(fieldId))
+      );
+    });
   }, [settings.fields]);
 
   const totalFieldsCount = settings.fields.length;
   const requiredFieldsCount = useMemo(
-    () => settings.fields.filter((field) => field.required).length,
+    () => settings.fields.filter((field) => isRecruitmentFieldRequired(field)).length,
     [settings.fields]
   );
   const hasFileFields = useMemo(
-    () => settings.fields.some((field) => field.type === "file"),
+    () => settings.fields.some((field) => hasRecruitmentFieldType(field, "file")),
     [settings.fields]
   );
 
@@ -142,21 +152,24 @@ export default function Careers() {
       const uploadedFilesByFieldId: Record<string, UploadDocumentResult> = {};
 
       for (const field of settings.fields) {
-        if (field.type !== "file") continue;
+        for (const item of getRecruitmentFieldItems(field)) {
+          if (item.type !== "file") continue;
 
-        const selectedFile = files[field.id] ?? null;
-        if (!selectedFile) continue;
+          const valueKey = getRecruitmentFieldValueKey(field, item);
+          const selectedFile = files[valueKey] ?? null;
+          if (!selectedFile) continue;
 
-        uploadedFilesByFieldId[field.id] = await uploadDocumentToCloudflare({
-          entityType: "career",
-          entityId: applicationRef.id,
-          category: RECRUITMENT_FILE_CATEGORY,
-          file: selectedFile,
-          kind: "attachment",
-          status: "submitted",
-          uploadedBy: "public_careers_page",
-          storageFolder: field.fileFolder,
-        });
+          uploadedFilesByFieldId[valueKey] = await uploadDocumentToCloudflare({
+            entityType: "career",
+            entityId: applicationRef.id,
+            category: RECRUITMENT_FILE_CATEGORY,
+            file: selectedFile,
+            kind: "attachment",
+            status: "submitted",
+            uploadedBy: "public_careers_page",
+            storageFolder: item.fileFolder,
+          });
+        }
       }
 
       submitStage = "save_application";

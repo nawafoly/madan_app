@@ -1,20 +1,12 @@
 import { useEffect, type ReactNode } from "react";
 import { useLocation } from "wouter";
 import {
+  getHomePathForUser,
   hasPermission,
   isOpsRole,
   useAuth,
-  type AppUser,
   type Permission,
 } from "@/_core/hooks/useAuth";
-
-function homeForUser(user: AppUser | null | undefined) {
-  if (!user) return "/login";
-  if (isOpsRole(user.role) && hasPermission(user, "dashboard.view")) return "/dashboard";
-  if (user.role === "client" || user.role === "guest") return "/client/dashboard";
-  if (hasPermission(user, "projects.view")) return "/projects";
-  return "/login";
-}
 
 type Props = {
   permission: Permission;
@@ -36,7 +28,7 @@ export default function RequireAdminPermission({ permission, children }: Props) 
     }
 
     if (!allowed) {
-      const target = homeForUser(user);
+      const target = getHomePathForUser(user);
       if (location !== target) setLocation(target);
     }
   }, [allowed, loading, location, setLocation, user]);

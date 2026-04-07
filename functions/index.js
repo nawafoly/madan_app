@@ -65,6 +65,7 @@ const ALLOWED_ROLES = new Set([
   "owner",
   "admin",
   "accountant",
+  "hr",
   "staff",
 ]);
 
@@ -140,20 +141,62 @@ const normalizeStringArray = value =>
         .filter(Boolean)
     : [];
 
-const getUserRole = async uid => {
-  if (!uid) return "guest";
-  const snap = await db.doc(`users/${uid}`).get();
-  if (!snap.exists) return "guest";
-  return String(snap.data()?.role || "guest").toLowerCase();
+const normalizeKnownRole = value => {
+  const role = String(value || "")
+    .trim()
+    .toLowerCase();
+  return ALLOWED_ROLES.has(role) ? role : "guest";
 };
 
-const isAdminUid = async uid => {
-  const role = await getUserRole(uid);
+const getUserRole = async (uid, email = "") => {
+  let fallbackRole = "guest";
+  let resolvedEmail = String(email || "")
+    .trim()
+    .toLowerCase();
+
+  if (uid) {
+    const snap = await db.doc(`users/${uid}`).get();
+    if (snap.exists) {
+      const data = snap.data() || {};
+      const userRole = normalizeKnownRole(data.role);
+      const userEmail = String(data.email || "")
+        .trim()
+        .toLowerCase();
+
+      fallbackRole = userRole;
+      if (!resolvedEmail && userEmail) resolvedEmail = userEmail;
+
+      if (userRole !== "guest" && userRole !== "client") {
+        return userRole;
+      }
+    }
+  }
+
+  if (resolvedEmail) {
+    const adminUserSnap = await db.doc(`admin_users/${resolvedEmail}`).get();
+    if (adminUserSnap.exists) {
+      const adminRole = normalizeKnownRole(
+        adminUserSnap.data()?.roleKey || adminUserSnap.data()?.role
+      );
+      if (adminRole !== "guest" && adminRole !== "client") {
+        return adminRole;
+      }
+      if (fallbackRole === "guest") {
+        fallbackRole = adminRole;
+      }
+    }
+  }
+
+  return fallbackRole;
+};
+
+const isAdminUid = async (uid, email = "") => {
+  const role = await getUserRole(uid, email);
   return role === "admin" || role === "owner";
 };
 
 const isOpsRole = role =>
-  ["owner", "admin", "accountant", "staff"].includes(
+  ["owner", "admin", "accountant", "hr"].includes(
     String(role || "").toLowerCase()
   );
 
@@ -565,7 +608,7 @@ exports.recomputeProjectAggregates = onCall(
       throw new HttpsError("unauthenticated", "Authentication required.");
     }
 
-    const isAdmin = await isAdminUid(request.auth.uid);
+    const isAdmin = await isAdminUid(request.auth.uid, request.auth.token.email);
     if (!isAdmin) {
       throw new HttpsError("permission-denied", "Admin access required.");
     }
@@ -604,7 +647,7 @@ const adminRecomputeAllProjectsHandler = async request => {
     throw new HttpsError("unauthenticated", "Authentication required.");
   }
 
-  const isAdmin = await isAdminUid(request.auth.uid);
+  const isAdmin = await isAdminUid(request.auth.uid, request.auth.token.email);
   if (!isAdmin) {
     throw new HttpsError("permission-denied", "Admin access required.");
   }
@@ -1119,7 +1162,7 @@ exports.writeAuditLog = onCall(
       throw new HttpsError("permission-denied", "Reserved audit source area.");
     }
 
-    const role = await getUserRole(request.auth.uid);
+    const role = await getUserRole(request.auth.uid, request.auth.token.email);
     if (isOpsRole(role)) {
       const id = await writeAuditLogEntry(db, payload, { auth: request.auth });
       return { ok: true, id };

@@ -8,6 +8,8 @@ import {
   type RecruitmentApplicationAnswer,
   type RecruitmentApplicationAttachment,
   type RecruitmentFieldDefinition,
+  type RecruitmentFieldInputDefinition,
+  type RecruitmentFieldItemDefinition,
   type RecruitmentFieldOption,
   type RecruitmentFieldType,
   type RecruitmentFormValues,
@@ -15,7 +17,6 @@ import {
   type RecruitmentSettingsDoc,
 } from "@shared/recruitment";
 
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const FILE_FOLDER_REGEX = /^[a-z0-9_-]+$/;
 
 export type RecruitmentFormFileMap = Record<string, File | null>;
@@ -34,16 +35,6 @@ function sanitizeOptionValue(label: string) {
   return normalized || buildId("option");
 }
 
-export function sanitizeRecruitmentFileFolder(value: unknown) {
-  const normalized = String(value ?? "")
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, "_")
-    .replace(/[^a-z0-9_-]/g, "");
-
-  return normalized || RECRUITMENT_DEFAULT_FILE_FOLDER;
-}
-
 function isRecruitmentFieldType(value: unknown): value is RecruitmentFieldType {
   return (RECRUITMENT_FIELD_TYPES as readonly string[]).includes(String(value));
 }
@@ -54,18 +45,90 @@ function isRecruitmentNumberMode(
   return (RECRUITMENT_NUMBER_MODES as readonly string[]).includes(String(value));
 }
 
+function normalizeLegacyRecruitmentFieldType(
+  value: unknown,
+  fallback: RecruitmentFieldType = "text"
+): RecruitmentFieldType {
+  const normalized = String(value ?? "")
+    .trim()
+    .toLowerCase();
+
+  if (isRecruitmentFieldType(normalized)) {
+    return normalized;
+  }
+
+  if (normalized === "email" || normalized === "textarea") {
+    return "text";
+  }
+
+  return fallback;
+}
+
+function getDefaultRecruitmentInputDefinition(
+  type: RecruitmentFieldType,
+  idPrefix: "field" | "item"
+): RecruitmentFieldInputDefinition {
+  const baseInput: RecruitmentFieldInputDefinition = {
+    id: buildId(idPrefix),
+    type,
+    required: false,
+  };
+
+  if (type !== "date" && type !== "file") {
+    baseInput.placeholder = getDefaultRecruitmentPlaceholder(type);
+  }
+
+  if (type === "number") {
+    return {
+      ...baseInput,
+      numberMode: "default",
+    };
+  }
+
+  if (type === "select") {
+    return {
+      ...baseInput,
+      options: [
+        createRecruitmentOption({
+          label: "الخيار الأول",
+          value: "option_1",
+        }),
+        createRecruitmentOption({
+          label: "الخيار الثاني",
+          value: "option_2",
+        }),
+      ],
+    };
+  }
+
+  if (type === "file") {
+    return {
+      ...baseInput,
+      fileFolder: RECRUITMENT_DEFAULT_FILE_FOLDER,
+    };
+  }
+
+  return baseInput;
+}
+
+export function sanitizeRecruitmentFileFolder(value: unknown) {
+  const normalized = String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_")
+    .replace(/[^a-z0-9_-]/g, "");
+
+  return normalized || RECRUITMENT_DEFAULT_FILE_FOLDER;
+}
+
 export function getDefaultRecruitmentFieldLabel(type: RecruitmentFieldType) {
   switch (type) {
-    case "email":
-      return "البريد الإلكتروني";
     case "number":
       return "حقل رقمي";
     case "date":
       return "حقل تاريخ";
     case "select":
       return "قائمة خيارات";
-    case "textarea":
-      return "نبذة مختصرة";
     case "file":
       return "رفع ملف";
     case "text":
@@ -76,16 +139,12 @@ export function getDefaultRecruitmentFieldLabel(type: RecruitmentFieldType) {
 
 export function getDefaultRecruitmentPlaceholder(type: RecruitmentFieldType) {
   switch (type) {
-    case "email":
-      return "name@example.com";
     case "number":
       return "أدخل رقمًا";
     case "date":
       return "";
     case "select":
       return "اختر من القائمة";
-    case "textarea":
-      return "اكتب هنا";
     case "file":
       return "";
     case "text":
@@ -111,45 +170,82 @@ export function createRecruitmentOption(
   };
 }
 
+export function createRecruitmentFieldItem(
+  type: RecruitmentFieldType = "text"
+): RecruitmentFieldItemDefinition {
+  return getDefaultRecruitmentInputDefinition(
+    normalizeLegacyRecruitmentFieldType(type),
+    "item"
+  );
+}
+
 export function createRecruitmentField(
   type: RecruitmentFieldType = "text"
 ): RecruitmentFieldDefinition {
-  const baseField: RecruitmentFieldDefinition = {
-    id: buildId("field"),
-    label: getDefaultRecruitmentFieldLabel(type),
+  const nextType = normalizeLegacyRecruitmentFieldType(type);
+  return {
+    ...getDefaultRecruitmentInputDefinition(nextType, "field"),
+    label: getDefaultRecruitmentFieldLabel(nextType),
+  };
+}
+
+function normalizeRecruitmentFieldOptions(
+  optionsInput: unknown
+): RecruitmentFieldOption[] {
+  const options = Array.isArray(optionsInput)
+    ? optionsInput.map(option => createRecruitmentOption(option))
+    : [];
+
+  return options.length
+    ? options
+    : [
+        createRecruitmentOption({
+          label: "الخيار الأول",
+          value: "option_1",
+        }),
+      ];
+}
+
+export function normalizeRecruitmentFieldItem(
+  input: unknown,
+  index = 0,
+  fallbackType: RecruitmentFieldType = "text"
+): RecruitmentFieldItemDefinition {
+  const raw =
+    input && typeof input === "object"
+      ? (input as Partial<RecruitmentFieldInputDefinition>)
+      : {};
+
+  const type = normalizeLegacyRecruitmentFieldType(raw.type, fallbackType);
+  const normalized: RecruitmentFieldItemDefinition = {
+    id: String(raw.id || `item_${index + 1}`).trim() || `item_${index + 1}`,
     type,
-    required: false,
-    placeholder: getDefaultRecruitmentPlaceholder(type),
+    required: Boolean(raw.required),
   };
 
+  const placeholder = String(raw.placeholder || "").trim();
+  if (type !== "date" && type !== "file") {
+    normalized.placeholder = placeholder || getDefaultRecruitmentPlaceholder(type);
+  }
+
   if (type === "number") {
-    return {
-      ...baseField,
-      numberMode: "default",
-    };
+    normalized.numberMode = isRecruitmentNumberMode(raw.numberMode)
+      ? raw.numberMode
+      : "default";
   }
 
   if (type === "select") {
-    return {
-      ...baseField,
-      options: [
-        createRecruitmentOption({ label: "الخيار الأول", value: "option_1" }),
-        createRecruitmentOption({ label: "الخيار الثاني", value: "option_2" }),
-      ],
-    };
+    normalized.options = normalizeRecruitmentFieldOptions(raw.options);
   }
 
   if (type === "file") {
-    return {
-      ...baseField,
-      fileFolder: RECRUITMENT_DEFAULT_FILE_FOLDER,
-    };
+    normalized.fileFolder = sanitizeRecruitmentFileFolder(raw.fileFolder);
   }
 
-  return baseField;
+  return normalized;
 }
 
-export function normalizeRecruitmentField(
+function normalizeRecruitmentFieldCore(
   input: unknown,
   index = 0
 ): RecruitmentFieldDefinition {
@@ -158,58 +254,140 @@ export function normalizeRecruitmentField(
       ? (input as Partial<RecruitmentFieldDefinition>)
       : {};
 
-  const type = isRecruitmentFieldType(raw.type) ? raw.type : "text";
-  const hasExplicitLabel = typeof raw.label === "string";
+  const normalizedInput = normalizeRecruitmentFieldItem(
+    raw,
+    index,
+    normalizeLegacyRecruitmentFieldType(raw.type)
+  );
+  const label = String(raw.label || "").trim();
   const field: RecruitmentFieldDefinition = {
     id: String(raw.id || `field_${index + 1}`).trim() || `field_${index + 1}`,
-    label: hasExplicitLabel
-      ? String(raw.label)
-      : getDefaultRecruitmentFieldLabel(type),
-    type,
-    required: Boolean(raw.required),
+    label: label || getDefaultRecruitmentFieldLabel(normalizedInput.type),
+    type: normalizedInput.type,
+    required:
+      typeof raw.required === "boolean" ? raw.required : normalizedInput.required,
   };
 
-  const placeholder = String(raw.placeholder || "").trim();
-  if (placeholder) {
-    field.placeholder = placeholder;
-  } else if (type !== "date" && type !== "file") {
-    field.placeholder = getDefaultRecruitmentPlaceholder(type);
+  if (normalizedInput.placeholder && field.type !== "date" && field.type !== "file") {
+    field.placeholder = normalizedInput.placeholder;
   }
 
-  if (type === "number") {
-    field.numberMode = isRecruitmentNumberMode(raw.numberMode)
-      ? raw.numberMode
-      : "default";
+  if (field.type === "number") {
+    field.numberMode = normalizedInput.numberMode || "default";
   }
 
-  if (type === "select") {
-    const options = Array.isArray(raw.options)
-      ? raw.options.map((option) => createRecruitmentOption(option))
-      : [];
-
-    field.options = options.length
-      ? options
-      : [
-          createRecruitmentOption({
-            label: "الخيار الأول",
-            value: "option_1",
-          }),
-        ];
+  if (field.type === "select") {
+    field.options = normalizeRecruitmentFieldOptions(raw.options);
   }
 
-  if (type === "file") {
+  if (field.type === "file") {
     field.fileFolder = sanitizeRecruitmentFileFolder(raw.fileFolder);
   }
 
   return field;
 }
 
+function expandLegacyRecruitmentField(
+  input: unknown,
+  startIndex = 0
+): RecruitmentFieldDefinition[] {
+  const raw =
+    input && typeof input === "object"
+      ? (input as Partial<RecruitmentFieldDefinition>)
+      : {};
+  const rawItems = Array.isArray(raw.items) ? raw.items : [];
+
+  if (!rawItems.length) {
+    return [normalizeRecruitmentFieldCore(raw, startIndex)];
+  }
+
+  const baseId =
+    String(raw.id || `field_${startIndex + 1}`).trim() || `field_${startIndex + 1}`;
+  const baseLabel = String(raw.label || "").trim();
+  const fallbackType = normalizeLegacyRecruitmentFieldType(raw.type);
+
+  return rawItems.map((item, itemIndex) => {
+    const normalizedItem = normalizeRecruitmentFieldItem(
+      {
+        ...(item && typeof item === "object" ? item : {}),
+        type:
+          item && typeof item === "object" && "type" in item
+            ? (item as RecruitmentFieldItemDefinition).type
+            : raw.type,
+        required:
+          item && typeof item === "object" && "required" in item
+            ? (item as RecruitmentFieldItemDefinition).required
+            : raw.required,
+        placeholder:
+          item && typeof item === "object" && "placeholder" in item
+            ? (item as RecruitmentFieldItemDefinition).placeholder
+            : raw.placeholder,
+        options:
+          item && typeof item === "object" && "options" in item
+            ? (item as RecruitmentFieldItemDefinition).options
+            : raw.options,
+        numberMode:
+          item && typeof item === "object" && "numberMode" in item
+            ? (item as RecruitmentFieldItemDefinition).numberMode
+            : raw.numberMode,
+        fileFolder:
+          item && typeof item === "object" && "fileFolder" in item
+            ? (item as RecruitmentFieldItemDefinition).fileFolder
+            : raw.fileFolder,
+      },
+      itemIndex,
+      fallbackType
+    );
+
+    const label =
+      baseLabel || getDefaultRecruitmentFieldLabel(normalizedItem.type);
+
+    return normalizeRecruitmentFieldCore(
+      {
+        id:
+          rawItems.length === 1
+            ? baseId
+            : `${baseId}__${normalizedItem.id || itemIndex + 1}`,
+        label: rawItems.length === 1 ? label : `${label} ${itemIndex + 1}`,
+        type: normalizedItem.type,
+        required: normalizedItem.required,
+        placeholder: normalizedItem.placeholder,
+        options: normalizedItem.options,
+        numberMode: normalizedItem.numberMode,
+        fileFolder: normalizedItem.fileFolder,
+      },
+      startIndex + itemIndex
+    );
+  });
+}
+
+function normalizeRecruitmentFields(fieldsInput: unknown[]) {
+  const normalized: RecruitmentFieldDefinition[] = [];
+
+  fieldsInput.forEach((field) => {
+    expandLegacyRecruitmentField(field, normalized.length).forEach(
+      (expandedField) => {
+        normalized.push(
+          normalizeRecruitmentFieldCore(expandedField, normalized.length)
+        );
+      }
+    );
+  });
+
+  return normalized;
+}
+
+export function normalizeRecruitmentField(input: unknown, index = 0) {
+  return (
+    expandLegacyRecruitmentField(input, index)[0] ||
+    normalizeRecruitmentFieldCore({}, index)
+  );
+}
+
 function cloneDefaultRecruitmentSettings(): RecruitmentSettingsDoc {
   return {
     isPublished: DEFAULT_RECRUITMENT_SETTINGS.isPublished,
-    fields: DEFAULT_RECRUITMENT_SETTINGS.fields.map((field, index) =>
-      normalizeRecruitmentField(field, index)
-    ),
+    fields: normalizeRecruitmentFields(DEFAULT_RECRUITMENT_SETTINGS.fields),
   };
 }
 
@@ -223,7 +401,7 @@ export function normalizeRecruitmentSettings(
   const raw = input as Partial<RecruitmentSettingsDoc>;
   const defaults = cloneDefaultRecruitmentSettings();
   const fields = Array.isArray(raw.fields)
-    ? raw.fields.map((field, index) => normalizeRecruitmentField(field, index))
+    ? normalizeRecruitmentFields(raw.fields)
     : defaults.fields;
 
   return {
@@ -237,16 +415,12 @@ export function normalizeRecruitmentSettings(
 
 export function getRecruitmentFieldTypeLabel(type: RecruitmentFieldType) {
   switch (type) {
-    case "email":
-      return "بريد إلكتروني";
     case "number":
       return "رقمي";
     case "date":
       return "تاريخ";
     case "select":
       return "قائمة";
-    case "textarea":
-      return "نص طويل";
     case "file":
       return "ملف";
     case "text":
@@ -259,30 +433,95 @@ export function getRecruitmentNumberModeLabel(mode: RecruitmentNumberMode) {
   return mode === "phone" ? "جوال" : "رقم";
 }
 
-export function getRecruitmentFieldHint(field: RecruitmentFieldDefinition) {
-  switch (field.type) {
-    case "email":
-      return "يتحقق من صحة البريد الإلكتروني.";
+export function getRecruitmentFieldItems(
+  field: RecruitmentFieldDefinition
+): RecruitmentFieldItemDefinition[] {
+  return [
+    normalizeRecruitmentFieldItem(
+      {
+        id: field.id,
+        type: field.type,
+        required: field.required,
+        placeholder: field.placeholder,
+        options: field.options,
+        numberMode: field.numberMode,
+        fileFolder: field.fileFolder,
+      },
+      0,
+      field.type
+    ),
+  ];
+}
+
+export function hasRecruitmentFieldItems(_field: RecruitmentFieldDefinition) {
+  return false;
+}
+
+export function getRecruitmentFieldValueKey(
+  field: RecruitmentFieldDefinition,
+  _item?: RecruitmentFieldItemDefinition
+) {
+  return field.id;
+}
+
+export function getRecruitmentFieldItemTitle(index: number) {
+  return `حقل ${index + 1}`;
+}
+
+export function getRecruitmentFieldItemTypeLabel(
+  item: RecruitmentFieldInputDefinition
+) {
+  if (item.type === "number" && item.numberMode === "phone") {
+    return "رقم الجوال";
+  }
+
+  return getRecruitmentFieldTypeLabel(item.type);
+}
+
+export function getRecruitmentFieldItemDisplayLabel(
+  item: RecruitmentFieldInputDefinition,
+  index: number
+) {
+  return `${getRecruitmentFieldItemTypeLabel(item)} ${index + 1}`;
+}
+
+export function hasRecruitmentFieldType(
+  field: RecruitmentFieldDefinition,
+  type: RecruitmentFieldType
+) {
+  return field.type === type;
+}
+
+export function isRecruitmentFieldRequired(field: RecruitmentFieldDefinition) {
+  return Boolean(field.required);
+}
+
+export function getRecruitmentFieldItemHint(
+  item: RecruitmentFieldInputDefinition
+) {
+  switch (item.type) {
     case "number":
-      return field.numberMode === "phone"
+      return item.numberMode === "phone"
         ? "هذا الحقل يقبل أرقام الجوال فقط."
         : "هذا الحقل يقبل الأرقام فقط.";
     case "date":
       return "يظهر كحقل تاريخ مع منتقي تاريخ واضح.";
     case "select":
       return "تظهر الخيارات كقائمة منسدلة مرتبة.";
-    case "textarea":
-      return "مناسب للنصوص الطويلة أو النبذة المختصرة.";
     case "file":
-      return "يسمح للمتقدم برفع ملف حتى 10MB، ويُحفظ في مسار مستقل داخل careers/.";
+      return "يسمح برفع ملف حتى 10MB ويحفظ في مسار مستقل داخل careers/.";
     case "text":
     default:
       return "حقل نصي بسيط للإجابات الحرة.";
   }
 }
 
+export function getRecruitmentFieldHint(field: RecruitmentFieldDefinition) {
+  return getRecruitmentFieldItemHint(getRecruitmentFieldItems(field)[0]);
+}
+
 export function sanitizeRecruitmentFieldValue(
-  field: RecruitmentFieldDefinition,
+  field: RecruitmentFieldInputDefinition,
   rawValue: unknown
 ) {
   const value = String(rawValue ?? "");
@@ -307,6 +546,10 @@ export function syncRecruitmentValuesWithFields(
   currentValues: RecruitmentFormValues = {}
 ) {
   return fields.reduce<RecruitmentFormValues>((acc, field) => {
+    if (field.type === "file") {
+      return acc;
+    }
+
     const nextValue = sanitizeRecruitmentFieldValue(
       field,
       currentValues[field.id] ?? ""
@@ -315,7 +558,7 @@ export function syncRecruitmentValuesWithFields(
     if (
       field.type === "select" &&
       nextValue &&
-      !field.options?.some((option) => option.value === nextValue)
+      !field.options?.some(option => option.value === nextValue)
     ) {
       acc[field.id] = "";
       return acc;
@@ -331,8 +574,10 @@ export function syncRecruitmentFilesWithFields(
   currentFiles: RecruitmentFormFileMap = {}
 ) {
   return fields.reduce<RecruitmentFormFileMap>((acc, field) => {
-    if (field.type !== "file") return acc;
-    acc[field.id] = currentFiles[field.id] ?? null;
+    if (field.type === "file") {
+      acc[field.id] = currentFiles[field.id] ?? null;
+    }
+
     return acc;
   }, {});
 }
@@ -344,15 +589,13 @@ export function validateRecruitmentForm(
 ) {
   return fields.reduce<Record<string, string>>((acc, field) => {
     if (field.type === "file") {
-      const selectedFile = files[field.id] ?? null;
-      if (field.required && !selectedFile) {
+      if (field.required && !files[field.id]) {
         acc[field.id] = "هذا الملف مطلوب.";
       }
       return acc;
     }
 
-    const rawValue = values[field.id] ?? "";
-    const value = rawValue.trim();
+    const value = String(values[field.id] ?? "").trim();
 
     if (field.required && !value) {
       acc[field.id] = "هذا الحقل مطلوب.";
@@ -363,11 +606,6 @@ export function validateRecruitmentForm(
       return acc;
     }
 
-    if (field.type === "email" && !EMAIL_REGEX.test(value)) {
-      acc[field.id] = "أدخل بريدًا إلكترونيًا صحيحًا.";
-      return acc;
-    }
-
     if (field.type === "number" && /\D/.test(value)) {
       acc[field.id] = "هذا الحقل يقبل الأرقام فقط.";
       return acc;
@@ -375,7 +613,7 @@ export function validateRecruitmentForm(
 
     if (
       field.type === "select" &&
-      !field.options?.some((option) => option.value === value)
+      !field.options?.some(option => option.value === value)
     ) {
       acc[field.id] = "اختر قيمة صحيحة من القائمة.";
       return acc;
@@ -392,6 +630,37 @@ export function validateRecruitmentForm(
   }, {});
 }
 
+function collectRecruitmentFieldValidationIssues(
+  field: RecruitmentFieldDefinition
+) {
+  const issues: string[] = [];
+
+  if (!String(field.label || "").trim()) {
+    issues.push("عنوان الحقل مطلوب.");
+  }
+
+  if (field.type === "select") {
+    const options = field.options || [];
+
+    if (!options.length) {
+      issues.push("أضف خيارًا واحدًا على الأقل لهذا الحقل.");
+    } else if (options.some(option => !String(option.label || "").trim())) {
+      issues.push("جميع خيارات القائمة يجب أن تحتوي على عنوان واضح.");
+    }
+  }
+
+  if (field.type === "file") {
+    const folder = String(field.fileFolder || "").trim();
+    if (!folder) {
+      issues.push("مجلد تخزين الملف مطلوب.");
+    } else if (!FILE_FOLDER_REGEX.test(folder)) {
+      issues.push("مجلد التخزين يجب أن يحتوي على a-z و0-9 و- و_ فقط.");
+    }
+  }
+
+  return issues;
+}
+
 export function validateRecruitmentSettings(settings: RecruitmentSettingsDoc) {
   const formErrors: string[] = [];
   const fieldErrors: Record<string, string[]> = {};
@@ -400,34 +669,8 @@ export function validateRecruitmentSettings(settings: RecruitmentSettingsDoc) {
     formErrors.push("أضف حقلًا واحدًا على الأقل قبل نشر نموذج التوظيف.");
   }
 
-  settings.fields.forEach((field) => {
-    const issues: string[] = [];
-
-    if (!String(field.label || "").trim()) {
-      issues.push("عنوان الحقل مطلوب.");
-    }
-
-    if (field.type === "select") {
-      const options = field.options || [];
-
-      if (!options.length) {
-        issues.push("أضف خيارًا واحدًا على الأقل لهذا الحقل.");
-      } else if (
-        options.some((option) => !String(option.label || "").trim())
-      ) {
-        issues.push("جميع خيارات القائمة يجب أن تحتوي على عنوان واضح.");
-      }
-    }
-
-    if (field.type === "file") {
-      const folder = String(field.fileFolder || "").trim();
-      if (!folder) {
-        issues.push("مجلد تخزين الملف مطلوب.");
-      } else if (!FILE_FOLDER_REGEX.test(folder)) {
-        issues.push("مجلد التخزين يجب أن يحتوي على a-z و0-9 و- و_ فقط.");
-      }
-    }
-
+  settings.fields.forEach(field => {
+    const issues = collectRecruitmentFieldValidationIssues(field);
     if (issues.length) {
       fieldErrors[field.id] = issues;
     }
@@ -443,45 +686,63 @@ export function buildRecruitmentApplicationAnswers(
   fields: RecruitmentFieldDefinition[],
   values: RecruitmentFormValues
 ) {
-  return fields.reduce<RecruitmentApplicationAnswer[]>((acc, field, index) => {
-    if (field.type === "file") return acc;
+  const answers: RecruitmentApplicationAnswer[] = [];
+  let order = 0;
+
+  fields.forEach(field => {
+    if (field.type === "file") {
+      return;
+    }
 
     const value = String(values[field.id] ?? "").trim();
-    if (!value) return acc;
+    if (!value) {
+      return;
+    }
 
     const answer: RecruitmentApplicationAnswer = {
       fieldId: field.id,
       label: field.label,
+      fieldLabel: field.label,
       type: field.type,
       value,
-      order: index,
+      order,
     };
 
     if (field.type === "select") {
-      const matchedOption = field.options?.find((option) => option.value === value);
+      const matchedOption = field.options?.find(option => option.value === value);
       if (matchedOption) {
         answer.valueLabel = matchedOption.label;
       }
     }
 
-    acc.push(answer);
-    return acc;
-  }, []);
+    answers.push(answer);
+    order += 1;
+  });
+
+  return answers;
 }
 
 export function buildRecruitmentApplicationAttachments(
   fields: RecruitmentFieldDefinition[],
   uploadsByFieldId: Record<string, UploadDocumentResult | null | undefined>
 ) {
-  return fields.reduce<RecruitmentApplicationAttachment[]>((acc, field, index) => {
-    if (field.type !== "file") return acc;
+  const attachments: RecruitmentApplicationAttachment[] = [];
+  let order = 0;
+
+  fields.forEach(field => {
+    if (field.type !== "file") {
+      return;
+    }
 
     const upload = uploadsByFieldId[field.id];
-    if (!upload) return acc;
+    if (!upload) {
+      return;
+    }
 
-    acc.push({
+    attachments.push({
       fieldId: field.id,
       label: field.label,
+      fieldLabel: field.label,
       fileId: upload.id,
       category: RECRUITMENT_FILE_CATEGORY,
       storageFolder: sanitizeRecruitmentFileFolder(field.fileFolder),
@@ -491,11 +752,13 @@ export function buildRecruitmentApplicationAttachments(
       contentType: upload.contentType,
       fileSize: upload.fileSize,
       uploadedAt: upload.uploadedAt,
-      order: index,
+      order,
     });
 
-    return acc;
-  }, []);
+    order += 1;
+  });
+
+  return attachments;
 }
 
 export function moveItem<T>(items: T[], fromIndex: number, toIndex: number) {

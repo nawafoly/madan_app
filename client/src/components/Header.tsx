@@ -4,7 +4,11 @@ import { Globe, LogOut, Search } from "lucide-react";
 
 import { NotificationBell } from "@/components/NotificationBell";
 import { Button } from "@/components/ui/button";
-import { useAuth } from "@/_core/hooks/useAuth";
+import {
+  getHomePathForUser,
+  isOpsRole,
+  useAuth,
+} from "@/_core/hooks/useAuth";
 import { useLanguage } from "@/contexts/LanguageContext";
 
 export default function Header() {
@@ -59,11 +63,20 @@ export default function Header() {
     return [navLinks.slice(0, mid), navLinks.slice(mid)];
   }, [navLinks]);
 
-  const role = (user as any)?.role;
-  const dashboardHref =
-    role && ["owner", "admin", "accountant", "staff"].includes(role)
-      ? "/dashboard"
-      : "/client/dashboard";
+  const homeHref = getHomePathForUser(user);
+  const isOpsUser = isOpsRole(user?.role);
+  const isStaffUser = user?.role === "staff";
+  const accountCtaLabel = isOpsUser
+    ? language === "ar"
+      ? "لوحة التحكم"
+      : "Dashboard"
+    : isStaffUser
+      ? language === "ar"
+        ? "بروفايل الموظف"
+        : "Employee Profile"
+      : language === "ar"
+        ? "حسابي"
+        : "My Account";
 
   const closeMobile = () => setIsMobileMenuOpen(false);
 
@@ -84,7 +97,7 @@ export default function Header() {
       return currentPath === href || currentPath.startsWith(href + "/");
     };
 
-    const found = navLinks.find((link) => isActive(link.href));
+    const found = navLinks.find(link => isActive(link.href));
     return found?.href ?? "";
   }, [currentPath, navLinks]);
 
@@ -132,7 +145,7 @@ export default function Header() {
                 className="rsg-burger lg:hidden"
                 aria-label="Open menu"
                 aria-expanded={isMobileMenuOpen}
-                onClick={() => setIsMobileMenuOpen((value) => !value)}
+                onClick={() => setIsMobileMenuOpen(value => !value)}
               >
                 <span />
                 <span />
@@ -164,13 +177,13 @@ export default function Header() {
 
             <nav className="rsg-nav__links rsg-nav__slot rsg-nav__slot--center">
               <div className="flex items-center justify-center gap-5">
-                {linksLeft.map((link) => {
+                {linksLeft.map(link => {
                   const isActive = activeHref === link.href;
 
                   return (
                     <Link key={link.href} href={link.href}>
                       <span
-                        ref={(el) => {
+                        ref={el => {
                           linkRefs.current[link.href] = el;
                         }}
                         className={`rsg-nav__link ${isActive ? "is-active" : ""}`}
@@ -189,13 +202,13 @@ export default function Header() {
                   />
                 </Link>
 
-                {linksRight.map((link) => {
+                {linksRight.map(link => {
                   const isActive = activeHref === link.href;
 
                   return (
                     <Link key={link.href} href={link.href}>
                       <span
-                        ref={(el) => {
+                        ref={el => {
                           linkRefs.current[link.href] = el;
                         }}
                         className={`rsg-nav__link ${isActive ? "is-active" : ""}`}
@@ -219,9 +232,9 @@ export default function Header() {
                 ) : null
               ) : (
                 <div className="hidden items-center gap-2 md:flex">
-                  <Link href={dashboardHref}>
+                  <Link href={homeHref}>
                     <Button className={`rsg-cta ${navBtnClass}`}>
-                      {language === "ar" ? "لوحة التحكم" : "Dashboard"}
+                      {accountCtaLabel}
                     </Button>
                   </Link>
 
@@ -241,7 +254,7 @@ export default function Header() {
           {isMobileMenuOpen ? (
             <div className="mt-3 animate-slide-up p-4 lg:hidden rsg-card rsg-card--tight">
               <nav className="flex flex-col gap-2">
-                {navLinks.map((link) => {
+                {navLinks.map(link => {
                   const isActive = activeHref === link.href;
 
                   return (
@@ -281,12 +294,12 @@ export default function Header() {
                     ) : null
                   ) : (
                     <>
-                      <Link href={dashboardHref}>
+                      <Link href={homeHref}>
                         <Button
                           className={`w-full rsg-cta ${navBtnClass}`}
                           onClick={closeMobile}
                         >
-                          {language === "ar" ? "لوحة التحكم" : "Dashboard"}
+                          {accountCtaLabel}
                         </Button>
                       </Link>
 

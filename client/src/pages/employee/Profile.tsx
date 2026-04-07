@@ -1,0 +1,646 @@
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
+import {
+  EmailAuthProvider,
+  reauthenticateWithCredential,
+  updatePassword,
+  updateProfile,
+} from "firebase/auth";
+import { doc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
+import {
+  BriefcaseBusiness,
+  Camera,
+  Loader2,
+  Mail,
+  Phone,
+  ShieldCheck,
+  UserRound,
+  CalendarDays,
+  Building2,
+  BadgeCheck,
+  KeyRound,
+} from "lucide-react";
+import { toast } from "sonner";
+
+import EmployeeLayout from "@/components/EmployeeLayout";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { auth, db } from "@/_core/firebase";
+import { useAuth } from "@/_core/hooks/useAuth";
+import {
+  EMPLOYEE_AVATAR_CATEGORY,
+  EMPLOYEE_EMPTY_VALUE,
+  buildEmployeeAvatarPatch,
+  buildEmployeePhonePatch,
+  normalizeEmployeeProfile,
+  type EmployeeProfileUserDoc,
+} from "@/lib/employeeProfile";
+import { uploadDocumentToCloudflare } from "@/lib/documentUploadService";
+import { formatDateEN } from "@/lib/formatters";
+import { cn } from "@/lib/utils";
+
+const AVATAR_MAX_SIZE_BYTES = 5 * 1024 * 1024;
+
+function initialsFromName(name: string, email: string) {
+  const source = String(name || email || "").trim();
+  if (!source) return "م";
+  const parts = source
+    .split(/\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .slice(0, 2);
+  return parts
+    .map((part) => part.charAt(0))
+    .join("")
+    .toUpperCase();
+}
+
+function friendlyPasswordError(code?: string) {
+  switch (String(code || "").trim()) {
+    case "auth/wrong-password":
+    case "auth/invalid-credential":
+      return "كلمة المرور الحالية غير صحيحة.";
+    case "auth/weak-password":
+      return "كلمة المرور الجديدة ضعيفة. استخدم 6 أحرف على الأقل.";
+    case "auth/requires-recent-login":
+      return "لأمان الحساب، سجّل الدخول مرة أخرى ثم حاول تغيير كلمة المرور.";
+    default:
+      return "تعذر تغيير كلمة المرور الآن.";
+  }
+}
+
+function validatePhone(value: string) {
+  const normalized = String(value || "").trim();
+  const digits = normalized.replace(/\D/g, "");
+  return normalized.length >= 7 && digits.length >= 7;
+}
+
+function validateAvatarFile(file: File) {
+  if (!file.type.startsWith("image/")) {
+    throw new Error("يرجى اختيار صورة فقط.");
+  }
+
+  if (file.size > AVATAR_MAX_SIZE_BYTES) {
+    throw new Error("حجم الصورة كبير. الحد الأعلى 5MB.");
+  }
+}
+
+function SectionHeading({
+  icon: Icon,
+  title,
+  description,
+}: {
+  icon: typeof UserRound;
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="space-y-3">
+      <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/85 px-4 py-1.5 text-xs font-semibold text-slate-600">
+        <Icon className="h-4 w-4" />
+        {title}
+      </div>
+      <div className="space-y-2">
+        <h2 className="text-2xl font-semibold tracking-tight text-slate-950">
+          {title}
+        </h2>
+        <p className="text-sm leading-7 text-slate-600">{description}</p>
+      </div>
+    </div>
+  );
+}
+
+function ReadonlyField({
+  label,
+  value,
+  icon: Icon,
+  dir,
+}: {
+  label: string;
+  value: string;
+  icon: typeof UserRound;
+  dir?: "rtl" | "ltr";
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-200/80 bg-slate-50/80 p-4 shadow-sm">
+      <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+        <Icon className="h-3.5 w-3.5" />
+        {label}
+      </div>
+      <div
+        dir={dir}
+        className="mt-2 break-words text-sm font-semibold leading-7 text-slate-950"
+      >
+        {value || EMPLOYEE_EMPTY_VALUE}
+      </div>
+      <div className="mt-3">
+        <Badge
+          variant="outline"
+          className="rounded-full border-slate-200 bg-white/80 text-slate-500 shadow-none"
+        >
+          عرض فقط
+        </Badge>
+      </div>
+    </div>
+  );
+}
+
+function EmploymentTile({
+  label,
+  value,
+  icon: Icon,
+  valueClassName,
+  badge,
+}: {
+  label: string;
+  value: string;
+  icon: typeof UserRound;
+  valueClassName?: string;
+  badge?: ReactNode;
+}) {
+  return (
+    <div className="rounded-[24px] border border-slate-200/80 bg-white/95 p-5 shadow-sm">
+      <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+        <Icon className="h-3.5 w-3.5" />
+        {label}
+      </div>
+      <div
+        className={cn(
+          "mt-3 break-words text-lg font-semibold text-slate-950",
+          valueClassName
+        )}
+      >
+        {value}
+      </div>
+      {badge ? <div className="mt-3">{badge}</div> : null}
+    </div>
+  );
+}
+
+export default function EmployeeProfilePage() {
+  const { user } = useAuth();
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const [userDoc, setUserDoc] = useState<EmployeeProfileUserDoc | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [phoneInput, setPhoneInput] = useState("");
+  const [savingPhone, setSavingPhone] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [changingPassword, setChangingPassword] = useState(false);
+
+  useEffect(() => {
+    if (!user?.uid) {
+      setUserDoc(null);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    const unsubscribe = onSnapshot(
+      doc(db, "users", user.uid),
+      (snapshot) => {
+        setUserDoc(
+          snapshot.exists()
+            ? ({ uid: snapshot.id, ...(snapshot.data() as EmployeeProfileUserDoc) } as EmployeeProfileUserDoc)
+            : null
+        );
+        setLoading(false);
+      },
+      (error) => {
+        console.error("employee_profile_snapshot_error", error);
+        setUserDoc(null);
+        setLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [user?.uid]);
+
+  const profile = useMemo(
+    () =>
+      normalizeEmployeeProfile(userDoc, {
+        displayName: user?.displayName,
+        email: user?.email,
+        photoURL: user?.firebaseUser?.photoURL || auth.currentUser?.photoURL,
+      }),
+    [user?.displayName, user?.email, user?.firebaseUser?.photoURL, userDoc]
+  );
+
+  useEffect(() => {
+    setPhoneInput(profile.personal.phone || "");
+  }, [profile.personal.phone]);
+
+  const phoneDirty = phoneInput.trim() !== profile.personal.phone.trim();
+  const phoneValid = validatePhone(phoneInput);
+
+  const handleSavePhone = async () => {
+    const normalizedPhone = phoneInput.trim();
+    if (!user?.uid) return;
+    if (!validatePhone(normalizedPhone)) {
+      toast.error("رقم الجوال غير صالح.");
+      return;
+    }
+
+    setSavingPhone(true);
+    try {
+      await setDoc(
+        doc(db, "users", user.uid),
+        {
+          ...buildEmployeePhonePatch(normalizedPhone),
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+      toast.success("تم تحديث رقم الجوال.");
+    } catch (error) {
+      console.error("employee_phone_update_failed", error);
+      toast.error("تعذر تحديث رقم الجوال.");
+    } finally {
+      setSavingPhone(false);
+    }
+  };
+
+  const handleAvatarButtonClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleAvatarChange = async (
+    event: ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file || !user?.uid) return;
+
+    try {
+      validateAvatarFile(file);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "ملف الصورة غير صالح.");
+      event.target.value = "";
+      return;
+    }
+
+    setUploadingAvatar(true);
+    try {
+      const uploaded = await uploadDocumentToCloudflare({
+        entityType: "employee",
+        entityId: user.uid,
+        category: EMPLOYEE_AVATAR_CATEGORY,
+        file,
+        kind: "attachment",
+        uploadedBy: user.uid,
+        storageFolder: "profile_avatar",
+      });
+
+      const avatarPayload = {
+        id: uploaded.id,
+        fileName: uploaded.fileName,
+        filePath: uploaded.filePath,
+        fileUrl: uploaded.fileUrl,
+        contentType: uploaded.contentType,
+        fileSize: uploaded.fileSize,
+        uploadedAt: uploaded.uploadedAt,
+      };
+
+      await setDoc(
+        doc(db, "users", user.uid),
+        {
+          ...buildEmployeeAvatarPatch(avatarPayload),
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      if (auth.currentUser) {
+        await updateProfile(auth.currentUser, {
+          photoURL: uploaded.fileUrl,
+        });
+      }
+
+      toast.success("تم تحديث الصورة الشخصية.");
+    } catch (error) {
+      console.error("employee_avatar_upload_failed", error);
+      toast.error("تعذر رفع الصورة الشخصية.");
+    } finally {
+      setUploadingAvatar(false);
+      event.target.value = "";
+    }
+  };
+
+  const handleChangePassword = async () => {
+    const currentUser = auth.currentUser;
+    const email = String(currentUser?.email || user?.email || "").trim();
+
+    if (!currentUser || !email) {
+      toast.error("تعذر الوصول إلى حسابك الآن.");
+      return;
+    }
+
+    if (!currentPassword.trim()) {
+      toast.error("اكتب كلمة المرور الحالية.");
+      return;
+    }
+
+    if (newPassword.trim().length < 6) {
+      toast.error("كلمة المرور الجديدة يجب أن تكون 6 أحرف على الأقل.");
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      toast.error("كلمة المرور الجديدة وتأكيدها غير متطابقين.");
+      return;
+    }
+
+    setChangingPassword(true);
+    try {
+      const credential = EmailAuthProvider.credential(
+        email,
+        currentPassword
+      );
+      await reauthenticateWithCredential(currentUser, credential);
+      await updatePassword(currentUser, newPassword);
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      toast.success("تم تغيير كلمة المرور.");
+    } catch (error: any) {
+      console.error("employee_password_change_failed", error);
+      toast.error(friendlyPasswordError(error?.code));
+    } finally {
+      setChangingPassword(false);
+    }
+  };
+
+  const statusBadgeClass =
+    profile.employment.statusTone === "success"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+      : profile.employment.statusTone === "warning"
+        ? "border-amber-200 bg-amber-50 text-amber-700"
+        : "border-slate-200 bg-slate-100 text-slate-600";
+
+  return (
+    <EmployeeLayout
+      title="بروفايل الموظف"
+      description="هذه المساحة مخصصة لمتابعة بياناتك الشخصية والوظيفية، مع صلاحيات محددة لتعديل الجوال والصورة الشخصية وتغيير كلمة المرور فقط."
+    >
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
+        <section className="space-y-6">
+          <SectionHeading
+            icon={UserRound}
+            title="البيانات الشخصية"
+            description="يعرض هذا القسم بياناتك الأساسية. يمكنك تعديل رقم الجوال والصورة الشخصية فقط، بينما الاسم والبريد للعرض فقط في هذه المرحلة."
+          />
+
+          <Card className="overflow-hidden rounded-[28px] border border-slate-200/80 bg-white/95 shadow-[0_24px_70px_-42px_rgba(15,23,42,0.28)]">
+            <CardContent className="space-y-6 p-6 sm:p-8">
+              <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex items-center gap-4">
+                  <Avatar className="size-24 border border-slate-200 bg-slate-100 shadow-sm">
+                    <AvatarImage
+                      src={profile.personal.avatarUrl || undefined}
+                      alt={profile.personal.name}
+                    />
+                    <AvatarFallback className="bg-slate-900 text-lg font-semibold text-white">
+                      {initialsFromName(
+                        profile.personal.name,
+                        profile.personal.email
+                      )}
+                    </AvatarFallback>
+                  </Avatar>
+
+                  <div className="space-y-2">
+                    <div className="text-2xl font-semibold tracking-tight text-slate-950">
+                      {profile.personal.name}
+                    </div>
+                    <div className="text-sm text-slate-500">
+                      {profile.personal.email}
+                    </div>
+                    <Badge
+                      variant="outline"
+                      className="rounded-full border-[#F2B705]/35 bg-[#F2B705]/10 text-[#8b6700] shadow-none"
+                    >
+                      موظف
+                    </Badge>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="rounded-2xl border-slate-200 bg-white/90"
+                    onClick={handleAvatarButtonClick}
+                    disabled={uploadingAvatar}
+                  >
+                    {uploadingAvatar ? (
+                      <Loader2 className="ml-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Camera className="ml-2 h-4 w-4" />
+                    )}
+                    {profile.personal.avatarUrl ? "تغيير الصورة" : "رفع الصورة"}
+                  </Button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleAvatarChange}
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <ReadonlyField
+                  label="الاسم"
+                  value={profile.personal.name}
+                  icon={UserRound}
+                />
+                <ReadonlyField
+                  label="البريد الإلكتروني"
+                  value={profile.personal.email}
+                  icon={Mail}
+                  dir="ltr"
+                />
+              </div>
+
+              <div className="rounded-[24px] border border-slate-200/80 bg-slate-50/75 p-5 shadow-sm">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                      <Phone className="h-3.5 w-3.5" />
+                      رقم الجوال
+                    </div>
+                    <p className="text-sm leading-7 text-slate-600">
+                      يمكنك تحديث رقم الجوال المرتبط بحسابك لاستخدامه في التواصل.
+                    </p>
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className="rounded-full border-emerald-200 bg-emerald-50 text-emerald-700 shadow-none"
+                  >
+                    قابل للتعديل
+                  </Badge>
+                </div>
+
+                <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-center">
+                  <Input
+                    dir="ltr"
+                    value={phoneInput}
+                    onChange={(event) => setPhoneInput(event.target.value)}
+                    placeholder="05xxxxxxxx"
+                    className="h-12 rounded-2xl border-slate-200 bg-white text-left shadow-none"
+                  />
+                  <Button
+                    type="button"
+                    className="h-12 rounded-2xl bg-slate-950 px-6 text-white hover:bg-[#15233c]"
+                    disabled={savingPhone || !phoneDirty || !phoneValid}
+                    onClick={handleSavePhone}
+                  >
+                    {savingPhone ? (
+                      <Loader2 className="ml-2 h-4 w-4 animate-spin" />
+                    ) : null}
+                    حفظ رقم الجوال
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-[28px] border border-slate-200/80 bg-white/95 shadow-[0_24px_70px_-42px_rgba(15,23,42,0.22)]">
+            <CardHeader className="space-y-3">
+              <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                <KeyRound className="h-4 w-4" />
+                أمان الحساب
+              </div>
+              <CardTitle className="text-xl font-semibold text-slate-950">
+                تغيير كلمة المرور
+              </CardTitle>
+              <CardDescription className="text-sm leading-7 text-slate-600">
+                يمكنك تغيير كلمة المرور الخاصة بحسابك فقط. لن يؤثر ذلك على أي إعدادات إدارية أخرى.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4">
+              <Input
+                type="password"
+                value={currentPassword}
+                onChange={(event) => setCurrentPassword(event.target.value)}
+                placeholder="كلمة المرور الحالية"
+                className="h-12 rounded-2xl border-slate-200 bg-slate-50/80 shadow-none"
+              />
+              <Input
+                type="password"
+                value={newPassword}
+                onChange={(event) => setNewPassword(event.target.value)}
+                placeholder="كلمة المرور الجديدة"
+                className="h-12 rounded-2xl border-slate-200 bg-slate-50/80 shadow-none"
+              />
+              <Input
+                type="password"
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+                placeholder="تأكيد كلمة المرور الجديدة"
+                className="h-12 rounded-2xl border-slate-200 bg-slate-50/80 shadow-none"
+              />
+              <div className="flex justify-start">
+                <Button
+                  type="button"
+                  className="h-12 rounded-2xl bg-[#F2B705] px-6 text-slate-950 hover:bg-[#dfaa00]"
+                  disabled={changingPassword}
+                  onClick={handleChangePassword}
+                >
+                  {changingPassword ? (
+                    <Loader2 className="ml-2 h-4 w-4 animate-spin" />
+                  ) : null}
+                  تغيير كلمة المرور
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+
+        <section className="space-y-6">
+          <SectionHeading
+            icon={BriefcaseBusiness}
+            title="بيانات العمل"
+            description="هذه البيانات مرتبطة بوظيفتك داخل الشركة، وهي للعرض فقط في هذه المرحلة. تعديلها سيكون لاحقًا من جهة الإدارة أو الموارد البشرية."
+          />
+
+          <Card className="rounded-[28px] border border-slate-200/80 bg-white/95 shadow-[0_24px_70px_-42px_rgba(15,23,42,0.22)]">
+            <CardContent className="space-y-5 p-6 sm:p-8">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <EmploymentTile
+                  label="المسمى الوظيفي"
+                  value={profile.employment.title}
+                  icon={BriefcaseBusiness}
+                />
+                <EmploymentTile
+                  label="القسم / الإدارة"
+                  value={profile.employment.department}
+                  icon={Building2}
+                />
+                <EmploymentTile
+                  label="تاريخ بداية العمل"
+                  value={
+                    profile.employment.startDate
+                      ? formatDateEN(profile.employment.startDate)
+                      : EMPLOYEE_EMPTY_VALUE
+                  }
+                  icon={CalendarDays}
+                />
+                <EmploymentTile
+                  label="رصيد الإجازات"
+                  value={profile.employment.leaveBalanceLabel}
+                  icon={BadgeCheck}
+                />
+                <EmploymentTile
+                  label="الحالة الوظيفية"
+                  value={profile.employment.statusLabel}
+                  icon={ShieldCheck}
+                  badge={
+                    <Badge
+                      variant="outline"
+                      className={cn("rounded-full shadow-none", statusBadgeClass)}
+                    >
+                      {profile.employment.statusLabel}
+                    </Badge>
+                  }
+                />
+                {profile.employment.employeeCode !== EMPLOYEE_EMPTY_VALUE ? (
+                  <EmploymentTile
+                    label="الرقم الوظيفي"
+                    value={profile.employment.employeeCode}
+                    icon={UserRound}
+                  />
+                ) : null}
+              </div>
+
+              <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50/60 p-4 text-sm leading-7 text-slate-600">
+                بيانات العمل هنا للعرض فقط. لا يمكنك تعديل المسمى الوظيفي أو رصيد الإجازات أو الحالة الوظيفية بنفسك من هذه الصفحة.
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+      </div>
+
+      {loading ? (
+        <div className="pointer-events-none fixed inset-0 z-40 bg-white/45 backdrop-blur-[1px]">
+          <div className="flex h-full items-center justify-center">
+            <div className="inline-flex items-center gap-3 rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-medium text-slate-600 shadow-lg">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              جاري تحميل بروفايل الموظف...
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </EmployeeLayout>
+  );
+}

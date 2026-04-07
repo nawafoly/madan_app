@@ -45,6 +45,8 @@ export function getRoleDisplayLabel(role: unknown) {
       return "أدمن";
     case "accountant":
       return "محاسب";
+    case "hr":
+      return "الموارد البشرية";
     case "staff":
       return "موظف";
     case "client":

@@ -1504,7 +1504,14 @@ const makeEvent = (opts: {
 /* =========================
   ✅ Roles (Safe + Backward compatible)
 ========================= */
-type AppRole = "owner" | "admin" | "accountant" | "staff" | "client" | "guest";
+type AppRole =
+  | "owner"
+  | "admin"
+  | "accountant"
+  | "hr"
+  | "staff"
+  | "client"
+  | "guest";
 
 function normalizeRole(raw: any): AppRole {
   if (!raw) return "guest";
@@ -1513,6 +1520,14 @@ function normalizeRole(raw: any): AppRole {
   if (r.includes("owner")) return "owner";
   if (r.includes("admin")) return "admin";
   if (r.includes("account")) return "accountant";
+  if (
+    r === "hr" ||
+    r.includes("human resources") ||
+    r.includes("human_resources") ||
+    r.includes("human-resources")
+  ) {
+    return "hr";
+  }
   if (r.includes("staff") || r.includes("reception")) return "staff";
   if (r.includes("client") || r.includes("investor")) return "client";
   if (r.includes("guest")) return "guest";

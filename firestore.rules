@@ -43,12 +43,13 @@ service cloud.firestore {
 
     function isOwner() { return signedIn() && myIsActive() && myRole() == "owner"; }
     function isAdmin() { return signedIn() && myIsActive() && (myRole() == "admin" || isOwner()); }
+    function isHr() { return signedIn() && myIsActive() && myRole() == "hr"; }
     function isStaff() { return signedIn() && myIsActive() && myRole() == "staff"; }
     function isAccountant() { return signedIn() && myIsActive() && myRole() == "accountant"; }
     function isClient() { return signedIn() && myIsActive() && myRole() == "client"; }
 
     function isOps() {
-      return signedIn() && (isOwner() || isAdmin() || isStaff() || isAccountant());
+      return signedIn() && (isOwner() || isAdmin() || isAccountant() || isHr());
     }
 
     function myAllowPermissions() {
@@ -76,6 +77,10 @@ service cloud.firestore {
             "users.manage",
             "messages.view",
             "messages.manage",
+            "recruitment.view",
+            "recruitment.manage",
+            "employees.view",
+            "employees.manage",
             "reports.view",
             "financial.view",
             "financial.edit",
@@ -93,6 +98,10 @@ service cloud.firestore {
               "users.manage",
               "messages.view",
               "messages.manage",
+              "recruitment.view",
+              "recruitment.manage",
+              "employees.view",
+              "employees.manage",
               "reports.view",
               "settings.manage"
             ]
@@ -105,8 +114,15 @@ service cloud.firestore {
                 "financial.edit",
                 "reports.view"
               ]
+            : myRole() == "hr"
+              ? [
+                  "recruitment.view",
+                  "recruitment.manage",
+                  "employees.view",
+                  "employees.manage"
+                ]
             : myRole() == "staff"
-              ? ["dashboard.view", "projects.view", "messages.view"]
+              ? []
               : myRole() == "client"
                 ? ["projects.view"]
                 : ["projects.view"];
@@ -120,7 +136,8 @@ service cloud.firestore {
     }
 
     function hasAdminPermission(permission) {
-      return isOps() && hasEffectivePermission(permission);
+      return (isOps() && hasEffectivePermission(permission))
+        || hasAdminUserPermission(permission);
     }
 
     function canReadUsersAdmin() {
@@ -135,6 +152,324 @@ service cloud.firestore {
     function canManageUsersAdmin() {
       return hasAdminPermission("users.manage")
         || hasAdminPermission("settings.manage");
+    }
+
+    function myAdminUserDocId() {
+      return signedIn() && (request.auth.token.email is string)
+        ? lower(request.auth.token.email)
+        : "";
+    }
+
+    function adminUserDocExists() {
+      return myAdminUserDocId() != ""
+        && exists(/databases/$(database)/documents/admin_users/$(myAdminUserDocId()));
+    }
+
+    function myAdminUserData() {
+      return adminUserDocExists()
+        ? get(/databases/$(database)/documents/admin_users/$(myAdminUserDocId())).data
+        : {};
+    }
+
+    function adminUserRoleValue() {
+      return (("roleKey" in myAdminUserData()) && (myAdminUserData().roleKey is string))
+        ? lower(myAdminUserData().roleKey)
+        : (("role" in myAdminUserData()) && (myAdminUserData().role is string))
+          ? lower(myAdminUserData().role)
+          : "";
+    }
+
+    function adminUserIsActive() {
+      return !adminUserDocExists()
+        ? false
+        : (("active" in myAdminUserData()) && (myAdminUserData().active is bool))
+          ? myAdminUserData().active
+          : (("isActive" in myAdminUserData()) && (myAdminUserData().isActive is bool))
+            ? myAdminUserData().isActive
+            : true;
+    }
+
+    function adminUserAllowPermissions() {
+      return (("permissionsAllow" in myAdminUserData()) && (myAdminUserData().permissionsAllow is list))
+        ? myAdminUserData().permissionsAllow
+        : [];
+    }
+
+    function adminUserDenyPermissions() {
+      return (("permissionsDeny" in myAdminUserData()) && (myAdminUserData().permissionsDeny is list))
+        ? myAdminUserData().permissionsDeny
+        : [];
+    }
+
+    function adminUserRoleDefaultPermissions() {
+      return adminUserRoleValue() == "owner"
+        ? [
+            "dashboard.view",
+            "projects.view",
+            "projects.manage",
+            "projects.publish",
+            "investments.view",
+            "investments.manage",
+            "users.view",
+            "users.manage",
+            "messages.view",
+            "messages.manage",
+            "recruitment.view",
+            "recruitment.manage",
+            "employees.view",
+            "employees.manage",
+            "reports.view",
+            "financial.view",
+            "financial.edit",
+            "settings.manage"
+          ]
+        : adminUserRoleValue() == "admin"
+          ? [
+              "dashboard.view",
+              "projects.view",
+              "projects.manage",
+              "projects.publish",
+              "investments.view",
+              "investments.manage",
+              "users.view",
+              "users.manage",
+              "messages.view",
+              "messages.manage",
+              "recruitment.view",
+              "recruitment.manage",
+              "employees.view",
+              "employees.manage",
+              "reports.view",
+              "settings.manage"
+            ]
+          : adminUserRoleValue() == "accountant"
+            ? [
+                "dashboard.view",
+                "projects.view",
+                "investments.view",
+                "financial.view",
+                "financial.edit",
+                "reports.view"
+              ]
+            : adminUserRoleValue() == "hr"
+              ? [
+                  "recruitment.view",
+                  "recruitment.manage",
+                  "employees.view",
+                  "employees.manage"
+                ]
+              : adminUserRoleValue() == "staff"
+                ? []
+                : adminUserRoleValue() == "client"
+                  ? ["projects.view"]
+                  : ["projects.view"];
+    }
+
+    function hasAdminUserPermission(permission) {
+      return signedIn()
+        && adminUserDocExists()
+        && adminUserIsActive()
+        && (adminUserRoleValue() in ["owner", "admin", "accountant", "hr"])
+        && !(permission in adminUserDenyPermissions())
+        && (
+          (permission in adminUserAllowPermissions())
+          || (permission in adminUserRoleDefaultPermissions())
+        );
+    }
+
+    function isBootstrapOwnerEmail() {
+      return signedIn()
+        && (
+          lower(request.auth.token.email) == "abdullah@madanalbena.com"
+          || (
+            adminUserDocExists()
+            && adminUserIsActive()
+            && adminUserRoleValue() == "owner"
+          )
+        );
+    }
+
+    function roleFromData(data) {
+      return (("role" in data) && (data.role is string))
+        ? lower(data.role)
+        : "";
+    }
+
+    function isStaffUserDoc(data) {
+      return roleFromData(data) == "staff";
+    }
+
+    function profileMap(data) {
+      return (("profile" in data) && (data.profile is map))
+        ? data.profile
+        : {};
+    }
+
+    function employmentMap(data) {
+      return (("employment" in data) && (data.employment is map))
+        ? data.employment
+        : {};
+    }
+
+    function employeeProfileMap(data) {
+      return (("employeeProfile" in data) && (data.employeeProfile is map))
+        ? data.employeeProfile
+        : {};
+    }
+
+    function employeePersonalMap(data) {
+      let employeeProfile = employeeProfileMap(data);
+      return (("personal" in employeeProfile) && (employeeProfile.personal is map))
+        ? employeeProfile.personal
+        : {};
+    }
+
+    function employeeEmploymentMap(data) {
+      let employeeProfile = employeeProfileMap(data);
+      return (("employment" in employeeProfile) && (employeeProfile.employment is map))
+        ? employeeProfile.employment
+        : {};
+    }
+
+    function canReadEmployeesAdmin() {
+      return hasAdminPermission("employees.view")
+        || hasAdminPermission("employees.manage");
+    }
+
+    function canManageEmployeesAdmin() {
+      return hasAdminPermission("employees.manage");
+    }
+
+    function canReadRecruitmentAdmin() {
+      return hasAdminPermission("recruitment.view")
+        || hasAdminPermission("recruitment.manage");
+    }
+
+    function canManageRecruitmentAdmin() {
+      return hasAdminPermission("recruitment.manage");
+    }
+
+    function isValidEmployeeSelfProfileUpdate() {
+      let keys = request.resource.data.diff(resource.data).changedKeys();
+      return !keys.hasAny([
+          "role",
+          "permissionsAllow",
+          "permissionsDeny",
+          "active",
+          "isActive",
+          "isInvestor",
+          "vipStatus",
+          "linkedUserUid",
+          "title",
+          "jobTitle",
+          "department",
+          "startDate",
+          "hireDate",
+          "joinedAt",
+          "leaveBalance",
+          "status",
+          "employmentStatus",
+          "employeeCode",
+          "employeeId",
+          "adminNotes",
+          "employment"
+        ])
+        && (!keys.hasAny(["email"]) || request.resource.data.email == request.auth.token.email)
+        && (!keys.hasAny(["uid"]) || request.resource.data.uid == request.auth.uid)
+        && (
+          !keys.hasAny(["profile"])
+          || profileMap(request.resource.data).diff(profileMap(resource.data)).changedKeys().hasOnly([
+            "phone",
+            "photoURL",
+            "avatar"
+          ])
+        )
+        && (
+          !keys.hasAny(["employeeProfile"])
+          || (
+            employeeProfileMap(request.resource.data)
+              .diff(employeeProfileMap(resource.data))
+              .changedKeys()
+              .hasOnly(["personal"])
+            && employeePersonalMap(request.resource.data)
+              .diff(employeePersonalMap(resource.data))
+              .changedKeys()
+              .hasOnly(["phone", "avatar"])
+          )
+        );
+    }
+
+    function isValidEmployeeAdminUpdate() {
+      let keys = request.resource.data.diff(resource.data).changedKeys();
+      return isStaffUserDoc(resource.data)
+        && isStaffUserDoc(request.resource.data)
+        && !keys.hasAny([
+            "role",
+            "permissionsAllow",
+            "permissionsDeny",
+            "active",
+            "isActive",
+            "isInvestor",
+            "vipStatus",
+            "linkedUserUid",
+            "email",
+            "uid",
+            "phone",
+            "photoURL",
+            "profile"
+          ])
+        && keys.hasOnly([
+            "title",
+            "department",
+            "startDate",
+            "leaveBalance",
+            "employment",
+            "employeeProfile",
+            "updatedAt"
+          ])
+        && (
+          !keys.hasAny(["employment"])
+          || employmentMap(request.resource.data).diff(employmentMap(resource.data)).changedKeys().hasOnly([
+            "title",
+            "jobTitle",
+            "department",
+            "startDate",
+            "leaveBalance",
+            "status",
+            "employmentStatus",
+            "employeeCode",
+            "adminNotes",
+            "updatedAt",
+            "updatedByUid",
+            "updatedByEmail"
+          ])
+        )
+        && (
+          !keys.hasAny(["employeeProfile"])
+          || (
+            employeeProfileMap(request.resource.data)
+              .diff(employeeProfileMap(resource.data))
+              .changedKeys()
+              .hasOnly(["employment"])
+            && employeeEmploymentMap(request.resource.data)
+              .diff(employeeEmploymentMap(resource.data))
+              .changedKeys()
+              .hasOnly([
+                "title",
+                "jobTitle",
+                "department",
+                "startDate",
+                "leaveBalance",
+                "status",
+                "employmentStatus",
+                "employeeCode",
+                "adminNotes",
+                "updatedAt",
+                "updatedByUid",
+                "updatedByEmail"
+              ])
+          )
+        );
     }
 
     function canReadMessagesAdmin() {
@@ -459,7 +794,9 @@ match /projects/{projectId} {
        - ops يقرأ الجميع (للوحات الإدارة)
     ========================= */
     match /users/{userId} {
-      allow read: if (signedIn() && request.auth.uid == userId) || canReadUsersAdmin();
+      allow read: if (signedIn() && request.auth.uid == userId)
+        || canReadUsersAdmin()
+        || (canReadEmployeesAdmin() && isStaffUserDoc(resource.data));
 
       // ✅ create: أقل شروط ممكنة (عشان ما ينهار ensureUserDoc)
       allow create: if signedIn()
@@ -467,11 +804,13 @@ match /projects/{projectId} {
         && request.resource.data.email == request.auth.token.email
         && isValidRoleOnCreate();
 
-      allow update: if canManageUsersAdmin() || (
-        signedIn()
-        && request.auth.uid == userId
-        && isValidRoleOnUpdate()
-      );
+      allow update: if canManageUsersAdmin()
+        || (canManageEmployeesAdmin() && isValidEmployeeAdminUpdate())
+        || (
+          signedIn()
+          && request.auth.uid == userId
+          && isValidEmployeeSelfProfileUpdate()
+        );
 
       allow delete: if canManageUsersAdmin();
 
@@ -486,23 +825,6 @@ match /projects/{projectId} {
           && (!("active" in request.resource.data) || request.resource.data.active == true);
       }
 
-      function isValidRoleOnUpdate() {
-        // المستخدم ما يغير role بنفسه (إلا admin)
-        // نسمح له بتعديل بياناته فقط
-        let keys = request.resource.data.diff(resource.data).changedKeys();
-        return !keys.hasAny([
-            "role",
-            "permissionsAllow",
-            "permissionsDeny",
-            "active",
-            "isActive",
-            "isInvestor",
-            "vipStatus",
-            "linkedUserUid"
-          ]) // المستخدم ممنوع يغيّر صلاحياته/حالة الحساب
-          && (!keys.hasAny(["email"]) || request.resource.data.email == request.auth.token.email)
-          && (!keys.hasAny(["uid"]) || request.resource.data.uid == request.auth.uid);
-      }
     }
 
     /* =========================
@@ -511,6 +833,20 @@ match /projects/{projectId} {
        - Client: يشوف فقط اللي createdByUid == uid (مستوى الأمان الحقيقي يحتاج تغيير مسار البيانات)
        - حالياً نخلي list للـ client مسموح عشان التطبيق يشتغل
     ========================= */
+    match /employees/{employeeId} {
+      allow get: if canReadEmployeesAdmin()
+        || (
+          signedIn()
+          && (
+            request.auth.uid == employeeId
+            || (("uid" in resource.data) && resource.data.uid is string && resource.data.uid == request.auth.uid)
+            || (("userId" in resource.data) && resource.data.userId is string && resource.data.userId == request.auth.uid)
+          )
+        );
+      allow list: if canReadEmployeesAdmin();
+      allow create, update, delete: if canManageEmployeesAdmin();
+    }
+
     match /messages/{messageId} {
       allow create: if true;
 
@@ -637,8 +973,8 @@ match /admin_users/{docId} {
     ========================= */
     match /job_applications/{id} {
       allow create: if isValidJobApplicationCreate();
-      allow read: if canReadMessagesAdmin() || hasAdminPermission("settings.manage");
-      allow update, delete: if canManageMessagesAdmin() || hasAdminPermission("settings.manage");
+      allow read: if canReadRecruitmentAdmin() || hasAdminPermission("settings.manage");
+      allow update, delete: if canManageRecruitmentAdmin() || hasAdminPermission("settings.manage");
     }
 
     match /audit_logs/{id} {

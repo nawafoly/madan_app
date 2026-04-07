@@ -33,9 +33,11 @@ import ClientsManagement from "./pages/admin/Clients";
 import ClientProfile from "@/pages/admin/ClientProfile";
 import MessagesManagement from "./pages/admin/Messages";
 import RecruitmentApplicationsPage from "./pages/admin/RecruitmentApplications";
+import EmployeesManagementPage from "./pages/admin/Employees";
 import AuditLogPage from "./pages/admin/AuditLog";
 import DebugAuthPage from "./pages/admin/DebugAuth";
 import Vip from "./pages/admin/Vip";
+import EmployeeProfilePage from "@/pages/employee/Profile";
 
 // ✅ Client pages
 import ClientDashboard from "@/pages/client/MyInvestments";
@@ -171,8 +173,14 @@ function Router() {
         </Route>
 
         <Route path="/admin/recruitment-applications">
-          <RequireAdminPermission permission="messages.view">
+          <RequireAdminPermission permission="recruitment.view">
             <RecruitmentApplicationsPage />
+          </RequireAdminPermission>
+        </Route>
+
+        <Route path="/admin/employees">
+          <RequireAdminPermission permission="employees.view">
+            <EmployeesManagementPage />
           </RequireAdminPermission>
         </Route>
 
@@ -198,6 +206,24 @@ function Router() {
         </Route>
 
         {/* ================= Client Area ================= */}
+
+        <Route path="/employee/profile">
+          <RequireRole allow={["staff"]}>
+            <EmployeeProfilePage />
+          </RequireRole>
+        </Route>
+
+        <Route path="/employee">
+          <Redirect to="/employee/profile" />
+        </Route>
+
+        <Route path="/staff/profile">
+          <Redirect to="/employee/profile" />
+        </Route>
+
+        <Route path="/staff">
+          <Redirect to="/employee/profile" />
+        </Route>
 
         {/* ✅ deep link لازم يسبق أي redirects عامة */}
         <Route path="/client/contracts/:id">
