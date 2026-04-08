@@ -4,7 +4,9 @@ import {
   useAuth,
   type Permission,
 } from "@/_core/hooks/useAuth";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { auth, db } from "@/_core/firebase";
+import { doc, getDoc, onSnapshot } from "firebase/firestore";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -30,6 +32,7 @@ import {
   LayoutDashboard,
   LogOut,
   PanelLeft,
+  User,
   Users,
   Building2,
   DollarSign,
@@ -42,10 +45,14 @@ import {
   BriefcaseBusiness,
 } from "lucide-react";
 import { CSSProperties, useEffect, useMemo, useRef, useState } from "react";
-import { useLocation } from "wouter";
+import { Link, useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
 import { Button } from "./ui/button";
 import { useLanguage } from "@/contexts/LanguageContext";
+import {
+  normalizeEmployeeProfile,
+  type EmployeeProfileUserDoc,
+} from "@/lib/employeeProfile";
 import { cn } from "@/lib/utils";
 
 type RoleKey = "owner" | "admin" | "accountant" | "hr";
@@ -54,7 +61,7 @@ type MenuItem = {
   icon: any;
   label: string;
   path: string;
-  allow: RoleKey[]; // ✅ أدوار مسموحة
+  allow: RoleKey[]; // الأدوار المسموح بها
   permission: Permission;
 };
 
@@ -153,6 +160,8 @@ const SIDEBAR_OPEN_KEY = "dashboard_sidebar_open";
 const DEFAULT_WIDTH = 280;
 const MIN_WIDTH = 200;
 const MAX_WIDTH = 480;
+const EMPLOYEE_PROFILE_PATH = "/employee/profile";
+const EMPLOYEE_PROFILE_LABEL = "بروفايل الموظف";
 
 function readStoredSidebarOpen() {
   try {
@@ -195,11 +204,11 @@ function titleCaseLatin(w: string) {
   return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
 }
 
-// تحويل تقريبي (Transliteration) من اللاتيني للعربي — مو 100% لكن يعطي اسم “مقروء”
+// تحويل تقريبي من اللاتيني إلى العربي. ليس دقيقًا 100% لكنه يعطي اسمًا مقروءًا.
 function latinToArabicApprox(word: string) {
   const w = word.toLowerCase();
 
-  // بعض التركيبات الشائعة أولاً
+  // بعض التركيبات الشائعة أولًا
   const digraphs: Array<[RegExp, string]> = [
     [/sh/g, "ش"],
     [/ch/g, "تش"],
@@ -254,8 +263,7 @@ function latinToArabicApprox(word: string) {
   for (const ch of s) {
     if (map[ch]) out += map[ch];
     else if (ch === " ") out += " ";
-    else if (/[\u0600-\u06FF]/.test(ch)) out += ch; // احتفظ بالأحرف العربية (من digraphs)
-    // تجاهل أي رموز أخرى
+    else if (/[\u0600-\u06FF]/.test(ch)) out += ch;
   }
 
   // تنظيف المسافات
@@ -268,7 +276,7 @@ function nameFromEmail(email?: string) {
   const local = email.split("@")[0] ?? "";
   if (!local) return "مستخدم";
 
-  // لو أصلاً عربي
+  // لو كان الاسم عربيًا أصلًا
   if (hasArabic(local)) {
     const parts = splitLocalPart(local);
     return parts.length ? parts.join(" ") : local;
@@ -277,11 +285,11 @@ function nameFromEmail(email?: string) {
   const parts = splitLocalPart(local);
   if (!parts.length) return "مستخدم";
 
-  // “تعريب” الاسم (تقريبي)
+  // قرّب الاسم إلى العربية
   const arParts = parts.map(p => latinToArabicApprox(p));
   const arName = arParts.join(" ").trim();
 
-  // إذا التعريب طلع غريب جداً، نعرض نسخة مرتبة إنجليزي كخطة بديلة
+  // إذا كانت النتيجة ضعيفة، ارجع إلى الاسم اللاتيني المنسق
   if (!arName || arName.length < 2) {
     return parts.map(titleCaseLatin).join(" ");
   }
@@ -327,11 +335,11 @@ export default function DashboardLayout({
         <div className="flex flex-col items-center gap-8 p-8 max-w-md w-full">
           <div className="flex flex-col items-center gap-6">
             <h1 className="text-2xl font-semibold tracking-tight text-center">
-              Sign in to continue
+              تسجيل الدخول للمتابعة
             </h1>
             <p className="text-sm text-muted-foreground text-center max-w-sm">
-              Access to this dashboard requires authentication. Continue to
-              launch the login flow.
+              يتطلب الوصول إلى لوحة التحكم تسجيل الدخول. تابع لبدء عملية
+              تسجيل الدخول.
             </p>
           </div>
           <Button
@@ -341,7 +349,7 @@ export default function DashboardLayout({
             size="lg"
             className="w-full shadow-lg hover:shadow-xl transition-all"
           >
-            Sign in
+            تسجيل الدخول
           </Button>
         </div>
       </div>
@@ -387,6 +395,12 @@ function DashboardLayoutContent({
 
   const isCollapsed = state === "collapsed";
   const [isResizing, setIsResizing] = useState(false);
+  const [sidebarProfileSource, setSidebarProfileSource] = useState<{
+    collectionName: "employees" | "users";
+    docId: string;
+  } | null>(null);
+  const [sidebarProfileDoc, setSidebarProfileDoc] =
+    useState<EmployeeProfileUserDoc | null>(null);
 
   const sidebarRef = useRef<HTMLDivElement>(null);
   const mainRef = useRef<HTMLElement>(null);
@@ -402,25 +416,27 @@ function DashboardLayoutContent({
     setOpen(prev => !prev);
   };
 
-  // ✅ 1) الدور
+  // الدور
   const role = user?.role;
 
-  // ✅ 2) العناصر المسموحة
+  // عناصر القائمة المسموحة
   const visibleMenuItems = useMemo(() => {
     if (!role || !isOpsRole(role)) return [];
     return menuItems.filter(item => hasPermission(user, item.permission));
   }, [role, user]);
 
-  // ✅ 3) العنصر النشط
-  const activeMenuItem = visibleMenuItems.find(item => item.path === location);
+  // العنصر النشط
+  const isEmployeeProfileActive = location === EMPLOYEE_PROFILE_PATH;
+  const activeMenuLabel = isEmployeeProfileActive
+    ? EMPLOYEE_PROFILE_LABEL
+    : (visibleMenuItems.find(item => item.path === location)?.label ?? "Menu");
 
-  // ✅ اسم العرض: يفضّل user.name، وإلا من الإيميل (بالعربي)
-  // ✅ اسم العرض: استخدم displayName من useAuth أولاً (مو name)
+  // اسم العرض: يفضل displayName ثم name ثم الإيميل
   const displayName = useMemo(() => {
     const dn = String((user as any)?.displayName ?? "").trim();
     if (dn && dn !== "-" && dn.length >= 2) return dn;
 
-    const dn2 = String((user as any)?.name ?? "").trim(); // احتياط لو عندك مكان ثاني
+    const dn2 = String((user as any)?.name ?? "").trim(); // احتياط إضافي
     if (dn2 && dn2 !== "-" && dn2.length >= 2) return dn2;
 
     return nameFromEmail((user as any)?.email);
@@ -435,6 +451,95 @@ function DashboardLayoutContent({
     if (!titleText) return displayName;
     return `${displayName} ${titleText}`.trim();
   }, [displayName, titleText]);
+
+  const sidebarProfile = useMemo(
+    () =>
+      normalizeEmployeeProfile(sidebarProfileDoc, {
+        displayName: String(user?.displayName || "").trim() || null,
+        email: String(user?.email || "").trim() || null,
+        photoURL: user?.firebaseUser?.photoURL || auth.currentUser?.photoURL,
+      }),
+    [sidebarProfileDoc, user?.displayName, user?.email, user?.firebaseUser?.photoURL]
+  );
+
+  const sidebarAvatarUrl = sidebarProfile.personal.avatarUrl;
+
+  useEffect(() => {
+    if (!user?.uid) {
+      setSidebarProfileSource(null);
+      setSidebarProfileDoc(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    const resolveSidebarProfileSource = async () => {
+      const linkedEmployeeId = String(user.linkedEmployeeId || "").trim();
+      const candidateEmployeeDocIds = Array.from(
+        new Set([linkedEmployeeId, user.uid].filter(Boolean))
+      );
+
+      for (const docId of candidateEmployeeDocIds) {
+        try {
+          const employeeSnapshot = await getDoc(doc(db, "employees", docId));
+          if (employeeSnapshot.exists()) {
+            if (!cancelled) {
+              setSidebarProfileSource({
+                collectionName: "employees",
+                docId,
+              });
+            }
+            return;
+          }
+        } catch (error) {
+          console.error("sidebar_profile_source_lookup_failed", error);
+        }
+      }
+
+      if (!cancelled) {
+        setSidebarProfileSource({
+          collectionName: "users",
+          docId: user.uid,
+        });
+      }
+    };
+
+    void resolveSidebarProfileSource();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.linkedEmployeeId, user?.uid]);
+
+  useEffect(() => {
+    if (!user?.uid || !sidebarProfileSource) {
+      setSidebarProfileDoc(null);
+      return;
+    }
+
+    const unsubscribe = onSnapshot(
+      doc(db, sidebarProfileSource.collectionName, sidebarProfileSource.docId),
+      snapshot => {
+        const snapshotData = snapshot.data() as EmployeeProfileUserDoc | undefined;
+        setSidebarProfileDoc(
+          snapshot.exists()
+            ? ({
+                ...(snapshotData || {}),
+                uid:
+                  String(snapshotData?.uid || user.uid || snapshot.id).trim() ||
+                  snapshot.id,
+              } as EmployeeProfileUserDoc)
+            : null
+        );
+      },
+      error => {
+        console.error("sidebar_profile_snapshot_error", error);
+        setSidebarProfileDoc(null);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [sidebarProfileSource, user?.uid]);
 
   useEffect(() => {
     if (isCollapsed) setIsResizing(false);
@@ -516,7 +621,7 @@ function DashboardLayoutContent({
                 </span>
               </div>
 
-              {/* ✅ زر الرئيسية */}
+              {/* زر الرئيسية */}
               <div
                 className={cn(
                   isRight ? "mr-auto" : "ml-auto",
@@ -572,6 +677,40 @@ function DashboardLayoutContent({
                 );
               })}
             </SidebarMenu>
+
+            <div className="mx-4 my-3 h-px bg-white/10" />
+
+            <div className="px-2 pb-3">
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={isEmployeeProfileActive}
+                    tooltip={EMPLOYEE_PROFILE_LABEL}
+                    className="h-10 rounded-xl font-normal text-slate-300 transition-all hover:text-white data-[active=true]:bg-white/10 data-[active=true]:text-white [&>svg]:text-[#F2B705]"
+                  >
+                    <Link href={EMPLOYEE_PROFILE_PATH}>
+                      <User
+                        className={cn(
+                          "h-4 w-4 text-[#F2B705]",
+                          isEmployeeProfileActive && "text-[#FFD24A]"
+                        )}
+                      />
+                      <span
+                        className={cn(
+                          "whitespace-nowrap transition-[max-width,opacity] duration-200",
+                          isCollapsed
+                            ? "max-w-0 opacity-0 pointer-events-none"
+                            : "max-w-40 opacity-100"
+                        )}
+                      >
+                        {EMPLOYEE_PROFILE_LABEL}
+                      </span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </div>
           </SidebarContent>
 
           <SidebarFooter className="border-t border-white/10 bg-slate-950/90 p-3">
@@ -579,6 +718,10 @@ function DashboardLayoutContent({
               <DropdownMenuTrigger asChild>
                 <button className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition-colors hover:bg-white/6 group-data-[collapsible=icon]:justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-white/20">
                   <Avatar className="h-9 w-9 shrink-0 border border-white/10">
+                    <AvatarImage
+                      src={sidebarAvatarUrl || undefined}
+                      alt={displayNameWithTitle}
+                    />
                     <AvatarFallback className="bg-white/[0.06] text-xs font-medium text-slate-100">
                       {String(displayName ?? "م")
                         .trim()
@@ -609,7 +752,7 @@ function DashboardLayoutContent({
                   className="cursor-pointer text-destructive focus:text-destructive"
                 >
                   <LogOut className="mr-2 h-4 w-4" />
-                  <span>Sign out</span>
+                  <span>تسجيل الخروج</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -640,13 +783,13 @@ function DashboardLayoutContent({
               <div className="flex items-center gap-3">
                 <div className="flex flex-col gap-1">
                   <span className="tracking-tight text-foreground">
-                    {activeMenuItem?.label ?? "Menu"}
+                    {activeMenuLabel}
                   </span>
                 </div>
               </div>
             </div>
 
-            {/* ✅ زر الرئيسية في الموبايل */}
+            {/* زر الرئيسية في الموبايل */}
             <Button
               variant="outline"
               size="sm"

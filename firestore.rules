@@ -19,12 +19,10 @@ service cloud.firestore {
         : {};
     }
 
-    // ✅ FIX: ترجع string دائمًا (بدون null) عشان يختفي تحذير الـ ternary
     function lower(v) {
       return (v is string) ? v.lower() : "";
     }
 
-    // ✅ FIX: ترجع "guest" بدل null + تتحقق أن role string
     function myRole() {
       return (("role" in myUserData()) && (myUserData().role is string))
         ? lower(myUserData().role)
@@ -121,11 +119,11 @@ service cloud.firestore {
                   "employees.view",
                   "employees.manage"
                 ]
-            : myRole() == "staff"
-              ? []
-              : myRole() == "client"
-                ? ["projects.view"]
-                : ["projects.view"];
+              : myRole() == "staff"
+                ? []
+                : myRole() == "client"
+                  ? ["projects.view"]
+                  : ["projects.view"];
     }
 
     function hasEffectivePermission(permission) {
@@ -299,6 +297,20 @@ service cloud.firestore {
       return roleFromData(data) == "staff";
     }
 
+    function employeeOwnerUid(data) {
+      return (("uid" in data) && (data.uid is string))
+        ? data.uid
+        : (
+            (("linkedUserUid" in data) && (data.linkedUserUid is string))
+              ? data.linkedUserUid
+              : (
+                  (("userId" in data) && (data.userId is string))
+                    ? data.userId
+                    : ""
+                )
+          );
+    }
+
     function profileMap(data) {
       return (("profile" in data) && (data.profile is map))
         ? data.profile
@@ -468,6 +480,41 @@ service cloud.firestore {
                 "updatedByUid",
                 "updatedByEmail"
               ])
+          )
+        );
+    }
+
+    function isValidEmployeeCollectionSelfUpdate() {
+      let keys = request.resource.data.diff(resource.data).changedKeys();
+      return signedIn()
+        && employeeOwnerUid(resource.data) == request.auth.uid
+        && employeeOwnerUid(request.resource.data) == request.auth.uid
+        && keys.hasOnly([
+            "phone",
+            "photoURL",
+            "profile",
+            "employeeProfile",
+            "updatedAt"
+          ])
+        && (
+          !keys.hasAny(["profile"])
+          || profileMap(request.resource.data).diff(profileMap(resource.data)).changedKeys().hasOnly([
+            "phone",
+            "photoURL",
+            "avatar"
+          ])
+        )
+        && (
+          !keys.hasAny(["employeeProfile"])
+          || (
+            employeeProfileMap(request.resource.data)
+              .diff(employeeProfileMap(resource.data))
+              .changedKeys()
+              .hasOnly(["personal"])
+            && employeePersonalMap(request.resource.data)
+              .diff(employeePersonalMap(resource.data))
+              .changedKeys()
+              .hasOnly(["phone", "avatar"])
           )
         );
     }
@@ -777,28 +824,22 @@ service cloud.firestore {
     /* =========================
        projects
     ========================= */
-match /projects/{projectId} {
-  allow read: if true;
-  allow create, delete: if hasAdminPermission("projects.manage");
+    match /projects/{projectId} {
+      allow read: if true;
+      allow create, delete: if hasAdminPermission("projects.manage");
 
-  // ✅ المحاسب + الأدمن يقدرون يحدثون status + aggregates
-  allow update: if hasAdminPermission("projects.manage")
-    || hasAdminPermission("projects.publish");
-}
-
+      allow update: if hasAdminPermission("projects.manage")
+        || hasAdminPermission("projects.publish");
+    }
 
     /* =========================
-       users  ✅ أهم إصلاح
-       - خلّينا create مرن عشان useAuth يقدر ينشئ الوثيقة
-       - المستخدم يقرأ/يعدل وثيقته
-       - ops يقرأ الجميع (للوحات الإدارة)
+       users
     ========================= */
     match /users/{userId} {
       allow read: if (signedIn() && request.auth.uid == userId)
         || canReadUsersAdmin()
         || (canReadEmployeesAdmin() && isStaffUserDoc(resource.data));
 
-      // ✅ create: أقل شروط ممكنة (عشان ما ينهار ensureUserDoc)
       allow create: if signedIn()
         && request.auth.uid == userId
         && request.resource.data.email == request.auth.token.email
@@ -815,8 +856,6 @@ match /projects/{projectId} {
       allow delete: if canManageUsersAdmin();
 
       function isValidRoleOnCreate() {
-        // يسمح guest/client افتراضياً
-        // ويسمح owner فقط لحسابك (bootstrap)
         return (!("role" in request.resource.data)
           || request.resource.data.role in ["guest","client"]
           || (request.resource.data.role == "owner" && isBootstrapOwnerEmail()))
@@ -824,14 +863,10 @@ match /projects/{projectId} {
           && (!("permissionsDeny" in request.resource.data) || request.resource.data.permissionsDeny.size() == 0)
           && (!("active" in request.resource.data) || request.resource.data.active == true);
       }
-
     }
 
     /* =========================
-       messages ✅ إصلاح list
-       - Ops: يشوف الكل
-       - Client: يشوف فقط اللي createdByUid == uid (مستوى الأمان الحقيقي يحتاج تغيير مسار البيانات)
-       - حالياً نخلي list للـ client مسموح عشان التطبيق يشتغل
+       employees
     ========================= */
     match /employees/{employeeId} {
       allow get: if canReadEmployeesAdmin()
@@ -839,14 +874,18 @@ match /projects/{projectId} {
           signedIn()
           && (
             request.auth.uid == employeeId
-            || (("uid" in resource.data) && resource.data.uid is string && resource.data.uid == request.auth.uid)
-            || (("userId" in resource.data) && resource.data.userId is string && resource.data.userId == request.auth.uid)
+            || employeeOwnerUid(resource.data) == request.auth.uid
           )
         );
       allow list: if canReadEmployeesAdmin();
-      allow create, update, delete: if canManageEmployeesAdmin();
+      allow create, delete: if canManageEmployeesAdmin();
+      allow update: if canManageEmployeesAdmin()
+        || isValidEmployeeCollectionSelfUpdate();
     }
 
+    /* =========================
+       messages
+    ========================= */
     match /messages/{messageId} {
       allow create: if true;
 
@@ -854,7 +893,6 @@ match /projects/{projectId} {
 
       allow get: if isClient() && resource.data.createdByUid == request.auth.uid;
 
-      // ✅ مؤقت لتشغيل الواجهة (احذف شرط request.query.where الغير مدعوم)
       allow list: if isClient();
 
       allow update: if canManageMessagesAdmin();
@@ -901,8 +939,7 @@ match /projects/{projectId} {
     }
 
     /* =========================
-       notifications ✅ مهم
-       - غالباً “ارسال الطلب” يكتب هنا
+       notifications
     ========================= */
     match /notifications/{id} {
       allow read: if signedIn() && resource.data.uid == request.auth.uid;
@@ -924,50 +961,38 @@ match /projects/{projectId} {
         || hasAdminPermission("settings.manage");
     }
 
-match /admin_users/{docId} {
-  // ✅ أي شخص يقرأ وثيقته فقط (docId = email lower)
-  allow read: if signedIn()
-    && (
-      hasAdminPermission("settings.manage")
-      || (
-        lower(request.auth.token.email) != ""
-        && docId == lower(request.auth.token.email)
-      )
-    );
+    match /admin_users/{docId} {
+      allow read: if signedIn()
+        && (
+          isOwner()
+          || isAdmin()
+          || (
+            lower(request.auth.token.email) != ""
+            && docId == lower(request.auth.token.email)
+          )
+        );
 
-  // ✅ التعديل/الإنشاء/الحذف للإدارة فقط
-  allow create, update, delete: if hasAdminPermission("settings.manage");
-}
+      allow create, update, delete: if isOwner() || isAdmin();
+    }
 
-
- match /role_invites/{docId} {
-  allow read, write: if hasAdminPermission("settings.manage");
-}
-
+    match /role_invites/{docId} {
+      allow read, write: if hasAdminPermission("settings.manage");
+    }
 
     /* =========================
-       interest_requests ✅ (مخفف عشان يشتغل الإرسال)
+       interest_requests
     ========================= */
     match /interest_requests/{id} {
-      // العميل يرسل طلبه (المهم يطابق investorUid)
       allow create: if isValidInterestRequestCreate();
 
-      // العميل يشوف طلباته فقط + ops يشوف الكل
       allow read: if canReadInterestRequestsAdmin()
         || (signedIn() && resource.data.investorUid == request.auth.uid);
 
-      // التعديل/الحذف للإدارة فقط
       allow update: if (canManageMessagesAdmin() || canManageInvestmentsAdmin())
         && isValidInterestRequestUpdateByOps();
       allow delete: if canManageMessagesAdmin() || canManageInvestmentsAdmin();
     }
 
-    /* =========================
-       audit_logs
-       - Read: owner/admin only
-       - Client writes are blocked; audit entries are created via trusted server code
-       - Append-only from the application's point of view
-    ========================= */
     /* =========================
        job_applications
     ========================= */
@@ -977,6 +1002,9 @@ match /admin_users/{docId} {
       allow update, delete: if canManageRecruitmentAdmin() || hasAdminPermission("settings.manage");
     }
 
+    /* =========================
+       audit_logs
+    ========================= */
     match /audit_logs/{id} {
       allow read: if hasAdminPermission("settings.manage");
       allow create, update, delete: if false;

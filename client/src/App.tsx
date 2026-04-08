@@ -20,6 +20,7 @@ import ProjectDetails from "./pages/ProjectDetails";
 import LoginPage from "./pages/Login";
 import RequireRole from "./components/RequireRole";
 import RequireAdminPermission from "./components/RequireAdminPermission";
+import RequireEmployeeProfileAccess from "./components/RequireEmployeeProfileAccess";
 
 // Admin pages
 import AdminDashboard from "./pages/admin/Dashboard";
@@ -208,9 +209,9 @@ function Router() {
         {/* ================= Client Area ================= */}
 
         <Route path="/employee/profile">
-          <RequireRole allow={["staff"]}>
+          <RequireEmployeeProfileAccess>
             <EmployeeProfilePage />
-          </RequireRole>
+          </RequireEmployeeProfileAccess>
         </Route>
 
         <Route path="/employee">

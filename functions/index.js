@@ -729,6 +729,8 @@ exports.onAuthCreateUserProfile = onUserCreated(
     let title = String(existingData?.title || "").trim();
     let permissionsAllow = normalizeStringArray(existingData?.permissionsAllow);
     let permissionsDeny = normalizeStringArray(existingData?.permissionsDeny);
+    let employeeProfileEnabled = !!existingData?.employeeProfileEnabled;
+    let linkedEmployeeId = stringOrEmpty(existingData?.linkedEmployeeId);
 
     const emailLower = String(user.email || "")
       .trim()
@@ -756,6 +758,8 @@ exports.onAuthCreateUserProfile = onUserCreated(
       title = String(adminUser?.title || "").trim();
       permissionsAllow = normalizeStringArray(adminUser?.permissionsAllow);
       permissionsDeny = normalizeStringArray(adminUser?.permissionsDeny);
+      employeeProfileEnabled = !!adminUser?.employeeProfileEnabled;
+      linkedEmployeeId = stringOrEmpty(adminUser?.linkedEmployeeId);
     }
 
     // ✅ apply invite by email
@@ -782,6 +786,11 @@ exports.onAuthCreateUserProfile = onUserCreated(
       user.displayName || adminDisplayName || existingData?.displayName || existingData?.name || ""
     ).trim();
     const finalPhone = String(user.phoneNumber || existingData?.phone || "").trim();
+    let resolvedLinkedEmployeeId = linkedEmployeeId;
+    if (employeeProfileEnabled && !resolvedLinkedEmployeeId) {
+      resolvedLinkedEmployeeId = user.uid;
+    }
+
     const payload = {
       uid: user.uid,
       role,
@@ -792,6 +801,8 @@ exports.onAuthCreateUserProfile = onUserCreated(
       phone: finalPhone,
       active,
       isInvestor,
+      employeeProfileEnabled,
+      linkedEmployeeId: resolvedLinkedEmployeeId || null,
       permissionsAllow,
       permissionsDeny,
       createdAt: existingData?.createdAt || FieldValue.serverTimestamp(),
@@ -810,10 +821,59 @@ exports.onAuthCreateUserProfile = onUserCreated(
 
     await userRef.set(payload, { merge: true });
 
+    if (employeeProfileEnabled && resolvedLinkedEmployeeId) {
+      const employeeRef = db.doc(`employees/${resolvedLinkedEmployeeId}`);
+      const employeeSnap = await employeeRef.get();
+      const employeeData = employeeSnap.exists ? employeeSnap.data() || {} : {};
+      const employeeProfile = employeeData.employeeProfile || {};
+      const employeeEmployment =
+        employeeProfile.employment || employeeData.employment || {};
+      const employeePersonal = employeeProfile.personal || {};
+      const employeeTitle =
+        stringOrEmpty(employeeData.title) ||
+        stringOrEmpty(employeeEmployment.title) ||
+        stringOrEmpty(employeeEmployment.jobTitle) ||
+        title;
+
+      await employeeRef.set(
+        {
+          uid: user.uid,
+          linkedUserUid: user.uid,
+          email: payload.email || "",
+          displayName: finalDisplayName || "",
+          name: finalDisplayName || "",
+          title: employeeTitle || null,
+          active,
+          isActive: active,
+          updatedAt: FieldValue.serverTimestamp(),
+          createdAt: employeeData.createdAt || FieldValue.serverTimestamp(),
+          employeeProfile: {
+            personal: employeePersonal,
+            employment: {
+              ...employeeEmployment,
+              title:
+                stringOrEmpty(employeeEmployment.title) ||
+                stringOrEmpty(employeeEmployment.jobTitle) ||
+                title ||
+                null,
+              jobTitle:
+                stringOrEmpty(employeeEmployment.jobTitle) ||
+                stringOrEmpty(employeeEmployment.title) ||
+                title ||
+                null,
+              updatedAt: FieldValue.serverTimestamp(),
+            },
+          },
+        },
+        { merge: true }
+      );
+    }
+
     if (emailLower && hasAdminUserDoc) {
       await db.doc(`admin_users/${emailLower}`).set(
         {
           linkedUserUid: user.uid,
+          linkedEmployeeId: resolvedLinkedEmployeeId || null,
           updatedAt: FieldValue.serverTimestamp(),
         },
         { merge: true }

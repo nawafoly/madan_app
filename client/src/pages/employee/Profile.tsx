@@ -5,7 +5,7 @@ import {
   updatePassword,
   updateProfile,
 } from "firebase/auth";
-import { doc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
+import { doc, getDoc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
 import {
   BriefcaseBusiness,
   Camera,
@@ -198,6 +198,59 @@ export default function EmployeeProfilePage() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [changingPassword, setChangingPassword] = useState(false);
+  const [employeeProfileSource, setEmployeeProfileSource] = useState<{
+    collectionName: "employees" | "users";
+    docId: string;
+    entityId: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!user?.uid) {
+      setEmployeeProfileSource(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    const resolveSource = async () => {
+      const linkedEmployeeId = String(user.linkedEmployeeId || "").trim();
+      const candidateEmployeeDocIds = Array.from(
+        new Set([linkedEmployeeId, user.uid].filter(Boolean))
+      );
+
+      for (const docId of candidateEmployeeDocIds) {
+        try {
+          const employeeSnapshot = await getDoc(doc(db, "employees", docId));
+          if (employeeSnapshot.exists()) {
+            if (!cancelled) {
+              setEmployeeProfileSource({
+                collectionName: "employees",
+                docId,
+                entityId: docId,
+              });
+            }
+            return;
+          }
+        } catch (error) {
+          console.error("employee_profile_source_lookup_failed", error);
+        }
+      }
+
+      if (!cancelled) {
+        setEmployeeProfileSource({
+          collectionName: "users",
+          docId: user.uid,
+          entityId: user.uid,
+        });
+      }
+    };
+
+    void resolveSource();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.employeeProfileEnabled, user?.linkedEmployeeId, user?.role, user?.uid]);
 
   useEffect(() => {
     if (!user?.uid) {
@@ -206,13 +259,28 @@ export default function EmployeeProfilePage() {
       return;
     }
 
+    if (!employeeProfileSource) {
+      setLoading(true);
+      return;
+    }
+
     setLoading(true);
     const unsubscribe = onSnapshot(
-      doc(db, "users", user.uid),
+      doc(
+        db,
+        employeeProfileSource.collectionName,
+        employeeProfileSource.docId
+      ),
       (snapshot) => {
+        const snapshotData = snapshot.data() as EmployeeProfileUserDoc | undefined;
         setUserDoc(
           snapshot.exists()
-            ? ({ uid: snapshot.id, ...(snapshot.data() as EmployeeProfileUserDoc) } as EmployeeProfileUserDoc)
+            ? ({
+                ...(snapshotData || {}),
+                uid:
+                  String(snapshotData?.uid || user.uid || snapshot.id).trim() ||
+                  snapshot.id,
+              } as EmployeeProfileUserDoc)
             : null
         );
         setLoading(false);
@@ -225,7 +293,7 @@ export default function EmployeeProfilePage() {
     );
 
     return () => unsubscribe();
-  }, [user?.uid]);
+  }, [employeeProfileSource, user?.uid]);
 
   const profile = useMemo(
     () =>
@@ -246,7 +314,7 @@ export default function EmployeeProfilePage() {
 
   const handleSavePhone = async () => {
     const normalizedPhone = phoneInput.trim();
-    if (!user?.uid) return;
+    if (!user?.uid || !employeeProfileSource) return;
     if (!validatePhone(normalizedPhone)) {
       toast.error("رقم الجوال غير صالح.");
       return;
@@ -255,7 +323,11 @@ export default function EmployeeProfilePage() {
     setSavingPhone(true);
     try {
       await setDoc(
-        doc(db, "users", user.uid),
+        doc(
+          db,
+          employeeProfileSource.collectionName,
+          employeeProfileSource.docId
+        ),
         {
           ...buildEmployeePhonePatch(normalizedPhone),
           updatedAt: serverTimestamp(),
@@ -279,7 +351,7 @@ export default function EmployeeProfilePage() {
     event: ChangeEvent<HTMLInputElement>
   ) => {
     const file = event.target.files?.[0];
-    if (!file || !user?.uid) return;
+    if (!file || !user?.uid || !employeeProfileSource) return;
 
     try {
       validateAvatarFile(file);
@@ -293,7 +365,7 @@ export default function EmployeeProfilePage() {
     try {
       const uploaded = await uploadDocumentToCloudflare({
         entityType: "employee",
-        entityId: user.uid,
+        entityId: employeeProfileSource.entityId,
         category: EMPLOYEE_AVATAR_CATEGORY,
         file,
         kind: "attachment",
@@ -312,7 +384,11 @@ export default function EmployeeProfilePage() {
       };
 
       await setDoc(
-        doc(db, "users", user.uid),
+        doc(
+          db,
+          employeeProfileSource.collectionName,
+          employeeProfileSource.docId
+        ),
         {
           ...buildEmployeeAvatarPatch(avatarPayload),
           updatedAt: serverTimestamp(),

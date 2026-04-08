@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { collection, doc, onSnapshot, query, serverTimestamp, where } from "firebase/firestore";
+import { collection, doc, onSnapshot, serverTimestamp } from "firebase/firestore";
 import { BriefcaseBusiness, CalendarDays, Mail, Phone, Save, Search, ShieldCheck, UserRound } from "lucide-react";
 import { toast } from "sonner";
 
@@ -47,7 +47,12 @@ import { formatDateEN, formatNumberEN, toDateSafe } from "@/lib/formatters";
 import { cn } from "@/lib/utils";
 import type { EmployeeEmploymentDoc, EmployeeEmploymentStatus } from "@shared/employee";
 
-type EmployeeRecord = EmployeeProfileUserDoc & { id: string };
+type EmployeeRecord = EmployeeProfileUserDoc & {
+  id: string;
+  firebaseUser?: {
+    photoURL?: string | null;
+  } | null;
+};
 
 type EmployeeFormValues = {
   jobTitle: string;
@@ -94,6 +99,98 @@ function toNullableNumber(value: string) {
 
   const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function hasValuesObject(value: unknown) {
+  return !!value && typeof value === "object" && Object.keys(value as Record<string, any>).length > 0;
+}
+
+function hasEmployeeProfileSignal(
+  userData: Record<string, any>,
+  employeeDoc?: Record<string, any> | null
+) {
+  const userEmployment = (userData.employeeProfile?.employment ||
+    userData.employment ||
+    {}) as Record<string, any>;
+  const userPersonal = (userData.employeeProfile?.personal ||
+    userData.personal ||
+    {}) as Record<string, any>;
+
+  return (
+    !!employeeDoc ||
+    String(userData.role || "").trim().toLowerCase() === "staff" ||
+    !!pickText(userData.linkedEmployeeId) ||
+    hasValuesObject(userEmployment) ||
+    hasValuesObject(userPersonal)
+  );
+}
+
+function buildMergedEmployeeRecord(input: {
+  userId: string;
+  userData: Record<string, any>;
+  employeeDocId?: string | null;
+  employeeData?: Record<string, any> | null;
+}): EmployeeRecord {
+  const { userId, userData, employeeDocId, employeeData } = input;
+
+  const userEmployeeProfile = (userData.employeeProfile || {}) as Record<string, any>;
+  const employeeEmployeeProfile = (employeeData?.employeeProfile || {}) as Record<
+    string,
+    any
+  >;
+
+  const mergedPersonal =
+    (employeeEmployeeProfile.personal as Record<string, any> | undefined) ||
+    (employeeData?.personal as Record<string, any> | undefined) ||
+    (userEmployeeProfile.personal as Record<string, any> | undefined) ||
+    (userData.personal as Record<string, any> | undefined) ||
+    undefined;
+
+  const mergedEmployment =
+    (employeeEmployeeProfile.employment as Record<string, any> | undefined) ||
+    (employeeData?.employment as Record<string, any> | undefined) ||
+    (userEmployeeProfile.employment as Record<string, any> | undefined) ||
+    (userData.employment as Record<string, any> | undefined) ||
+    undefined;
+
+  const mergedEmployeeProfile =
+    mergedPersonal || mergedEmployment || hasValuesObject(employeeEmployeeProfile) || hasValuesObject(userEmployeeProfile)
+      ? {
+          ...userEmployeeProfile,
+          ...employeeEmployeeProfile,
+          ...(mergedPersonal ? { personal: mergedPersonal } : {}),
+          ...(mergedEmployment ? { employment: mergedEmployment } : {}),
+        }
+      : undefined;
+
+  return {
+    ...(employeeData || {}),
+    ...userData,
+    id: userId,
+    uid: pickText(userId, userData.uid, employeeData?.linkedUserUid, employeeData?.uid) || userId,
+    email: pickText(userData.email, employeeData?.email) || null,
+    displayName:
+      pickText(userData.displayName, userData.name, employeeData?.displayName, employeeData?.name) ||
+      null,
+    name:
+      pickText(userData.name, userData.displayName, employeeData?.name, employeeData?.displayName) ||
+      null,
+    title:
+      pickText(
+        userData.title,
+        employeeData?.title,
+        mergedEmployment?.title,
+        mergedEmployment?.jobTitle
+      ) || null,
+    department:
+      pickText(userData.department, employeeData?.department, mergedEmployment?.department) ||
+      null,
+    linkedEmployeeId: pickText(userData.linkedEmployeeId, employeeDocId) || null,
+    employeeProfile: mergedEmployeeProfile,
+    personal: mergedPersonal,
+    employment: mergedEmployment,
+    photoURL: pickText(userData.photoURL, employeeData?.photoURL) || null,
+  } as EmployeeRecord;
 }
 
 function buildEmployeeFormValues(employee: EmployeeRecord | null | undefined): EmployeeFormValues {
@@ -177,30 +274,83 @@ export default function EmployeesManagementPage() {
     setLoading(true);
     setError("");
 
-    const employeesQuery = query(
-      collection(db, "users"),
-      where("role", "==", "staff")
-    );
+    let usersReady = false;
+    let employeesReady = false;
+    let usersMap = new Map<string, Record<string, any>>();
+    let employeesMap = new Map<string, Record<string, any>>();
 
-    const unsubscribe = onSnapshot(
-      employeesQuery,
-      snapshot => {
-        const rows = snapshot.docs
-          .map(
-            docSnapshot =>
-              ({
-                id: docSnapshot.id,
-                ...(docSnapshot.data() as EmployeeProfileUserDoc),
-              }) as EmployeeRecord
-          )
-          .sort((a, b) => {
-            const aName = pickText(a.displayName, a.name, a.email).toLowerCase();
-            const bName = pickText(b.displayName, b.name, b.email).toLowerCase();
-            return aName.localeCompare(bName);
+    const rebuildEmployees = () => {
+      if (!usersReady || !employeesReady) return;
+      const employeesByLinkedUserId = new Map<
+        string,
+        { docId: string; data: Record<string, any> }
+      >();
+
+      employeesMap.forEach((employeeData, employeeDocId) => {
+        const linkedUserId = pickText(
+          employeeData.linkedUserUid,
+          employeeData.uid,
+          employeeData.userId
+        );
+
+        if (linkedUserId && !employeesByLinkedUserId.has(linkedUserId)) {
+          employeesByLinkedUserId.set(linkedUserId, {
+            docId: employeeDocId,
+            data: employeeData,
           });
+        }
+      });
 
-        setEmployees(rows);
-        setLoading(false);
+      const rows = Array.from(usersMap.entries())
+        .map(([userId, userData]) => {
+          const linkedEmployeeId = pickText(userData.linkedEmployeeId);
+          const linkedEmployee =
+            (linkedEmployeeId && employeesMap.has(linkedEmployeeId)
+              ? {
+                  docId: linkedEmployeeId,
+                  data: employeesMap.get(linkedEmployeeId) as Record<string, any>,
+                }
+              : employeesByLinkedUserId.get(userId)) ||
+            (employeesMap.has(userId)
+              ? {
+                  docId: userId,
+                  data: employeesMap.get(userId) as Record<string, any>,
+                }
+              : null);
+
+          if (!hasEmployeeProfileSignal(userData, linkedEmployee?.data)) {
+            return null;
+          }
+
+          return buildMergedEmployeeRecord({
+            userId,
+            userData,
+            employeeDocId: linkedEmployee?.docId ?? null,
+            employeeData: linkedEmployee?.data ?? null,
+          });
+        })
+        .filter((employee): employee is EmployeeRecord => !!employee)
+        .sort((a, b) => {
+          const aName = pickText(a.displayName, a.name, a.email).toLowerCase();
+          const bName = pickText(b.displayName, b.name, b.email).toLowerCase();
+          return aName.localeCompare(bName);
+        });
+
+      setEmployees(rows);
+      setLoading(false);
+    };
+
+    const unsubscribeUsers = onSnapshot(
+      collection(db, "users"),
+      snapshot => {
+        usersMap = new Map(
+          snapshot.docs.map(docSnapshot => [
+            docSnapshot.id,
+            docSnapshot.data() as Record<string, any>,
+          ])
+        );
+        usersReady = true;
+        rebuildEmployees();
       },
       snapshotError => {
         console.error("employees_snapshot_error", snapshotError);
@@ -210,7 +360,30 @@ export default function EmployeesManagementPage() {
       }
     );
 
-    return () => unsubscribe();
+    const unsubscribeEmployeeDirectory = onSnapshot(
+      collection(db, "employees"),
+      snapshot => {
+        employeesMap = new Map(
+          snapshot.docs.map(docSnapshot => [
+            docSnapshot.id,
+            docSnapshot.data() as Record<string, any>,
+          ])
+        );
+        employeesReady = true;
+        rebuildEmployees();
+      },
+      snapshotError => {
+        console.error("employee_directory_snapshot_error", snapshotError);
+        employeesMap = new Map();
+        employeesReady = true;
+        rebuildEmployees();
+      }
+    );
+
+    return () => {
+      unsubscribeUsers();
+      unsubscribeEmployeeDirectory();
+    };
   }, []);
 
   useEffect(() => {

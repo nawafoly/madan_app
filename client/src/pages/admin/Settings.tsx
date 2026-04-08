@@ -154,7 +154,9 @@ import {
   where,
 } from "firebase/firestore";
 import {
+  ALL_PERMISSION_KEYS as CENTRAL_PERMISSION_KEYS,
   getEffectivePermissions,
+  PERMISSION_DEFINITIONS as CENTRAL_PERMISSION_DEFINITIONS,
   ROLE_DEFAULT_PERMS,
   type Permission,
 } from "@/_core/hooks/useAuth";
@@ -274,6 +276,8 @@ type AdminUserDoc = {
   title?: string;
   isActive: boolean;
   linkedUserUid?: string;
+  employeeProfileEnabled?: boolean;
+  linkedEmployeeId?: string | null;
   notes?: string;
 
   // ✅ Flexible per-user overrides
@@ -282,6 +286,16 @@ type AdminUserDoc = {
 
   createdAt?: any;
   updatedAt?: any;
+};
+
+type EmployeeLinkMode = "existing" | "create";
+
+type EmployeeDirectoryEntry = {
+  id: string;
+  displayName: string;
+  email: string;
+  linkedUserUid?: string | null;
+  title?: string | null;
 };
 
 // ✅ NEW: invite/promote by email (no UID)
@@ -843,7 +857,7 @@ function normalizeAdminRoleKey(roleKey: unknown): AdminRoleKey {
 function isKnownPermission(
   permissionKey: unknown
 ): permissionKey is Permission {
-  return ALL_PERMISSION_KEYS.includes(permissionKey as Permission);
+  return CENTRAL_PERMISSION_KEYS.includes(permissionKey as Permission);
 }
 
 function normalizePermissionOverrides(
@@ -862,8 +876,52 @@ function normalizePermissionOverrides(
   });
 
   return {
-    permissionsAllow: Array.from(allowSet),
-    permissionsDeny: Array.from(denySet),
+    permissionsAllow: CENTRAL_PERMISSION_KEYS.filter(permissionKey =>
+      allowSet.has(permissionKey)
+    ),
+    permissionsDeny: CENTRAL_PERMISSION_KEYS.filter(permissionKey =>
+      denySet.has(permissionKey)
+    ),
+  };
+}
+
+function getPermissionLabel(permissionKey: string): string {
+  return (
+    CENTRAL_PERMISSION_DEFINITIONS.find(
+      permission => permission.key === permissionKey
+    )?.label ?? permissionKey
+  );
+}
+
+function pickEmployeeDirectoryText(...values: unknown[]) {
+  for (const value of values) {
+    const text = String(value ?? "").trim();
+    if (text && text !== "undefined" && text !== "null") return text;
+  }
+  return "";
+}
+
+function normalizeEmployeeDirectoryEntry(
+  id: string,
+  raw: Record<string, any>
+): EmployeeDirectoryEntry {
+  const employment = (raw.employeeProfile?.employment ||
+    raw.employment ||
+    {}) as Record<string, any>;
+
+  return {
+    id,
+    displayName:
+      pickEmployeeDirectoryText(raw.displayName, raw.name, raw.fullName) || id,
+    email: pickEmployeeDirectoryText(raw.email),
+    linkedUserUid:
+      pickEmployeeDirectoryText(raw.linkedUserUid, raw.uid, raw.userId) || null,
+    title:
+      pickEmployeeDirectoryText(
+        raw.title,
+        employment.title,
+        employment.jobTitle
+      ) || null,
   };
 }
 
@@ -904,7 +962,7 @@ function buildOverridesFromEffectiveSelection(
   const permissionsAllow: Permission[] = [];
   const permissionsDeny: Permission[] = [];
 
-  for (const permissionKey of ALL_PERMISSION_KEYS) {
+  for (const permissionKey of CENTRAL_PERMISSION_KEYS) {
     const isSelected = selected.has(permissionKey);
     const isDefault = defaults.has(permissionKey);
 
@@ -969,6 +1027,9 @@ export default function Settings() {
   // NEW: roles / admin users / labels / flags / content
   const [roles, setRoles] = useState<RoleDoc[]>([]);
   const [adminUsers, setAdminUsers] = useState<AdminUserDoc[]>([]);
+  const [employeeDirectory, setEmployeeDirectory] = useState<
+    EmployeeDirectoryEntry[]
+  >([]);
 
   // ✅ NEW: role invites
   const [promoteEmail, setPromoteEmail] = useState("");
@@ -1089,6 +1150,8 @@ export default function Settings() {
   // Admin user dialog
   const [isAdminDialogOpen, setIsAdminDialogOpen] = useState(false);
   const [editingAdminId, setEditingAdminId] = useState<string | null>(null);
+  const [adminEmployeeLinkMode, setAdminEmployeeLinkMode] =
+    useState<EmployeeLinkMode>("create");
   const [adminForm, setAdminForm] = useState<Omit<AdminUserDoc, "id">>({
     displayName: "",
     email: "",
@@ -1096,6 +1159,8 @@ export default function Settings() {
     title: "",
     isActive: true,
     linkedUserUid: "",
+    employeeProfileEnabled: false,
+    linkedEmployeeId: null,
     notes: "",
     permissionsAllow: [],
     permissionsDeny: [],
@@ -1553,6 +1618,33 @@ export default function Settings() {
       }
     );
 
+    const unsubEmployees = onSnapshot(
+      collection(db, "employees"),
+      snap => {
+        const rows = snap.docs
+          .map(employeeDoc =>
+            normalizeEmployeeDirectoryEntry(
+              employeeDoc.id,
+              (employeeDoc.data() as Record<string, any>) || {}
+            )
+          )
+          .sort((left, right) => {
+            const leftName = `${left.displayName} ${left.email}`
+              .trim()
+              .toLowerCase();
+            const rightName = `${right.displayName} ${right.email}`
+              .trim()
+              .toLowerCase();
+            return leftName.localeCompare(rightName);
+          });
+
+        setEmployeeDirectory(rows);
+      },
+      err => {
+        console.error("employees snapshot error:", err);
+      }
+    );
+
     // Realtime: role_invites
     const unsubInvites = onSnapshot(
       collection(db, "role_invites"),
@@ -1573,6 +1665,7 @@ export default function Settings() {
 
     return () => {
       unsubAdmins();
+      unsubEmployees();
       unsubInvites();
     };
   }, [databaseWorkerUrl]);
@@ -2076,6 +2169,14 @@ export default function Settings() {
     [adminForm.permissionsAllow, adminForm.permissionsDeny]
   );
 
+  const selectedEmployeeDirectoryEntry = useMemo(
+    () =>
+      employeeDirectory.find(
+        employee => employee.id === String(adminForm.linkedEmployeeId || "").trim()
+      ) || null,
+    [adminForm.linkedEmployeeId, employeeDirectory]
+  );
+
   const findUserDocsByEmail = async (email: string) => {
     const normalizedEmail = email.trim().toLowerCase();
     if (!normalizedEmail) return [];
@@ -2112,12 +2213,136 @@ export default function Settings() {
     return Array.from(linkedDocs.values());
   };
 
+  const ensureLinkedEmployeeRecord = async ({
+    employeeProfileEnabled,
+    requestedEmployeeId,
+    linkMode,
+    linkedUserUid,
+    displayName,
+    email,
+    title,
+    isActive,
+  }: {
+    employeeProfileEnabled: boolean;
+    requestedEmployeeId?: string | null;
+    linkMode: EmployeeLinkMode;
+    linkedUserUid?: string | null;
+    displayName: string;
+    email: string;
+    title: string;
+    isActive: boolean;
+  }): Promise<string | null> => {
+    if (!employeeProfileEnabled) return null;
+
+    const normalizedLinkedUserUid = String(linkedUserUid || "").trim();
+    if (!normalizedLinkedUserUid) {
+      throw new Error(
+        "ربط بروفايل الموظف يتطلب وجود حساب مستخدم مرتبط حتى نثبت الـ uid الصحيح."
+      );
+    }
+
+    const normalizedRequestedEmployeeId = String(
+      requestedEmployeeId || ""
+    ).trim();
+    const employeeId =
+      linkMode === "existing"
+        ? normalizedRequestedEmployeeId
+        : normalizedLinkedUserUid;
+
+    if (!employeeId) {
+      throw new Error("اختر بروفايل موظف موجود أو أنشئ سجلًا جديدًا.");
+    }
+
+    const employeeRef = doc(db, "employees", employeeId);
+    const employeeSnap = await getDoc(employeeRef);
+    if (linkMode === "existing" && !employeeSnap.exists()) {
+      throw new Error("سجل الموظف المحدد غير موجود.");
+    }
+
+    const existingEmployee = employeeSnap.exists()
+      ? ((employeeSnap.data() as Record<string, any>) || {})
+      : {};
+    const existingLinkedUserUid =
+      pickEmployeeDirectoryText(
+        existingEmployee.linkedUserUid,
+        existingEmployee.uid,
+        existingEmployee.userId
+      ) || "";
+
+    if (
+      linkMode === "existing" &&
+      existingLinkedUserUid &&
+      existingLinkedUserUid !== normalizedLinkedUserUid
+    ) {
+      throw new Error(
+        "بروفايل الموظف المحدد مرتبط بالفعل بحساب مستخدم آخر."
+      );
+    }
+
+    const existingEmployment = (existingEmployee.employeeProfile?.employment ||
+      existingEmployee.employment ||
+      {}) as Record<string, any>;
+    const existingPersonal = (existingEmployee.employeeProfile?.personal ||
+      {}) as Record<string, any>;
+    const normalizedTitle = String(title || "").trim();
+
+    await setDoc(
+      employeeRef,
+      {
+        uid: normalizedLinkedUserUid,
+        linkedUserUid: normalizedLinkedUserUid,
+        email: email || existingEmployee.email || "",
+        displayName:
+          displayName ||
+          existingEmployee.displayName ||
+          existingEmployee.name ||
+          "",
+        name:
+          displayName ||
+          existingEmployee.name ||
+          existingEmployee.displayName ||
+          "",
+        title:
+          pickEmployeeDirectoryText(existingEmployee.title, normalizedTitle) ||
+          null,
+        active: isActive,
+        isActive,
+        updatedAt: serverTimestamp(),
+        createdAt: existingEmployee.createdAt ?? serverTimestamp(),
+        employeeProfile: {
+          personal: existingPersonal,
+          employment: {
+            ...existingEmployment,
+            title:
+              pickEmployeeDirectoryText(
+                existingEmployment.title,
+                existingEmployment.jobTitle,
+                normalizedTitle
+              ) || null,
+            jobTitle:
+              pickEmployeeDirectoryText(
+                existingEmployment.jobTitle,
+                existingEmployment.title,
+                normalizedTitle
+              ) || null,
+            updatedAt: serverTimestamp(),
+          },
+        },
+      },
+      { merge: true }
+    );
+
+    return employeeRef.id;
+  };
+
   const buildAdminUserPayload = ({
     displayName,
     email,
     roleKey,
     title,
     isActive,
+    employeeProfileEnabled,
+    linkedEmployeeId,
     notes,
     permissionsAllow,
     permissionsDeny,
@@ -2127,6 +2352,8 @@ export default function Settings() {
     roleKey: AdminRoleKey;
     title: string;
     isActive: boolean;
+    employeeProfileEnabled: boolean;
+    linkedEmployeeId: string | null;
     notes: string;
     permissionsAllow: Permission[];
     permissionsDeny: Permission[];
@@ -2136,6 +2363,8 @@ export default function Settings() {
     roleKey,
     title: title || "",
     isActive,
+    employeeProfileEnabled,
+    linkedEmployeeId,
     notes,
     permissionsAllow,
     permissionsDeny,
@@ -2147,6 +2376,8 @@ export default function Settings() {
     roleKey,
     title,
     isActive,
+    employeeProfileEnabled,
+    linkedEmployeeId,
     permissionsAllow,
     permissionsDeny,
   }: {
@@ -2155,6 +2386,8 @@ export default function Settings() {
     roleKey: AdminRoleKey;
     title: string;
     isActive: boolean;
+    employeeProfileEnabled: boolean;
+    linkedEmployeeId: string | null;
     permissionsAllow: Permission[];
     permissionsDeny: Permission[];
   }) => ({
@@ -2163,6 +2396,8 @@ export default function Settings() {
     displayName: displayName || null,
     name: displayName || null,
     title: title || null,
+    employeeProfileEnabled,
+    linkedEmployeeId,
     permissionsAllow,
     permissionsDeny,
     active: isActive,
@@ -2202,6 +2437,7 @@ export default function Settings() {
 
   const openCreateAdmin = () => {
     setEditingAdminId(null);
+    setAdminEmployeeLinkMode("create");
     setAdminForm({
       displayName: "",
       email: "",
@@ -2209,6 +2445,8 @@ export default function Settings() {
       title: "",
       isActive: true,
       linkedUserUid: "",
+      employeeProfileEnabled: false,
+      linkedEmployeeId: null,
       notes: "",
       permissionsAllow: [],
       permissionsDeny: [],
@@ -2218,6 +2456,9 @@ export default function Settings() {
 
   const openEditAdmin = (u: AdminUserDoc) => {
     setEditingAdminId((u.email || "").trim().toLowerCase());
+    setAdminEmployeeLinkMode(
+      String(u.linkedEmployeeId || "").trim() ? "existing" : "create"
+    );
     setAdminForm({
       displayName: String(u.displayName || "").trim(),
       email: u.email || "",
@@ -2225,6 +2466,8 @@ export default function Settings() {
       title: String(u.title || "").trim(),
       isActive: !!u.isActive,
       linkedUserUid: String(u.linkedUserUid || "").trim(),
+      employeeProfileEnabled: !!u.employeeProfileEnabled,
+      linkedEmployeeId: String(u.linkedEmployeeId || "").trim() || null,
       notes: u.notes || "",
       permissionsAllow: u.permissionsAllow || [],
       permissionsDeny: u.permissionsDeny || [],
@@ -2237,6 +2480,13 @@ export default function Settings() {
     const displayName = String(adminForm.displayName || "").trim();
     const title = String(adminForm.title || "").trim();
     const email = adminForm.email.trim().toLowerCase();
+    const employeeProfileEnabled = !!adminForm.employeeProfileEnabled;
+    const requestedLinkedEmployeeId =
+      String(adminForm.linkedEmployeeId || "").trim() || null;
+    const needsExistingEmployeeSelection =
+      employeeProfileEnabled &&
+      adminEmployeeLinkMode === "existing" &&
+      !requestedLinkedEmployeeId;
 
     if (!displayName) return toast.error("اسم الحساب مطلوب");
     if (!email || !email.includes("@")) return toast.error("البريد غير صحيح");
@@ -2253,6 +2503,10 @@ export default function Settings() {
       permissionsDeny
     );
 
+    if (needsExistingEmployeeSelection) {
+      return toast.error("اختر بروفايل موظف موجود لربط الحساب به.");
+    }
+
     try {
       // ✅ ALWAYS upsert by emailLower (docId = email)
       const linkedUserDocs = await resolveLinkedUserDocs(
@@ -2261,6 +2515,16 @@ export default function Settings() {
       );
       const linkedUserDoc = linkedUserDocs[0] || null;
       const linkedUserUid = linkedUserDoc?.id || null;
+      const linkedEmployeeId = await ensureLinkedEmployeeRecord({
+        employeeProfileEnabled,
+        requestedEmployeeId: requestedLinkedEmployeeId,
+        linkMode: adminEmployeeLinkMode,
+        linkedUserUid,
+        displayName,
+        email,
+        title,
+        isActive: adminForm.isActive,
+      });
       await auditedSetDoc({
         ref: doc(db, "admin_users", email),
         data: {
@@ -2270,6 +2534,8 @@ export default function Settings() {
             roleKey,
             title,
             isActive: adminForm.isActive,
+            employeeProfileEnabled,
+            linkedEmployeeId,
             notes: String(adminForm.notes || "").trim(),
             permissionsAllow,
             permissionsDeny,
@@ -2297,6 +2563,9 @@ export default function Settings() {
           permissionsDeny,
           effectivePermissions,
           linkedUserUid,
+          employeeProfileEnabled,
+          linkedEmployeeId,
+          adminEmployeeLinkMode,
           matchedUserCount: linkedUserDocs.length,
           targetUserEmail: email,
         },
@@ -2316,6 +2585,8 @@ export default function Settings() {
               roleKey,
               title,
               isActive: adminForm.isActive,
+              employeeProfileEnabled,
+              linkedEmployeeId,
               permissionsAllow,
               permissionsDeny,
             }),
@@ -2336,6 +2607,8 @@ export default function Settings() {
             permissionsDeny,
             effectivePermissions,
             active: adminForm.isActive,
+            employeeProfileEnabled,
+            linkedEmployeeId,
             targetUserEmail: email,
           },
           ignoreFields: ["updatedAt"],
@@ -4270,7 +4543,7 @@ export default function Settings() {
                 {
                   icon: Shield,
                   label: "الصلاحيات",
-                  value: formatNumberEN(DEFAULT_PERMISSIONS.length),
+                  value: formatNumberEN(CENTRAL_PERMISSION_DEFINITIONS.length),
                   helper: "كتالوج الصلاحيات المتاح",
                 },
               ]}
@@ -4450,7 +4723,7 @@ export default function Settings() {
               description="مرجع سريع للصلاحيات المتاحة داخل النظام كما يتم استخدامها حاليًا."
             >
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {DEFAULT_PERMISSIONS.map(permission => (
+                {CENTRAL_PERMISSION_DEFINITIONS.map(permission => (
                   <div
                     key={permission.key}
                     className="rounded-[20px] border border-slate-200 bg-white p-4"
@@ -6938,7 +7211,7 @@ export default function Settings() {
             <div className="space-y-2">
               <Label>الصلاحيات</Label>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                {DEFAULT_PERMISSIONS.map(perm => {
+                {CENTRAL_PERMISSION_DEFINITIONS.map(perm => {
                   const checked = roleForm.permissions.includes(perm.key);
                   return (
                     <div
@@ -7063,6 +7336,131 @@ export default function Settings() {
               </div>
             </div>
 
+            <div className="space-y-3 rounded-xl border border-slate-200 p-4">
+              <div className="flex items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <Label>لديه بروفايل موظف</Label>
+                  <p className="text-xs text-muted-foreground">
+                    يبقى الدور مسؤولًا عن الصلاحيات فقط، بينما بروفايل الموظف
+                    يستخدم لبيانات الموظف التشغيلية والظهور في واجهات الموظفين.
+                  </p>
+                </div>
+                <Switch
+                  checked={!!adminForm.employeeProfileEnabled}
+                  onCheckedChange={checked =>
+                    setAdminForm(previous => ({
+                      ...previous,
+                      employeeProfileEnabled: checked,
+                      linkedEmployeeId: checked
+                        ? previous.linkedEmployeeId || null
+                        : null,
+                    }))
+                  }
+                />
+              </div>
+
+              {adminForm.employeeProfileEnabled ? (
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-1">
+                    <Label>طريقة الربط</Label>
+                    <Select
+                      value={adminEmployeeLinkMode}
+                      onValueChange={(value: EmployeeLinkMode) => {
+                        setAdminEmployeeLinkMode(value);
+                        if (value === "create") {
+                          setAdminForm(previous => ({
+                            ...previous,
+                            linkedEmployeeId: null,
+                          }));
+                        }
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="create">
+                          إنشاء سجل موظف جديد بنفس uid
+                        </SelectItem>
+                        <SelectItem value="existing">
+                          ربط بسجل موظف موجود
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {adminEmployeeLinkMode === "existing" ? (
+                    <div className="space-y-1">
+                      <Label>سجل الموظف المرتبط</Label>
+                      <Select
+                        value={String(adminForm.linkedEmployeeId || "")}
+                        onValueChange={value =>
+                          setAdminForm(previous => ({
+                            ...previous,
+                            linkedEmployeeId: value || null,
+                          }))
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="اختر سجل موظف" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {employeeDirectory.length ? (
+                            employeeDirectory.map(employee => (
+                              <SelectItem key={employee.id} value={employee.id}>
+                                {employee.displayName}
+                                {employee.email ? ` - ${employee.email}` : ""}
+                              </SelectItem>
+                            ))
+                          ) : (
+                            <SelectItem value="__empty" disabled>
+                              لا توجد سجلات موظفين متاحة
+                            </SelectItem>
+                          )}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      <Label>طريقة الإنشاء</Label>
+                      <div className="rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground">
+                        سيتم إنشاء سجل داخل <code>employees</code> وربطه بنفس{" "}
+                        <code>uid</code> عند الحفظ إذا تم العثور على حساب مستخدم
+                        مطابق لهذا البريد.
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : null}
+
+              {adminForm.employeeProfileEnabled ? (
+                <div className="rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                  <div>
+                    المصدر التشغيلي للموظف:{" "}
+                    <code>
+                      {adminEmployeeLinkMode === "existing"
+                        ? String(adminForm.linkedEmployeeId || "employees/{id}")
+                        : "employees/{linkedUid}"}
+                    </code>
+                  </div>
+                  <div>
+                    الدور الحالي يبقى{" "}
+                    <code>{adminForm.roleKey || "staff"}</code> ولا يتم تحويل
+                    الحساب إلى <code>staff</code> بسبب هذا الربط.
+                  </div>
+                  {selectedEmployeeDirectoryEntry ? (
+                    <div>
+                      السجل المختار:{" "}
+                      <code>{selectedEmployeeDirectoryEntry.id}</code>
+                      {selectedEmployeeDirectoryEntry.email
+                        ? ` - ${selectedEmployeeDirectoryEntry.email}`
+                        : ""}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+
             <div className="space-y-1">
               <Label>ملاحظات (اختياري)</Label>
               <Textarea
@@ -7078,7 +7476,7 @@ export default function Settings() {
               <div className="space-y-2">
                 <Label>الصلاحيات الفعلية</Label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {DEFAULT_PERMISSIONS.map(perm => {
+                  {CENTRAL_PERMISSION_DEFINITIONS.map(perm => {
                     const checked = adminFormEffectivePermissions.includes(
                       perm.key as Permission
                     );
@@ -7133,7 +7531,7 @@ export default function Settings() {
                         key={`override-allow-${permissionKey}`}
                         variant="secondary"
                       >
-                        + {permissionKey}
+                        + {getPermissionLabel(permissionKey)} ({permissionKey})
                       </Badge>
                     )
                   )}
@@ -7143,7 +7541,7 @@ export default function Settings() {
                         key={`override-deny-${permissionKey}`}
                         variant="outline"
                       >
-                        - {permissionKey}
+                        - {getPermissionLabel(permissionKey)} ({permissionKey})
                       </Badge>
                     )
                   )}

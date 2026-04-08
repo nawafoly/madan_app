@@ -24,25 +24,57 @@ export type AppRole =
   | "client"
   | "guest";
 
-export type Permission =
-  | "dashboard.view"
-  | "projects.view"
-  | "projects.manage"
-  | "projects.publish"
-  | "investments.view"
-  | "investments.manage"
-  | "users.view"
-  | "users.manage"
-  | "messages.view"
-  | "messages.manage"
-  | "recruitment.view"
-  | "recruitment.manage"
-  | "employees.view"
-  | "employees.manage"
-  | "reports.view"
-  | "financial.view"
-  | "financial.edit"
-  | "settings.manage";
+export const ALL_PERMISSION_KEYS = [
+  "dashboard.view",
+  "projects.view",
+  "projects.manage",
+  "projects.publish",
+  "investments.view",
+  "investments.manage",
+  "users.view",
+  "users.manage",
+  "messages.view",
+  "messages.manage",
+  "recruitment.view",
+  "recruitment.manage",
+  "employees.view",
+  "employees.manage",
+  "reports.view",
+  "financial.view",
+  "financial.edit",
+  "settings.manage",
+] as const;
+
+export type Permission = (typeof ALL_PERMISSION_KEYS)[number];
+
+export const PERMISSION_LABELS: Record<Permission, string> = {
+  "dashboard.view": "عرض لوحة التحكم",
+  "projects.view": "عرض المشاريع",
+  "projects.manage": "إدارة المشاريع (إنشاء/تعديل/نشر)",
+  "projects.publish": "نشر المشاريع (Publish)",
+  "investments.view": "عرض الاستثمارات",
+  "investments.manage": "إدارة الاستثمارات (موافقة/رفض/تحديث)",
+  "users.view": "عرض العملاء",
+  "users.manage": "إدارة العملاء (VIP/ملاحظات)",
+  "messages.view": "عرض الرسائل",
+  "messages.manage": "إدارة الرسائل",
+  "recruitment.view": "عرض طلبات التوظيف",
+  "recruitment.manage": "إدارة طلبات التوظيف",
+  "employees.view": "عرض الموظفين",
+  "employees.manage": "إدارة الموظفين",
+  "reports.view": "عرض التقارير",
+  "financial.view": "عرض المالية",
+  "financial.edit": "تعديل المالية",
+  "settings.manage": "إدارة الإعدادات",
+};
+
+export const PERMISSION_DEFINITIONS: ReadonlyArray<{
+  key: Permission;
+  label: string;
+}> = ALL_PERMISSION_KEYS.map(key => ({
+  key,
+  label: PERMISSION_LABELS[key],
+}));
 
 export const ROLE_DEFAULT_PERMS: Record<AppRole, Permission[]> = {
   owner: [
@@ -113,6 +145,8 @@ export type AppUser = {
   role: AppRole;
   permissionsAllow?: Permission[];
   permissionsDeny?: Permission[];
+  employeeProfileEnabled?: boolean;
+  linkedEmployeeId?: string | null;
   firebaseUser?: FbUser;
 };
 
@@ -150,6 +184,26 @@ function normalizeText(value: unknown) {
   const text = String(value ?? "").trim();
   if (!text || text === "undefined" || text === "null") return "";
   return text;
+}
+
+function normalizeOptionalText(value: unknown) {
+  const text = normalizeText(value);
+  return text || null;
+}
+
+function normalizeBoolean(value: unknown) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value !== 0;
+
+  const normalized = String(value ?? "")
+    .trim()
+    .toLowerCase();
+  return (
+    normalized === "true" ||
+    normalized === "1" ||
+    normalized === "yes" ||
+    normalized === "on"
+  );
 }
 
 function isRoleLikeDisplayName(name: string) {
@@ -196,6 +250,8 @@ type UserRuntimeData = {
   isActive: boolean;
   title?: string;
   displayName?: string;
+  employeeProfileEnabled: boolean;
+  linkedEmployeeId: string | null;
 };
 
 function isPermissionDenied(err: any) {
@@ -213,6 +269,8 @@ function getFallbackRuntime(fb: FbUser): UserRuntimeData {
     permissionsAllow: [],
     permissionsDeny: [],
     isActive: true,
+    employeeProfileEnabled: false,
+    linkedEmployeeId: null,
   };
 }
 
@@ -232,6 +290,8 @@ function getRuntimeFromUserDocData(fb: FbUser, data: any): UserRuntimeData {
     isActive: accountStatus.isActive,
     title: title || undefined,
     displayName: displayName || undefined,
+    employeeProfileEnabled: normalizeBoolean(data?.employeeProfileEnabled),
+    linkedEmployeeId: normalizeOptionalText(data?.linkedEmployeeId),
   };
 }
 
@@ -254,6 +314,8 @@ function getRuntimeFromAdminUserDocData(
     isActive: accountStatus.isActive,
     title: title || undefined,
     displayName: displayName || undefined,
+    employeeProfileEnabled: normalizeBoolean(data?.employeeProfileEnabled),
+    linkedEmployeeId: normalizeOptionalText(data?.linkedEmployeeId),
   };
 }
 
@@ -290,6 +352,9 @@ function mergeRuntimeData(
     isActive: base.isActive && adminRuntime.isActive,
     title: base.title || adminRuntime.title,
     displayName: base.displayName || adminRuntime.displayName,
+    employeeProfileEnabled:
+      base.employeeProfileEnabled || adminRuntime.employeeProfileEnabled,
+    linkedEmployeeId: adminRuntime.linkedEmployeeId || base.linkedEmployeeId,
   };
 }
 
@@ -523,9 +588,27 @@ function buildAppUserState(fb: FbUser, runtime: UserRuntimeData): AppUser {
     role: runtime.role,
     permissionsAllow: runtime.permissionsAllow,
     permissionsDeny: runtime.permissionsDeny,
+    employeeProfileEnabled: runtime.employeeProfileEnabled,
+    linkedEmployeeId: runtime.linkedEmployeeId,
     firebaseUser: fb,
   };
 }
+
+export function canAccessEmployeeProfile(
+  user:
+    | Pick<AppUser, "role" | "employeeProfileEnabled" | "linkedEmployeeId">
+    | null
+    | undefined
+): boolean {
+  if (!user) return false;
+  return (
+    user.role === "staff" ||
+    user.employeeProfileEnabled === true ||
+    !!normalizeText(user.linkedEmployeeId)
+  );
+}
+
+export const hasEmployeeProfileAccess = canAccessEmployeeProfile;
 
 export function useAuth() {
   const [user, setUser] = useState<AppUser | null>(null);
