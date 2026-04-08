@@ -11,6 +11,8 @@ export type EmployeeAvatarDoc = {
 };
 
 export type EmployeePersonalDoc = {
+  name?: string | null;
+  email?: string | null;
   phone?: string | null;
   avatar?: EmployeeAvatarDoc | null;
 };
@@ -42,4 +44,42 @@ export type EmployeeEmploymentDoc = {
 export type EmployeeProfileDoc = {
   personal?: EmployeePersonalDoc | null;
   employment?: EmployeeEmploymentDoc | null;
+};
+
+export type EmployeeLeaveRequestStatus =
+  | "pending"
+  | "approved"
+  | "rejected";
+
+export type EmployeeLeaveType =
+  | "annual"
+  | "sick"
+  | "emergency"
+  | "unpaid"
+  | "other"
+  | string;
+
+export type EmployeeLeaveRequestDoc = {
+  employeeId: string;
+  employeeUid: string;
+  userId?: string | null;
+  employeeName?: string | null;
+  employeeEmail?: string | null;
+  status: EmployeeLeaveRequestStatus;
+  leaveType: EmployeeLeaveType;
+  startDate: unknown;
+  endDate: unknown;
+  daysCount: number | null;
+  employeeNote?: string | null;
+  hrNote?: string | null;
+  createdAt?: unknown;
+  decidedAt?: unknown;
+  decidedBy?: string | null;
+  decidedByEmail?: string | null;
+  decidedByName?: string | null;
+  reviewedAt?: unknown;
+  reviewedBy?: string | null;
+  reviewedByEmail?: string | null;
+  reviewedByName?: string | null;
+  updatedAt?: unknown;
 };

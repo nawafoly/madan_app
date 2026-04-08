@@ -352,6 +352,10 @@ service cloud.firestore {
       return hasAdminPermission("employees.manage");
     }
 
+    function isEmployeeManagedUserDoc(data) {
+      return !(("role" in data) && lower(data.role) in ["guest", "client"]);
+    }
+
     function canReadRecruitmentAdmin() {
       return hasAdminPermission("recruitment.view")
         || hasAdminPermission("recruitment.manage");
@@ -413,8 +417,8 @@ service cloud.firestore {
 
     function isValidEmployeeAdminUpdate() {
       let keys = request.resource.data.diff(resource.data).changedKeys();
-      return isStaffUserDoc(resource.data)
-        && isStaffUserDoc(request.resource.data)
+      return isEmployeeManagedUserDoc(resource.data)
+        && isEmployeeManagedUserDoc(request.resource.data)
         && !keys.hasAny([
             "role",
             "permissionsAllow",
@@ -424,13 +428,16 @@ service cloud.firestore {
             "isInvestor",
             "vipStatus",
             "linkedUserUid",
-            "email",
             "uid",
-            "phone",
-            "photoURL",
-            "profile"
+            "photoURL"
           ])
         && keys.hasOnly([
+            "displayName",
+            "name",
+            "fullName",
+            "email",
+            "phone",
+            "profile",
             "title",
             "department",
             "startDate",
@@ -457,29 +464,58 @@ service cloud.firestore {
           ])
         )
         && (
+          !keys.hasAny(["profile"])
+          || profileMap(request.resource.data).diff(profileMap(resource.data)).changedKeys().hasOnly([
+            "name",
+            "displayName",
+            "email",
+            "phone"
+          ])
+        )
+        && (
           !keys.hasAny(["employeeProfile"])
           || (
             employeeProfileMap(request.resource.data)
               .diff(employeeProfileMap(resource.data))
               .changedKeys()
-              .hasOnly(["employment"])
-            && employeeEmploymentMap(request.resource.data)
-              .diff(employeeEmploymentMap(resource.data))
-              .changedKeys()
-              .hasOnly([
-                "title",
-                "jobTitle",
-                "department",
-                "startDate",
-                "leaveBalance",
-                "status",
-                "employmentStatus",
-                "employeeCode",
-                "adminNotes",
-                "updatedAt",
-                "updatedByUid",
-                "updatedByEmail"
-              ])
+              .hasOnly(["employment", "personal"])
+            && (
+              !employeeProfileMap(request.resource.data)
+                .diff(employeeProfileMap(resource.data))
+                .changedKeys()
+                .hasAny(["employment"])
+              || employeeEmploymentMap(request.resource.data)
+                .diff(employeeEmploymentMap(resource.data))
+                .changedKeys()
+                .hasOnly([
+                  "title",
+                  "jobTitle",
+                  "department",
+                  "startDate",
+                  "leaveBalance",
+                  "status",
+                  "employmentStatus",
+                  "employeeCode",
+                  "adminNotes",
+                  "updatedAt",
+                  "updatedByUid",
+                  "updatedByEmail"
+                ])
+            )
+            && (
+              !employeeProfileMap(request.resource.data)
+                .diff(employeeProfileMap(resource.data))
+                .changedKeys()
+                .hasAny(["personal"])
+              || employeePersonalMap(request.resource.data)
+                .diff(employeePersonalMap(resource.data))
+                .changedKeys()
+                .hasOnly([
+                  "name",
+                  "email",
+                  "phone"
+                ])
+            )
           )
         );
     }
@@ -517,6 +553,54 @@ service cloud.firestore {
               .hasOnly(["phone", "avatar"])
           )
         );
+    }
+
+    function leaveRequestOwnerUid(data) {
+      return (("employeeUid" in data) && (data.employeeUid is string) && data.employeeUid.size() > 0)
+        ? data.employeeUid
+        : ((("userId" in data) && (data.userId is string) && data.userId.size() > 0)
+          ? data.userId
+          : "");
+    }
+
+    function isValidEmployeeLeaveRequestCreate() {
+      return signedIn()
+        && request.resource.data.employeeId is string
+        && request.resource.data.employeeId.size() > 0
+        && request.resource.data.employeeUid is string
+        && request.resource.data.employeeUid.size() > 0
+        && request.resource.data.userId is string
+        && request.resource.data.userId == request.auth.uid
+        && leaveRequestOwnerUid(request.resource.data) == request.auth.uid
+        && requestStatusValue(request.resource.data) == "pending"
+        && request.resource.data.leaveType is string
+        && ("startDate" in request.resource.data)
+        && request.resource.data.startDate != null
+        && ("endDate" in request.resource.data)
+        && request.resource.data.endDate != null
+        && request.resource.data.daysCount is number
+        && request.resource.data.daysCount > 0;
+    }
+
+    function isValidEmployeeLeaveRequestAdminUpdate() {
+      let keys = request.resource.data.diff(resource.data).changedKeys();
+      let beforeStatus = requestStatusValue(resource.data);
+      let afterStatus = requestStatusValue(request.resource.data);
+      return beforeStatus == "pending"
+        && afterStatus in ["approved", "rejected"]
+        && keys.hasOnly([
+          "status",
+          "hrNote",
+          "decidedAt",
+          "decidedBy",
+          "decidedByEmail",
+          "decidedByName",
+          "reviewedAt",
+          "reviewedBy",
+          "reviewedByEmail",
+          "reviewedByName",
+          "updatedAt"
+        ]);
     }
 
     function canReadMessagesAdmin() {
@@ -838,7 +922,7 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if (signedIn() && request.auth.uid == userId)
         || canReadUsersAdmin()
-        || (canReadEmployeesAdmin() && isStaffUserDoc(resource.data));
+        || (canReadEmployeesAdmin() && isEmployeeManagedUserDoc(resource.data));
 
       allow create: if signedIn()
         && request.auth.uid == userId
@@ -881,6 +965,15 @@ service cloud.firestore {
       allow create, delete: if canManageEmployeesAdmin();
       allow update: if canManageEmployeesAdmin()
         || isValidEmployeeCollectionSelfUpdate();
+    }
+
+    match /employee_leave_requests/{requestId} {
+      allow read: if canReadEmployeesAdmin()
+        || (signedIn() && leaveRequestOwnerUid(resource.data) == request.auth.uid);
+      allow create: if isValidEmployeeLeaveRequestCreate();
+      allow update: if canManageEmployeesAdmin()
+        && isValidEmployeeLeaveRequestAdminUpdate();
+      allow delete: if canManageEmployeesAdmin();
     }
 
     /* =========================

@@ -204,13 +204,15 @@ export function normalizeEmployeeProfile(
       user.displayName,
       user.name,
       user.fullName,
+      personal.name,
       user.profile?.name,
       user.profile?.displayName,
       authFallback?.displayName
     ) || EMPTY_VALUE;
 
   const email =
-    pickText(user.email, user.profile?.email, authFallback?.email) || EMPTY_VALUE;
+    pickText(user.email, personal.email, user.profile?.email, authFallback?.email) ||
+    EMPTY_VALUE;
 
   const phone =
     pickText(

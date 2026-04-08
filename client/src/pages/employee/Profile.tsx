@@ -5,10 +5,22 @@ import {
   updatePassword,
   updateProfile,
 } from "firebase/auth";
-import { doc, getDoc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
+import {
+  addDoc,
+  collection,
+  doc,
+  getDoc,
+  onSnapshot,
+  query,
+  serverTimestamp,
+  setDoc,
+  where,
+} from "firebase/firestore";
 import {
   BriefcaseBusiness,
+  Clock3,
   Camera,
+  CheckCircle2,
   Loader2,
   Mail,
   Phone,
@@ -18,6 +30,8 @@ import {
   Building2,
   BadgeCheck,
   KeyRound,
+  Send,
+  XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -33,6 +47,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { auth, db } from "@/_core/firebase";
 import { useAuth } from "@/_core/hooks/useAuth";
 import {
@@ -43,9 +58,25 @@ import {
   normalizeEmployeeProfile,
   type EmployeeProfileUserDoc,
 } from "@/lib/employeeProfile";
+import {
+  EMPLOYEE_LEAVE_REQUESTS_COLLECTION,
+  EMPLOYEE_LEAVE_TYPE_OPTIONS,
+  buildLeaveDateFromInput,
+  calculateLeaveDaysCount,
+  formatLeaveDateRange,
+  formatLeaveDaysLabel,
+  getLatestApprovedEmployeeLeaveRequest,
+  getLeaveStatusMeta,
+  getLeaveTypeLabel,
+  normalizeEmployeeLeaveRequest,
+  sortEmployeeLeaveRequests,
+  type EmployeeLeaveRequestRecord,
+} from "@/lib/employeeLeave";
 import { uploadDocumentToCloudflare } from "@/lib/documentUploadService";
-import { formatDateEN } from "@/lib/formatters";
+import { formatDateEN, formatDateTimeEN } from "@/lib/formatters";
 import { cn } from "@/lib/utils";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 
 const AVATAR_MAX_SIZE_BYTES = 5 * 1024 * 1024;
 
@@ -185,6 +216,50 @@ function EmploymentTile({
   );
 }
 
+function LeaveStatusBadge({ status }: { status: unknown }) {
+  const meta = getLeaveStatusMeta(status);
+
+  return (
+    <Badge
+      variant="outline"
+      className={cn(
+        "rounded-full shadow-none",
+        meta.tone === "success"
+          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+          : meta.tone === "warning"
+            ? "border-amber-200 bg-amber-50 text-amber-700"
+            : meta.tone === "danger"
+              ? "border-rose-200 bg-rose-50 text-rose-700"
+              : "border-slate-200 bg-slate-100 text-slate-600"
+      )}
+    >
+      {meta.label}
+    </Badge>
+  );
+}
+
+function LeaveSummaryCard({
+  label,
+  value,
+  icon: Icon,
+  accent,
+}: {
+  label: string;
+  value: string;
+  icon: typeof UserRound;
+  accent?: string;
+}) {
+  return (
+    <div className="rounded-[24px] border border-slate-200/80 bg-white/95 p-5 shadow-sm">
+      <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+        <Icon className={cn("h-3.5 w-3.5", accent)} />
+        {label}
+      </div>
+      <div className="mt-3 text-lg font-semibold text-slate-950">{value}</div>
+    </div>
+  );
+}
+
 export default function EmployeeProfilePage() {
   const { user } = useAuth();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -194,6 +269,15 @@ export default function EmployeeProfilePage() {
   const [phoneInput, setPhoneInput] = useState("");
   const [savingPhone, setSavingPhone] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [leaveRequests, setLeaveRequests] = useState<EmployeeLeaveRequestRecord[]>([]);
+  const [leaveRequestsLoading, setLeaveRequestsLoading] = useState(true);
+  const [leaveForm, setLeaveForm] = useState({
+    leaveType: "annual",
+    startDate: "",
+    endDate: "",
+    employeeNote: "",
+  });
+  const [submittingLeaveRequest, setSubmittingLeaveRequest] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -306,11 +390,54 @@ export default function EmployeeProfilePage() {
   );
 
   useEffect(() => {
+    if (!user?.uid) {
+      setLeaveRequests([]);
+      setLeaveRequestsLoading(false);
+      return;
+    }
+
+    setLeaveRequestsLoading(true);
+    const unsubscribe = onSnapshot(
+      query(
+        collection(db, EMPLOYEE_LEAVE_REQUESTS_COLLECTION),
+        where("employeeUid", "==", user.uid)
+      ),
+      snapshot => {
+        const rows = sortEmployeeLeaveRequests(
+          snapshot.docs.map(docSnapshot =>
+            normalizeEmployeeLeaveRequest(
+              docSnapshot.id,
+              (docSnapshot.data() as Record<string, any>) || {}
+            )
+          )
+        );
+        setLeaveRequests(rows);
+        setLeaveRequestsLoading(false);
+      },
+      error => {
+        console.error("employee_leave_requests_snapshot_error", error);
+        setLeaveRequests([]);
+        setLeaveRequestsLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [user?.uid]);
+
+  useEffect(() => {
     setPhoneInput(profile.personal.phone || "");
   }, [profile.personal.phone]);
 
   const phoneDirty = phoneInput.trim() !== profile.personal.phone.trim();
   const phoneValid = validatePhone(phoneInput);
+  const requestedLeaveDays = useMemo(
+    () => calculateLeaveDaysCount(leaveForm.startDate, leaveForm.endDate),
+    [leaveForm.endDate, leaveForm.startDate]
+  );
+  const latestLeaveRequest = useMemo(
+    () => getLatestApprovedEmployeeLeaveRequest(leaveRequests),
+    [leaveRequests]
+  );
 
   const handleSavePhone = async () => {
     const normalizedPhone = phoneInput.trim();
@@ -409,6 +536,87 @@ export default function EmployeeProfilePage() {
     } finally {
       setUploadingAvatar(false);
       event.target.value = "";
+    }
+  };
+
+  const handleLeaveFormChange = (
+    key: keyof typeof leaveForm,
+    value: string
+  ) => {
+    setLeaveForm(current => ({
+      ...current,
+      [key]: value,
+    }));
+  };
+
+  const handleSubmitLeaveRequest = async () => {
+    if (!user?.uid || !employeeProfileSource) {
+      toast.error("تعذر تحديد ملف الموظف الحالي.");
+      return;
+    }
+
+    const startDate = buildLeaveDateFromInput(leaveForm.startDate);
+    const endDate = buildLeaveDateFromInput(leaveForm.endDate);
+    const daysCount = calculateLeaveDaysCount(
+      leaveForm.startDate,
+      leaveForm.endDate
+    );
+
+    if (!leaveForm.leaveType) {
+      toast.error("اختر نوع الإجازة.");
+      return;
+    }
+
+    if (!startDate || !endDate || !daysCount) {
+      toast.error("أدخل تاريخ بداية ونهاية صالحين للإجازة.");
+      return;
+    }
+
+    setSubmittingLeaveRequest(true);
+    try {
+      await addDoc(collection(db, EMPLOYEE_LEAVE_REQUESTS_COLLECTION), {
+        employeeId: employeeProfileSource.entityId,
+        employeeUid: user.uid,
+        userId: user.uid,
+        employeeName:
+          profile.personal.name !== EMPLOYEE_EMPTY_VALUE
+            ? profile.personal.name
+            : user.displayName || user.email || "موظف",
+        employeeEmail:
+          profile.personal.email !== EMPLOYEE_EMPTY_VALUE
+            ? profile.personal.email
+            : user.email || null,
+        status: "pending",
+        leaveType: leaveForm.leaveType,
+        startDate,
+        endDate,
+        daysCount,
+        employeeNote: leaveForm.employeeNote.trim() || null,
+        hrNote: null,
+        decidedAt: null,
+        decidedBy: null,
+        decidedByEmail: null,
+        decidedByName: null,
+        reviewedAt: null,
+        reviewedBy: null,
+        reviewedByEmail: null,
+        reviewedByName: null,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+
+      setLeaveForm({
+        leaveType: "annual",
+        startDate: "",
+        endDate: "",
+        employeeNote: "",
+      });
+      toast.success("تم رفع طلب الإجازة بنجاح.");
+    } catch (error) {
+      console.error("employee_leave_request_create_failed", error);
+      toast.error("تعذر رفع طلب الإجازة الآن.");
+    } finally {
+      setSubmittingLeaveRequest(false);
     }
   };
 
@@ -706,6 +914,350 @@ export default function EmployeeProfilePage() {
           </Card>
         </section>
       </div>
+
+      <section className="mt-8 space-y-6">
+        <SectionHeading
+          icon={CalendarDays}
+          title="الإجازات"
+          description="هنا يمكنك متابعة رصيد الإجازات ورفع طلب جديد والاطلاع على آخر إجازة وسجل الطلبات السابقة."
+        />
+
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,0.95fr)]">
+          <Card className="rounded-[28px] border border-slate-200/80 bg-white/95 shadow-[0_24px_70px_-42px_rgba(15,23,42,0.22)]">
+            <CardHeader className="space-y-3">
+              <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                <Clock3 className="h-4 w-4" />
+                آخر إجازة
+              </div>
+              <CardTitle className="text-xl font-semibold text-slate-950">
+                ملخص الإجازات الحالية
+              </CardTitle>
+              <CardDescription className="text-sm leading-7 text-slate-600">
+                الرصيد الحالي وآخر إجازة مسجلة يظهران هنا بشكل مباشر وسريع.
+              </CardDescription>
+            </CardHeader>
+
+            <CardContent className="space-y-5">
+              <div className="grid gap-4 md:grid-cols-3">
+                <LeaveSummaryCard
+                  label="الرصيد الحالي"
+                  value={profile.employment.leaveBalanceLabel}
+                  icon={BadgeCheck}
+                  accent="text-[#B98500]"
+                />
+                <LeaveSummaryCard
+                  label="حالة آخر إجازة"
+                  value={
+                    latestLeaveRequest
+                      ? getLeaveStatusMeta(latestLeaveRequest.status).label
+                      : "لا توجد إجازات"
+                  }
+                  icon={
+                    latestLeaveRequest?.status === "approved"
+                      ? CheckCircle2
+                      : latestLeaveRequest?.status === "rejected"
+                        ? XCircle
+                        : Clock3
+                  }
+                />
+                <LeaveSummaryCard
+                  label="عدد الأيام"
+                  value={
+                    latestLeaveRequest
+                      ? formatLeaveDaysLabel(latestLeaveRequest.daysCount)
+                      : "—"
+                  }
+                  icon={CalendarDays}
+                />
+              </div>
+
+              {latestLeaveRequest ? (
+                <div className="rounded-[24px] border border-slate-200/80 bg-slate-50/75 p-5 shadow-sm">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge
+                          variant="outline"
+                          className="rounded-full border-[#F2B705]/35 bg-[#F2B705]/10 text-[#8b6700] shadow-none"
+                        >
+                          {getLeaveTypeLabel(latestLeaveRequest.leaveType)}
+                        </Badge>
+                        <LeaveStatusBadge status={latestLeaveRequest.status} />
+                      </div>
+
+                      <div className="grid gap-2 text-sm text-slate-600">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-semibold text-slate-900">الفترة:</span>
+                          <span>
+                            {formatLeaveDateRange(
+                              latestLeaveRequest.startDate,
+                              latestLeaveRequest.endDate
+                            )}
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-semibold text-slate-900">تاريخ الطلب:</span>
+                          <span>{formatDateTimeEN(latestLeaveRequest.createdAt)}</span>
+                        </div>
+                        {latestLeaveRequest.employeeNote ? (
+                          <div className="rounded-2xl border border-slate-200 bg-white/80 px-4 py-3 leading-7 text-slate-600">
+                            <span className="font-semibold text-slate-900">
+                              ملاحظتك:
+                            </span>{" "}
+                            {latestLeaveRequest.employeeNote}
+                          </div>
+                        ) : null}
+                        {latestLeaveRequest.hrNote ? (
+                          <div className="rounded-2xl border border-emerald-200/80 bg-emerald-50/70 px-4 py-3 leading-7 text-emerald-800">
+                            <span className="font-semibold">ملاحظة HR:</span>{" "}
+                            {latestLeaveRequest.hrNote}
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    <div className="rounded-[22px] border border-dashed border-slate-200 bg-white/80 px-4 py-4 text-center">
+                      <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                        آخر إجازة مسجلة
+                      </div>
+                      <div className="mt-2 text-lg font-semibold text-slate-950">
+                        {formatLeaveDaysLabel(latestLeaveRequest.daysCount)}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50/70 px-5 py-10 text-center text-sm text-slate-500">
+                  لا توجد أي إجازات مسجلة لك حتى الآن.
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-[28px] border border-slate-200/80 bg-white/95 shadow-[0_24px_70px_-42px_rgba(15,23,42,0.22)]">
+            <CardHeader className="space-y-3">
+              <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                <Send className="h-4 w-4" />
+                طلب جديد
+              </div>
+              <CardTitle className="text-xl font-semibold text-slate-950">
+                رفع طلب إجازة
+              </CardTitle>
+              <CardDescription className="text-sm leading-7 text-slate-600">
+                أدخل تفاصيل الإجازة المطلوبة، وسيصل الطلب للموارد البشرية للمراجعة والاعتماد أو الرفض.
+              </CardDescription>
+            </CardHeader>
+
+            <CardContent className="space-y-5">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label className="text-sm font-semibold text-slate-800">
+                    نوع الإجازة
+                  </Label>
+                  <Select
+                    value={leaveForm.leaveType}
+                    onValueChange={value =>
+                      handleLeaveFormChange("leaveType", value)
+                    }
+                    disabled={submittingLeaveRequest}
+                  >
+                    <SelectTrigger className="h-12 rounded-2xl border-slate-200 bg-slate-50/80">
+                      <SelectValue placeholder="اختر نوع الإجازة" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {EMPLOYEE_LEAVE_TYPE_OPTIONS.map(option => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-sm font-semibold text-slate-800">
+                    عدد الأيام
+                  </Label>
+                  <div className="flex h-12 items-center rounded-2xl border border-slate-200 bg-slate-50/80 px-4 text-sm font-semibold text-slate-900">
+                    {requestedLeaveDays
+                      ? formatLeaveDaysLabel(requestedLeaveDays)
+                      : "حدّد تاريخ البداية والنهاية"}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-sm font-semibold text-slate-800">
+                    تاريخ البداية
+                  </Label>
+                  <Input
+                    type="date"
+                    value={leaveForm.startDate}
+                    onChange={event =>
+                      handleLeaveFormChange("startDate", event.target.value)
+                    }
+                    className="h-12 rounded-2xl border-slate-200 bg-slate-50/80 shadow-none"
+                    disabled={submittingLeaveRequest}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-sm font-semibold text-slate-800">
+                    تاريخ النهاية
+                  </Label>
+                  <Input
+                    type="date"
+                    value={leaveForm.endDate}
+                    onChange={event =>
+                      handleLeaveFormChange("endDate", event.target.value)
+                    }
+                    className="h-12 rounded-2xl border-slate-200 bg-slate-50/80 shadow-none"
+                    disabled={submittingLeaveRequest}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold text-slate-800">
+                  ملاحظة / سبب الطلب
+                </Label>
+                <Textarea
+                  value={leaveForm.employeeNote}
+                  onChange={event =>
+                    handleLeaveFormChange("employeeNote", event.target.value)
+                  }
+                  placeholder="اكتب ملاحظة توضح سبب الإجازة إذا رغبت"
+                  className="min-h-32 rounded-[22px] border-slate-200 bg-slate-50/80 shadow-none"
+                  disabled={submittingLeaveRequest}
+                />
+              </div>
+
+              <div className="rounded-[22px] border border-slate-200 bg-slate-50/80 px-4 py-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="text-sm text-slate-500">
+                    لن يتم خصم الرصيد إلا بعد اعتماد الطلب من الموارد البشرية.
+                  </div>
+                  <Button
+                    type="button"
+                    className="h-11 rounded-2xl bg-slate-950 px-5 text-white hover:bg-[#15233c]"
+                    disabled={
+                      submittingLeaveRequest ||
+                      !leaveForm.leaveType ||
+                      !leaveForm.startDate ||
+                      !leaveForm.endDate ||
+                      !requestedLeaveDays
+                    }
+                    onClick={() => void handleSubmitLeaveRequest()}
+                  >
+                    {submittingLeaveRequest ? (
+                      <Loader2 className="ml-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Send className="ml-2 h-4 w-4" />
+                    )}
+                    رفع طلب الإجازة
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <Card className="rounded-[28px] border border-slate-200/80 bg-white/95 shadow-[0_24px_70px_-42px_rgba(15,23,42,0.22)]">
+          <CardHeader className="space-y-3">
+            <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+              <CalendarDays className="h-4 w-4" />
+              سجل الإجازات
+            </div>
+            <CardTitle className="text-xl font-semibold text-slate-950">
+              الطلبات السابقة
+            </CardTitle>
+            <CardDescription className="text-sm leading-7 text-slate-600">
+              جميع طلبات الإجازة السابقة تظهر هنا مع حالتها وتواريخها وأي ملاحظات مضافة.
+            </CardDescription>
+          </CardHeader>
+
+          <CardContent className="space-y-4">
+            {leaveRequestsLoading ? (
+              <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50/70 px-5 py-10 text-center text-sm text-slate-500">
+                جاري تحميل طلبات الإجازة...
+              </div>
+            ) : leaveRequests.length ? (
+              leaveRequests.map((request, index) => (
+                <div
+                  key={request.id}
+                  className={cn(
+                    "rounded-[24px] border p-5 shadow-sm",
+                    index === 0
+                      ? "border-[#F2B705]/35 bg-[#F2B705]/[0.08]"
+                      : "border-slate-200/80 bg-slate-50/70"
+                  )}
+                >
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        {index === 0 ? (
+                          <Badge
+                            variant="outline"
+                            className="rounded-full border-[#F2B705]/35 bg-[#F2B705]/10 text-[#8b6700] shadow-none"
+                          >
+                            آخر إجازة
+                          </Badge>
+                        ) : null}
+                        <Badge variant="outline" className="rounded-full">
+                          {getLeaveTypeLabel(request.leaveType)}
+                        </Badge>
+                        <LeaveStatusBadge status={request.status} />
+                      </div>
+
+                      <div className="grid gap-2 text-sm text-slate-600">
+                        <div>
+                          <span className="font-semibold text-slate-900">
+                            الفترة:
+                          </span>{" "}
+                          {formatLeaveDateRange(request.startDate, request.endDate)}
+                        </div>
+                        <div>
+                          <span className="font-semibold text-slate-900">
+                            عدد الأيام:
+                          </span>{" "}
+                          {formatLeaveDaysLabel(request.daysCount)}
+                        </div>
+                        <div>
+                          <span className="font-semibold text-slate-900">
+                            تاريخ الطلب:
+                          </span>{" "}
+                          {formatDateTimeEN(request.createdAt)}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="min-w-[220px] space-y-2 text-sm text-slate-600">
+                      {request.employeeNote ? (
+                        <div className="rounded-2xl border border-slate-200 bg-white/80 px-4 py-3 leading-7">
+                          <span className="font-semibold text-slate-900">
+                            ملاحظتك:
+                          </span>{" "}
+                          {request.employeeNote}
+                        </div>
+                      ) : null}
+
+                      {request.hrNote ? (
+                        <div className="rounded-2xl border border-emerald-200/80 bg-emerald-50/70 px-4 py-3 leading-7 text-emerald-800">
+                          <span className="font-semibold">ملاحظة HR:</span>{" "}
+                          {request.hrNote}
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50/70 px-5 py-10 text-center text-sm text-slate-500">
+                لم يتم رفع أي طلب إجازة حتى الآن.
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </section>
 
       {loading ? (
         <div className="pointer-events-none fixed inset-0 z-40 bg-white/45 backdrop-blur-[1px]">

@@ -1,6 +1,26 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { collection, doc, onSnapshot, serverTimestamp } from "firebase/firestore";
-import { BriefcaseBusiness, CalendarDays, Mail, Phone, Save, Search, ShieldCheck, UserRound } from "lucide-react";
+import {
+  collection,
+  doc,
+  onSnapshot,
+  runTransaction,
+  serverTimestamp,
+  setDoc,
+} from "firebase/firestore";
+import {
+  BriefcaseBusiness,
+  BadgeCheck,
+  CalendarDays,
+  CheckCircle2,
+  Clock3,
+  Mail,
+  Phone,
+  Save,
+  Search,
+  ShieldCheck,
+  UserRound,
+  XCircle,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import DashboardLayout from "@/components/DashboardLayout";
@@ -43,18 +63,38 @@ import {
   normalizeEmployeeProfile,
   type EmployeeProfileUserDoc,
 } from "@/lib/employeeProfile";
-import { formatDateEN, formatNumberEN, toDateSafe } from "@/lib/formatters";
+import {
+  EMPLOYEE_LEAVE_REQUESTS_COLLECTION,
+  getLatestApprovedEmployeeLeaveRequest,
+  formatLeaveDateRange,
+  formatLeaveDaysLabel,
+  getLeaveStatusMeta,
+  getLeaveTypeLabel,
+  normalizeEmployeeLeaveRequest,
+  sortEmployeeLeaveRequests,
+  type EmployeeLeaveRequestRecord,
+} from "@/lib/employeeLeave";
+import { formatDateEN, formatDateTimeEN, formatNumberEN, toDateSafe } from "@/lib/formatters";
 import { cn } from "@/lib/utils";
-import type { EmployeeEmploymentDoc, EmployeeEmploymentStatus } from "@shared/employee";
+import type {
+  EmployeeEmploymentDoc,
+  EmployeeEmploymentStatus,
+  EmployeeLeaveRequestDoc,
+  EmployeeLeaveRequestStatus,
+} from "@shared/employee";
 
 type EmployeeRecord = EmployeeProfileUserDoc & {
   id: string;
+  linkedEmployeeId?: string | null;
   firebaseUser?: {
     photoURL?: string | null;
   } | null;
 };
 
 type EmployeeFormValues = {
+  fullName: string;
+  email: string;
+  phone: string;
   jobTitle: string;
   department: string;
   employmentStatus: string;
@@ -172,13 +212,38 @@ function buildMergedEmployeeRecord(input: {
     ...(employeeData || {}),
     ...userData,
     id: userId,
-    uid: pickText(userId, userData.uid, employeeData?.linkedUserUid, employeeData?.uid) || userId,
-    email: pickText(userData.email, employeeData?.email) || null,
+    uid:
+      pickText(userData.uid, employeeData?.linkedUserUid, employeeData?.uid, userId) ||
+      userId,
+    email:
+      pickText(
+        userData.email,
+        employeeData?.email,
+        mergedPersonal?.email,
+        userEmployeeProfile.personal?.email,
+        userData.personal?.email
+      ) || null,
     displayName:
-      pickText(userData.displayName, userData.name, employeeData?.displayName, employeeData?.name) ||
+      pickText(
+        userData.displayName,
+        userData.name,
+        userData.fullName,
+        employeeData?.displayName,
+        employeeData?.name,
+        employeeData?.fullName,
+        mergedPersonal?.name
+      ) ||
       null,
     name:
-      pickText(userData.name, userData.displayName, employeeData?.name, employeeData?.displayName) ||
+      pickText(
+        userData.name,
+        userData.displayName,
+        userData.fullName,
+        employeeData?.name,
+        employeeData?.displayName,
+        employeeData?.fullName,
+        mergedPersonal?.name
+      ) ||
       null,
     title:
       pickText(
@@ -199,11 +264,22 @@ function buildMergedEmployeeRecord(input: {
 }
 
 function buildEmployeeFormValues(employee: EmployeeRecord | null | undefined): EmployeeFormValues {
+  const personal = (employee?.employeeProfile?.personal ||
+    employee?.personal ||
+    {}) as Record<string, any>;
   const employment = (employee?.employeeProfile?.employment ||
     employee?.employment ||
     {}) as Record<string, any>;
 
   return {
+    fullName: pickText(
+      employee?.displayName,
+      employee?.name,
+      employee?.fullName,
+      personal.name
+    ),
+    email: pickText(employee?.email, personal.email),
+    phone: pickText(personal.phone, employee?.phone, employee?.mobile, employee?.phoneNumber),
     jobTitle: pickText(employment.jobTitle, employment.title, employee?.title),
     department: pickText(employment.department, employee?.department),
     employmentStatus:
@@ -261,6 +337,96 @@ function ReadonlyMeta({
   );
 }
 
+function LeaveStatusBadge({ status }: { status: unknown }) {
+  const meta = getLeaveStatusMeta(status);
+
+  return (
+    <Badge
+      variant="outline"
+      className={cn(
+        "rounded-full shadow-none",
+        meta.tone === "success"
+          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+          : meta.tone === "warning"
+            ? "border-amber-200 bg-amber-50 text-amber-700"
+            : meta.tone === "danger"
+              ? "border-rose-200 bg-rose-50 text-rose-700"
+              : "border-slate-200 bg-slate-100 text-slate-600"
+      )}
+    >
+      {meta.label}
+    </Badge>
+  );
+}
+
+function LeaveOverviewStat({
+  label,
+  value,
+  icon: Icon,
+}: {
+  label: string;
+  value: string;
+  icon: typeof UserRound;
+}) {
+  return (
+    <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/70 px-4 py-4">
+      <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+        <Icon className="h-3.5 w-3.5" />
+        {label}
+      </div>
+      <div className="mt-2 text-base font-semibold text-slate-950">{value}</div>
+    </div>
+  );
+}
+
+function resolveEmploymentLeaveBalance(
+  ...sources: Array<Record<string, any> | null | undefined>
+) {
+  for (const source of sources) {
+    const employment = (source?.employeeProfile?.employment ||
+      source?.employment ||
+      {}) as Record<string, any>;
+
+    const candidates = [employment.leaveBalance, source?.leaveBalance];
+    for (const candidate of candidates) {
+      const parsed = Number(candidate);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+  }
+
+  return 0;
+}
+
+function collectEmployeeLeaveRequestKeys(
+  employee: EmployeeRecord | null | undefined,
+  request?: EmployeeLeaveRequestRecord | EmployeeLeaveRequestDoc | null
+) {
+  return new Set(
+    [
+      employee?.id,
+      employee?.uid,
+      employee?.linkedEmployeeId,
+      request?.employeeUid,
+      request?.userId,
+      request?.employeeId,
+    ]
+      .map(value => String(value || "").trim())
+      .filter(Boolean)
+  );
+}
+
+function doesLeaveRequestBelongToEmployee(
+  request: EmployeeLeaveRequestRecord,
+  employee: EmployeeRecord | null | undefined
+) {
+  const keys = collectEmployeeLeaveRequestKeys(employee);
+  return [request.employeeUid, request.userId, request.employeeId].some(value =>
+    keys.has(String(value || "").trim())
+  );
+}
+
 export default function EmployeesManagementPage() {
   const { user } = useAuth();
   const canManageEmployees = hasPermission(user, "employees.manage");
@@ -274,6 +440,12 @@ export default function EmployeesManagementPage() {
     buildEmployeeFormValues(null)
   );
   const [saving, setSaving] = useState(false);
+  const [leaveRequests, setLeaveRequests] = useState<EmployeeLeaveRequestRecord[]>([]);
+  const [leaveRequestsLoading, setLeaveRequestsLoading] = useState(false);
+  const [reviewNotes, setReviewNotes] = useState<Record<string, string>>({});
+  const [reviewingLeaveRequestId, setReviewingLeaveRequestId] = useState<string | null>(
+    null
+  );
 
   useEffect(() => {
     setLoading(true);
@@ -455,6 +627,42 @@ export default function EmployeesManagementPage() {
     [selectedEmployee]
   );
 
+  useEffect(() => {
+    if (!selectedEmployee?.id) {
+      setLeaveRequests([]);
+      setLeaveRequestsLoading(false);
+      setReviewNotes({});
+      return;
+    }
+
+    setReviewNotes({});
+    setLeaveRequestsLoading(true);
+    const unsubscribe = onSnapshot(
+      collection(db, EMPLOYEE_LEAVE_REQUESTS_COLLECTION),
+      snapshot => {
+        const rows = sortEmployeeLeaveRequests(
+          snapshot.docs
+            .map(docSnapshot =>
+              normalizeEmployeeLeaveRequest(
+                docSnapshot.id,
+                (docSnapshot.data() as Record<string, any>) || {}
+              )
+            )
+            .filter(request => doesLeaveRequestBelongToEmployee(request, selectedEmployee))
+        );
+        setLeaveRequests(rows);
+        setLeaveRequestsLoading(false);
+      },
+      snapshotError => {
+        console.error("employee_leave_requests_admin_snapshot_error", snapshotError);
+        setLeaveRequests([]);
+        setLeaveRequestsLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [selectedEmployee]);
+
   const initialForm = useMemo(
     () => buildEmployeeFormValues(selectedEmployee),
     [selectedEmployee]
@@ -467,6 +675,10 @@ export default function EmployeesManagementPage() {
   const isDirty = useMemo(
     () => JSON.stringify(form) !== JSON.stringify(initialForm),
     [form, initialForm]
+  );
+  const latestApprovedLeaveRequest = useMemo(
+    () => getLatestApprovedEmployeeLeaveRequest(leaveRequests),
+    [leaveRequests]
   );
 
   const activeEmployeesCount = employeeCards.filter(
@@ -500,7 +712,22 @@ export default function EmployeesManagementPage() {
       return;
     }
 
+    const normalizedFullName = form.fullName.trim();
+    const normalizedEmail = form.email.trim();
+    const normalizedPhone = form.phone.trim();
     const leaveBalance = toNullableNumber(form.leaveBalance);
+    if (!normalizedFullName) {
+      toast.error("ظٹط¬ط¨ ط¥ط¯ط®ط§ظ„ ط§ط³ظ… ط§ظ„ظ…ظˆط¸ظپ.");
+      return;
+    }
+
+    if (
+      !normalizedEmail ||
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)
+    ) {
+      toast.error("ط§ظ„ط¨ط±ظٹط¯ ط§ظ„ط¥ظ„ظƒطھط±ظˆظ†ظٹ ط؛ظٹط± طµط§ظ„ط­.");
+      return;
+    }
     if (form.leaveBalance.trim() && leaveBalance === null) {
       toast.error("رصيد الإجازات يجب أن يكون رقمًا صالحًا.");
       return;
@@ -508,9 +735,21 @@ export default function EmployeesManagementPage() {
 
     setSaving(true);
     try {
+      const currentPersonal = (selectedEmployee.employeeProfile?.personal ||
+        selectedEmployee.personal ||
+        {}) as Record<string, any>;
       const currentEmployment = (selectedEmployee.employeeProfile?.employment ||
         selectedEmployee.employment ||
         {}) as EmployeeEmploymentDoc;
+      const linkedUserUid =
+        String(selectedEmployee.uid || selectedEmployee.id || "").trim() ||
+        selectedEmployee.id;
+      const nextPersonal = {
+        ...currentPersonal,
+        name: normalizedFullName,
+        email: normalizedEmail,
+        phone: normalizedPhone || null,
+      };
 
       const nextEmployment: EmployeeEmploymentDoc = {
         ...currentEmployment,
@@ -530,12 +769,22 @@ export default function EmployeesManagementPage() {
       await auditedUpdateDoc({
         ref: doc(db, "users", selectedEmployee.id),
         data: {
+          displayName: normalizedFullName,
+          name: normalizedFullName,
+          fullName: normalizedFullName,
+          email: normalizedEmail,
+          phone: normalizedPhone || null,
+          "profile.name": normalizedFullName,
+          "profile.displayName": normalizedFullName,
+          "profile.email": normalizedEmail,
+          "profile.phone": normalizedPhone || null,
           title: form.jobTitle.trim() || null,
           department: form.department.trim() || null,
           startDate: form.startDate || null,
           leaveBalance,
           updatedAt: serverTimestamp(),
           employment: nextEmployment,
+          "employeeProfile.personal": nextPersonal,
           "employeeProfile.employment": nextEmployment,
         } as any,
         action: AUDIT_ACTIONS.USER_UPDATED,
@@ -549,8 +798,9 @@ export default function EmployeesManagementPage() {
         relatedIds: { userId: selectedEmployee.id },
         message: `Updated employee employment profile for ${selectedEmployeeProfile.personal.name}`,
         meta: {
-          targetUserEmail: selectedEmployee.email || null,
-          targetUserName: selectedEmployeeProfile.personal.name,
+          targetUserEmail: normalizedEmail,
+          targetUserName: normalizedFullName,
+          phone: normalizedPhone || null,
           jobTitle: nextEmployment.jobTitle || null,
           department: nextEmployment.department || null,
           employmentStatus: nextEmployment.employmentStatus || null,
@@ -558,12 +808,229 @@ export default function EmployeesManagementPage() {
         },
       });
 
+      if (selectedEmployee.linkedEmployeeId) {
+        await setDoc(
+          doc(db, "employees", selectedEmployee.linkedEmployeeId),
+          {
+            uid: linkedUserUid,
+            linkedUserUid: linkedUserUid,
+            name: normalizedFullName,
+            displayName: normalizedFullName,
+            fullName: normalizedFullName,
+            email: normalizedEmail,
+            phone: normalizedPhone || null,
+            profile: {
+              name: normalizedFullName,
+              displayName: normalizedFullName,
+              email: normalizedEmail,
+              phone: normalizedPhone || null,
+            },
+            title: form.jobTitle.trim() || null,
+            department: form.department.trim() || null,
+            startDate: form.startDate || null,
+            leaveBalance,
+            updatedAt: serverTimestamp(),
+            employment: nextEmployment,
+            employeeProfile: {
+              personal: nextPersonal,
+              employment: nextEmployment,
+            },
+          },
+          { merge: true }
+        );
+      }
+
       toast.success("تم حفظ بيانات الموظف الوظيفية.");
     } catch (saveError) {
       console.error("save_employee_profile_error", saveError);
       toast.error("تعذر حفظ بيانات الموظف الوظيفية.");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleReviewNoteChange = (requestId: string, value: string) => {
+    setReviewNotes(current => ({
+      ...current,
+      [requestId]: value,
+    }));
+  };
+
+  const handleReviewLeaveRequest = async (
+    request: EmployeeLeaveRequestRecord,
+    nextStatus: EmployeeLeaveRequestStatus
+  ) => {
+    if (!selectedEmployee || !selectedEmployeeProfile) return;
+    if (!canManageEmployees) {
+      toast.error("لا تملك صلاحية مراجعة طلبات الإجازة.");
+      return;
+    }
+
+    setReviewingLeaveRequestId(request.id);
+    try {
+      await runTransaction(db, async tx => {
+        const leaveRequestRef = doc(db, EMPLOYEE_LEAVE_REQUESTS_COLLECTION, request.id);
+        const leaveRequestSnap = await tx.get(leaveRequestRef);
+        if (!leaveRequestSnap.exists()) {
+          throw new Error("leave_request_not_found");
+        }
+
+        const currentLeaveRequest =
+          leaveRequestSnap.data() as EmployeeLeaveRequestDoc;
+        const currentStatus = String(currentLeaveRequest.status || "pending")
+          .trim()
+          .toLowerCase();
+        if (currentStatus !== "pending") {
+          throw new Error("leave_request_already_reviewed");
+        }
+
+        const daysCount = Number(
+          currentLeaveRequest.daysCount ?? request.daysCount ?? 0
+        );
+        if (!Number.isFinite(daysCount) || daysCount <= 0) {
+          throw new Error("leave_request_invalid_days");
+        }
+
+        const hrNote =
+          String(reviewNotes[request.id] ?? request.hrNote ?? "").trim() || null;
+        const userRef = doc(db, "users", selectedEmployee.id);
+        const userSnap = await tx.get(userRef);
+        if (!userSnap.exists()) {
+          throw new Error("employee_user_not_found");
+        }
+
+        const userData = (userSnap.data() as Record<string, any>) || {};
+        const userEmployment = (userData.employeeProfile?.employment ||
+          userData.employment ||
+          {}) as Record<string, any>;
+        const linkedUserUid =
+          String(selectedEmployee.uid || selectedEmployee.id || "").trim() ||
+          selectedEmployee.id;
+
+        const employeeDocId = String(
+          selectedEmployee.linkedEmployeeId ||
+            currentLeaveRequest.employeeId ||
+            ""
+        ).trim();
+        const employeeRef = employeeDocId ? doc(db, "employees", employeeDocId) : null;
+        const employeeSnap = employeeRef ? await tx.get(employeeRef) : null;
+        const employeeData =
+          employeeSnap?.exists() && employeeSnap.data()
+            ? ((employeeSnap.data() as Record<string, any>) || {})
+            : null;
+        const employeeEmployment = (employeeData?.employeeProfile?.employment ||
+          employeeData?.employment ||
+          {}) as Record<string, any>;
+
+        if (nextStatus === "approved") {
+          const currentLeaveBalance = resolveEmploymentLeaveBalance(
+            userData,
+            employeeData
+          );
+          if (currentLeaveBalance < daysCount) {
+            throw new Error("leave_balance_insufficient");
+          }
+
+          const nextLeaveBalance = currentLeaveBalance - daysCount;
+          const nextUserEmployment = {
+            ...userEmployment,
+            leaveBalance: nextLeaveBalance,
+            updatedAt: serverTimestamp(),
+            updatedByUid: user?.uid || null,
+            updatedByEmail: user?.email || null,
+          };
+
+          tx.set(
+            userRef,
+            {
+              leaveBalance: nextLeaveBalance,
+              updatedAt: serverTimestamp(),
+              employment: nextUserEmployment,
+              employeeProfile: {
+                personal:
+                  (userData.employeeProfile?.personal ||
+                    userData.personal ||
+                    null) as Record<string, any> | null,
+                employment: nextUserEmployment,
+              },
+            },
+            { merge: true }
+          );
+
+          if (employeeRef) {
+            const nextEmployeeEmployment = {
+              ...employeeEmployment,
+              leaveBalance: nextLeaveBalance,
+              updatedAt: serverTimestamp(),
+              updatedByUid: user?.uid || null,
+              updatedByEmail: user?.email || null,
+            };
+
+            tx.set(
+              employeeRef,
+              {
+                uid: linkedUserUid,
+                linkedUserUid: linkedUserUid,
+                leaveBalance: nextLeaveBalance,
+                updatedAt: serverTimestamp(),
+                employment: nextEmployeeEmployment,
+                employeeProfile: {
+                  personal:
+                    (employeeData?.employeeProfile?.personal ||
+                      employeeData?.personal ||
+                      null) as Record<string, any> | null,
+                  employment: nextEmployeeEmployment,
+                },
+              },
+              { merge: true }
+            );
+          }
+        }
+
+        tx.update(leaveRequestRef, {
+          status: nextStatus,
+          hrNote,
+          decidedAt: serverTimestamp(),
+          decidedBy: user?.uid || null,
+          decidedByEmail: user?.email || null,
+          decidedByName: user?.displayName || user?.email || null,
+          reviewedAt: serverTimestamp(),
+          reviewedBy: user?.uid || null,
+          reviewedByEmail: user?.email || null,
+          reviewedByName: user?.displayName || user?.email || null,
+          updatedAt: serverTimestamp(),
+        });
+      });
+
+      setReviewNotes(current => {
+        const next = { ...current };
+        delete next[request.id];
+        return next;
+      });
+
+      toast.success(
+        nextStatus === "approved"
+          ? "تم اعتماد طلب الإجازة وخصم الرصيد."
+          : "تم رفض طلب الإجازة."
+      );
+    } catch (reviewError) {
+      console.error("review_leave_request_error", reviewError);
+
+      if (
+        reviewError instanceof Error &&
+        reviewError.message === "leave_balance_insufficient"
+      ) {
+        toast.error("رصيد الإجازات الحالي لا يكفي لاعتماد هذا الطلب.");
+      } else if (
+        reviewError instanceof Error &&
+        reviewError.message === "leave_request_already_reviewed"
+      ) {
+        toast.error("تمت مراجعة هذا الطلب مسبقًا.");
+      } else {
+        toast.error("تعذر تحديث حالة طلب الإجازة.");
+      }
+    } finally {
+      setReviewingLeaveRequestId(null);
     }
   };
 
@@ -827,7 +1294,316 @@ export default function EmployeesManagementPage() {
                     </div>
                   </div>
 
+                  <div className="rounded-[28px] border border-slate-200/80 bg-white/95 p-5 shadow-sm">
+                    <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                          <CalendarDays className="h-4 w-4" />
+                          الإجازات
+                        </div>
+                        <div className="text-2xl font-semibold tracking-tight text-slate-950">
+                          آخر إجازة وسجل الطلبات
+                        </div>
+                        <p className="max-w-2xl text-sm leading-7 text-slate-500">
+                          يتيح هذا القسم متابعة آخر إجازة للموظف بشكل واضح، مع مراجعة
+                          جميع الطلبات السابقة واعتماد الطلبات المعلقة أو رفضها.
+                        </p>
+                      </div>
+
+                      <div className="grid gap-3 sm:grid-cols-3">
+                        <LeaveOverviewStat
+                          icon={BadgeCheck}
+                          label="الرصيد الحالي"
+                          value={selectedEmployeeProfile.employment.leaveBalanceLabel}
+                        />
+                        <LeaveOverviewStat
+                          icon={
+                            latestApprovedLeaveRequest?.status === "approved"
+                              ? CheckCircle2
+                              : latestApprovedLeaveRequest?.status === "rejected"
+                                ? XCircle
+                                : Clock3
+                          }
+                          label="حالة آخر إجازة"
+                          value={
+                            latestApprovedLeaveRequest
+                              ? getLeaveStatusMeta(latestApprovedLeaveRequest.status).label
+                              : "لا توجد إجازات"
+                          }
+                        />
+                        <LeaveOverviewStat
+                          icon={CalendarDays}
+                          label="عدد الأيام"
+                          value={
+                            latestApprovedLeaveRequest
+                              ? formatLeaveDaysLabel(latestApprovedLeaveRequest.daysCount)
+                              : "—"
+                          }
+                        />
+                      </div>
+                    </div>
+
+                    <div className="mt-5 rounded-[24px] border border-slate-200/80 bg-slate-50/75 p-5">
+                      {latestApprovedLeaveRequest ? (
+                        <div className="space-y-4">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Badge
+                              variant="outline"
+                              className="rounded-full border-[#F2B705]/35 bg-[#F2B705]/10 text-[#8b6700] shadow-none"
+                            >
+                              آخر إجازة
+                            </Badge>
+                            <Badge variant="outline" className="rounded-full">
+                              {getLeaveTypeLabel(latestApprovedLeaveRequest.leaveType)}
+                            </Badge>
+                            <LeaveStatusBadge status={latestApprovedLeaveRequest.status} />
+                          </div>
+
+                          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                            <ReadonlyMeta
+                              icon={CalendarDays}
+                              label="تاريخ البداية"
+                              value={formatDateEN(latestApprovedLeaveRequest.startDate)}
+                            />
+                            <ReadonlyMeta
+                              icon={CalendarDays}
+                              label="تاريخ النهاية"
+                              value={formatDateEN(latestApprovedLeaveRequest.endDate)}
+                            />
+                            <ReadonlyMeta
+                              icon={CalendarDays}
+                              label="عدد الأيام"
+                              value={formatLeaveDaysLabel(latestApprovedLeaveRequest.daysCount)}
+                            />
+                            <ReadonlyMeta
+                              icon={Clock3}
+                              label="تاريخ الطلب"
+                              value={formatDateTimeEN(latestApprovedLeaveRequest.createdAt)}
+                            />
+                          </div>
+
+                          {latestApprovedLeaveRequest.employeeNote ? (
+                            <div className="rounded-[20px] border border-slate-200 bg-white/90 px-4 py-3 text-sm leading-7 text-slate-700">
+                              <span className="font-semibold text-slate-900">
+                                ملاحظة الموظف:
+                              </span>{" "}
+                              {latestApprovedLeaveRequest.employeeNote}
+                            </div>
+                          ) : null}
+
+                          {latestApprovedLeaveRequest.hrNote ? (
+                            <div className="rounded-[20px] border border-emerald-200 bg-emerald-50/70 px-4 py-3 text-sm leading-7 text-emerald-800">
+                              <span className="font-semibold">ملاحظة HR:</span>{" "}
+                              {latestApprovedLeaveRequest.hrNote}
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : (
+                        <div className="rounded-[22px] border border-dashed border-slate-200 bg-white/90 px-5 py-10 text-center text-sm text-slate-500">
+                          لا توجد أي إجازات أو طلبات إجازة لهذا الموظف حتى الآن.
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="mt-5 space-y-3">
+                      <div className="text-sm font-semibold text-slate-900">
+                        سجل الإجازات
+                      </div>
+
+                      {leaveRequestsLoading ? (
+                        <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50/70 px-5 py-10 text-center text-sm text-slate-500">
+                          جاري تحميل طلبات الإجازة...
+                        </div>
+                      ) : leaveRequests.length ? (
+                        leaveRequests.map((request, index) => {
+                          const isPending = request.status === "pending";
+                          const currentReviewNote =
+                            reviewNotes[request.id] ?? request.hrNote ?? "";
+
+                          return (
+                            <div
+                              key={request.id}
+                              className={cn(
+                                "rounded-[24px] border p-5 shadow-sm",
+                                index === 0
+                                  ? "border-[#F2B705]/35 bg-[#F2B705]/[0.08]"
+                                  : "border-slate-200/80 bg-slate-50/70"
+                              )}
+                            >
+                              <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                                <div className="space-y-3">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    {index === 0 ? (
+                                      <Badge
+                                        variant="outline"
+                                        className="rounded-full border-[#F2B705]/35 bg-[#F2B705]/10 text-[#8b6700] shadow-none"
+                                      >
+                                        آخر إجازة
+                                      </Badge>
+                                    ) : null}
+                                    <Badge variant="outline" className="rounded-full">
+                                      {getLeaveTypeLabel(request.leaveType)}
+                                    </Badge>
+                                    <LeaveStatusBadge status={request.status} />
+                                  </div>
+
+                                  <div className="grid gap-2 text-sm text-slate-600">
+                                    <div>
+                                      <span className="font-semibold text-slate-900">
+                                        الفترة:
+                                      </span>{" "}
+                                      {formatLeaveDateRange(
+                                        request.startDate,
+                                        request.endDate
+                                      )}
+                                    </div>
+                                    <div>
+                                      <span className="font-semibold text-slate-900">
+                                        عدد الأيام:
+                                      </span>{" "}
+                                      {formatLeaveDaysLabel(request.daysCount)}
+                                    </div>
+                                    <div>
+                                      <span className="font-semibold text-slate-900">
+                                        تاريخ الإنشاء:
+                                      </span>{" "}
+                                      {formatDateTimeEN(request.createdAt)}
+                                    </div>
+                                    {request.reviewedAt ? (
+                                      <div>
+                                        <span className="font-semibold text-slate-900">
+                                          تمت المراجعة:
+                                        </span>{" "}
+                                        {formatDateTimeEN(request.reviewedAt)}
+                                      </div>
+                                    ) : null}
+                                  </div>
+
+                                  {request.employeeNote ? (
+                                    <div className="rounded-[20px] border border-slate-200 bg-white/85 px-4 py-3 text-sm leading-7 text-slate-700">
+                                      <span className="font-semibold text-slate-900">
+                                        ملاحظة الموظف:
+                                      </span>{" "}
+                                      {request.employeeNote}
+                                    </div>
+                                  ) : null}
+                                </div>
+
+                                <div className="w-full max-w-xl space-y-3">
+                                  <div className="rounded-[20px] border border-slate-200 bg-white/90 px-4 py-3 text-sm leading-7 text-slate-700">
+                                    <span className="font-semibold text-slate-900">
+                                      ملاحظة HR:
+                                    </span>{" "}
+                                    {request.hrNote || "لا توجد ملاحظة حتى الآن."}
+                                  </div>
+
+                                  {isPending ? (
+                                    <div className="space-y-3 rounded-[20px] border border-slate-200 bg-white/90 p-4">
+                                      <Label className="text-sm font-semibold text-slate-800">
+                                        ملاحظة إدارية للطلب
+                                      </Label>
+                                      <Textarea
+                                        value={currentReviewNote}
+                                        onChange={event =>
+                                          handleReviewNoteChange(
+                                            request.id,
+                                            event.target.value
+                                          )
+                                        }
+                                        placeholder="اكتب ملاحظة عند الاعتماد أو الرفض"
+                                        className="min-h-28"
+                                        disabled={
+                                          !canManageEmployees ||
+                                          reviewingLeaveRequestId === request.id
+                                        }
+                                      />
+
+                                      <div className="flex flex-wrap gap-3">
+                                        <Button
+                                          type="button"
+                                          className="bg-emerald-600 text-white hover:bg-emerald-700"
+                                          disabled={
+                                            !canManageEmployees ||
+                                            reviewingLeaveRequestId === request.id
+                                          }
+                                          onClick={() =>
+                                            void handleReviewLeaveRequest(
+                                              request,
+                                              "approved"
+                                            )
+                                          }
+                                        >
+                                          {reviewingLeaveRequestId === request.id ? (
+                                            <Clock3 className="ml-2 h-4 w-4 animate-pulse" />
+                                          ) : (
+                                            <CheckCircle2 className="ml-2 h-4 w-4" />
+                                          )}
+                                          اعتماد الطلب
+                                        </Button>
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          className="border-rose-200 text-rose-700 hover:bg-rose-50 hover:text-rose-800"
+                                          disabled={
+                                            !canManageEmployees ||
+                                            reviewingLeaveRequestId === request.id
+                                          }
+                                          onClick={() =>
+                                            void handleReviewLeaveRequest(
+                                              request,
+                                              "rejected"
+                                            )
+                                          }
+                                        >
+                                          <XCircle className="ml-2 h-4 w-4" />
+                                          رفض الطلب
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  ) : null}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50/70 px-5 py-10 text-center text-sm text-slate-500">
+                          لا توجد طلبات إجازة مسجلة لهذا الموظف.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
                   <div className="grid gap-5 md:grid-cols-2">
+                    <Field label="ط§ط³ظ… ط§ظ„ظ…ظˆط¸ظپ">
+                      <Input
+                        value={form.fullName}
+                        onChange={event => handleFormChange("fullName", event.target.value)}
+                        placeholder="ظ…ط«ط§ظ„: ظ†ظˆط§ظپ ط§ظ„ط¹ظ„ظٹط§ظ†"
+                        disabled={!canManageEmployees || saving}
+                      />
+                    </Field>
+
+                    <Field label="ط§ظ„ط¨ط±ظٹط¯ ط§ظ„ط¥ظ„ظƒطھط±ظˆظ†ظٹ">
+                      <Input
+                        type="email"
+                        dir="ltr"
+                        value={form.email}
+                        onChange={event => handleFormChange("email", event.target.value)}
+                        placeholder="name@example.com"
+                        disabled={!canManageEmployees || saving}
+                      />
+                    </Field>
+
+                    <Field label="ط±ظ‚ظ… ط§ظ„ط¬ظˆط§ظ„">
+                      <Input
+                        dir="ltr"
+                        value={form.phone}
+                        onChange={event => handleFormChange("phone", event.target.value)}
+                        placeholder="05xxxxxxxx"
+                        disabled={!canManageEmployees || saving}
+                      />
+                    </Field>
                     <Field label="المسمى الوظيفي">
                       <Input
                         value={form.jobTitle}
