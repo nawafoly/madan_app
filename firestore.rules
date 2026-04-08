@@ -621,6 +621,22 @@ service cloud.firestore {
         : "";
     }
 
+    function employeeMessageConversationValue(data, fallbackId) {
+      return (("conversationId" in data) && (data.conversationId is string) && data.conversationId.size() > 0)
+        ? data.conversationId
+        : ((("threadId" in data) && (data.threadId is string) && data.threadId.size() > 0)
+          ? data.threadId
+          : fallbackId);
+    }
+
+    function employeeMessageReplyTargetUid(data) {
+      return (("toUserId" in data) && (data.toUserId is string) && data.toUserId == request.auth.uid)
+        ? ((("fromUserId" in data) && (data.fromUserId is string)) ? data.fromUserId : "")
+        : ((("fromUserId" in data) && (data.fromUserId is string) && data.fromUserId == request.auth.uid)
+          ? ((("toUserId" in data) && (data.toUserId is string)) ? data.toUserId : "")
+          : "");
+    }
+
     function notificationOwnerUid(data) {
       return (("userId" in data) && (data.userId is string) && data.userId.size() > 0)
         ? data.userId
@@ -644,12 +660,103 @@ service cloud.firestore {
         && request.resource.data.message.size() <= 4000
         && request.resource.data.isRead == false
         && (
+          !("conversationId" in request.resource.data)
+          || (
+            request.resource.data.conversationId is string
+            && request.resource.data.conversationId.size() > 0
+          )
+        )
+        && (
+          !("threadId" in request.resource.data)
+          || (
+            request.resource.data.threadId is string
+            && request.resource.data.threadId.size() > 0
+            && (
+              !("conversationId" in request.resource.data)
+              || request.resource.data.threadId == request.resource.data.conversationId
+            )
+          )
+        )
+        && (
+          !("senderUid" in request.resource.data)
+          || (
+            request.resource.data.senderUid is string
+            && request.resource.data.senderUid == request.resource.data.fromUserId
+          )
+        )
+        && (
+          !("recipientUid" in request.resource.data)
+          || (
+            request.resource.data.recipientUid is string
+            && request.resource.data.recipientUid == request.resource.data.toUserId
+          )
+        )
+        && (
+          !("body" in request.resource.data)
+          || (
+            request.resource.data.body is string
+            && request.resource.data.body == request.resource.data.message
+          )
+        )
+        && (
+          !("messageType" in request.resource.data)
+          || (
+            request.resource.data.messageType is string
+            && lower(request.resource.data.messageType) == lower(request.resource.data.type)
+          )
+        )
+        && (
+          !("senderRole" in request.resource.data)
+          || (
+            request.resource.data.senderRole is string
+            && lower(request.resource.data.senderRole) in ["employee", "hr", "system"]
+          )
+        )
+        && (
+          !("status" in request.resource.data)
+          || (
+            request.resource.data.status is string
+            && lower(request.resource.data.status) == "sent"
+          )
+        )
+        && (
+          !("relatedId" in request.resource.data)
+          || request.resource.data.relatedId == null
+          || (
+            request.resource.data.relatedId is string
+            && request.resource.data.relatedId.size() > 0
+          )
+        )
+        && (
+          !("relatedTo" in request.resource.data)
+          || request.resource.data.relatedTo == null
+          || (
+            request.resource.data.relatedTo is string
+            && request.resource.data.relatedTo.size() > 0
+          )
+        )
+        && (
           !("type" in request.resource.data)
           || (
             request.resource.data.type is string
             && lower(request.resource.data.type) in ["message", "notice", "system"]
           )
         );
+    }
+
+    function isValidEmployeeMessageEmployeeReplyCreate() {
+      let parentPath = /databases/$(database)/documents/employee_messages/$(request.resource.data.relatedId);
+      let parentData = get(parentPath).data;
+      return isValidEmployeeMessageCreate()
+        && request.resource.data.employeeUid == request.auth.uid
+        && request.resource.data.fromUserId == request.auth.uid
+        && request.resource.data.relatedId is string
+        && request.resource.data.relatedId.size() > 0
+        && exists(parentPath)
+        && employeeMessageOwnerUid(parentData) == request.auth.uid
+        && employeeMessageConversationValue(parentData, request.resource.data.relatedId)
+          == employeeMessageConversationValue(request.resource.data, "")
+        && request.resource.data.toUserId == employeeMessageReplyTargetUid(parentData);
     }
 
     function isValidEmployeeMessageReadUpdate() {
@@ -660,8 +767,15 @@ service cloud.firestore {
         && request.resource.data.employeeUid == resource.data.employeeUid
         && request.resource.data.fromUserId == resource.data.fromUserId
         && request.resource.data.message == resource.data.message
-        && keys.hasOnly(["isRead", "readAt", "updatedAt"])
-        && request.resource.data.isRead == true;
+        && keys.hasOnly(["isRead", "readAt", "updatedAt", "status"])
+        && request.resource.data.isRead == true
+        && (
+          !("status" in request.resource.data)
+          || (
+            request.resource.data.status is string
+            && lower(request.resource.data.status) == "read"
+          )
+        );
     }
 
     function isValidNotificationCreate() {
@@ -669,6 +783,22 @@ service cloud.firestore {
         && request.resource.data.title is string
         && request.resource.data.title.size() > 0
         && request.resource.data.isRead == false;
+    }
+
+    function isValidEmployeeMessageNotificationCreate() {
+      let messagePath = /databases/$(database)/documents/employee_messages/$(request.resource.data.relatedId);
+      let messageData = get(messagePath).data;
+      return signedIn()
+        && request.resource.data.relatedId is string
+        && request.resource.data.relatedId.size() > 0
+        && request.resource.data.relatedTo is string
+        && request.resource.data.relatedTo == "employee_message"
+        && request.resource.data.type is string
+        && lower(request.resource.data.type) == "message"
+        && exists(messagePath)
+        && employeeMessageOwnerUid(messageData) == request.auth.uid
+        && messageData.fromUserId == request.auth.uid
+        && notificationOwnerUid(request.resource.data) == messageData.toUserId;
     }
 
     function isValidNotificationReadUpdate() {
@@ -1048,8 +1178,8 @@ service cloud.firestore {
       allow read: if canReadEmployeesAdmin()
         || (signedIn() && employeeMessageOwnerUid(resource.data) == request.auth.uid);
 
-      allow create: if (canManageEmployeesAdmin() || request.resource.data.employeeUid == request.auth.uid)
-        && isValidEmployeeMessageCreate();
+      allow create: if (canManageEmployeesAdmin() && isValidEmployeeMessageCreate())
+        || isValidEmployeeMessageEmployeeReplyCreate();
 
       allow update: if canManageEmployeesAdmin()
         || isValidEmployeeMessageReadUpdate();
@@ -1122,7 +1252,8 @@ service cloud.firestore {
         || canManageInvestmentsAdmin()
         || canManageUsersAdmin()
         || hasAdminPermission("settings.manage")
-        || canManageEmployeesAdmin());
+        || canManageEmployeesAdmin()
+        || isValidEmployeeMessageNotificationCreate());
       allow update: if isValidNotificationReadUpdate()
         || canManageMessagesAdmin()
         || canManageInvestmentsAdmin()

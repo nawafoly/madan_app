@@ -132,7 +132,7 @@ function EmployeeFileCard({
               {file.fileName}
             </span>
             <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5">
-              {formatFileSizeEN(file.fileSize)}
+              {formatFileSizeEN(file.fileSize ?? null)}
             </span>
             <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5">
               {file.contentType || "بدون نوع"}

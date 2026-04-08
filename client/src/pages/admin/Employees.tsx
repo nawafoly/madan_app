@@ -10,12 +10,14 @@ import { useSearch } from "wouter";
 import {
   collection,
   doc,
+  getDoc,
   onSnapshot,
   or,
   query,
   runTransaction,
   serverTimestamp,
   setDoc,
+  writeBatch,
   where,
 } from "firebase/firestore";
 import {
@@ -41,6 +43,7 @@ import {
 import { toast } from "sonner";
 
 import DashboardLayout from "@/components/DashboardLayout";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -89,8 +92,9 @@ import {
 } from "@/lib/employeeFiles";
 import {
   EMPLOYEE_MESSAGE_TYPE_OPTIONS,
+  groupEmployeeMessageConversations,
   normalizeEmployeeMessageRecord,
-  sortEmployeeMessages,
+  type EmployeeMessageConversationRecord,
   type EmployeeMessageRecord,
 } from "@/lib/employeeMessages";
 import { uploadDocumentToCloudflare } from "@/lib/documentUploadService";
@@ -163,6 +167,52 @@ type EmployeeMessageFormValues = {
   message: string;
 };
 
+type MessageSenderProfile = {
+  avatarUrl: string | null;
+  name: string;
+  email: string | null;
+};
+
+type EmployeeWorkspaceSectionKey = "profile" | "leave" | "messages" | "files";
+
+const EMPLOYEE_WORKSPACE_SECTIONS: Array<{
+  key: EmployeeWorkspaceSectionKey;
+  label: string;
+  icon: typeof ShieldCheck;
+}> = [
+  { key: "profile", label: "بيانات الموظف", icon: ShieldCheck },
+  { key: "leave", label: "الإجازات", icon: CalendarDays },
+  { key: "messages", label: "الرسائل", icon: Mail },
+  { key: "files", label: "الملفات", icon: FileText },
+];
+
+function resolveEmployeeWorkspaceSection(
+  panel: string
+): EmployeeWorkspaceSectionKey | null {
+  switch (
+    String(panel || "")
+      .trim()
+      .toLowerCase()
+  ) {
+    case "profile":
+    case "overview":
+    case "employee":
+    case "employee-info":
+      return "profile";
+    case "leave":
+    case "leaves":
+    case "vacation":
+    case "vacations":
+      return "leave";
+    case "messages":
+      return "messages";
+    case "files":
+      return "files";
+    default:
+      return null;
+  }
+}
+
 const EMPLOYMENT_STATUS_OPTIONS: Array<{
   value: EmployeeEmploymentStatus;
   label: string;
@@ -206,14 +256,20 @@ function normalizeFingerprintNumber(value: unknown) {
 }
 
 function hasValuesObject(value: unknown) {
-  return !!value && typeof value === "object" && Object.keys(value as Record<string, any>).length > 0;
+  return (
+    !!value &&
+    typeof value === "object" &&
+    Object.keys(value as Record<string, any>).length > 0
+  );
 }
 
 function hasEmployeeProfileSignal(
   userData: Record<string, any>,
   employeeDoc?: Record<string, any> | null
 ) {
-  const normalizedRole = String(userData.role || "").trim().toLowerCase();
+  const normalizedRole = String(userData.role || "")
+    .trim()
+    .toLowerCase();
   if (normalizedRole === "client" || normalizedRole === "guest") {
     return false;
   }
@@ -242,11 +298,12 @@ function buildMergedEmployeeRecord(input: {
 }): EmployeeRecord {
   const { userId, userData, employeeDocId, employeeData } = input;
 
-  const userEmployeeProfile = (userData.employeeProfile || {}) as Record<string, any>;
-  const employeeEmployeeProfile = (employeeData?.employeeProfile || {}) as Record<
+  const userEmployeeProfile = (userData.employeeProfile || {}) as Record<
     string,
     any
   >;
+  const employeeEmployeeProfile = (employeeData?.employeeProfile ||
+    {}) as Record<string, any>;
 
   const mergedPersonal =
     (employeeEmployeeProfile.personal as Record<string, any> | undefined) ||
@@ -263,7 +320,10 @@ function buildMergedEmployeeRecord(input: {
     undefined;
 
   const mergedEmployeeProfile =
-    mergedPersonal || mergedEmployment || hasValuesObject(employeeEmployeeProfile) || hasValuesObject(userEmployeeProfile)
+    mergedPersonal ||
+    mergedEmployment ||
+    hasValuesObject(employeeEmployeeProfile) ||
+    hasValuesObject(userEmployeeProfile)
       ? {
           ...userEmployeeProfile,
           ...employeeEmployeeProfile,
@@ -277,8 +337,12 @@ function buildMergedEmployeeRecord(input: {
     ...userData,
     id: userId,
     uid:
-      pickText(userData.uid, employeeData?.linkedUserUid, employeeData?.uid, userId) ||
-      userId,
+      pickText(
+        userData.uid,
+        employeeData?.linkedUserUid,
+        employeeData?.uid,
+        userId
+      ) || userId,
     email:
       pickText(
         userData.email,
@@ -296,8 +360,7 @@ function buildMergedEmployeeRecord(input: {
         employeeData?.name,
         employeeData?.fullName,
         mergedPersonal?.name
-      ) ||
-      null,
+      ) || null,
     name:
       pickText(
         userData.name,
@@ -307,8 +370,7 @@ function buildMergedEmployeeRecord(input: {
         employeeData?.displayName,
         employeeData?.fullName,
         mergedPersonal?.name
-      ) ||
-      null,
+      ) || null,
     title:
       pickText(
         userData.title,
@@ -317,9 +379,13 @@ function buildMergedEmployeeRecord(input: {
         mergedEmployment?.jobTitle
       ) || null,
     department:
-      pickText(userData.department, employeeData?.department, mergedEmployment?.department) ||
-      null,
-    linkedEmployeeId: pickText(userData.linkedEmployeeId, employeeDocId) || null,
+      pickText(
+        userData.department,
+        employeeData?.department,
+        mergedEmployment?.department
+      ) || null,
+    linkedEmployeeId:
+      pickText(userData.linkedEmployeeId, employeeDocId) || null,
     employeeProfile: mergedEmployeeProfile,
     personal: mergedPersonal,
     employment: mergedEmployment,
@@ -327,7 +393,9 @@ function buildMergedEmployeeRecord(input: {
   } as EmployeeRecord;
 }
 
-function buildEmployeeFormValues(employee: EmployeeRecord | null | undefined): EmployeeFormValues {
+function buildEmployeeFormValues(
+  employee: EmployeeRecord | null | undefined
+): EmployeeFormValues {
   const personal = (employee?.employeeProfile?.personal ||
     employee?.personal ||
     {}) as Record<string, any>;
@@ -343,10 +411,18 @@ function buildEmployeeFormValues(employee: EmployeeRecord | null | undefined): E
       personal.name
     ),
     email: pickText(employee?.email, personal.email),
-    phone: pickText(personal.phone, employee?.phone, employee?.mobile, employee?.phoneNumber),
+    phone: pickText(
+      personal.phone,
+      employee?.phone,
+      employee?.mobile,
+      employee?.phoneNumber
+    ),
     jobTitle: pickText(employment.jobTitle, employment.title, employee?.title),
     department: pickText(employment.department, employee?.department),
-    fingerprintNumber: pickText(employment.fingerprintNumber, employee?.fingerprintNumber),
+    fingerprintNumber: pickText(
+      employment.fingerprintNumber,
+      employee?.fingerprintNumber
+    ),
     employmentStatus:
       pickText(employment.employmentStatus, employment.status) || "active",
     startDate: toDateInputValue(employment.startDate ?? employee?.startDate),
@@ -415,6 +491,92 @@ function ReadonlyMeta({
         {value || EMPLOYEE_EMPTY_VALUE}
       </div>
     </div>
+  );
+}
+
+function initialsFromName(name: string, email?: string) {
+  const source = String(name || email || "").trim();
+  if (!source || source === EMPLOYEE_EMPTY_VALUE) return "م";
+  const parts = source
+    .split(/\s+/)
+    .map(part => part.trim())
+    .filter(Boolean)
+    .slice(0, 2);
+
+  if (!parts.length) {
+    return source.slice(0, 2).toUpperCase();
+  }
+
+  return parts
+    .map(part => part.charAt(0))
+    .join("")
+    .toUpperCase();
+}
+
+function EmployeeAvatar({
+  avatarUrl,
+  name,
+  email,
+  className,
+  fallbackClassName,
+}: {
+  avatarUrl?: string | null;
+  name: string;
+  email?: string;
+  className?: string;
+  fallbackClassName?: string;
+}) {
+  return (
+    <Avatar
+      className={cn(
+        "rounded-full border border-slate-200 bg-slate-100 shadow-sm",
+        className
+      )}
+    >
+      <AvatarImage
+        src={avatarUrl || undefined}
+        alt={name}
+        className="object-cover"
+      />
+      <AvatarFallback
+        className={cn(
+          "bg-slate-900 font-semibold text-white",
+          fallbackClassName
+        )}
+      >
+        {initialsFromName(name, email)}
+      </AvatarFallback>
+    </Avatar>
+  );
+}
+
+function EmployeeWorkspaceTabButton({
+  active,
+  icon: Icon,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  icon: typeof ShieldCheck;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "flex min-w-[140px] items-center justify-center gap-2 rounded-[18px] border px-4 py-3 text-sm font-semibold transition-all",
+        active
+          ? "border-slate-900 bg-slate-900 text-white shadow-[0_18px_34px_-24px_rgba(15,23,42,0.62)]"
+          : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+      )}
+    >
+      <Icon
+        className={cn("h-4 w-4", active ? "text-white" : "text-slate-500")}
+      />
+      <span>{label}</span>
+    </button>
   );
 }
 
@@ -534,7 +696,9 @@ function resolveEmployeeAuthUid(employee: EmployeeRecord | null | undefined) {
 }
 
 function normalizeEmployeeFileMatchValue(value: unknown) {
-  return String(value ?? "").trim().toLowerCase();
+  return String(value ?? "")
+    .trim()
+    .toLowerCase();
 }
 
 function matchesEmployeeFileVersion(
@@ -544,8 +708,11 @@ function matchesEmployeeFileVersion(
 ) {
   return (
     file.active &&
-    normalizeEmployeeFileMatchValue(file.title) === normalizeEmployeeFileMatchValue(title) &&
-    normalizeEmployeeFileMatchValue(file.fileType || EMPLOYEE_DEFAULT_FILE_TYPE) ===
+    normalizeEmployeeFileMatchValue(file.title) ===
+      normalizeEmployeeFileMatchValue(title) &&
+    normalizeEmployeeFileMatchValue(
+      file.fileType || EMPLOYEE_DEFAULT_FILE_TYPE
+    ) ===
       normalizeEmployeeFileMatchValue(fileType || EMPLOYEE_DEFAULT_FILE_TYPE)
   );
 }
@@ -564,37 +731,50 @@ export default function EmployeesManagementPage() {
     buildEmployeeFormValues(null)
   );
   const [saving, setSaving] = useState(false);
-  const [leaveRequests, setLeaveRequests] = useState<EmployeeLeaveRequestRecord[]>([]);
+  const [leaveRequests, setLeaveRequests] = useState<
+    EmployeeLeaveRequestRecord[]
+  >([]);
   const [leaveRequestsLoading, setLeaveRequestsLoading] = useState(false);
   const [reviewNotes, setReviewNotes] = useState<Record<string, string>>({});
-  const [reviewingLeaveRequestId, setReviewingLeaveRequestId] = useState<string | null>(
-    null
-  );
+  const [reviewingLeaveRequestId, setReviewingLeaveRequestId] = useState<
+    string | null
+  >(null);
   const [employeeFiles, setEmployeeFiles] = useState<EmployeeFileRecord[]>([]);
   const [employeeFilesLoading, setEmployeeFilesLoading] = useState(false);
-  const [employeeFileForm, setEmployeeFileForm] = useState<EmployeeFileFormValues>(
-    buildEmployeeFileFormValues
-  );
+  const [employeeFileForm, setEmployeeFileForm] =
+    useState<EmployeeFileFormValues>(buildEmployeeFileFormValues);
   const [uploadingEmployeeFile, setUploadingEmployeeFile] = useState(false);
-  const [replacingEmployeeFileId, setReplacingEmployeeFileId] = useState<string | null>(
-    null
-  );
-  const [deletingEmployeeFileId, setDeletingEmployeeFileId] = useState<string | null>(
-    null
-  );
-  const [employeeMessages, setEmployeeMessages] = useState<EmployeeMessageRecord[]>([]);
+  const [replacingEmployeeFileId, setReplacingEmployeeFileId] = useState<
+    string | null
+  >(null);
+  const [deletingEmployeeFileId, setDeletingEmployeeFileId] = useState<
+    string | null
+  >(null);
+  const [employeeMessages, setEmployeeMessages] = useState<
+    EmployeeMessageRecord[]
+  >([]);
   const [employeeMessagesLoading, setEmployeeMessagesLoading] = useState(false);
-  const [employeeMessageForm, setEmployeeMessageForm] = useState<EmployeeMessageFormValues>(
-    buildEmployeeMessageFormValues
-  );
-  const [activeEmployeeMessageId, setActiveEmployeeMessageId] = useState<string | null>(
-    null
-  );
+  const [employeeMessageForm, setEmployeeMessageForm] =
+    useState<EmployeeMessageFormValues>(buildEmployeeMessageFormValues);
+  const [activeEmployeeWorkspaceSection, setActiveEmployeeWorkspaceSection] =
+    useState<EmployeeWorkspaceSectionKey>("profile");
+  const [activeEmployeeConversationId, setActiveEmployeeConversationId] =
+    useState<string | null>(null);
+  const [openingEmployeeConversationId, setOpeningEmployeeConversationId] =
+    useState<string | null>(null);
+  const [composeEmployeeMessageAsNew, setComposeEmployeeMessageAsNew] =
+    useState(false);
   const [sendingEmployeeMessage, setSendingEmployeeMessage] = useState(false);
+  const [employeeMessageSenderLookup, setEmployeeMessageSenderLookup] =
+    useState<Record<string, MessageSenderProfile>>({});
   const employeeFileInputRef = useRef<HTMLInputElement | null>(null);
+  const employeeOverviewSectionRef = useRef<HTMLDivElement | null>(null);
+  const employeeLeaveSectionRef = useRef<HTMLDivElement | null>(null);
   const employeeMessagesSectionRef = useRef<HTMLDivElement | null>(null);
+  const employeeFilesSectionRef = useRef<HTMLDivElement | null>(null);
   const handledEmployeeSearchRef = useRef("");
   const handledMessageSearchRef = useRef("");
+  const handledSectionNavigationRef = useRef("");
 
   const searchParams = useMemo(() => new URLSearchParams(search), [search]);
   const requestedEmployeeId = useMemo(
@@ -602,12 +782,19 @@ export default function EmployeesManagementPage() {
     [searchParams]
   );
   const requestedPanel = useMemo(
-    () => String(searchParams.get("panel") || "").trim().toLowerCase(),
+    () =>
+      String(searchParams.get("panel") || "")
+        .trim()
+        .toLowerCase(),
     [searchParams]
   );
   const requestedMessageId = useMemo(
     () => String(searchParams.get("messageId") || "").trim(),
     [searchParams]
+  );
+  const requestedEmployeeSection = useMemo(
+    () => resolveEmployeeWorkspaceSection(requestedPanel),
+    [requestedPanel]
   );
 
   const resetEmployeeFileForm = () => {
@@ -660,7 +847,10 @@ export default function EmployeesManagementPage() {
             (linkedEmployeeId && employeesMap.has(linkedEmployeeId)
               ? {
                   docId: linkedEmployeeId,
-                  data: employeesMap.get(linkedEmployeeId) as Record<string, any>,
+                  data: employeesMap.get(linkedEmployeeId) as Record<
+                    string,
+                    any
+                  >,
                 }
               : employeesByLinkedUserId.get(userId)) ||
             (employeesMap.has(userId)
@@ -761,7 +951,9 @@ export default function EmployeesManagementPage() {
       return;
     }
 
-    const selectedExists = employees.some(employee => employee.id === selectedEmployeeId);
+    const selectedExists = employees.some(
+      employee => employee.id === selectedEmployeeId
+    );
     if (!selectedEmployeeId || !selectedExists) {
       setSelectedEmployeeId(employees[0].id);
     }
@@ -774,7 +966,9 @@ export default function EmployeesManagementPage() {
           displayName: employee.displayName,
           email: employee.email,
           photoURL:
-            employee.photoURL || employee.firebaseUser?.photoURL || auth.currentUser?.photoURL,
+            employee.photoURL ||
+            employee.firebaseUser?.photoURL ||
+            auth.currentUser?.photoURL,
         });
 
         return {
@@ -799,7 +993,9 @@ export default function EmployeesManagementPage() {
   const filteredEmployeeCards = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
     if (!normalizedQuery) return employeeCards;
-    return employeeCards.filter(card => card.searchText.includes(normalizedQuery));
+    return employeeCards.filter(card =>
+      card.searchText.includes(normalizedQuery)
+    );
   }, [employeeCards, searchQuery]);
 
   const selectedEmployee =
@@ -852,7 +1048,10 @@ export default function EmployeesManagementPage() {
         setLeaveRequestsLoading(false);
       },
       snapshotError => {
-        console.error("employee_leave_requests_admin_snapshot_error", snapshotError);
+        console.error(
+          "employee_leave_requests_admin_snapshot_error",
+          snapshotError
+        );
         setLeaveRequests([]);
         setLeaveRequestsLoading(false);
       }
@@ -864,7 +1063,10 @@ export default function EmployeesManagementPage() {
   useEffect(() => {
     resetEmployeeFileForm();
     resetEmployeeMessageForm();
-    setActiveEmployeeMessageId(null);
+    setActiveEmployeeWorkspaceSection("profile");
+    setActiveEmployeeConversationId(null);
+    setComposeEmployeeMessageAsNew(false);
+    handledSectionNavigationRef.current = "";
   }, [selectedEmployeeId]);
 
   useEffect(() => {
@@ -916,12 +1118,10 @@ export default function EmployeesManagementPage() {
         where("employeeUid", "==", selectedEmployeeAuthUid)
       ),
       snapshot => {
-        const rows = sortEmployeeMessages(
-          snapshot.docs.map(docSnapshot =>
-            normalizeEmployeeMessageRecord(
-              docSnapshot.id,
-              (docSnapshot.data() as Record<string, any>) || {}
-            )
+        const rows = snapshot.docs.map(docSnapshot =>
+          normalizeEmployeeMessageRecord(
+            docSnapshot.id,
+            (docSnapshot.data() as Record<string, any>) || {}
           )
         );
         setEmployeeMessages(rows);
@@ -962,72 +1162,277 @@ export default function EmployeesManagementPage() {
     () => visibleEmployeeFiles.filter(file => !file.isRead).length,
     [visibleEmployeeFiles]
   );
-  const archivedEmployeeFilesCount = employeeFiles.length - visibleEmployeeFiles.length;
+  const archivedEmployeeFilesCount =
+    employeeFiles.length - visibleEmployeeFiles.length;
   const replacingEmployeeFile = useMemo(
     () =>
-      visibleEmployeeFiles.find(file => file.id === replacingEmployeeFileId) || null,
+      visibleEmployeeFiles.find(file => file.id === replacingEmployeeFileId) ||
+      null,
     [replacingEmployeeFileId, visibleEmployeeFiles]
   );
-  const activeEmployeeMessage = useMemo(
-    () =>
-      employeeMessages.find(message => message.id === activeEmployeeMessageId) || null,
-    [activeEmployeeMessageId, employeeMessages]
+  const employeeConversations = useMemo(
+    () => groupEmployeeMessageConversations(employeeMessages, user?.uid),
+    [employeeMessages, user?.uid]
   );
-  const unreadEmployeeMessagesCount = useMemo(
+  const requestedConversationId = useMemo(
     () =>
-      employeeMessages.filter(
-        message =>
-          message.toUserId === selectedEmployeeAuthUid && !message.isRead
-      ).length,
-    [employeeMessages, selectedEmployeeAuthUid]
+      employeeMessages.find(message => message.id === requestedMessageId)
+        ?.conversationId || null,
+    [employeeMessages, requestedMessageId]
+  );
+  const activeEmployeeConversation = useMemo(
+    () =>
+      employeeConversations.find(
+        conversation => conversation.id === activeEmployeeConversationId
+      ) || null,
+    [activeEmployeeConversationId, employeeConversations]
+  );
+  const currentAdminAvatarUrl = useMemo(() => {
+    const currentUser = user as {
+      photoURL?: string | null;
+      avatarUrl?: string | null;
+      firebaseUser?: { photoURL?: string | null } | null;
+    } | null;
+
+    return (
+      currentUser?.avatarUrl ||
+      currentUser?.photoURL ||
+      currentUser?.firebaseUser?.photoURL ||
+      auth.currentUser?.photoURL ||
+      null
+    );
+  }, [user]);
+  const unreadEmployeeMessagesCount = useMemo(
+    () => employeeMessages.filter(message => !message.isRead).length,
+    [employeeMessages]
   );
   const readEmployeeMessagesCount =
     employeeMessages.length - unreadEmployeeMessagesCount;
 
   useEffect(() => {
+    const senderIds = Array.from(
+      new Set(
+        (activeEmployeeConversation?.messages || [])
+          .map(message => message.fromUserId || message.senderUid)
+          .filter(Boolean)
+      )
+    );
+
+    if (!senderIds.length) {
+      setEmployeeMessageSenderLookup({});
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadSenderProfiles = async () => {
+      const entries = await Promise.all(
+        senderIds.map(async senderUid => {
+          const seededMessage = activeEmployeeConversation?.messages.find(
+            message => (message.fromUserId || message.senderUid) === senderUid
+          );
+
+          if (!seededMessage) return null;
+
+          if (
+            senderUid === selectedEmployeeAuthUid &&
+            selectedEmployeeProfile
+          ) {
+            return [
+              senderUid,
+              {
+                avatarUrl:
+                  selectedEmployeeProfile.personal.avatarUrl ||
+                  seededMessage.fromUserPhoto ||
+                  null,
+                name:
+                  selectedEmployeeProfile.personal.name !== EMPLOYEE_EMPTY_VALUE
+                    ? selectedEmployeeProfile.personal.name
+                    : seededMessage.fromUserName || "الموظف",
+                email:
+                  selectedEmployeeProfile.personal.email !==
+                  EMPLOYEE_EMPTY_VALUE
+                    ? selectedEmployeeProfile.personal.email
+                    : seededMessage.fromUserEmail || null,
+              },
+            ] as const;
+          }
+
+          if (senderUid === user?.uid) {
+            return [
+              senderUid,
+              {
+                avatarUrl:
+                  currentAdminAvatarUrl || seededMessage.fromUserPhoto || null,
+                name:
+                  seededMessage.fromUserName ||
+                  user?.displayName ||
+                  user?.email ||
+                  "HR",
+                email: seededMessage.fromUserEmail || user?.email || null,
+              },
+            ] as const;
+          }
+
+          try {
+            const snapshot = await getDoc(doc(db, "users", senderUid));
+            if (snapshot.exists()) {
+              const raw = {
+                ...(snapshot.data() as EmployeeProfileUserDoc),
+                uid: senderUid,
+              } satisfies EmployeeProfileUserDoc;
+              const profile = normalizeEmployeeProfile(raw, {
+                displayName: raw.displayName,
+                email: raw.email,
+                photoURL: raw.photoURL,
+              });
+
+              return [
+                senderUid,
+                {
+                  avatarUrl:
+                    profile.personal.avatarUrl ||
+                    seededMessage.fromUserPhoto ||
+                    null,
+                  name:
+                    profile.personal.name !== EMPLOYEE_EMPTY_VALUE
+                      ? profile.personal.name
+                      : seededMessage.fromUserName || "HR",
+                  email:
+                    profile.personal.email !== EMPLOYEE_EMPTY_VALUE
+                      ? profile.personal.email
+                      : seededMessage.fromUserEmail || null,
+                },
+              ] as const;
+            }
+          } catch (lookupError) {
+            console.error("employee_message_admin_sender_lookup_failed", {
+              senderUid,
+              error: lookupError,
+            });
+          }
+
+          return [
+            senderUid,
+            {
+              avatarUrl: seededMessage.fromUserPhoto || null,
+              name:
+                seededMessage.fromUserName ||
+                (senderUid === selectedEmployeeAuthUid ? "الموظف" : "HR"),
+              email: seededMessage.fromUserEmail || null,
+            },
+          ] as const;
+        })
+      );
+
+      if (cancelled) return;
+
+      setEmployeeMessageSenderLookup(
+        Object.fromEntries(
+          entries.filter(
+            (entry): entry is readonly [string, MessageSenderProfile] =>
+              Boolean(entry)
+          )
+        )
+      );
+    };
+
+    void loadSenderProfiles();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activeEmployeeConversation,
+    currentAdminAvatarUrl,
+    selectedEmployeeAuthUid,
+    selectedEmployeeProfile,
+    user?.displayName,
+    user?.email,
+    user?.uid,
+  ]);
+
+  useEffect(() => {
+    if (
+      requestedConversationId &&
+      search &&
+      handledMessageSearchRef.current !== search
+    ) {
+      handledMessageSearchRef.current = search;
+      setActiveEmployeeConversationId(requestedConversationId);
+      setComposeEmployeeMessageAsNew(false);
+      return;
+    }
+
     if (!requestedMessageId) {
       handledMessageSearchRef.current = "";
     }
 
     if (
-      requestedMessageId &&
-      search &&
-      handledMessageSearchRef.current !== search &&
-      employeeMessages.some(message => message.id === requestedMessageId)
+      activeEmployeeConversationId &&
+      !employeeConversations.some(
+        conversation => conversation.id === activeEmployeeConversationId
+      )
     ) {
-      handledMessageSearchRef.current = search;
-      setActiveEmployeeMessageId(requestedMessageId);
-      return;
+      setActiveEmployeeConversationId(null);
     }
+  }, [
+    activeEmployeeConversationId,
+    employeeConversations,
+    requestedConversationId,
+    requestedMessageId,
+    search,
+  ]);
 
-    if (!activeEmployeeMessageId && employeeMessages.length) {
-      setActiveEmployeeMessageId(employeeMessages[0].id);
-      return;
-    }
+  const scrollToEmployeeWorkspaceSection = (
+    section: EmployeeWorkspaceSectionKey,
+    behavior: ScrollBehavior = "smooth"
+  ) => {
+    setActiveEmployeeWorkspaceSection(section);
 
-    if (
-      activeEmployeeMessageId &&
-      !employeeMessages.some(message => message.id === activeEmployeeMessageId)
-    ) {
-      setActiveEmployeeMessageId(employeeMessages[0]?.id || null);
-    }
-  }, [activeEmployeeMessageId, employeeMessages, requestedMessageId, search]);
+    const target =
+      section === "profile"
+        ? employeeOverviewSectionRef.current
+        : section === "leave"
+          ? employeeLeaveSectionRef.current
+          : section === "messages"
+            ? employeeMessagesSectionRef.current
+            : employeeFilesSectionRef.current;
 
-  useEffect(() => {
-    if (
-      requestedPanel !== "messages" ||
-      !requestedEmployeeId ||
-      requestedEmployeeId !== selectedEmployeeId ||
-      !employeeMessagesSectionRef.current
-    ) {
-      return;
-    }
-
-    employeeMessagesSectionRef.current.scrollIntoView({
-      behavior: "smooth",
+    target?.scrollIntoView({
+      behavior,
       block: "start",
     });
-  }, [employeeMessages.length, requestedEmployeeId, requestedPanel, selectedEmployeeId]);
+  };
+
+  useEffect(() => {
+    if (!requestedPanel) {
+      handledSectionNavigationRef.current = "";
+      return;
+    }
+
+    if (
+      !requestedEmployeeSection ||
+      !requestedEmployeeId ||
+      requestedEmployeeId !== selectedEmployeeId ||
+      !selectedEmployee ||
+      !selectedEmployeeProfile ||
+      handledSectionNavigationRef.current === search
+    ) {
+      return;
+    }
+
+    handledSectionNavigationRef.current = search;
+    scrollToEmployeeWorkspaceSection(requestedEmployeeSection);
+  }, [
+    requestedEmployeeId,
+    requestedEmployeeSection,
+    requestedPanel,
+    search,
+    selectedEmployee,
+    selectedEmployeeId,
+    selectedEmployeeProfile,
+  ]);
 
   const activeEmployeesCount = employeeCards.filter(
     card => card.profile.employment.statusKey === "active"
@@ -1054,7 +1459,7 @@ export default function EmployeesManagementPage() {
   };
 
   const handleEmployeeFileFormChange = <
-    K extends keyof Omit<EmployeeFileFormValues, "file">
+    K extends keyof Omit<EmployeeFileFormValues, "file">,
   >(
     key: K,
     value: EmployeeFileFormValues[K]
@@ -1085,12 +1490,66 @@ export default function EmployeesManagementPage() {
     }));
   };
 
-  const handleSelectEmployeeMessage = (messageId: string) => {
-    setActiveEmployeeMessageId(messageId);
+  const markEmployeeConversationAsRead = async (
+    conversation: EmployeeMessageConversationRecord
+  ) => {
+    if (!user?.uid || !canManageEmployees) return;
+
+    const unreadIncomingMessages = conversation.messages.filter(
+      message => message.toUserId === user.uid && !message.isRead
+    );
+    if (!unreadIncomingMessages.length) return;
+
+    setOpeningEmployeeConversationId(conversation.id);
+    try {
+      const batch = writeBatch(db);
+      unreadIncomingMessages.forEach(message => {
+        batch.update(doc(db, EMPLOYEE_MESSAGES_COLLECTION, message.id), {
+          isRead: true,
+          readAt: serverTimestamp(),
+          status: "read",
+          updatedAt: serverTimestamp(),
+        });
+      });
+      await batch.commit();
+    } catch (error) {
+      console.error("employee_conversation_mark_read_failed", error);
+    } finally {
+      setOpeningEmployeeConversationId(current =>
+        current === conversation.id ? null : current
+      );
+    }
+  };
+
+  useEffect(() => {
+    if (!activeEmployeeConversation) return;
+    void markEmployeeConversationAsRead(activeEmployeeConversation);
+  }, [activeEmployeeConversation, canManageEmployees, user?.uid]);
+
+  const handleSelectEmployeeConversation = (
+    conversation: EmployeeMessageConversationRecord
+  ) => {
+    if (activeEmployeeConversationId === conversation.id) {
+      setActiveEmployeeConversationId(null);
+      return;
+    }
+
+    setActiveEmployeeConversationId(conversation.id);
+    setComposeEmployeeMessageAsNew(false);
+    void markEmployeeConversationAsRead(conversation);
+  };
+
+  const handleCloseEmployeeConversation = () => {
+    setActiveEmployeeConversationId(null);
   };
 
   const handleSendEmployeeMessage = async () => {
-    if (!selectedEmployee || !selectedEmployeeProfile || !selectedEmployeeAuthUid) return;
+    if (
+      !selectedEmployee ||
+      !selectedEmployeeProfile ||
+      !selectedEmployeeAuthUid
+    )
+      return;
     if (!user?.uid) return;
     if (!canManageEmployees) {
       toast.error("لا تملك صلاحية إرسال رسائل داخلية للموظفين.");
@@ -1098,9 +1557,9 @@ export default function EmployeesManagementPage() {
     }
 
     const normalizedMessage = employeeMessageForm.message.trim();
-    const normalizedType = (
-      String(employeeMessageForm.type || "message").trim().toLowerCase() || "message"
-    ) as EmployeeMessageType;
+    const normalizedType = (String(employeeMessageForm.type || "message")
+      .trim()
+      .toLowerCase() || "message") as EmployeeMessageType;
 
     if (!normalizedMessage) {
       toast.error("اكتب نص الرسالة أولًا.");
@@ -1110,6 +1569,17 @@ export default function EmployeesManagementPage() {
     setSendingEmployeeMessage(true);
     try {
       const messageRef = doc(collection(db, EMPLOYEE_MESSAGES_COLLECTION));
+      const isReply = Boolean(
+        activeEmployeeConversation && !composeEmployeeMessageAsNew
+      );
+      const parentMessage = isReply
+        ? activeEmployeeConversation?.messages[
+            activeEmployeeConversation.messages.length - 1
+          ] || null
+        : null;
+      const conversationId = isReply
+        ? activeEmployeeConversation?.conversationId || messageRef.id
+        : messageRef.id;
       const employeeDisplayName =
         selectedEmployeeProfile.personal.name !== EMPLOYEE_EMPTY_VALUE
           ? selectedEmployeeProfile.personal.name
@@ -1117,19 +1587,35 @@ export default function EmployeesManagementPage() {
             selectedEmployee.name ||
             selectedEmployee.email ||
             "الموظف";
+      const employeeEmail =
+        selectedEmployeeProfile.personal.email !== EMPLOYEE_EMPTY_VALUE
+          ? selectedEmployeeProfile.personal.email
+          : selectedEmployee.email || null;
       const senderDisplayName = user?.displayName || user?.email || "HR";
 
       await setDoc(messageRef, {
         employeeId: selectedEmployee.id,
         employeeUid: selectedEmployeeAuthUid,
+        conversationId,
+        threadId: conversationId,
+        senderUid: user.uid,
+        senderRole: "hr",
+        recipientUid: selectedEmployeeAuthUid,
+        messageType: normalizedType,
+        body: normalizedMessage,
+        status: "sent",
         fromUserId: user.uid,
         fromUserName: senderDisplayName,
+        fromUserEmail: user?.email || null,
+        fromUserPhoto: currentAdminAvatarUrl || null,
         toUserId: selectedEmployeeAuthUid,
         toUserName: employeeDisplayName,
+        toUserEmail: employeeEmail,
+        toUserPhoto: selectedEmployeeProfile.personal.avatarUrl || null,
         message: normalizedMessage,
         type: normalizedType,
-        relatedTo: null,
-        relatedId: null,
+        relatedTo: parentMessage ? "employee_message" : null,
+        relatedId: parentMessage?.id || null,
         createdAt: serverTimestamp(),
         isRead: false,
         readAt: null,
@@ -1154,10 +1640,14 @@ export default function EmployeesManagementPage() {
         });
       } catch (notificationError) {
         notificationFailed = true;
-        console.error("employee_message_notification_failed", notificationError);
+        console.error(
+          "employee_message_notification_failed",
+          notificationError
+        );
       }
 
-      setActiveEmployeeMessageId(messageRef.id);
+      setActiveEmployeeConversationId(conversationId);
+      setComposeEmployeeMessageAsNew(false);
       resetEmployeeMessageForm();
       toast.success(
         notificationFailed
@@ -1240,7 +1730,9 @@ export default function EmployeesManagementPage() {
       console.error("employee_file_delete_failed", error);
       toast.error("تعذر حذف ملف الموظف.");
     } finally {
-      setDeletingEmployeeFileId(current => (current === file.id ? null : current));
+      setDeletingEmployeeFileId(current =>
+        current === file.id ? null : current
+      );
     }
   };
 
@@ -1259,7 +1751,8 @@ export default function EmployeesManagementPage() {
       EMPLOYEE_DEFAULT_FILE_TYPE;
     const employeeUid = selectedEmployeeAuthUid || selectedEmployee.id;
     const employeeId =
-      String(selectedEmployee.linkedEmployeeId || "").trim() || selectedEmployee.id;
+      String(selectedEmployee.linkedEmployeeId || "").trim() ||
+      selectedEmployee.id;
 
     if (!employeeUid) {
       toast.error("تعذر تحديد الموظف المستهدف لرفع الملف.");
@@ -1292,8 +1785,13 @@ export default function EmployeesManagementPage() {
       const uploadedByName = user?.displayName || user?.email || "HR";
       const replacedCandidates = employeeFiles.filter(file => {
         if (!file.active) return false;
-        if (replacingEmployeeFileId && file.id === replacingEmployeeFileId) return true;
-        return matchesEmployeeFileVersion(file, normalizedTitle, normalizedFileType);
+        if (replacingEmployeeFileId && file.id === replacingEmployeeFileId)
+          return true;
+        return matchesEmployeeFileVersion(
+          file,
+          normalizedTitle,
+          normalizedFileType
+        );
       });
 
       const fileDoc: EmployeeFileDoc = {
@@ -1326,7 +1824,8 @@ export default function EmployeesManagementPage() {
         replacedBy: null,
         replacedByName: null,
         replacedByFileId: null,
-        replacesFileId: replacingEmployeeFileId || replacedCandidates[0]?.id || null,
+        replacesFileId:
+          replacingEmployeeFileId || replacedCandidates[0]?.id || null,
         isRead: false,
         readAt: null,
         updatedAt: serverTimestamp(),
@@ -1407,7 +1906,14 @@ export default function EmployeesManagementPage() {
       );
     } catch (error) {
       console.error("employee_file_upload_failed", error);
-      toast.error("تعذر رفع ملف الموظف.");
+      if (
+        error instanceof Error &&
+        error.message.includes("File is too large")
+      ) {
+        toast.error("حجم الملف كبير، الحد الأقصى المسموح 10MB");
+      } else {
+        toast.error("تعذر رفع ملف الموظف.");
+      }
     } finally {
       setUploadingEmployeeFile(false);
     }
@@ -1423,7 +1929,9 @@ export default function EmployeesManagementPage() {
     const normalizedFullName = form.fullName.trim();
     const normalizedEmail = form.email.trim();
     const normalizedPhone = form.phone.trim();
-    const normalizedFingerprintNumber = normalizeFingerprintNumber(form.fingerprintNumber);
+    const normalizedFingerprintNumber = normalizeFingerprintNumber(
+      form.fingerprintNumber
+    );
     const leaveBalance = toNullableNumber(form.leaveBalance);
     if (!normalizedFullName) {
       toast.error("يجب إدخال اسم الموظف.");
@@ -1625,7 +2133,11 @@ export default function EmployeesManagementPage() {
     setReviewingLeaveRequestId(request.id);
     try {
       await runTransaction(db, async tx => {
-        const leaveRequestRef = doc(db, EMPLOYEE_LEAVE_REQUESTS_COLLECTION, request.id);
+        const leaveRequestRef = doc(
+          db,
+          EMPLOYEE_LEAVE_REQUESTS_COLLECTION,
+          request.id
+        );
         const leaveRequestSnap = await tx.get(leaveRequestRef);
         if (!leaveRequestSnap.exists()) {
           throw new Error("leave_request_not_found");
@@ -1648,7 +2160,8 @@ export default function EmployeesManagementPage() {
         }
 
         const hrNote =
-          String(reviewNotes[request.id] ?? request.hrNote ?? "").trim() || null;
+          String(reviewNotes[request.id] ?? request.hrNote ?? "").trim() ||
+          null;
         const userRef = doc(db, "users", selectedEmployee.id);
         const userSnap = await tx.get(userRef);
         if (!userSnap.exists()) {
@@ -1667,11 +2180,13 @@ export default function EmployeesManagementPage() {
             currentLeaveRequest.employeeId ||
             ""
         ).trim();
-        const employeeRef = employeeDocId ? doc(db, "employees", employeeDocId) : null;
+        const employeeRef = employeeDocId
+          ? doc(db, "employees", employeeDocId)
+          : null;
         const employeeSnap = employeeRef ? await tx.get(employeeRef) : null;
         const employeeData =
           employeeSnap?.exists() && employeeSnap.data()
-            ? ((employeeSnap.data() as Record<string, any>) || {})
+            ? (employeeSnap.data() as Record<string, any>) || {}
             : null;
         const employeeEmployment = (employeeData?.employeeProfile?.employment ||
           employeeData?.employment ||
@@ -1702,10 +2217,9 @@ export default function EmployeesManagementPage() {
               updatedAt: serverTimestamp(),
               employment: nextUserEmployment,
               employeeProfile: {
-                personal:
-                  (userData.employeeProfile?.personal ||
-                    userData.personal ||
-                    null) as Record<string, any> | null,
+                personal: (userData.employeeProfile?.personal ||
+                  userData.personal ||
+                  null) as Record<string, any> | null,
                 employment: nextUserEmployment,
               },
             },
@@ -1730,10 +2244,9 @@ export default function EmployeesManagementPage() {
                 updatedAt: serverTimestamp(),
                 employment: nextEmployeeEmployment,
                 employeeProfile: {
-                  personal:
-                    (employeeData?.employeeProfile?.personal ||
-                      employeeData?.personal ||
-                      null) as Record<string, any> | null,
+                  personal: (employeeData?.employeeProfile?.personal ||
+                    employeeData?.personal ||
+                    null) as Record<string, any> | null,
                   employment: nextEmployeeEmployment,
                 },
               },
@@ -1817,8 +2330,9 @@ export default function EmployeesManagementPage() {
             إدارة الموظفين
           </h1>
           <p className="max-w-3xl text-lg text-slate-500">
-            صفحة مخصصة لإدارة البيانات الوظيفية للموظفين من جهة الإدارة والموارد البشرية،
-            مع فصل واضح بين ما يشاهده الموظف في بروفايله وما يتم تعديله من داخل اللوحة.
+            صفحة مخصصة لإدارة البيانات الوظيفية للموظفين من جهة الإدارة والموارد
+            البشرية، مع فصل واضح بين ما يشاهده الموظف في بروفايله وما يتم تعديله
+            من داخل اللوحة.
           </p>
         </div>
 
@@ -1868,9 +2382,9 @@ export default function EmployeesManagementPage() {
           </Card>
         </div>
 
-        <div className="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
-          <Card className="overflow-hidden border-slate-200/80">
-            <CardHeader className="border-b border-slate-100 bg-white/90">
+        <div className="grid items-start gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
+          <Card className="self-start gap-0 border-slate-200/80 py-0">
+            <CardHeader className="border-b border-slate-100 bg-white/90 px-5 pb-5 pt-5">
               <CardTitle className="flex items-center gap-2 text-xl text-slate-950">
                 <BriefcaseBusiness className="h-5 w-5 text-[#030640]" />
                 قائمة الموظفين
@@ -1890,201 +2404,300 @@ export default function EmployeesManagementPage() {
               </div>
             </CardHeader>
 
-            <CardContent className="p-0">
-              <ScrollArea className="h-[680px]">
-                <div className="space-y-3 p-4">
-                  {loading ? (
-                    <div className="rounded-[24px] border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-500">
-                      جاري تحميل الموظفين...
-                    </div>
-                  ) : error ? (
-                    <div className="rounded-[24px] border border-rose-200 bg-rose-50 px-4 py-10 text-center text-sm text-rose-700">
-                      {error}
-                    </div>
-                  ) : filteredEmployeeCards.length ? (
-                    filteredEmployeeCards.map(card => {
-                      const isActive = card.employee.id === selectedEmployeeId;
-                      const startDateLabel = card.profile.employment.startDate
-                        ? formatDateEN(card.profile.employment.startDate)
-                        : EMPLOYEE_EMPTY_VALUE;
+            <CardContent className="px-5 pb-5 pt-4">
+              <div className="space-y-3">
+                {loading ? (
+                  <div className="rounded-[24px] border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-500">
+                    جاري تحميل الموظفين...
+                  </div>
+                ) : error ? (
+                  <div className="rounded-[24px] border border-rose-200 bg-rose-50 px-4 py-10 text-center text-sm text-rose-700">
+                    {error}
+                  </div>
+                ) : filteredEmployeeCards.length ? (
+                  filteredEmployeeCards.map(card => {
+                    const isActive = card.employee.id === selectedEmployeeId;
+                    const startDateLabel = card.profile.employment.startDate
+                      ? formatDateEN(card.profile.employment.startDate)
+                      : EMPLOYEE_EMPTY_VALUE;
 
-                      return (
-                        <button
-                          key={card.employee.id}
-                          type="button"
-                          onClick={() => setSelectedEmployeeId(card.employee.id)}
-                          className={cn(
-                            "w-full rounded-[24px] border px-4 py-4 text-right transition-all",
-                            isActive
-                              ? "border-[#F2B705]/50 bg-[#F2B705]/10 shadow-[0_20px_44px_-34px_rgba(242,183,5,0.55)]"
-                              : "border-slate-200/80 bg-white hover:border-slate-300 hover:bg-slate-50/80"
-                          )}
-                        >
-                          <div className="space-y-3">
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="space-y-1">
-                                <div className="text-base font-semibold text-slate-950">
-                                  {card.profile.personal.name}
-                                </div>
-                                <div className="text-xs text-slate-500">
-                                  {card.profile.personal.email}
-                                </div>
+                    return (
+                      <button
+                        key={card.employee.id}
+                        type="button"
+                        onClick={() => setSelectedEmployeeId(card.employee.id)}
+                        className={cn(
+                          "w-full rounded-[24px] border px-4 py-4 text-right transition-all",
+                          isActive
+                            ? "border-[#F2B705]/50 bg-[#F2B705]/10 shadow-[0_20px_44px_-34px_rgba(242,183,5,0.55)]"
+                            : "border-slate-200/80 bg-white hover:border-slate-300 hover:bg-slate-50/80"
+                        )}
+                      >
+                        <div className="space-y-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="space-y-1">
+                              <div className="text-base font-semibold text-slate-950">
+                                {card.profile.personal.name}
                               </div>
-
-                              <Badge
-                                variant="outline"
-                                className={cn(
-                                  "rounded-full",
-                                  card.profile.employment.statusTone === "success"
-                                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                                    : card.profile.employment.statusTone === "warning"
-                                      ? "border-amber-200 bg-amber-50 text-amber-700"
-                                      : "border-slate-200 bg-slate-100 text-slate-700"
-                                )}
-                              >
-                                {card.profile.employment.statusLabel}
-                              </Badge>
+                              <div className="text-xs text-slate-500">
+                                {card.profile.personal.email}
+                              </div>
                             </div>
 
-                            <div className="grid gap-2 text-sm text-slate-600">
-                              <div className="flex items-center justify-between gap-3">
-                                <span className="text-slate-500">المسمى</span>
-                                <span className="font-medium text-slate-900">
-                                  {card.profile.employment.title}
-                                </span>
-                              </div>
-                              <div className="flex items-center justify-between gap-3">
-                                <span className="text-slate-500">القسم</span>
-                                <span className="font-medium text-slate-900">
-                                  {card.profile.employment.department}
-                                </span>
-                              </div>
-                              <div className="flex items-center justify-between gap-3">
-                                <span className="text-slate-500">رقم البصمة</span>
-                                <span dir="ltr" className="font-medium text-slate-900">
-                                  {card.profile.employment.fingerprintNumber}
-                                </span>
-                              </div>
-                              <div className="flex items-center justify-between gap-3">
-                                <span className="text-slate-500">بداية العمل</span>
-                                <span className="font-medium text-slate-900">
-                                  {startDateLabel}
-                                </span>
-                              </div>
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                "rounded-full",
+                                card.profile.employment.statusTone === "success"
+                                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                  : card.profile.employment.statusTone ===
+                                      "warning"
+                                    ? "border-amber-200 bg-amber-50 text-amber-700"
+                                    : "border-slate-200 bg-slate-100 text-slate-700"
+                              )}
+                            >
+                              {card.profile.employment.statusLabel}
+                            </Badge>
+                          </div>
+
+                          <div className="grid gap-2 text-sm text-slate-600">
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="text-slate-500">المسمى</span>
+                              <span className="font-medium text-slate-900">
+                                {card.profile.employment.title}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="text-slate-500">القسم</span>
+                              <span className="font-medium text-slate-900">
+                                {card.profile.employment.department}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="text-slate-500">رقم البصمة</span>
+                              <span
+                                dir="ltr"
+                                className="font-medium text-slate-900"
+                              >
+                                {card.profile.employment.fingerprintNumber}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="text-slate-500">
+                                بداية العمل
+                              </span>
+                              <span className="font-medium text-slate-900">
+                                {startDateLabel}
+                              </span>
                             </div>
                           </div>
-                        </button>
-                      );
-                    })
-                  ) : (
-                    <Empty className="min-h-[360px] rounded-[24px] border border-dashed border-slate-200 bg-slate-50/70">
-                      <EmptyHeader>
-                        <EmptyMedia
-                          variant="icon"
-                          className="bg-[#F2B705]/12 text-[#030640]"
-                        >
-                          <UserRound className="size-5" />
-                        </EmptyMedia>
-                        <EmptyTitle>لا توجد نتائج مطابقة</EmptyTitle>
-                        <EmptyDescription>
-                          جرّب تغيير عبارة البحث أو أزل الفلتر لعرض الموظفين الحاليين.
-                        </EmptyDescription>
-                      </EmptyHeader>
-                    </Empty>
-                  )}
-                </div>
-              </ScrollArea>
+                        </div>
+                      </button>
+                    );
+                  })
+                ) : (
+                  <Empty className="min-h-[360px] rounded-[24px] border border-dashed border-slate-200 bg-slate-50/70">
+                    <EmptyHeader>
+                      <EmptyMedia
+                        variant="icon"
+                        className="bg-[#F2B705]/12 text-[#030640]"
+                      >
+                        <UserRound className="size-5" />
+                      </EmptyMedia>
+                      <EmptyTitle>لا توجد نتائج مطابقة</EmptyTitle>
+                      <EmptyDescription>
+                        جرّب تغيير عبارة البحث أو أزل الفلتر لعرض الموظفين
+                        الحاليين.
+                      </EmptyDescription>
+                    </EmptyHeader>
+                  </Empty>
+                )}
+              </div>
             </CardContent>
           </Card>
 
-          <Card className="overflow-hidden border-slate-200/80">
-            <CardHeader className="border-b border-slate-100 bg-white/90">
-              <CardTitle className="flex items-center gap-2 text-xl text-slate-950">
-                <ShieldCheck className="h-5 w-5 text-[#030640]" />
-                بيانات الموظف الوظيفية
-              </CardTitle>
-              <CardDescription className="text-sm leading-6 text-slate-500">
-                هذا القسم مخصص للإدارة والموارد البشرية فقط. الموظف يرى هذه البيانات في
-                بروفايله بشكل للعرض فقط ولا يحررها بنفسه.
-              </CardDescription>
-            </CardHeader>
+          <div className="flex min-w-0 flex-col gap-6">
+            <Card className="gap-0 overflow-hidden border-slate-200/80 bg-white/95 py-0 shadow-sm">
+              <CardHeader className="border-b border-slate-100 bg-white/90 px-6 pt-6 pb-4">
+                <CardTitle className="flex items-center gap-2 text-xl text-slate-950">
+                  <ShieldCheck className="h-5 w-5 text-[#030640]" />
+                  بيانات الموظف الوظيفية
+                </CardTitle>
+                <CardDescription className="text-sm leading-6 text-slate-500">
+                  هذا القسم مخصص للإدارة والموارد البشرية فقط. الموظف يرى هذه
+                  البيانات في بروفايله بشكل للعرض فقط ولا يحررها بنفسه.
+                </CardDescription>
+              </CardHeader>
+            </Card>
 
-            <CardContent className="p-6">
-              {selectedEmployee && selectedEmployeeProfile ? (
-                <div className="space-y-6">
-                  <div className="rounded-[28px] border border-slate-200/80 bg-[linear-gradient(135deg,rgba(255,255,255,0.98)_0%,rgba(248,250,252,0.95)_100%)] p-5 shadow-sm">
-                    <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                      <div className="space-y-3">
-                        <div>
-                          <div className="text-2xl font-semibold tracking-tight text-slate-950">
+            {selectedEmployee && selectedEmployeeProfile ? (
+              <div className="flex flex-col gap-6">
+                <Card className="order-0 sticky top-4 z-20 gap-0 overflow-hidden border-slate-200/80 bg-white/95 py-0 shadow-[0_22px_48px_-34px_rgba(15,23,42,0.3)] backdrop-blur">
+                  <CardHeader className="border-b border-slate-100 bg-[linear-gradient(135deg,rgba(255,255,255,0.98)_0%,rgba(244,247,255,0.95)_100%)] px-6 pt-6 pb-4">
+                    <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+                      <div className="flex items-center gap-3">
+                        <EmployeeAvatar
+                          avatarUrl={selectedEmployeeProfile.personal.avatarUrl}
+                          name={selectedEmployeeProfile.personal.name}
+                          email={selectedEmployeeProfile.personal.email}
+                          className="h-12 w-12 shrink-0"
+                          fallbackClassName="text-sm"
+                        />
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                            <BriefcaseBusiness className="h-4 w-4 text-[#030640]" />
+                            تنقل داخلي مستقل
+                          </div>
+                          <CardTitle className="text-xl tracking-tight text-slate-950">
+                            أقسام ملف الموظف
+                          </CardTitle>
+                          <div className="text-sm font-medium text-slate-600">
                             {selectedEmployeeProfile.personal.name}
                           </div>
-                          <div className="mt-1 text-sm text-slate-500">
-                            {selectedEmployeeProfile.employment.title}
-                          </div>
-                        </div>
-
-                        <div className="flex flex-wrap gap-2">
-                          <Badge variant="outline" className="rounded-full">
-                            {selectedEmployeeProfile.employment.department}
-                          </Badge>
-                          <Badge
-                            variant="outline"
-                            className={cn(
-                              "rounded-full",
-                              selectedEmployeeProfile.employment.statusTone === "success"
-                                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                                : selectedEmployeeProfile.employment.statusTone === "warning"
-                                  ? "border-amber-200 bg-amber-50 text-amber-700"
-                                  : "border-slate-200 bg-slate-100 text-slate-700"
-                            )}
-                          >
-                            {selectedEmployeeProfile.employment.statusLabel}
-                          </Badge>
-                          {selectedEmployeeProfile.employment.employeeCode !== EMPLOYEE_EMPTY_VALUE ? (
-                            <Badge variant="outline" className="rounded-full">
-                              رقم الموظف: {selectedEmployeeProfile.employment.employeeCode}
-                            </Badge>
-                          ) : null}
                         </div>
                       </div>
 
-                      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                        <ReadonlyMeta
-                          icon={Mail}
-                          label="البريد"
-                          value={selectedEmployeeProfile.personal.email}
-                          dir="ltr"
-                        />
-                        <ReadonlyMeta
-                          icon={Phone}
-                          label="الجوال"
-                          value={selectedEmployeeProfile.personal.phone || EMPLOYEE_EMPTY_VALUE}
-                          dir="ltr"
-                        />
-                        <ReadonlyMeta
-                          icon={CalendarDays}
-                          label="بداية العمل"
-                          value={
-                            selectedEmployeeProfile.employment.startDate
-                              ? formatDateEN(selectedEmployeeProfile.employment.startDate)
-                              : EMPLOYEE_EMPTY_VALUE
-                          }
-                        />
-                        <ReadonlyMeta
-                          icon={ShieldCheck}
-                          label="رقم البصمة"
-                          value={selectedEmployeeProfile.employment.fingerprintNumber}
-                          dir="ltr"
-                        />
+                      <div className="flex flex-wrap gap-2">
+                        {EMPLOYEE_WORKSPACE_SECTIONS.map(section => (
+                          <EmployeeWorkspaceTabButton
+                            key={section.key}
+                            active={
+                              activeEmployeeWorkspaceSection === section.key
+                            }
+                            icon={section.icon}
+                            label={section.label}
+                            onClick={() =>
+                              scrollToEmployeeWorkspaceSection(section.key)
+                            }
+                          />
+                        ))}
                       </div>
                     </div>
-                  </div>
+                  </CardHeader>
 
-                  <div
-                    ref={employeeMessagesSectionRef}
-                    className="rounded-[28px] border border-slate-200/80 bg-white/95 p-5 shadow-sm"
-                  >
+                  <CardContent className="px-6 pb-5 pt-4">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge
+                        variant="outline"
+                        className="rounded-full border-slate-200 bg-slate-50 text-slate-600 shadow-none"
+                      >
+                        {selectedEmployeeProfile.employment.department}
+                      </Badge>
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "rounded-full shadow-none",
+                          selectedEmployeeProfile.employment.statusTone ===
+                            "success"
+                            ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                            : selectedEmployeeProfile.employment.statusTone ===
+                                "warning"
+                              ? "border-amber-200 bg-amber-50 text-amber-700"
+                              : "border-slate-200 bg-slate-100 text-slate-700"
+                        )}
+                      >
+                        {selectedEmployeeProfile.employment.statusLabel}
+                      </Badge>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card
+                  id="employee-section-profile"
+                  ref={employeeOverviewSectionRef}
+                  className="order-10 scroll-mt-36 gap-0 overflow-hidden border-slate-200/80 bg-[linear-gradient(135deg,rgba(255,255,255,0.98)_0%,rgba(248,250,252,0.95)_100%)] py-0 shadow-sm lg:scroll-mt-44"
+                >
+                  <CardHeader className="border-b border-white/70 bg-white/70 px-6 pt-6 pb-4 backdrop-blur">
+                    <div className="space-y-3">
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                          <UserRound className="h-4 w-4 text-[#030640]" />
+                          ملخص الموظف
+                        </div>
+                        <CardTitle className="text-2xl tracking-tight text-slate-950">
+                          {selectedEmployeeProfile.personal.name}
+                        </CardTitle>
+                        <CardDescription className="text-sm text-slate-500">
+                          {selectedEmployeeProfile.employment.title}
+                        </CardDescription>
+                      </div>
+
+                      <div className="flex flex-wrap gap-2">
+                        <Badge variant="outline" className="rounded-full">
+                          {selectedEmployeeProfile.employment.department}
+                        </Badge>
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "rounded-full",
+                            selectedEmployeeProfile.employment.statusTone ===
+                              "success"
+                              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                              : selectedEmployeeProfile.employment
+                                    .statusTone === "warning"
+                                ? "border-amber-200 bg-amber-50 text-amber-700"
+                                : "border-slate-200 bg-slate-100 text-slate-700"
+                          )}
+                        >
+                          {selectedEmployeeProfile.employment.statusLabel}
+                        </Badge>
+                        {selectedEmployeeProfile.employment.employeeCode !==
+                        EMPLOYEE_EMPTY_VALUE ? (
+                          <Badge variant="outline" className="rounded-full">
+                            رقم الموظف:{" "}
+                            {selectedEmployeeProfile.employment.employeeCode}
+                          </Badge>
+                        ) : null}
+                      </div>
+                    </div>
+                  </CardHeader>
+
+                  <CardContent className="p-5">
+                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                      <ReadonlyMeta
+                        icon={Mail}
+                        label="البريد"
+                        value={selectedEmployeeProfile.personal.email}
+                        dir="ltr"
+                      />
+                      <ReadonlyMeta
+                        icon={Phone}
+                        label="الجوال"
+                        value={
+                          selectedEmployeeProfile.personal.phone ||
+                          EMPLOYEE_EMPTY_VALUE
+                        }
+                        dir="ltr"
+                      />
+                      <ReadonlyMeta
+                        icon={CalendarDays}
+                        label="بداية العمل"
+                        value={
+                          selectedEmployeeProfile.employment.startDate
+                            ? formatDateEN(
+                                selectedEmployeeProfile.employment.startDate
+                              )
+                            : EMPLOYEE_EMPTY_VALUE
+                        }
+                      />
+                      <ReadonlyMeta
+                        icon={ShieldCheck}
+                        label="رقم البصمة"
+                        value={
+                          selectedEmployeeProfile.employment.fingerprintNumber
+                        }
+                        dir="ltr"
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card
+                  id="employee-section-messages"
+                  ref={employeeMessagesSectionRef}
+                  className="order-40 scroll-mt-36 gap-0 overflow-hidden border-slate-200/80 bg-white/95 py-0 shadow-sm lg:scroll-mt-44"
+                >
+                  <CardHeader className="border-b border-slate-100 bg-white/90 px-6 pt-6 pb-4">
                     <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                       <div className="space-y-2">
                         <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
@@ -2095,7 +2708,8 @@ export default function EmployeesManagementPage() {
                           رسائل HR مع الموظف
                         </div>
                         <p className="max-w-2xl text-sm leading-7 text-slate-500">
-                          أرسل رسالة مباشرة أو تنبيهًا نصيًا للموظف، وراجع سجل الرسائل السابقة ضمن نفس الملف الوظيفي.
+                          أرسل رسالة مباشرة أو تنبيهًا نصيًا للموظف، وراجع سجل
+                          الرسائل السابقة ضمن نفس الملف الوظيفي.
                         </p>
                       </div>
 
@@ -2117,78 +2731,152 @@ export default function EmployeesManagementPage() {
                         />
                       </div>
                     </div>
+                  </CardHeader>
 
-                    <div className="mt-5 grid gap-5 xl:grid-cols-[340px_minmax(0,1fr)]">
-                      <div className="space-y-4">
-                        <div className="rounded-[24px] border border-slate-200/80 bg-slate-50/75 p-4">
+                  <CardContent className="p-5">
+                    <div className="grid gap-5 xl:grid-cols-[340px_minmax(0,1fr)]">
+                      <div className="space-y-4" dir="rtl">
+                        <div className="rounded-[24px] border border-slate-200/80 bg-slate-50/75 p-4 text-right">
                           <div className="mb-3 text-sm font-semibold text-slate-900">
-                            سجل الرسائل
+                            سجل المحادثات
                           </div>
 
                           {employeeMessagesLoading ? (
                             <div className="rounded-[18px] border border-dashed border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-500">
                               جارٍ تحميل الرسائل...
                             </div>
-                          ) : employeeMessages.length ? (
+                          ) : employeeConversations.length ? (
                             <ScrollArea className="h-[420px] pr-1">
                               <div className="space-y-2">
-                                {employeeMessages.map(message => {
-                                  const isActive = message.id === activeEmployeeMessageId;
-                                  const directedToEmployee =
-                                    message.toUserId === selectedEmployeeAuthUid;
+                                {employeeConversations.map(conversation => {
+                                  const latestMessage =
+                                    conversation.latestMessage;
+                                  const isActive =
+                                    conversation.id ===
+                                    activeEmployeeConversationId;
+                                  const latestFromEmployee =
+                                    latestMessage.fromUserId ===
+                                    selectedEmployeeAuthUid;
 
                                   return (
                                     <button
-                                      key={message.id}
+                                      key={conversation.id}
                                       type="button"
-                                      onClick={() => handleSelectEmployeeMessage(message.id)}
+                                      onClick={() =>
+                                        handleSelectEmployeeConversation(
+                                          conversation
+                                        )
+                                      }
                                       className={cn(
-                                        "w-full rounded-[20px] border p-4 text-right transition-colors",
+                                        "w-full min-w-0 rounded-[22px] border px-4 py-4 text-right transition-all",
                                         isActive
-                                          ? "border-slate-950 bg-slate-950 text-white"
+                                          ? "border-slate-900 bg-slate-900 text-white shadow-[0_20px_42px_-28px_rgba(15,23,42,0.75)]"
                                           : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
                                       )}
                                     >
-                                      <div className="flex flex-wrap items-center gap-2">
-                                        <Badge
-                                          variant="outline"
+                                      <div className="flex min-w-0 items-start justify-between gap-3">
+                                        <div className="min-w-0 flex-1">
+                                          <div className="flex flex-wrap items-center gap-2">
+                                            <Badge
+                                              variant="outline"
+                                              className={cn(
+                                                "rounded-full shadow-none",
+                                                isActive
+                                                  ? "border-white/20 bg-white/10 text-white"
+                                                  : "border-slate-200 bg-slate-50 text-slate-600"
+                                              )}
+                                            >
+                                              {latestMessage.typeLabel}
+                                            </Badge>
+                                            <Badge
+                                              variant="outline"
+                                              className={cn(
+                                                "rounded-full shadow-none",
+                                                isActive
+                                                  ? "border-white/20 bg-white/10 text-white"
+                                                  : latestFromEmployee
+                                                    ? "border-[#030640]/15 bg-[#030640]/5 text-[#030640]"
+                                                    : "border-slate-200 bg-slate-100 text-slate-600"
+                                              )}
+                                            >
+                                              {latestFromEmployee
+                                                ? "الموظف"
+                                                : "HR"}
+                                            </Badge>
+                                            {conversation.unreadCount > 0 ? (
+                                              <Badge className="rounded-full bg-[#F2B705] text-slate-950 hover:bg-[#F2B705]">
+                                                {conversation.unreadCount} جديد
+                                              </Badge>
+                                            ) : null}
+                                          </div>
+
+                                          <div className="mt-3 min-w-0 truncate text-sm font-semibold">
+                                            {latestFromEmployee
+                                              ? latestMessage.fromUserName ||
+                                                "الموظف"
+                                              : latestMessage.toUserName ||
+                                                "الموظف"}
+                                          </div>
+                                          <div
+                                            className={cn(
+                                              "mt-2 min-w-0 text-right text-sm leading-7 line-clamp-2 whitespace-pre-wrap break-words [overflow-wrap:anywhere]",
+                                              isActive
+                                                ? "text-white/80"
+                                                : "text-slate-600"
+                                            )}
+                                          >
+                                            {latestMessage.preview ||
+                                              "لا يوجد نص محفوظ لهذه الرسالة."}
+                                          </div>
+                                        </div>
+
+                                        <div
                                           className={cn(
-                                            "rounded-full shadow-none",
+                                            "shrink-0 whitespace-nowrap pt-0.5 text-[11px]",
                                             isActive
-                                              ? "border-white/20 bg-white/10 text-white"
-                                              : "bg-slate-50"
+                                              ? "text-white/70"
+                                              : "text-slate-500"
                                           )}
                                         >
-                                          {message.typeLabel}
-                                        </Badge>
-                                        {!message.isRead && directedToEmployee ? (
-                                          <Badge className="rounded-full bg-[#F2B705] text-slate-950 hover:bg-[#F2B705]">
-                                            غير مقروءة
-                                          </Badge>
-                                        ) : null}
+                                          {latestMessage.createdAtDate
+                                            ? formatDateTimeEN(
+                                                latestMessage.createdAtDate
+                                              )
+                                            : "تاريخ غير متوفر"}
+                                        </div>
                                       </div>
 
-                                      <div className="mt-3 text-sm font-semibold">
-                                        {message.fromUserName || "HR"}
-                                      </div>
                                       <div
                                         className={cn(
-                                          "mt-2 text-sm leading-6",
-                                          isActive ? "text-white/80" : "text-slate-600"
+                                          "mt-3 flex flex-wrap items-center justify-between gap-2 border-t pt-3 text-xs",
+                                          isActive
+                                            ? "border-white/10 text-white/70"
+                                            : "border-slate-200 text-slate-500"
                                         )}
                                       >
-                                        {message.preview || "لا يوجد نص محفوظ لهذه الرسالة."}
+                                        <span>
+                                          {conversation.messages.length} رسالة
+                                          داخل السجل
+                                        </span>
+                                        <span>
+                                          {latestFromEmployee
+                                            ? "آخر تحديث من الموظف"
+                                            : "آخر تحديث من HR"}
+                                        </span>
                                       </div>
-                                      <div
-                                        className={cn(
-                                          "mt-3 text-xs",
-                                          isActive ? "text-white/70" : "text-slate-500"
-                                        )}
-                                      >
-                                        {message.createdAtDate
-                                          ? formatDateTimeEN(message.createdAtDate)
-                                          : "تاريخ غير متوفر"}
-                                      </div>
+                                      {openingEmployeeConversationId ===
+                                      conversation.id ? (
+                                        <div
+                                          className={cn(
+                                            "mt-2 text-xs",
+                                            isActive
+                                              ? "text-white/70"
+                                              : "text-slate-500"
+                                          )}
+                                        >
+                                          جارٍ تحديث حالة القراءة...
+                                        </div>
+                                      ) : null}
                                     </button>
                                   );
                                 })}
@@ -2202,68 +2890,232 @@ export default function EmployeesManagementPage() {
                         </div>
                       </div>
 
-                      <div className="space-y-4">
-                        <div className="rounded-[24px] border border-slate-200/80 bg-slate-50/75 p-5">
-                          {activeEmployeeMessage ? (
+                      <div className="space-y-4" dir="rtl">
+                        <div className="space-y-5 text-right">
+                          {activeEmployeeConversation ? (
                             <div className="space-y-5">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <Badge
+                              <div className="flex flex-wrap items-center justify-between gap-3">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <Badge
+                                    variant="outline"
+                                    className="rounded-full border-[#F2B705]/35 bg-[#F2B705]/10 text-[#8b6700] shadow-none"
+                                  >
+                                    {
+                                      activeEmployeeConversation.latestMessage
+                                        .typeLabel
+                                    }
+                                  </Badge>
+                                  <Badge
+                                    variant="outline"
+                                    className="rounded-full border-slate-200 bg-white text-slate-600 shadow-none"
+                                  >
+                                    {activeEmployeeConversation.messages.length}{" "}
+                                    رسالة داخل نفس السجل
+                                  </Badge>
+                                </div>
+
+                                <Button
+                                  type="button"
                                   variant="outline"
-                                  className="rounded-full border-[#F2B705]/35 bg-[#F2B705]/10 text-[#8b6700] shadow-none"
+                                  onClick={handleCloseEmployeeConversation}
                                 >
-                                  {activeEmployeeMessage.typeLabel}
-                                </Badge>
-                                <Badge
-                                  variant="outline"
-                                  className={cn(
-                                    "rounded-full shadow-none",
-                                    activeEmployeeMessage.isRead
-                                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                                      : "border-amber-200 bg-amber-50 text-amber-700"
-                                  )}
-                                >
-                                  {activeEmployeeMessage.toUserId === selectedEmployeeAuthUid
-                                    ? activeEmployeeMessage.isRead
-                                      ? "قرأها الموظف"
-                                      : "بانتظار القراءة"
-                                    : "رسالة واردة"}
-                                </Badge>
+                                  إغلاق
+                                </Button>
                               </div>
 
                               <div className="grid gap-3 md:grid-cols-3">
                                 <ReadonlyMeta
                                   icon={Mail}
-                                  label="من"
-                                  value={activeEmployeeMessage.fromUserName || "HR"}
+                                  label="المسار"
+                                  value={
+                                    composeEmployeeMessageAsNew ||
+                                    !activeEmployeeConversation
+                                      ? "رسالة جديدة"
+                                      : "رد داخل المحادثة الحالية"
+                                  }
                                 />
                                 <ReadonlyMeta
                                   icon={UserRound}
-                                  label="إلى"
-                                  value={activeEmployeeMessage.toUserName || "الموظف"}
+                                  label="الموظف"
+                                  value={
+                                    activeEmployeeConversation.latestMessage
+                                      .toUserName ||
+                                    activeEmployeeConversation.latestMessage
+                                      .fromUserName ||
+                                    "الموظف"
+                                  }
                                 />
                                 <ReadonlyMeta
                                   icon={Clock3}
-                                  label="وقت الإرسال"
-                                  value={formatDateTimeEN(activeEmployeeMessage.createdAtDate)}
+                                  label="آخر تحديث"
+                                  value={formatDateTimeEN(
+                                    activeEmployeeConversation.latestMessage
+                                      .createdAtDate
+                                  )}
                                 />
                               </div>
 
-                              <div className="rounded-[22px] border border-slate-200 bg-white px-5 py-5 text-sm leading-8 text-slate-700">
-                                {activeEmployeeMessage.message || "لا يوجد نص محفوظ لهذه الرسالة."}
-                              </div>
+                              <div className="space-y-4 pt-1" dir="ltr">
+                                {activeEmployeeConversation.messages.map(
+                                  message => {
+                                    const fromEmployee =
+                                      message.fromUserId ===
+                                      selectedEmployeeAuthUid;
+                                    const senderId =
+                                      message.fromUserId ||
+                                      message.senderUid ||
+                                      "";
+                                    const senderProfile = senderId
+                                      ? employeeMessageSenderLookup[senderId]
+                                      : null;
+                                    const senderName =
+                                      senderProfile?.name ||
+                                      message.fromUserName ||
+                                      (fromEmployee ? "الموظف" : "HR");
+                                    const senderEmail =
+                                      senderProfile?.email ||
+                                      message.fromUserEmail ||
+                                      null;
+                                    const senderAvatarUrl =
+                                      senderProfile?.avatarUrl ||
+                                      message.fromUserPhoto ||
+                                      (fromEmployee
+                                        ? selectedEmployeeProfile?.personal
+                                            .avatarUrl || null
+                                        : currentAdminAvatarUrl);
+                                    const avatarNode = (
+                                      <EmployeeAvatar
+                                        avatarUrl={senderAvatarUrl}
+                                        name={senderName}
+                                        email={senderEmail || undefined}
+                                        className="h-9 w-9 shrink-0"
+                                        fallbackClassName="text-[11px]"
+                                      />
+                                    );
+                                    return (
+                                      <div
+                                        key={message.id}
+                                        className={cn(
+                                          "flex items-start gap-3",
+                                          fromEmployee
+                                            ? "justify-start"
+                                            : "justify-end"
+                                        )}
+                                        dir="ltr"
+                                      >
+                                        {fromEmployee ? (
+                                          <>
+                                            {avatarNode}
+                                            <div
+                                              className={cn(
+                                                "max-w-[70%] rounded-2xl border px-4 py-3 text-right shadow-[0_18px_40px_-32px_rgba(15,23,42,0.32)]",
+                                                "border-[#E7D8AA] bg-[#FBF7E8] text-slate-900"
+                                              )}
+                                              dir="rtl"
+                                            >
+                                              <div className="flex flex-wrap items-center gap-2">
+                                                <Badge
+                                                  variant="outline"
+                                                  className="rounded-full border-[#E7D8AA] bg-white text-[#8b6700] shadow-none"
+                                                >
+                                                  {senderName}
+                                                </Badge>
+                                                <Badge
+                                                  variant="outline"
+                                                  className="rounded-full border-[#E7D8AA] bg-[#F8F2DD] text-[#8b6700] shadow-none"
+                                                >
+                                                  رسالة موظف
+                                                </Badge>
+                                                <Badge
+                                                  variant="outline"
+                                                  className="rounded-full border-slate-200 bg-white text-slate-500 shadow-none"
+                                                >
+                                                  {message.typeLabel}
+                                                </Badge>
+                                              </div>
 
-                              {activeEmployeeMessage.isRead &&
-                              activeEmployeeMessage.readAtDate &&
-                              activeEmployeeMessage.toUserId === selectedEmployeeAuthUid ? (
-                                <div className="text-xs text-emerald-700">
-                                  تمت قراءة الرسالة في{" "}
-                                  {formatDateTimeEN(activeEmployeeMessage.readAtDate)}
-                                </div>
-                              ) : null}
+                                              <div className="mt-4 whitespace-pre-wrap break-words text-[0.97rem] leading-8 text-slate-800 [overflow-wrap:anywhere]">
+                                                {message.body ||
+                                                  "لا يوجد نص محفوظ لهذه الرسالة."}
+                                              </div>
+
+                                              <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200/80 pt-3 text-xs text-slate-500">
+                                                <span>
+                                                  {message.createdAtDate
+                                                    ? formatDateTimeEN(
+                                                        message.createdAtDate
+                                                      )
+                                                    : "تاريخ غير متوفر"}
+                                                </span>
+                                                <span>وارد من الموظف</span>
+                                              </div>
+                                            </div>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <div
+                                              className={cn(
+                                                "max-w-[70%] rounded-2xl border px-4 py-3 text-right shadow-[0_18px_40px_-32px_rgba(15,23,42,0.32)]",
+                                                "border-slate-200 bg-white text-slate-800"
+                                              )}
+                                              dir="rtl"
+                                            >
+                                              <div className="flex flex-wrap items-center gap-2">
+                                                <Badge
+                                                  variant="outline"
+                                                  className="rounded-full border-slate-200 bg-slate-50 text-slate-700 shadow-none"
+                                                >
+                                                  {senderName}
+                                                </Badge>
+                                                <Badge
+                                                  variant="outline"
+                                                  className="rounded-full border-slate-200 bg-white text-slate-500 shadow-none"
+                                                >
+                                                  رسالة HR
+                                                </Badge>
+                                                <Badge
+                                                  variant="outline"
+                                                  className="rounded-full border-slate-200 bg-white text-slate-500 shadow-none"
+                                                >
+                                                  {message.typeLabel}
+                                                </Badge>
+                                              </div>
+
+                                              <div className="mt-4 whitespace-pre-wrap break-words text-[0.97rem] leading-8 text-slate-800 [overflow-wrap:anywhere]">
+                                                {message.body ||
+                                                  "لا يوجد نص محفوظ لهذه الرسالة."}
+                                              </div>
+
+                                              <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200/80 pt-3 text-xs text-slate-500">
+                                                <span>
+                                                  {message.createdAtDate
+                                                    ? formatDateTimeEN(
+                                                        message.createdAtDate
+                                                      )
+                                                    : "تاريخ غير متوفر"}
+                                                </span>
+                                                <span>
+                                                  {message.isRead &&
+                                                  message.readAtDate
+                                                    ? `تمت القراءة في ${formatDateTimeEN(
+                                                        message.readAtDate
+                                                      )}`
+                                                    : "بانتظار القراءة"}
+                                                </span>
+                                              </div>
+                                            </div>
+                                            {avatarNode}
+                                          </>
+                                        )}
+                                      </div>
+                                    );
+                                  }
+                                )}
+                              </div>
                             </div>
                           ) : (
                             <div className="rounded-[20px] border border-dashed border-slate-200 bg-white px-5 py-10 text-center text-sm text-slate-500">
-                              اختر رسالة من القائمة لعرض محتواها هنا.
+                              اختر محادثة من القائمة لعرض سجلها هنا.
                             </div>
                           )}
                         </div>
@@ -2271,11 +3123,43 @@ export default function EmployeesManagementPage() {
                         <div className="rounded-[24px] border border-slate-200/80 bg-slate-50/75 p-5">
                           <div className="mb-4 space-y-1">
                             <div className="text-sm font-semibold text-slate-900">
-                              إرسال رسالة جديدة
+                              {composeEmployeeMessageAsNew ||
+                              !activeEmployeeConversation
+                                ? "إرسال رسالة جديدة"
+                                : "الرد داخل المحادثة المحددة"}
                             </div>
                             <p className="text-sm leading-6 text-slate-500">
-                              ستصل الرسالة للموظف داخل صفحة الرسائل، مع تنبيه داخلي مباشر.
+                              {composeEmployeeMessageAsNew ||
+                              !activeEmployeeConversation
+                                ? "ستصل الرسالة للموظف داخل صفحة الرسائل، مع تنبيه داخلي مباشر."
+                                : "سيتم إلحاق الرسالة بالمحادثة الحالية بحيث يظهر الرد من الموظف داخل نفس السجل."}
                             </p>
+                          </div>
+
+                          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
+                            <span>
+                              {composeEmployeeMessageAsNew ||
+                              !activeEmployeeConversation
+                                ? "الوضع الحالي: بدء محادثة جديدة"
+                                : "الوضع الحالي: الرد على المحادثة المحددة"}
+                            </span>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() =>
+                                setComposeEmployeeMessageAsNew(
+                                  current => !current
+                                )
+                              }
+                              disabled={
+                                sendingEmployeeMessage ||
+                                !activeEmployeeConversation
+                              }
+                            >
+                              {composeEmployeeMessageAsNew
+                                ? "الرد داخل المحادثة الحالية"
+                                : "بدء محادثة جديدة"}
+                            </Button>
                           </div>
 
                           <div className="grid gap-4 md:grid-cols-[220px_minmax(0,1fr)]">
@@ -2288,14 +3172,19 @@ export default function EmployeesManagementPage() {
                                     value as EmployeeMessageType
                                   )
                                 }
-                                disabled={!canManageEmployees || sendingEmployeeMessage}
+                                disabled={
+                                  !canManageEmployees || sendingEmployeeMessage
+                                }
                               >
                                 <SelectTrigger className="w-full bg-white">
                                   <SelectValue placeholder="اختر نوع الرسالة" />
                                 </SelectTrigger>
                                 <SelectContent>
                                   {EMPLOYEE_MESSAGE_TYPE_OPTIONS.map(option => (
-                                    <SelectItem key={option.value} value={option.value}>
+                                    <SelectItem
+                                      key={option.value}
+                                      value={option.value}
+                                    >
                                       {option.label}
                                     </SelectItem>
                                   ))}
@@ -2313,8 +3202,10 @@ export default function EmployeesManagementPage() {
                                   )
                                 }
                                 placeholder="اكتب الرسالة الداخلية التي ستصل إلى الموظف"
-                                className="min-h-32 bg-white"
-                                disabled={!canManageEmployees || sendingEmployeeMessage}
+                                className="min-h-36 resize-y bg-white text-right leading-7 [direction:rtl]"
+                                disabled={
+                                  !canManageEmployees || sendingEmployeeMessage
+                                }
                               />
                             </Field>
                           </div>
@@ -2336,18 +3227,31 @@ export default function EmployeesManagementPage() {
                               type="button"
                               className="bg-[#F2B705] text-slate-950 hover:bg-[#e0ab00]"
                               onClick={() => void handleSendEmployeeMessage()}
-                              disabled={!canManageEmployees || sendingEmployeeMessage}
+                              disabled={
+                                !canManageEmployees || sendingEmployeeMessage
+                              }
                             >
                               <Mail className="ml-2 h-4 w-4" />
-                              {sendingEmployeeMessage ? "جارٍ الإرسال..." : "إرسال الرسالة"}
+                              {sendingEmployeeMessage
+                                ? "جارٍ الإرسال..."
+                                : composeEmployeeMessageAsNew ||
+                                    !activeEmployeeConversation
+                                  ? "إرسال الرسالة"
+                                  : "إرسال الرد"}
                             </Button>
                           </div>
                         </div>
                       </div>
                     </div>
-                  </div>
+                  </CardContent>
+                </Card>
 
-                  <div className="rounded-[28px] border border-slate-200/80 bg-white/95 p-5 shadow-sm">
+                <Card
+                  id="employee-section-files"
+                  ref={employeeFilesSectionRef}
+                  className="order-50 scroll-mt-36 gap-0 overflow-hidden border-slate-200/80 bg-white/95 py-0 shadow-sm lg:scroll-mt-44"
+                >
+                  <CardHeader className="border-b border-slate-100 bg-white/90 px-6 pt-6 pb-4">
                     <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                       <div className="space-y-2">
                         <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
@@ -2370,270 +3274,339 @@ export default function EmployeesManagementPage() {
                           value={String(visibleEmployeeFiles.length)}
                         />
                         <LeaveOverviewStat
-                          icon={unreadEmployeeFilesCount > 0 ? Clock3 : CheckCircle2}
+                          icon={
+                            unreadEmployeeFilesCount > 0 ? Clock3 : CheckCircle2
+                          }
                           label="ملفات جديدة"
                           value={String(unreadEmployeeFilesCount)}
                         />
                       </div>
                     </div>
+                  </CardHeader>
 
-                    {archivedEmployeeFilesCount > 0 ? (
-                      <div className="mt-4 rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                        يتم إخفاء {archivedEmployeeFilesCount} من النسخ المستبدلة عن القائمة
-                        الأساسية.
-                      </div>
-                    ) : null}
-
-                    <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(320px,0.42fr)_minmax(0,0.58fr)]">
-                      <div className="rounded-[24px] border border-slate-200/80 bg-slate-50/70 p-5">
-                        <div className="space-y-4">
-                          {replacingEmployeeFile ? (
-                            <div className="rounded-[18px] border border-emerald-200 bg-emerald-50/80 px-4 py-3 text-sm text-emerald-800">
-                              <div className="font-semibold">وضع الاستبدال مفعل</div>
-                              <div className="mt-1">
-                                سيتم رفع نسخة معدلة بدل الملف: {replacingEmployeeFile.title}
-                              </div>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                className="mt-3 rounded-full border-emerald-200 bg-white text-emerald-800 hover:bg-emerald-100"
-                                onClick={resetEmployeeFileForm}
-                                disabled={uploadingEmployeeFile}
-                              >
-                                إلغاء الاستبدال
-                              </Button>
-                            </div>
-                          ) : null}
-
-                          <Field label="عنوان الملف">
-                            <Input
-                              value={employeeFileForm.title}
-                              onChange={event =>
-                                handleEmployeeFileFormChange("title", event.target.value)
-                              }
-                              placeholder="مثال: خطاب مباشرة العمل"
-                              disabled={!canManageEmployees || uploadingEmployeeFile}
-                            />
-                          </Field>
-
-                          <Field label="وصف الملف">
-                            <Textarea
-                              value={employeeFileForm.description}
-                              onChange={event =>
-                                handleEmployeeFileFormChange("description", event.target.value)
-                              }
-                              placeholder="أضف وصفًا بسيطًا للملف"
-                              className="min-h-28"
-                              disabled={!canManageEmployees || uploadingEmployeeFile}
-                            />
-                          </Field>
-
-                          <Field label="نوع الملف">
-                            <Select
-                              value={employeeFileForm.fileType}
-                              onValueChange={value =>
-                                handleEmployeeFileFormChange("fileType", value)
-                              }
-                              disabled={!canManageEmployees || uploadingEmployeeFile}
-                            >
-                              <SelectTrigger className="w-full bg-white">
-                                <SelectValue placeholder="اختر نوع الملف" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {EMPLOYEE_FILE_TYPE_OPTIONS.map(option => (
-                                  <SelectItem key={option.value} value={option.value}>
-                                    {option.label}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </Field>
-
-                          <Field label="اختيار الملف">
-                            <Input
-                              ref={employeeFileInputRef}
-                              type="file"
-                              onChange={handleEmployeeFileSelected}
-                              disabled={!canManageEmployees || uploadingEmployeeFile}
-                            />
-                          </Field>
-
-                          <div className="rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
-                            {employeeFileForm.file ? (
-                              <div className="space-y-1">
-                                <div className="font-semibold text-slate-900">
-                                  {employeeFileForm.file.name}
-                                </div>
-                                <div>الحجم: {formatFileSizeEN(employeeFileForm.file.size)}</div>
-                              </div>
-                            ) : (
-                              "لم يتم اختيار ملف بعد."
-                            )}
-                          </div>
-
-                          <Button
-                            type="button"
-                            className="w-full bg-[#F2B705] text-slate-950 hover:bg-[#e0ab00]"
-                            onClick={() => void handleUploadEmployeeFile()}
-                            disabled={!canManageEmployees || uploadingEmployeeFile}
-                          >
-                            <Upload className="ml-2 h-4 w-4" />
-                            {uploadingEmployeeFile
-                              ? "جارٍ رفع الملف..."
-                              : replacingEmployeeFile
-                                ? "رفع نسخة معدلة"
-                                : "رفع ملف"}
-                          </Button>
+                  <CardContent className="p-5">
+                    <div className="space-y-6">
+                      {archivedEmployeeFilesCount > 0 ? (
+                        <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                          يتم إخفاء {archivedEmployeeFilesCount} من النسخ
+                          المستبدلة عن القائمة الأساسية.
                         </div>
-                      </div>
+                      ) : null}
 
-                      <div className="space-y-4">
-                        {employeeFilesLoading ? (
-                          <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50/70 px-5 py-10 text-center text-sm text-slate-500">
-                            جاري تحميل ملفات الموظف...
-                          </div>
-                        ) : visibleEmployeeFiles.length ? (
-                          visibleEmployeeFiles.map(file => (
-                            <div
-                              key={file.id}
-                              className="rounded-[24px] border border-slate-200/80 bg-slate-50/70 p-5"
-                            >
-                              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                                <div className="min-w-0 space-y-3">
-                                  <div className="flex flex-wrap items-center gap-2">
-                                    <EmployeeFileVersionBadge file={file} />
-                                    <EmployeeFileStatusBadge file={file} />
-                                    <Badge
-                                      variant="outline"
-                                      className="rounded-full bg-white shadow-none"
+                      <div className="grid gap-6 xl:grid-cols-[minmax(320px,0.42fr)_minmax(0,0.58fr)]">
+                        <div className="rounded-[24px] border border-slate-200/80 bg-slate-50/70 p-5">
+                          <div className="space-y-4">
+                            {replacingEmployeeFile ? (
+                              <div className="rounded-[18px] border border-emerald-200 bg-emerald-50/80 px-4 py-3 text-sm text-emerald-800">
+                                <div className="font-semibold">
+                                  وضع الاستبدال مفعل
+                                </div>
+                                <div className="mt-1">
+                                  سيتم رفع نسخة معدلة بدل الملف:{" "}
+                                  {replacingEmployeeFile.title}
+                                </div>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="mt-3 rounded-full border-emerald-200 bg-white text-emerald-800 hover:bg-emerald-100"
+                                  onClick={resetEmployeeFileForm}
+                                  disabled={uploadingEmployeeFile}
+                                >
+                                  إلغاء الاستبدال
+                                </Button>
+                              </div>
+                            ) : null}
+
+                            <Field label="عنوان الملف">
+                              <Input
+                                value={employeeFileForm.title}
+                                onChange={event =>
+                                  handleEmployeeFileFormChange(
+                                    "title",
+                                    event.target.value
+                                  )
+                                }
+                                placeholder="مثال: خطاب مباشرة العمل"
+                                disabled={
+                                  !canManageEmployees || uploadingEmployeeFile
+                                }
+                              />
+                            </Field>
+
+                            <Field label="وصف الملف">
+                              <Textarea
+                                value={employeeFileForm.description}
+                                onChange={event =>
+                                  handleEmployeeFileFormChange(
+                                    "description",
+                                    event.target.value
+                                  )
+                                }
+                                placeholder="أضف وصفًا بسيطًا للملف"
+                                className="min-h-28"
+                                disabled={
+                                  !canManageEmployees || uploadingEmployeeFile
+                                }
+                              />
+                            </Field>
+
+                            <Field label="نوع الملف">
+                              <Select
+                                value={employeeFileForm.fileType}
+                                onValueChange={value =>
+                                  handleEmployeeFileFormChange(
+                                    "fileType",
+                                    value
+                                  )
+                                }
+                                disabled={
+                                  !canManageEmployees || uploadingEmployeeFile
+                                }
+                              >
+                                <SelectTrigger className="w-full bg-white">
+                                  <SelectValue placeholder="اختر نوع الملف" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {EMPLOYEE_FILE_TYPE_OPTIONS.map(option => (
+                                    <SelectItem
+                                      key={option.value}
+                                      value={option.value}
                                     >
-                                      {file.fileTypeLabel}
-                                    </Badge>
-                                  </div>
+                                      {option.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </Field>
 
+                            <Field label="اختيار الملف">
+                              <Input
+                                ref={employeeFileInputRef}
+                                type="file"
+                                onChange={handleEmployeeFileSelected}
+                                disabled={
+                                  !canManageEmployees || uploadingEmployeeFile
+                                }
+                              />
+                            </Field>
+
+                            <div className="rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
+                              {employeeFileForm.file ? (
+                                <div className="space-y-1">
+                                  <div className="font-semibold text-slate-900">
+                                    {employeeFileForm.file.name}
+                                  </div>
                                   <div>
-                                    <div className="text-lg font-semibold text-slate-950">
-                                      {file.title}
-                                    </div>
-                                    <div className="mt-1 text-sm text-slate-500">
-                                      {file.uploadedAtDate
-                                        ? `تاريخ الرفع: ${formatDateTimeEN(file.uploadedAtDate)}`
-                                        : "تاريخ الرفع غير متوفر"}
-                                    </div>
-                                  </div>
-
-                                  <p className="text-sm leading-7 text-slate-600">
-                                    {file.description || "لا يوجد وصف لهذا الملف."}
-                                  </p>
-
-                                  <div className="flex flex-wrap gap-2">
-                                    <EmployeeFileMetaBadge label={file.fileName} dir="ltr" />
-                                    <EmployeeFileMetaBadge
-                                      label={formatFileSizeEN(file.fileSize)}
-                                    />
-                                    <EmployeeFileMetaBadge
-                                      label={file.contentType || "بدون نوع"}
-                                    />
-                                    {file.uploadedByName ? (
-                                      <EmployeeFileMetaBadge
-                                        label={`بواسطة: ${file.uploadedByName}`}
-                                      />
-                                    ) : null}
-                                  </div>
-
-                                  <div
-                                    className={cn(
-                                      "text-xs",
-                                      file.isRead ? "text-emerald-700" : "text-amber-700"
+                                    الحجم:{" "}
+                                    {formatFileSizeEN(
+                                      employeeFileForm.file.size
                                     )}
-                                  >
-                                    {file.isRead && file.readAtDate
-                                      ? `تمت القراءة في ${formatDateTimeEN(file.readAtDate)}`
-                                      : "الملف لم يُفتح بعد من الموظف."}
                                   </div>
                                 </div>
+                              ) : (
+                                "لم يتم اختيار ملف بعد."
+                              )}
+                            </div>
 
-                                <div className="flex flex-wrap gap-2 lg:justify-end">
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    className="rounded-full"
-                                    onClick={() => handleStartEmployeeFileReplacement(file)}
-                                    disabled={!canManageEmployees || uploadingEmployeeFile}
-                                  >
-                                    <Upload className="ml-2 h-4 w-4" />
-                                    استبدال الملف
-                                  </Button>
+                            <Button
+                              type="button"
+                              className="w-full bg-[#F2B705] text-slate-950 hover:bg-[#e0ab00]"
+                              onClick={() => void handleUploadEmployeeFile()}
+                              disabled={
+                                !canManageEmployees || uploadingEmployeeFile
+                              }
+                            >
+                              <Upload className="ml-2 h-4 w-4" />
+                              {uploadingEmployeeFile
+                                ? "جارٍ رفع الملف..."
+                                : replacingEmployeeFile
+                                  ? "رفع نسخة معدلة"
+                                  : "رفع ملف"}
+                            </Button>
+                          </div>
+                        </div>
 
-                                  {file.viewUrl ? (
+                        <div className="space-y-4">
+                          {employeeFilesLoading ? (
+                            <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50/70 px-5 py-10 text-center text-sm text-slate-500">
+                              جاري تحميل ملفات الموظف...
+                            </div>
+                          ) : visibleEmployeeFiles.length ? (
+                            visibleEmployeeFiles.map(file => (
+                              <div
+                                key={file.id}
+                                className="rounded-[24px] border border-slate-200/80 bg-slate-50/70 p-5"
+                              >
+                                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                                  <div className="min-w-0 space-y-3">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <EmployeeFileVersionBadge file={file} />
+                                      <EmployeeFileStatusBadge file={file} />
+                                      <Badge
+                                        variant="outline"
+                                        className="rounded-full bg-white shadow-none"
+                                      >
+                                        {file.fileTypeLabel}
+                                      </Badge>
+                                    </div>
+
+                                    <div>
+                                      <div className="text-lg font-semibold text-slate-950">
+                                        {file.title}
+                                      </div>
+                                      <div className="mt-1 text-sm text-slate-500">
+                                        {file.uploadedAtDate
+                                          ? `تاريخ الرفع: ${formatDateTimeEN(file.uploadedAtDate)}`
+                                          : "تاريخ الرفع غير متوفر"}
+                                      </div>
+                                    </div>
+
+                                    <p className="text-sm leading-7 text-slate-600">
+                                      {file.description ||
+                                        "لا يوجد وصف لهذا الملف."}
+                                    </p>
+
+                                    <div className="flex flex-wrap gap-2">
+                                      <EmployeeFileMetaBadge
+                                        label={file.fileName}
+                                        dir="ltr"
+                                      />
+                                      <EmployeeFileMetaBadge
+                                        label={formatFileSizeEN(
+                                          file.fileSize ?? null
+                                        )}
+                                      />
+                                      <EmployeeFileMetaBadge
+                                        label={file.contentType || "بدون نوع"}
+                                      />
+                                      {file.uploadedByName ? (
+                                        <EmployeeFileMetaBadge
+                                          label={`بواسطة: ${file.uploadedByName}`}
+                                        />
+                                      ) : null}
+                                    </div>
+
+                                    <div
+                                      className={cn(
+                                        "text-xs",
+                                        file.isRead
+                                          ? "text-emerald-700"
+                                          : "text-amber-700"
+                                      )}
+                                    >
+                                      {file.isRead && file.readAtDate
+                                        ? `تمت القراءة في ${formatDateTimeEN(file.readAtDate)}`
+                                        : "الملف لم يُفتح بعد من الموظف."}
+                                    </div>
+                                  </div>
+
+                                  <div className="flex flex-wrap gap-2 lg:justify-end">
                                     <Button
-                                      asChild
+                                      type="button"
                                       variant="outline"
                                       size="sm"
                                       className="rounded-full"
+                                      onClick={() =>
+                                        handleStartEmployeeFileReplacement(file)
+                                      }
+                                      disabled={
+                                        !canManageEmployees ||
+                                        uploadingEmployeeFile
+                                      }
                                     >
-                                      <a href={file.viewUrl} target="_blank" rel="noreferrer">
-                                        <Eye className="ml-2 h-4 w-4" />
-                                        معاينة
-                                      </a>
+                                      <Upload className="ml-2 h-4 w-4" />
+                                      استبدال الملف
                                     </Button>
-                                  ) : null}
 
-                                  {file.downloadUrl ? (
-                                    <Button asChild size="sm" className="rounded-full">
-                                      <a
-                                        href={file.downloadUrl}
-                                        rel="noreferrer"
-                                        download={file.fileName || true}
+                                    {file.viewUrl ? (
+                                      <Button
+                                        asChild
+                                        variant="outline"
+                                        size="sm"
+                                        className="rounded-full"
                                       >
-                                        <Download className="ml-2 h-4 w-4" />
-                                        تحميل
-                                      </a>
-                                    </Button>
-                                  ) : null}
+                                        <a
+                                          href={file.viewUrl}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                        >
+                                          <Eye className="ml-2 h-4 w-4" />
+                                          معاينة
+                                        </a>
+                                      </Button>
+                                    ) : null}
 
-                                  <Button
-                                    type="button"
-                                    variant="destructive"
-                                    size="sm"
-                                    className="rounded-full"
-                                    onClick={() => void handleDeleteEmployeeFile(file)}
-                                    disabled={
-                                      !canManageEmployees ||
-                                      deletingEmployeeFileId === file.id
-                                    }
-                                  >
-                                    <Trash2 className="ml-2 h-4 w-4" />
-                                    {deletingEmployeeFileId === file.id ? "جارٍ الحذف..." : "حذف"}
-                                  </Button>
+                                    {file.downloadUrl ? (
+                                      <Button
+                                        asChild
+                                        size="sm"
+                                        className="rounded-full"
+                                      >
+                                        <a
+                                          href={file.downloadUrl}
+                                          rel="noreferrer"
+                                          download={file.fileName || true}
+                                        >
+                                          <Download className="ml-2 h-4 w-4" />
+                                          تحميل
+                                        </a>
+                                      </Button>
+                                    ) : null}
+
+                                    <Button
+                                      type="button"
+                                      variant="destructive"
+                                      size="sm"
+                                      className="rounded-full"
+                                      onClick={() =>
+                                        void handleDeleteEmployeeFile(file)
+                                      }
+                                      disabled={
+                                        !canManageEmployees ||
+                                        deletingEmployeeFileId === file.id
+                                      }
+                                    >
+                                      <Trash2 className="ml-2 h-4 w-4" />
+                                      {deletingEmployeeFileId === file.id
+                                        ? "جارٍ الحذف..."
+                                        : "حذف"}
+                                    </Button>
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                          ))
-                        ) : (
-                          <Empty className="min-h-[320px] rounded-[24px] border border-dashed border-slate-200 bg-slate-50/70">
-                            <EmptyHeader>
-                              <EmptyMedia
-                                variant="icon"
-                                className="bg-[#F2B705]/12 text-[#030640]"
-                              >
-                                <Inbox className="size-5" />
-                              </EmptyMedia>
-                              <EmptyTitle>لا توجد ملفات لهذا الموظف</EmptyTitle>
-                              <EmptyDescription>
-                                ارفع أول ملف من النموذج المجاور ليظهر هنا وفي
-                                حساب الموظف مباشرة.
-                              </EmptyDescription>
-                            </EmptyHeader>
-                          </Empty>
-                        )}
+                            ))
+                          ) : (
+                            <Empty className="min-h-[320px] rounded-[24px] border border-dashed border-slate-200 bg-slate-50/70">
+                              <EmptyHeader>
+                                <EmptyMedia
+                                  variant="icon"
+                                  className="bg-[#F2B705]/12 text-[#030640]"
+                                >
+                                  <Inbox className="size-5" />
+                                </EmptyMedia>
+                                <EmptyTitle>
+                                  لا توجد ملفات لهذا الموظف
+                                </EmptyTitle>
+                                <EmptyDescription>
+                                  ارفع أول ملف من النموذج المجاور ليظهر هنا وفي
+                                  حساب الموظف مباشرة.
+                                </EmptyDescription>
+                              </EmptyHeader>
+                            </Empty>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  </CardContent>
+                </Card>
 
-                  <div className="rounded-[28px] border border-slate-200/80 bg-white/95 p-5 shadow-sm">
+                <Card
+                  id="employee-section-leave"
+                  ref={employeeLeaveSectionRef}
+                  className="order-30 scroll-mt-36 gap-0 overflow-hidden border-slate-200/80 bg-white/95 py-0 shadow-sm lg:scroll-mt-44"
+                >
+                  <CardHeader className="border-b border-slate-100 bg-white/90">
                     <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                       <div className="space-y-2">
                         <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
@@ -2644,8 +3617,9 @@ export default function EmployeesManagementPage() {
                           آخر إجازة معتمدة وسجل الطلبات
                         </div>
                         <p className="max-w-2xl text-sm leading-7 text-slate-500">
-                          يتيح هذا القسم متابعة آخر إجازة معتمدة للموظف بشكل واضح، مع مراجعة
-                          جميع الطلبات السابقة واعتماد الطلبات المعلقة أو رفضها.
+                          يتيح هذا القسم متابعة آخر إجازة معتمدة للموظف بشكل
+                          واضح، مع مراجعة جميع الطلبات السابقة واعتماد الطلبات
+                          المعلقة أو رفضها.
                         </p>
                       </div>
 
@@ -2653,20 +3627,25 @@ export default function EmployeesManagementPage() {
                         <LeaveOverviewStat
                           icon={BadgeCheck}
                           label="الرصيد الحالي"
-                          value={selectedEmployeeProfile.employment.leaveBalanceLabel}
+                          value={
+                            selectedEmployeeProfile.employment.leaveBalanceLabel
+                          }
                         />
                         <LeaveOverviewStat
                           icon={
                             latestApprovedLeaveRequest?.status === "approved"
                               ? CheckCircle2
-                              : latestApprovedLeaveRequest?.status === "rejected"
+                              : latestApprovedLeaveRequest?.status ===
+                                  "rejected"
                                 ? XCircle
                                 : Clock3
                           }
                           label="حالة آخر إجازة معتمدة"
                           value={
                             latestApprovedLeaveRequest
-                              ? getLeaveStatusMeta(latestApprovedLeaveRequest.status).label
+                              ? getLeaveStatusMeta(
+                                  latestApprovedLeaveRequest.status
+                                ).label
                               : "لا توجد إجازات"
                           }
                         />
@@ -2675,425 +3654,517 @@ export default function EmployeesManagementPage() {
                           label="عدد الأيام"
                           value={
                             latestApprovedLeaveRequest
-                              ? formatLeaveDaysLabel(latestApprovedLeaveRequest.daysCount)
+                              ? formatLeaveDaysLabel(
+                                  latestApprovedLeaveRequest.daysCount
+                                )
                               : "—"
                           }
                         />
                       </div>
                     </div>
+                  </CardHeader>
 
-                    <div className="mt-5 rounded-[24px] border border-slate-200/80 bg-slate-50/75 p-5">
-                      {latestApprovedLeaveRequest ? (
-                        <div className="space-y-4">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <Badge
-                              variant="outline"
-                              className="rounded-full border-[#F2B705]/35 bg-[#F2B705]/10 text-[#8b6700] shadow-none"
-                            >
-                              آخر إجازة معتمدة
-                            </Badge>
-                            <Badge variant="outline" className="rounded-full">
-                              {getLeaveTypeLabel(latestApprovedLeaveRequest.leaveType)}
-                            </Badge>
-                            <LeaveStatusBadge status={latestApprovedLeaveRequest.status} />
-                          </div>
-
-                          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                            <ReadonlyMeta
-                              icon={CalendarDays}
-                              label="تاريخ البداية"
-                              value={formatDateEN(latestApprovedLeaveRequest.startDate)}
-                            />
-                            <ReadonlyMeta
-                              icon={CalendarDays}
-                              label="تاريخ النهاية"
-                              value={formatDateEN(latestApprovedLeaveRequest.endDate)}
-                            />
-                            <ReadonlyMeta
-                              icon={CalendarDays}
-                              label="عدد الأيام"
-                              value={formatLeaveDaysLabel(latestApprovedLeaveRequest.daysCount)}
-                            />
-                            <ReadonlyMeta
-                              icon={Clock3}
-                              label="تاريخ الطلب"
-                              value={formatDateTimeEN(latestApprovedLeaveRequest.createdAt)}
-                            />
-                          </div>
-
-                          {latestApprovedLeaveRequest.employeeNote ? (
-                            <div className="rounded-[20px] border border-slate-200 bg-white/90 px-4 py-3 text-sm leading-7 text-slate-700">
-                              <span className="font-semibold text-slate-900">
-                                ملاحظة الموظف:
-                              </span>{" "}
-                              {latestApprovedLeaveRequest.employeeNote}
+                  <CardContent className="p-5">
+                    <div className="space-y-5">
+                      <div className="rounded-[24px] border border-slate-200/80 bg-slate-50/75 p-5">
+                        {latestApprovedLeaveRequest ? (
+                          <div className="space-y-4">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Badge
+                                variant="outline"
+                                className="rounded-full border-[#F2B705]/35 bg-[#F2B705]/10 text-[#8b6700] shadow-none"
+                              >
+                                آخر إجازة معتمدة
+                              </Badge>
+                              <Badge variant="outline" className="rounded-full">
+                                {getLeaveTypeLabel(
+                                  latestApprovedLeaveRequest.leaveType
+                                )}
+                              </Badge>
+                              <LeaveStatusBadge
+                                status={latestApprovedLeaveRequest.status}
+                              />
                             </div>
-                          ) : null}
 
-                          {latestApprovedLeaveRequest.hrNote ? (
-                            <div className="rounded-[20px] border border-emerald-200 bg-emerald-50/70 px-4 py-3 text-sm leading-7 text-emerald-800">
-                              <span className="font-semibold">ملاحظة HR:</span>{" "}
-                              {latestApprovedLeaveRequest.hrNote}
+                            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                              <ReadonlyMeta
+                                icon={CalendarDays}
+                                label="تاريخ البداية"
+                                value={formatDateEN(
+                                  latestApprovedLeaveRequest.startDate
+                                )}
+                              />
+                              <ReadonlyMeta
+                                icon={CalendarDays}
+                                label="تاريخ النهاية"
+                                value={formatDateEN(
+                                  latestApprovedLeaveRequest.endDate
+                                )}
+                              />
+                              <ReadonlyMeta
+                                icon={CalendarDays}
+                                label="عدد الأيام"
+                                value={formatLeaveDaysLabel(
+                                  latestApprovedLeaveRequest.daysCount
+                                )}
+                              />
+                              <ReadonlyMeta
+                                icon={Clock3}
+                                label="تاريخ الطلب"
+                                value={formatDateTimeEN(
+                                  latestApprovedLeaveRequest.createdAt
+                                )}
+                              />
                             </div>
-                          ) : null}
-                        </div>
-                      ) : (
-                        <div className="rounded-[22px] border border-dashed border-slate-200 bg-white/90 px-5 py-10 text-center text-sm text-slate-500">
-                          لا توجد أي إجازات أو طلبات إجازة لهذا الموظف حتى الآن.
-                        </div>
-                      )}
-                    </div>
 
-                    <div className="mt-5 space-y-3">
-                      <div className="text-sm font-semibold text-slate-900">
-                        سجل الإجازات
+                            {latestApprovedLeaveRequest.employeeNote ? (
+                              <div className="rounded-[20px] border border-slate-200 bg-white/90 px-4 py-3 text-sm leading-7 text-slate-700">
+                                <span className="font-semibold text-slate-900">
+                                  ملاحظة الموظف:
+                                </span>{" "}
+                                {latestApprovedLeaveRequest.employeeNote}
+                              </div>
+                            ) : null}
+
+                            {latestApprovedLeaveRequest.hrNote ? (
+                              <div className="rounded-[20px] border border-emerald-200 bg-emerald-50/70 px-4 py-3 text-sm leading-7 text-emerald-800">
+                                <span className="font-semibold">
+                                  ملاحظة HR:
+                                </span>{" "}
+                                {latestApprovedLeaveRequest.hrNote}
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : (
+                          <div className="rounded-[22px] border border-dashed border-slate-200 bg-white/90 px-5 py-10 text-center text-sm text-slate-500">
+                            لا توجد أي إجازات أو طلبات إجازة لهذا الموظف حتى
+                            الآن.
+                          </div>
+                        )}
                       </div>
 
-                      {leaveRequestsLoading ? (
-                        <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50/70 px-5 py-10 text-center text-sm text-slate-500">
-                          جاري تحميل طلبات الإجازة...
+                      <div className="space-y-3">
+                        <div className="text-sm font-semibold text-slate-900">
+                          سجل الإجازات
                         </div>
-                      ) : leaveRequests.length ? (
-                        leaveRequests.map((request, index) => {
-                          const isPending = request.status === "pending";
-                          const currentReviewNote =
-                            reviewNotes[request.id] ?? request.hrNote ?? "";
 
-                          return (
-                            <div
-                              key={request.id}
-                              className={cn(
-                                "rounded-[24px] border p-5 shadow-sm",
-                                index === 0
-                                  ? "border-[#F2B705]/35 bg-[#F2B705]/[0.08]"
-                                  : "border-slate-200/80 bg-slate-50/70"
-                              )}
-                            >
-                              <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                                <div className="space-y-3">
-                                  <div className="flex flex-wrap items-center gap-2">
-                                    {index === 0 ? (
+                        {leaveRequestsLoading ? (
+                          <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50/70 px-5 py-10 text-center text-sm text-slate-500">
+                            جاري تحميل طلبات الإجازة...
+                          </div>
+                        ) : leaveRequests.length ? (
+                          leaveRequests.map((request, index) => {
+                            const isPending = request.status === "pending";
+                            const currentReviewNote =
+                              reviewNotes[request.id] ?? request.hrNote ?? "";
+
+                            return (
+                              <div
+                                key={request.id}
+                                className={cn(
+                                  "rounded-[24px] border p-5 shadow-sm",
+                                  index === 0
+                                    ? "border-[#F2B705]/35 bg-[#F2B705]/[0.08]"
+                                    : "border-slate-200/80 bg-slate-50/70"
+                                )}
+                              >
+                                <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                                  <div className="space-y-3">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      {index === 0 ? (
+                                        <Badge
+                                          variant="outline"
+                                          className="rounded-full border-[#F2B705]/35 bg-[#F2B705]/10 text-[#8b6700] shadow-none"
+                                        >
+                                          أحدث طلب
+                                        </Badge>
+                                      ) : null}
                                       <Badge
                                         variant="outline"
-                                        className="rounded-full border-[#F2B705]/35 bg-[#F2B705]/10 text-[#8b6700] shadow-none"
+                                        className="rounded-full"
                                       >
-                                        أحدث طلب
+                                        {getLeaveTypeLabel(request.leaveType)}
                                       </Badge>
-                                    ) : null}
-                                    <Badge variant="outline" className="rounded-full">
-                                      {getLeaveTypeLabel(request.leaveType)}
-                                    </Badge>
-                                    <LeaveStatusBadge status={request.status} />
-                                  </div>
+                                      <LeaveStatusBadge
+                                        status={request.status}
+                                      />
+                                    </div>
 
-                                  <div className="grid gap-2 text-sm text-slate-600">
-                                    <div>
-                                      <span className="font-semibold text-slate-900">
-                                        الفترة:
-                                      </span>{" "}
-                                      {formatLeaveDateRange(
-                                        request.startDate,
-                                        request.endDate
-                                      )}
-                                    </div>
-                                    <div>
-                                      <span className="font-semibold text-slate-900">
-                                        عدد الأيام:
-                                      </span>{" "}
-                                      {formatLeaveDaysLabel(request.daysCount)}
-                                    </div>
-                                    <div>
-                                      <span className="font-semibold text-slate-900">
-                                        تاريخ الإنشاء:
-                                      </span>{" "}
-                                      {formatDateTimeEN(request.createdAt)}
-                                    </div>
-                                    {request.reviewedAt ? (
+                                    <div className="grid gap-2 text-sm text-slate-600">
                                       <div>
                                         <span className="font-semibold text-slate-900">
-                                          تمت المراجعة:
+                                          الفترة:
                                         </span>{" "}
-                                        {formatDateTimeEN(request.reviewedAt)}
+                                        {formatLeaveDateRange(
+                                          request.startDate,
+                                          request.endDate
+                                        )}
+                                      </div>
+                                      <div>
+                                        <span className="font-semibold text-slate-900">
+                                          عدد الأيام:
+                                        </span>{" "}
+                                        {formatLeaveDaysLabel(
+                                          request.daysCount
+                                        )}
+                                      </div>
+                                      <div>
+                                        <span className="font-semibold text-slate-900">
+                                          تاريخ الإنشاء:
+                                        </span>{" "}
+                                        {formatDateTimeEN(request.createdAt)}
+                                      </div>
+                                      {request.reviewedAt ? (
+                                        <div>
+                                          <span className="font-semibold text-slate-900">
+                                            تمت المراجعة:
+                                          </span>{" "}
+                                          {formatDateTimeEN(request.reviewedAt)}
+                                        </div>
+                                      ) : null}
+                                    </div>
+
+                                    {request.employeeNote ? (
+                                      <div className="rounded-[20px] border border-slate-200 bg-white/85 px-4 py-3 text-sm leading-7 text-slate-700">
+                                        <span className="font-semibold text-slate-900">
+                                          ملاحظة الموظف:
+                                        </span>{" "}
+                                        {request.employeeNote}
                                       </div>
                                     ) : null}
                                   </div>
 
-                                  {request.employeeNote ? (
-                                    <div className="rounded-[20px] border border-slate-200 bg-white/85 px-4 py-3 text-sm leading-7 text-slate-700">
+                                  <div className="w-full max-w-xl space-y-3">
+                                    <div className="rounded-[20px] border border-slate-200 bg-white/90 px-4 py-3 text-sm leading-7 text-slate-700">
                                       <span className="font-semibold text-slate-900">
-                                        ملاحظة الموظف:
+                                        ملاحظة HR:
                                       </span>{" "}
-                                      {request.employeeNote}
+                                      {request.hrNote ||
+                                        "لا توجد ملاحظة حتى الآن."}
                                     </div>
-                                  ) : null}
-                                </div>
 
-                                <div className="w-full max-w-xl space-y-3">
-                                  <div className="rounded-[20px] border border-slate-200 bg-white/90 px-4 py-3 text-sm leading-7 text-slate-700">
-                                    <span className="font-semibold text-slate-900">
-                                      ملاحظة HR:
-                                    </span>{" "}
-                                    {request.hrNote || "لا توجد ملاحظة حتى الآن."}
-                                  </div>
-
-                                  {isPending ? (
-                                    <div className="space-y-3 rounded-[20px] border border-slate-200 bg-white/90 p-4">
-                                      <Label className="text-sm font-semibold text-slate-800">
-                                        ملاحظة إدارية للطلب
-                                      </Label>
-                                      <Textarea
-                                        value={currentReviewNote}
-                                        onChange={event =>
-                                          handleReviewNoteChange(
-                                            request.id,
-                                            event.target.value
-                                          )
-                                        }
-                                        placeholder="اكتب ملاحظة عند الاعتماد أو الرفض"
-                                        className="min-h-28"
-                                        disabled={
-                                          !canManageEmployees ||
-                                          reviewingLeaveRequestId === request.id
-                                        }
-                                      />
-
-                                      <div className="flex flex-wrap gap-3">
-                                        <Button
-                                          type="button"
-                                          className="bg-emerald-600 text-white hover:bg-emerald-700"
-                                          disabled={
-                                            !canManageEmployees ||
-                                            reviewingLeaveRequestId === request.id
-                                          }
-                                          onClick={() =>
-                                            void handleReviewLeaveRequest(
-                                              request,
-                                              "approved"
+                                    {isPending ? (
+                                      <div className="space-y-3 rounded-[20px] border border-slate-200 bg-white/90 p-4">
+                                        <Label className="text-sm font-semibold text-slate-800">
+                                          ملاحظة إدارية للطلب
+                                        </Label>
+                                        <Textarea
+                                          value={currentReviewNote}
+                                          onChange={event =>
+                                            handleReviewNoteChange(
+                                              request.id,
+                                              event.target.value
                                             )
                                           }
-                                        >
-                                          {reviewingLeaveRequestId === request.id ? (
-                                            <Clock3 className="ml-2 h-4 w-4 animate-pulse" />
-                                          ) : (
-                                            <CheckCircle2 className="ml-2 h-4 w-4" />
-                                          )}
-                                          اعتماد الطلب
-                                        </Button>
-                                        <Button
-                                          type="button"
-                                          variant="outline"
-                                          className="border-rose-200 text-rose-700 hover:bg-rose-50 hover:text-rose-800"
+                                          placeholder="اكتب ملاحظة عند الاعتماد أو الرفض"
+                                          className="min-h-28"
                                           disabled={
                                             !canManageEmployees ||
-                                            reviewingLeaveRequestId === request.id
+                                            reviewingLeaveRequestId ===
+                                              request.id
                                           }
-                                          onClick={() =>
-                                            void handleReviewLeaveRequest(
-                                              request,
-                                              "rejected"
-                                            )
-                                          }
-                                        >
-                                          <XCircle className="ml-2 h-4 w-4" />
-                                          رفض الطلب
-                                        </Button>
+                                        />
+
+                                        <div className="flex flex-wrap gap-3">
+                                          <Button
+                                            type="button"
+                                            className="bg-emerald-600 text-white hover:bg-emerald-700"
+                                            disabled={
+                                              !canManageEmployees ||
+                                              reviewingLeaveRequestId ===
+                                                request.id
+                                            }
+                                            onClick={() =>
+                                              void handleReviewLeaveRequest(
+                                                request,
+                                                "approved"
+                                              )
+                                            }
+                                          >
+                                            {reviewingLeaveRequestId ===
+                                            request.id ? (
+                                              <Clock3 className="ml-2 h-4 w-4 animate-pulse" />
+                                            ) : (
+                                              <CheckCircle2 className="ml-2 h-4 w-4" />
+                                            )}
+                                            اعتماد الطلب
+                                          </Button>
+                                          <Button
+                                            type="button"
+                                            variant="outline"
+                                            className="border-rose-200 text-rose-700 hover:bg-rose-50 hover:text-rose-800"
+                                            disabled={
+                                              !canManageEmployees ||
+                                              reviewingLeaveRequestId ===
+                                                request.id
+                                            }
+                                            onClick={() =>
+                                              void handleReviewLeaveRequest(
+                                                request,
+                                                "rejected"
+                                              )
+                                            }
+                                          >
+                                            <XCircle className="ml-2 h-4 w-4" />
+                                            رفض الطلب
+                                          </Button>
+                                        </div>
                                       </div>
-                                    </div>
-                                  ) : null}
+                                    ) : null}
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                          );
-                        })
-                      ) : (
-                        <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50/70 px-5 py-10 text-center text-sm text-slate-500">
-                          لا توجد طلبات إجازة مسجلة لهذا الموظف.
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="grid gap-5 md:grid-cols-2">
-                    <Field label="اسم الموظف">
-                      <Input
-                        value={form.fullName}
-                        onChange={event => handleFormChange("fullName", event.target.value)}
-                        placeholder="مثال: نواف العليان"
-                        disabled={!canManageEmployees || saving}
-                      />
-                    </Field>
-
-                    <Field label="البريد الإلكتروني">
-                      <Input
-                        type="email"
-                        dir="ltr"
-                        value={form.email}
-                        onChange={event => handleFormChange("email", event.target.value)}
-                        placeholder="name@example.com"
-                        disabled={!canManageEmployees || saving}
-                      />
-                    </Field>
-
-                    <Field label="رقم الجوال">
-                      <Input
-                        dir="ltr"
-                        value={form.phone}
-                        onChange={event => handleFormChange("phone", event.target.value)}
-                        placeholder="05xxxxxxxx"
-                        disabled={!canManageEmployees || saving}
-                      />
-                    </Field>
-                    <Field label="المسمى الوظيفي">
-                      <Input
-                        value={form.jobTitle}
-                        onChange={event => handleFormChange("jobTitle", event.target.value)}
-                        placeholder="مثال: مسؤول عمليات"
-                        disabled={!canManageEmployees || saving}
-                      />
-                    </Field>
-
-                    <Field label="القسم / الإدارة">
-                      <Input
-                        value={form.department}
-                        onChange={event => handleFormChange("department", event.target.value)}
-                        placeholder="مثال: الموارد البشرية"
-                        disabled={!canManageEmployees || saving}
-                      />
-                    </Field>
-
-                    <Field label="الحالة الوظيفية">
-                      <Select
-                        value={form.employmentStatus}
-                        onValueChange={value => handleFormChange("employmentStatus", value)}
-                        disabled={!canManageEmployees || saving}
-                      >
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="اختر الحالة الوظيفية" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {EMPLOYMENT_STATUS_OPTIONS.map(option => (
-                            <SelectItem key={option.value} value={option.value}>
-                              {option.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </Field>
-
-                    <Field label="تاريخ بداية العمل">
-                      <Input
-                        type="date"
-                        value={form.startDate}
-                        onChange={event => handleFormChange("startDate", event.target.value)}
-                        disabled={!canManageEmployees || saving}
-                      />
-                    </Field>
-
-                    <Field
-                      label="رقم البصمة"
-                      description="حقل اختياري، ويجب ألا يتكرر بين الموظفين عند إدخاله."
-                    >
-                      <Input
-                        dir="ltr"
-                        value={form.fingerprintNumber}
-                        onChange={event =>
-                          handleFormChange("fingerprintNumber", event.target.value)
-                        }
-                        placeholder="مثال: 10245"
-                        disabled={!canManageEmployees || saving}
-                      />
-                    </Field>
-
-                    <Field
-                      label="رصيد الإجازات"
-                      description="يُحفظ كرقم ويمكن لاحقًا ربطه بطلبات الإجازة."
-                    >
-                      <Input
-                        type="number"
-                        inputMode="decimal"
-                        step="0.5"
-                        value={form.leaveBalance}
-                        onChange={event => handleFormChange("leaveBalance", event.target.value)}
-                        placeholder="مثال: 21"
-                        disabled={!canManageEmployees || saving}
-                      />
-                    </Field>
-
-                    <Field
-                      label="صلاحية الصفحة"
-                      description={
-                        canManageEmployees
-                          ? "يمكنك تعديل بيانات العمل وحفظها من هذه الصفحة."
-                          : "تمتلك صلاحية عرض فقط، والحفظ معطل لهذا الحساب."
-                      }
-                    >
-                      <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-                        {canManageEmployees
-                          ? "إدارة كاملة لبيانات الموظف الوظيفية"
-                          : "عرض بيانات الموظف الوظيفية فقط"}
+                            );
+                          })
+                        ) : (
+                          <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50/70 px-5 py-10 text-center text-sm text-slate-500">
+                            لا توجد طلبات إجازة مسجلة لهذا الموظف.
+                          </div>
+                        )}
                       </div>
-                    </Field>
-                  </div>
-
-                  <Field
-                    label="ملاحظات إدارية"
-                    description="ملاحظات داخلية مخصصة للإدارة والموارد البشرية."
-                  >
-                    <Textarea
-                      value={form.adminNotes}
-                      onChange={event => handleFormChange("adminNotes", event.target.value)}
-                      placeholder="اكتب أي ملاحظات إدارية داخلية هنا"
-                      className="min-h-36"
-                      disabled={!canManageEmployees || saving}
-                    />
-                  </Field>
-
-                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-[22px] border border-slate-200 bg-slate-50/80 px-4 py-4">
-                    <div className="text-sm text-slate-500">
-                      {isDirty
-                        ? "هناك تغييرات غير محفوظة على ملف الموظف."
-                        : "البيانات الوظيفية الحالية متزامنة ومحفوظة."}
                     </div>
+                  </CardContent>
+                </Card>
 
-                    <div className="flex flex-wrap gap-3">
-                      <Button
-                        type="button"
+                <Card className="order-20 gap-0 overflow-hidden border-slate-200/80 bg-white/95 py-0 shadow-sm">
+                  <CardHeader className="border-b border-slate-100 bg-white/90 px-6 pt-6 pb-4">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="space-y-1">
+                        <CardTitle className="flex items-center gap-2 text-xl text-slate-950">
+                          <ShieldCheck className="h-5 w-5 text-[#030640]" />
+                          تفاصيل البيانات الوظيفية
+                        </CardTitle>
+                        <CardDescription className="text-sm leading-6 text-slate-500">
+                          حدّث المعلومات الأساسية للموظف من مكان واحد منظم، مع
+                          فصل واضح بين بيانات الملف وبقية الأقسام التشغيلية.
+                        </CardDescription>
+                      </div>
+
+                      <Badge
                         variant="outline"
-                        onClick={handleReset}
-                        disabled={!isDirty || saving}
+                        className={cn(
+                          "w-fit rounded-full shadow-none",
+                          canManageEmployees
+                            ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                            : "border-slate-200 bg-slate-100 text-slate-600"
+                        )}
                       >
-                        إعادة ضبط
-                      </Button>
-                      <Button
-                        type="button"
-                        onClick={() => void handleSave()}
-                        disabled={!canManageEmployees || !isDirty || saving}
-                        className="bg-[#F2B705] text-slate-950 hover:bg-[#e0ab00]"
-                      >
-                        <Save className="ml-2 h-4 w-4" />
-                        {saving ? "جارٍ الحفظ..." : "حفظ البيانات الوظيفية"}
-                      </Button>
+                        {canManageEmployees ? "تعديل مفعل" : "عرض فقط"}
+                      </Badge>
                     </div>
-                  </div>
-                </div>
-              ) : (
-                <Empty className="min-h-[560px] rounded-[24px] border border-dashed border-slate-200 bg-slate-50/70">
-                  <EmptyHeader>
-                    <EmptyMedia
-                      variant="icon"
-                      className="bg-[#F2B705]/12 text-[#030640]"
+                  </CardHeader>
+
+                  <CardContent className="space-y-6 p-6">
+                    <div className="grid gap-5 md:grid-cols-2">
+                      <Field label="اسم الموظف">
+                        <Input
+                          value={form.fullName}
+                          onChange={event =>
+                            handleFormChange("fullName", event.target.value)
+                          }
+                          placeholder="مثال: نواف العليان"
+                          disabled={!canManageEmployees || saving}
+                        />
+                      </Field>
+
+                      <Field label="البريد الإلكتروني">
+                        <Input
+                          type="email"
+                          dir="ltr"
+                          value={form.email}
+                          onChange={event =>
+                            handleFormChange("email", event.target.value)
+                          }
+                          placeholder="name@example.com"
+                          disabled={!canManageEmployees || saving}
+                        />
+                      </Field>
+
+                      <Field label="رقم الجوال">
+                        <Input
+                          dir="ltr"
+                          value={form.phone}
+                          onChange={event =>
+                            handleFormChange("phone", event.target.value)
+                          }
+                          placeholder="05xxxxxxxx"
+                          disabled={!canManageEmployees || saving}
+                        />
+                      </Field>
+                      <Field label="المسمى الوظيفي">
+                        <Input
+                          value={form.jobTitle}
+                          onChange={event =>
+                            handleFormChange("jobTitle", event.target.value)
+                          }
+                          placeholder="مثال: مسؤول عمليات"
+                          disabled={!canManageEmployees || saving}
+                        />
+                      </Field>
+
+                      <Field label="القسم / الإدارة">
+                        <Input
+                          value={form.department}
+                          onChange={event =>
+                            handleFormChange("department", event.target.value)
+                          }
+                          placeholder="مثال: الموارد البشرية"
+                          disabled={!canManageEmployees || saving}
+                        />
+                      </Field>
+
+                      <Field label="الحالة الوظيفية">
+                        <Select
+                          value={form.employmentStatus}
+                          onValueChange={value =>
+                            handleFormChange("employmentStatus", value)
+                          }
+                          disabled={!canManageEmployees || saving}
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="اختر الحالة الوظيفية" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {EMPLOYMENT_STATUS_OPTIONS.map(option => (
+                              <SelectItem
+                                key={option.value}
+                                value={option.value}
+                              >
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </Field>
+
+                      <Field label="تاريخ بداية العمل">
+                        <Input
+                          type="date"
+                          value={form.startDate}
+                          onChange={event =>
+                            handleFormChange("startDate", event.target.value)
+                          }
+                          disabled={!canManageEmployees || saving}
+                        />
+                      </Field>
+
+                      <Field
+                        label="رقم البصمة"
+                        description="حقل اختياري، ويجب ألا يتكرر بين الموظفين عند إدخاله."
+                      >
+                        <Input
+                          dir="ltr"
+                          value={form.fingerprintNumber}
+                          onChange={event =>
+                            handleFormChange(
+                              "fingerprintNumber",
+                              event.target.value
+                            )
+                          }
+                          placeholder="مثال: 10245"
+                          disabled={!canManageEmployees || saving}
+                        />
+                      </Field>
+
+                      <Field
+                        label="رصيد الإجازات"
+                        description="يُحفظ كرقم ويمكن لاحقًا ربطه بطلبات الإجازة."
+                      >
+                        <Input
+                          type="number"
+                          inputMode="decimal"
+                          step="0.5"
+                          value={form.leaveBalance}
+                          onChange={event =>
+                            handleFormChange("leaveBalance", event.target.value)
+                          }
+                          placeholder="مثال: 21"
+                          disabled={!canManageEmployees || saving}
+                        />
+                      </Field>
+
+                      <Field
+                        label="صلاحية الصفحة"
+                        description={
+                          canManageEmployees
+                            ? "يمكنك تعديل بيانات العمل وحفظها من هذه الصفحة."
+                            : "تمتلك صلاحية عرض فقط، والحفظ معطل لهذا الحساب."
+                        }
+                      >
+                        <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                          {canManageEmployees
+                            ? "إدارة كاملة لبيانات الموظف الوظيفية"
+                            : "عرض بيانات الموظف الوظيفية فقط"}
+                        </div>
+                      </Field>
+                    </div>
+
+                    <Field
+                      label="ملاحظات إدارية"
+                      description="ملاحظات داخلية مخصصة للإدارة والموارد البشرية."
                     >
-                      <BriefcaseBusiness className="size-5" />
-                    </EmptyMedia>
-                    <EmptyTitle>لا يوجد موظف محدد</EmptyTitle>
-                    <EmptyDescription>
-                      اختر موظفًا من القائمة لعرض ملفه الوظيفي وإدارة بياناته.
-                    </EmptyDescription>
-                  </EmptyHeader>
-                </Empty>
-              )}
-            </CardContent>
-          </Card>
+                      <Textarea
+                        value={form.adminNotes}
+                        onChange={event =>
+                          handleFormChange("adminNotes", event.target.value)
+                        }
+                        placeholder="اكتب أي ملاحظات إدارية داخلية هنا"
+                        className="min-h-36"
+                        disabled={!canManageEmployees || saving}
+                      />
+                    </Field>
+
+                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-[22px] border border-slate-200 bg-slate-50/80 px-4 py-4">
+                      <div className="text-sm text-slate-500">
+                        {isDirty
+                          ? "هناك تغييرات غير محفوظة على ملف الموظف."
+                          : "البيانات الوظيفية الحالية متزامنة ومحفوظة."}
+                      </div>
+
+                      <div className="flex flex-wrap gap-3">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={handleReset}
+                          disabled={!isDirty || saving}
+                        >
+                          إعادة ضبط
+                        </Button>
+                        <Button
+                          type="button"
+                          onClick={() => void handleSave()}
+                          disabled={!canManageEmployees || !isDirty || saving}
+                          className="bg-[#F2B705] text-slate-950 hover:bg-[#e0ab00]"
+                        >
+                          <Save className="ml-2 h-4 w-4" />
+                          {saving ? "جارٍ الحفظ..." : "حفظ البيانات الوظيفية"}
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            ) : (
+              <Card className="gap-0 overflow-hidden border-slate-200/80 bg-white/95 py-0 shadow-sm">
+                <CardContent className="p-6">
+                  <Empty className="min-h-[560px] rounded-[24px] border border-dashed border-slate-200 bg-slate-50/70">
+                    <EmptyHeader>
+                      <EmptyMedia
+                        variant="icon"
+                        className="bg-[#F2B705]/12 text-[#030640]"
+                      >
+                        <BriefcaseBusiness className="size-5" />
+                      </EmptyMedia>
+                      <EmptyTitle>لا يوجد موظف محدد</EmptyTitle>
+                      <EmptyDescription>
+                        اختر موظفًا من القائمة لعرض ملفه الوظيفي وإدارة بياناته.
+                      </EmptyDescription>
+                    </EmptyHeader>
+                  </Empty>
+                </CardContent>
+              </Card>
+            )}
+          </div>
         </div>
       </div>
     </DashboardLayout>

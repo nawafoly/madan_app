@@ -74,6 +74,8 @@ export type EmployeeProfileDoc = {
 export type EmployeeFileType = (typeof EMPLOYEE_FILE_TYPES)[number] | string;
 export type EmployeeFileStatus = (typeof EMPLOYEE_FILE_STATUSES)[number] | string;
 export type EmployeeMessageType = (typeof EMPLOYEE_MESSAGE_TYPES)[number] | string;
+export type EmployeeMessageRole = "employee" | "hr" | "system" | string;
+export type EmployeeMessageStatus = "sent" | "read" | string;
 export type EmployeeNotificationType =
   | (typeof EMPLOYEE_NOTIFICATION_TYPES)[number]
   | string;
@@ -111,10 +113,22 @@ export type EmployeeFileDoc = {
 export type EmployeeMessageDoc = {
   employeeId?: string | null;
   employeeUid: string;
+  conversationId?: string | null;
+  threadId?: string | null;
+  senderUid?: string | null;
+  senderRole?: EmployeeMessageRole | null;
+  recipientUid?: string | null;
+  messageType?: EmployeeMessageType | null;
+  body?: string | null;
+  status?: EmployeeMessageStatus | null;
   fromUserId: string;
   fromUserName?: string | null;
+  fromUserEmail?: string | null;
+  fromUserPhoto?: string | null;
   toUserId: string;
   toUserName?: string | null;
+  toUserEmail?: string | null;
+  toUserPhoto?: string | null;
   message: string;
   type?: EmployeeMessageType | null;
   relatedTo?: string | null;

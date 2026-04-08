@@ -44,7 +44,7 @@ function pickText(...values: unknown[]) {
 
 function normalizeNotificationType(value: unknown) {
   const normalized = String(value || "system").trim().toLowerCase();
-  return (EMPLOYEE_NOTIFICATION_TYPES.includes(normalized as EmployeeNotificationType)
+  return (EMPLOYEE_NOTIFICATION_TYPES.some(type => type === normalized)
     ? normalized
     : "system") as EmployeeNotificationType;
 }

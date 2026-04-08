@@ -1,4 +1,12 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from "react";
 import {
   EmailAuthProvider,
   reauthenticateWithCredential,
@@ -24,7 +32,9 @@ import {
   CheckCircle2,
   Loader2,
   Mail,
+  Minus,
   Phone,
+  Plus,
   ShieldCheck,
   UserRound,
   CalendarDays,
@@ -47,8 +57,17 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Slider } from "@/components/ui/slider";
 import { auth, db } from "@/_core/firebase";
 import { useAuth } from "@/_core/hooks/useAuth";
 import {
@@ -74,24 +93,50 @@ import {
   sortEmployeeLeaveRequests,
   type EmployeeLeaveRequestRecord,
 } from "@/lib/employeeLeave";
+import {
+  AVATAR_CROP_FRAME_INSET_RATIO,
+  clampAvatarCropPosition,
+  clampNumber,
+  getAvatarCroppedAreaPixels,
+  getAvatarCropMetrics,
+  type AvatarCroppedAreaPixels,
+  type AvatarCropPosition,
+} from "@/lib/avatarCrop";
 import { uploadDocumentToCloudflare } from "@/lib/documentUploadService";
 import { formatDateEN, formatDateTimeEN } from "@/lib/formatters";
 import { cn } from "@/lib/utils";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
 const AVATAR_MAX_SIZE_BYTES = 5 * 1024 * 1024;
+const AVATAR_CROP_OUTPUT_SIZE = 512;
+const AVATAR_CROP_MIN_ZOOM = 1;
+const AVATAR_CROP_MAX_ZOOM = 3;
+
+type AvatarCropDraft = {
+  objectUrl: string;
+  fileName: string;
+  fileType: string;
+  naturalWidth: number;
+  naturalHeight: number;
+};
 
 function initialsFromName(name: string, email: string) {
   const source = String(name || email || "").trim();
   if (!source) return "م";
   const parts = source
     .split(/\s+/)
-    .map((part) => part.trim())
+    .map(part => part.trim())
     .filter(Boolean)
     .slice(0, 2);
   return parts
-    .map((part) => part.charAt(0))
+    .map(part => part.charAt(0))
     .join("")
     .toUpperCase();
 }
@@ -124,6 +169,127 @@ function validateAvatarFile(file: File) {
   if (file.size > AVATAR_MAX_SIZE_BYTES) {
     throw new Error("حجم الصورة كبير. الحد الأعلى 5MB.");
   }
+}
+
+function loadImageElement(src: string) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () =>
+      reject(new Error("تعذر تحميل الصورة المختارة للمعاينة."));
+    image.src = src;
+  });
+}
+
+async function createAvatarCropDraft(file: File): Promise<AvatarCropDraft> {
+  const objectUrl = URL.createObjectURL(file);
+
+  try {
+    const image = await loadImageElement(objectUrl);
+    return {
+      objectUrl,
+      fileName: file.name,
+      fileType: file.type,
+      naturalWidth: image.naturalWidth || image.width || 1,
+      naturalHeight: image.naturalHeight || image.height || 1,
+    };
+  } catch (error) {
+    URL.revokeObjectURL(objectUrl);
+    throw error;
+  }
+}
+
+function resolveAvatarOutputType(fileType: string) {
+  switch (
+    String(fileType || "")
+      .trim()
+      .toLowerCase()
+  ) {
+    case "image/png":
+      return "image/png";
+    case "image/webp":
+      return "image/webp";
+    default:
+      return "image/jpeg";
+  }
+}
+
+async function buildCroppedAvatarFile(input: {
+  draft: AvatarCropDraft;
+  croppedAreaPixels: AvatarCroppedAreaPixels;
+}) {
+  const image = await loadImageElement(input.draft.objectUrl);
+  const outputType = resolveAvatarOutputType(input.draft.fileType);
+  const canvas = document.createElement("canvas");
+  const context = canvas.getContext("2d");
+
+  if (!context) {
+    throw new Error("تعذر تجهيز الصورة المقصوصة.");
+  }
+
+  canvas.width = AVATAR_CROP_OUTPUT_SIZE;
+  canvas.height = AVATAR_CROP_OUTPUT_SIZE;
+  const cropWidth = clampNumber(
+    input.croppedAreaPixels.width,
+    1,
+    input.draft.naturalWidth
+  );
+  const cropHeight = clampNumber(
+    input.croppedAreaPixels.height,
+    1,
+    input.draft.naturalHeight
+  );
+  const cropX = clampNumber(
+    input.croppedAreaPixels.x,
+    0,
+    Math.max(0, input.draft.naturalWidth - cropWidth)
+  );
+  const cropY = clampNumber(
+    input.croppedAreaPixels.y,
+    0,
+    Math.max(0, input.draft.naturalHeight - cropHeight)
+  );
+
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = "high";
+  context.drawImage(
+    image,
+    cropX,
+    cropY,
+    cropWidth,
+    cropHeight,
+    0,
+    0,
+    canvas.width,
+    canvas.height
+  );
+
+  const blob = await new Promise<Blob | null>(resolve => {
+    canvas.toBlob(
+      resolve,
+      outputType,
+      outputType === "image/jpeg" ? 0.92 : undefined
+    );
+  });
+
+  if (!blob) {
+    throw new Error("تعذر إنشاء الصورة المقصوصة.");
+  }
+
+  const extension =
+    outputType === "image/png"
+      ? "png"
+      : outputType === "image/webp"
+        ? "webp"
+        : "jpg";
+  const fileNameBase =
+    input.draft.fileName.replace(/\.[^.]+$/, "").trim() || "employee-avatar";
+
+  return new File([blob], `${fileNameBase}-avatar.${extension}`, {
+    type: outputType,
+    lastModified: Date.now(),
+  });
 }
 
 function SectionHeading({
@@ -268,13 +434,34 @@ function LeaveSummaryCard({
 export default function EmployeeProfilePage() {
   const { user } = useAuth();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const avatarCropViewportRef = useRef<HTMLDivElement | null>(null);
+  const avatarCropDragRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    originX: number;
+    originY: number;
+  } | null>(null);
 
   const [userDoc, setUserDoc] = useState<EmployeeProfileUserDoc | null>(null);
   const [loading, setLoading] = useState(true);
   const [phoneInput, setPhoneInput] = useState("");
   const [savingPhone, setSavingPhone] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
-  const [leaveRequests, setLeaveRequests] = useState<EmployeeLeaveRequestRecord[]>([]);
+  const [avatarCropOpen, setAvatarCropOpen] = useState(false);
+  const [avatarCropDraft, setAvatarCropDraft] =
+    useState<AvatarCropDraft | null>(null);
+  const [avatarCropZoom, setAvatarCropZoom] = useState(1);
+  const [avatarCropPosition, setAvatarCropPosition] =
+    useState<AvatarCropPosition>({
+      x: 0,
+      y: 0,
+    });
+  const [avatarCropViewportSize, setAvatarCropViewportSize] = useState(320);
+  const [avatarCropDragging, setAvatarCropDragging] = useState(false);
+  const [leaveRequests, setLeaveRequests] = useState<
+    EmployeeLeaveRequestRecord[]
+  >([]);
   const [leaveRequestsLoading, setLeaveRequestsLoading] = useState(true);
   const [leaveForm, setLeaveForm] = useState({
     leaveType: "annual",
@@ -339,7 +526,12 @@ export default function EmployeeProfilePage() {
     return () => {
       cancelled = true;
     };
-  }, [user?.employeeProfileEnabled, user?.linkedEmployeeId, user?.role, user?.uid]);
+  }, [
+    user?.employeeProfileEnabled,
+    user?.linkedEmployeeId,
+    user?.role,
+    user?.uid,
+  ]);
 
   useEffect(() => {
     if (!user?.uid) {
@@ -360,8 +552,10 @@ export default function EmployeeProfilePage() {
         employeeProfileSource.collectionName,
         employeeProfileSource.docId
       ),
-      (snapshot) => {
-        const snapshotData = snapshot.data() as EmployeeProfileUserDoc | undefined;
+      snapshot => {
+        const snapshotData = snapshot.data() as
+          | EmployeeProfileUserDoc
+          | undefined;
         setUserDoc(
           snapshot.exists()
             ? ({
@@ -374,7 +568,7 @@ export default function EmployeeProfilePage() {
         );
         setLoading(false);
       },
-      (error) => {
+      error => {
         console.error("employee_profile_snapshot_error", error);
         setUserDoc(null);
         setLoading(false);
@@ -393,6 +587,111 @@ export default function EmployeeProfilePage() {
       }),
     [user?.displayName, user?.email, user?.firebaseUser?.photoURL, userDoc]
   );
+  const avatarCropMetrics = useMemo(
+    () =>
+      avatarCropDraft
+        ? getAvatarCropMetrics({
+            naturalWidth: avatarCropDraft.naturalWidth,
+            naturalHeight: avatarCropDraft.naturalHeight,
+            viewportSize: avatarCropViewportSize,
+            zoom: avatarCropZoom,
+          })
+        : null,
+    [avatarCropDraft, avatarCropViewportSize, avatarCropZoom]
+  );
+  const avatarCroppedAreaPixels = useMemo(
+    () =>
+      avatarCropDraft
+        ? getAvatarCroppedAreaPixels({
+            naturalWidth: avatarCropDraft.naturalWidth,
+            naturalHeight: avatarCropDraft.naturalHeight,
+            viewportSize: avatarCropViewportSize,
+            zoom: avatarCropZoom,
+            position: avatarCropPosition,
+            insetRatio: AVATAR_CROP_FRAME_INSET_RATIO,
+          })
+        : null,
+    [
+      avatarCropDraft,
+      avatarCropPosition,
+      avatarCropViewportSize,
+      avatarCropZoom,
+    ]
+  );
+  const avatarCropImageStyle = useMemo(() => {
+    if (!avatarCropMetrics) return undefined;
+
+    const position = clampAvatarCropPosition(
+      avatarCropPosition,
+      avatarCropMetrics
+    );
+
+    return {
+      width: `${avatarCropMetrics.width}px`,
+      height: `${avatarCropMetrics.height}px`,
+      left: `${
+        (avatarCropViewportSize - avatarCropMetrics.width) / 2 + position.x
+      }px`,
+      top: `${
+        (avatarCropViewportSize - avatarCropMetrics.height) / 2 + position.y
+      }px`,
+    };
+  }, [avatarCropMetrics, avatarCropPosition, avatarCropViewportSize]);
+  const avatarCropMiniPreviewStyle = useMemo(() => {
+    if (!avatarCropDraft || !avatarCroppedAreaPixels) return undefined;
+
+    const previewSize = 112;
+    const scale = previewSize / Math.max(1, avatarCroppedAreaPixels.width);
+
+    return {
+      width: `${avatarCropDraft.naturalWidth * scale}px`,
+      height: `${avatarCropDraft.naturalHeight * scale}px`,
+      left: `${-avatarCroppedAreaPixels.x * scale}px`,
+      top: `${-avatarCroppedAreaPixels.y * scale}px`,
+    };
+  }, [avatarCropDraft, avatarCroppedAreaPixels]);
+  const avatarCropZoomLabel = `${Math.round(avatarCropZoom * 100)}%`;
+
+  useEffect(() => {
+    return () => {
+      if (avatarCropDraft?.objectUrl) {
+        URL.revokeObjectURL(avatarCropDraft.objectUrl);
+      }
+    };
+  }, [avatarCropDraft?.objectUrl]);
+
+  useEffect(() => {
+    if (!avatarCropOpen) return;
+
+    const element = avatarCropViewportRef.current;
+    if (!element) return;
+
+    const updateViewportSize = () => {
+      const nextSize = Math.max(
+        240,
+        Math.round(element.getBoundingClientRect().width)
+      );
+      setAvatarCropViewportSize(nextSize);
+    };
+
+    updateViewportSize();
+
+    if (typeof ResizeObserver === "undefined") return;
+
+    const observer = new ResizeObserver(() => {
+      updateViewportSize();
+    });
+    observer.observe(element);
+
+    return () => observer.disconnect();
+  }, [avatarCropOpen, avatarCropDraft]);
+
+  useEffect(() => {
+    if (!avatarCropMetrics) return;
+    setAvatarCropPosition(current =>
+      clampAvatarCropPosition(current, avatarCropMetrics)
+    );
+  }, [avatarCropMetrics]);
 
   useEffect(() => {
     if (!user?.uid) {
@@ -405,7 +704,10 @@ export default function EmployeeProfilePage() {
     const unsubscribe = onSnapshot(
       query(
         collection(db, EMPLOYEE_LEAVE_REQUESTS_COLLECTION),
-        or(where("userId", "==", user.uid), where("employeeUid", "==", user.uid))
+        or(
+          where("userId", "==", user.uid),
+          where("employeeUid", "==", user.uid)
+        )
       ),
       snapshot => {
         const rows = sortEmployeeLeaveRequests(
@@ -475,26 +777,47 @@ export default function EmployeeProfilePage() {
     }
   };
 
+  const resetAvatarCropState = () => {
+    setAvatarCropOpen(false);
+    setAvatarCropDraft(null);
+    setAvatarCropZoom(1);
+    setAvatarCropPosition({ x: 0, y: 0 });
+    setAvatarCropDragging(false);
+    avatarCropDragRef.current = null;
+  };
+
   const handleAvatarButtonClick = () => {
     fileInputRef.current?.click();
   };
 
-  const handleAvatarChange = async (
-    event: ChangeEvent<HTMLInputElement>
-  ) => {
+  const handleAvatarChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file || !user?.uid || !employeeProfileSource) return;
+    event.target.value = "";
 
-    try {
-      validateAvatarFile(file);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "ملف الصورة غير صالح.");
-      event.target.value = "";
+    if (!file) return;
+    if (!user?.uid || !employeeProfileSource) {
+      toast.error("تعذر الوصول إلى ملف الموظف الحالي.");
       return;
     }
 
-    setUploadingAvatar(true);
     try {
+      validateAvatarFile(file);
+      const draft = await createAvatarCropDraft(file);
+      setAvatarCropDraft(draft);
+      setAvatarCropZoom(1);
+      setAvatarCropPosition({ x: 0, y: 0 });
+      setAvatarCropOpen(true);
+      return;
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "ملف الصورة غير صالح."
+      );
+      event.target.value = "";
+      return;
+    }
+  };
+
+  /*
       const uploaded = await uploadDocumentToCloudflare({
         entityType: "employee",
         entityId: employeeProfileSource.entityId,
@@ -541,6 +864,136 @@ export default function EmployeeProfilePage() {
     } finally {
       setUploadingAvatar(false);
       event.target.value = "";
+    }
+  };
+
+    */
+
+  const handleAvatarCropPointerDown = (
+    event: ReactPointerEvent<HTMLDivElement>
+  ) => {
+    if (!avatarCropMetrics) return;
+
+    event.preventDefault();
+    avatarCropDragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      originX: avatarCropPosition.x,
+      originY: avatarCropPosition.y,
+    };
+    setAvatarCropDragging(true);
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const handleAvatarCropPointerMove = (
+    event: ReactPointerEvent<HTMLDivElement>
+  ) => {
+    const activeDrag = avatarCropDragRef.current;
+    if (
+      !activeDrag ||
+      activeDrag.pointerId !== event.pointerId ||
+      !avatarCropMetrics
+    ) {
+      return;
+    }
+
+    setAvatarCropPosition(
+      clampAvatarCropPosition(
+        {
+          x: activeDrag.originX + (event.clientX - activeDrag.startX),
+          y: activeDrag.originY + (event.clientY - activeDrag.startY),
+        },
+        avatarCropMetrics
+      )
+    );
+  };
+
+  const handleAvatarCropPointerEnd = (
+    event: ReactPointerEvent<HTMLDivElement>
+  ) => {
+    if (avatarCropDragRef.current?.pointerId !== event.pointerId) return;
+
+    avatarCropDragRef.current = null;
+    setAvatarCropDragging(false);
+
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  };
+
+  const handleAvatarCropZoomStep = (direction: "in" | "out") => {
+    setAvatarCropZoom(current =>
+      clampNumber(
+        current + (direction === "in" ? 0.15 : -0.15),
+        AVATAR_CROP_MIN_ZOOM,
+        AVATAR_CROP_MAX_ZOOM
+      )
+    );
+  };
+
+  const handleConfirmAvatarCrop = async () => {
+    if (
+      !avatarCropDraft ||
+      !avatarCroppedAreaPixels ||
+      !user?.uid ||
+      !employeeProfileSource
+    ) {
+      return;
+    }
+
+    setUploadingAvatar(true);
+    try {
+      const croppedFile = await buildCroppedAvatarFile({
+        draft: avatarCropDraft,
+        croppedAreaPixels: avatarCroppedAreaPixels,
+      });
+      const uploaded = await uploadDocumentToCloudflare({
+        entityType: "employee",
+        entityId: employeeProfileSource.entityId,
+        category: EMPLOYEE_AVATAR_CATEGORY,
+        file: croppedFile,
+        kind: "attachment",
+        uploadedBy: user.uid,
+        storageFolder: "profile_avatar",
+      });
+
+      const avatarPayload = {
+        id: uploaded.id,
+        fileName: uploaded.fileName,
+        filePath: uploaded.filePath,
+        fileUrl: uploaded.fileUrl,
+        contentType: uploaded.contentType,
+        fileSize: uploaded.fileSize,
+        uploadedAt: uploaded.uploadedAt,
+      };
+
+      await setDoc(
+        doc(
+          db,
+          employeeProfileSource.collectionName,
+          employeeProfileSource.docId
+        ),
+        {
+          ...buildEmployeeAvatarPatch(avatarPayload),
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      if (auth.currentUser) {
+        await updateProfile(auth.currentUser, {
+          photoURL: uploaded.fileUrl,
+        });
+      }
+
+      toast.success("تم تحديث الصورة الشخصية.");
+      resetAvatarCropState();
+    } catch (error) {
+      console.error("employee_avatar_upload_failed", error);
+      toast.error("تعذر رفع الصورة الشخصية.");
+    } finally {
+      setUploadingAvatar(false);
     }
   };
 
@@ -647,10 +1100,7 @@ export default function EmployeeProfilePage() {
 
     setChangingPassword(true);
     try {
-      const credential = EmailAuthProvider.credential(
-        email,
-        currentPassword
-      );
+      const credential = EmailAuthProvider.credential(email, currentPassword);
       await reauthenticateWithCredential(currentUser, credential);
       await updatePassword(currentUser, newPassword);
       setCurrentPassword("");
@@ -689,10 +1139,11 @@ export default function EmployeeProfilePage() {
             <CardContent className="space-y-6 p-6 sm:p-8">
               <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
                 <div className="flex items-center gap-4">
-                  <Avatar className="size-24 border border-slate-200 bg-slate-100 shadow-sm">
+                  <Avatar className="h-52 w-52 shrink-0 rounded-full border-2 border-white bg-slate-100 shadow-sm ring-2 ring-slate-200/80">
                     <AvatarImage
                       src={profile.personal.avatarUrl || undefined}
                       alt={profile.personal.name}
+                      className="object-cover"
                     />
                     <AvatarFallback className="bg-slate-900 text-lg font-semibold text-white">
                       {initialsFromName(
@@ -765,7 +1216,8 @@ export default function EmployeeProfilePage() {
                       رقم الجوال
                     </div>
                     <p className="text-sm leading-7 text-slate-600">
-                      يمكنك تحديث رقم الجوال المرتبط بحسابك لاستخدامه في التواصل.
+                      يمكنك تحديث رقم الجوال المرتبط بحسابك لاستخدامه في
+                      التواصل.
                     </p>
                   </div>
                   <Badge
@@ -780,7 +1232,7 @@ export default function EmployeeProfilePage() {
                   <Input
                     dir="ltr"
                     value={phoneInput}
-                    onChange={(event) => setPhoneInput(event.target.value)}
+                    onChange={event => setPhoneInput(event.target.value)}
                     placeholder="05xxxxxxxx"
                     className="h-12 rounded-2xl border-slate-200 bg-white text-left shadow-none"
                   />
@@ -810,28 +1262,29 @@ export default function EmployeeProfilePage() {
                 تغيير كلمة المرور
               </CardTitle>
               <CardDescription className="text-sm leading-7 text-slate-600">
-                يمكنك تغيير كلمة المرور الخاصة بحسابك فقط. لن يؤثر ذلك على أي إعدادات إدارية أخرى.
+                يمكنك تغيير كلمة المرور الخاصة بحسابك فقط. لن يؤثر ذلك على أي
+                إعدادات إدارية أخرى.
               </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-4">
               <Input
                 type="password"
                 value={currentPassword}
-                onChange={(event) => setCurrentPassword(event.target.value)}
+                onChange={event => setCurrentPassword(event.target.value)}
                 placeholder="كلمة المرور الحالية"
                 className="h-12 rounded-2xl border-slate-200 bg-slate-50/80 shadow-none"
               />
               <Input
                 type="password"
                 value={newPassword}
-                onChange={(event) => setNewPassword(event.target.value)}
+                onChange={event => setNewPassword(event.target.value)}
                 placeholder="كلمة المرور الجديدة"
                 className="h-12 rounded-2xl border-slate-200 bg-slate-50/80 shadow-none"
               />
               <Input
                 type="password"
                 value={confirmPassword}
-                onChange={(event) => setConfirmPassword(event.target.value)}
+                onChange={event => setConfirmPassword(event.target.value)}
                 placeholder="تأكيد كلمة المرور الجديدة"
                 className="h-12 rounded-2xl border-slate-200 bg-slate-50/80 shadow-none"
               />
@@ -899,7 +1352,10 @@ export default function EmployeeProfilePage() {
                   badge={
                     <Badge
                       variant="outline"
-                      className={cn("rounded-full shadow-none", statusBadgeClass)}
+                      className={cn(
+                        "rounded-full shadow-none",
+                        statusBadgeClass
+                      )}
                     >
                       {profile.employment.statusLabel}
                     </Badge>
@@ -915,7 +1371,8 @@ export default function EmployeeProfilePage() {
               </div>
 
               <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50/60 p-4 text-sm leading-7 text-slate-600">
-                بيانات العمل هنا للعرض فقط. لا يمكنك تعديل المسمى الوظيفي أو رصيد الإجازات أو الحالة الوظيفية بنفسك من هذه الصفحة.
+                بيانات العمل هنا للعرض فقط. لا يمكنك تعديل المسمى الوظيفي أو
+                رصيد الإجازات أو الحالة الوظيفية بنفسك من هذه الصفحة.
               </div>
             </CardContent>
           </Card>
@@ -956,7 +1413,8 @@ export default function EmployeeProfilePage() {
                   label="حالة آخر إجازة معتمدة"
                   value={
                     latestApprovedLeaveRequest
-                      ? getLeaveStatusMeta(latestApprovedLeaveRequest.status).label
+                      ? getLeaveStatusMeta(latestApprovedLeaveRequest.status)
+                          .label
                       : "لا توجد إجازات"
                   }
                   icon={
@@ -971,7 +1429,9 @@ export default function EmployeeProfilePage() {
                   label="عدد الأيام"
                   value={
                     latestApprovedLeaveRequest
-                      ? formatLeaveDaysLabel(latestApprovedLeaveRequest.daysCount)
+                      ? formatLeaveDaysLabel(
+                          latestApprovedLeaveRequest.daysCount
+                        )
                       : "—"
                   }
                   icon={CalendarDays}
@@ -987,14 +1447,20 @@ export default function EmployeeProfilePage() {
                           variant="outline"
                           className="rounded-full border-[#F2B705]/35 bg-[#F2B705]/10 text-[#8b6700] shadow-none"
                         >
-                          {getLeaveTypeLabel(latestApprovedLeaveRequest.leaveType)}
+                          {getLeaveTypeLabel(
+                            latestApprovedLeaveRequest.leaveType
+                          )}
                         </Badge>
-                        <LeaveStatusBadge status={latestApprovedLeaveRequest.status} />
+                        <LeaveStatusBadge
+                          status={latestApprovedLeaveRequest.status}
+                        />
                       </div>
 
                       <div className="grid gap-2 text-sm text-slate-600">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-semibold text-slate-900">الفترة:</span>
+                          <span className="font-semibold text-slate-900">
+                            الفترة:
+                          </span>
                           <span>
                             {formatLeaveDateRange(
                               latestApprovedLeaveRequest.startDate,
@@ -1003,8 +1469,14 @@ export default function EmployeeProfilePage() {
                           </span>
                         </div>
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-semibold text-slate-900">تاريخ الطلب:</span>
-                          <span>{formatDateTimeEN(latestApprovedLeaveRequest.createdAt)}</span>
+                          <span className="font-semibold text-slate-900">
+                            تاريخ الطلب:
+                          </span>
+                          <span>
+                            {formatDateTimeEN(
+                              latestApprovedLeaveRequest.createdAt
+                            )}
+                          </span>
                         </div>
                         {latestApprovedLeaveRequest.employeeNote ? (
                           <div className="rounded-2xl border border-slate-200 bg-white/80 px-4 py-3 leading-7 text-slate-600">
@@ -1028,7 +1500,9 @@ export default function EmployeeProfilePage() {
                         آخر إجازة معتمدة
                       </div>
                       <div className="mt-2 text-lg font-semibold text-slate-950">
-                        {formatLeaveDaysLabel(latestApprovedLeaveRequest.daysCount)}
+                        {formatLeaveDaysLabel(
+                          latestApprovedLeaveRequest.daysCount
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1051,7 +1525,8 @@ export default function EmployeeProfilePage() {
                 رفع طلب إجازة
               </CardTitle>
               <CardDescription className="text-sm leading-7 text-slate-600">
-                أدخل تفاصيل الإجازة المطلوبة، وسيصل الطلب للموارد البشرية للمراجعة والاعتماد أو الرفض.
+                أدخل تفاصيل الإجازة المطلوبة، وسيصل الطلب للموارد البشرية
+                للمراجعة والاعتماد أو الرفض.
               </CardDescription>
             </CardHeader>
 
@@ -1178,7 +1653,8 @@ export default function EmployeeProfilePage() {
               الطلبات السابقة
             </CardTitle>
             <CardDescription className="text-sm leading-7 text-slate-600">
-              جميع طلبات الإجازة السابقة تظهر هنا مع حالتها وتواريخها وأي ملاحظات مضافة.
+              جميع طلبات الإجازة السابقة تظهر هنا مع حالتها وتواريخها وأي
+              ملاحظات مضافة.
             </CardDescription>
           </CardHeader>
 
@@ -1220,7 +1696,10 @@ export default function EmployeeProfilePage() {
                           <span className="font-semibold text-slate-900">
                             الفترة:
                           </span>{" "}
-                          {formatLeaveDateRange(request.startDate, request.endDate)}
+                          {formatLeaveDateRange(
+                            request.startDate,
+                            request.endDate
+                          )}
                         </div>
                         <div>
                           <span className="font-semibold text-slate-900">
@@ -1265,6 +1744,173 @@ export default function EmployeeProfilePage() {
           </CardContent>
         </Card>
       </section>
+
+      <Dialog
+        open={avatarCropOpen}
+        onOpenChange={open => {
+          if (uploadingAvatar) return;
+          if (!open) {
+            resetAvatarCropState();
+            return;
+          }
+          setAvatarCropOpen(true);
+        }}
+      >
+        <DialogContent
+          showCloseButton={!uploadingAvatar}
+          className="w-[min(94vw,46rem)] max-w-[46rem] overflow-hidden rounded-[30px] border border-slate-200 bg-white p-0 shadow-[0_28px_80px_-36px_rgba(15,23,42,0.4)]"
+          onPointerDownOutside={event => {
+            if (uploadingAvatar) {
+              event.preventDefault();
+            }
+          }}
+        >
+          <DialogHeader className="border-b border-slate-100 bg-white px-6 pt-6 pb-4 text-right sm:text-right">
+            <DialogTitle className="text-xl font-semibold text-slate-950">
+              معاينة وقص الصورة
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="grid gap-6 px-6 pb-6 pt-5 lg:grid-cols-[minmax(0,1fr)_220px]">
+            <div className="space-y-4">
+              <div
+                ref={avatarCropViewportRef}
+                className={cn(
+                  "relative mx-auto aspect-square w-full max-w-[360px] overflow-hidden rounded-[32px] bg-slate-950 touch-none select-none",
+                  avatarCropDragging ? "cursor-grabbing" : "cursor-grab"
+                )}
+                onPointerDown={handleAvatarCropPointerDown}
+                onPointerMove={handleAvatarCropPointerMove}
+                onPointerUp={handleAvatarCropPointerEnd}
+                onPointerCancel={handleAvatarCropPointerEnd}
+              >
+                {avatarCropDraft ? (
+                  <img
+                    src={avatarCropDraft.objectUrl}
+                    alt="معاينة الصورة الشخصية"
+                    draggable={false}
+                    className="pointer-events-none absolute max-w-none select-none object-cover"
+                    style={avatarCropImageStyle}
+                  />
+                ) : null}
+                <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0,transparent_58%,rgba(15,23,42,0.5)_59%,rgba(15,23,42,0.75)_100%)]" />
+                <div
+                  className="pointer-events-none absolute rounded-full border-[3px] border-white/95 shadow-[0_0_0_1px_rgba(255,255,255,0.12)]"
+                  style={{
+                    inset: `${AVATAR_CROP_FRAME_INSET_RATIO * 100}%`,
+                  }}
+                />
+              </div>
+
+              <div className="rounded-[24px] border border-slate-200 bg-slate-50/85 p-4">
+                <div className="flex items-center justify-between gap-3 text-sm">
+                  <Label className="font-semibold text-slate-800">
+                    مستوى التكبير
+                  </Label>
+                  <span className="font-semibold text-slate-600">
+                    {avatarCropZoomLabel}
+                  </span>
+                </div>
+
+                <div className="mt-4 flex items-center gap-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-10 w-10 rounded-full border-slate-200 bg-white p-0"
+                    onClick={() => handleAvatarCropZoomStep("out")}
+                    disabled={
+                      uploadingAvatar || avatarCropZoom <= AVATAR_CROP_MIN_ZOOM
+                    }
+                  >
+                    <Minus className="h-4 w-4" />
+                  </Button>
+                  <Slider
+                    value={[avatarCropZoom]}
+                    onValueChange={values => {
+                      const nextZoom = values[0] ?? AVATAR_CROP_MIN_ZOOM;
+                      setAvatarCropZoom(
+                        clampNumber(
+                          nextZoom,
+                          AVATAR_CROP_MIN_ZOOM,
+                          AVATAR_CROP_MAX_ZOOM
+                        )
+                      );
+                    }}
+                    min={AVATAR_CROP_MIN_ZOOM}
+                    max={AVATAR_CROP_MAX_ZOOM}
+                    step={0.01}
+                    className="flex-1"
+                    disabled={uploadingAvatar}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-10 w-10 rounded-full border-slate-200 bg-white p-0"
+                    onClick={() => handleAvatarCropZoomStep("in")}
+                    disabled={
+                      uploadingAvatar || avatarCropZoom >= AVATAR_CROP_MAX_ZOOM
+                    }
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="rounded-[24px] border border-slate-200 bg-slate-50/85 p-5 text-center">
+                <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                  المعاينة النهائية
+                </div>
+                <div className="mt-4 flex justify-center">
+                  <div className="relative size-28 overflow-hidden rounded-full border-4 border-white bg-slate-200 shadow-[0_18px_38px_-26px_rgba(15,23,42,0.42)]">
+                    {avatarCropDraft ? (
+                      <img
+                        src={avatarCropDraft.objectUrl}
+                        alt="المعاينة النهائية للصورة"
+                        draggable={false}
+                        className="pointer-events-none absolute max-w-none select-none object-cover"
+                        style={avatarCropMiniPreviewStyle}
+                      />
+                    ) : null}
+                  </div>
+                </div>
+                <p className="mt-4 text-sm leading-6 text-slate-600">
+                  هذه المعاينة تحاكي شكل الصورة داخل الـ Avatar بعد الحفظ.
+                </p>
+              </div>
+
+              <div className="rounded-[24px] border border-dashed border-slate-200 bg-white px-4 py-4 text-sm leading-6 text-slate-600">
+                اسحب الصورة يمينًا أو يسارًا أو للأعلى والأسفل لتحديد أفضل موضع،
+                ثم استخدم شريط التكبير لضبط مقاس الوجه داخل الدائرة.
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="border-t border-slate-100 bg-white px-6 py-4 sm:justify-between">
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-2xl border-slate-200 bg-white"
+              onClick={resetAvatarCropState}
+              disabled={uploadingAvatar}
+            >
+              إلغاء
+            </Button>
+            <Button
+              type="button"
+              className="rounded-2xl bg-slate-950 text-white hover:bg-[#15233c]"
+              onClick={() => void handleConfirmAvatarCrop()}
+              disabled={!avatarCropDraft || uploadingAvatar}
+            >
+              {uploadingAvatar ? (
+                <Loader2 className="ml-2 h-4 w-4 animate-spin" />
+              ) : null}
+              اعتماد الصورة
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {loading ? (
         <div className="pointer-events-none fixed inset-0 z-40 bg-white/45 backdrop-blur-[1px]">
