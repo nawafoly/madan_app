@@ -192,12 +192,14 @@ function EmploymentTile({
   icon: Icon,
   valueClassName,
   badge,
+  dir,
 }: {
   label: string;
   value: string;
   icon: typeof UserRound;
   valueClassName?: string;
   badge?: ReactNode;
+  dir?: "rtl" | "ltr";
 }) {
   return (
     <div className="rounded-[24px] border border-slate-200/80 bg-white/95 p-5 shadow-sm">
@@ -206,6 +208,7 @@ function EmploymentTile({
         {label}
       </div>
       <div
+        dir={dir}
         className={cn(
           "mt-3 break-words text-lg font-semibold text-slate-950",
           valueClassName
@@ -877,6 +880,12 @@ export default function EmployeeProfilePage() {
                       : EMPLOYEE_EMPTY_VALUE
                   }
                   icon={CalendarDays}
+                />
+                <EmploymentTile
+                  label="رقم البصمة"
+                  value={profile.employment.fingerprintNumber}
+                  icon={UserRound}
+                  dir="ltr"
                 />
                 <EmploymentTile
                   label="رصيد الإجازات"

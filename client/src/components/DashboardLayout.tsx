@@ -437,7 +437,8 @@ function DashboardLayoutContent({
   }, [role, user]);
 
   // العنصر النشط
-  const isEmployeeProfileActive = location === EMPLOYEE_PROFILE_PATH;
+  const isEmployeeProfileActive =
+    location === EMPLOYEE_PROFILE_PATH || location === "/employee/files";
   const activeMenuLabel = isEmployeeProfileActive
     ? EMPLOYEE_PROFILE_LABEL
     : (visibleMenuItems.find(item => item.path === location)?.label ?? "Menu");

@@ -1,10 +1,12 @@
 import type { ReactNode } from "react";
+import { FileText, BriefcaseBusiness, ShieldCheck, UserRound } from "lucide-react";
+import { Link, useLocation } from "wouter";
 
 import Footer from "@/components/Footer";
 import Header from "@/components/Header";
 import { Badge } from "@/components/ui/badge";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { BriefcaseBusiness, ShieldCheck } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 type EmployeeLayoutProps = {
   title: string;
@@ -18,7 +20,20 @@ export default function EmployeeLayout({
   children,
 }: EmployeeLayoutProps) {
   const { language } = useLanguage();
+  const [location] = useLocation();
   const layoutDir: "rtl" | "ltr" = language === "ar" ? "rtl" : "ltr";
+  const navItems = [
+    {
+      label: "الملف الشخصي",
+      path: "/employee/profile",
+      icon: UserRound,
+    },
+    {
+      label: "الملفات",
+      path: "/employee/files",
+      icon: FileText,
+    },
+  ];
 
   return (
     <div
@@ -53,6 +68,28 @@ export default function EmployeeLayout({
                   <p className="max-w-3xl text-sm leading-8 text-slate-600 sm:text-[15px]">
                     {description}
                   </p>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  {navItems.map(item => {
+                    const Icon = item.icon;
+                    const isActive = location === item.path;
+                    return (
+                      <Link
+                        key={item.path}
+                        href={item.path}
+                        className={cn(
+                          "inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition-all",
+                          isActive
+                            ? "border-slate-950 bg-slate-950 text-white shadow-sm"
+                            : "border-slate-200 bg-white/80 text-slate-700 hover:border-slate-300 hover:bg-white"
+                        )}
+                      >
+                        <Icon className="h-4 w-4" />
+                        {item.label}
+                      </Link>
+                    );
+                  })}
                 </div>
               </div>
             </div>

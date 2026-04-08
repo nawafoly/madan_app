@@ -23,6 +23,7 @@ export type EmployeeProfileUserDoc = EmployeeProfileDoc & {
   title?: string | null;
   department?: string | null;
   employeeCode?: string | null;
+  fingerprintNumber?: string | null;
   employeeId?: string | null;
   leaveBalance?: number | string | null;
   adminNotes?: string | null;
@@ -56,6 +57,7 @@ export type EmployeeProfileViewModel = {
     statusLabel: string;
     statusTone: "success" | "warning" | "muted";
     employeeCode: string;
+    fingerprintNumber: string;
     isActive: boolean;
   };
 };
@@ -271,6 +273,13 @@ export function normalizeEmployeeProfile(
       user.profile?.employeeCode
     ) || EMPTY_VALUE;
 
+  const fingerprintNumber =
+    pickText(
+      employment.fingerprintNumber,
+      user.fingerprintNumber,
+      user.profile?.fingerprintNumber
+    ) || EMPTY_VALUE;
+
   const employmentStatus = normalizeEmploymentStatus({
     rawStatus:
       (employment.employmentStatus as EmployeeEmploymentStatus | null | undefined) ??
@@ -297,6 +306,7 @@ export function normalizeEmployeeProfile(
       statusLabel: employmentStatus.label,
       statusTone: employmentStatus.tone,
       employeeCode,
+      fingerprintNumber,
       isActive: accountStatus.isActive,
     },
   };

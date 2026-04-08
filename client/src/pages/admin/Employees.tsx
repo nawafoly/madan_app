@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type ReactNode,
+} from "react";
 import {
   collection,
   doc,
@@ -16,11 +23,16 @@ import {
   CalendarDays,
   CheckCircle2,
   Clock3,
+  Download,
+  Eye,
+  FileText,
+  Inbox,
   Mail,
   Phone,
   Save,
   Search,
   ShieldCheck,
+  Upload,
   UserRound,
   XCircle,
 } from "lucide-react";
@@ -58,9 +70,19 @@ import { auth, db } from "@/_core/firebase";
 import { hasPermission, useAuth } from "@/_core/hooks/useAuth";
 import {
   AUDIT_ACTIONS,
+  auditedSetDoc,
   auditedUpdateDoc,
   buildAuditSource,
 } from "@/lib/auditLog";
+import {
+  EMPLOYEE_DEFAULT_FILE_TYPE,
+  EMPLOYEE_FILE_CATEGORY,
+  EMPLOYEE_FILES_COLLECTION,
+  normalizeEmployeeFileRecord,
+  sortEmployeeFiles,
+  type EmployeeFileRecord,
+} from "@/lib/employeeFiles";
+import { uploadDocumentToCloudflare } from "@/lib/documentUploadService";
 import {
   EMPLOYEE_EMPTY_VALUE,
   normalizeEmployeeProfile,
@@ -77,11 +99,18 @@ import {
   sortEmployeeLeaveRequests,
   type EmployeeLeaveRequestRecord,
 } from "@/lib/employeeLeave";
-import { formatDateEN, formatDateTimeEN, formatNumberEN, toDateSafe } from "@/lib/formatters";
+import {
+  formatDateEN,
+  formatDateTimeEN,
+  formatFileSizeEN,
+  formatNumberEN,
+  toDateSafe,
+} from "@/lib/formatters";
 import { cn } from "@/lib/utils";
 import type {
   EmployeeEmploymentDoc,
   EmployeeEmploymentStatus,
+  EmployeeFileDoc,
   EmployeeLeaveRequestDoc,
   EmployeeLeaveRequestStatus,
 } from "@shared/employee";
@@ -100,10 +129,18 @@ type EmployeeFormValues = {
   phone: string;
   jobTitle: string;
   department: string;
+  fingerprintNumber: string;
   employmentStatus: string;
   startDate: string;
   leaveBalance: string;
   adminNotes: string;
+};
+
+type EmployeeFileFormValues = {
+  title: string;
+  description: string;
+  fileType: string;
+  file: File | null;
 };
 
 const EMPLOYMENT_STATUS_OPTIONS: Array<{
@@ -142,6 +179,10 @@ function toNullableNumber(value: string) {
 
   const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function normalizeFingerprintNumber(value: unknown) {
+  return String(value ?? "").trim();
 }
 
 function hasValuesObject(value: unknown) {
@@ -285,6 +326,7 @@ function buildEmployeeFormValues(employee: EmployeeRecord | null | undefined): E
     phone: pickText(personal.phone, employee?.phone, employee?.mobile, employee?.phoneNumber),
     jobTitle: pickText(employment.jobTitle, employment.title, employee?.title),
     department: pickText(employment.department, employee?.department),
+    fingerprintNumber: pickText(employment.fingerprintNumber, employee?.fingerprintNumber),
     employmentStatus:
       pickText(employment.employmentStatus, employment.status) || "active",
     startDate: toDateInputValue(employment.startDate ?? employee?.startDate),
@@ -293,6 +335,15 @@ function buildEmployeeFormValues(employee: EmployeeRecord | null | undefined): E
         ? String(employment.leaveBalance ?? employee?.leaveBalance ?? 0)
         : pickText(employment.leaveBalance, employee?.leaveBalance),
     adminNotes: pickText(employment.adminNotes),
+  };
+}
+
+function buildEmployeeFileFormValues(): EmployeeFileFormValues {
+  return {
+    title: "",
+    description: "",
+    fileType: EMPLOYEE_DEFAULT_FILE_TYPE,
+    file: null,
   };
 }
 
@@ -337,6 +388,39 @@ function ReadonlyMeta({
         {value || EMPLOYEE_EMPTY_VALUE}
       </div>
     </div>
+  );
+}
+
+function EmployeeFileStatusBadge({ file }: { file: EmployeeFileRecord }) {
+  return (
+    <Badge
+      variant="outline"
+      className={cn(
+        "rounded-full shadow-none",
+        file.readStatusTone === "success"
+          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+          : "border-amber-200 bg-amber-50 text-amber-700"
+      )}
+    >
+      {file.readStatusLabel}
+    </Badge>
+  );
+}
+
+function EmployeeFileMetaBadge({
+  label,
+  dir,
+}: {
+  label: string;
+  dir?: "rtl" | "ltr";
+}) {
+  return (
+    <span
+      dir={dir}
+      className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-600"
+    >
+      {label}
+    </span>
   );
 }
 
@@ -425,6 +509,13 @@ export default function EmployeesManagementPage() {
   const [reviewingLeaveRequestId, setReviewingLeaveRequestId] = useState<string | null>(
     null
   );
+  const [employeeFiles, setEmployeeFiles] = useState<EmployeeFileRecord[]>([]);
+  const [employeeFilesLoading, setEmployeeFilesLoading] = useState(false);
+  const [employeeFileForm, setEmployeeFileForm] = useState<EmployeeFileFormValues>(
+    buildEmployeeFileFormValues
+  );
+  const [uploadingEmployeeFile, setUploadingEmployeeFile] = useState(false);
+  const employeeFileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -574,6 +665,7 @@ export default function EmployeesManagementPage() {
             profile.employment.title,
             profile.employment.department,
             profile.employment.employeeCode,
+            profile.employment.fingerprintNumber,
           ]
             .join(" ")
             .toLowerCase(),
@@ -647,6 +739,48 @@ export default function EmployeesManagementPage() {
     return () => unsubscribe();
   }, [selectedEmployeeAuthUid]);
 
+  useEffect(() => {
+    setEmployeeFileForm(buildEmployeeFileFormValues());
+    if (employeeFileInputRef.current) {
+      employeeFileInputRef.current.value = "";
+    }
+  }, [selectedEmployeeId]);
+
+  useEffect(() => {
+    if (!selectedEmployeeAuthUid) {
+      setEmployeeFiles([]);
+      setEmployeeFilesLoading(false);
+      return;
+    }
+
+    setEmployeeFilesLoading(true);
+    const unsubscribe = onSnapshot(
+      query(
+        collection(db, EMPLOYEE_FILES_COLLECTION),
+        where("employeeUid", "==", selectedEmployeeAuthUid)
+      ),
+      snapshot => {
+        const rows = sortEmployeeFiles(
+          snapshot.docs.map(docSnapshot =>
+            normalizeEmployeeFileRecord(
+              docSnapshot.id,
+              (docSnapshot.data() as Record<string, any>) || {}
+            )
+          )
+        );
+        setEmployeeFiles(rows);
+        setEmployeeFilesLoading(false);
+      },
+      snapshotError => {
+        console.error("employee_files_admin_snapshot_error", snapshotError);
+        setEmployeeFiles([]);
+        setEmployeeFilesLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [selectedEmployeeAuthUid]);
+
   const initialForm = useMemo(
     () => buildEmployeeFormValues(selectedEmployee),
     [selectedEmployee]
@@ -663,6 +797,10 @@ export default function EmployeesManagementPage() {
   const latestApprovedLeaveRequest = useMemo(
     () => getLatestApprovedEmployeeLeaveRequest(leaveRequests),
     [leaveRequests]
+  );
+  const unreadEmployeeFilesCount = useMemo(
+    () => employeeFiles.filter(file => !file.isRead).length,
+    [employeeFiles]
   );
 
   const activeEmployeesCount = employeeCards.filter(
@@ -689,6 +827,139 @@ export default function EmployeesManagementPage() {
     setForm(initialForm);
   };
 
+  const handleEmployeeFileFormChange = <
+    K extends keyof Omit<EmployeeFileFormValues, "file">
+  >(
+    key: K,
+    value: EmployeeFileFormValues[K]
+  ) => {
+    setEmployeeFileForm(current => ({
+      ...current,
+      [key]: value,
+    }));
+  };
+
+  const handleEmployeeFileSelected = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] || null;
+    setEmployeeFileForm(current => ({
+      ...current,
+      file,
+    }));
+  };
+
+  const handleUploadEmployeeFile = async () => {
+    if (!selectedEmployee || !selectedEmployeeProfile) return;
+    if (!canManageEmployees) {
+      toast.error("لا تملك صلاحية رفع ملفات الموظفين.");
+      return;
+    }
+
+    const selectedFile = employeeFileForm.file;
+    const normalizedTitle = employeeFileForm.title.trim();
+    const normalizedDescription = employeeFileForm.description.trim();
+    const employeeUid = selectedEmployeeAuthUid || selectedEmployee.id;
+    const employeeId =
+      String(selectedEmployee.linkedEmployeeId || "").trim() || selectedEmployee.id;
+
+    if (!employeeUid) {
+      toast.error("تعذر تحديد الموظف المستهدف لرفع الملف.");
+      return;
+    }
+
+    if (!normalizedTitle) {
+      toast.error("أدخل عنوان الملف أولاً.");
+      return;
+    }
+
+    if (!selectedFile) {
+      toast.error("اختر ملفًا قبل الرفع.");
+      return;
+    }
+
+    setUploadingEmployeeFile(true);
+    try {
+      const uploaded = await uploadDocumentToCloudflare({
+        entityType: "employee",
+        entityId: employeeId,
+        category: EMPLOYEE_FILE_CATEGORY,
+        file: selectedFile,
+        kind: "attachment",
+        uploadedBy: user?.uid || undefined,
+        storageFolder: "internal_files",
+      });
+
+      const fileRef = doc(collection(db, EMPLOYEE_FILES_COLLECTION));
+      const fileDoc: EmployeeFileDoc = {
+        employeeId,
+        employeeUid,
+        userId: selectedEmployee.id,
+        employeeName:
+          selectedEmployeeProfile.personal.name !== EMPLOYEE_EMPTY_VALUE
+            ? selectedEmployeeProfile.personal.name
+            : selectedEmployee.displayName ||
+              selectedEmployee.name ||
+              selectedEmployee.email ||
+              null,
+        title: normalizedTitle,
+        description: normalizedDescription || null,
+        fileType: employeeFileForm.fileType || EMPLOYEE_DEFAULT_FILE_TYPE,
+        fileId: uploaded.id,
+        fileName: uploaded.fileName,
+        filePath: uploaded.filePath,
+        fileUrl: uploaded.fileUrl,
+        contentType: uploaded.contentType || null,
+        fileSize: uploaded.fileSize,
+        category: uploaded.category || EMPLOYEE_FILE_CATEGORY,
+        uploadedBy: user?.uid || null,
+        uploadedByName: user?.displayName || user?.email || "HR",
+        uploadedAt: uploaded.uploadedAt,
+        isRead: false,
+        readAt: null,
+        updatedAt: serverTimestamp(),
+      };
+
+      await auditedSetDoc({
+        ref: fileRef,
+        data: fileDoc as any,
+        action: "employee_file_uploaded",
+        category: "user",
+        entityType: "employee_file",
+        entityId: fileRef.id,
+        source: buildAuditSource({
+          area: "admin",
+          page: "Employees",
+          method: "upload_employee_file",
+        }),
+        relatedIds: {
+          userId: selectedEmployee.id,
+        },
+        message: `Uploaded employee file for ${selectedEmployeeProfile.personal.name}`,
+        meta: {
+          employeeId,
+          employeeUid,
+          employeeName: fileDoc.employeeName || null,
+          title: normalizedTitle,
+          description: normalizedDescription || null,
+          fileName: uploaded.fileName,
+          fileType: fileDoc.fileType || EMPLOYEE_DEFAULT_FILE_TYPE,
+          contentType: uploaded.contentType || null,
+          fileSize: uploaded.fileSize,
+        },
+      });
+
+      setEmployeeFileForm(buildEmployeeFileFormValues());
+      if (employeeFileInputRef.current) {
+        employeeFileInputRef.current.value = "";
+      }
+      toast.success("تم رفع الملف وإرساله إلى ملف الموظف.");
+    } catch (error) {
+      console.error("employee_file_upload_failed", error);
+      toast.error("تعذر رفع ملف الموظف.");
+    } finally {
+      setUploadingEmployeeFile(false);
+    }
+  };
+
   const handleSave = async () => {
     if (!selectedEmployee || !selectedEmployeeProfile) return;
     if (!canManageEmployees) {
@@ -699,6 +970,7 @@ export default function EmployeesManagementPage() {
     const normalizedFullName = form.fullName.trim();
     const normalizedEmail = form.email.trim();
     const normalizedPhone = form.phone.trim();
+    const normalizedFingerprintNumber = normalizeFingerprintNumber(form.fingerprintNumber);
     const leaveBalance = toNullableNumber(form.leaveBalance);
     if (!normalizedFullName) {
       toast.error("يجب إدخال اسم الموظف.");
@@ -715,6 +987,36 @@ export default function EmployeesManagementPage() {
     if (form.leaveBalance.trim() && leaveBalance === null) {
       toast.error("رصيد الإجازات يجب أن يكون رقمًا صالحًا.");
       return;
+    }
+
+    if (normalizedFingerprintNumber) {
+      const duplicateEmployee = employees.find(employee => {
+        if (employee.id === selectedEmployee.id) return false;
+
+        const employeeEmployment = (employee.employeeProfile?.employment ||
+          employee.employment ||
+          {}) as Record<string, any>;
+        const existingFingerprintNumber = normalizeFingerprintNumber(
+          employeeEmployment.fingerprintNumber ?? employee.fingerprintNumber
+        );
+
+        return (
+          !!existingFingerprintNumber &&
+          existingFingerprintNumber.toLowerCase() ===
+            normalizedFingerprintNumber.toLowerCase()
+        );
+      });
+
+      if (duplicateEmployee) {
+        const duplicateEmployeeLabel =
+          pickText(
+            duplicateEmployee.displayName,
+            duplicateEmployee.name,
+            duplicateEmployee.email
+          ) || "موظف آخر";
+        toast.error(`رقم البصمة مستخدم بالفعل لدى ${duplicateEmployeeLabel}.`);
+        return;
+      }
     }
 
     setSaving(true);
@@ -744,6 +1046,7 @@ export default function EmployeesManagementPage() {
         leaveBalance,
         status: form.employmentStatus || "active",
         employmentStatus: form.employmentStatus || "active",
+        fingerprintNumber: normalizedFingerprintNumber || null,
         adminNotes: form.adminNotes.trim() || null,
         updatedAt: serverTimestamp(),
         updatedByUid: user?.uid || null,
@@ -789,6 +1092,7 @@ export default function EmployeesManagementPage() {
             jobTitle: nextEmployment.jobTitle || null,
             department: nextEmployment.department || null,
             employmentStatus: nextEmployment.employmentStatus || null,
+            fingerprintNumber: nextEmployment.fingerprintNumber || null,
             leaveBalance,
           },
         });
@@ -1183,6 +1487,12 @@ export default function EmployeesManagementPage() {
                                 </span>
                               </div>
                               <div className="flex items-center justify-between gap-3">
+                                <span className="text-slate-500">رقم البصمة</span>
+                                <span dir="ltr" className="font-medium text-slate-900">
+                                  {card.profile.employment.fingerprintNumber}
+                                </span>
+                              </div>
+                              <div className="flex items-center justify-between gap-3">
                                 <span className="text-slate-500">بداية العمل</span>
                                 <span className="font-medium text-slate-900">
                                   {startDateLabel}
@@ -1266,7 +1576,7 @@ export default function EmployeesManagementPage() {
                         </div>
                       </div>
 
-                      <div className="grid gap-3 sm:grid-cols-3">
+                      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                         <ReadonlyMeta
                           icon={Mail}
                           label="البريد"
@@ -1288,6 +1598,219 @@ export default function EmployeesManagementPage() {
                               : EMPLOYEE_EMPTY_VALUE
                           }
                         />
+                        <ReadonlyMeta
+                          icon={ShieldCheck}
+                          label="رقم البصمة"
+                          value={selectedEmployeeProfile.employment.fingerprintNumber}
+                          dir="ltr"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-[28px] border border-slate-200/80 bg-white/95 p-5 shadow-sm">
+                    <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                          <FileText className="h-4 w-4" />
+                          الملفات الداخلية
+                        </div>
+                        <div className="text-2xl font-semibold tracking-tight text-slate-950">
+                          رفع وعرض ملفات الموظف
+                        </div>
+                        <p className="max-w-2xl text-sm leading-7 text-slate-500">
+                          يمكن للموارد البشرية رفع ملف جديد لهذا الموظف، وسيظهر
+                          داخل حسابه مع حالة القراءة وتاريخ الاطلاع.
+                        </p>
+                      </div>
+
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <LeaveOverviewStat
+                          icon={FileText}
+                          label="إجمالي الملفات"
+                          value={String(employeeFiles.length)}
+                        />
+                        <LeaveOverviewStat
+                          icon={unreadEmployeeFilesCount > 0 ? Clock3 : CheckCircle2}
+                          label="ملفات جديدة"
+                          value={String(unreadEmployeeFilesCount)}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(320px,0.42fr)_minmax(0,0.58fr)]">
+                      <div className="rounded-[24px] border border-slate-200/80 bg-slate-50/70 p-5">
+                        <div className="space-y-4">
+                          <Field label="عنوان الملف">
+                            <Input
+                              value={employeeFileForm.title}
+                              onChange={event =>
+                                handleEmployeeFileFormChange("title", event.target.value)
+                              }
+                              placeholder="مثال: خطاب مباشرة العمل"
+                              disabled={!canManageEmployees || uploadingEmployeeFile}
+                            />
+                          </Field>
+
+                          <Field label="وصف الملف">
+                            <Textarea
+                              value={employeeFileForm.description}
+                              onChange={event =>
+                                handleEmployeeFileFormChange("description", event.target.value)
+                              }
+                              placeholder="أضف وصفًا بسيطًا للملف"
+                              className="min-h-28"
+                              disabled={!canManageEmployees || uploadingEmployeeFile}
+                            />
+                          </Field>
+
+                          <Field label="اختيار الملف">
+                            <Input
+                              ref={employeeFileInputRef}
+                              type="file"
+                              onChange={handleEmployeeFileSelected}
+                              disabled={!canManageEmployees || uploadingEmployeeFile}
+                            />
+                          </Field>
+
+                          <div className="rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
+                            {employeeFileForm.file ? (
+                              <div className="space-y-1">
+                                <div className="font-semibold text-slate-900">
+                                  {employeeFileForm.file.name}
+                                </div>
+                                <div>الحجم: {formatFileSizeEN(employeeFileForm.file.size)}</div>
+                              </div>
+                            ) : (
+                              "لم يتم اختيار ملف بعد."
+                            )}
+                          </div>
+
+                          <Button
+                            type="button"
+                            className="w-full bg-[#F2B705] text-slate-950 hover:bg-[#e0ab00]"
+                            onClick={() => void handleUploadEmployeeFile()}
+                            disabled={!canManageEmployees || uploadingEmployeeFile}
+                          >
+                            <Upload className="ml-2 h-4 w-4" />
+                            {uploadingEmployeeFile ? "جارٍ رفع الملف..." : "رفع ملف"}
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div className="space-y-4">
+                        {employeeFilesLoading ? (
+                          <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50/70 px-5 py-10 text-center text-sm text-slate-500">
+                            جاري تحميل ملفات الموظف...
+                          </div>
+                        ) : employeeFiles.length ? (
+                          employeeFiles.map(file => (
+                            <div
+                              key={file.id}
+                              className="rounded-[24px] border border-slate-200/80 bg-slate-50/70 p-5"
+                            >
+                              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                                <div className="min-w-0 space-y-3">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <EmployeeFileStatusBadge file={file} />
+                                    <Badge
+                                      variant="outline"
+                                      className="rounded-full bg-white shadow-none"
+                                    >
+                                      {file.fileTypeLabel}
+                                    </Badge>
+                                  </div>
+
+                                  <div>
+                                    <div className="text-lg font-semibold text-slate-950">
+                                      {file.title}
+                                    </div>
+                                    <div className="mt-1 text-sm text-slate-500">
+                                      {file.uploadedAtDate
+                                        ? `تاريخ الرفع: ${formatDateTimeEN(file.uploadedAtDate)}`
+                                        : "تاريخ الرفع غير متوفر"}
+                                    </div>
+                                  </div>
+
+                                  <p className="text-sm leading-7 text-slate-600">
+                                    {file.description || "لا يوجد وصف لهذا الملف."}
+                                  </p>
+
+                                  <div className="flex flex-wrap gap-2">
+                                    <EmployeeFileMetaBadge label={file.fileName} dir="ltr" />
+                                    <EmployeeFileMetaBadge
+                                      label={formatFileSizeEN(file.fileSize)}
+                                    />
+                                    <EmployeeFileMetaBadge
+                                      label={file.contentType || "بدون نوع"}
+                                    />
+                                    {file.uploadedByName ? (
+                                      <EmployeeFileMetaBadge
+                                        label={`بواسطة: ${file.uploadedByName}`}
+                                      />
+                                    ) : null}
+                                  </div>
+
+                                  <div
+                                    className={cn(
+                                      "text-xs",
+                                      file.isRead ? "text-emerald-700" : "text-amber-700"
+                                    )}
+                                  >
+                                    {file.isRead && file.readAtDate
+                                      ? `تمت القراءة في ${formatDateTimeEN(file.readAtDate)}`
+                                      : "الملف لم يُفتح بعد من الموظف."}
+                                  </div>
+                                </div>
+
+                                <div className="flex flex-wrap gap-2 lg:justify-end">
+                                  {file.viewUrl ? (
+                                    <Button
+                                      asChild
+                                      variant="outline"
+                                      size="sm"
+                                      className="rounded-full"
+                                    >
+                                      <a href={file.viewUrl} target="_blank" rel="noreferrer">
+                                        <Eye className="ml-2 h-4 w-4" />
+                                        معاينة
+                                      </a>
+                                    </Button>
+                                  ) : null}
+
+                                  {file.downloadUrl ? (
+                                    <Button asChild size="sm" className="rounded-full">
+                                      <a
+                                        href={file.downloadUrl}
+                                        rel="noreferrer"
+                                        download={file.fileName || true}
+                                      >
+                                        <Download className="ml-2 h-4 w-4" />
+                                        تحميل
+                                      </a>
+                                    </Button>
+                                  ) : null}
+                                </div>
+                              </div>
+                            </div>
+                          ))
+                        ) : (
+                          <Empty className="min-h-[320px] rounded-[24px] border border-dashed border-slate-200 bg-slate-50/70">
+                            <EmptyHeader>
+                              <EmptyMedia
+                                variant="icon"
+                                className="bg-[#F2B705]/12 text-[#030640]"
+                              >
+                                <Inbox className="size-5" />
+                              </EmptyMedia>
+                              <EmptyTitle>لا توجد ملفات لهذا الموظف</EmptyTitle>
+                              <EmptyDescription>
+                                ارفع أول ملف من النموذج المجاور ليظهر هنا وفي
+                                حساب الموظف مباشرة.
+                              </EmptyDescription>
+                            </EmptyHeader>
+                          </Empty>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1644,6 +2167,21 @@ export default function EmployeesManagementPage() {
                         type="date"
                         value={form.startDate}
                         onChange={event => handleFormChange("startDate", event.target.value)}
+                        disabled={!canManageEmployees || saving}
+                      />
+                    </Field>
+
+                    <Field
+                      label="رقم البصمة"
+                      description="حقل اختياري، ويجب ألا يتكرر بين الموظفين عند إدخاله."
+                    >
+                      <Input
+                        dir="ltr"
+                        value={form.fingerprintNumber}
+                        onChange={event =>
+                          handleFormChange("fingerprintNumber", event.target.value)
+                        }
+                        placeholder="مثال: 10245"
                         disabled={!canManageEmployees || saving}
                       />
                     </Field>
