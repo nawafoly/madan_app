@@ -109,6 +109,11 @@ function hasEmployeeProfileSignal(
   userData: Record<string, any>,
   employeeDoc?: Record<string, any> | null
 ) {
+  const normalizedRole = String(userData.role || "").trim().toLowerCase();
+  if (normalizedRole === "client" || normalizedRole === "guest") {
+    return false;
+  }
+
   const userEmployment = (userData.employeeProfile?.employment ||
     userData.employment ||
     {}) as Record<string, any>;
@@ -118,7 +123,7 @@ function hasEmployeeProfileSignal(
 
   return (
     !!employeeDoc ||
-    String(userData.role || "").trim().toLowerCase() === "staff" ||
+    normalizedRole === "staff" ||
     !!pickText(userData.linkedEmployeeId) ||
     hasValuesObject(userEmployment) ||
     hasValuesObject(userPersonal)

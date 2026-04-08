@@ -2213,6 +2213,69 @@ export default function Settings() {
     return Array.from(linkedDocs.values());
   };
 
+  const resolveLinkedEmployeeDocIds = async ({
+    linkedEmployeeId,
+    linkedUserUids,
+  }: {
+    linkedEmployeeId?: string | null;
+    linkedUserUids: Array<string | null | undefined>;
+  }) => {
+    const employeeDocIds = new Set<string>();
+    const normalizedLinkedEmployeeId = String(linkedEmployeeId || "").trim();
+    const candidateUserUids = Array.from(
+      new Set(
+        linkedUserUids
+          .map(uid => String(uid || "").trim())
+          .filter(Boolean)
+      )
+    );
+
+    if (normalizedLinkedEmployeeId) {
+      const linkedEmployeeSnap = await getDoc(
+        doc(db, "employees", normalizedLinkedEmployeeId)
+      );
+
+      if (linkedEmployeeSnap.exists()) {
+        const linkedEmployeeData =
+          (linkedEmployeeSnap.data() as Record<string, any>) || {};
+        const resolvedLinkedUserUid = pickEmployeeDirectoryText(
+          linkedEmployeeData.linkedUserUid,
+          linkedEmployeeData.uid,
+          linkedEmployeeData.userId
+        );
+
+        if (
+          !candidateUserUids.length ||
+          !resolvedLinkedUserUid ||
+          candidateUserUids.includes(resolvedLinkedUserUid)
+        ) {
+          employeeDocIds.add(linkedEmployeeSnap.id);
+        }
+      }
+    }
+
+    for (const linkedUserUid of candidateUserUids) {
+      const directEmployeeSnap = await getDoc(doc(db, "employees", linkedUserUid));
+      if (directEmployeeSnap.exists()) {
+        employeeDocIds.add(directEmployeeSnap.id);
+      }
+
+      for (const fieldName of ["linkedUserUid", "uid", "userId"] as const) {
+        const employeeQuery = query(
+          collection(db, "employees"),
+          where(fieldName, "==", linkedUserUid),
+          limit(10)
+        );
+        const employeeSnapshot = await getDocs(employeeQuery);
+        employeeSnapshot.docs.forEach(employeeDoc => {
+          employeeDocIds.add(employeeDoc.id);
+        });
+      }
+    }
+
+    return Array.from(employeeDocIds.values());
+  };
+
   const ensureLinkedEmployeeRecord = async ({
     employeeProfileEnabled,
     requestedEmployeeId,
@@ -2714,6 +2777,13 @@ export default function Settings() {
     try {
       const id = (u.email || u.id || "").trim().toLowerCase(); // ✅ canonical
       const linkedUserDocs = await resolveLinkedUserDocs(id, u.linkedUserUid);
+      const linkedEmployeeDocIds = await resolveLinkedEmployeeDocIds({
+        linkedEmployeeId: u.linkedEmployeeId,
+        linkedUserUids: [
+          u.linkedUserUid,
+          ...linkedUserDocs.map(linkedUserDoc => linkedUserDoc.id),
+        ],
+      });
       await auditedDeleteDoc({
         ref: doc(db, "admin_users", id),
         action: AUDIT_ACTIONS.USER_UPDATED,
@@ -2737,6 +2807,10 @@ export default function Settings() {
             permissionsDeny: [],
             active: true,
             title: null,
+            employeeProfileEnabled: false,
+            linkedEmployeeId: null,
+            employeeProfile: null,
+            employment: null,
             updatedAt: serverTimestamp(),
           },
           options: { merge: true },
@@ -2755,9 +2829,29 @@ export default function Settings() {
         });
       }
 
+      for (const employeeDocId of linkedEmployeeDocIds) {
+        await auditedDeleteDoc({
+          ref: doc(db, "employees", employeeDocId),
+          action: AUDIT_ACTIONS.USER_UPDATED,
+          category: "user",
+          entityType: "employee",
+          entityId: employeeDocId,
+          source: settingsSource("delete_admin_user_employee_cleanup"),
+          relatedIds: {
+            userId: linkedUserDocs[0]?.id || u.linkedUserUid || id,
+          },
+          message: `Removed linked employee record ${employeeDocId} after deleting admin user ${id}`,
+          meta: {
+            targetUserEmail: id,
+          },
+        });
+      }
+
       toast.success(
         linkedUserDocs.length
-          ? "تم حذف الحساب الإداري وإرجاع المستخدم إلى عميل"
+          ? linkedEmployeeDocIds.length
+            ? "تم حذف الحساب الإداري وتنظيف سجل الموظف المرتبط"
+            : "تم حذف الحساب الإداري وإرجاع المستخدم إلى عميل"
           : "تم حذف الحساب الإداري"
       );
     } catch (e) {

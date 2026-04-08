@@ -204,6 +204,17 @@ function titleCaseLatin(w: string) {
   return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
 }
 
+function pickText(...values: unknown[]) {
+  for (const value of values) {
+    const text = String(value ?? "").trim();
+    if (text && text !== "-" && text !== "undefined" && text !== "null") {
+      return text;
+    }
+  }
+
+  return "";
+}
+
 // تحويل تقريبي من اللاتيني إلى العربي. ليس دقيقًا 100% لكنه يعطي اسمًا مقروءًا.
 function latinToArabicApprox(word: string) {
   const w = word.toLowerCase();
@@ -442,16 +453,6 @@ function DashboardLayoutContent({
     return nameFromEmail((user as any)?.email);
   }, [user]);
 
-  const titleText = useMemo(() => {
-    const t = String((user as any)?.title ?? "").trim();
-    return t && t !== "-" ? t : "";
-  }, [user]);
-
-  const displayNameWithTitle = useMemo(() => {
-    if (!titleText) return displayName;
-    return `${displayName} ${titleText}`.trim();
-  }, [displayName, titleText]);
-
   const sidebarProfile = useMemo(
     () =>
       normalizeEmployeeProfile(sidebarProfileDoc, {
@@ -463,6 +464,21 @@ function DashboardLayoutContent({
   );
 
   const sidebarAvatarUrl = sidebarProfile.personal.avatarUrl;
+  const sidebarJobTitle = useMemo(() => {
+    const resolvedTitle = pickText(
+      (sidebarProfileDoc as any)?.employeeProfile?.employment?.title,
+      (sidebarProfileDoc as any)?.employeeProfile?.employment?.jobTitle,
+      (sidebarProfileDoc as any)?.employment?.title,
+      (sidebarProfileDoc as any)?.employment?.jobTitle,
+      (sidebarProfileDoc as any)?.title,
+      (sidebarProfileDoc as any)?.jobTitle,
+      (sidebarProfileDoc as any)?.profile?.title,
+      (user as any)?.title,
+      (user as any)?.jobTitle
+    );
+
+    return resolvedTitle || "موظف";
+  }, [sidebarProfileDoc, user]);
 
   useEffect(() => {
     if (!user?.uid) {
@@ -714,15 +730,16 @@ function DashboardLayoutContent({
           </SidebarContent>
 
           <SidebarFooter className="border-t border-white/10 bg-slate-950/90 p-3">
-            <DropdownMenu>
+              <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition-colors hover:bg-white/6 group-data-[collapsible=icon]:justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-white/20">
-                  <Avatar className="h-9 w-9 shrink-0 border border-white/10">
+                <button className="group flex w-full items-center gap-3.5 rounded-2xl border border-white/10 bg-gradient-to-r from-white/[0.06] to-white/[0.03] px-3 py-2.5 text-start shadow-[0_18px_40px_-28px_rgba(15,23,42,0.95)] transition-all hover:border-white/15 hover:from-white/[0.08] hover:to-white/[0.05] hover:shadow-[0_22px_46px_-28px_rgba(15,23,42,0.98)] group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-2.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/20">
+                  <Avatar className="h-11 w-11 shrink-0 border border-white/15 ring-2 ring-white/6 shadow-[0_12px_24px_-14px_rgba(15,23,42,0.95)]">
                     <AvatarImage
                       src={sidebarAvatarUrl || undefined}
-                      alt={displayNameWithTitle}
+                      alt={displayName}
+                      className="object-cover"
                     />
-                    <AvatarFallback className="bg-white/[0.06] text-xs font-medium text-slate-100">
+                    <AvatarFallback className="bg-gradient-to-br from-slate-700 via-slate-800 to-slate-950 text-sm font-semibold text-slate-50">
                       {String(displayName ?? "م")
                         .trim()
                         .charAt(0)}
@@ -730,17 +747,17 @@ function DashboardLayoutContent({
                   </Avatar>
                   <div
                     className={cn(
-                      "flex-1 min-w-0 overflow-hidden transition-[max-width,opacity] duration-200",
+                      "min-w-0 flex-1 overflow-hidden transition-[max-width,opacity] duration-200",
                       isCollapsed
                         ? "max-w-0 opacity-0 pointer-events-none"
-                        : "max-w-48 opacity-100"
+                        : "max-w-52 opacity-100"
                     )}
                   >
-                    <p className="truncate text-sm font-medium leading-none text-slate-100">
-                      {displayNameWithTitle}
+                    <p className="truncate text-sm font-semibold leading-5 tracking-tight text-slate-50">
+                      {displayName}
                     </p>
-                    <p className="mt-1.5 truncate text-xs text-slate-400">
-                      {(user as any)?.email || "-"}
+                    <p className="mt-0.5 truncate text-[11px] font-medium leading-5 text-slate-400/90">
+                      {sidebarJobTitle}
                     </p>
                   </div>
                 </button>
