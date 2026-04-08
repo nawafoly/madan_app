@@ -1,12 +1,27 @@
 export const EMPLOYEE_AVATAR_CATEGORY = "employee_avatar" as const;
 export const EMPLOYEE_FILES_COLLECTION = "employee_files" as const;
 export const EMPLOYEE_FILE_CATEGORY = "employee_file" as const;
+export const EMPLOYEE_MESSAGES_COLLECTION = "employee_messages" as const;
+export const EMPLOYEE_NOTIFICATIONS_COLLECTION = "notifications" as const;
 export const EMPLOYEE_DEFAULT_FILE_TYPE = "general" as const;
+export const EMPLOYEE_FILE_STATUS_ACTIVE = "active" as const;
+export const EMPLOYEE_FILE_STATUS_REPLACED = "replaced" as const;
+export const EMPLOYEE_MESSAGE_TYPES = ["message", "notice", "system"] as const;
+export const EMPLOYEE_NOTIFICATION_TYPES = [
+  "leave",
+  "file",
+  "message",
+  "system",
+] as const;
 export const EMPLOYEE_FILE_TYPES = [
   EMPLOYEE_DEFAULT_FILE_TYPE,
   "contract",
   "warning",
   "letter",
+] as const;
+export const EMPLOYEE_FILE_STATUSES = [
+  EMPLOYEE_FILE_STATUS_ACTIVE,
+  EMPLOYEE_FILE_STATUS_REPLACED,
 ] as const;
 
 export type EmployeeAvatarDoc = {
@@ -57,6 +72,11 @@ export type EmployeeProfileDoc = {
 };
 
 export type EmployeeFileType = (typeof EMPLOYEE_FILE_TYPES)[number] | string;
+export type EmployeeFileStatus = (typeof EMPLOYEE_FILE_STATUSES)[number] | string;
+export type EmployeeMessageType = (typeof EMPLOYEE_MESSAGE_TYPES)[number] | string;
+export type EmployeeNotificationType =
+  | (typeof EMPLOYEE_NOTIFICATION_TYPES)[number]
+  | string;
 
 export type EmployeeFileDoc = {
   employeeId: string;
@@ -76,6 +96,47 @@ export type EmployeeFileDoc = {
   uploadedBy?: string | null;
   uploadedByName?: string | null;
   uploadedAt?: unknown;
+  status?: EmployeeFileStatus | null;
+  active?: boolean | null;
+  replacedAt?: unknown | null;
+  replacedBy?: string | null;
+  replacedByName?: string | null;
+  replacedByFileId?: string | null;
+  replacesFileId?: string | null;
+  isRead: boolean;
+  readAt?: unknown | null;
+  updatedAt?: unknown;
+};
+
+export type EmployeeMessageDoc = {
+  employeeId?: string | null;
+  employeeUid: string;
+  fromUserId: string;
+  fromUserName?: string | null;
+  toUserId: string;
+  toUserName?: string | null;
+  message: string;
+  type?: EmployeeMessageType | null;
+  relatedTo?: string | null;
+  relatedId?: string | null;
+  createdAt?: unknown;
+  isRead: boolean;
+  readAt?: unknown | null;
+  updatedAt?: unknown;
+};
+
+export type EmployeeNotificationDoc = {
+  userId: string;
+  uid?: string | null;
+  targetUid?: string | null;
+  title: string;
+  body?: string | null;
+  message?: string | null;
+  type?: EmployeeNotificationType | null;
+  relatedTo?: string | null;
+  relatedId?: string | null;
+  relatedPath?: string | null;
+  createdAt?: unknown;
   isRead: boolean;
   readAt?: unknown | null;
   updatedAt?: unknown;

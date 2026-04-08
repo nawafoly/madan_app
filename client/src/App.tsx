@@ -40,6 +40,7 @@ import DebugAuthPage from "./pages/admin/DebugAuth";
 import Vip from "./pages/admin/Vip";
 import EmployeeProfilePage from "@/pages/employee/Profile";
 import EmployeeFilesPage from "@/pages/employee/Files";
+import EmployeeMessagesPage from "@/pages/employee/Messages";
 
 // ✅ Client pages
 import ClientDashboard from "@/pages/client/MyInvestments";
@@ -221,6 +222,12 @@ function Router() {
           </RequireEmployeeProfileAccess>
         </Route>
 
+        <Route path="/employee/messages">
+          <RequireEmployeeProfileAccess>
+            <EmployeeMessagesPage />
+          </RequireEmployeeProfileAccess>
+        </Route>
+
         <Route path="/employee">
           <Redirect to="/employee/profile" />
         </Route>
@@ -231,6 +238,10 @@ function Router() {
 
         <Route path="/staff/files">
           <Redirect to="/employee/files" />
+        </Route>
+
+        <Route path="/staff/messages">
+          <Redirect to="/employee/messages" />
         </Route>
 
         <Route path="/staff">

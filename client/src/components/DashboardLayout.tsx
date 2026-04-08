@@ -53,6 +53,7 @@ import {
   normalizeEmployeeProfile,
   type EmployeeProfileUserDoc,
 } from "@/lib/employeeProfile";
+import { NotificationBell } from "@/components/NotificationBell";
 import { cn } from "@/lib/utils";
 
 type RoleKey = "owner" | "admin" | "accountant" | "hr";
@@ -438,7 +439,9 @@ function DashboardLayoutContent({
 
   // العنصر النشط
   const isEmployeeProfileActive =
-    location === EMPLOYEE_PROFILE_PATH || location === "/employee/files";
+    location === EMPLOYEE_PROFILE_PATH ||
+    location === "/employee/files" ||
+    location === "/employee/messages";
   const activeMenuLabel = isEmployeeProfileActive
     ? EMPLOYEE_PROFILE_LABEL
     : (visibleMenuItems.find(item => item.path === location)?.label ?? "Menu");
@@ -817,6 +820,8 @@ function DashboardLayoutContent({
               <Home className="h-4 w-4" />
               الرئيسية
             </Button>
+
+            <NotificationBell />
           </div>
         )}
 
@@ -824,6 +829,11 @@ function DashboardLayoutContent({
           ref={mainRef}
           className="flex-1 w-full px-4 md:px-6 lg:px-8 py-4 md:py-6"
         >
+          {!isMobile ? (
+            <div className="mb-5 flex items-center justify-end">
+              <NotificationBell />
+            </div>
+          ) : null}
           {children}
         </main>
       </SidebarInset>

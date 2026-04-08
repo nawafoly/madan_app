@@ -1,5 +1,11 @@
 import type { ReactNode } from "react";
-import { FileText, BriefcaseBusiness, ShieldCheck, UserRound } from "lucide-react";
+import {
+  FileText,
+  BriefcaseBusiness,
+  Mail,
+  ShieldCheck,
+  UserRound,
+} from "lucide-react";
 import { Link, useLocation } from "wouter";
 
 import Footer from "@/components/Footer";
@@ -32,6 +38,11 @@ export default function EmployeeLayout({
       label: "الملفات",
       path: "/employee/files",
       icon: FileText,
+    },
+    {
+      label: "الرسائل",
+      path: "/employee/messages",
+      icon: Mail,
     },
   ];
 

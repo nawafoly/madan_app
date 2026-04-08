@@ -4,7 +4,10 @@ import {
   EMPLOYEE_DEFAULT_FILE_TYPE,
   EMPLOYEE_FILE_CATEGORY,
   EMPLOYEE_FILES_COLLECTION,
+  EMPLOYEE_FILE_STATUS_ACTIVE,
+  EMPLOYEE_FILE_STATUS_REPLACED,
   type EmployeeFileDoc,
+  type EmployeeFileStatus,
   type EmployeeFileType,
 } from "@shared/employee";
 
@@ -12,6 +15,8 @@ export {
   EMPLOYEE_DEFAULT_FILE_TYPE,
   EMPLOYEE_FILE_CATEGORY,
   EMPLOYEE_FILES_COLLECTION,
+  EMPLOYEE_FILE_STATUS_ACTIVE,
+  EMPLOYEE_FILE_STATUS_REPLACED,
 };
 
 export const EMPLOYEE_FILE_TYPE_OPTIONS: Array<{
@@ -30,7 +35,12 @@ export type EmployeeFileRecord = EmployeeFileDoc & {
   downloadUrl: string;
   uploadedAtDate: Date | null;
   readAtDate: Date | null;
+  replacedAtDate: Date | null;
   fileTypeLabel: string;
+  status: EmployeeFileStatus;
+  active: boolean;
+  statusLabel: string;
+  statusTone: "default" | "warning" | "success";
   readStatusLabel: string;
   readStatusTone: "success" | "warning";
 };
@@ -46,6 +56,37 @@ function pickText(...values: unknown[]) {
 function toNullableNumber(value: unknown) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function toNullableBoolean(value: unknown) {
+  return typeof value === "boolean" ? value : null;
+}
+
+export function isEmployeeFileActive(
+  raw: Pick<EmployeeFileDoc, "status" | "active"> | null | undefined
+) {
+  const normalizedStatus = String(raw?.status || "").trim().toLowerCase();
+  const normalizedActive = toNullableBoolean(raw?.active);
+
+  if (normalizedStatus === EMPLOYEE_FILE_STATUS_REPLACED) return false;
+  if (normalizedActive !== null) return normalizedActive;
+  return true;
+}
+
+function normalizeEmployeeFileStatus(value: unknown, active: boolean) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (!normalized) {
+    return active ? EMPLOYEE_FILE_STATUS_ACTIVE : EMPLOYEE_FILE_STATUS_REPLACED;
+  }
+  return normalized as EmployeeFileStatus;
+}
+
+export function getEmployeeFileStatusLabel(value: unknown, active: boolean) {
+  const normalized = normalizeEmployeeFileStatus(value, active);
+  if (normalized === EMPLOYEE_FILE_STATUS_REPLACED) {
+    return "مستبدل";
+  }
+  return "النسخة الحالية";
 }
 
 export function getEmployeeFileTypeLabel(value: unknown) {
@@ -75,6 +116,9 @@ export function normalizeEmployeeFileRecord(
   const uploadedAtDate = toDateSafe(raw?.uploadedAt);
   const isRead = Boolean(raw?.isRead);
   const readAtDate = toDateSafe(raw?.readAt);
+  const active = isEmployeeFileActive(raw);
+  const status = normalizeEmployeeFileStatus(raw?.status, active);
+  const replacedAtDate = toDateSafe(raw?.replacedAt);
 
   return {
     id,
@@ -95,6 +139,13 @@ export function normalizeEmployeeFileRecord(
     uploadedBy: pickText(raw?.uploadedBy) || null,
     uploadedByName: pickText(raw?.uploadedByName) || null,
     uploadedAt: raw?.uploadedAt ?? null,
+    status,
+    active,
+    replacedAt: raw?.replacedAt ?? null,
+    replacedBy: pickText(raw?.replacedBy) || null,
+    replacedByName: pickText(raw?.replacedByName) || null,
+    replacedByFileId: pickText(raw?.replacedByFileId) || null,
+    replacesFileId: pickText(raw?.replacesFileId) || null,
     isRead,
     readAt: raw?.readAt ?? null,
     updatedAt: raw?.updatedAt ?? null,
@@ -102,7 +153,10 @@ export function normalizeEmployeeFileRecord(
     downloadUrl,
     uploadedAtDate,
     readAtDate,
+    replacedAtDate,
     fileTypeLabel: getEmployeeFileTypeLabel(raw?.fileType),
+    statusLabel: getEmployeeFileStatusLabel(raw?.status, active),
+    statusTone: active ? "success" : "default",
     readStatusLabel: isRead ? "مقروء" : "جديد",
     readStatusTone: isRead ? "success" : "warning",
   };
@@ -110,9 +164,16 @@ export function normalizeEmployeeFileRecord(
 
 export function sortEmployeeFiles(records: EmployeeFileRecord[]) {
   return [...records].sort((left, right) => {
+    if (left.active !== right.active) {
+      return left.active ? -1 : 1;
+    }
     const leftTime = left.uploadedAtDate?.getTime() ?? 0;
     const rightTime = right.uploadedAtDate?.getTime() ?? 0;
     if (leftTime !== rightTime) return rightTime - leftTime;
     return left.title.localeCompare(right.title, "ar");
   });
+}
+
+export function filterActiveEmployeeFiles(records: EmployeeFileRecord[]) {
+  return records.filter(record => record.active);
 }

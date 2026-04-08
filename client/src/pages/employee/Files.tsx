@@ -39,6 +39,7 @@ import { db } from "@/_core/firebase";
 import { useAuth } from "@/_core/hooks/useAuth";
 import {
   EMPLOYEE_FILES_COLLECTION,
+  filterActiveEmployeeFiles,
   normalizeEmployeeFileRecord,
   sortEmployeeFiles,
   type EmployeeFileRecord,
@@ -86,6 +87,17 @@ function EmployeeFileCard({
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0 space-y-3">
           <div className="flex flex-wrap items-center gap-2">
+            <Badge
+              variant="outline"
+              className={cn(
+                "rounded-full shadow-none",
+                file.statusTone === "success"
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                  : "border-slate-200 bg-slate-100 text-slate-700"
+              )}
+            >
+              {file.statusLabel}
+            </Badge>
             <Badge
               variant="outline"
               className={cn(
@@ -202,11 +214,13 @@ export default function EmployeeFilesPage() {
     return () => unsubscribe();
   }, [user?.uid]);
 
+  const visibleFiles = useMemo(() => filterActiveEmployeeFiles(files), [files]);
   const unreadFilesCount = useMemo(
-    () => files.filter(file => !file.isRead).length,
-    [files]
+    () => visibleFiles.filter(file => !file.isRead).length,
+    [visibleFiles]
   );
-  const readFilesCount = files.length - unreadFilesCount;
+  const readFilesCount = visibleFiles.length - unreadFilesCount;
+  const archivedFilesCount = files.length - visibleFiles.length;
 
   const handleOpenFile = async (file: EmployeeFileRecord) => {
     const targetUrl = file.viewUrl || file.downloadUrl;
@@ -255,7 +269,7 @@ export default function EmployeeFilesPage() {
     >
       <section className="space-y-6">
         <div className="grid gap-4 md:grid-cols-3">
-          <FilesStat label="إجمالي الملفات" value={String(files.length)} />
+          <FilesStat label="النسخ الحالية" value={String(visibleFiles.length)} />
           <FilesStat
             label="ملفات جديدة"
             value={String(unreadFilesCount)}
@@ -267,6 +281,13 @@ export default function EmployeeFilesPage() {
             tone="success"
           />
         </div>
+
+        {archivedFilesCount > 0 ? (
+          <div className="rounded-[20px] border border-slate-200/80 bg-slate-50/80 px-5 py-4 text-sm text-slate-600">
+            يتم عرض النسخة الحالية فقط لكل ملف. تم إخفاء {archivedFilesCount} من
+            النسخ المستبدلة من القائمة الأساسية.
+          </div>
+        ) : null}
 
         <Card className="rounded-[28px] border-slate-200/80 bg-white/95 shadow-[0_28px_80px_-52px_rgba(15,23,42,0.28)]">
           <CardHeader className="space-y-3">
@@ -287,9 +308,9 @@ export default function EmployeeFilesPage() {
               <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50/70 px-5 py-10 text-center text-sm text-slate-500">
                 جاري تحميل الملفات...
               </div>
-            ) : files.length ? (
+            ) : visibleFiles.length ? (
               <div className="space-y-4">
-                {files.map(file => (
+                {visibleFiles.map(file => (
                   <div key={file.id} className="space-y-2">
                     <EmployeeFileCard file={file} onOpen={handleOpenFile} />
                     {openingFileId === file.id ? (

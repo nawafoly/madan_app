@@ -1,56 +1,46 @@
-// client/src/components/NotificationBell.tsx
-import { Bell } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { useLocation } from "wouter";
+import { Bell, CalendarDays, FileText, Mail, ShieldCheck } from "lucide-react";
+import { formatDistanceToNow } from "date-fns";
+import { ar } from "date-fns/locale";
+import { collection, onSnapshot, orderBy, query, where } from "firebase/firestore";
+
+import { useAuth } from "@/_core/hooks/useAuth";
+import { db } from "@/_core/firebase";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-
-import { formatDistanceToNow } from "date-fns";
-import { ar } from "date-fns/locale";
-
-import { useEffect, useMemo, useState } from "react";
-import { useAuth } from "@/_core/hooks/useAuth";
-import { db } from "@/_core/firebase";
 import {
-  collection,
-  doc,
-  onSnapshot,
-  orderBy,
-  query,
-  updateDoc,
-  where,
-  writeBatch,
-  type Timestamp,
-} from "firebase/firestore";
+  EMPLOYEE_NOTIFICATIONS_COLLECTION,
+  type EmployeeNotificationType,
+} from "@shared/employee";
+import {
+  markInAppNotificationRead,
+  markInAppNotificationsRead,
+  normalizeInAppNotificationRecord,
+  sortInAppNotifications,
+  type InAppNotificationRecord,
+} from "@/lib/inAppNotifications";
 
-type FsNotification = {
-  id: string;
-  title: string;
-  message: string;
-  type?: string;
-  isRead?: boolean;
-  targetUid: string;
-  createdAt?: Timestamp | Date | null;
-};
-
-function toJsDate(v: any): Date {
-  if (!v) return new Date();
-  // Firestore Timestamp
-  if (typeof v?.toDate === "function") return v.toDate();
-  // Date
-  if (v instanceof Date) return v;
-  // string/number fallback
-  const d = new Date(v);
-  return isNaN(d.getTime()) ? new Date() : d;
+function getNotificationIcon(type: EmployeeNotificationType | null | undefined) {
+  const normalized = String(type || "").trim().toLowerCase();
+  if (normalized === "leave") return CalendarDays;
+  if (normalized === "file") return FileText;
+  if (normalized === "message") return Mail;
+  return ShieldCheck;
 }
 
 export function NotificationBell() {
   const { user } = useAuth();
-  const [items, setItems] = useState<FsNotification[]>([]);
+  const [, setLocation] = useLocation();
+  const [open, setOpen] = useState(false);
+  const [items, setItems] = useState<InAppNotificationRecord[]>([]);
+  const [markingAll, setMarkingAll] = useState(false);
 
   useEffect(() => {
     if (!user?.uid) {
@@ -58,146 +48,169 @@ export function NotificationBell() {
       return;
     }
 
-    const q = query(
-      collection(db, "notifications"),
+    const notificationsQuery = query(
+      collection(db, EMPLOYEE_NOTIFICATIONS_COLLECTION),
       where("targetUid", "==", user.uid),
       orderBy("createdAt", "desc")
     );
 
-    const unsub = onSnapshot(
-      q,
-      (snap) => {
-        const rows: FsNotification[] = snap.docs.map((d) => {
-          const data = d.data() as any;
-          return {
-            id: d.id,
-            title: data.title ?? "",
-            message: data.message ?? "",
-            type: data.type ?? "general",
-            isRead: Boolean(data.isRead),
-            targetUid: data.targetUid,
-            createdAt: data.createdAt ?? null,
-          };
-        });
+    const unsubscribe = onSnapshot(
+      notificationsQuery,
+      snapshot => {
+        const rows = sortInAppNotifications(
+          snapshot.docs.map(docSnapshot =>
+            normalizeInAppNotificationRecord(
+              docSnapshot.id,
+              (docSnapshot.data() as Record<string, any>) || {}
+            )
+          )
+        );
         setItems(rows);
       },
-      () => {
-        // لو rules منعت القراءة، نخليها فاضية بدون كسر UI
+      error => {
+        console.error("in_app_notifications_snapshot_error", error);
         setItems([]);
       }
     );
 
-    return () => unsub();
+    return () => unsubscribe();
   }, [user?.uid]);
 
   const unreadCount = useMemo(
-    () => items.filter((n) => !n.isRead).length,
+    () => items.filter(notification => !notification.isRead).length,
     [items]
   );
 
-  const handleMarkAsRead = async (id: string) => {
+  const handleOpenNotification = async (notification: InAppNotificationRecord) => {
     try {
-      await updateDoc(doc(db, "notifications", id), { isRead: true });
-    } catch {
-      // ignore to avoid UI crash
+      if (!notification.isRead) {
+        await markInAppNotificationRead(notification.id);
+      }
+    } catch (error) {
+      console.error("mark_notification_read_failed", error);
+    } finally {
+      setOpen(false);
+      setLocation(notification.targetPath || "/employee/profile");
     }
   };
 
   const handleMarkAllAsRead = async () => {
-    if (!items.length) return;
-    try {
-      const batch = writeBatch(db);
-      items
-        .filter((n) => !n.isRead)
-        .forEach((n) => batch.update(doc(db, "notifications", n.id), { isRead: true }));
-      await batch.commit();
-    } catch {
-      // ignore
-    }
-  };
+    const unreadIds = items.filter(notification => !notification.isRead).map(item => item.id);
+    if (!unreadIds.length) return;
 
-  const getNotificationIcon = (type?: string) => {
-    switch (type) {
-      case "investment_approved":
-        return "✅";
-      case "investment_rejected":
-        return "❌";
-      case "project_update":
-        return "📢";
-      case "vip_offer":
-        return "👑";
-      default:
-        return "🔔";
+    setMarkingAll(true);
+    try {
+      await markInAppNotificationsRead(unreadIds);
+    } catch (error) {
+      console.error("mark_all_notifications_read_failed", error);
+    } finally {
+      setMarkingAll(false);
     }
   };
 
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button variant="ghost" size="icon" className="relative">
           <Bell className="h-5 w-5" />
-          {unreadCount > 0 && (
+          {unreadCount > 0 ? (
             <Badge
               variant="destructive"
-              className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs"
+              className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center p-0 text-xs"
             >
               {unreadCount}
             </Badge>
-          )}
+          ) : null}
         </Button>
       </PopoverTrigger>
 
-      <PopoverContent className="w-80" align="end">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="font-semibold">الإشعارات</h3>
-          {unreadCount > 0 && (
+      <PopoverContent className="w-96 p-0" align="end">
+        <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+          <div>
+            <div className="text-sm font-semibold text-slate-950">التنبيهات</div>
+            <div className="text-xs text-slate-500">
+              {unreadCount > 0 ? `${unreadCount} غير مقروء` : "كل التنبيهات مقروءة"}
+            </div>
+          </div>
+
+          {unreadCount > 0 ? (
             <Button
+              type="button"
               variant="ghost"
               size="sm"
-              onClick={handleMarkAllAsRead}
               className="text-xs"
+              onClick={() => void handleMarkAllAsRead()}
+              disabled={markingAll}
             >
-              تحديد الكل كمقروء
+              {markingAll ? "جارٍ التحديث..." : "تحديد الكل كمقروء"}
             </Button>
-          )}
+          ) : null}
         </div>
 
-        <ScrollArea className="h-[400px]">
-          {items.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              لا توجد إشعارات
+        <ScrollArea className="h-[420px]">
+          {items.length ? (
+            <div className="space-y-2 p-3">
+              {items.map(notification => {
+                const Icon = getNotificationIcon(notification.type);
+                return (
+                  <button
+                    key={notification.id}
+                    type="button"
+                    onClick={() => void handleOpenNotification(notification)}
+                    className={`w-full rounded-2xl border p-3 text-right transition-colors ${
+                      notification.isRead
+                        ? "border-slate-200 bg-white hover:bg-slate-50"
+                        : "border-[#F2B705]/30 bg-[#F2B705]/10 hover:bg-[#F2B705]/15"
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div
+                        className={`rounded-full p-2 ${
+                          notification.isRead
+                            ? "bg-slate-100 text-slate-600"
+                            : "bg-white text-[#8b6700]"
+                        }`}
+                      >
+                        <Icon className="h-4 w-4" />
+                      </div>
+
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-sm font-semibold text-slate-950">
+                            {notification.title}
+                          </span>
+                          <Badge variant="outline" className="rounded-full shadow-none">
+                            {notification.typeLabel}
+                          </Badge>
+                          {!notification.isRead ? (
+                            <Badge className="rounded-full bg-[#F2B705] text-slate-950 hover:bg-[#F2B705]">
+                              جديد
+                            </Badge>
+                          ) : null}
+                        </div>
+
+                        <p className="text-sm leading-6 text-slate-600">
+                          {notification.bodyText || "لا يوجد وصف إضافي لهذا التنبيه."}
+                        </p>
+
+                        <div className="text-xs text-slate-500">
+                          {formatDistanceToNow(
+                            notification.createdAtDate || new Date(),
+                            {
+                              addSuffix: true,
+                              locale: ar,
+                            }
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           ) : (
-            <div className="space-y-2">
-              {items.map((notification) => (
-                <div
-                  key={notification.id}
-                  className={`p-3 rounded-lg border cursor-pointer transition-colors ${
-                    !notification.isRead
-                      ? "bg-primary/5 border-primary/20"
-                      : "bg-background"
-                  }`}
-                  onClick={() => !notification.isRead && handleMarkAsRead(notification.id)}
-                >
-                  <div className="flex items-start gap-2">
-                    <span className="text-2xl">
-                      {getNotificationIcon(notification.type)}
-                    </span>
-                    <div className="flex-1">
-                      <h4 className="font-medium text-sm">{notification.title}</h4>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {notification.message}
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-2">
-                        {formatDistanceToNow(toJsDate(notification.createdAt), {
-                          addSuffix: true,
-                          locale: ar,
-                        })}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              ))}
+            <div className="px-6 py-12 text-center text-sm text-slate-500">
+              لا توجد تنبيهات داخلية حاليًا.
             </div>
           )}
         </ScrollArea>

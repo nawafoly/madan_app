@@ -6,6 +6,7 @@ import {
   type ChangeEvent,
   type ReactNode,
 } from "react";
+import { useSearch } from "wouter";
 import {
   collection,
   doc,
@@ -32,6 +33,7 @@ import {
   Save,
   Search,
   ShieldCheck,
+  Trash2,
   Upload,
   UserRound,
   XCircle,
@@ -70,19 +72,29 @@ import { auth, db } from "@/_core/firebase";
 import { hasPermission, useAuth } from "@/_core/hooks/useAuth";
 import {
   AUDIT_ACTIONS,
-  auditedSetDoc,
+  auditedDeleteDoc,
   auditedUpdateDoc,
   buildAuditSource,
+  logAuditEvent,
 } from "@/lib/auditLog";
 import {
   EMPLOYEE_DEFAULT_FILE_TYPE,
   EMPLOYEE_FILE_CATEGORY,
   EMPLOYEE_FILES_COLLECTION,
+  EMPLOYEE_FILE_TYPE_OPTIONS,
+  filterActiveEmployeeFiles,
   normalizeEmployeeFileRecord,
   sortEmployeeFiles,
   type EmployeeFileRecord,
 } from "@/lib/employeeFiles";
+import {
+  EMPLOYEE_MESSAGE_TYPE_OPTIONS,
+  normalizeEmployeeMessageRecord,
+  sortEmployeeMessages,
+  type EmployeeMessageRecord,
+} from "@/lib/employeeMessages";
 import { uploadDocumentToCloudflare } from "@/lib/documentUploadService";
+import { createInAppNotification } from "@/lib/inAppNotifications";
 import {
   EMPLOYEE_EMPTY_VALUE,
   normalizeEmployeeProfile,
@@ -113,7 +125,10 @@ import type {
   EmployeeFileDoc,
   EmployeeLeaveRequestDoc,
   EmployeeLeaveRequestStatus,
+  EmployeeMessageDoc,
+  EmployeeMessageType,
 } from "@shared/employee";
+import { EMPLOYEE_MESSAGES_COLLECTION } from "@shared/employee";
 
 type EmployeeRecord = EmployeeProfileUserDoc & {
   id: string;
@@ -141,6 +156,11 @@ type EmployeeFileFormValues = {
   description: string;
   fileType: string;
   file: File | null;
+};
+
+type EmployeeMessageFormValues = {
+  type: EmployeeMessageType;
+  message: string;
 };
 
 const EMPLOYMENT_STATUS_OPTIONS: Array<{
@@ -347,6 +367,13 @@ function buildEmployeeFileFormValues(): EmployeeFileFormValues {
   };
 }
 
+function buildEmployeeMessageFormValues(): EmployeeMessageFormValues {
+  return {
+    type: "message",
+    message: "",
+  };
+}
+
 function Field({
   label,
   description,
@@ -403,6 +430,22 @@ function EmployeeFileStatusBadge({ file }: { file: EmployeeFileRecord }) {
       )}
     >
       {file.readStatusLabel}
+    </Badge>
+  );
+}
+
+function EmployeeFileVersionBadge({ file }: { file: EmployeeFileRecord }) {
+  return (
+    <Badge
+      variant="outline"
+      className={cn(
+        "rounded-full shadow-none",
+        file.statusTone === "success"
+          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+          : "border-slate-200 bg-slate-100 text-slate-700"
+      )}
+    >
+      {file.statusLabel}
     </Badge>
   );
 }
@@ -490,8 +533,26 @@ function resolveEmployeeAuthUid(employee: EmployeeRecord | null | undefined) {
   return String(employee?.uid || employee?.id || "").trim();
 }
 
+function normalizeEmployeeFileMatchValue(value: unknown) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function matchesEmployeeFileVersion(
+  file: EmployeeFileRecord,
+  title: string,
+  fileType: string
+) {
+  return (
+    file.active &&
+    normalizeEmployeeFileMatchValue(file.title) === normalizeEmployeeFileMatchValue(title) &&
+    normalizeEmployeeFileMatchValue(file.fileType || EMPLOYEE_DEFAULT_FILE_TYPE) ===
+      normalizeEmployeeFileMatchValue(fileType || EMPLOYEE_DEFAULT_FILE_TYPE)
+  );
+}
+
 export default function EmployeesManagementPage() {
   const { user } = useAuth();
+  const search = useSearch();
   const canManageEmployees = hasPermission(user, "employees.manage");
 
   const [employees, setEmployees] = useState<EmployeeRecord[]>([]);
@@ -515,7 +576,51 @@ export default function EmployeesManagementPage() {
     buildEmployeeFileFormValues
   );
   const [uploadingEmployeeFile, setUploadingEmployeeFile] = useState(false);
+  const [replacingEmployeeFileId, setReplacingEmployeeFileId] = useState<string | null>(
+    null
+  );
+  const [deletingEmployeeFileId, setDeletingEmployeeFileId] = useState<string | null>(
+    null
+  );
+  const [employeeMessages, setEmployeeMessages] = useState<EmployeeMessageRecord[]>([]);
+  const [employeeMessagesLoading, setEmployeeMessagesLoading] = useState(false);
+  const [employeeMessageForm, setEmployeeMessageForm] = useState<EmployeeMessageFormValues>(
+    buildEmployeeMessageFormValues
+  );
+  const [activeEmployeeMessageId, setActiveEmployeeMessageId] = useState<string | null>(
+    null
+  );
+  const [sendingEmployeeMessage, setSendingEmployeeMessage] = useState(false);
   const employeeFileInputRef = useRef<HTMLInputElement | null>(null);
+  const employeeMessagesSectionRef = useRef<HTMLDivElement | null>(null);
+  const handledEmployeeSearchRef = useRef("");
+  const handledMessageSearchRef = useRef("");
+
+  const searchParams = useMemo(() => new URLSearchParams(search), [search]);
+  const requestedEmployeeId = useMemo(
+    () => String(searchParams.get("employeeId") || "").trim(),
+    [searchParams]
+  );
+  const requestedPanel = useMemo(
+    () => String(searchParams.get("panel") || "").trim().toLowerCase(),
+    [searchParams]
+  );
+  const requestedMessageId = useMemo(
+    () => String(searchParams.get("messageId") || "").trim(),
+    [searchParams]
+  );
+
+  const resetEmployeeFileForm = () => {
+    setEmployeeFileForm(buildEmployeeFileFormValues());
+    setReplacingEmployeeFileId(null);
+    if (employeeFileInputRef.current) {
+      employeeFileInputRef.current.value = "";
+    }
+  };
+
+  const resetEmployeeMessageForm = () => {
+    setEmployeeMessageForm(buildEmployeeMessageFormValues());
+  };
 
   useEffect(() => {
     setLoading(true);
@@ -639,11 +744,28 @@ export default function EmployeesManagementPage() {
       return;
     }
 
+    if (!requestedEmployeeId) {
+      handledEmployeeSearchRef.current = "";
+    }
+
+    if (
+      requestedEmployeeId &&
+      search &&
+      handledEmployeeSearchRef.current !== search &&
+      employees.some(employee => employee.id === requestedEmployeeId)
+    ) {
+      handledEmployeeSearchRef.current = search;
+      if (selectedEmployeeId !== requestedEmployeeId) {
+        setSelectedEmployeeId(requestedEmployeeId);
+      }
+      return;
+    }
+
     const selectedExists = employees.some(employee => employee.id === selectedEmployeeId);
     if (!selectedEmployeeId || !selectedExists) {
       setSelectedEmployeeId(employees[0].id);
     }
-  }, [employees, selectedEmployeeId]);
+  }, [employees, requestedEmployeeId, search, selectedEmployeeId]);
 
   const employeeCards = useMemo(
     () =>
@@ -740,10 +862,9 @@ export default function EmployeesManagementPage() {
   }, [selectedEmployeeAuthUid]);
 
   useEffect(() => {
-    setEmployeeFileForm(buildEmployeeFileFormValues());
-    if (employeeFileInputRef.current) {
-      employeeFileInputRef.current.value = "";
-    }
+    resetEmployeeFileForm();
+    resetEmployeeMessageForm();
+    setActiveEmployeeMessageId(null);
   }, [selectedEmployeeId]);
 
   useEffect(() => {
@@ -781,6 +902,41 @@ export default function EmployeesManagementPage() {
     return () => unsubscribe();
   }, [selectedEmployeeAuthUid]);
 
+  useEffect(() => {
+    if (!selectedEmployeeAuthUid) {
+      setEmployeeMessages([]);
+      setEmployeeMessagesLoading(false);
+      return;
+    }
+
+    setEmployeeMessagesLoading(true);
+    const unsubscribe = onSnapshot(
+      query(
+        collection(db, EMPLOYEE_MESSAGES_COLLECTION),
+        where("employeeUid", "==", selectedEmployeeAuthUid)
+      ),
+      snapshot => {
+        const rows = sortEmployeeMessages(
+          snapshot.docs.map(docSnapshot =>
+            normalizeEmployeeMessageRecord(
+              docSnapshot.id,
+              (docSnapshot.data() as Record<string, any>) || {}
+            )
+          )
+        );
+        setEmployeeMessages(rows);
+        setEmployeeMessagesLoading(false);
+      },
+      snapshotError => {
+        console.error("employee_messages_admin_snapshot_error", snapshotError);
+        setEmployeeMessages([]);
+        setEmployeeMessagesLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [selectedEmployeeAuthUid]);
+
   const initialForm = useMemo(
     () => buildEmployeeFormValues(selectedEmployee),
     [selectedEmployee]
@@ -798,10 +954,80 @@ export default function EmployeesManagementPage() {
     () => getLatestApprovedEmployeeLeaveRequest(leaveRequests),
     [leaveRequests]
   );
-  const unreadEmployeeFilesCount = useMemo(
-    () => employeeFiles.filter(file => !file.isRead).length,
+  const visibleEmployeeFiles = useMemo(
+    () => filterActiveEmployeeFiles(employeeFiles),
     [employeeFiles]
   );
+  const unreadEmployeeFilesCount = useMemo(
+    () => visibleEmployeeFiles.filter(file => !file.isRead).length,
+    [visibleEmployeeFiles]
+  );
+  const archivedEmployeeFilesCount = employeeFiles.length - visibleEmployeeFiles.length;
+  const replacingEmployeeFile = useMemo(
+    () =>
+      visibleEmployeeFiles.find(file => file.id === replacingEmployeeFileId) || null,
+    [replacingEmployeeFileId, visibleEmployeeFiles]
+  );
+  const activeEmployeeMessage = useMemo(
+    () =>
+      employeeMessages.find(message => message.id === activeEmployeeMessageId) || null,
+    [activeEmployeeMessageId, employeeMessages]
+  );
+  const unreadEmployeeMessagesCount = useMemo(
+    () =>
+      employeeMessages.filter(
+        message =>
+          message.toUserId === selectedEmployeeAuthUid && !message.isRead
+      ).length,
+    [employeeMessages, selectedEmployeeAuthUid]
+  );
+  const readEmployeeMessagesCount =
+    employeeMessages.length - unreadEmployeeMessagesCount;
+
+  useEffect(() => {
+    if (!requestedMessageId) {
+      handledMessageSearchRef.current = "";
+    }
+
+    if (
+      requestedMessageId &&
+      search &&
+      handledMessageSearchRef.current !== search &&
+      employeeMessages.some(message => message.id === requestedMessageId)
+    ) {
+      handledMessageSearchRef.current = search;
+      setActiveEmployeeMessageId(requestedMessageId);
+      return;
+    }
+
+    if (!activeEmployeeMessageId && employeeMessages.length) {
+      setActiveEmployeeMessageId(employeeMessages[0].id);
+      return;
+    }
+
+    if (
+      activeEmployeeMessageId &&
+      !employeeMessages.some(message => message.id === activeEmployeeMessageId)
+    ) {
+      setActiveEmployeeMessageId(employeeMessages[0]?.id || null);
+    }
+  }, [activeEmployeeMessageId, employeeMessages, requestedMessageId, search]);
+
+  useEffect(() => {
+    if (
+      requestedPanel !== "messages" ||
+      !requestedEmployeeId ||
+      requestedEmployeeId !== selectedEmployeeId ||
+      !employeeMessagesSectionRef.current
+    ) {
+      return;
+    }
+
+    employeeMessagesSectionRef.current.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  }, [employeeMessages.length, requestedEmployeeId, requestedPanel, selectedEmployeeId]);
 
   const activeEmployeesCount = employeeCards.filter(
     card => card.profile.employment.statusKey === "active"
@@ -847,6 +1073,177 @@ export default function EmployeesManagementPage() {
     }));
   };
 
+  const handleEmployeeMessageFormChange = <
+    K extends keyof EmployeeMessageFormValues,
+  >(
+    key: K,
+    value: EmployeeMessageFormValues[K]
+  ) => {
+    setEmployeeMessageForm(current => ({
+      ...current,
+      [key]: value,
+    }));
+  };
+
+  const handleSelectEmployeeMessage = (messageId: string) => {
+    setActiveEmployeeMessageId(messageId);
+  };
+
+  const handleSendEmployeeMessage = async () => {
+    if (!selectedEmployee || !selectedEmployeeProfile || !selectedEmployeeAuthUid) return;
+    if (!user?.uid) return;
+    if (!canManageEmployees) {
+      toast.error("لا تملك صلاحية إرسال رسائل داخلية للموظفين.");
+      return;
+    }
+
+    const normalizedMessage = employeeMessageForm.message.trim();
+    const normalizedType = (
+      String(employeeMessageForm.type || "message").trim().toLowerCase() || "message"
+    ) as EmployeeMessageType;
+
+    if (!normalizedMessage) {
+      toast.error("اكتب نص الرسالة أولًا.");
+      return;
+    }
+
+    setSendingEmployeeMessage(true);
+    try {
+      const messageRef = doc(collection(db, EMPLOYEE_MESSAGES_COLLECTION));
+      const employeeDisplayName =
+        selectedEmployeeProfile.personal.name !== EMPLOYEE_EMPTY_VALUE
+          ? selectedEmployeeProfile.personal.name
+          : selectedEmployee.displayName ||
+            selectedEmployee.name ||
+            selectedEmployee.email ||
+            "الموظف";
+      const senderDisplayName = user?.displayName || user?.email || "HR";
+
+      await setDoc(messageRef, {
+        employeeId: selectedEmployee.id,
+        employeeUid: selectedEmployeeAuthUid,
+        fromUserId: user.uid,
+        fromUserName: senderDisplayName,
+        toUserId: selectedEmployeeAuthUid,
+        toUserName: employeeDisplayName,
+        message: normalizedMessage,
+        type: normalizedType,
+        relatedTo: null,
+        relatedId: null,
+        createdAt: serverTimestamp(),
+        isRead: false,
+        readAt: null,
+        updatedAt: serverTimestamp(),
+      } satisfies EmployeeMessageDoc);
+
+      let notificationFailed = false;
+      try {
+        await createInAppNotification({
+          userId: selectedEmployeeAuthUid,
+          title:
+            normalizedType === "notice"
+              ? "تنبيه جديد من HR"
+              : normalizedType === "system"
+                ? "إشعار داخلي جديد"
+                : "رسالة جديدة من HR",
+          body: normalizedMessage,
+          type: "message",
+          relatedId: messageRef.id,
+          relatedTo: "employee_message",
+          relatedPath: `/employee/messages?messageId=${messageRef.id}`,
+        });
+      } catch (notificationError) {
+        notificationFailed = true;
+        console.error("employee_message_notification_failed", notificationError);
+      }
+
+      setActiveEmployeeMessageId(messageRef.id);
+      resetEmployeeMessageForm();
+      toast.success(
+        notificationFailed
+          ? "تم إرسال الرسالة لكن تعذر إنشاء التنبيه الداخلي."
+          : "تم إرسال الرسالة الداخلية."
+      );
+    } catch (error) {
+      console.error("employee_message_send_failed", error);
+      toast.error("تعذر إرسال الرسالة الداخلية.");
+    } finally {
+      setSendingEmployeeMessage(false);
+    }
+  };
+
+  const handleStartEmployeeFileReplacement = (file: EmployeeFileRecord) => {
+    setReplacingEmployeeFileId(file.id);
+    setEmployeeFileForm({
+      title: file.title,
+      description: file.description || "",
+      fileType: file.fileType || EMPLOYEE_DEFAULT_FILE_TYPE,
+      file: null,
+    });
+
+    if (employeeFileInputRef.current) {
+      employeeFileInputRef.current.value = "";
+      employeeFileInputRef.current.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    }
+  };
+
+  const handleDeleteEmployeeFile = async (file: EmployeeFileRecord) => {
+    if (!selectedEmployee || !selectedEmployeeProfile) return;
+    if (!canManageEmployees) {
+      toast.error("لا تملك صلاحية حذف ملفات الموظفين.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `سيتم حذف "${file.title}" من سجل الموظف. هل تريد المتابعة؟`
+    );
+    if (!confirmed) return;
+
+    setDeletingEmployeeFileId(file.id);
+    try {
+      // The current Cloudflare Worker does not expose a delete endpoint for R2 objects.
+      // This action removes only the Firestore employee_files record.
+      await auditedDeleteDoc({
+        ref: doc(db, EMPLOYEE_FILES_COLLECTION, file.id),
+        action: "employee_file_deleted",
+        category: "user",
+        entityType: "employee_file",
+        source: buildAuditSource({
+          area: "admin",
+          page: "Employees",
+          method: "delete_employee_file",
+        }),
+        relatedIds: {
+          userId: selectedEmployee.id,
+        },
+        message: `Deleted employee file for ${selectedEmployeeProfile.personal.name}`,
+        meta: {
+          employeeId: file.employeeId,
+          employeeUid: file.employeeUid,
+          employeeName: file.employeeName || null,
+          title: file.title,
+          fileName: file.fileName,
+          fileType: file.fileType || EMPLOYEE_DEFAULT_FILE_TYPE,
+          storageCleanupSupported: false,
+        },
+      });
+
+      if (replacingEmployeeFileId === file.id) {
+        resetEmployeeFileForm();
+      }
+
+      toast.success("تم حذف الملف من سجل الموظف.");
+    } catch (error) {
+      console.error("employee_file_delete_failed", error);
+      toast.error("تعذر حذف ملف الموظف.");
+    } finally {
+      setDeletingEmployeeFileId(current => (current === file.id ? null : current));
+    }
+  };
+
   const handleUploadEmployeeFile = async () => {
     if (!selectedEmployee || !selectedEmployeeProfile) return;
     if (!canManageEmployees) {
@@ -857,6 +1254,9 @@ export default function EmployeesManagementPage() {
     const selectedFile = employeeFileForm.file;
     const normalizedTitle = employeeFileForm.title.trim();
     const normalizedDescription = employeeFileForm.description.trim();
+    const normalizedFileType =
+      String(employeeFileForm.fileType || EMPLOYEE_DEFAULT_FILE_TYPE).trim() ||
+      EMPLOYEE_DEFAULT_FILE_TYPE;
     const employeeUid = selectedEmployeeAuthUid || selectedEmployee.id;
     const employeeId =
       String(selectedEmployee.linkedEmployeeId || "").trim() || selectedEmployee.id;
@@ -889,6 +1289,13 @@ export default function EmployeesManagementPage() {
       });
 
       const fileRef = doc(collection(db, EMPLOYEE_FILES_COLLECTION));
+      const uploadedByName = user?.displayName || user?.email || "HR";
+      const replacedCandidates = employeeFiles.filter(file => {
+        if (!file.active) return false;
+        if (replacingEmployeeFileId && file.id === replacingEmployeeFileId) return true;
+        return matchesEmployeeFileVersion(file, normalizedTitle, normalizedFileType);
+      });
+
       const fileDoc: EmployeeFileDoc = {
         employeeId,
         employeeUid,
@@ -902,7 +1309,7 @@ export default function EmployeesManagementPage() {
               null,
         title: normalizedTitle,
         description: normalizedDescription || null,
-        fileType: employeeFileForm.fileType || EMPLOYEE_DEFAULT_FILE_TYPE,
+        fileType: normalizedFileType,
         fileId: uploaded.id,
         fileName: uploaded.fileName,
         filePath: uploaded.filePath,
@@ -911,20 +1318,44 @@ export default function EmployeesManagementPage() {
         fileSize: uploaded.fileSize,
         category: uploaded.category || EMPLOYEE_FILE_CATEGORY,
         uploadedBy: user?.uid || null,
-        uploadedByName: user?.displayName || user?.email || "HR",
+        uploadedByName,
         uploadedAt: uploaded.uploadedAt,
+        status: "active",
+        active: true,
+        replacedAt: null,
+        replacedBy: null,
+        replacedByName: null,
+        replacedByFileId: null,
+        replacesFileId: replacingEmployeeFileId || replacedCandidates[0]?.id || null,
         isRead: false,
         readAt: null,
         updatedAt: serverTimestamp(),
       };
 
-      await auditedSetDoc({
-        ref: fileRef,
-        data: fileDoc as any,
-        action: "employee_file_uploaded",
+      await runTransaction(db, async tx => {
+        replacedCandidates.forEach(file => {
+          tx.update(doc(db, EMPLOYEE_FILES_COLLECTION, file.id), {
+            status: "replaced",
+            active: false,
+            replacedAt: serverTimestamp(),
+            replacedBy: user?.uid || null,
+            replacedByName: uploadedByName,
+            replacedByFileId: fileRef.id,
+            updatedAt: serverTimestamp(),
+          });
+        });
+
+        tx.set(fileRef, fileDoc as any);
+      });
+
+      await logAuditEvent({
+        action: replacedCandidates.length
+          ? "employee_file_replaced"
+          : "employee_file_uploaded",
         category: "user",
         entityType: "employee_file",
         entityId: fileRef.id,
+        entityPath: fileRef.path,
         source: buildAuditSource({
           area: "admin",
           page: "Employees",
@@ -933,7 +1364,9 @@ export default function EmployeesManagementPage() {
         relatedIds: {
           userId: selectedEmployee.id,
         },
-        message: `Uploaded employee file for ${selectedEmployeeProfile.personal.name}`,
+        message: replacedCandidates.length
+          ? `Replaced employee file for ${selectedEmployeeProfile.personal.name}`
+          : `Uploaded employee file for ${selectedEmployeeProfile.personal.name}`,
         meta: {
           employeeId,
           employeeUid,
@@ -944,14 +1377,34 @@ export default function EmployeesManagementPage() {
           fileType: fileDoc.fileType || EMPLOYEE_DEFAULT_FILE_TYPE,
           contentType: uploaded.contentType || null,
           fileSize: uploaded.fileSize,
+          replacedFileIds: replacedCandidates.map(file => file.id),
         },
       });
 
-      setEmployeeFileForm(buildEmployeeFileFormValues());
-      if (employeeFileInputRef.current) {
-        employeeFileInputRef.current.value = "";
+      try {
+        await createInAppNotification({
+          userId: employeeUid,
+          title: replacedCandidates.length
+            ? "تم رفع نسخة محدثة من ملفك"
+            : "تم رفع ملف جديد لك",
+          body: replacedCandidates.length
+            ? `تم استبدال "${normalizedTitle}" بنسخة محدثة داخل ملفك الوظيفي.`
+            : `تمت إضافة "${normalizedTitle}" إلى ملفك الوظيفي.`,
+          type: "file",
+          relatedId: fileRef.id,
+          relatedTo: "employee_file",
+          relatedPath: "/employee/files",
+        });
+      } catch (notificationError) {
+        console.error("employee_file_notification_failed", notificationError);
       }
-      toast.success("تم رفع الملف وإرساله إلى ملف الموظف.");
+
+      resetEmployeeFileForm();
+      toast.success(
+        replacedCandidates.length
+          ? "تم رفع النسخة المعدلة وتفعيلها."
+          : "تم رفع الملف وإرساله إلى ملف الموظف."
+      );
     } catch (error) {
       console.error("employee_file_upload_failed", error);
       toast.error("تعذر رفع ملف الموظف.");
@@ -1304,6 +1757,26 @@ export default function EmployeesManagementPage() {
         });
       });
 
+      try {
+        await createInAppNotification({
+          userId: request.employeeUid,
+          title:
+            nextStatus === "approved"
+              ? "تم اعتماد طلب الإجازة"
+              : "تم رفض طلب الإجازة",
+          body:
+            nextStatus === "approved"
+              ? "تم اعتماد طلب الإجازة الخاص بك وتحديث الرصيد وفقًا لذلك."
+              : "تم رفض طلب الإجازة الخاص بك. يمكنك مراجعة الملاحظة الإدارية داخل الطلب.",
+          type: "leave",
+          relatedId: request.id,
+          relatedTo: "employee_leave_request",
+          relatedPath: "/employee/profile",
+        });
+      } catch (notificationError) {
+        console.error("employee_leave_notification_failed", notificationError);
+      }
+
       setReviewNotes(current => {
         const next = { ...current };
         delete next[request.id];
@@ -1608,6 +2081,272 @@ export default function EmployeesManagementPage() {
                     </div>
                   </div>
 
+                  <div
+                    ref={employeeMessagesSectionRef}
+                    className="rounded-[28px] border border-slate-200/80 bg-white/95 p-5 shadow-sm"
+                  >
+                    <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                          <Mail className="h-4 w-4" />
+                          التواصل الداخلي
+                        </div>
+                        <div className="text-2xl font-semibold tracking-tight text-slate-950">
+                          رسائل HR مع الموظف
+                        </div>
+                        <p className="max-w-2xl text-sm leading-7 text-slate-500">
+                          أرسل رسالة مباشرة أو تنبيهًا نصيًا للموظف، وراجع سجل الرسائل السابقة ضمن نفس الملف الوظيفي.
+                        </p>
+                      </div>
+
+                      <div className="grid gap-3 sm:grid-cols-3">
+                        <LeaveOverviewStat
+                          icon={Mail}
+                          label="إجمالي الرسائل"
+                          value={formatNumberEN(employeeMessages.length)}
+                        />
+                        <LeaveOverviewStat
+                          icon={Clock3}
+                          label="بانتظار القراءة"
+                          value={formatNumberEN(unreadEmployeeMessagesCount)}
+                        />
+                        <LeaveOverviewStat
+                          icon={CheckCircle2}
+                          label="تمت قراءتها"
+                          value={formatNumberEN(readEmployeeMessagesCount)}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="mt-5 grid gap-5 xl:grid-cols-[340px_minmax(0,1fr)]">
+                      <div className="space-y-4">
+                        <div className="rounded-[24px] border border-slate-200/80 bg-slate-50/75 p-4">
+                          <div className="mb-3 text-sm font-semibold text-slate-900">
+                            سجل الرسائل
+                          </div>
+
+                          {employeeMessagesLoading ? (
+                            <div className="rounded-[18px] border border-dashed border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-500">
+                              جارٍ تحميل الرسائل...
+                            </div>
+                          ) : employeeMessages.length ? (
+                            <ScrollArea className="h-[420px] pr-1">
+                              <div className="space-y-2">
+                                {employeeMessages.map(message => {
+                                  const isActive = message.id === activeEmployeeMessageId;
+                                  const directedToEmployee =
+                                    message.toUserId === selectedEmployeeAuthUid;
+
+                                  return (
+                                    <button
+                                      key={message.id}
+                                      type="button"
+                                      onClick={() => handleSelectEmployeeMessage(message.id)}
+                                      className={cn(
+                                        "w-full rounded-[20px] border p-4 text-right transition-colors",
+                                        isActive
+                                          ? "border-slate-950 bg-slate-950 text-white"
+                                          : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+                                      )}
+                                    >
+                                      <div className="flex flex-wrap items-center gap-2">
+                                        <Badge
+                                          variant="outline"
+                                          className={cn(
+                                            "rounded-full shadow-none",
+                                            isActive
+                                              ? "border-white/20 bg-white/10 text-white"
+                                              : "bg-slate-50"
+                                          )}
+                                        >
+                                          {message.typeLabel}
+                                        </Badge>
+                                        {!message.isRead && directedToEmployee ? (
+                                          <Badge className="rounded-full bg-[#F2B705] text-slate-950 hover:bg-[#F2B705]">
+                                            غير مقروءة
+                                          </Badge>
+                                        ) : null}
+                                      </div>
+
+                                      <div className="mt-3 text-sm font-semibold">
+                                        {message.fromUserName || "HR"}
+                                      </div>
+                                      <div
+                                        className={cn(
+                                          "mt-2 text-sm leading-6",
+                                          isActive ? "text-white/80" : "text-slate-600"
+                                        )}
+                                      >
+                                        {message.preview || "لا يوجد نص محفوظ لهذه الرسالة."}
+                                      </div>
+                                      <div
+                                        className={cn(
+                                          "mt-3 text-xs",
+                                          isActive ? "text-white/70" : "text-slate-500"
+                                        )}
+                                      >
+                                        {message.createdAtDate
+                                          ? formatDateTimeEN(message.createdAtDate)
+                                          : "تاريخ غير متوفر"}
+                                      </div>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </ScrollArea>
+                          ) : (
+                            <div className="rounded-[18px] border border-dashed border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-500">
+                              لا توجد رسائل داخلية لهذا الموظف بعد.
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="space-y-4">
+                        <div className="rounded-[24px] border border-slate-200/80 bg-slate-50/75 p-5">
+                          {activeEmployeeMessage ? (
+                            <div className="space-y-5">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Badge
+                                  variant="outline"
+                                  className="rounded-full border-[#F2B705]/35 bg-[#F2B705]/10 text-[#8b6700] shadow-none"
+                                >
+                                  {activeEmployeeMessage.typeLabel}
+                                </Badge>
+                                <Badge
+                                  variant="outline"
+                                  className={cn(
+                                    "rounded-full shadow-none",
+                                    activeEmployeeMessage.isRead
+                                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                      : "border-amber-200 bg-amber-50 text-amber-700"
+                                  )}
+                                >
+                                  {activeEmployeeMessage.toUserId === selectedEmployeeAuthUid
+                                    ? activeEmployeeMessage.isRead
+                                      ? "قرأها الموظف"
+                                      : "بانتظار القراءة"
+                                    : "رسالة واردة"}
+                                </Badge>
+                              </div>
+
+                              <div className="grid gap-3 md:grid-cols-3">
+                                <ReadonlyMeta
+                                  icon={Mail}
+                                  label="من"
+                                  value={activeEmployeeMessage.fromUserName || "HR"}
+                                />
+                                <ReadonlyMeta
+                                  icon={UserRound}
+                                  label="إلى"
+                                  value={activeEmployeeMessage.toUserName || "الموظف"}
+                                />
+                                <ReadonlyMeta
+                                  icon={Clock3}
+                                  label="وقت الإرسال"
+                                  value={formatDateTimeEN(activeEmployeeMessage.createdAtDate)}
+                                />
+                              </div>
+
+                              <div className="rounded-[22px] border border-slate-200 bg-white px-5 py-5 text-sm leading-8 text-slate-700">
+                                {activeEmployeeMessage.message || "لا يوجد نص محفوظ لهذه الرسالة."}
+                              </div>
+
+                              {activeEmployeeMessage.isRead &&
+                              activeEmployeeMessage.readAtDate &&
+                              activeEmployeeMessage.toUserId === selectedEmployeeAuthUid ? (
+                                <div className="text-xs text-emerald-700">
+                                  تمت قراءة الرسالة في{" "}
+                                  {formatDateTimeEN(activeEmployeeMessage.readAtDate)}
+                                </div>
+                              ) : null}
+                            </div>
+                          ) : (
+                            <div className="rounded-[20px] border border-dashed border-slate-200 bg-white px-5 py-10 text-center text-sm text-slate-500">
+                              اختر رسالة من القائمة لعرض محتواها هنا.
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="rounded-[24px] border border-slate-200/80 bg-slate-50/75 p-5">
+                          <div className="mb-4 space-y-1">
+                            <div className="text-sm font-semibold text-slate-900">
+                              إرسال رسالة جديدة
+                            </div>
+                            <p className="text-sm leading-6 text-slate-500">
+                              ستصل الرسالة للموظف داخل صفحة الرسائل، مع تنبيه داخلي مباشر.
+                            </p>
+                          </div>
+
+                          <div className="grid gap-4 md:grid-cols-[220px_minmax(0,1fr)]">
+                            <Field label="نوع الرسالة">
+                              <Select
+                                value={employeeMessageForm.type}
+                                onValueChange={value =>
+                                  handleEmployeeMessageFormChange(
+                                    "type",
+                                    value as EmployeeMessageType
+                                  )
+                                }
+                                disabled={!canManageEmployees || sendingEmployeeMessage}
+                              >
+                                <SelectTrigger className="w-full bg-white">
+                                  <SelectValue placeholder="اختر نوع الرسالة" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {EMPLOYEE_MESSAGE_TYPE_OPTIONS.map(option => (
+                                    <SelectItem key={option.value} value={option.value}>
+                                      {option.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </Field>
+
+                            <Field label="نص الرسالة">
+                              <Textarea
+                                value={employeeMessageForm.message}
+                                onChange={event =>
+                                  handleEmployeeMessageFormChange(
+                                    "message",
+                                    event.target.value
+                                  )
+                                }
+                                placeholder="اكتب الرسالة الداخلية التي ستصل إلى الموظف"
+                                className="min-h-32 bg-white"
+                                disabled={!canManageEmployees || sendingEmployeeMessage}
+                              />
+                            </Field>
+                          </div>
+
+                          <div className="mt-4 flex flex-wrap justify-end gap-3">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={resetEmployeeMessageForm}
+                              disabled={
+                                sendingEmployeeMessage ||
+                                (!employeeMessageForm.message.trim() &&
+                                  employeeMessageForm.type === "message")
+                              }
+                            >
+                              إعادة ضبط
+                            </Button>
+                            <Button
+                              type="button"
+                              className="bg-[#F2B705] text-slate-950 hover:bg-[#e0ab00]"
+                              onClick={() => void handleSendEmployeeMessage()}
+                              disabled={!canManageEmployees || sendingEmployeeMessage}
+                            >
+                              <Mail className="ml-2 h-4 w-4" />
+                              {sendingEmployeeMessage ? "جارٍ الإرسال..." : "إرسال الرسالة"}
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="rounded-[28px] border border-slate-200/80 bg-white/95 p-5 shadow-sm">
                     <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                       <div className="space-y-2">
@@ -1627,8 +2366,8 @@ export default function EmployeesManagementPage() {
                       <div className="grid gap-3 sm:grid-cols-2">
                         <LeaveOverviewStat
                           icon={FileText}
-                          label="إجمالي الملفات"
-                          value={String(employeeFiles.length)}
+                          label="النسخ الحالية"
+                          value={String(visibleEmployeeFiles.length)}
                         />
                         <LeaveOverviewStat
                           icon={unreadEmployeeFilesCount > 0 ? Clock3 : CheckCircle2}
@@ -1638,9 +2377,35 @@ export default function EmployeesManagementPage() {
                       </div>
                     </div>
 
+                    {archivedEmployeeFilesCount > 0 ? (
+                      <div className="mt-4 rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                        يتم إخفاء {archivedEmployeeFilesCount} من النسخ المستبدلة عن القائمة
+                        الأساسية.
+                      </div>
+                    ) : null}
+
                     <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(320px,0.42fr)_minmax(0,0.58fr)]">
                       <div className="rounded-[24px] border border-slate-200/80 bg-slate-50/70 p-5">
                         <div className="space-y-4">
+                          {replacingEmployeeFile ? (
+                            <div className="rounded-[18px] border border-emerald-200 bg-emerald-50/80 px-4 py-3 text-sm text-emerald-800">
+                              <div className="font-semibold">وضع الاستبدال مفعل</div>
+                              <div className="mt-1">
+                                سيتم رفع نسخة معدلة بدل الملف: {replacingEmployeeFile.title}
+                              </div>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="mt-3 rounded-full border-emerald-200 bg-white text-emerald-800 hover:bg-emerald-100"
+                                onClick={resetEmployeeFileForm}
+                                disabled={uploadingEmployeeFile}
+                              >
+                                إلغاء الاستبدال
+                              </Button>
+                            </div>
+                          ) : null}
+
                           <Field label="عنوان الملف">
                             <Input
                               value={employeeFileForm.title}
@@ -1662,6 +2427,27 @@ export default function EmployeesManagementPage() {
                               className="min-h-28"
                               disabled={!canManageEmployees || uploadingEmployeeFile}
                             />
+                          </Field>
+
+                          <Field label="نوع الملف">
+                            <Select
+                              value={employeeFileForm.fileType}
+                              onValueChange={value =>
+                                handleEmployeeFileFormChange("fileType", value)
+                              }
+                              disabled={!canManageEmployees || uploadingEmployeeFile}
+                            >
+                              <SelectTrigger className="w-full bg-white">
+                                <SelectValue placeholder="اختر نوع الملف" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {EMPLOYEE_FILE_TYPE_OPTIONS.map(option => (
+                                  <SelectItem key={option.value} value={option.value}>
+                                    {option.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
                           </Field>
 
                           <Field label="اختيار الملف">
@@ -1693,7 +2479,11 @@ export default function EmployeesManagementPage() {
                             disabled={!canManageEmployees || uploadingEmployeeFile}
                           >
                             <Upload className="ml-2 h-4 w-4" />
-                            {uploadingEmployeeFile ? "جارٍ رفع الملف..." : "رفع ملف"}
+                            {uploadingEmployeeFile
+                              ? "جارٍ رفع الملف..."
+                              : replacingEmployeeFile
+                                ? "رفع نسخة معدلة"
+                                : "رفع ملف"}
                           </Button>
                         </div>
                       </div>
@@ -1703,8 +2493,8 @@ export default function EmployeesManagementPage() {
                           <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50/70 px-5 py-10 text-center text-sm text-slate-500">
                             جاري تحميل ملفات الموظف...
                           </div>
-                        ) : employeeFiles.length ? (
-                          employeeFiles.map(file => (
+                        ) : visibleEmployeeFiles.length ? (
+                          visibleEmployeeFiles.map(file => (
                             <div
                               key={file.id}
                               className="rounded-[24px] border border-slate-200/80 bg-slate-50/70 p-5"
@@ -1712,6 +2502,7 @@ export default function EmployeesManagementPage() {
                               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                                 <div className="min-w-0 space-y-3">
                                   <div className="flex flex-wrap items-center gap-2">
+                                    <EmployeeFileVersionBadge file={file} />
                                     <EmployeeFileStatusBadge file={file} />
                                     <Badge
                                       variant="outline"
@@ -1764,6 +2555,18 @@ export default function EmployeesManagementPage() {
                                 </div>
 
                                 <div className="flex flex-wrap gap-2 lg:justify-end">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="rounded-full"
+                                    onClick={() => handleStartEmployeeFileReplacement(file)}
+                                    disabled={!canManageEmployees || uploadingEmployeeFile}
+                                  >
+                                    <Upload className="ml-2 h-4 w-4" />
+                                    استبدال الملف
+                                  </Button>
+
                                   {file.viewUrl ? (
                                     <Button
                                       asChild
@@ -1790,6 +2593,21 @@ export default function EmployeesManagementPage() {
                                       </a>
                                     </Button>
                                   ) : null}
+
+                                  <Button
+                                    type="button"
+                                    variant="destructive"
+                                    size="sm"
+                                    className="rounded-full"
+                                    onClick={() => void handleDeleteEmployeeFile(file)}
+                                    disabled={
+                                      !canManageEmployees ||
+                                      deletingEmployeeFileId === file.id
+                                    }
+                                  >
+                                    <Trash2 className="ml-2 h-4 w-4" />
+                                    {deletingEmployeeFileId === file.id ? "جارٍ الحذف..." : "حذف"}
+                                  </Button>
                                 </div>
                               </div>
                             </div>

@@ -615,6 +615,71 @@ service cloud.firestore {
       return hasAdminPermission("messages.manage");
     }
 
+    function employeeMessageOwnerUid(data) {
+      return (("employeeUid" in data) && (data.employeeUid is string))
+        ? data.employeeUid
+        : "";
+    }
+
+    function notificationOwnerUid(data) {
+      return (("userId" in data) && (data.userId is string) && data.userId.size() > 0)
+        ? data.userId
+        : ((("targetUid" in data) && (data.targetUid is string) && data.targetUid.size() > 0)
+          ? data.targetUid
+          : ((("uid" in data) && (data.uid is string) && data.uid.size() > 0)
+            ? data.uid
+            : ""));
+    }
+
+    function isValidEmployeeMessageCreate() {
+      return signedIn()
+        && request.resource.data.employeeUid is string
+        && request.resource.data.employeeUid.size() > 0
+        && request.resource.data.fromUserId is string
+        && request.resource.data.fromUserId == request.auth.uid
+        && request.resource.data.toUserId is string
+        && request.resource.data.toUserId.size() > 0
+        && request.resource.data.message is string
+        && request.resource.data.message.size() > 0
+        && request.resource.data.message.size() <= 4000
+        && request.resource.data.isRead == false
+        && (
+          !("type" in request.resource.data)
+          || (
+            request.resource.data.type is string
+            && lower(request.resource.data.type) in ["message", "notice", "system"]
+          )
+        );
+    }
+
+    function isValidEmployeeMessageReadUpdate() {
+      let keys = request.resource.data.diff(resource.data).changedKeys();
+      return signedIn()
+        && resource.data.toUserId == request.auth.uid
+        && request.resource.data.toUserId == request.auth.uid
+        && request.resource.data.employeeUid == resource.data.employeeUid
+        && request.resource.data.fromUserId == resource.data.fromUserId
+        && request.resource.data.message == resource.data.message
+        && keys.hasOnly(["isRead", "readAt", "updatedAt"])
+        && request.resource.data.isRead == true;
+    }
+
+    function isValidNotificationCreate() {
+      return notificationOwnerUid(request.resource.data).size() > 0
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.isRead == false;
+    }
+
+    function isValidNotificationReadUpdate() {
+      let keys = request.resource.data.diff(resource.data).changedKeys();
+      return signedIn()
+        && notificationOwnerUid(resource.data) == request.auth.uid
+        && notificationOwnerUid(request.resource.data) == request.auth.uid
+        && keys.hasOnly(["isRead", "readAt", "updatedAt"])
+        && request.resource.data.isRead is bool;
+    }
+
     function canReadInvestmentsAdmin() {
       return hasAdminPermission("investments.view")
         || hasAdminPermission("investments.manage")
@@ -979,6 +1044,19 @@ service cloud.firestore {
       allow delete: if canManageEmployeesAdmin();
     }
 
+    match /employee_messages/{id} {
+      allow read: if canReadEmployeesAdmin()
+        || (signedIn() && employeeMessageOwnerUid(resource.data) == request.auth.uid);
+
+      allow create: if (canManageEmployeesAdmin() || request.resource.data.employeeUid == request.auth.uid)
+        && isValidEmployeeMessageCreate();
+
+      allow update: if canManageEmployeesAdmin()
+        || isValidEmployeeMessageReadUpdate();
+
+      allow delete: if canManageEmployeesAdmin();
+    }
+
     /* =========================
        messages
     ========================= */
@@ -1038,23 +1116,24 @@ service cloud.firestore {
        notifications
     ========================= */
     match /notifications/{id} {
-      allow read: if signedIn() && resource.data.uid == request.auth.uid;
-      allow create: if canManageMessagesAdmin()
+      allow read: if signedIn() && notificationOwnerUid(resource.data) == request.auth.uid;
+      allow create: if isValidNotificationCreate()
+        && (canManageMessagesAdmin()
         || canManageInvestmentsAdmin()
         || canManageUsersAdmin()
-        || hasAdminPermission("settings.manage");
-      allow update: if (
-        signedIn()
-        && resource.data.uid == request.auth.uid
-        && request.resource.data.diff(resource.data).changedKeys().hasOnly(["isRead", "updatedAt"])
-      ) || canManageMessagesAdmin()
+        || hasAdminPermission("settings.manage")
+        || canManageEmployeesAdmin());
+      allow update: if isValidNotificationReadUpdate()
+        || canManageMessagesAdmin()
         || canManageInvestmentsAdmin()
         || canManageUsersAdmin()
-        || hasAdminPermission("settings.manage");
+        || hasAdminPermission("settings.manage")
+        || canManageEmployeesAdmin();
       allow delete: if canManageMessagesAdmin()
         || canManageInvestmentsAdmin()
         || canManageUsersAdmin()
-        || hasAdminPermission("settings.manage");
+        || hasAdminPermission("settings.manage")
+        || canManageEmployeesAdmin();
     }
 
     match /employee_files/{id} {
