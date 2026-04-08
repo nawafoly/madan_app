@@ -3,9 +3,12 @@ import {
   collection,
   doc,
   onSnapshot,
+  or,
+  query,
   runTransaction,
   serverTimestamp,
   setDoc,
+  where,
 } from "firebase/firestore";
 import {
   BriefcaseBusiness,
@@ -399,32 +402,8 @@ function resolveEmploymentLeaveBalance(
   return 0;
 }
 
-function collectEmployeeLeaveRequestKeys(
-  employee: EmployeeRecord | null | undefined,
-  request?: EmployeeLeaveRequestRecord | EmployeeLeaveRequestDoc | null
-) {
-  return new Set(
-    [
-      employee?.id,
-      employee?.uid,
-      employee?.linkedEmployeeId,
-      request?.employeeUid,
-      request?.userId,
-      request?.employeeId,
-    ]
-      .map(value => String(value || "").trim())
-      .filter(Boolean)
-  );
-}
-
-function doesLeaveRequestBelongToEmployee(
-  request: EmployeeLeaveRequestRecord,
-  employee: EmployeeRecord | null | undefined
-) {
-  const keys = collectEmployeeLeaveRequestKeys(employee);
-  return [request.employeeUid, request.userId, request.employeeId].some(value =>
-    keys.has(String(value || "").trim())
-  );
+function resolveEmployeeAuthUid(employee: EmployeeRecord | null | undefined) {
+  return String(employee?.uid || employee?.id || "").trim();
 }
 
 export default function EmployeesManagementPage() {
@@ -611,6 +590,7 @@ export default function EmployeesManagementPage() {
 
   const selectedEmployee =
     employees.find(employee => employee.id === selectedEmployeeId) ?? null;
+  const selectedEmployeeAuthUid = resolveEmployeeAuthUid(selectedEmployee);
 
   const selectedEmployeeProfile = useMemo(
     () =>
@@ -628,7 +608,7 @@ export default function EmployeesManagementPage() {
   );
 
   useEffect(() => {
-    if (!selectedEmployee?.id) {
+    if (!selectedEmployeeAuthUid) {
       setLeaveRequests([]);
       setLeaveRequestsLoading(false);
       setReviewNotes({});
@@ -638,17 +618,21 @@ export default function EmployeesManagementPage() {
     setReviewNotes({});
     setLeaveRequestsLoading(true);
     const unsubscribe = onSnapshot(
-      collection(db, EMPLOYEE_LEAVE_REQUESTS_COLLECTION),
+      query(
+        collection(db, EMPLOYEE_LEAVE_REQUESTS_COLLECTION),
+        or(
+          where("userId", "==", selectedEmployeeAuthUid),
+          where("employeeUid", "==", selectedEmployeeAuthUid)
+        )
+      ),
       snapshot => {
         const rows = sortEmployeeLeaveRequests(
-          snapshot.docs
-            .map(docSnapshot =>
-              normalizeEmployeeLeaveRequest(
-                docSnapshot.id,
-                (docSnapshot.data() as Record<string, any>) || {}
-              )
+          snapshot.docs.map(docSnapshot =>
+            normalizeEmployeeLeaveRequest(
+              docSnapshot.id,
+              (docSnapshot.data() as Record<string, any>) || {}
             )
-            .filter(request => doesLeaveRequestBelongToEmployee(request, selectedEmployee))
+          )
         );
         setLeaveRequests(rows);
         setLeaveRequestsLoading(false);
@@ -661,7 +645,7 @@ export default function EmployeesManagementPage() {
     );
 
     return () => unsubscribe();
-  }, [selectedEmployee]);
+  }, [selectedEmployeeAuthUid]);
 
   const initialForm = useMemo(
     () => buildEmployeeFormValues(selectedEmployee),
@@ -717,7 +701,7 @@ export default function EmployeesManagementPage() {
     const normalizedPhone = form.phone.trim();
     const leaveBalance = toNullableNumber(form.leaveBalance);
     if (!normalizedFullName) {
-      toast.error("ظٹط¬ط¨ ط¥ط¯ط®ط§ظ„ ط§ط³ظ… ط§ظ„ظ…ظˆط¸ظپ.");
+      toast.error("يجب إدخال اسم الموظف.");
       return;
     }
 
@@ -725,7 +709,7 @@ export default function EmployeesManagementPage() {
       !normalizedEmail ||
       !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)
     ) {
-      toast.error("ط§ظ„ط¨ط±ظٹط¯ ط§ظ„ط¥ظ„ظƒطھط±ظˆظ†ظٹ ط؛ظٹط± طµط§ظ„ط­.");
+      toast.error("يرجى إدخال بريد إلكتروني صحيح.");
       return;
     }
     if (form.leaveBalance.trim() && leaveBalance === null) {
@@ -766,83 +750,98 @@ export default function EmployeesManagementPage() {
         updatedByEmail: user?.email || null,
       };
 
-      await auditedUpdateDoc({
-        ref: doc(db, "users", selectedEmployee.id),
-        data: {
-          displayName: normalizedFullName,
-          name: normalizedFullName,
-          fullName: normalizedFullName,
-          email: normalizedEmail,
-          phone: normalizedPhone || null,
-          "profile.name": normalizedFullName,
-          "profile.displayName": normalizedFullName,
-          "profile.email": normalizedEmail,
-          "profile.phone": normalizedPhone || null,
-          title: form.jobTitle.trim() || null,
-          department: form.department.trim() || null,
-          startDate: form.startDate || null,
-          leaveBalance,
-          updatedAt: serverTimestamp(),
-          employment: nextEmployment,
-          "employeeProfile.personal": nextPersonal,
-          "employeeProfile.employment": nextEmployment,
-        } as any,
-        action: AUDIT_ACTIONS.USER_UPDATED,
-        category: "user",
-        entityType: "user",
-        source: buildAuditSource({
-          area: "admin",
-          page: "Employees",
-          method: "update_employment_profile",
-        }),
-        relatedIds: { userId: selectedEmployee.id },
-        message: `Updated employee employment profile for ${selectedEmployeeProfile.personal.name}`,
-        meta: {
-          targetUserEmail: normalizedEmail,
-          targetUserName: normalizedFullName,
-          phone: normalizedPhone || null,
-          jobTitle: nextEmployment.jobTitle || null,
-          department: nextEmployment.department || null,
-          employmentStatus: nextEmployment.employmentStatus || null,
-          leaveBalance,
-        },
-      });
-
-      if (selectedEmployee.linkedEmployeeId) {
-        await setDoc(
-          doc(db, "employees", selectedEmployee.linkedEmployeeId),
-          {
-            uid: linkedUserUid,
-            linkedUserUid: linkedUserUid,
-            name: normalizedFullName,
+      try {
+        await auditedUpdateDoc({
+          ref: doc(db, "users", selectedEmployee.id),
+          data: {
             displayName: normalizedFullName,
+            name: normalizedFullName,
             fullName: normalizedFullName,
             email: normalizedEmail,
             phone: normalizedPhone || null,
-            profile: {
-              name: normalizedFullName,
-              displayName: normalizedFullName,
-              email: normalizedEmail,
-              phone: normalizedPhone || null,
-            },
+            "profile.name": normalizedFullName,
+            "profile.displayName": normalizedFullName,
+            "profile.email": normalizedEmail,
+            "profile.phone": normalizedPhone || null,
             title: form.jobTitle.trim() || null,
             department: form.department.trim() || null,
             startDate: form.startDate || null,
             leaveBalance,
             updatedAt: serverTimestamp(),
             employment: nextEmployment,
-            employeeProfile: {
-              personal: nextPersonal,
-              employment: nextEmployment,
-            },
+            "employeeProfile.personal": nextPersonal,
+            "employeeProfile.employment": nextEmployment,
+          } as any,
+          action: AUDIT_ACTIONS.USER_UPDATED,
+          category: "user",
+          entityType: "user",
+          source: buildAuditSource({
+            area: "admin",
+            page: "Employees",
+            method: "update_employment_profile",
+          }),
+          relatedIds: { userId: selectedEmployee.id },
+          message: `Updated employee employment profile for ${selectedEmployeeProfile.personal.name}`,
+          meta: {
+            targetUserEmail: normalizedEmail,
+            targetUserName: normalizedFullName,
+            phone: normalizedPhone || null,
+            jobTitle: nextEmployment.jobTitle || null,
+            department: nextEmployment.department || null,
+            employmentStatus: nextEmployment.employmentStatus || null,
+            leaveBalance,
           },
-          { merge: true }
-        );
+        });
+      } catch (error) {
+        console.error("save_employee_profile_user_update_error", {
+          userId: selectedEmployee.id,
+          error,
+        });
+        throw error;
+      }
+
+      if (selectedEmployee.linkedEmployeeId) {
+        try {
+          await setDoc(
+            doc(db, "employees", selectedEmployee.linkedEmployeeId),
+            {
+              uid: linkedUserUid,
+              linkedUserUid: linkedUserUid,
+              name: normalizedFullName,
+              displayName: normalizedFullName,
+              fullName: normalizedFullName,
+              email: normalizedEmail,
+              phone: normalizedPhone || null,
+              profile: {
+                name: normalizedFullName,
+                displayName: normalizedFullName,
+                email: normalizedEmail,
+                phone: normalizedPhone || null,
+              },
+              title: form.jobTitle.trim() || null,
+              department: form.department.trim() || null,
+              startDate: form.startDate || null,
+              leaveBalance,
+              updatedAt: serverTimestamp(),
+              employment: nextEmployment,
+              employeeProfile: {
+                personal: nextPersonal,
+                employment: nextEmployment,
+              },
+            },
+            { merge: true }
+          );
+        } catch (error) {
+          console.error("save_employee_profile_employee_update_error", {
+            employeeDocId: selectedEmployee.linkedEmployeeId,
+            error,
+          });
+          throw error;
+        }
       }
 
       toast.success("تم حفظ بيانات الموظف الوظيفية.");
-    } catch (saveError) {
-      console.error("save_employee_profile_error", saveError);
+    } catch {
       toast.error("تعذر حفظ بيانات الموظف الوظيفية.");
     } finally {
       setSaving(false);
@@ -903,12 +902,11 @@ export default function EmployeesManagementPage() {
         const userEmployment = (userData.employeeProfile?.employment ||
           userData.employment ||
           {}) as Record<string, any>;
-        const linkedUserUid =
-          String(selectedEmployee.uid || selectedEmployee.id || "").trim() ||
-          selectedEmployee.id;
+        const linkedUserUid = selectedEmployeeAuthUid || selectedEmployee.id;
 
         const employeeDocId = String(
           selectedEmployee.linkedEmployeeId ||
+            currentLeaveRequest.employeeDocId ||
             currentLeaveRequest.employeeId ||
             ""
         ).trim();
@@ -1302,10 +1300,10 @@ export default function EmployeesManagementPage() {
                           الإجازات
                         </div>
                         <div className="text-2xl font-semibold tracking-tight text-slate-950">
-                          آخر إجازة وسجل الطلبات
+                          آخر إجازة معتمدة وسجل الطلبات
                         </div>
                         <p className="max-w-2xl text-sm leading-7 text-slate-500">
-                          يتيح هذا القسم متابعة آخر إجازة للموظف بشكل واضح، مع مراجعة
+                          يتيح هذا القسم متابعة آخر إجازة معتمدة للموظف بشكل واضح، مع مراجعة
                           جميع الطلبات السابقة واعتماد الطلبات المعلقة أو رفضها.
                         </p>
                       </div>
@@ -1324,7 +1322,7 @@ export default function EmployeesManagementPage() {
                                 ? XCircle
                                 : Clock3
                           }
-                          label="حالة آخر إجازة"
+                          label="حالة آخر إجازة معتمدة"
                           value={
                             latestApprovedLeaveRequest
                               ? getLeaveStatusMeta(latestApprovedLeaveRequest.status).label
@@ -1351,7 +1349,7 @@ export default function EmployeesManagementPage() {
                               variant="outline"
                               className="rounded-full border-[#F2B705]/35 bg-[#F2B705]/10 text-[#8b6700] shadow-none"
                             >
-                              آخر إجازة
+                              آخر إجازة معتمدة
                             </Badge>
                             <Badge variant="outline" className="rounded-full">
                               {getLeaveTypeLabel(latestApprovedLeaveRequest.leaveType)}
@@ -1438,7 +1436,7 @@ export default function EmployeesManagementPage() {
                                         variant="outline"
                                         className="rounded-full border-[#F2B705]/35 bg-[#F2B705]/10 text-[#8b6700] shadow-none"
                                       >
-                                        آخر إجازة
+                                        أحدث طلب
                                       </Badge>
                                     ) : null}
                                     <Badge variant="outline" className="rounded-full">
@@ -1575,16 +1573,16 @@ export default function EmployeesManagementPage() {
                   </div>
 
                   <div className="grid gap-5 md:grid-cols-2">
-                    <Field label="ط§ط³ظ… ط§ظ„ظ…ظˆط¸ظپ">
+                    <Field label="اسم الموظف">
                       <Input
                         value={form.fullName}
                         onChange={event => handleFormChange("fullName", event.target.value)}
-                        placeholder="ظ…ط«ط§ظ„: ظ†ظˆط§ظپ ط§ظ„ط¹ظ„ظٹط§ظ†"
+                        placeholder="مثال: نواف العليان"
                         disabled={!canManageEmployees || saving}
                       />
                     </Field>
 
-                    <Field label="ط§ظ„ط¨ط±ظٹط¯ ط§ظ„ط¥ظ„ظƒطھط±ظˆظ†ظٹ">
+                    <Field label="البريد الإلكتروني">
                       <Input
                         type="email"
                         dir="ltr"
@@ -1595,7 +1593,7 @@ export default function EmployeesManagementPage() {
                       />
                     </Field>
 
-                    <Field label="ط±ظ‚ظ… ط§ظ„ط¬ظˆط§ظ„">
+                    <Field label="رقم الجوال">
                       <Input
                         dir="ltr"
                         value={form.phone}

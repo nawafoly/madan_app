@@ -193,8 +193,65 @@ export function getLatestApprovedEmployeeLeaveRequest<
   );
 }
 
-function normalizeLeaveRequestUserId(raw: Record<string, any>) {
+function normalizeLeaveRequestAuthUid(raw: Record<string, any>) {
   return String(raw.userId || raw.employeeUid || "").trim() || null;
+}
+
+function normalizeLeaveRequestEmployeeDocId(
+  raw: Record<string, any>,
+  authUid: string | null
+) {
+  const explicitEmployeeDocId = String(
+    raw.employeeDocId || raw.linkedEmployeeId || ""
+  ).trim();
+  if (explicitEmployeeDocId) return explicitEmployeeDocId;
+
+  const legacyEmployeeId = String(raw.employeeId || "").trim();
+  if (!legacyEmployeeId) return null;
+
+  return authUid && legacyEmployeeId === authUid ? null : legacyEmployeeId;
+}
+
+export function buildEmployeeLeaveRequestPayload(input: {
+  authUid: string;
+  employeeDocId?: string | null;
+  employeeName?: string | null;
+  employeeEmail?: string | null;
+  leaveType: EmployeeLeaveType;
+  startDate: Date;
+  endDate: Date;
+  daysCount: number;
+  employeeNote?: string | null;
+}) {
+  const authUid = String(input.authUid || "").trim();
+  const employeeDocId = String(input.employeeDocId || "").trim() || null;
+
+  return {
+    employeeDocId,
+    employeeUid: authUid,
+    userId: authUid,
+    employeeName: String(input.employeeName || "").trim() || null,
+    employeeEmail: String(input.employeeEmail || "").trim() || null,
+    status: "pending" as EmployeeLeaveRequestStatus,
+    leaveType: input.leaveType,
+    startDate: input.startDate,
+    endDate: input.endDate,
+    daysCount: input.daysCount,
+    employeeNote: String(input.employeeNote || "").trim() || null,
+    hrNote: null,
+    decidedAt: null,
+    decidedBy: null,
+    decidedByEmail: null,
+    decidedByName: null,
+    reviewedAt: null,
+    reviewedBy: null,
+    reviewedByEmail: null,
+    reviewedByName: null,
+  };
+}
+
+function normalizeLeaveRequestUserId(raw: Record<string, any>) {
+  return normalizeLeaveRequestAuthUid(raw);
 }
 
 export function normalizeEmployeeLeaveRequest(
@@ -202,17 +259,18 @@ export function normalizeEmployeeLeaveRequest(
   raw: Record<string, any>
 ): EmployeeLeaveRequestRecord {
   const normalizedUserId = normalizeLeaveRequestUserId(raw);
-  const normalizedEmployeeUid = String(
-    raw.employeeUid || raw.userId || raw.employeeId || ""
-  ).trim();
-  const normalizedEmployeeId = String(
-    raw.employeeId || raw.employeeUid || raw.userId || ""
-  ).trim();
+  const normalizedEmployeeUid = String(raw.employeeUid || raw.userId || "").trim();
+  const normalizedEmployeeId = String(raw.employeeId || "").trim() || null;
+  const normalizedEmployeeDocId = normalizeLeaveRequestEmployeeDocId(
+    raw,
+    normalizedUserId
+  );
 
   return {
     id,
     employeeId: normalizedEmployeeId,
-    employeeUid: normalizedEmployeeUid,
+    employeeDocId: normalizedEmployeeDocId,
+    employeeUid: normalizedEmployeeUid || normalizedUserId || "",
     userId: normalizedUserId,
     employeeName: String(raw.employeeName || "").trim() || null,
     employeeEmail: String(raw.employeeEmail || "").trim() || null,

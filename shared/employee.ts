@@ -60,7 +60,8 @@ export type EmployeeLeaveType =
   | string;
 
 export type EmployeeLeaveRequestDoc = {
-  employeeId: string;
+  employeeId?: string | null;
+  employeeDocId?: string | null;
   employeeUid: string;
   userId?: string | null;
   employeeName?: string | null;

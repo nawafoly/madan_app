@@ -11,6 +11,7 @@ import {
   doc,
   getDoc,
   onSnapshot,
+  or,
   query,
   serverTimestamp,
   setDoc,
@@ -62,6 +63,7 @@ import {
   EMPLOYEE_LEAVE_REQUESTS_COLLECTION,
   EMPLOYEE_LEAVE_TYPE_OPTIONS,
   buildLeaveDateFromInput,
+  buildEmployeeLeaveRequestPayload,
   calculateLeaveDaysCount,
   formatLeaveDateRange,
   formatLeaveDaysLabel,
@@ -400,7 +402,7 @@ export default function EmployeeProfilePage() {
     const unsubscribe = onSnapshot(
       query(
         collection(db, EMPLOYEE_LEAVE_REQUESTS_COLLECTION),
-        where("employeeUid", "==", user.uid)
+        or(where("userId", "==", user.uid), where("employeeUid", "==", user.uid))
       ),
       snapshot => {
         const rows = sortEmployeeLeaveRequests(
@@ -434,7 +436,7 @@ export default function EmployeeProfilePage() {
     () => calculateLeaveDaysCount(leaveForm.startDate, leaveForm.endDate),
     [leaveForm.endDate, leaveForm.startDate]
   );
-  const latestLeaveRequest = useMemo(
+  const latestApprovedLeaveRequest = useMemo(
     () => getLatestApprovedEmployeeLeaveRequest(leaveRequests),
     [leaveRequests]
   );
@@ -574,33 +576,29 @@ export default function EmployeeProfilePage() {
 
     setSubmittingLeaveRequest(true);
     try {
+      const employeeDocId =
+        (employeeProfileSource.collectionName === "employees"
+          ? employeeProfileSource.docId
+          : String(user.linkedEmployeeId || "").trim()) || null;
+
       await addDoc(collection(db, EMPLOYEE_LEAVE_REQUESTS_COLLECTION), {
-        employeeId: employeeProfileSource.entityId,
-        employeeUid: user.uid,
-        userId: user.uid,
-        employeeName:
-          profile.personal.name !== EMPLOYEE_EMPTY_VALUE
-            ? profile.personal.name
-            : user.displayName || user.email || "موظف",
-        employeeEmail:
-          profile.personal.email !== EMPLOYEE_EMPTY_VALUE
-            ? profile.personal.email
-            : user.email || null,
-        status: "pending",
-        leaveType: leaveForm.leaveType,
-        startDate,
-        endDate,
-        daysCount,
-        employeeNote: leaveForm.employeeNote.trim() || null,
-        hrNote: null,
-        decidedAt: null,
-        decidedBy: null,
-        decidedByEmail: null,
-        decidedByName: null,
-        reviewedAt: null,
-        reviewedBy: null,
-        reviewedByEmail: null,
-        reviewedByName: null,
+        ...buildEmployeeLeaveRequestPayload({
+          authUid: user.uid,
+          employeeDocId,
+          employeeName:
+            profile.personal.name !== EMPLOYEE_EMPTY_VALUE
+              ? profile.personal.name
+              : user.displayName || user.email || "موظف",
+          employeeEmail:
+            profile.personal.email !== EMPLOYEE_EMPTY_VALUE
+              ? profile.personal.email
+              : user.email || null,
+          leaveType: leaveForm.leaveType,
+          startDate,
+          endDate,
+          daysCount,
+          employeeNote: leaveForm.employeeNote,
+        }),
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
@@ -927,13 +925,13 @@ export default function EmployeeProfilePage() {
             <CardHeader className="space-y-3">
               <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
                 <Clock3 className="h-4 w-4" />
-                آخر إجازة
+                آخر إجازة معتمدة
               </div>
               <CardTitle className="text-xl font-semibold text-slate-950">
                 ملخص الإجازات الحالية
               </CardTitle>
               <CardDescription className="text-sm leading-7 text-slate-600">
-                الرصيد الحالي وآخر إجازة مسجلة يظهران هنا بشكل مباشر وسريع.
+                الرصيد الحالي وآخر إجازة معتمدة يظهران هنا بشكل مباشر وسريع.
               </CardDescription>
             </CardHeader>
 
@@ -946,16 +944,16 @@ export default function EmployeeProfilePage() {
                   accent="text-[#B98500]"
                 />
                 <LeaveSummaryCard
-                  label="حالة آخر إجازة"
+                  label="حالة آخر إجازة معتمدة"
                   value={
-                    latestLeaveRequest
-                      ? getLeaveStatusMeta(latestLeaveRequest.status).label
+                    latestApprovedLeaveRequest
+                      ? getLeaveStatusMeta(latestApprovedLeaveRequest.status).label
                       : "لا توجد إجازات"
                   }
                   icon={
-                    latestLeaveRequest?.status === "approved"
+                    latestApprovedLeaveRequest?.status === "approved"
                       ? CheckCircle2
-                      : latestLeaveRequest?.status === "rejected"
+                      : latestApprovedLeaveRequest?.status === "rejected"
                         ? XCircle
                         : Clock3
                   }
@@ -963,15 +961,15 @@ export default function EmployeeProfilePage() {
                 <LeaveSummaryCard
                   label="عدد الأيام"
                   value={
-                    latestLeaveRequest
-                      ? formatLeaveDaysLabel(latestLeaveRequest.daysCount)
+                    latestApprovedLeaveRequest
+                      ? formatLeaveDaysLabel(latestApprovedLeaveRequest.daysCount)
                       : "—"
                   }
                   icon={CalendarDays}
                 />
               </div>
 
-              {latestLeaveRequest ? (
+              {latestApprovedLeaveRequest ? (
                 <div className="rounded-[24px] border border-slate-200/80 bg-slate-50/75 p-5 shadow-sm">
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                     <div className="space-y-3">
@@ -980,9 +978,9 @@ export default function EmployeeProfilePage() {
                           variant="outline"
                           className="rounded-full border-[#F2B705]/35 bg-[#F2B705]/10 text-[#8b6700] shadow-none"
                         >
-                          {getLeaveTypeLabel(latestLeaveRequest.leaveType)}
+                          {getLeaveTypeLabel(latestApprovedLeaveRequest.leaveType)}
                         </Badge>
-                        <LeaveStatusBadge status={latestLeaveRequest.status} />
+                        <LeaveStatusBadge status={latestApprovedLeaveRequest.status} />
                       </div>
 
                       <div className="grid gap-2 text-sm text-slate-600">
@@ -990,27 +988,27 @@ export default function EmployeeProfilePage() {
                           <span className="font-semibold text-slate-900">الفترة:</span>
                           <span>
                             {formatLeaveDateRange(
-                              latestLeaveRequest.startDate,
-                              latestLeaveRequest.endDate
+                              latestApprovedLeaveRequest.startDate,
+                              latestApprovedLeaveRequest.endDate
                             )}
                           </span>
                         </div>
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="font-semibold text-slate-900">تاريخ الطلب:</span>
-                          <span>{formatDateTimeEN(latestLeaveRequest.createdAt)}</span>
+                          <span>{formatDateTimeEN(latestApprovedLeaveRequest.createdAt)}</span>
                         </div>
-                        {latestLeaveRequest.employeeNote ? (
+                        {latestApprovedLeaveRequest.employeeNote ? (
                           <div className="rounded-2xl border border-slate-200 bg-white/80 px-4 py-3 leading-7 text-slate-600">
                             <span className="font-semibold text-slate-900">
                               ملاحظتك:
                             </span>{" "}
-                            {latestLeaveRequest.employeeNote}
+                            {latestApprovedLeaveRequest.employeeNote}
                           </div>
                         ) : null}
-                        {latestLeaveRequest.hrNote ? (
+                        {latestApprovedLeaveRequest.hrNote ? (
                           <div className="rounded-2xl border border-emerald-200/80 bg-emerald-50/70 px-4 py-3 leading-7 text-emerald-800">
                             <span className="font-semibold">ملاحظة HR:</span>{" "}
-                            {latestLeaveRequest.hrNote}
+                            {latestApprovedLeaveRequest.hrNote}
                           </div>
                         ) : null}
                       </div>
@@ -1018,10 +1016,10 @@ export default function EmployeeProfilePage() {
 
                     <div className="rounded-[22px] border border-dashed border-slate-200 bg-white/80 px-4 py-4 text-center">
                       <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-500">
-                        آخر إجازة مسجلة
+                        آخر إجازة معتمدة
                       </div>
                       <div className="mt-2 text-lg font-semibold text-slate-950">
-                        {formatLeaveDaysLabel(latestLeaveRequest.daysCount)}
+                        {formatLeaveDaysLabel(latestApprovedLeaveRequest.daysCount)}
                       </div>
                     </div>
                   </div>
@@ -1199,7 +1197,7 @@ export default function EmployeeProfilePage() {
                             variant="outline"
                             className="rounded-full border-[#F2B705]/35 bg-[#F2B705]/10 text-[#8b6700] shadow-none"
                           >
-                            آخر إجازة
+                            أحدث طلب
                           </Badge>
                         ) : null}
                         <Badge variant="outline" className="rounded-full">

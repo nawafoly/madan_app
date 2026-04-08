@@ -1520,7 +1520,7 @@ export default function ProjectDetails() {
         requestId: requestRef.id,
         type: requestType,
         projectId: project?.id || projectId,
-        projectTitle: projectTitle === "â€”" ? "" : projectTitle,
+        projectTitle: projectTitle === "—" ? "" : projectTitle,
 
         investorUid: user.uid,
         userId: user.uid,
@@ -1573,7 +1573,7 @@ export default function ProjectDetails() {
         },
         message: ({ result }) => `Created ${requestType} ${result}`,
         meta: ({ result }) => ({
-          projectName: projectTitle === "â€”" ? null : projectTitle,
+          projectName: projectTitle === "—" ? null : projectTitle,
           amount: requireAmount ? amount : null,
           requestCode: result,
           requestType,
@@ -2046,7 +2046,7 @@ export default function ProjectDetails() {
           {coverImage ? (
             <img
               src={coverImage}
-              alt={projectTitle === "â€”" ? "Project" : projectTitle}
+              alt={projectTitle === "—" ? "Project" : projectTitle}
               className="h-full w-full object-cover opacity-20 mix-blend-screen"
             />
           ) : (
