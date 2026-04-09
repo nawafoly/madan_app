@@ -2511,18 +2511,6 @@ export default function EmployeesManagementPage() {
           </Card>
 
           <div className="flex min-w-0 flex-col gap-6">
-            <Card className="gap-0 overflow-hidden border-slate-200/80 bg-white/95 py-0 shadow-sm">
-              <CardHeader className="border-b border-slate-100 bg-white/90 px-6 pt-6 pb-4">
-                <CardTitle className="flex items-center gap-2 text-xl text-slate-950">
-                  <ShieldCheck className="h-5 w-5 text-[#030640]" />
-                  بيانات الموظف الوظيفية
-                </CardTitle>
-                <CardDescription className="text-sm leading-6 text-slate-500">
-                  هذا القسم مخصص للإدارة والموارد البشرية فقط. الموظف يرى هذه
-                  البيانات في بروفايله بشكل للعرض فقط ولا يحررها بنفسه.
-                </CardDescription>
-              </CardHeader>
-            </Card>
 
             {selectedEmployee && selectedEmployeeProfile ? (
               <div className="flex flex-col gap-6">
@@ -3626,14 +3614,14 @@ export default function EmployeesManagementPage() {
                     id="employee-section-leave"
                     className="gap-0 overflow-hidden border-slate-200/80 bg-white/95 py-0 shadow-sm"
                   >
-                    <CardHeader className="border-b border-slate-100 bg-white/90">
-                      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                        <div className="space-y-2">
-                          <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                    <CardHeader className="border-b border-slate-100 bg-white/90 px-6 pt-6 pb-6 sm:px-7 sm:pt-7 lg:px-8">
+                      <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between xl:gap-8">
+                        <div className="max-w-2xl space-y-3">
+                          <div className="flex items-center gap-2.5 text-[11px] font-semibold leading-5 tracking-[0.14em] text-slate-500">
                             <CalendarDays className="h-4 w-4" />
                             الإجازات
                           </div>
-                          <div className="text-2xl font-semibold tracking-tight text-slate-950">
+                          <div className="text-2xl font-semibold leading-tight tracking-tight text-slate-950">
                             آخر إجازة معتمدة وسجل الطلبات
                           </div>
                           <p className="max-w-2xl text-sm leading-7 text-slate-500">
@@ -3643,7 +3631,7 @@ export default function EmployeesManagementPage() {
                           </p>
                         </div>
 
-                        <div className="grid gap-3 sm:grid-cols-3">
+                        <div className="grid gap-3.5 sm:grid-cols-3 xl:min-w-[420px] xl:max-w-[520px] xl:shrink-0">
                           <LeaveOverviewStat
                             icon={BadgeCheck}
                             label="الرصيد الحالي"
