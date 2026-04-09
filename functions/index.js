@@ -207,8 +207,102 @@ const CLIENT_ALLOWED_AUDIT_ACTIONS = new Set([
   "user_login",
   "user_created",
 ]);
+const EMPLOYEE_DIRECTORY_CALLER_ROLES = new Set([
+  "staff",
+  "hr",
+  "admin",
+  "owner",
+  "accountant",
+]);
 
 const stringOrEmpty = value => String(value || "").trim();
+
+const hasValuesObject = value =>
+  !!value &&
+  typeof value === "object" &&
+  Object.keys(value).length > 0;
+
+const pickFirstText = (...values) => {
+  for (const value of values) {
+    const normalized = stringOrEmpty(value);
+    if (normalized) return normalized;
+  }
+  return "";
+};
+
+const normalizeEmployeeDirectoryStatus = data => {
+  const employment =
+    data?.employeeProfile?.employment || data?.employment || {};
+  const rawStatus = pickFirstText(
+    employment?.employmentStatus,
+    employment?.status,
+    data?.status
+  ).toLowerCase();
+
+  if (rawStatus) return rawStatus;
+  return resolveUserActive(data) ? "active" : "inactive";
+};
+
+const isEmployeeDirectoryCandidate = data => {
+  const role = normalizeKnownRole(data?.role);
+  if (role === "client" || role === "guest") return false;
+
+  const employment =
+    data?.employeeProfile?.employment || data?.employment || {};
+  const personal = data?.employeeProfile?.personal || data?.personal || {};
+
+  return (
+    role === "staff" ||
+    role === "hr" ||
+    stringOrEmpty(data?.linkedEmployeeId).length > 0 ||
+    hasValuesObject(employment) ||
+    hasValuesObject(personal)
+  );
+};
+
+const sanitizeEmployeeDirectoryEntry = (uid, data) => {
+  if (!uid || !isEmployeeDirectoryCandidate(data) || !resolveUserActive(data)) {
+    return null;
+  }
+
+  const statusKey = normalizeEmployeeDirectoryStatus(data);
+  if (statusKey !== "active") {
+    return null;
+  }
+
+  const employment =
+    data?.employeeProfile?.employment || data?.employment || {};
+  const personal = data?.employeeProfile?.personal || data?.personal || {};
+  const name = pickFirstText(
+    data?.displayName,
+    data?.name,
+    data?.fullName,
+    personal?.name,
+    uid
+  );
+
+  if (!name) {
+    return null;
+  }
+
+  return {
+    uid,
+    name,
+    email: pickFirstText(data?.email, personal?.email) || null,
+    avatarUrl: pickFirstText(
+      personal?.avatar?.fileUrl,
+      data?.photoURL,
+      data?.profile?.photoURL
+    ) || null,
+    title: pickFirstText(
+      employment?.title,
+      employment?.jobTitle,
+      data?.title
+    ) || null,
+    department: pickFirstText(employment?.department, data?.department) || null,
+    statusKey,
+  };
+};
 
 const escapeHtml = value =>
   String(value ?? "")
@@ -708,6 +802,34 @@ exports.adminRecomputeAllProjects = onCall(
  * + Apply role_invites/{emailLower} if exists and active
  * + Consume invite after use (isActive=false)
  */
+exports.listActiveEmployeeDirectory = onCall(
+  { region: REGION },
+  async request => {
+    if (!request.auth?.uid) {
+      throw new HttpsError("unauthenticated", "Authentication required.");
+    }
+
+    const role = await getUserRole(request.auth.uid, request.auth.token.email);
+    if (!EMPLOYEE_DIRECTORY_CALLER_ROLES.has(role)) {
+      throw new HttpsError(
+        "permission-denied",
+        "Employee directory access is not allowed for this account."
+      );
+    }
+
+    const usersSnap = await db.collection("users").get();
+    const employees = usersSnap.docs
+      .map(docSnap => sanitizeEmployeeDirectoryEntry(docSnap.id, docSnap.data() || {}))
+      .filter(Boolean)
+      .filter(employee => employee.uid !== request.auth.uid)
+      .sort((left, right) =>
+        left.name.localeCompare(right.name, "ar", { sensitivity: "base" })
+      );
+
+    return { employees };
+  }
+);
+
 exports.onAuthCreateUserProfile = onUserCreated(
   { region: "us-central1" },
   async event => {

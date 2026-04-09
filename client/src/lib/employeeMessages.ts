@@ -1,6 +1,8 @@
 import { toDateSafe } from "@/lib/formatters";
 import {
+  EMPLOYEE_CONVERSATION_TYPES,
   EMPLOYEE_MESSAGE_TYPES,
+  type EmployeeConversationType,
   type EmployeeMessageDoc,
   type EmployeeMessageRole,
   type EmployeeMessageStatus,
@@ -16,10 +18,20 @@ export const EMPLOYEE_MESSAGE_TYPE_OPTIONS: Array<{
   { value: "system", label: "إشعار نظام" },
 ];
 
+export const EMPLOYEE_CONVERSATION_TYPE_OPTIONS: Array<{
+  value: EmployeeConversationType;
+  label: string;
+}> = [
+  { value: "hr_to_employee", label: "رسائل HR" },
+  { value: "employee_to_employee", label: "محادثة داخلية" },
+];
+
 export type EmployeeMessageRecord = EmployeeMessageDoc & {
   id: string;
   conversationId: string;
   threadId: string;
+  conversationType: EmployeeConversationType;
+  participantUids: string[];
   senderUid: string;
   senderRole: EmployeeMessageRole;
   recipientUid: string;
@@ -28,6 +40,7 @@ export type EmployeeMessageRecord = EmployeeMessageDoc & {
   status: EmployeeMessageStatus;
   createdAtDate: Date | null;
   readAtDate: Date | null;
+  conversationTypeLabel: string;
   typeLabel: string;
   preview: string;
 };
@@ -38,8 +51,17 @@ export type EmployeeMessageConversationRecord = {
   threadId: string;
   employeeId: string | null;
   employeeUid: string;
+  conversationType: EmployeeConversationType;
+  conversationTypeLabel: string;
+  participantUids: string[];
+  counterpartyUid: string;
+  counterpartyName: string;
+  counterpartyEmail: string | null;
+  counterpartyPhoto: string | null;
   messages: EmployeeMessageRecord[];
   latestMessage: EmployeeMessageRecord;
+  lastMessageAt: unknown;
+  lastMessageAtDate: Date | null;
   unreadCount: number;
 };
 
@@ -56,6 +78,22 @@ function normalizeMessageType(value: unknown) {
   return (EMPLOYEE_MESSAGE_TYPES.some(type => type === normalized)
     ? normalized
     : "message") as EmployeeMessageType;
+}
+
+function normalizeConversationType(
+  value: unknown,
+  raw: Record<string, any> | null | undefined
+) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (EMPLOYEE_CONVERSATION_TYPES.some(type => type === normalized)) {
+    return normalized as EmployeeConversationType;
+  }
+
+  if (pickText(raw?.employeeUid)) {
+    return "hr_to_employee" as EmployeeConversationType;
+  }
+
+  return "hr_to_employee" as EmployeeConversationType;
 }
 
 function normalizeMessageRole(
@@ -84,6 +122,102 @@ export function getEmployeeMessageTypeLabel(value: unknown) {
   );
 }
 
+export function getEmployeeConversationTypeLabel(
+  value: unknown,
+  raw?: Record<string, any> | null
+) {
+  const normalized = normalizeConversationType(value, raw);
+  return (
+    EMPLOYEE_CONVERSATION_TYPE_OPTIONS.find(option => option.value === normalized)
+      ?.label || "رسائل HR"
+  );
+}
+
+export function buildEmployeeMessageParticipants(...values: Array<unknown>) {
+  return Array.from(
+    new Set(
+      values
+        .map(value => String(value ?? "").trim())
+        .filter(value => value && value !== "undefined" && value !== "null")
+    )
+  );
+}
+
+export function buildEmployeePeerConversationId(
+  leftUid: string,
+  rightUid: string
+) {
+  const participants = buildEmployeeMessageParticipants(leftUid, rightUid).sort();
+  return participants.length === 2
+    ? `employee_to_employee__${participants[0]}__${participants[1]}`
+    : "";
+}
+
+function resolveParticipantUids(
+  raw: Record<string, any> | null | undefined,
+  senderUid: string,
+  recipientUid: string
+) {
+  const explicitParticipants = Array.isArray(raw?.participantUids)
+    ? raw.participantUids
+    : [];
+
+  return buildEmployeeMessageParticipants(
+    ...explicitParticipants,
+    senderUid,
+    recipientUid,
+    raw?.employeeUid
+  );
+}
+
+function resolveCounterparty(
+  timeline: EmployeeMessageRecord[],
+  viewerUid?: string | null
+) {
+  const fallback = {
+    uid: "",
+    name: "",
+    email: null as string | null,
+    photo: null as string | null,
+  };
+
+  if (!timeline.length) return fallback;
+
+  if (!viewerUid) {
+    const latestMessage = timeline[timeline.length - 1];
+    return {
+      uid: latestMessage.fromUserId || latestMessage.senderUid || "",
+      name: latestMessage.fromUserName || latestMessage.toUserName || "",
+      email: latestMessage.fromUserEmail || latestMessage.toUserEmail || null,
+      photo: latestMessage.fromUserPhoto || latestMessage.toUserPhoto || null,
+    };
+  }
+
+  for (let index = timeline.length - 1; index >= 0; index -= 1) {
+    const message = timeline[index];
+
+    if ((message.fromUserId || message.senderUid) !== viewerUid) {
+      return {
+        uid: message.fromUserId || message.senderUid || "",
+        name: message.fromUserName || "",
+        email: message.fromUserEmail || null,
+        photo: message.fromUserPhoto || null,
+      };
+    }
+
+    if ((message.toUserId || message.recipientUid) !== viewerUid) {
+      return {
+        uid: message.toUserId || message.recipientUid || "",
+        name: message.toUserName || "",
+        email: message.toUserEmail || null,
+        photo: message.toUserPhoto || null,
+      };
+    }
+  }
+
+  return fallback;
+}
+
 export function normalizeEmployeeMessageRecord(
   id: string,
   raw: Record<string, any> | null | undefined
@@ -92,6 +226,7 @@ export function normalizeEmployeeMessageRecord(
   const normalizedType = normalizeMessageType(raw?.messageType ?? raw?.type);
   const senderUid = pickText(raw?.senderUid, raw?.fromUserId);
   const recipientUid = pickText(raw?.recipientUid, raw?.toUserId);
+  const conversationType = normalizeConversationType(raw?.conversationType, raw);
   const conversationId = pickText(raw?.conversationId, raw?.threadId) || id;
   const threadId = pickText(raw?.threadId, raw?.conversationId) || conversationId;
   const isRead = Boolean(raw?.isRead);
@@ -100,13 +235,16 @@ export function normalizeEmployeeMessageRecord(
     employeeUid: pickText(raw?.employeeUid),
   });
   const status = normalizeMessageStatus(raw?.status, isRead);
+  const participantUids = resolveParticipantUids(raw, senderUid, recipientUid);
 
   return {
     id,
     employeeId: pickText(raw?.employeeId) || null,
-    employeeUid: pickText(raw?.employeeUid),
+    employeeUid: pickText(raw?.employeeUid) || null,
     conversationId,
     threadId,
+    conversationType,
+    participantUids,
     senderUid,
     senderRole,
     recipientUid,
@@ -135,6 +273,10 @@ export function normalizeEmployeeMessageRecord(
     updatedAt: raw?.updatedAt ?? null,
     createdAtDate: toDateSafe(raw?.createdAt),
     readAtDate: toDateSafe(raw?.readAt),
+    conversationTypeLabel: getEmployeeConversationTypeLabel(
+      conversationType,
+      raw
+    ),
     typeLabel: getEmployeeMessageTypeLabel(normalizedType),
     preview: message.length > 120 ? `${message.slice(0, 117).trim()}...` : message,
   };
@@ -148,7 +290,9 @@ export function sortEmployeeMessages<T extends EmployeeMessageDoc>(messages: T[]
   });
 }
 
-export function sortEmployeeMessagesChronologically<T extends EmployeeMessageDoc>(messages: T[]) {
+export function sortEmployeeMessagesChronologically<T extends EmployeeMessageDoc>(
+  messages: T[]
+) {
   return [...messages].sort((left, right) => {
     const leftTime = toDateSafe(left.createdAt)?.getTime() ?? 0;
     const rightTime = toDateSafe(right.createdAt)?.getTime() ?? 0;
@@ -176,6 +320,7 @@ export function groupEmployeeMessageConversations(
     .map(([conversationId, group]) => {
       const timeline = sortEmployeeMessagesChronologically(group);
       const latestMessage = timeline[timeline.length - 1];
+      const counterparty = resolveCounterparty(timeline, viewerUid);
       return {
         id: conversationId,
         conversationId,
@@ -188,16 +333,31 @@ export function groupEmployeeMessageConversations(
           latestMessage.employeeUid ||
           timeline.find(message => pickText(message.employeeUid))?.employeeUid ||
           "",
+        conversationType: latestMessage.conversationType,
+        conversationTypeLabel: latestMessage.conversationTypeLabel,
+        participantUids: buildEmployeeMessageParticipants(
+          ...timeline.flatMap(message => message.participantUids || [])
+        ),
+        counterpartyUid: counterparty.uid,
+        counterpartyName:
+          counterparty.name ||
+          (latestMessage.conversationType === "employee_to_employee"
+            ? "موظف"
+            : "HR"),
+        counterpartyEmail: counterparty.email,
+        counterpartyPhoto: counterparty.photo,
         messages: timeline,
         latestMessage,
+        lastMessageAt: latestMessage.createdAt ?? null,
+        lastMessageAtDate: latestMessage.createdAtDate,
         unreadCount: viewerUid
           ? timeline.filter(message => message.toUserId === viewerUid && !message.isRead).length
           : 0,
       } satisfies EmployeeMessageConversationRecord;
     })
     .sort((left, right) => {
-      const leftTime = left.latestMessage.createdAtDate?.getTime() ?? 0;
-      const rightTime = right.latestMessage.createdAtDate?.getTime() ?? 0;
+      const leftTime = left.lastMessageAtDate?.getTime() ?? 0;
+      const rightTime = right.lastMessageAtDate?.getTime() ?? 0;
       return rightTime - leftTime;
     });
 }

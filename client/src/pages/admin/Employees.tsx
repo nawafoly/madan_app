@@ -93,6 +93,7 @@ import {
   type EmployeeFileRecord,
 } from "@/lib/employeeFiles";
 import {
+  buildEmployeeMessageParticipants,
   EMPLOYEE_MESSAGE_TYPE_OPTIONS,
   groupEmployeeMessageConversations,
   normalizeEmployeeMessageRecord,
@@ -1592,6 +1593,11 @@ export default function EmployeesManagementPage() {
         employeeUid: selectedEmployeeAuthUid,
         conversationId,
         threadId: conversationId,
+        conversationType: "hr_to_employee",
+        participantUids: buildEmployeeMessageParticipants(
+          user.uid,
+          selectedEmployeeAuthUid
+        ),
         senderUid: user.uid,
         senderRole: "hr",
         recipientUid: selectedEmployeeAuthUid,

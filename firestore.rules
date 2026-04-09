@@ -629,6 +629,21 @@ service cloud.firestore {
           : fallbackId);
     }
 
+    function employeeMessageConversationType(data) {
+      return (("conversationType" in data) && (data.conversationType is string) && data.conversationType.size() > 0)
+        ? lower(data.conversationType)
+        : ((employeeMessageOwnerUid(data).size() > 0) ? "hr_to_employee" : "hr_to_employee");
+    }
+
+    function employeeMessageHasParticipant(data, uid) {
+      return (
+        (("participantUids" in data) && (data.participantUids is list) && (uid in data.participantUids))
+        || (("fromUserId" in data) && (data.fromUserId is string) && data.fromUserId == uid)
+        || (("toUserId" in data) && (data.toUserId is string) && data.toUserId == uid)
+        || employeeMessageOwnerUid(data) == uid
+      );
+    }
+
     function employeeMessageReplyTargetUid(data) {
       return (("toUserId" in data) && (data.toUserId is string) && data.toUserId == request.auth.uid)
         ? ((("fromUserId" in data) && (data.fromUserId is string)) ? data.fromUserId : "")
@@ -648,17 +663,44 @@ service cloud.firestore {
     }
 
     function isValidEmployeeMessageCreate() {
+      let conversationType = employeeMessageConversationType(request.resource.data);
       return signedIn()
-        && request.resource.data.employeeUid is string
-        && request.resource.data.employeeUid.size() > 0
         && request.resource.data.fromUserId is string
         && request.resource.data.fromUserId == request.auth.uid
         && request.resource.data.toUserId is string
         && request.resource.data.toUserId.size() > 0
+        && request.resource.data.fromUserId != request.resource.data.toUserId
+        && request.resource.data.participantUids is list
+        && request.resource.data.participantUids.size() == 2
+        && request.resource.data.fromUserId in request.resource.data.participantUids
+        && request.resource.data.toUserId in request.resource.data.participantUids
+        && request.resource.data.conversationType is string
+        && conversationType in ["hr_to_employee", "employee_to_employee"]
         && request.resource.data.message is string
         && request.resource.data.message.size() > 0
         && request.resource.data.message.size() <= 4000
         && request.resource.data.isRead == false
+        && (
+          (conversationType == "hr_to_employee"
+            && request.resource.data.employeeUid is string
+            && request.resource.data.employeeUid.size() > 0
+            && request.resource.data.employeeUid in request.resource.data.participantUids)
+          || (
+            conversationType == "employee_to_employee"
+            && (
+              !("employeeUid" in request.resource.data)
+              || request.resource.data.employeeUid == null
+              || (
+                request.resource.data.employeeUid is string
+                && request.resource.data.employeeUid.size() == 0
+              )
+            )
+            && request.resource.data.senderRole is string
+            && lower(request.resource.data.senderRole) == "employee"
+            && request.resource.data.type is string
+            && lower(request.resource.data.type) == "message"
+          )
+        )
         && (
           !("conversationId" in request.resource.data)
           || (
@@ -748,15 +790,41 @@ service cloud.firestore {
       let parentPath = /databases/$(database)/documents/employee_messages/$(request.resource.data.relatedId);
       let parentData = get(parentPath).data;
       return isValidEmployeeMessageCreate()
+        && employeeMessageConversationType(request.resource.data) == "hr_to_employee"
         && request.resource.data.employeeUid == request.auth.uid
         && request.resource.data.fromUserId == request.auth.uid
         && request.resource.data.relatedId is string
         && request.resource.data.relatedId.size() > 0
         && exists(parentPath)
+        && employeeMessageConversationType(parentData) == "hr_to_employee"
         && employeeMessageOwnerUid(parentData) == request.auth.uid
         && employeeMessageConversationValue(parentData, request.resource.data.relatedId)
           == employeeMessageConversationValue(request.resource.data, "")
         && request.resource.data.toUserId == employeeMessageReplyTargetUid(parentData);
+    }
+
+    function isValidEmployeeMessageEmployeeToEmployeeNewCreate() {
+      return isValidEmployeeMessageCreate()
+        && employeeMessageConversationType(request.resource.data) == "employee_to_employee"
+        && (
+          !("relatedId" in request.resource.data)
+          || request.resource.data.relatedId == null
+        );
+    }
+
+    function isValidEmployeeMessageEmployeeToEmployeeReplyCreate() {
+      let parentPath = /databases/$(database)/documents/employee_messages/$(request.resource.data.relatedId);
+      let parentData = get(parentPath).data;
+      return isValidEmployeeMessageCreate()
+        && employeeMessageConversationType(request.resource.data) == "employee_to_employee"
+        && request.resource.data.relatedId is string
+        && request.resource.data.relatedId.size() > 0
+        && exists(parentPath)
+        && employeeMessageConversationType(parentData) == "employee_to_employee"
+        && employeeMessageHasParticipant(parentData, request.auth.uid)
+        && employeeMessageHasParticipant(parentData, request.resource.data.toUserId)
+        && employeeMessageConversationValue(parentData, request.resource.data.relatedId)
+          == employeeMessageConversationValue(request.resource.data, "");
     }
 
     function isValidEmployeeMessageReadUpdate() {
@@ -764,7 +832,6 @@ service cloud.firestore {
       return signedIn()
         && resource.data.toUserId == request.auth.uid
         && request.resource.data.toUserId == request.auth.uid
-        && request.resource.data.employeeUid == resource.data.employeeUid
         && request.resource.data.fromUserId == resource.data.fromUserId
         && request.resource.data.message == resource.data.message
         && keys.hasOnly(["isRead", "readAt", "updatedAt", "status"])
@@ -796,7 +863,7 @@ service cloud.firestore {
         && request.resource.data.type is string
         && lower(request.resource.data.type) == "message"
         && exists(messagePath)
-        && employeeMessageOwnerUid(messageData) == request.auth.uid
+        && employeeMessageHasParticipant(messageData, request.auth.uid)
         && messageData.fromUserId == request.auth.uid
         && notificationOwnerUid(request.resource.data) == messageData.toUserId;
     }
@@ -1176,10 +1243,12 @@ service cloud.firestore {
 
     match /employee_messages/{id} {
       allow read: if canReadEmployeesAdmin()
-        || (signedIn() && employeeMessageOwnerUid(resource.data) == request.auth.uid);
+        || (signedIn() && employeeMessageHasParticipant(resource.data, request.auth.uid));
 
       allow create: if (canManageEmployeesAdmin() && isValidEmployeeMessageCreate())
-        || isValidEmployeeMessageEmployeeReplyCreate();
+        || isValidEmployeeMessageEmployeeReplyCreate()
+        || isValidEmployeeMessageEmployeeToEmployeeNewCreate()
+        || isValidEmployeeMessageEmployeeToEmployeeReplyCreate();
 
       allow update: if canManageEmployeesAdmin()
         || isValidEmployeeMessageReadUpdate();

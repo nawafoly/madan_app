@@ -6,6 +6,10 @@ export const EMPLOYEE_NOTIFICATIONS_COLLECTION = "notifications" as const;
 export const EMPLOYEE_DEFAULT_FILE_TYPE = "general" as const;
 export const EMPLOYEE_FILE_STATUS_ACTIVE = "active" as const;
 export const EMPLOYEE_FILE_STATUS_REPLACED = "replaced" as const;
+export const EMPLOYEE_CONVERSATION_TYPES = [
+  "hr_to_employee",
+  "employee_to_employee",
+] as const;
 export const EMPLOYEE_MESSAGE_TYPES = ["message", "notice", "system"] as const;
 export const EMPLOYEE_NOTIFICATION_TYPES = [
   "leave",
@@ -73,6 +77,9 @@ export type EmployeeProfileDoc = {
 
 export type EmployeeFileType = (typeof EMPLOYEE_FILE_TYPES)[number] | string;
 export type EmployeeFileStatus = (typeof EMPLOYEE_FILE_STATUSES)[number] | string;
+export type EmployeeConversationType =
+  | (typeof EMPLOYEE_CONVERSATION_TYPES)[number]
+  | string;
 export type EmployeeMessageType = (typeof EMPLOYEE_MESSAGE_TYPES)[number] | string;
 export type EmployeeMessageRole = "employee" | "hr" | "system" | string;
 export type EmployeeMessageStatus = "sent" | "read" | string;
@@ -112,9 +119,11 @@ export type EmployeeFileDoc = {
 
 export type EmployeeMessageDoc = {
   employeeId?: string | null;
-  employeeUid: string;
+  employeeUid?: string | null;
   conversationId?: string | null;
   threadId?: string | null;
+  conversationType?: EmployeeConversationType | null;
+  participantUids?: string[] | null;
   senderUid?: string | null;
   senderRole?: EmployeeMessageRole | null;
   recipientUid?: string | null;
