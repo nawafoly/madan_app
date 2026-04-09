@@ -16,11 +16,121 @@ const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 const DEFAULT_STATUS = "uploaded";
 const LIST_LIMIT_DEFAULT = 50;
 const LIST_LIMIT_MAX = 200;
+const DEFAULT_ALLOWED_ORIGINS = new Set([
+  "http://localhost:5173",
+  "https://madan-app.vercel.app",
+]);
+const EMPLOYEE_DIRECTORY_CALLER_ROLES = new Set([
+  "staff",
+  "hr",
+  "admin",
+  "owner",
+  "accountant",
+]);
+const KNOWN_APP_ROLES = new Set([
+  "owner",
+  "admin",
+  "accountant",
+  "hr",
+  "staff",
+  "client",
+  "guest",
+]);
+const ROLE_ALIASES = {
+  user: "client",
+  employee: "staff",
+  human_resources: "hr",
+  "human-resources": "hr",
+  "human resources": "hr",
+  humanresources: "hr",
+  administrator: "admin",
+  "super_admin": "admin",
+  "super-admin": "admin",
+  "super admin": "admin",
+  superadmin: "admin",
+};
+const ACTIVE_TRUE_VALUES = new Set(["active", "enabled", "true", "1", "yes"]);
+const ACTIVE_FALSE_VALUES = new Set([
+  "inactive",
+  "disabled",
+  "false",
+  "0",
+  "no",
+]);
+const EMPLOYEE_DIRECTORY_EXCLUDED_ROLES = new Set(["client", "guest"]);
+const FIRESTORE_PAGE_SIZE = 300;
+const ROLE_PRIORITY = {
+  guest: 0,
+  client: 1,
+  staff: 2,
+  hr: 3,
+  accountant: 4,
+  admin: 5,
+  owner: 6,
+};
+
+const ROLE_DEFAULT_PERMISSIONS = {
+  owner: [
+    "dashboard.view",
+    "projects.view",
+    "projects.manage",
+    "projects.publish",
+    "investments.view",
+    "investments.manage",
+    "users.view",
+    "users.manage",
+    "messages.view",
+    "messages.manage",
+    "recruitment.view",
+    "recruitment.manage",
+    "employees.view",
+    "employees.manage",
+    "reports.view",
+    "financial.view",
+    "financial.edit",
+    "settings.manage",
+  ],
+  admin: [
+    "dashboard.view",
+    "projects.view",
+    "projects.manage",
+    "projects.publish",
+    "investments.view",
+    "investments.manage",
+    "users.view",
+    "users.manage",
+    "messages.view",
+    "messages.manage",
+    "recruitment.view",
+    "recruitment.manage",
+    "employees.view",
+    "employees.manage",
+    "reports.view",
+    "settings.manage",
+  ],
+  accountant: [
+    "dashboard.view",
+    "projects.view",
+    "investments.view",
+    "financial.view",
+    "financial.edit",
+    "reports.view",
+  ],
+  hr: [
+    "recruitment.view",
+    "recruitment.manage",
+    "employees.view",
+    "employees.manage",
+  ],
+  staff: [],
+  client: ["projects.view"],
+  guest: ["projects.view"],
+};
 
 export default {
   async fetch(request, env) {
     if (request.method === "OPTIONS") {
-      return withCors(new Response(null, { status: 204 }));
+      return withCors(new Response(null, { status: 204 }), request, env);
     }
 
     const bucket = getBucket(env);
@@ -29,64 +139,120 @@ export default {
 
     if (request.method === "GET" && url.pathname === "/download") {
       if (!bucket) {
-        return json(500, {
-          ok: false,
-          success: false,
-          message: "missing_r2_binding",
-        });
+        return withCors(
+          json(500, {
+            ok: false,
+            success: false,
+            message: "missing_r2_binding",
+          }),
+          request,
+          env
+        );
       }
-      return handleDownload(url, bucket);
+      return withCors(await handleDownload(url, bucket), request, env);
     }
 
     if (request.method === "GET" && url.pathname === "/files") {
       if (!db) {
-        return json(500, {
-          ok: false,
-          success: false,
-          message: "missing_d1_binding",
-        });
+        return withCors(
+          json(500, {
+            ok: false,
+            success: false,
+            message: "missing_d1_binding",
+          }),
+          request,
+          env
+        );
       }
-      return handleList(url, db, request.url);
+      return withCors(await handleList(url, db, request.url), request, env);
     }
 
-    if (request.method === "GET" && url.pathname === "/listActiveEmployeeDirectory") {
+    if (
+      request.method === "GET" &&
+      url.pathname === "/listActiveEmployeeDirectory"
+    ) {
       if (!db) {
-        return json(500, {
-          ok: false,
-          success: false,
-          message: "missing_d1_binding",
-        });
+        return withCors(
+          json(500, {
+            ok: false,
+            success: false,
+            message: "missing_d1_binding",
+          }),
+          request,
+          env
+        );
       }
-      return handleListActiveEmployeeDirectory(db);
+      return withCors(
+        await handleListActiveEmployeeDirectory(request, db),
+        request,
+        env
+      );
+    }
+
+    if (
+      request.method === "POST" &&
+      url.pathname === "/admin/syncEmployeeDirectory"
+    ) {
+      if (!db) {
+        return withCors(
+          json(500, {
+            ok: false,
+            success: false,
+            message: "missing_d1_binding",
+          }),
+          request,
+          env
+        );
+      }
+      return withCors(
+        await handleAdminSyncEmployeeDirectory(request, db),
+        request,
+        env
+      );
     }
 
     if (request.method === "GET" && url.pathname === "/stats") {
-      return handleStats(bucket, db);
+      return withCors(await handleStats(bucket, db), request, env);
     }
 
-    if (request.method === "POST" && (url.pathname === "/" || url.pathname === "/upload")) {
+    if (
+      request.method === "POST" &&
+      (url.pathname === "/" || url.pathname === "/upload")
+    ) {
       if (!bucket) {
-        return json(500, {
-          ok: false,
-          success: false,
-          message: "missing_r2_binding",
-        });
+        return withCors(
+          json(500, {
+            ok: false,
+            success: false,
+            message: "missing_r2_binding",
+          }),
+          request,
+          env
+        );
       }
       if (!db) {
-        return json(500, {
-          ok: false,
-          success: false,
-          message: "missing_d1_binding",
-        });
+        return withCors(
+          json(500, {
+            ok: false,
+            success: false,
+            message: "missing_d1_binding",
+          }),
+          request,
+          env
+        );
       }
-      return handleUpload(request, bucket, db);
+      return withCors(await handleUpload(request, bucket, db), request, env);
     }
 
-    return json(405, {
-      ok: false,
-      success: false,
-      message: "method_not_allowed",
-    });
+    return withCors(
+      json(405, {
+        ok: false,
+        success: false,
+        message: "method_not_allowed",
+      }),
+      request,
+      env
+    );
   },
 };
 
@@ -99,7 +265,9 @@ function getDatabase(env) {
 }
 
 async function handleUpload(request, bucket, db) {
-  const contentType = String(request.headers.get("content-type") || "").toLowerCase();
+  const contentType = String(
+    request.headers.get("content-type") || ""
+  ).toLowerCase();
   if (!contentType.includes("multipart/form-data")) {
     return json(400, {
       ok: false,
@@ -148,7 +316,10 @@ async function handleUpload(request, bucket, db) {
   }
 
   const normalizedType = normalizeContentType(file.type, file.name);
-  if ((kind === "original" || kind === "signed") && normalizedType !== "application/pdf") {
+  if (
+    (kind === "original" || kind === "signed") &&
+    normalizedType !== "application/pdf"
+  ) {
     return json(400, {
       ok: false,
       success: false,
@@ -157,7 +328,8 @@ async function handleUpload(request, bucket, db) {
   }
 
   const uploadedAt = new Date().toISOString();
-  const storageFolder = normalizeSlug(form.get("storageFolder")) || "attachments";
+  const storageFolder =
+    normalizeSlug(form.get("storageFolder")) || "attachments";
   const filePath = buildUploadPath({
     entityType,
     entityId,
@@ -309,7 +481,9 @@ async function handleList(url, db, requestUrl) {
   const category = normalizeSlug(url.searchParams.get("category"));
   const categories = normalizeCsvSlugs(url.searchParams.get("categories"));
   const projectId = normalizeNullableSlug(url.searchParams.get("projectId"));
-  const investmentId = normalizeNullableSlug(url.searchParams.get("investmentId"));
+  const investmentId = normalizeNullableSlug(
+    url.searchParams.get("investmentId")
+  );
   const contractId = normalizeNullableSlug(url.searchParams.get("contractId"));
   const requestId = normalizeNullableSlug(url.searchParams.get("requestId"));
   const status = normalizeStatus(url.searchParams.get("status"));
@@ -403,17 +577,28 @@ async function handleList(url, db, requestUrl) {
   return json(200, {
     ok: true,
     success: true,
-    files: rows.map((row) => mapDbRowToFileRecord(row, requestUrl)),
+    files: rows.map(row => mapDbRowToFileRecord(row, requestUrl)),
   });
 }
 
 async function handleStats(bucket, db) {
   const checkedAt = new Date().toISOString();
-  const [d1Stats, r2Stats] = await Promise.all([collectD1Stats(db), collectR2Stats(bucket)]);
+  const [d1Stats, r2Stats] = await Promise.all([
+    collectD1Stats(db),
+    collectR2Stats(bucket),
+  ]);
 
-  const totalFiles = r2Stats.ok ? r2Stats.totalFiles : d1Stats.ok ? d1Stats.totalFiles : null;
+  const totalFiles = r2Stats.ok
+    ? r2Stats.totalFiles
+    : d1Stats.ok
+      ? d1Stats.totalFiles
+      : null;
   const totalFilesSource = r2Stats.ok ? "r2" : d1Stats.ok ? "d1" : null;
-  const totalBytes = r2Stats.ok ? r2Stats.totalBytes : d1Stats.ok ? d1Stats.totalBytes : null;
+  const totalBytes = r2Stats.ok
+    ? r2Stats.totalBytes
+    : d1Stats.ok
+      ? d1Stats.totalBytes
+      : null;
   const totalBytesSource = r2Stats.ok ? "r2" : d1Stats.ok ? "d1" : null;
   const latestUploadAt =
     d1Stats.ok && d1Stats.latestUploadAt
@@ -464,7 +649,25 @@ async function handleStats(bucket, db) {
   });
 }
 
-async function handleListActiveEmployeeDirectory(db) {
+async function handleListActiveEmployeeDirectory(request, db) {
+  const requester = await resolveRequesterContext(request);
+  if (!requester.ok) {
+    return requester.response;
+  }
+
+  if (!hasEmployeeDirectoryAccess(requester.runtime)) {
+    return json(403, {
+      ok: false,
+      success: false,
+      message: "employee_directory_access_denied",
+      reason: !requester.runtime.isActive
+        ? "inactive_account"
+        : "role_not_allowed",
+      allowedRoles: Array.from(EMPLOYEE_DIRECTORY_CALLER_ROLES),
+      ...buildRequesterDebugPayload(requester),
+    });
+  }
+
   try {
     const result = await db
       .prepare(
@@ -491,6 +694,8 @@ async function handleListActiveEmployeeDirectory(db) {
     const rows = Array.isArray(result?.results) ? result.results : [];
 
     return json(200, {
+      ok: true,
+      success: true,
       employees: rows.map(mapEmployeeDirectoryRow),
     });
   } catch (error) {
@@ -498,6 +703,105 @@ async function handleListActiveEmployeeDirectory(db) {
       ok: false,
       success: false,
       message: "employee_directory_query_failed",
+      detail: errorToMessage(error),
+    });
+  }
+}
+
+async function handleAdminSyncEmployeeDirectory(request, db) {
+  const requester = await resolveRequesterContext(request);
+  if (!requester.ok) {
+    return requester.response;
+  }
+
+  if (!hasEffectivePermission(requester.runtime, "settings.manage")) {
+    return json(403, {
+      ok: false,
+      success: false,
+      message: "employee_directory_sync_forbidden",
+      requiredPermission: "settings.manage",
+      ...buildRequesterDebugPayload(requester),
+    });
+  }
+
+  try {
+    const syncedAt = new Date().toISOString();
+    const sourceUsers = await listFirestoreCollectionDocuments({
+      projectId: requester.projectId,
+      idToken: requester.idToken,
+      collectionPath: "users",
+      maskFields: [
+        "role",
+        "roleKey",
+        "active",
+        "isActive",
+        "status",
+        "linkedEmployeeId",
+        "displayName",
+        "name",
+        "fullName",
+        "email",
+        "photoURL",
+        "title",
+        "department",
+        "updatedAt",
+        "profile.photoURL",
+        "employeeProfile.updatedAt",
+        "employeeProfile.personal.name",
+        "employeeProfile.personal.email",
+        "employeeProfile.personal.avatar.fileUrl",
+        "employeeProfile.employment.title",
+        "employeeProfile.employment.jobTitle",
+        "employeeProfile.employment.department",
+        "employeeProfile.employment.employmentStatus",
+        "employeeProfile.employment.status",
+        "employment.title",
+        "employment.jobTitle",
+        "employment.department",
+        "employment.employmentStatus",
+        "employment.status",
+      ],
+    });
+
+    const rows = sourceUsers
+      .map(userDoc =>
+        buildEmployeeDirectoryRow(userDoc.documentId, userDoc.data, syncedAt)
+      )
+      .filter(Boolean)
+      .sort((left, right) =>
+        left.name.localeCompare(right.name, "ar", { sensitivity: "base" })
+      );
+
+    if (!rows.length) {
+      return json(422, {
+        ok: false,
+        success: false,
+        message: "employee_directory_source_empty",
+        detail: "sync_aborted_to_avoid_clearing_directory",
+      });
+    }
+
+    const syncResult = await syncEmployeeDirectoryRowsToD1(db, rows);
+
+    return json(200, {
+      ok: true,
+      success: true,
+      message: "employee_directory_sync_completed",
+      syncedAt,
+      sourceCount: sourceUsers.length,
+      employeesSynced: rows.length,
+      employeesDeleted: syncResult.deletedCount,
+      actor: {
+        uid: requester.uid,
+        email: requester.email || null,
+        role: requester.runtime.role,
+      },
+    });
+  } catch (error) {
+    return json(500, {
+      ok: false,
+      success: false,
+      message: "employee_directory_sync_failed",
       detail: errorToMessage(error),
     });
   }
@@ -574,12 +878,14 @@ async function collectR2Stats(bucket) {
     let truncated = false;
 
     do {
-      const page = await bucket.list(cursor ? { limit: 1000, cursor } : { limit: 1000 });
+      const page = await bucket.list(
+        cursor ? { limit: 1000, cursor } : { limit: 1000 }
+      );
       const objects = Array.isArray(page?.objects) ? page.objects : [];
 
       totalFiles += objects.length;
 
-      objects.forEach((object) => {
+      objects.forEach(object => {
         totalBytes += normalizeNonNegativeNumber(object?.size, 0);
         const uploadedAt = normalizeIsoDate(object?.uploaded);
         if (uploadedAt && (!latestUploadAt || uploadedAt > latestUploadAt)) {
@@ -588,7 +894,9 @@ async function collectR2Stats(bucket) {
       });
 
       truncated = Boolean(page?.truncated);
-      cursor = truncated ? normalizeNullableString(page?.cursor) || undefined : undefined;
+      cursor = truncated
+        ? normalizeNullableString(page?.cursor) || undefined
+        : undefined;
     } while (truncated && cursor);
 
     return {
@@ -650,7 +958,9 @@ async function handleDownload(url, bucket) {
     const headers = new Headers();
     object.writeHttpMetadata(headers);
     const contentType =
-      headers.get("Content-Type") || inferContentTypeFromName(path) || "application/octet-stream";
+      headers.get("Content-Type") ||
+      inferContentTypeFromName(path) ||
+      "application/octet-stream";
 
     return json(200, {
       ok: true,
@@ -666,24 +976,31 @@ async function handleDownload(url, bucket) {
   object.writeHttpMetadata(headers);
 
   const contentType =
-    headers.get("Content-Type") || inferContentTypeFromName(path) || "application/octet-stream";
+    headers.get("Content-Type") ||
+    inferContentTypeFromName(path) ||
+    "application/octet-stream";
   const fileName = getFileNameFromPath(path);
-  const forceDownloadRaw = String(url.searchParams.get("download") || "").trim().toLowerCase();
+  const forceDownloadRaw = String(url.searchParams.get("download") || "")
+    .trim()
+    .toLowerCase();
   const forceDownload = forceDownloadRaw === "1" || forceDownloadRaw === "true";
   const disposition =
-    forceDownload || contentType !== "application/pdf" ? "attachment" : "inline";
+    forceDownload || contentType !== "application/pdf"
+      ? "attachment"
+      : "inline";
 
   headers.set("Content-Type", contentType);
-  headers.set("Content-Disposition", `${disposition}; filename="${toHeaderSafeFileName(fileName)}"`);
+  headers.set(
+    "Content-Disposition",
+    `${disposition}; filename="${toHeaderSafeFileName(fileName)}"`
+  );
   headers.set("Cache-Control", "private, max-age=60");
   headers.set("X-Content-Type-Options", "nosniff");
 
-  return withCors(
-    new Response(object.body, {
-      status: 200,
-      headers,
-    })
-  );
+  return new Response(object.body, {
+    status: 200,
+    headers,
+  });
 }
 
 async function insertFileMetadata(db, record) {
@@ -758,7 +1075,9 @@ async function insertFileMetadata(db, record) {
 
 function mapDbRowToFileRecord(row, requestUrl) {
   const filePath = String(row?.file_path || "").trim();
-  const fileUrl = String(row?.file_url || buildDownloadUrl(requestUrl, filePath, false)).trim();
+  const fileUrl = String(
+    row?.file_url || buildDownloadUrl(requestUrl, filePath, false)
+  ).trim();
 
   return {
     id: String(row?.id || "").trim(),
@@ -791,8 +1110,703 @@ function mapEmployeeDirectoryRow(row) {
     avatarUrl: normalizeNullableString(row?.avatar_url),
     title: normalizeNullableString(row?.title),
     department: normalizeNullableString(row?.department),
-    statusKey: "active",
+    statusKey: normalizeNullableString(row?.status_key) || "active",
   };
+}
+
+async function syncEmployeeDirectoryRowsToD1(db, rows) {
+  const existingResult = await db
+    .prepare(
+      `
+        SELECT uid
+        FROM employee_directory
+      `
+    )
+    .all();
+
+  const existingUids = Array.isArray(existingResult?.results)
+    ? existingResult.results
+        .map(row => String(row?.uid || "").trim())
+        .filter(Boolean)
+    : [];
+  const nextUidSet = new Set(rows.map(row => row.uid));
+  const staleUids = existingUids.filter(uid => !nextUidSet.has(uid));
+
+  for (const row of rows) {
+    await upsertEmployeeDirectoryRow(db, row);
+  }
+
+  for (const uid of staleUids) {
+    await db
+      .prepare(
+        `
+          DELETE FROM employee_directory
+          WHERE uid = ?
+        `
+      )
+      .bind(uid)
+      .run();
+  }
+
+  return {
+    deletedCount: staleUids.length,
+  };
+}
+
+async function upsertEmployeeDirectoryRow(db, row) {
+  await db
+    .prepare(
+      `
+        INSERT INTO employee_directory (
+          uid,
+          name,
+          email,
+          avatar_url,
+          title,
+          department,
+          status_key,
+          role,
+          linked_employee_id,
+          is_active,
+          updated_at,
+          synced_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(uid) DO UPDATE SET
+          name = excluded.name,
+          email = excluded.email,
+          avatar_url = excluded.avatar_url,
+          title = excluded.title,
+          department = excluded.department,
+          status_key = excluded.status_key,
+          role = excluded.role,
+          linked_employee_id = excluded.linked_employee_id,
+          is_active = excluded.is_active,
+          updated_at = excluded.updated_at,
+          synced_at = excluded.synced_at
+      `
+    )
+    .bind(
+      row.uid,
+      row.name,
+      row.email,
+      row.avatarUrl,
+      row.title,
+      row.department,
+      row.statusKey,
+      row.role,
+      row.linkedEmployeeId,
+      row.isActive ? 1 : 0,
+      row.updatedAt,
+      row.syncedAt
+    )
+    .run();
+}
+
+async function resolveRequesterContext(request) {
+  const idToken = readBearerToken(request);
+  if (!idToken) {
+    return {
+      ok: false,
+      response: json(401, {
+        ok: false,
+        success: false,
+        message: "missing_firebase_id_token",
+      }),
+    };
+  }
+
+  const tokenPayload = decodeJwtPayload(idToken);
+  const projectId = stringOrEmpty(tokenPayload?.aud);
+  const uid = stringOrEmpty(tokenPayload?.user_id || tokenPayload?.sub);
+  const email = stringOrEmpty(tokenPayload?.email).toLowerCase();
+
+  if (!projectId || !uid) {
+    return {
+      ok: false,
+      response: json(401, {
+        ok: false,
+        success: false,
+        message: "invalid_firebase_id_token",
+      }),
+    };
+  }
+
+  const [userDocResult, adminUserDocResult] = await Promise.all([
+    fetchFirestoreDocument({
+      projectId,
+      idToken,
+      documentPath: `users/${uid}`,
+    }),
+    email
+      ? fetchFirestoreDocument({
+          projectId,
+          idToken,
+          documentPath: `admin_users/${email}`,
+        })
+      : Promise.resolve({ ok: true, found: false, data: null }),
+  ]);
+
+  if (!userDocResult.ok) {
+    return {
+      ok: false,
+      response: json(userDocResult.status, {
+        ok: false,
+        success: false,
+        message: "firebase_user_lookup_failed",
+        detail: userDocResult.error || null,
+      }),
+    };
+  }
+
+  if (!adminUserDocResult.ok) {
+    return {
+      ok: false,
+      response: json(adminUserDocResult.status, {
+        ok: false,
+        success: false,
+        message: "firebase_admin_lookup_failed",
+        detail: adminUserDocResult.error || null,
+      }),
+    };
+  }
+
+  const runtime = resolveEffectiveRuntime(
+    userDocResult.found ? userDocResult.data : null,
+    adminUserDocResult.found ? adminUserDocResult.data : null
+  );
+
+  return {
+    ok: true,
+    idToken,
+    projectId,
+    uid,
+    email,
+    runtime,
+  };
+}
+
+async function fetchFirestoreDocument({ projectId, idToken, documentPath }) {
+  const url = buildFirestoreDocumentUrl(projectId, documentPath);
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${idToken}`,
+    },
+  });
+
+  const payload = await safeReadJson(response);
+
+  if (response.status === 404) {
+    return {
+      ok: true,
+      found: false,
+      data: null,
+    };
+  }
+
+  if (!response.ok) {
+    return {
+      ok: false,
+      status: response.status === 401 ? 401 : 403,
+      error:
+        stringOrEmpty(payload?.error?.message) ||
+        `firestore_request_failed_${response.status}`,
+    };
+  }
+
+  return {
+    ok: true,
+    found: true,
+    data: parseFirestoreDocument(payload),
+  };
+}
+
+async function listFirestoreCollectionDocuments({
+  projectId,
+  idToken,
+  collectionPath,
+  maskFields = [],
+}) {
+  const documents = [];
+  let nextPageToken = "";
+
+  do {
+    const url = buildFirestoreCollectionUrl(projectId, collectionPath, {
+      pageSize: FIRESTORE_PAGE_SIZE,
+      pageToken: nextPageToken,
+      maskFields,
+    });
+
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${idToken}`,
+      },
+    });
+    const payload = await safeReadJson(response);
+
+    if (!response.ok) {
+      throw new Error(
+        stringOrEmpty(payload?.error?.message) ||
+          `firestore_collection_request_failed_${response.status}`
+      );
+    }
+
+    const pageDocuments = Array.isArray(payload?.documents)
+      ? payload.documents.map(parseFirestoreDocument)
+      : [];
+    documents.push(...pageDocuments);
+    nextPageToken = stringOrEmpty(payload?.nextPageToken);
+  } while (nextPageToken);
+
+  return documents;
+}
+
+function buildFirestoreDocumentUrl(projectId, documentPath) {
+  return `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(
+    projectId
+  )}/databases/(default)/documents/${documentPath}`;
+}
+
+function buildFirestoreCollectionUrl(
+  projectId,
+  collectionPath,
+  { pageSize, pageToken, maskFields = [] } = {}
+) {
+  const url = new URL(
+    buildFirestoreDocumentUrl(projectId, collectionPath)
+  );
+
+  if (pageSize) {
+    url.searchParams.set("pageSize", String(pageSize));
+  }
+  if (pageToken) {
+    url.searchParams.set("pageToken", pageToken);
+  }
+  maskFields.forEach(fieldPath => {
+    const normalizedFieldPath = stringOrEmpty(fieldPath);
+    if (normalizedFieldPath) {
+      url.searchParams.append("mask.fieldPaths", normalizedFieldPath);
+    }
+  });
+
+  return url.toString();
+}
+
+async function safeReadJson(response) {
+  try {
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
+
+function parseFirestoreDocument(document) {
+  const documentName = stringOrEmpty(document?.name);
+  const segments = documentName.split("/").filter(Boolean);
+  const documentId = segments.length ? segments[segments.length - 1] : "";
+
+  return {
+    documentId,
+    name: documentName,
+    data: parseFirestoreFields(document?.fields),
+  };
+}
+
+function parseFirestoreFields(fields) {
+  if (!fields || typeof fields !== "object") return {};
+
+  const output = {};
+  Object.entries(fields).forEach(([key, value]) => {
+    output[key] = parseFirestoreValue(value);
+  });
+  return output;
+}
+
+function parseFirestoreValue(value) {
+  if (!value || typeof value !== "object") return null;
+  if ("stringValue" in value) return String(value.stringValue || "");
+  if ("booleanValue" in value) return Boolean(value.booleanValue);
+  if ("integerValue" in value) return Number(value.integerValue || 0);
+  if ("doubleValue" in value) return Number(value.doubleValue || 0);
+  if ("timestampValue" in value) return normalizeIsoDate(value.timestampValue);
+  if ("nullValue" in value) return null;
+  if ("mapValue" in value) return parseFirestoreFields(value.mapValue?.fields);
+  if ("arrayValue" in value) {
+    const values = Array.isArray(value.arrayValue?.values)
+      ? value.arrayValue.values
+      : [];
+    return values.map(parseFirestoreValue);
+  }
+  return null;
+}
+
+function readBearerToken(request) {
+  const header = String(request.headers.get("Authorization") || "").trim();
+  if (!header.toLowerCase().startsWith("bearer ")) return "";
+  return header.slice(7).trim();
+}
+
+function decodeJwtPayload(token) {
+  try {
+    const payload = String(token || "").split(".")[1] || "";
+    if (!payload) return null;
+
+    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const padding =
+      normalized.length % 4 === 0
+        ? ""
+        : "=".repeat(4 - (normalized.length % 4));
+    return JSON.parse(atob(normalized + padding));
+  } catch {
+    return null;
+  }
+}
+
+function resolveEffectiveRuntime(userData, adminUserData) {
+  const userRuntime = createRuntimeFromUserData(userData);
+  const adminRuntime = createRuntimeFromAdminUserData(adminUserData);
+  const runtimes = [userRuntime, adminRuntime];
+
+  return {
+    role: resolveHighestPriorityRuntimeRole(runtimes),
+    permissionsAllow: collectRuntimePermissions(runtimes, "permissionsAllow"),
+    permissionsDeny: collectRuntimePermissions(runtimes, "permissionsDeny"),
+    isActive: runtimes.some(runtime => runtime.isActive),
+    sources: {
+      user: userRuntime,
+      admin: adminRuntime,
+    },
+  };
+}
+
+function createRuntimeFromUserData(data) {
+  if (!data || typeof data !== "object") {
+    return createEmptyRuntime();
+  }
+
+  return {
+    role: resolveRoleFromData(data),
+    rawRole: normalizeRawRoleValue(data?.role),
+    rawRoleKey: normalizeRawRoleValue(data?.roleKey),
+    permissionsAllow: normalizePermissionList(data?.permissionsAllow),
+    permissionsDeny: normalizePermissionList(data?.permissionsDeny),
+    isActive: resolveUserActive(data),
+  };
+}
+
+function createRuntimeFromAdminUserData(data) {
+  if (!data || typeof data !== "object") {
+    return createEmptyRuntime();
+  }
+
+  return {
+    role: resolveRoleFromData(data, { preferRoleKey: true }),
+    rawRole: normalizeRawRoleValue(data?.role),
+    rawRoleKey: normalizeRawRoleValue(data?.roleKey),
+    permissionsAllow: normalizePermissionList(data?.permissionsAllow),
+    permissionsDeny: normalizePermissionList(data?.permissionsDeny),
+    isActive: resolveAdminUserActive(data),
+  };
+}
+
+function normalizeKnownRole(value) {
+  return resolveNormalizedRole(value) || "guest";
+}
+
+function normalizePermissionList(value) {
+  return Array.isArray(value)
+    ? value.map(entry => stringOrEmpty(entry)).filter(Boolean)
+    : [];
+}
+
+function createEmptyRuntime() {
+  return {
+    role: "guest",
+    rawRole: "",
+    rawRoleKey: "",
+    permissionsAllow: [],
+    permissionsDeny: [],
+    isActive: false,
+  };
+}
+
+function resolveRoleFromData(data, { preferRoleKey = false } = {}) {
+  const candidates = preferRoleKey
+    ? [data?.roleKey, data?.role]
+    : [data?.role, data?.roleKey];
+
+  for (const candidate of candidates) {
+    const resolvedRole = resolveNormalizedRole(candidate);
+    if (resolvedRole) return resolvedRole;
+  }
+
+  return "guest";
+}
+
+function normalizeRawRoleValue(value) {
+  return stringOrEmpty(value).toLowerCase();
+}
+
+function resolveNormalizedRole(value) {
+  const rawRole = normalizeRawRoleValue(value);
+  if (!rawRole) return "";
+  if (KNOWN_APP_ROLES.has(rawRole)) return rawRole;
+  return ROLE_ALIASES[rawRole] || "";
+}
+
+function resolveHighestPriorityRuntimeRole(runtimes) {
+  const activeRuntimes = runtimes.filter(runtime => runtime?.isActive);
+  const candidates = activeRuntimes.length ? activeRuntimes : runtimes;
+  let highestRole = "guest";
+  let highestPriority = ROLE_PRIORITY.guest ?? 0;
+
+  candidates.forEach(runtime => {
+    const role = normalizeKnownRole(runtime?.role);
+    const priority = ROLE_PRIORITY[role] ?? 0;
+    if (priority > highestPriority) {
+      highestRole = role;
+      highestPriority = priority;
+    }
+  });
+
+  return highestRole;
+}
+
+function collectRuntimePermissions(runtimes, key) {
+  return Array.from(
+    new Set(
+      runtimes.flatMap(runtime =>
+        Array.isArray(runtime?.[key]) ? runtime[key] : []
+      )
+    )
+  );
+}
+
+function getRuntimeSources(runtime) {
+  const runtimeSources = runtime?.sources;
+  if (!runtimeSources || typeof runtimeSources !== "object") {
+    return runtime ? [runtime] : [];
+  }
+
+  return Object.values(runtimeSources).filter(
+    source => source && typeof source === "object"
+  );
+}
+
+function hasEffectivePermission(runtime, permission) {
+  const normalizedPermission = stringOrEmpty(permission);
+  if (!normalizedPermission) return false;
+
+  return getRuntimeSources(runtime).some(source =>
+    doesRuntimeGrantPermission(source, normalizedPermission)
+  );
+}
+
+function doesRuntimeGrantPermission(runtime, permission) {
+  if (!runtime?.isActive) return false;
+
+  const deny = new Set(runtime.permissionsDeny || []);
+  if (deny.has(permission)) return false;
+
+  const allow = new Set(runtime.permissionsAllow || []);
+  if (allow.has(permission)) return true;
+
+  const defaults = ROLE_DEFAULT_PERMISSIONS[runtime.role] || [];
+  return defaults.includes(permission);
+}
+
+function hasEmployeeDirectoryAccess(runtime) {
+  return getRuntimeSources(runtime).some(
+    source =>
+      source?.isActive && EMPLOYEE_DIRECTORY_CALLER_ROLES.has(source.role)
+  );
+}
+
+function buildRequesterDebugPayload(requester) {
+  const userRuntime = requester?.runtime?.sources?.user || null;
+  const adminRuntime = requester?.runtime?.sources?.admin || null;
+
+  return {
+    uid: requester?.uid || "",
+    email: requester?.email || null,
+    role: requester?.runtime?.role || "guest",
+    resolvedRole: requester?.runtime?.role || "guest",
+    rawUserRole: userRuntime?.rawRole || "",
+    rawUserRoleKey: userRuntime?.rawRoleKey || "",
+    rawAdminRole: adminRuntime?.rawRole || "",
+    rawAdminRoleKey: adminRuntime?.rawRoleKey || "",
+    isActive: Boolean(requester?.runtime?.isActive),
+    permissionsAllow: Array.isArray(requester?.runtime?.permissionsAllow)
+      ? requester.runtime.permissionsAllow
+      : [],
+    permissionsDeny: Array.isArray(requester?.runtime?.permissionsDeny)
+      ? requester.runtime.permissionsDeny
+      : [],
+    hasSettingsManage: hasEffectivePermission(
+      requester?.runtime,
+      "settings.manage"
+    ),
+  };
+}
+
+function resolveEmployeeDirectoryActive(data) {
+  if (!data || typeof data !== "object") return false;
+
+  const direct = parseActiveValue(data?.active);
+  if (direct !== null) return direct;
+
+  const legacyFlag = parseActiveValue(data?.isActive);
+  if (legacyFlag !== null) return legacyFlag;
+
+  const legacyStatus = parseActiveValue(data?.status);
+  if (legacyStatus !== null) return legacyStatus;
+
+  const employment = data?.employeeProfile?.employment || data?.employment || {};
+  const employmentStatus = parseActiveValue(
+    employment?.employmentStatus ?? employment?.status
+  );
+  if (employmentStatus !== null) return employmentStatus;
+
+  return true;
+}
+
+function resolveAdminUserActive(data) {
+  if (!data || typeof data !== "object") return false;
+
+  const direct = parseActiveValue(data?.active);
+  if (direct !== null) return direct;
+
+  const legacy = parseActiveValue(data?.isActive);
+  if (legacy !== null) return legacy;
+
+  const status = parseActiveValue(data?.status);
+  if (status !== null) return status;
+
+  return true;
+}
+
+function resolveUserActive(data) {
+  if (!data || typeof data !== "object") return false;
+
+  const direct = parseActiveValue(data?.active);
+  if (direct !== null) return direct;
+
+  const legacyFlag = parseActiveValue(data?.isActive);
+  if (legacyFlag !== null) return legacyFlag;
+
+  const legacyStatus = parseActiveValue(data?.status);
+  if (legacyStatus !== null) return legacyStatus;
+
+  return true;
+}
+
+function parseActiveValue(value) {
+  if (typeof value === "boolean") return value;
+
+  if (typeof value === "number") {
+    if (value === 1) return true;
+    if (value === 0) return false;
+  }
+
+  const normalized = stringOrEmpty(value).toLowerCase();
+  if (!normalized) return null;
+  if (ACTIVE_TRUE_VALUES.has(normalized)) return true;
+  if (ACTIVE_FALSE_VALUES.has(normalized)) return false;
+  return null;
+}
+
+function buildEmployeeDirectoryRow(uid, data, syncedAt) {
+  if (!uid || !isEmployeeDirectoryCandidate(data)) {
+    return null;
+  }
+
+  const employment = data?.employeeProfile?.employment || data?.employment || {};
+  const personal = data?.employeeProfile?.personal || data?.personal || {};
+  const role = normalizeEmployeeDirectoryRole(data) || null;
+  const isActive = resolveEmployeeDirectoryActive(data);
+  const statusKey = isActive ? "active" : "inactive";
+  const name = pickFirstText(
+    data?.displayName,
+    data?.name,
+    data?.fullName,
+    personal?.name,
+    uid
+  );
+
+  if (!name) {
+    return null;
+  }
+
+  return {
+    uid,
+    name,
+    email: pickFirstText(data?.email, personal?.email) || null,
+    avatarUrl:
+      pickFirstText(
+        personal?.avatar?.fileUrl,
+        data?.photoURL,
+        data?.profile?.photoURL
+      ) || null,
+    title: pickFirstText(employment?.title, employment?.jobTitle, data?.title) || null,
+    department: pickFirstText(employment?.department, data?.department) || null,
+    statusKey,
+    role,
+    linkedEmployeeId: stringOrEmpty(data?.linkedEmployeeId) || null,
+    isActive,
+    updatedAt:
+      normalizeIsoDate(data?.updatedAt) ||
+      normalizeIsoDate(data?.employeeProfile?.updatedAt) ||
+      syncedAt,
+    syncedAt,
+  };
+}
+
+function isEmployeeDirectoryCandidate(data) {
+  const role = normalizeEmployeeDirectoryRole(data);
+  if (EMPLOYEE_DIRECTORY_EXCLUDED_ROLES.has(role)) return false;
+
+  const employment = data?.employeeProfile?.employment || data?.employment || {};
+  const personal = data?.employeeProfile?.personal || data?.personal || {};
+
+  return (
+    role === "staff" ||
+    role === "hr" ||
+    stringOrEmpty(data?.linkedEmployeeId).length > 0 ||
+    hasValuesObject(employment) ||
+    hasValuesObject(personal)
+  );
+}
+
+function normalizeEmployeeDirectoryRole(value) {
+  if (value && typeof value === "object") {
+    return resolveRoleFromData(value);
+  }
+
+  return normalizeKnownRole(value);
+}
+
+function hasValuesObject(value) {
+  return (
+    !!value &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    Object.keys(value).length > 0
+  );
+}
+
+function pickFirstText(...values) {
+  for (const value of values) {
+    const normalized = stringOrEmpty(value);
+    if (normalized) return normalized;
+  }
+  return "";
+}
+
+function stringOrEmpty(value) {
+  return String(value || "").trim();
 }
 
 function buildUploadPath({
@@ -810,7 +1824,9 @@ function buildUploadPath({
   if (category === "career_attachment") {
     const safeFolder = normalizeSlug(storageFolder) || "attachments";
     const safeName = sanitizeFileName(fileName || "attachment");
-    const ext = safeName.includes(".") ? "" : inferExtensionFromType(contentType);
+    const ext = safeName.includes(".")
+      ? ""
+      : inferExtensionFromType(contentType);
     const stamp = Date.now();
     return `careers/${safeEntityId}/${safeFolder}/${stamp}-${safeName}${ext}`;
   }
@@ -862,7 +1878,9 @@ function buildDownloadUrl(requestUrl, path, forceDownload) {
 }
 
 function normalizeKind(value) {
-  const kind = String(value || "").trim().toLowerCase();
+  const kind = String(value || "")
+    .trim()
+    .toLowerCase();
   return ALLOWED_KINDS.has(kind) ? kind : "";
 }
 
@@ -901,7 +1919,9 @@ function normalizeIsoDate(value) {
 }
 
 function normalizeStatus(value) {
-  const raw = String(value || "").trim().toLowerCase();
+  const raw = String(value || "")
+    .trim()
+    .toLowerCase();
   if (!raw) return "";
   if (!/^[a-z0-9_-]+$/.test(raw)) return "";
   return raw;
@@ -910,7 +1930,7 @@ function normalizeStatus(value) {
 function normalizeCsvSlugs(value) {
   return String(value || "")
     .split(",")
-    .map((part) => normalizeSlug(part))
+    .map(part => normalizeSlug(part))
     .filter(Boolean);
 }
 
@@ -921,7 +1941,9 @@ function clampLimit(value) {
 }
 
 function normalizeObjectPath(value) {
-  const raw = String(value || "").trim().replace(/^\/+/, "");
+  const raw = String(value || "")
+    .trim()
+    .replace(/^\/+/, "");
   if (!raw) return "";
   if (raw.includes("..") || raw.includes("\\")) return "";
   return raw;
@@ -944,7 +1966,10 @@ function getFileNameFromPath(path) {
 }
 
 function normalizeContentType(type, fileName) {
-  const normalized = String(type || "").split(";")[0].trim().toLowerCase();
+  const normalized = String(type || "")
+    .split(";")[0]
+    .trim()
+    .toLowerCase();
   if (normalized) return normalized;
   return inferContentTypeFromName(fileName) || "application/octet-stream";
 }
@@ -986,11 +2011,17 @@ function inferExtensionFromType(contentType) {
   if (contentType === "application/json") return ".json";
   if (contentType === "application/zip") return ".zip";
   if (contentType === "application/msword") return ".doc";
-  if (contentType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
+  if (
+    contentType ===
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+  ) {
     return ".docx";
   }
   if (contentType === "application/vnd.ms-excel") return ".xls";
-  if (contentType === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") {
+  if (
+    contentType ===
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+  ) {
     return ".xlsx";
   }
   return "";
@@ -1007,22 +2038,43 @@ function toHeaderSafeFileName(value) {
 }
 
 function json(status, payload) {
-  return withCors(
-    new Response(JSON.stringify(payload), {
-      status,
-      headers: {
-        "Content-Type": "application/json; charset=utf-8",
-        "Cache-Control": "no-store",
-      },
-    })
-  );
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": "no-store",
+    },
+  });
 }
 
-function withCors(response) {
+function getAllowedCorsOrigins(env) {
+  const configuredOrigins = String(env?.CORS_ALLOWED_ORIGINS || "")
+    .split(",")
+    .map(origin => origin.trim())
+    .filter(Boolean);
+
+  return new Set([...DEFAULT_ALLOWED_ORIGINS, ...configuredOrigins]);
+}
+
+function resolveCorsOrigin(request, env) {
+  const requestOrigin = String(request.headers.get("Origin") || "").trim();
+  if (!requestOrigin) return "";
+
+  return getAllowedCorsOrigins(env).has(requestOrigin) ? requestOrigin : "";
+}
+
+function withCors(response, request, env) {
   const headers = new Headers(response.headers);
-  headers.set("Access-Control-Allow-Origin", "*");
+  const allowedOrigin = resolveCorsOrigin(request, env);
+
+  if (allowedOrigin) {
+    headers.set("Access-Control-Allow-Origin", allowedOrigin);
+    headers.append("Vary", "Origin");
+  }
+
   headers.set("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
   headers.set("Access-Control-Allow-Headers", "Content-Type,Authorization");
+  headers.set("Access-Control-Max-Age", "86400");
 
   return new Response(response.body, {
     status: response.status,

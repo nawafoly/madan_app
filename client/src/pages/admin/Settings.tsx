@@ -129,6 +129,10 @@ import {
   type DocumentStorageServiceHealth,
 } from "@/lib/documentUploadService";
 import {
+  syncEmployeeDirectoryFromWorker,
+  type EmployeeDirectorySyncResult,
+} from "@/lib/employeeDirectoryWorker";
+import {
   generateBusinessExcelExport,
   type BusinessExcelExportSummary,
 } from "@/lib/businessExcelExport";
@@ -1129,6 +1133,10 @@ export default function Settings() {
   const [databaseLoaded, setDatabaseLoaded] = useState(
     Boolean(!databaseWorkerUrl)
   );
+  const [employeeDirectorySyncing, setEmployeeDirectorySyncing] =
+    useState(false);
+  const [employeeDirectorySyncSummary, setEmployeeDirectorySyncSummary] =
+    useState<EmployeeDirectorySyncResult | null>(null);
 
   /* =========================
      Dialogs state
@@ -1553,6 +1561,52 @@ export default function Settings() {
     } finally {
       setDatabaseRefreshing(false);
       setDatabaseLoaded(true);
+    }
+  };
+
+  const handleSyncEmployeeDirectory = async () => {
+    if (!databaseWorkerUrl) {
+      toast.error("تعذر تنفيذ المزامنة لأن رابط الـ Worker غير مهيأ");
+      return;
+    }
+
+    setEmployeeDirectorySyncing(true);
+    try {
+      const summary = await syncEmployeeDirectoryFromWorker();
+      setEmployeeDirectorySyncSummary(summary);
+
+      toast.success(
+        `تمت مزامنة دليل الموظفين: ${formatNumberEN(
+          summary.employeesSynced
+        )} سجل`
+      );
+
+      void logAuditEvent({
+        action: "employee_directory_synced",
+        category: "settings",
+        entityType: "employee_directory",
+        entityId: "d1",
+        source: settingsSource("sync_employee_directory"),
+        message: `Synced employee_directory to D1 (${summary.employeesSynced} rows, ${summary.employeesDeleted} deleted).`,
+        meta: {
+          syncedAt: summary.syncedAt,
+          sourceCount: summary.sourceCount,
+          employeesSynced: summary.employeesSynced,
+          employeesDeleted: summary.employeesDeleted,
+          actorRole: summary.actor?.role || null,
+        },
+      }).catch(error => {
+        console.warn("employee_directory_sync_audit_failed", error);
+      });
+    } catch (error) {
+      console.error("employee_directory_sync_failed", error);
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "فشلت مزامنة دليل الموظفين."
+      );
+    } finally {
+      setEmployeeDirectorySyncing(false);
     }
   };
 
@@ -7114,6 +7168,106 @@ export default function Settings() {
                       </div>
                     );
                   })}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="overflow-hidden rounded-[26px] border border-slate-200/80 bg-white shadow-[0_24px_54px_-40px_rgba(15,23,42,0.28)]">
+              <CardHeader className="border-b border-slate-100/80 pb-6">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="space-y-2">
+                    <CardTitle className="text-[1.1rem] font-semibold tracking-tight text-slate-950">
+                      مزامنة دليل الموظفين
+                    </CardTitle>
+                    <CardDescription className="max-w-2xl text-sm leading-7 text-slate-600">
+                      تشغيل مزامنة `employee_directory` من Firestore إلى D1 عبر
+                      Cloudflare Worker، بدون الحاجة إلى سكربت يدوي من التيرمنل.
+                    </CardDescription>
+                  </div>
+
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      getDatabaseStatusTone(
+                        employeeDirectorySyncing
+                          ? "checking"
+                          : employeeDirectorySyncSummary?.syncedAt
+                            ? "success"
+                            : "not_ready"
+                      )
+                    )}
+                  >
+                    {employeeDirectorySyncing
+                      ? "جارٍ التنفيذ"
+                      : employeeDirectorySyncSummary?.syncedAt
+                        ? "تمت آخر مزامنة"
+                        : "مزامنة يدوية"}
+                  </Badge>
+                </div>
+              </CardHeader>
+
+              <CardContent className="pt-6">
+                <div className="grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
+                  <div className="rounded-[22px] border border-slate-200 bg-slate-50/60 p-4">
+                    <div className="flex items-start gap-3">
+                      <div className="rounded-xl border bg-background p-2 text-muted-foreground">
+                        <Users className="h-4 w-4" />
+                      </div>
+                      <div className="space-y-2">
+                        <div className="font-medium">
+                          تحديث قائمة الموظفين النشطين المعروضة للـ coworkers
+                        </div>
+                        <p className="text-sm leading-6 text-muted-foreground">
+                          هذا الإجراء يقرأ سجلات `users` المسموح بها، يعيد
+                          توليد صفوف `employee_directory`، ثم يحدّث D1 ليبقى
+                          مصدر العرض من الـ Worker مباشرة.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-[22px] border border-slate-200 bg-slate-50/60 p-4">
+                    <div className="space-y-3">
+                      <div className="text-sm text-muted-foreground">
+                        {employeeDirectorySyncSummary?.syncedAt
+                          ? `آخر مزامنة: ${formatDatabaseTimestamp(
+                              employeeDirectorySyncSummary.syncedAt
+                            )}`
+                          : "لم تُنفذ المزامنة من داخل النظام بعد."}
+                      </div>
+
+                      {employeeDirectorySyncSummary ? (
+                        <div className="flex flex-wrap gap-2">
+                          <Badge variant="secondary">
+                            {formatNumberEN(
+                              employeeDirectorySyncSummary.employeesSynced
+                            )}{" "}
+                            سجل
+                          </Badge>
+                          <Badge variant="outline">
+                            حذف {formatNumberEN(
+                              employeeDirectorySyncSummary.employeesDeleted
+                            )}
+                          </Badge>
+                          <Badge variant="outline">
+                            المصدر {formatNumberEN(
+                              employeeDirectorySyncSummary.sourceCount
+                            )}
+                          </Badge>
+                        </div>
+                      ) : null}
+
+                      <Button
+                        className="w-full"
+                        disabled={employeeDirectorySyncing || !databaseWorkerUrl}
+                        onClick={() => void handleSyncEmployeeDirectory()}
+                      >
+                        {employeeDirectorySyncing
+                          ? "جارٍ مزامنة دليل الموظفين..."
+                          : "مزامنة دليل الموظفين"}
+                      </Button>
+                    </div>
+                  </div>
                 </div>
               </CardContent>
             </Card>

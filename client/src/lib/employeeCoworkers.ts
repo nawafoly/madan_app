@@ -1,56 +1,12 @@
-export type EmployeeCoworkerOption = {
-  uid: string;
-  name: string;
-  email: string | null;
-  avatarUrl: string | null;
-  title: string | null;
-  department: string | null;
-  statusKey: string;
-};
+import {
+  fetchEmployeeDirectoryFromWorker,
+  type EmployeeDirectoryWorkerEmployee,
+} from "@/lib/employeeDirectoryWorker";
 
-type EmployeeDirectoryResponse = {
-  employees?: EmployeeCoworkerOption[] | null;
-};
-
-function buildEmployeeDirectoryEndpoint() {
-  const workerBaseUrl = String(import.meta.env.VITE_R2_UPLOAD_WORKER_URL || "").trim();
-  if (!workerBaseUrl) return "";
-
-  try {
-    return new URL("/listActiveEmployeeDirectory", workerBaseUrl).toString();
-  } catch {
-    return "";
-  }
-}
+export type EmployeeCoworkerOption = EmployeeDirectoryWorkerEmployee;
 
 export async function fetchActiveEmployeeCoworkers() {
-  const endpoint = buildEmployeeDirectoryEndpoint();
-  if (!endpoint) {
-    throw new Error("Employee directory endpoint is not configured.");
-  }
-
-  const response = await fetch(endpoint, {
-    method: "GET",
-    headers: {
-      Accept: "application/json",
-    },
-  });
-
-  let payload: EmployeeDirectoryResponse | null = null;
-  try {
-    payload = (await response.json()) as EmployeeDirectoryResponse;
-  } catch {
-    payload = null;
-  }
-
-  if (!response.ok) {
-    const message =
-      String((payload as { message?: string } | null)?.message || "").trim() ||
-      `Employee directory request failed (${response.status}).`;
-    throw new Error(message);
-  }
-
-  const employees = Array.isArray(payload?.employees) ? payload.employees : [];
+  const employees = await fetchEmployeeDirectoryFromWorker();
 
   return employees
     .map(employee => ({
