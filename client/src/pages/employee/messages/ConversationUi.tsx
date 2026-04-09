@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
-import { Check, ChevronDown, Inbox } from "lucide-react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Check, ChevronDown, Inbox, Search } from "lucide-react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -19,6 +19,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
+import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
@@ -102,7 +103,7 @@ export function MetaCard({
   );
 }
 
-export function RecipientPicker({
+function LegacyRecipientPicker({
   options,
   selectedRecipient,
   loading,
@@ -200,6 +201,251 @@ export function RecipientPicker({
             </CommandGroup>
           </CommandList>
         </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+export function RecipientPicker({
+  options,
+  selectedRecipient,
+  loading,
+  disabled,
+  open,
+  onOpenChange,
+  onSelect,
+}: {
+  options: EmployeeCoworkerOption[];
+  selectedRecipient: EmployeeCoworkerOption | null;
+  loading: boolean;
+  disabled?: boolean;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSelect: (uid: string) => void;
+}) {
+  const [searchQuery, setSearchQuery] = useState("");
+  const selectedMeta = [selectedRecipient?.title, selectedRecipient?.department]
+    .filter(Boolean)
+    .join(" - ");
+  const filteredOptions = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLocaleLowerCase();
+    if (!normalizedQuery) return options;
+
+    return options.filter(option =>
+      [option.name, option.email || "", option.department || "", option.title || ""]
+        .join(" ")
+        .toLocaleLowerCase()
+        .includes(normalizedQuery)
+    );
+  }, [options, searchQuery]);
+
+  useEffect(() => {
+    if (!open) {
+      setSearchQuery("");
+    }
+  }, [open]);
+
+  return (
+    <Popover
+      open={open}
+      onOpenChange={nextOpen => {
+        if (!nextOpen) {
+          setSearchQuery("");
+        }
+        onOpenChange(nextOpen);
+      }}
+    >
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          role="combobox"
+          disabled={disabled}
+          className="h-auto min-h-[78px] w-full justify-between rounded-[24px] border-slate-200 bg-white px-5 py-4 text-right text-sm text-slate-900 shadow-[0_18px_40px_-32px_rgba(15,23,42,0.32)] transition-all hover:border-slate-300 hover:bg-slate-50"
+        >
+          <div className="flex min-w-0 flex-1 items-center gap-4">
+            <Avatar className="h-12 w-12 border border-slate-200 bg-slate-100 shadow-sm">
+              <AvatarImage
+                src={selectedRecipient?.avatarUrl || undefined}
+                alt={selectedRecipient?.name || "المستلم"}
+                className="object-cover"
+              />
+              <AvatarFallback className="bg-slate-900 text-xs font-semibold text-white">
+                {selectedRecipient
+                  ? initialsFromName(selectedRecipient.name, selectedRecipient.email)
+                  : "مو"}
+              </AvatarFallback>
+            </Avatar>
+
+            <div className="min-w-0 flex-1 text-right" dir="rtl">
+              <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                المستلم
+              </div>
+              <div className="mt-1 truncate text-sm font-semibold text-slate-950">
+                {selectedRecipient
+                  ? selectedRecipient.name
+                  : loading
+                    ? "جارٍ تحميل الموظفين..."
+                    : "اختر موظفًا لإرسال الرسالة"}
+              </div>
+              <div className="mt-1 truncate text-xs text-slate-500">
+                {selectedRecipient
+                  ? selectedRecipient.email || selectedMeta || "جاهز لبدء محادثة داخلية"
+                  : "ابحث بالاسم أو البريد أو القسم ثم اختر الموظف المناسب"}
+              </div>
+            </div>
+          </div>
+
+          <ChevronDown
+            className={cn(
+              "h-5 w-5 shrink-0 text-slate-500 transition-transform",
+              open ? "rotate-180" : ""
+            )}
+          />
+        </Button>
+      </PopoverTrigger>
+
+      <PopoverContent
+        align="start"
+        sideOffset={10}
+        className="w-[min(720px,calc(100vw-2rem))] rounded-[28px] border border-slate-200/90 bg-white p-0 shadow-[0_32px_90px_-40px_rgba(15,23,42,0.42)]"
+      >
+        <div className="border-b border-slate-200/80 px-5 py-4 text-right">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="space-y-1">
+              <div className="text-sm font-semibold text-slate-950">
+                اختر موظفًا لبدء أو متابعة المحادثة
+              </div>
+              <p className="text-sm leading-6 text-slate-500">
+                ابحث بالاسم أو البريد أو القسم، ثم اختر الموظف من القائمة أدناه.
+              </p>
+            </div>
+            <Badge
+              variant="outline"
+              className="rounded-full border-slate-200 bg-slate-50 text-slate-600 shadow-none"
+            >
+              {options.length} موظف نشط
+            </Badge>
+          </div>
+
+          <div className="relative mt-4">
+            <Search className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Input
+              autoFocus
+              value={searchQuery}
+              onChange={event => setSearchQuery(event.target.value)}
+              placeholder="ابحث بالاسم أو البريد أو المسمى أو القسم"
+              className="h-12 rounded-2xl border-slate-200 bg-slate-50 pr-11 text-right shadow-none placeholder:text-slate-400 focus-visible:border-sky-300 focus-visible:ring-sky-100"
+              dir="rtl"
+            />
+          </div>
+        </div>
+
+        <ScrollArea className="max-h-[420px]">
+          <div className="space-y-3 p-4">
+            {filteredOptions.length ? (
+              filteredOptions.map(option => {
+                const isSelected = selectedRecipient?.uid === option.uid;
+                const meta = [option.title, option.department].filter(Boolean).join(" - ");
+
+                return (
+                  <button
+                    key={option.uid}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => {
+                      onSelect(option.uid);
+                      setSearchQuery("");
+                      onOpenChange(false);
+                    }}
+                    className={cn(
+                      "w-full rounded-[22px] border bg-white px-4 py-4 text-right shadow-sm transition-all",
+                      isSelected
+                        ? "border-sky-300 bg-sky-50 shadow-[0_18px_40px_-30px_rgba(14,116,144,0.35)]"
+                        : "border-slate-200 hover:border-slate-300 hover:bg-slate-50 hover:shadow-[0_18px_40px_-32px_rgba(15,23,42,0.18)]"
+                    )}
+                    dir="rtl"
+                  >
+                    <div className="flex items-start gap-4">
+                      <Avatar className="mt-0.5 h-12 w-12 border border-slate-200 bg-slate-100 shadow-sm">
+                        <AvatarImage
+                          src={option.avatarUrl || undefined}
+                          alt={option.name}
+                          className="object-cover"
+                        />
+                        <AvatarFallback className="bg-slate-900 text-xs font-semibold text-white">
+                          {initialsFromName(option.name, option.email)}
+                        </AvatarFallback>
+                      </Avatar>
+
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-semibold text-slate-950">
+                              {option.name}
+                            </div>
+                            <div className="mt-1 truncate text-xs text-slate-500">
+                              {option.email || "لا يوجد بريد إلكتروني"}
+                            </div>
+                          </div>
+
+                          {isSelected ? (
+                            <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-sky-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-sky-700">
+                              <Check className="h-3.5 w-3.5" />
+                              المختار
+                            </span>
+                          ) : null}
+                        </div>
+
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {option.title ? (
+                            <Badge
+                              variant="outline"
+                              className="rounded-full border-slate-200 bg-slate-50 text-slate-600 shadow-none"
+                            >
+                              {option.title}
+                            </Badge>
+                          ) : null}
+                          {option.department ? (
+                            <Badge
+                              variant="outline"
+                              className="rounded-full border-slate-200 bg-slate-50 text-slate-600 shadow-none"
+                            >
+                              {option.department}
+                            </Badge>
+                          ) : null}
+                          {!option.title && !option.department ? (
+                            <Badge
+                              variant="outline"
+                              className="rounded-full border-slate-200 bg-slate-50 text-slate-500 shadow-none"
+                            >
+                              بيانات وظيفية محدودة
+                            </Badge>
+                          ) : null}
+                        </div>
+
+                        {meta ? (
+                          <div className="mt-3 text-xs leading-6 text-slate-500">
+                            {meta}
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })
+            ) : (
+              <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50/60 px-5 py-10 text-center">
+                <div className="text-sm font-semibold text-slate-900">
+                  لا توجد نتائج مطابقة
+                </div>
+                <p className="mt-2 text-sm leading-7 text-slate-500">
+                  جرّب البحث باسم مختلف أو بالبريد أو بالقسم للعثور على الموظف.
+                </p>
+              </div>
+            )}
+          </div>
+        </ScrollArea>
       </PopoverContent>
     </Popover>
   );
@@ -442,6 +688,7 @@ export function ConversationWorkspace({
   emptyListDescription,
   emptyConversationTitle,
   emptyConversationDescription,
+  emptyConversationContent,
   composer,
 }: {
   sectionLabel: string;
@@ -461,6 +708,7 @@ export function ConversationWorkspace({
   emptyListDescription: string;
   emptyConversationTitle: string;
   emptyConversationDescription: string;
+  emptyConversationContent?: ReactNode;
   composer: ReactNode;
 }) {
   return (
@@ -543,6 +791,8 @@ export function ConversationWorkspace({
                 })}
               </div>
             </div>
+          ) : emptyConversationContent ? (
+            emptyConversationContent
           ) : (
             <Empty className="min-h-[320px] rounded-[24px] border border-dashed border-slate-200 bg-white/90">
               <EmptyHeader>

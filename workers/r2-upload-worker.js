@@ -49,6 +49,17 @@ export default {
       return handleList(url, db, request.url);
     }
 
+    if (request.method === "GET" && url.pathname === "/listActiveEmployeeDirectory") {
+      if (!db) {
+        return json(500, {
+          ok: false,
+          success: false,
+          message: "missing_d1_binding",
+        });
+      }
+      return handleListActiveEmployeeDirectory(db);
+    }
+
     if (request.method === "GET" && url.pathname === "/stats") {
       return handleStats(bucket, db);
     }
@@ -453,6 +464,45 @@ async function handleStats(bucket, db) {
   });
 }
 
+async function handleListActiveEmployeeDirectory(db) {
+  try {
+    const result = await db
+      .prepare(
+        `
+          SELECT
+            uid,
+            name,
+            email,
+            avatar_url,
+            title,
+            department,
+            status_key
+          FROM employee_directory
+          WHERE is_active = 1
+            AND lower(coalesce(status_key, '')) = 'active'
+            AND lower(coalesce(role, '')) NOT IN ('client', 'guest')
+            AND length(trim(coalesce(uid, ''))) > 0
+            AND length(trim(coalesce(name, ''))) > 0
+          ORDER BY name COLLATE NOCASE ASC, uid ASC
+        `
+      )
+      .all();
+
+    const rows = Array.isArray(result?.results) ? result.results : [];
+
+    return json(200, {
+      employees: rows.map(mapEmployeeDirectoryRow),
+    });
+  } catch (error) {
+    return json(500, {
+      ok: false,
+      success: false,
+      message: "employee_directory_query_failed",
+      detail: errorToMessage(error),
+    });
+  }
+}
+
 async function collectD1Stats(db) {
   if (!db) {
     return {
@@ -730,6 +780,18 @@ function mapDbRowToFileRecord(row, requestUrl) {
     status: String(row?.status || DEFAULT_STATUS).trim(),
     version: normalizeNullableInteger(row?.version),
     bucket: normalizeNullableString(row?.bucket),
+  };
+}
+
+function mapEmployeeDirectoryRow(row) {
+  return {
+    uid: String(row?.uid || "").trim(),
+    name: String(row?.name || "").trim(),
+    email: normalizeNullableString(row?.email),
+    avatarUrl: normalizeNullableString(row?.avatar_url),
+    title: normalizeNullableString(row?.title),
+    department: normalizeNullableString(row?.department),
+    statusKey: "active",
   };
 }
 

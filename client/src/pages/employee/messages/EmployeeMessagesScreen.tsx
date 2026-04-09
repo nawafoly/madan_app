@@ -258,9 +258,6 @@ export default function EmployeeMessagesScreen() {
     if (activeSection === "hr" && !hrConversations.length && internalConversations.length) {
       setActiveSection("internal");
     }
-    if (activeSection === "internal" && !internalConversations.length && hrConversations.length) {
-      setActiveSection("hr");
-    }
   }, [activeSection, hrConversations.length, internalConversations.length]);
 
   const activeHrConversation = useMemo(
@@ -294,6 +291,63 @@ export default function EmployeeMessagesScreen() {
     }
     return selectedInternalRecipientUid ? coworkersByUid.get(selectedInternalRecipientUid) || null : null;
   }, [activeInternalConversation, coworkersByUid, selectedInternalRecipientUid]);
+  const internalEmptyConversationContent = useMemo(() => {
+    if (!selectedInternalRecipient) return null;
+
+    return (
+      <div className="min-h-[320px] rounded-[24px] border border-sky-100 bg-sky-50/40 p-6 text-right">
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="outline" className="rounded-full border-sky-200 bg-white text-sky-700 shadow-none">
+            محادثة داخلية جديدة
+          </Badge>
+          <Badge variant="outline" className="rounded-full border-slate-200 bg-white text-slate-600 shadow-none">
+            لم تبدأ الرسائل بعد
+          </Badge>
+        </div>
+
+        <div className="mt-5 space-y-2">
+          <div className="text-lg font-semibold text-slate-950">
+            {selectedInternalRecipient.name}
+          </div>
+          <p className="text-sm leading-7 text-slate-600">
+            تم اختيار هذا الموظف كمستلم. اكتب الرسالة الأولى بالأسفل وسيتم إنشاء
+            المحادثة مباشرة داخل السجل الداخلي.
+          </p>
+        </div>
+
+        <div className="mt-5 grid gap-3 md:grid-cols-3">
+          <div className="rounded-[20px] border border-slate-200 bg-white px-4 py-3">
+            <div className="text-xs font-semibold tracking-[0.14em] text-slate-500">
+              المستلم
+            </div>
+            <div className="mt-2 text-sm font-semibold text-slate-950">
+              {selectedInternalRecipient.name}
+            </div>
+          </div>
+
+          <div className="rounded-[20px] border border-slate-200 bg-white px-4 py-3">
+            <div className="text-xs font-semibold tracking-[0.14em] text-slate-500">
+              البريد
+            </div>
+            <div className="mt-2 text-sm font-semibold text-slate-950">
+              {selectedInternalRecipient.email || "غير متوفر"}
+            </div>
+          </div>
+
+          <div className="rounded-[20px] border border-slate-200 bg-white px-4 py-3">
+            <div className="text-xs font-semibold tracking-[0.14em] text-slate-500">
+              القسم / المسمى
+            </div>
+            <div className="mt-2 text-sm font-semibold text-slate-950">
+              {[selectedInternalRecipient.title, selectedInternalRecipient.department]
+                .filter(Boolean)
+                .join(" - ") || "غير متوفر"}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }, [selectedInternalRecipient]);
 
   useEffect(() => {
     if (activeInternalConversation?.counterpartyUid) {
@@ -605,11 +659,15 @@ export default function EmployeeMessagesScreen() {
                     setSelectedInternalRecipientUid(conversation.counterpartyUid);
                     void markConversationAsRead(conversation);
                   }}
-                  onCloseConversation={() => setActiveInternalConversationId(null)}
+                  onCloseConversation={() => {
+                    setActiveInternalConversationId(null);
+                    setSelectedInternalRecipientUid("");
+                  }}
                   emptyListTitle={loading ? "جارٍ تحميل المحادثات..." : "لا توجد محادثات داخلية بعد"}
                   emptyListDescription={loading ? "لحظات قليلة..." : "ابدأ رسالة جديدة إلى أحد زملائك وسيظهر السجل هنا مباشرة."}
                   emptyConversationTitle="اختر محادثة داخلية أو ابدأ رسالة جديدة"
                   emptyConversationDescription="يمكنك فتح أي محادثة داخلية من القائمة أو اختيار موظف جديد من أداة الإرسال أدناه."
+                  emptyConversationContent={internalEmptyConversationContent}
                   composer={
                     <div className="rounded-[24px] border border-slate-200/80 bg-slate-50/70 p-5">
                       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">

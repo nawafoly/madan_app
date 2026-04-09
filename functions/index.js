@@ -32,6 +32,24 @@ const DEFAULT_NOTIFICATION_SETTINGS = Object.freeze({
 const ADMIN_MESSAGES_PATH = "/admin/messages";
 const EMAIL_PREVIEW_LIMIT = 220;
 const EMAIL_TIMEZONE = "Asia/Riyadh";
+const PUBLIC_WEB_APP_ORIGINS = Object.freeze(
+  Array.from(
+    new Set([
+      "http://localhost:5173",
+      "http://127.0.0.1:5173",
+      "https://madan-app.vercel.app",
+      ...String(process.env.PUBLIC_WEB_APP_ORIGINS || "")
+        .split(",")
+        .map(origin => origin.trim())
+        .filter(Boolean),
+    ])
+  )
+);
+const PUBLIC_WEB_CALLABLE_OPTIONS = Object.freeze({
+  region: REGION,
+  cors: PUBLIC_WEB_APP_ORIGINS,
+  invoker: "public",
+});
 
 // ✅ vNext Contract: countedStatuses = [active, stopped, completed]
 const COUNTED_STATUSES = new Set(["active", "stopped", "completed"]);
@@ -803,7 +821,7 @@ exports.adminRecomputeAllProjects = onCall(
  * + Consume invite after use (isActive=false)
  */
 exports.listActiveEmployeeDirectory = onCall(
-  { region: REGION },
+  PUBLIC_WEB_CALLABLE_OPTIONS,
   async request => {
     if (!request.auth?.uid) {
       throw new HttpsError("unauthenticated", "Authentication required.");
@@ -1321,7 +1339,7 @@ exports.onInterestRequestCreatedNotification = onDocumentCreated(
 );
 
 exports.writeAuditLog = onCall(
-  { region: REGION, cors: true, invoker: "public" },
+  PUBLIC_WEB_CALLABLE_OPTIONS,
   async request => {
     if (!request.auth?.uid) {
       throw new HttpsError("unauthenticated", "Authentication required.");
