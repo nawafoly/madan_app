@@ -25,6 +25,8 @@ import {
   BadgeCheck,
   CalendarDays,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   Clock3,
   Download,
   Eye,
@@ -764,14 +766,12 @@ export default function EmployeesManagementPage() {
     useState<string | null>(null);
   const [composeEmployeeMessageAsNew, setComposeEmployeeMessageAsNew] =
     useState(false);
+  const [isEmployeeSectionNavOpen, setIsEmployeeSectionNavOpen] =
+    useState(true);
   const [sendingEmployeeMessage, setSendingEmployeeMessage] = useState(false);
   const [employeeMessageSenderLookup, setEmployeeMessageSenderLookup] =
     useState<Record<string, MessageSenderProfile>>({});
   const employeeFileInputRef = useRef<HTMLInputElement | null>(null);
-  const employeeOverviewSectionRef = useRef<HTMLDivElement | null>(null);
-  const employeeLeaveSectionRef = useRef<HTMLDivElement | null>(null);
-  const employeeMessagesSectionRef = useRef<HTMLDivElement | null>(null);
-  const employeeFilesSectionRef = useRef<HTMLDivElement | null>(null);
   const handledEmployeeSearchRef = useRef("");
   const handledMessageSearchRef = useRef("");
   const handledSectionNavigationRef = useRef("");
@@ -1064,6 +1064,7 @@ export default function EmployeesManagementPage() {
     resetEmployeeFileForm();
     resetEmployeeMessageForm();
     setActiveEmployeeWorkspaceSection("profile");
+    setIsEmployeeSectionNavOpen(true);
     setActiveEmployeeConversationId(null);
     setComposeEmployeeMessageAsNew(false);
     handledSectionNavigationRef.current = "";
@@ -1208,6 +1209,13 @@ export default function EmployeesManagementPage() {
   );
   const readEmployeeMessagesCount =
     employeeMessages.length - unreadEmployeeMessagesCount;
+  const activeEmployeeWorkspaceSectionMeta = useMemo(
+    () =>
+      EMPLOYEE_WORKSPACE_SECTIONS.find(
+        section => section.key === activeEmployeeWorkspaceSection
+      ) || EMPLOYEE_WORKSPACE_SECTIONS[0],
+    [activeEmployeeWorkspaceSection]
+  );
 
   useEffect(() => {
     const senderIds = Array.from(
@@ -1384,25 +1392,10 @@ export default function EmployeesManagementPage() {
     search,
   ]);
 
-  const scrollToEmployeeWorkspaceSection = (
-    section: EmployeeWorkspaceSectionKey,
-    behavior: ScrollBehavior = "smooth"
+  const handleSelectEmployeeWorkspaceSection = (
+    section: EmployeeWorkspaceSectionKey
   ) => {
     setActiveEmployeeWorkspaceSection(section);
-
-    const target =
-      section === "profile"
-        ? employeeOverviewSectionRef.current
-        : section === "leave"
-          ? employeeLeaveSectionRef.current
-          : section === "messages"
-            ? employeeMessagesSectionRef.current
-            : employeeFilesSectionRef.current;
-
-    target?.scrollIntoView({
-      behavior,
-      block: "start",
-    });
   };
 
   useEffect(() => {
@@ -1423,7 +1416,8 @@ export default function EmployeesManagementPage() {
     }
 
     handledSectionNavigationRef.current = search;
-    scrollToEmployeeWorkspaceSection(requestedEmployeeSection);
+    setActiveEmployeeWorkspaceSection(requestedEmployeeSection);
+    setIsEmployeeSectionNavOpen(true);
   }, [
     requestedEmployeeId,
     requestedEmployeeSection,
@@ -2532,8 +2526,8 @@ export default function EmployeesManagementPage() {
 
             {selectedEmployee && selectedEmployeeProfile ? (
               <div className="flex flex-col gap-6">
-                <Card className="order-0 sticky top-4 z-20 gap-0 overflow-hidden border-slate-200/80 bg-white/95 py-0 shadow-[0_22px_48px_-34px_rgba(15,23,42,0.3)] backdrop-blur">
-                  <CardHeader className="border-b border-slate-100 bg-[linear-gradient(135deg,rgba(255,255,255,0.98)_0%,rgba(244,247,255,0.95)_100%)] px-6 pt-6 pb-4">
+                <Card className="gap-0 overflow-hidden border-slate-200/80 bg-white/95 py-0 shadow-[0_22px_48px_-34px_rgba(15,23,42,0.18)]">
+                  <CardHeader className="bg-[linear-gradient(135deg,rgba(255,255,255,0.98)_0%,rgba(244,247,255,0.95)_100%)] px-6 pt-6 pb-5">
                     <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
                       <div className="flex items-center gap-3">
                         <EmployeeAvatar
@@ -2557,1592 +2551,1630 @@ export default function EmployeesManagementPage() {
                         </div>
                       </div>
 
-                      <div className="flex flex-wrap gap-2">
-                        {EMPLOYEE_WORKSPACE_SECTIONS.map(section => (
-                          <EmployeeWorkspaceTabButton
-                            key={section.key}
-                            active={
-                              activeEmployeeWorkspaceSection === section.key
-                            }
-                            icon={section.icon}
-                            label={section.label}
-                            onClick={() =>
-                              scrollToEmployeeWorkspaceSection(section.key)
-                            }
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  </CardHeader>
-
-                  <CardContent className="px-6 pb-5 pt-4">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge
+                      <Button
+                        type="button"
                         variant="outline"
-                        className="rounded-full border-slate-200 bg-slate-50 text-slate-600 shadow-none"
+                        className="w-full rounded-full border-slate-200 bg-white/90 text-slate-700 shadow-none hover:bg-slate-50 xl:w-auto"
+                        onClick={() =>
+                          setIsEmployeeSectionNavOpen(current => !current)
+                        }
                       >
-                        {selectedEmployeeProfile.employment.department}
-                      </Badge>
-                      <Badge
-                        variant="outline"
-                        className={cn(
-                          "rounded-full shadow-none",
-                          selectedEmployeeProfile.employment.statusTone ===
-                            "success"
-                            ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                            : selectedEmployeeProfile.employment.statusTone ===
-                                "warning"
-                              ? "border-amber-200 bg-amber-50 text-amber-700"
-                              : "border-slate-200 bg-slate-100 text-slate-700"
+                        {isEmployeeSectionNavOpen ? (
+                          <ChevronUp className="ml-2 h-4 w-4" />
+                        ) : (
+                          <ChevronDown className="ml-2 h-4 w-4" />
                         )}
-                      >
-                        {selectedEmployeeProfile.employment.statusLabel}
-                      </Badge>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card
-                  id="employee-section-profile"
-                  ref={employeeOverviewSectionRef}
-                  className="order-10 scroll-mt-36 gap-0 overflow-hidden border-slate-200/80 bg-[linear-gradient(135deg,rgba(255,255,255,0.98)_0%,rgba(248,250,252,0.95)_100%)] py-0 shadow-sm lg:scroll-mt-44"
-                >
-                  <CardHeader className="border-b border-white/70 bg-white/70 px-6 pt-6 pb-4 backdrop-blur">
-                    <div className="space-y-3">
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
-                          <UserRound className="h-4 w-4 text-[#030640]" />
-                          ملخص الموظف
-                        </div>
-                        <CardTitle className="text-2xl tracking-tight text-slate-950">
-                          {selectedEmployeeProfile.personal.name}
-                        </CardTitle>
-                        <CardDescription className="text-sm text-slate-500">
-                          {selectedEmployeeProfile.employment.title}
-                        </CardDescription>
-                      </div>
-
-                      <div className="flex flex-wrap gap-2">
-                        <Badge variant="outline" className="rounded-full">
-                          {selectedEmployeeProfile.employment.department}
-                        </Badge>
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            "rounded-full",
-                            selectedEmployeeProfile.employment.statusTone ===
-                              "success"
-                              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                              : selectedEmployeeProfile.employment
-                                    .statusTone === "warning"
-                                ? "border-amber-200 bg-amber-50 text-amber-700"
-                                : "border-slate-200 bg-slate-100 text-slate-700"
-                          )}
-                        >
-                          {selectedEmployeeProfile.employment.statusLabel}
-                        </Badge>
-                        {selectedEmployeeProfile.employment.employeeCode !==
-                        EMPLOYEE_EMPTY_VALUE ? (
-                          <Badge variant="outline" className="rounded-full">
-                            رقم الموظف:{" "}
-                            {selectedEmployeeProfile.employment.employeeCode}
-                          </Badge>
-                        ) : null}
-                      </div>
+                        {isEmployeeSectionNavOpen
+                          ? "إخفاء التنقل الداخلي"
+                          : "إظهار التنقل الداخلي"}
+                      </Button>
                     </div>
                   </CardHeader>
 
-                  <CardContent className="p-5">
-                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                      <ReadonlyMeta
-                        icon={Mail}
-                        label="البريد"
-                        value={selectedEmployeeProfile.personal.email}
-                        dir="ltr"
-                      />
-                      <ReadonlyMeta
-                        icon={Phone}
-                        label="الجوال"
-                        value={
-                          selectedEmployeeProfile.personal.phone ||
-                          EMPLOYEE_EMPTY_VALUE
-                        }
-                        dir="ltr"
-                      />
-                      <ReadonlyMeta
-                        icon={CalendarDays}
-                        label="بداية العمل"
-                        value={
-                          selectedEmployeeProfile.employment.startDate
-                            ? formatDateEN(
-                                selectedEmployeeProfile.employment.startDate
-                              )
-                            : EMPLOYEE_EMPTY_VALUE
-                        }
-                      />
-                      <ReadonlyMeta
-                        icon={ShieldCheck}
-                        label="رقم البصمة"
-                        value={
-                          selectedEmployeeProfile.employment.fingerprintNumber
-                        }
-                        dir="ltr"
-                      />
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card
-                  id="employee-section-messages"
-                  ref={employeeMessagesSectionRef}
-                  className="order-40 scroll-mt-36 gap-0 overflow-hidden border-slate-200/80 bg-white/95 py-0 shadow-sm lg:scroll-mt-44"
-                >
-                  <CardHeader className="border-b border-slate-100 bg-white/90 px-6 pt-6 pb-4">
-                    <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
-                          <Mail className="h-4 w-4" />
-                          التواصل الداخلي
-                        </div>
-                        <div className="text-2xl font-semibold tracking-tight text-slate-950">
-                          رسائل HR مع الموظف
-                        </div>
-                        <p className="max-w-2xl text-sm leading-7 text-slate-500">
-                          أرسل رسالة مباشرة أو تنبيهًا نصيًا للموظف، وراجع سجل
-                          الرسائل السابقة ضمن نفس الملف الوظيفي.
-                        </p>
-                      </div>
-
-                      <div className="grid gap-3 sm:grid-cols-3">
-                        <LeaveOverviewStat
-                          icon={Mail}
-                          label="إجمالي الرسائل"
-                          value={formatNumberEN(employeeMessages.length)}
-                        />
-                        <LeaveOverviewStat
-                          icon={Clock3}
-                          label="بانتظار القراءة"
-                          value={formatNumberEN(unreadEmployeeMessagesCount)}
-                        />
-                        <LeaveOverviewStat
-                          icon={CheckCircle2}
-                          label="تمت قراءتها"
-                          value={formatNumberEN(readEmployeeMessagesCount)}
-                        />
-                      </div>
-                    </div>
-                  </CardHeader>
-
-                  <CardContent className="p-5">
-                    <div className="grid gap-5 xl:grid-cols-[340px_minmax(0,1fr)]">
-                      <div className="space-y-4" dir="rtl">
-                        <div className="rounded-[24px] border border-slate-200/80 bg-slate-50/75 p-4 text-right">
-                          <div className="mb-3 text-sm font-semibold text-slate-900">
-                            سجل المحادثات
+                  {isEmployeeSectionNavOpen ? (
+                    <CardContent className="border-t border-slate-100 px-6 pb-6 pt-5">
+                      <div className="space-y-4">
+                        <div className="flex flex-col gap-1 text-right">
+                          <div className="text-sm font-semibold text-slate-900">
+                            اختر القسم المطلوب
                           </div>
+                          <div className="text-sm text-slate-500">
+                            يتم عرض قسم واحد فقط أسفل هذا التنقل حسب التبويب
+                            المحدد. القسم النشط الآن:{" "}
+                            {activeEmployeeWorkspaceSectionMeta.label}
+                          </div>
+                        </div>
 
-                          {employeeMessagesLoading ? (
-                            <div className="rounded-[18px] border border-dashed border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-500">
-                              جارٍ تحميل الرسائل...
+                        <div className="flex flex-wrap gap-2">
+                          {EMPLOYEE_WORKSPACE_SECTIONS.map(section => (
+                            <EmployeeWorkspaceTabButton
+                              key={section.key}
+                              active={
+                                activeEmployeeWorkspaceSection === section.key
+                              }
+                              icon={section.icon}
+                              label={section.label}
+                              onClick={() =>
+                                handleSelectEmployeeWorkspaceSection(
+                                  section.key
+                                )
+                              }
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    </CardContent>
+                  ) : null}
+                </Card>
+
+                {activeEmployeeWorkspaceSection === "profile" ? (
+                  <Card
+                    id="employee-section-profile"
+                    className="gap-0 overflow-hidden border-slate-200/80 bg-[linear-gradient(135deg,rgba(255,255,255,0.98)_0%,rgba(248,250,252,0.95)_100%)] py-0 shadow-sm"
+                  >
+                    <CardHeader className="border-b border-white/70 bg-white/70 px-6 pt-6 pb-4 backdrop-blur">
+                      <div className="space-y-3">
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                            <UserRound className="h-4 w-4 text-[#030640]" />
+                            ملخص الموظف
+                          </div>
+                          <CardTitle className="text-2xl tracking-tight text-slate-950">
+                            {selectedEmployeeProfile.personal.name}
+                          </CardTitle>
+                          <CardDescription className="text-sm text-slate-500">
+                            {selectedEmployeeProfile.employment.title}
+                          </CardDescription>
+                        </div>
+
+                        <div className="flex flex-wrap gap-2">
+                          <Badge variant="outline" className="rounded-full">
+                            {selectedEmployeeProfile.employment.department}
+                          </Badge>
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              "rounded-full",
+                              selectedEmployeeProfile.employment.statusTone ===
+                                "success"
+                                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                : selectedEmployeeProfile.employment
+                                      .statusTone === "warning"
+                                  ? "border-amber-200 bg-amber-50 text-amber-700"
+                                  : "border-slate-200 bg-slate-100 text-slate-700"
+                            )}
+                          >
+                            {selectedEmployeeProfile.employment.statusLabel}
+                          </Badge>
+                          {selectedEmployeeProfile.employment.employeeCode !==
+                          EMPLOYEE_EMPTY_VALUE ? (
+                            <Badge variant="outline" className="rounded-full">
+                              رقم الموظف:{" "}
+                              {selectedEmployeeProfile.employment.employeeCode}
+                            </Badge>
+                          ) : null}
+                        </div>
+                      </div>
+                    </CardHeader>
+
+                    <CardContent className="p-5">
+                      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                        <ReadonlyMeta
+                          icon={Mail}
+                          label="البريد"
+                          value={selectedEmployeeProfile.personal.email}
+                          dir="ltr"
+                        />
+                        <ReadonlyMeta
+                          icon={Phone}
+                          label="الجوال"
+                          value={
+                            selectedEmployeeProfile.personal.phone ||
+                            EMPLOYEE_EMPTY_VALUE
+                          }
+                          dir="ltr"
+                        />
+                        <ReadonlyMeta
+                          icon={CalendarDays}
+                          label="بداية العمل"
+                          value={
+                            selectedEmployeeProfile.employment.startDate
+                              ? formatDateEN(
+                                  selectedEmployeeProfile.employment.startDate
+                                )
+                              : EMPLOYEE_EMPTY_VALUE
+                          }
+                        />
+                        <ReadonlyMeta
+                          icon={ShieldCheck}
+                          label="رقم البصمة"
+                          value={
+                            selectedEmployeeProfile.employment.fingerprintNumber
+                          }
+                          dir="ltr"
+                        />
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : null}
+
+                {activeEmployeeWorkspaceSection === "messages" ? (
+                  <Card
+                    id="employee-section-messages"
+                    className="gap-0 overflow-hidden border-slate-200/80 bg-white/95 py-0 shadow-sm"
+                  >
+                    <CardHeader className="border-b border-slate-100 bg-white/90 px-6 pt-6 pb-4">
+                      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                            <Mail className="h-4 w-4" />
+                            التواصل الداخلي
+                          </div>
+                          <div className="text-2xl font-semibold tracking-tight text-slate-950">
+                            رسائل HR مع الموظف
+                          </div>
+                          <p className="max-w-2xl text-sm leading-7 text-slate-500">
+                            أرسل رسالة مباشرة أو تنبيهًا نصيًا للموظف، وراجع سجل
+                            الرسائل السابقة ضمن نفس الملف الوظيفي.
+                          </p>
+                        </div>
+
+                        <div className="grid gap-3 sm:grid-cols-3">
+                          <LeaveOverviewStat
+                            icon={Mail}
+                            label="إجمالي الرسائل"
+                            value={formatNumberEN(employeeMessages.length)}
+                          />
+                          <LeaveOverviewStat
+                            icon={Clock3}
+                            label="بانتظار القراءة"
+                            value={formatNumberEN(unreadEmployeeMessagesCount)}
+                          />
+                          <LeaveOverviewStat
+                            icon={CheckCircle2}
+                            label="تمت قراءتها"
+                            value={formatNumberEN(readEmployeeMessagesCount)}
+                          />
+                        </div>
+                      </div>
+                    </CardHeader>
+
+                    <CardContent className="p-5">
+                      <div className="grid gap-5 xl:grid-cols-[340px_minmax(0,1fr)]">
+                        <div className="space-y-4" dir="rtl">
+                          <div className="rounded-[24px] border border-slate-200/80 bg-slate-50/75 p-4 text-right">
+                            <div className="mb-3 text-sm font-semibold text-slate-900">
+                              سجل المحادثات
                             </div>
-                          ) : employeeConversations.length ? (
-                            <ScrollArea className="h-[420px] pr-1">
-                              <div className="space-y-2">
-                                {employeeConversations.map(conversation => {
-                                  const latestMessage =
-                                    conversation.latestMessage;
-                                  const isActive =
-                                    conversation.id ===
-                                    activeEmployeeConversationId;
-                                  const latestFromEmployee =
-                                    latestMessage.fromUserId ===
-                                    selectedEmployeeAuthUid;
 
-                                  return (
-                                    <button
-                                      key={conversation.id}
-                                      type="button"
-                                      onClick={() =>
-                                        handleSelectEmployeeConversation(
-                                          conversation
-                                        )
-                                      }
-                                      className={cn(
-                                        "w-full min-w-0 rounded-[22px] border px-4 py-4 text-right transition-all",
-                                        isActive
-                                          ? "border-slate-900 bg-slate-900 text-white shadow-[0_20px_42px_-28px_rgba(15,23,42,0.75)]"
-                                          : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
-                                      )}
-                                    >
-                                      <div className="flex min-w-0 items-start justify-between gap-3">
-                                        <div className="min-w-0 flex-1">
-                                          <div className="flex flex-wrap items-center gap-2">
-                                            <Badge
-                                              variant="outline"
-                                              className={cn(
-                                                "rounded-full shadow-none",
-                                                isActive
-                                                  ? "border-white/20 bg-white/10 text-white"
-                                                  : "border-slate-200 bg-slate-50 text-slate-600"
-                                              )}
-                                            >
-                                              {latestMessage.typeLabel}
-                                            </Badge>
-                                            <Badge
-                                              variant="outline"
-                                              className={cn(
-                                                "rounded-full shadow-none",
-                                                isActive
-                                                  ? "border-white/20 bg-white/10 text-white"
-                                                  : latestFromEmployee
-                                                    ? "border-[#030640]/15 bg-[#030640]/5 text-[#030640]"
-                                                    : "border-slate-200 bg-slate-100 text-slate-600"
-                                              )}
-                                            >
-                                              {latestFromEmployee
-                                                ? "الموظف"
-                                                : "HR"}
-                                            </Badge>
-                                            {conversation.unreadCount > 0 ? (
-                                              <Badge className="rounded-full bg-[#F2B705] text-slate-950 hover:bg-[#F2B705]">
-                                                {conversation.unreadCount} جديد
+                            {employeeMessagesLoading ? (
+                              <div className="rounded-[18px] border border-dashed border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-500">
+                                جارٍ تحميل الرسائل...
+                              </div>
+                            ) : employeeConversations.length ? (
+                              <ScrollArea className="h-[420px] pr-1">
+                                <div className="space-y-2">
+                                  {employeeConversations.map(conversation => {
+                                    const latestMessage =
+                                      conversation.latestMessage;
+                                    const isActive =
+                                      conversation.id ===
+                                      activeEmployeeConversationId;
+                                    const latestFromEmployee =
+                                      latestMessage.fromUserId ===
+                                      selectedEmployeeAuthUid;
+
+                                    return (
+                                      <button
+                                        key={conversation.id}
+                                        type="button"
+                                        onClick={() =>
+                                          handleSelectEmployeeConversation(
+                                            conversation
+                                          )
+                                        }
+                                        className={cn(
+                                          "w-full min-w-0 rounded-[22px] border px-4 py-4 text-right transition-all",
+                                          isActive
+                                            ? "border-slate-900 bg-slate-900 text-white shadow-[0_20px_42px_-28px_rgba(15,23,42,0.75)]"
+                                            : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+                                        )}
+                                      >
+                                        <div className="flex min-w-0 items-start justify-between gap-3">
+                                          <div className="min-w-0 flex-1">
+                                            <div className="flex flex-wrap items-center gap-2">
+                                              <Badge
+                                                variant="outline"
+                                                className={cn(
+                                                  "rounded-full shadow-none",
+                                                  isActive
+                                                    ? "border-white/20 bg-white/10 text-white"
+                                                    : "border-slate-200 bg-slate-50 text-slate-600"
+                                                )}
+                                              >
+                                                {latestMessage.typeLabel}
                                               </Badge>
-                                            ) : null}
+                                              <Badge
+                                                variant="outline"
+                                                className={cn(
+                                                  "rounded-full shadow-none",
+                                                  isActive
+                                                    ? "border-white/20 bg-white/10 text-white"
+                                                    : latestFromEmployee
+                                                      ? "border-[#030640]/15 bg-[#030640]/5 text-[#030640]"
+                                                      : "border-slate-200 bg-slate-100 text-slate-600"
+                                                )}
+                                              >
+                                                {latestFromEmployee
+                                                  ? "الموظف"
+                                                  : "HR"}
+                                              </Badge>
+                                              {conversation.unreadCount > 0 ? (
+                                                <Badge className="rounded-full bg-[#F2B705] text-slate-950 hover:bg-[#F2B705]">
+                                                  {conversation.unreadCount}{" "}
+                                                  جديد
+                                                </Badge>
+                                              ) : null}
+                                            </div>
+
+                                            <div className="mt-3 min-w-0 truncate text-sm font-semibold">
+                                              {latestFromEmployee
+                                                ? latestMessage.fromUserName ||
+                                                  "الموظف"
+                                                : latestMessage.toUserName ||
+                                                  "الموظف"}
+                                            </div>
+                                            <div
+                                              className={cn(
+                                                "mt-2 min-w-0 text-right text-sm leading-7 line-clamp-2 whitespace-pre-wrap break-words [overflow-wrap:anywhere]",
+                                                isActive
+                                                  ? "text-white/80"
+                                                  : "text-slate-600"
+                                              )}
+                                            >
+                                              {latestMessage.preview ||
+                                                "لا يوجد نص محفوظ لهذه الرسالة."}
+                                            </div>
                                           </div>
 
-                                          <div className="mt-3 min-w-0 truncate text-sm font-semibold">
-                                            {latestFromEmployee
-                                              ? latestMessage.fromUserName ||
-                                                "الموظف"
-                                              : latestMessage.toUserName ||
-                                                "الموظف"}
-                                          </div>
                                           <div
                                             className={cn(
-                                              "mt-2 min-w-0 text-right text-sm leading-7 line-clamp-2 whitespace-pre-wrap break-words [overflow-wrap:anywhere]",
+                                              "shrink-0 whitespace-nowrap pt-0.5 text-[11px]",
                                               isActive
-                                                ? "text-white/80"
-                                                : "text-slate-600"
+                                                ? "text-white/70"
+                                                : "text-slate-500"
                                             )}
                                           >
-                                            {latestMessage.preview ||
-                                              "لا يوجد نص محفوظ لهذه الرسالة."}
+                                            {latestMessage.createdAtDate
+                                              ? formatDateTimeEN(
+                                                  latestMessage.createdAtDate
+                                                )
+                                              : "تاريخ غير متوفر"}
                                           </div>
                                         </div>
 
                                         <div
                                           className={cn(
-                                            "shrink-0 whitespace-nowrap pt-0.5 text-[11px]",
+                                            "mt-3 flex flex-wrap items-center justify-between gap-2 border-t pt-3 text-xs",
                                             isActive
-                                              ? "text-white/70"
-                                              : "text-slate-500"
+                                              ? "border-white/10 text-white/70"
+                                              : "border-slate-200 text-slate-500"
                                           )}
                                         >
-                                          {latestMessage.createdAtDate
-                                            ? formatDateTimeEN(
-                                                latestMessage.createdAtDate
-                                              )
-                                            : "تاريخ غير متوفر"}
+                                          <span>
+                                            {conversation.messages.length} رسالة
+                                            داخل السجل
+                                          </span>
+                                          <span>
+                                            {latestFromEmployee
+                                              ? "آخر تحديث من الموظف"
+                                              : "آخر تحديث من HR"}
+                                          </span>
                                         </div>
+                                        {openingEmployeeConversationId ===
+                                        conversation.id ? (
+                                          <div
+                                            className={cn(
+                                              "mt-2 text-xs",
+                                              isActive
+                                                ? "text-white/70"
+                                                : "text-slate-500"
+                                            )}
+                                          >
+                                            جارٍ تحديث حالة القراءة...
+                                          </div>
+                                        ) : null}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </ScrollArea>
+                            ) : (
+                              <div className="rounded-[18px] border border-dashed border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-500">
+                                لا توجد رسائل داخلية لهذا الموظف بعد.
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="space-y-4" dir="rtl">
+                          <div className="space-y-5 text-right">
+                            {activeEmployeeConversation ? (
+                              <div className="space-y-5">
+                                <div className="flex flex-wrap items-center justify-between gap-3">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <Badge
+                                      variant="outline"
+                                      className="rounded-full border-[#F2B705]/35 bg-[#F2B705]/10 text-[#8b6700] shadow-none"
+                                    >
+                                      {
+                                        activeEmployeeConversation.latestMessage
+                                          .typeLabel
+                                      }
+                                    </Badge>
+                                    <Badge
+                                      variant="outline"
+                                      className="rounded-full border-slate-200 bg-white text-slate-600 shadow-none"
+                                    >
+                                      {
+                                        activeEmployeeConversation.messages
+                                          .length
+                                      }{" "}
+                                      رسالة داخل نفس السجل
+                                    </Badge>
+                                  </div>
+
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={handleCloseEmployeeConversation}
+                                  >
+                                    إغلاق
+                                  </Button>
+                                </div>
+
+                                <div className="grid gap-3 md:grid-cols-3">
+                                  <ReadonlyMeta
+                                    icon={Mail}
+                                    label="المسار"
+                                    value={
+                                      composeEmployeeMessageAsNew ||
+                                      !activeEmployeeConversation
+                                        ? "رسالة جديدة"
+                                        : "رد داخل المحادثة الحالية"
+                                    }
+                                  />
+                                  <ReadonlyMeta
+                                    icon={UserRound}
+                                    label="الموظف"
+                                    value={
+                                      activeEmployeeConversation.latestMessage
+                                        .toUserName ||
+                                      activeEmployeeConversation.latestMessage
+                                        .fromUserName ||
+                                      "الموظف"
+                                    }
+                                  />
+                                  <ReadonlyMeta
+                                    icon={Clock3}
+                                    label="آخر تحديث"
+                                    value={formatDateTimeEN(
+                                      activeEmployeeConversation.latestMessage
+                                        .createdAtDate
+                                    )}
+                                  />
+                                </div>
+
+                                <div className="space-y-4 pt-1" dir="ltr">
+                                  {activeEmployeeConversation.messages.map(
+                                    message => {
+                                      const fromEmployee =
+                                        message.fromUserId ===
+                                        selectedEmployeeAuthUid;
+                                      const senderId =
+                                        message.fromUserId ||
+                                        message.senderUid ||
+                                        "";
+                                      const senderProfile = senderId
+                                        ? employeeMessageSenderLookup[senderId]
+                                        : null;
+                                      const senderName =
+                                        senderProfile?.name ||
+                                        message.fromUserName ||
+                                        (fromEmployee ? "الموظف" : "HR");
+                                      const senderEmail =
+                                        senderProfile?.email ||
+                                        message.fromUserEmail ||
+                                        null;
+                                      const senderAvatarUrl =
+                                        senderProfile?.avatarUrl ||
+                                        message.fromUserPhoto ||
+                                        (fromEmployee
+                                          ? selectedEmployeeProfile?.personal
+                                              .avatarUrl || null
+                                          : currentAdminAvatarUrl);
+                                      const avatarNode = (
+                                        <EmployeeAvatar
+                                          avatarUrl={senderAvatarUrl}
+                                          name={senderName}
+                                          email={senderEmail || undefined}
+                                          className="h-9 w-9 shrink-0"
+                                          fallbackClassName="text-[11px]"
+                                        />
+                                      );
+                                      return (
+                                        <div
+                                          key={message.id}
+                                          className={cn(
+                                            "flex items-start gap-3",
+                                            fromEmployee
+                                              ? "justify-start"
+                                              : "justify-end"
+                                          )}
+                                          dir="ltr"
+                                        >
+                                          {fromEmployee ? (
+                                            <>
+                                              {avatarNode}
+                                              <div
+                                                className={cn(
+                                                  "max-w-[70%] rounded-2xl border px-4 py-3 text-right shadow-[0_18px_40px_-32px_rgba(15,23,42,0.32)]",
+                                                  "border-[#E7D8AA] bg-[#FBF7E8] text-slate-900"
+                                                )}
+                                                dir="rtl"
+                                              >
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                  <Badge
+                                                    variant="outline"
+                                                    className="rounded-full border-[#E7D8AA] bg-white text-[#8b6700] shadow-none"
+                                                  >
+                                                    {senderName}
+                                                  </Badge>
+                                                  <Badge
+                                                    variant="outline"
+                                                    className="rounded-full border-[#E7D8AA] bg-[#F8F2DD] text-[#8b6700] shadow-none"
+                                                  >
+                                                    رسالة موظف
+                                                  </Badge>
+                                                  <Badge
+                                                    variant="outline"
+                                                    className="rounded-full border-slate-200 bg-white text-slate-500 shadow-none"
+                                                  >
+                                                    {message.typeLabel}
+                                                  </Badge>
+                                                </div>
+
+                                                <div className="mt-4 whitespace-pre-wrap break-words text-[0.97rem] leading-8 text-slate-800 [overflow-wrap:anywhere]">
+                                                  {message.body ||
+                                                    "لا يوجد نص محفوظ لهذه الرسالة."}
+                                                </div>
+
+                                                <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200/80 pt-3 text-xs text-slate-500">
+                                                  <span>
+                                                    {message.createdAtDate
+                                                      ? formatDateTimeEN(
+                                                          message.createdAtDate
+                                                        )
+                                                      : "تاريخ غير متوفر"}
+                                                  </span>
+                                                  <span>وارد من الموظف</span>
+                                                </div>
+                                              </div>
+                                            </>
+                                          ) : (
+                                            <>
+                                              <div
+                                                className={cn(
+                                                  "max-w-[70%] rounded-2xl border px-4 py-3 text-right shadow-[0_18px_40px_-32px_rgba(15,23,42,0.32)]",
+                                                  "border-slate-200 bg-white text-slate-800"
+                                                )}
+                                                dir="rtl"
+                                              >
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                  <Badge
+                                                    variant="outline"
+                                                    className="rounded-full border-slate-200 bg-slate-50 text-slate-700 shadow-none"
+                                                  >
+                                                    {senderName}
+                                                  </Badge>
+                                                  <Badge
+                                                    variant="outline"
+                                                    className="rounded-full border-slate-200 bg-white text-slate-500 shadow-none"
+                                                  >
+                                                    رسالة HR
+                                                  </Badge>
+                                                  <Badge
+                                                    variant="outline"
+                                                    className="rounded-full border-slate-200 bg-white text-slate-500 shadow-none"
+                                                  >
+                                                    {message.typeLabel}
+                                                  </Badge>
+                                                </div>
+
+                                                <div className="mt-4 whitespace-pre-wrap break-words text-[0.97rem] leading-8 text-slate-800 [overflow-wrap:anywhere]">
+                                                  {message.body ||
+                                                    "لا يوجد نص محفوظ لهذه الرسالة."}
+                                                </div>
+
+                                                <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200/80 pt-3 text-xs text-slate-500">
+                                                  <span>
+                                                    {message.createdAtDate
+                                                      ? formatDateTimeEN(
+                                                          message.createdAtDate
+                                                        )
+                                                      : "تاريخ غير متوفر"}
+                                                  </span>
+                                                  <span>
+                                                    {message.isRead &&
+                                                    message.readAtDate
+                                                      ? `تمت القراءة في ${formatDateTimeEN(
+                                                          message.readAtDate
+                                                        )}`
+                                                      : "بانتظار القراءة"}
+                                                  </span>
+                                                </div>
+                                              </div>
+                                              {avatarNode}
+                                            </>
+                                          )}
+                                        </div>
+                                      );
+                                    }
+                                  )}
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="rounded-[20px] border border-dashed border-slate-200 bg-white px-5 py-10 text-center text-sm text-slate-500">
+                                اختر محادثة من القائمة لعرض سجلها هنا.
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="rounded-[24px] border border-slate-200/80 bg-slate-50/75 p-5">
+                            <div className="mb-4 space-y-1">
+                              <div className="text-sm font-semibold text-slate-900">
+                                {composeEmployeeMessageAsNew ||
+                                !activeEmployeeConversation
+                                  ? "إرسال رسالة جديدة"
+                                  : "الرد داخل المحادثة المحددة"}
+                              </div>
+                              <p className="text-sm leading-6 text-slate-500">
+                                {composeEmployeeMessageAsNew ||
+                                !activeEmployeeConversation
+                                  ? "ستصل الرسالة للموظف داخل صفحة الرسائل، مع تنبيه داخلي مباشر."
+                                  : "سيتم إلحاق الرسالة بالمحادثة الحالية بحيث يظهر الرد من الموظف داخل نفس السجل."}
+                              </p>
+                            </div>
+
+                            <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
+                              <span>
+                                {composeEmployeeMessageAsNew ||
+                                !activeEmployeeConversation
+                                  ? "الوضع الحالي: بدء محادثة جديدة"
+                                  : "الوضع الحالي: الرد على المحادثة المحددة"}
+                              </span>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() =>
+                                  setComposeEmployeeMessageAsNew(
+                                    current => !current
+                                  )
+                                }
+                                disabled={
+                                  sendingEmployeeMessage ||
+                                  !activeEmployeeConversation
+                                }
+                              >
+                                {composeEmployeeMessageAsNew
+                                  ? "الرد داخل المحادثة الحالية"
+                                  : "بدء محادثة جديدة"}
+                              </Button>
+                            </div>
+
+                            <div className="grid gap-4 md:grid-cols-[220px_minmax(0,1fr)]">
+                              <Field label="نوع الرسالة">
+                                <Select
+                                  value={employeeMessageForm.type}
+                                  onValueChange={value =>
+                                    handleEmployeeMessageFormChange(
+                                      "type",
+                                      value as EmployeeMessageType
+                                    )
+                                  }
+                                  disabled={
+                                    !canManageEmployees ||
+                                    sendingEmployeeMessage
+                                  }
+                                >
+                                  <SelectTrigger className="w-full bg-white">
+                                    <SelectValue placeholder="اختر نوع الرسالة" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {EMPLOYEE_MESSAGE_TYPE_OPTIONS.map(
+                                      option => (
+                                        <SelectItem
+                                          key={option.value}
+                                          value={option.value}
+                                        >
+                                          {option.label}
+                                        </SelectItem>
+                                      )
+                                    )}
+                                  </SelectContent>
+                                </Select>
+                              </Field>
+
+                              <Field label="نص الرسالة">
+                                <Textarea
+                                  value={employeeMessageForm.message}
+                                  onChange={event =>
+                                    handleEmployeeMessageFormChange(
+                                      "message",
+                                      event.target.value
+                                    )
+                                  }
+                                  placeholder="اكتب الرسالة الداخلية التي ستصل إلى الموظف"
+                                  className="min-h-36 resize-y bg-white text-right leading-7 [direction:rtl]"
+                                  disabled={
+                                    !canManageEmployees ||
+                                    sendingEmployeeMessage
+                                  }
+                                />
+                              </Field>
+                            </div>
+
+                            <div className="mt-4 flex flex-wrap justify-end gap-3">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={resetEmployeeMessageForm}
+                                disabled={
+                                  sendingEmployeeMessage ||
+                                  (!employeeMessageForm.message.trim() &&
+                                    employeeMessageForm.type === "message")
+                                }
+                              >
+                                إعادة ضبط
+                              </Button>
+                              <Button
+                                type="button"
+                                className="bg-[#F2B705] text-slate-950 hover:bg-[#e0ab00]"
+                                onClick={() => void handleSendEmployeeMessage()}
+                                disabled={
+                                  !canManageEmployees || sendingEmployeeMessage
+                                }
+                              >
+                                <Mail className="ml-2 h-4 w-4" />
+                                {sendingEmployeeMessage
+                                  ? "جارٍ الإرسال..."
+                                  : composeEmployeeMessageAsNew ||
+                                      !activeEmployeeConversation
+                                    ? "إرسال الرسالة"
+                                    : "إرسال الرد"}
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : null}
+
+                {activeEmployeeWorkspaceSection === "files" ? (
+                  <Card
+                    id="employee-section-files"
+                    className="gap-0 overflow-hidden border-slate-200/80 bg-white/95 py-0 shadow-sm"
+                  >
+                    <CardHeader className="border-b border-slate-100 bg-white/90 px-6 pt-6 pb-4">
+                      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                            <FileText className="h-4 w-4" />
+                            الملفات الداخلية
+                          </div>
+                          <div className="text-2xl font-semibold tracking-tight text-slate-950">
+                            رفع وعرض ملفات الموظف
+                          </div>
+                          <p className="max-w-2xl text-sm leading-7 text-slate-500">
+                            يمكن للموارد البشرية رفع ملف جديد لهذا الموظف،
+                            وسيظهر داخل حسابه مع حالة القراءة وتاريخ الاطلاع.
+                          </p>
+                        </div>
+
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <LeaveOverviewStat
+                            icon={FileText}
+                            label="النسخ الحالية"
+                            value={String(visibleEmployeeFiles.length)}
+                          />
+                          <LeaveOverviewStat
+                            icon={
+                              unreadEmployeeFilesCount > 0
+                                ? Clock3
+                                : CheckCircle2
+                            }
+                            label="ملفات جديدة"
+                            value={String(unreadEmployeeFilesCount)}
+                          />
+                        </div>
+                      </div>
+                    </CardHeader>
+
+                    <CardContent className="p-5">
+                      <div className="space-y-6">
+                        {archivedEmployeeFilesCount > 0 ? (
+                          <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                            يتم إخفاء {archivedEmployeeFilesCount} من النسخ
+                            المستبدلة عن القائمة الأساسية.
+                          </div>
+                        ) : null}
+
+                        <div className="grid gap-6 xl:grid-cols-[minmax(320px,0.42fr)_minmax(0,0.58fr)]">
+                          <div className="rounded-[24px] border border-slate-200/80 bg-slate-50/70 p-5">
+                            <div className="space-y-4">
+                              {replacingEmployeeFile ? (
+                                <div className="rounded-[18px] border border-emerald-200 bg-emerald-50/80 px-4 py-3 text-sm text-emerald-800">
+                                  <div className="font-semibold">
+                                    وضع الاستبدال مفعل
+                                  </div>
+                                  <div className="mt-1">
+                                    سيتم رفع نسخة معدلة بدل الملف:{" "}
+                                    {replacingEmployeeFile.title}
+                                  </div>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="mt-3 rounded-full border-emerald-200 bg-white text-emerald-800 hover:bg-emerald-100"
+                                    onClick={resetEmployeeFileForm}
+                                    disabled={uploadingEmployeeFile}
+                                  >
+                                    إلغاء الاستبدال
+                                  </Button>
+                                </div>
+                              ) : null}
+
+                              <Field label="عنوان الملف">
+                                <Input
+                                  value={employeeFileForm.title}
+                                  onChange={event =>
+                                    handleEmployeeFileFormChange(
+                                      "title",
+                                      event.target.value
+                                    )
+                                  }
+                                  placeholder="مثال: خطاب مباشرة العمل"
+                                  disabled={
+                                    !canManageEmployees || uploadingEmployeeFile
+                                  }
+                                />
+                              </Field>
+
+                              <Field label="وصف الملف">
+                                <Textarea
+                                  value={employeeFileForm.description}
+                                  onChange={event =>
+                                    handleEmployeeFileFormChange(
+                                      "description",
+                                      event.target.value
+                                    )
+                                  }
+                                  placeholder="أضف وصفًا بسيطًا للملف"
+                                  className="min-h-28"
+                                  disabled={
+                                    !canManageEmployees || uploadingEmployeeFile
+                                  }
+                                />
+                              </Field>
+
+                              <Field label="نوع الملف">
+                                <Select
+                                  value={employeeFileForm.fileType}
+                                  onValueChange={value =>
+                                    handleEmployeeFileFormChange(
+                                      "fileType",
+                                      value
+                                    )
+                                  }
+                                  disabled={
+                                    !canManageEmployees || uploadingEmployeeFile
+                                  }
+                                >
+                                  <SelectTrigger className="w-full bg-white">
+                                    <SelectValue placeholder="اختر نوع الملف" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {EMPLOYEE_FILE_TYPE_OPTIONS.map(option => (
+                                      <SelectItem
+                                        key={option.value}
+                                        value={option.value}
+                                      >
+                                        {option.label}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </Field>
+
+                              <Field label="اختيار الملف">
+                                <Input
+                                  ref={employeeFileInputRef}
+                                  type="file"
+                                  onChange={handleEmployeeFileSelected}
+                                  disabled={
+                                    !canManageEmployees || uploadingEmployeeFile
+                                  }
+                                />
+                              </Field>
+
+                              <div className="rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
+                                {employeeFileForm.file ? (
+                                  <div className="space-y-1">
+                                    <div className="font-semibold text-slate-900">
+                                      {employeeFileForm.file.name}
+                                    </div>
+                                    <div>
+                                      الحجم:{" "}
+                                      {formatFileSizeEN(
+                                        employeeFileForm.file.size
+                                      )}
+                                    </div>
+                                  </div>
+                                ) : (
+                                  "لم يتم اختيار ملف بعد."
+                                )}
+                              </div>
+
+                              <Button
+                                type="button"
+                                className="w-full bg-[#F2B705] text-slate-950 hover:bg-[#e0ab00]"
+                                onClick={() => void handleUploadEmployeeFile()}
+                                disabled={
+                                  !canManageEmployees || uploadingEmployeeFile
+                                }
+                              >
+                                <Upload className="ml-2 h-4 w-4" />
+                                {uploadingEmployeeFile
+                                  ? "جارٍ رفع الملف..."
+                                  : replacingEmployeeFile
+                                    ? "رفع نسخة معدلة"
+                                    : "رفع ملف"}
+                              </Button>
+                            </div>
+                          </div>
+
+                          <div className="space-y-4">
+                            {employeeFilesLoading ? (
+                              <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50/70 px-5 py-10 text-center text-sm text-slate-500">
+                                جاري تحميل ملفات الموظف...
+                              </div>
+                            ) : visibleEmployeeFiles.length ? (
+                              visibleEmployeeFiles.map(file => (
+                                <div
+                                  key={file.id}
+                                  className="rounded-[24px] border border-slate-200/80 bg-slate-50/70 p-5"
+                                >
+                                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                                    <div className="min-w-0 space-y-3">
+                                      <div className="flex flex-wrap items-center gap-2">
+                                        <EmployeeFileVersionBadge file={file} />
+                                        <EmployeeFileStatusBadge file={file} />
+                                        <Badge
+                                          variant="outline"
+                                          className="rounded-full bg-white shadow-none"
+                                        >
+                                          {file.fileTypeLabel}
+                                        </Badge>
+                                      </div>
+
+                                      <div>
+                                        <div className="text-lg font-semibold text-slate-950">
+                                          {file.title}
+                                        </div>
+                                        <div className="mt-1 text-sm text-slate-500">
+                                          {file.uploadedAtDate
+                                            ? `تاريخ الرفع: ${formatDateTimeEN(file.uploadedAtDate)}`
+                                            : "تاريخ الرفع غير متوفر"}
+                                        </div>
+                                      </div>
+
+                                      <p className="text-sm leading-7 text-slate-600">
+                                        {file.description ||
+                                          "لا يوجد وصف لهذا الملف."}
+                                      </p>
+
+                                      <div className="flex flex-wrap gap-2">
+                                        <EmployeeFileMetaBadge
+                                          label={file.fileName}
+                                          dir="ltr"
+                                        />
+                                        <EmployeeFileMetaBadge
+                                          label={formatFileSizeEN(
+                                            file.fileSize ?? null
+                                          )}
+                                        />
+                                        <EmployeeFileMetaBadge
+                                          label={file.contentType || "بدون نوع"}
+                                        />
+                                        {file.uploadedByName ? (
+                                          <EmployeeFileMetaBadge
+                                            label={`بواسطة: ${file.uploadedByName}`}
+                                          />
+                                        ) : null}
                                       </div>
 
                                       <div
                                         className={cn(
-                                          "mt-3 flex flex-wrap items-center justify-between gap-2 border-t pt-3 text-xs",
-                                          isActive
-                                            ? "border-white/10 text-white/70"
-                                            : "border-slate-200 text-slate-500"
+                                          "text-xs",
+                                          file.isRead
+                                            ? "text-emerald-700"
+                                            : "text-amber-700"
                                         )}
                                       >
-                                        <span>
-                                          {conversation.messages.length} رسالة
-                                          داخل السجل
-                                        </span>
-                                        <span>
-                                          {latestFromEmployee
-                                            ? "آخر تحديث من الموظف"
-                                            : "آخر تحديث من HR"}
-                                        </span>
+                                        {file.isRead && file.readAtDate
+                                          ? `تمت القراءة في ${formatDateTimeEN(file.readAtDate)}`
+                                          : "الملف لم يُفتح بعد من الموظف."}
                                       </div>
-                                      {openingEmployeeConversationId ===
-                                      conversation.id ? (
-                                        <div
-                                          className={cn(
-                                            "mt-2 text-xs",
-                                            isActive
-                                              ? "text-white/70"
-                                              : "text-slate-500"
-                                          )}
+                                    </div>
+
+                                    <div className="flex flex-wrap gap-2 lg:justify-end">
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        className="rounded-full"
+                                        onClick={() =>
+                                          handleStartEmployeeFileReplacement(
+                                            file
+                                          )
+                                        }
+                                        disabled={
+                                          !canManageEmployees ||
+                                          uploadingEmployeeFile
+                                        }
+                                      >
+                                        <Upload className="ml-2 h-4 w-4" />
+                                        استبدال الملف
+                                      </Button>
+
+                                      {file.viewUrl ? (
+                                        <Button
+                                          asChild
+                                          variant="outline"
+                                          size="sm"
+                                          className="rounded-full"
                                         >
-                                          جارٍ تحديث حالة القراءة...
-                                        </div>
+                                          <a
+                                            href={file.viewUrl}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                          >
+                                            <Eye className="ml-2 h-4 w-4" />
+                                            معاينة
+                                          </a>
+                                        </Button>
                                       ) : null}
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            </ScrollArea>
-                          ) : (
-                            <div className="rounded-[18px] border border-dashed border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-500">
-                              لا توجد رسائل داخلية لهذا الموظف بعد.
-                            </div>
-                          )}
+
+                                      {file.downloadUrl ? (
+                                        <Button
+                                          asChild
+                                          size="sm"
+                                          className="rounded-full"
+                                        >
+                                          <a
+                                            href={file.downloadUrl}
+                                            rel="noreferrer"
+                                            download={file.fileName || true}
+                                          >
+                                            <Download className="ml-2 h-4 w-4" />
+                                            تحميل
+                                          </a>
+                                        </Button>
+                                      ) : null}
+
+                                      <Button
+                                        type="button"
+                                        variant="destructive"
+                                        size="sm"
+                                        className="rounded-full"
+                                        onClick={() =>
+                                          void handleDeleteEmployeeFile(file)
+                                        }
+                                        disabled={
+                                          !canManageEmployees ||
+                                          deletingEmployeeFileId === file.id
+                                        }
+                                      >
+                                        <Trash2 className="ml-2 h-4 w-4" />
+                                        {deletingEmployeeFileId === file.id
+                                          ? "جارٍ الحذف..."
+                                          : "حذف"}
+                                      </Button>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))
+                            ) : (
+                              <Empty className="min-h-[320px] rounded-[24px] border border-dashed border-slate-200 bg-slate-50/70">
+                                <EmptyHeader>
+                                  <EmptyMedia
+                                    variant="icon"
+                                    className="bg-[#F2B705]/12 text-[#030640]"
+                                  >
+                                    <Inbox className="size-5" />
+                                  </EmptyMedia>
+                                  <EmptyTitle>
+                                    لا توجد ملفات لهذا الموظف
+                                  </EmptyTitle>
+                                  <EmptyDescription>
+                                    ارفع أول ملف من النموذج المجاور ليظهر هنا
+                                    وفي حساب الموظف مباشرة.
+                                  </EmptyDescription>
+                                </EmptyHeader>
+                              </Empty>
+                            )}
+                          </div>
                         </div>
                       </div>
+                    </CardContent>
+                  </Card>
+                ) : null}
 
-                      <div className="space-y-4" dir="rtl">
-                        <div className="space-y-5 text-right">
-                          {activeEmployeeConversation ? (
-                            <div className="space-y-5">
-                              <div className="flex flex-wrap items-center justify-between gap-3">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <Badge
-                                    variant="outline"
-                                    className="rounded-full border-[#F2B705]/35 bg-[#F2B705]/10 text-[#8b6700] shadow-none"
-                                  >
-                                    {
-                                      activeEmployeeConversation.latestMessage
-                                        .typeLabel
-                                    }
-                                  </Badge>
-                                  <Badge
-                                    variant="outline"
-                                    className="rounded-full border-slate-200 bg-white text-slate-600 shadow-none"
-                                  >
-                                    {activeEmployeeConversation.messages.length}{" "}
-                                    رسالة داخل نفس السجل
-                                  </Badge>
-                                </div>
+                {activeEmployeeWorkspaceSection === "leave" ? (
+                  <Card
+                    id="employee-section-leave"
+                    className="gap-0 overflow-hidden border-slate-200/80 bg-white/95 py-0 shadow-sm"
+                  >
+                    <CardHeader className="border-b border-slate-100 bg-white/90">
+                      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                            <CalendarDays className="h-4 w-4" />
+                            الإجازات
+                          </div>
+                          <div className="text-2xl font-semibold tracking-tight text-slate-950">
+                            آخر إجازة معتمدة وسجل الطلبات
+                          </div>
+                          <p className="max-w-2xl text-sm leading-7 text-slate-500">
+                            يتيح هذا القسم متابعة آخر إجازة معتمدة للموظف بشكل
+                            واضح، مع مراجعة جميع الطلبات السابقة واعتماد الطلبات
+                            المعلقة أو رفضها.
+                          </p>
+                        </div>
 
-                                <Button
-                                  type="button"
+                        <div className="grid gap-3 sm:grid-cols-3">
+                          <LeaveOverviewStat
+                            icon={BadgeCheck}
+                            label="الرصيد الحالي"
+                            value={
+                              selectedEmployeeProfile.employment
+                                .leaveBalanceLabel
+                            }
+                          />
+                          <LeaveOverviewStat
+                            icon={
+                              latestApprovedLeaveRequest?.status === "approved"
+                                ? CheckCircle2
+                                : latestApprovedLeaveRequest?.status ===
+                                    "rejected"
+                                  ? XCircle
+                                  : Clock3
+                            }
+                            label="حالة آخر إجازة معتمدة"
+                            value={
+                              latestApprovedLeaveRequest
+                                ? getLeaveStatusMeta(
+                                    latestApprovedLeaveRequest.status
+                                  ).label
+                                : "لا توجد إجازات"
+                            }
+                          />
+                          <LeaveOverviewStat
+                            icon={CalendarDays}
+                            label="عدد الأيام"
+                            value={
+                              latestApprovedLeaveRequest
+                                ? formatLeaveDaysLabel(
+                                    latestApprovedLeaveRequest.daysCount
+                                  )
+                                : "—"
+                            }
+                          />
+                        </div>
+                      </div>
+                    </CardHeader>
+
+                    <CardContent className="p-5">
+                      <div className="space-y-5">
+                        <div className="rounded-[24px] border border-slate-200/80 bg-slate-50/75 p-5">
+                          {latestApprovedLeaveRequest ? (
+                            <div className="space-y-4">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Badge
                                   variant="outline"
-                                  onClick={handleCloseEmployeeConversation}
+                                  className="rounded-full border-[#F2B705]/35 bg-[#F2B705]/10 text-[#8b6700] shadow-none"
                                 >
-                                  إغلاق
-                                </Button>
+                                  آخر إجازة معتمدة
+                                </Badge>
+                                <Badge
+                                  variant="outline"
+                                  className="rounded-full"
+                                >
+                                  {getLeaveTypeLabel(
+                                    latestApprovedLeaveRequest.leaveType
+                                  )}
+                                </Badge>
+                                <LeaveStatusBadge
+                                  status={latestApprovedLeaveRequest.status}
+                                />
                               </div>
 
-                              <div className="grid gap-3 md:grid-cols-3">
+                              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                                 <ReadonlyMeta
-                                  icon={Mail}
-                                  label="المسار"
-                                  value={
-                                    composeEmployeeMessageAsNew ||
-                                    !activeEmployeeConversation
-                                      ? "رسالة جديدة"
-                                      : "رد داخل المحادثة الحالية"
-                                  }
+                                  icon={CalendarDays}
+                                  label="تاريخ البداية"
+                                  value={formatDateEN(
+                                    latestApprovedLeaveRequest.startDate
+                                  )}
                                 />
                                 <ReadonlyMeta
-                                  icon={UserRound}
-                                  label="الموظف"
-                                  value={
-                                    activeEmployeeConversation.latestMessage
-                                      .toUserName ||
-                                    activeEmployeeConversation.latestMessage
-                                      .fromUserName ||
-                                    "الموظف"
-                                  }
+                                  icon={CalendarDays}
+                                  label="تاريخ النهاية"
+                                  value={formatDateEN(
+                                    latestApprovedLeaveRequest.endDate
+                                  )}
+                                />
+                                <ReadonlyMeta
+                                  icon={CalendarDays}
+                                  label="عدد الأيام"
+                                  value={formatLeaveDaysLabel(
+                                    latestApprovedLeaveRequest.daysCount
+                                  )}
                                 />
                                 <ReadonlyMeta
                                   icon={Clock3}
-                                  label="آخر تحديث"
+                                  label="تاريخ الطلب"
                                   value={formatDateTimeEN(
-                                    activeEmployeeConversation.latestMessage
-                                      .createdAtDate
+                                    latestApprovedLeaveRequest.createdAt
                                   )}
                                 />
                               </div>
 
-                              <div className="space-y-4 pt-1" dir="ltr">
-                                {activeEmployeeConversation.messages.map(
-                                  message => {
-                                    const fromEmployee =
-                                      message.fromUserId ===
-                                      selectedEmployeeAuthUid;
-                                    const senderId =
-                                      message.fromUserId ||
-                                      message.senderUid ||
-                                      "";
-                                    const senderProfile = senderId
-                                      ? employeeMessageSenderLookup[senderId]
-                                      : null;
-                                    const senderName =
-                                      senderProfile?.name ||
-                                      message.fromUserName ||
-                                      (fromEmployee ? "الموظف" : "HR");
-                                    const senderEmail =
-                                      senderProfile?.email ||
-                                      message.fromUserEmail ||
-                                      null;
-                                    const senderAvatarUrl =
-                                      senderProfile?.avatarUrl ||
-                                      message.fromUserPhoto ||
-                                      (fromEmployee
-                                        ? selectedEmployeeProfile?.personal
-                                            .avatarUrl || null
-                                        : currentAdminAvatarUrl);
-                                    const avatarNode = (
-                                      <EmployeeAvatar
-                                        avatarUrl={senderAvatarUrl}
-                                        name={senderName}
-                                        email={senderEmail || undefined}
-                                        className="h-9 w-9 shrink-0"
-                                        fallbackClassName="text-[11px]"
-                                      />
-                                    );
-                                    return (
-                                      <div
-                                        key={message.id}
-                                        className={cn(
-                                          "flex items-start gap-3",
-                                          fromEmployee
-                                            ? "justify-start"
-                                            : "justify-end"
-                                        )}
-                                        dir="ltr"
-                                      >
-                                        {fromEmployee ? (
-                                          <>
-                                            {avatarNode}
-                                            <div
-                                              className={cn(
-                                                "max-w-[70%] rounded-2xl border px-4 py-3 text-right shadow-[0_18px_40px_-32px_rgba(15,23,42,0.32)]",
-                                                "border-[#E7D8AA] bg-[#FBF7E8] text-slate-900"
-                                              )}
-                                              dir="rtl"
-                                            >
-                                              <div className="flex flex-wrap items-center gap-2">
-                                                <Badge
-                                                  variant="outline"
-                                                  className="rounded-full border-[#E7D8AA] bg-white text-[#8b6700] shadow-none"
-                                                >
-                                                  {senderName}
-                                                </Badge>
-                                                <Badge
-                                                  variant="outline"
-                                                  className="rounded-full border-[#E7D8AA] bg-[#F8F2DD] text-[#8b6700] shadow-none"
-                                                >
-                                                  رسالة موظف
-                                                </Badge>
-                                                <Badge
-                                                  variant="outline"
-                                                  className="rounded-full border-slate-200 bg-white text-slate-500 shadow-none"
-                                                >
-                                                  {message.typeLabel}
-                                                </Badge>
-                                              </div>
+                              {latestApprovedLeaveRequest.employeeNote ? (
+                                <div className="rounded-[20px] border border-slate-200 bg-white/90 px-4 py-3 text-sm leading-7 text-slate-700">
+                                  <span className="font-semibold text-slate-900">
+                                    ملاحظة الموظف:
+                                  </span>{" "}
+                                  {latestApprovedLeaveRequest.employeeNote}
+                                </div>
+                              ) : null}
 
-                                              <div className="mt-4 whitespace-pre-wrap break-words text-[0.97rem] leading-8 text-slate-800 [overflow-wrap:anywhere]">
-                                                {message.body ||
-                                                  "لا يوجد نص محفوظ لهذه الرسالة."}
-                                              </div>
-
-                                              <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200/80 pt-3 text-xs text-slate-500">
-                                                <span>
-                                                  {message.createdAtDate
-                                                    ? formatDateTimeEN(
-                                                        message.createdAtDate
-                                                      )
-                                                    : "تاريخ غير متوفر"}
-                                                </span>
-                                                <span>وارد من الموظف</span>
-                                              </div>
-                                            </div>
-                                          </>
-                                        ) : (
-                                          <>
-                                            <div
-                                              className={cn(
-                                                "max-w-[70%] rounded-2xl border px-4 py-3 text-right shadow-[0_18px_40px_-32px_rgba(15,23,42,0.32)]",
-                                                "border-slate-200 bg-white text-slate-800"
-                                              )}
-                                              dir="rtl"
-                                            >
-                                              <div className="flex flex-wrap items-center gap-2">
-                                                <Badge
-                                                  variant="outline"
-                                                  className="rounded-full border-slate-200 bg-slate-50 text-slate-700 shadow-none"
-                                                >
-                                                  {senderName}
-                                                </Badge>
-                                                <Badge
-                                                  variant="outline"
-                                                  className="rounded-full border-slate-200 bg-white text-slate-500 shadow-none"
-                                                >
-                                                  رسالة HR
-                                                </Badge>
-                                                <Badge
-                                                  variant="outline"
-                                                  className="rounded-full border-slate-200 bg-white text-slate-500 shadow-none"
-                                                >
-                                                  {message.typeLabel}
-                                                </Badge>
-                                              </div>
-
-                                              <div className="mt-4 whitespace-pre-wrap break-words text-[0.97rem] leading-8 text-slate-800 [overflow-wrap:anywhere]">
-                                                {message.body ||
-                                                  "لا يوجد نص محفوظ لهذه الرسالة."}
-                                              </div>
-
-                                              <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200/80 pt-3 text-xs text-slate-500">
-                                                <span>
-                                                  {message.createdAtDate
-                                                    ? formatDateTimeEN(
-                                                        message.createdAtDate
-                                                      )
-                                                    : "تاريخ غير متوفر"}
-                                                </span>
-                                                <span>
-                                                  {message.isRead &&
-                                                  message.readAtDate
-                                                    ? `تمت القراءة في ${formatDateTimeEN(
-                                                        message.readAtDate
-                                                      )}`
-                                                    : "بانتظار القراءة"}
-                                                </span>
-                                              </div>
-                                            </div>
-                                            {avatarNode}
-                                          </>
-                                        )}
-                                      </div>
-                                    );
-                                  }
-                                )}
-                              </div>
+                              {latestApprovedLeaveRequest.hrNote ? (
+                                <div className="rounded-[20px] border border-emerald-200 bg-emerald-50/70 px-4 py-3 text-sm leading-7 text-emerald-800">
+                                  <span className="font-semibold">
+                                    ملاحظة HR:
+                                  </span>{" "}
+                                  {latestApprovedLeaveRequest.hrNote}
+                                </div>
+                              ) : null}
                             </div>
                           ) : (
-                            <div className="rounded-[20px] border border-dashed border-slate-200 bg-white px-5 py-10 text-center text-sm text-slate-500">
-                              اختر محادثة من القائمة لعرض سجلها هنا.
+                            <div className="rounded-[22px] border border-dashed border-slate-200 bg-white/90 px-5 py-10 text-center text-sm text-slate-500">
+                              لا توجد أي إجازات أو طلبات إجازة لهذا الموظف حتى
+                              الآن.
                             </div>
                           )}
                         </div>
 
-                        <div className="rounded-[24px] border border-slate-200/80 bg-slate-50/75 p-5">
-                          <div className="mb-4 space-y-1">
-                            <div className="text-sm font-semibold text-slate-900">
-                              {composeEmployeeMessageAsNew ||
-                              !activeEmployeeConversation
-                                ? "إرسال رسالة جديدة"
-                                : "الرد داخل المحادثة المحددة"}
+                        <div className="space-y-3">
+                          <div className="text-sm font-semibold text-slate-900">
+                            سجل الإجازات
+                          </div>
+
+                          {leaveRequestsLoading ? (
+                            <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50/70 px-5 py-10 text-center text-sm text-slate-500">
+                              جاري تحميل طلبات الإجازة...
                             </div>
-                            <p className="text-sm leading-6 text-slate-500">
-                              {composeEmployeeMessageAsNew ||
-                              !activeEmployeeConversation
-                                ? "ستصل الرسالة للموظف داخل صفحة الرسائل، مع تنبيه داخلي مباشر."
-                                : "سيتم إلحاق الرسالة بالمحادثة الحالية بحيث يظهر الرد من الموظف داخل نفس السجل."}
-                            </p>
-                          </div>
+                          ) : leaveRequests.length ? (
+                            leaveRequests.map((request, index) => {
+                              const isPending = request.status === "pending";
+                              const currentReviewNote =
+                                reviewNotes[request.id] ?? request.hrNote ?? "";
 
-                          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
-                            <span>
-                              {composeEmployeeMessageAsNew ||
-                              !activeEmployeeConversation
-                                ? "الوضع الحالي: بدء محادثة جديدة"
-                                : "الوضع الحالي: الرد على المحادثة المحددة"}
-                            </span>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              onClick={() =>
-                                setComposeEmployeeMessageAsNew(
-                                  current => !current
-                                )
-                              }
-                              disabled={
-                                sendingEmployeeMessage ||
-                                !activeEmployeeConversation
-                              }
-                            >
-                              {composeEmployeeMessageAsNew
-                                ? "الرد داخل المحادثة الحالية"
-                                : "بدء محادثة جديدة"}
-                            </Button>
-                          </div>
-
-                          <div className="grid gap-4 md:grid-cols-[220px_minmax(0,1fr)]">
-                            <Field label="نوع الرسالة">
-                              <Select
-                                value={employeeMessageForm.type}
-                                onValueChange={value =>
-                                  handleEmployeeMessageFormChange(
-                                    "type",
-                                    value as EmployeeMessageType
-                                  )
-                                }
-                                disabled={
-                                  !canManageEmployees || sendingEmployeeMessage
-                                }
-                              >
-                                <SelectTrigger className="w-full bg-white">
-                                  <SelectValue placeholder="اختر نوع الرسالة" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {EMPLOYEE_MESSAGE_TYPE_OPTIONS.map(option => (
-                                    <SelectItem
-                                      key={option.value}
-                                      value={option.value}
-                                    >
-                                      {option.label}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </Field>
-
-                            <Field label="نص الرسالة">
-                              <Textarea
-                                value={employeeMessageForm.message}
-                                onChange={event =>
-                                  handleEmployeeMessageFormChange(
-                                    "message",
-                                    event.target.value
-                                  )
-                                }
-                                placeholder="اكتب الرسالة الداخلية التي ستصل إلى الموظف"
-                                className="min-h-36 resize-y bg-white text-right leading-7 [direction:rtl]"
-                                disabled={
-                                  !canManageEmployees || sendingEmployeeMessage
-                                }
-                              />
-                            </Field>
-                          </div>
-
-                          <div className="mt-4 flex flex-wrap justify-end gap-3">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              onClick={resetEmployeeMessageForm}
-                              disabled={
-                                sendingEmployeeMessage ||
-                                (!employeeMessageForm.message.trim() &&
-                                  employeeMessageForm.type === "message")
-                              }
-                            >
-                              إعادة ضبط
-                            </Button>
-                            <Button
-                              type="button"
-                              className="bg-[#F2B705] text-slate-950 hover:bg-[#e0ab00]"
-                              onClick={() => void handleSendEmployeeMessage()}
-                              disabled={
-                                !canManageEmployees || sendingEmployeeMessage
-                              }
-                            >
-                              <Mail className="ml-2 h-4 w-4" />
-                              {sendingEmployeeMessage
-                                ? "جارٍ الإرسال..."
-                                : composeEmployeeMessageAsNew ||
-                                    !activeEmployeeConversation
-                                  ? "إرسال الرسالة"
-                                  : "إرسال الرد"}
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card
-                  id="employee-section-files"
-                  ref={employeeFilesSectionRef}
-                  className="order-50 scroll-mt-36 gap-0 overflow-hidden border-slate-200/80 bg-white/95 py-0 shadow-sm lg:scroll-mt-44"
-                >
-                  <CardHeader className="border-b border-slate-100 bg-white/90 px-6 pt-6 pb-4">
-                    <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
-                          <FileText className="h-4 w-4" />
-                          الملفات الداخلية
-                        </div>
-                        <div className="text-2xl font-semibold tracking-tight text-slate-950">
-                          رفع وعرض ملفات الموظف
-                        </div>
-                        <p className="max-w-2xl text-sm leading-7 text-slate-500">
-                          يمكن للموارد البشرية رفع ملف جديد لهذا الموظف، وسيظهر
-                          داخل حسابه مع حالة القراءة وتاريخ الاطلاع.
-                        </p>
-                      </div>
-
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <LeaveOverviewStat
-                          icon={FileText}
-                          label="النسخ الحالية"
-                          value={String(visibleEmployeeFiles.length)}
-                        />
-                        <LeaveOverviewStat
-                          icon={
-                            unreadEmployeeFilesCount > 0 ? Clock3 : CheckCircle2
-                          }
-                          label="ملفات جديدة"
-                          value={String(unreadEmployeeFilesCount)}
-                        />
-                      </div>
-                    </div>
-                  </CardHeader>
-
-                  <CardContent className="p-5">
-                    <div className="space-y-6">
-                      {archivedEmployeeFilesCount > 0 ? (
-                        <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                          يتم إخفاء {archivedEmployeeFilesCount} من النسخ
-                          المستبدلة عن القائمة الأساسية.
-                        </div>
-                      ) : null}
-
-                      <div className="grid gap-6 xl:grid-cols-[minmax(320px,0.42fr)_minmax(0,0.58fr)]">
-                        <div className="rounded-[24px] border border-slate-200/80 bg-slate-50/70 p-5">
-                          <div className="space-y-4">
-                            {replacingEmployeeFile ? (
-                              <div className="rounded-[18px] border border-emerald-200 bg-emerald-50/80 px-4 py-3 text-sm text-emerald-800">
-                                <div className="font-semibold">
-                                  وضع الاستبدال مفعل
-                                </div>
-                                <div className="mt-1">
-                                  سيتم رفع نسخة معدلة بدل الملف:{" "}
-                                  {replacingEmployeeFile.title}
-                                </div>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  className="mt-3 rounded-full border-emerald-200 bg-white text-emerald-800 hover:bg-emerald-100"
-                                  onClick={resetEmployeeFileForm}
-                                  disabled={uploadingEmployeeFile}
+                              return (
+                                <div
+                                  key={request.id}
+                                  className={cn(
+                                    "rounded-[24px] border p-5 shadow-sm",
+                                    index === 0
+                                      ? "border-[#F2B705]/35 bg-[#F2B705]/[0.08]"
+                                      : "border-slate-200/80 bg-slate-50/70"
+                                  )}
                                 >
-                                  إلغاء الاستبدال
-                                </Button>
-                              </div>
-                            ) : null}
-
-                            <Field label="عنوان الملف">
-                              <Input
-                                value={employeeFileForm.title}
-                                onChange={event =>
-                                  handleEmployeeFileFormChange(
-                                    "title",
-                                    event.target.value
-                                  )
-                                }
-                                placeholder="مثال: خطاب مباشرة العمل"
-                                disabled={
-                                  !canManageEmployees || uploadingEmployeeFile
-                                }
-                              />
-                            </Field>
-
-                            <Field label="وصف الملف">
-                              <Textarea
-                                value={employeeFileForm.description}
-                                onChange={event =>
-                                  handleEmployeeFileFormChange(
-                                    "description",
-                                    event.target.value
-                                  )
-                                }
-                                placeholder="أضف وصفًا بسيطًا للملف"
-                                className="min-h-28"
-                                disabled={
-                                  !canManageEmployees || uploadingEmployeeFile
-                                }
-                              />
-                            </Field>
-
-                            <Field label="نوع الملف">
-                              <Select
-                                value={employeeFileForm.fileType}
-                                onValueChange={value =>
-                                  handleEmployeeFileFormChange(
-                                    "fileType",
-                                    value
-                                  )
-                                }
-                                disabled={
-                                  !canManageEmployees || uploadingEmployeeFile
-                                }
-                              >
-                                <SelectTrigger className="w-full bg-white">
-                                  <SelectValue placeholder="اختر نوع الملف" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {EMPLOYEE_FILE_TYPE_OPTIONS.map(option => (
-                                    <SelectItem
-                                      key={option.value}
-                                      value={option.value}
-                                    >
-                                      {option.label}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </Field>
-
-                            <Field label="اختيار الملف">
-                              <Input
-                                ref={employeeFileInputRef}
-                                type="file"
-                                onChange={handleEmployeeFileSelected}
-                                disabled={
-                                  !canManageEmployees || uploadingEmployeeFile
-                                }
-                              />
-                            </Field>
-
-                            <div className="rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
-                              {employeeFileForm.file ? (
-                                <div className="space-y-1">
-                                  <div className="font-semibold text-slate-900">
-                                    {employeeFileForm.file.name}
-                                  </div>
-                                  <div>
-                                    الحجم:{" "}
-                                    {formatFileSizeEN(
-                                      employeeFileForm.file.size
-                                    )}
-                                  </div>
-                                </div>
-                              ) : (
-                                "لم يتم اختيار ملف بعد."
-                              )}
-                            </div>
-
-                            <Button
-                              type="button"
-                              className="w-full bg-[#F2B705] text-slate-950 hover:bg-[#e0ab00]"
-                              onClick={() => void handleUploadEmployeeFile()}
-                              disabled={
-                                !canManageEmployees || uploadingEmployeeFile
-                              }
-                            >
-                              <Upload className="ml-2 h-4 w-4" />
-                              {uploadingEmployeeFile
-                                ? "جارٍ رفع الملف..."
-                                : replacingEmployeeFile
-                                  ? "رفع نسخة معدلة"
-                                  : "رفع ملف"}
-                            </Button>
-                          </div>
-                        </div>
-
-                        <div className="space-y-4">
-                          {employeeFilesLoading ? (
-                            <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50/70 px-5 py-10 text-center text-sm text-slate-500">
-                              جاري تحميل ملفات الموظف...
-                            </div>
-                          ) : visibleEmployeeFiles.length ? (
-                            visibleEmployeeFiles.map(file => (
-                              <div
-                                key={file.id}
-                                className="rounded-[24px] border border-slate-200/80 bg-slate-50/70 p-5"
-                              >
-                                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                                  <div className="min-w-0 space-y-3">
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      <EmployeeFileVersionBadge file={file} />
-                                      <EmployeeFileStatusBadge file={file} />
-                                      <Badge
-                                        variant="outline"
-                                        className="rounded-full bg-white shadow-none"
-                                      >
-                                        {file.fileTypeLabel}
-                                      </Badge>
-                                    </div>
-
-                                    <div>
-                                      <div className="text-lg font-semibold text-slate-950">
-                                        {file.title}
-                                      </div>
-                                      <div className="mt-1 text-sm text-slate-500">
-                                        {file.uploadedAtDate
-                                          ? `تاريخ الرفع: ${formatDateTimeEN(file.uploadedAtDate)}`
-                                          : "تاريخ الرفع غير متوفر"}
-                                      </div>
-                                    </div>
-
-                                    <p className="text-sm leading-7 text-slate-600">
-                                      {file.description ||
-                                        "لا يوجد وصف لهذا الملف."}
-                                    </p>
-
-                                    <div className="flex flex-wrap gap-2">
-                                      <EmployeeFileMetaBadge
-                                        label={file.fileName}
-                                        dir="ltr"
-                                      />
-                                      <EmployeeFileMetaBadge
-                                        label={formatFileSizeEN(
-                                          file.fileSize ?? null
-                                        )}
-                                      />
-                                      <EmployeeFileMetaBadge
-                                        label={file.contentType || "بدون نوع"}
-                                      />
-                                      {file.uploadedByName ? (
-                                        <EmployeeFileMetaBadge
-                                          label={`بواسطة: ${file.uploadedByName}`}
-                                        />
-                                      ) : null}
-                                    </div>
-
-                                    <div
-                                      className={cn(
-                                        "text-xs",
-                                        file.isRead
-                                          ? "text-emerald-700"
-                                          : "text-amber-700"
-                                      )}
-                                    >
-                                      {file.isRead && file.readAtDate
-                                        ? `تمت القراءة في ${formatDateTimeEN(file.readAtDate)}`
-                                        : "الملف لم يُفتح بعد من الموظف."}
-                                    </div>
-                                  </div>
-
-                                  <div className="flex flex-wrap gap-2 lg:justify-end">
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      size="sm"
-                                      className="rounded-full"
-                                      onClick={() =>
-                                        handleStartEmployeeFileReplacement(file)
-                                      }
-                                      disabled={
-                                        !canManageEmployees ||
-                                        uploadingEmployeeFile
-                                      }
-                                    >
-                                      <Upload className="ml-2 h-4 w-4" />
-                                      استبدال الملف
-                                    </Button>
-
-                                    {file.viewUrl ? (
-                                      <Button
-                                        asChild
-                                        variant="outline"
-                                        size="sm"
-                                        className="rounded-full"
-                                      >
-                                        <a
-                                          href={file.viewUrl}
-                                          target="_blank"
-                                          rel="noreferrer"
-                                        >
-                                          <Eye className="ml-2 h-4 w-4" />
-                                          معاينة
-                                        </a>
-                                      </Button>
-                                    ) : null}
-
-                                    {file.downloadUrl ? (
-                                      <Button
-                                        asChild
-                                        size="sm"
-                                        className="rounded-full"
-                                      >
-                                        <a
-                                          href={file.downloadUrl}
-                                          rel="noreferrer"
-                                          download={file.fileName || true}
-                                        >
-                                          <Download className="ml-2 h-4 w-4" />
-                                          تحميل
-                                        </a>
-                                      </Button>
-                                    ) : null}
-
-                                    <Button
-                                      type="button"
-                                      variant="destructive"
-                                      size="sm"
-                                      className="rounded-full"
-                                      onClick={() =>
-                                        void handleDeleteEmployeeFile(file)
-                                      }
-                                      disabled={
-                                        !canManageEmployees ||
-                                        deletingEmployeeFileId === file.id
-                                      }
-                                    >
-                                      <Trash2 className="ml-2 h-4 w-4" />
-                                      {deletingEmployeeFileId === file.id
-                                        ? "جارٍ الحذف..."
-                                        : "حذف"}
-                                    </Button>
-                                  </div>
-                                </div>
-                              </div>
-                            ))
-                          ) : (
-                            <Empty className="min-h-[320px] rounded-[24px] border border-dashed border-slate-200 bg-slate-50/70">
-                              <EmptyHeader>
-                                <EmptyMedia
-                                  variant="icon"
-                                  className="bg-[#F2B705]/12 text-[#030640]"
-                                >
-                                  <Inbox className="size-5" />
-                                </EmptyMedia>
-                                <EmptyTitle>
-                                  لا توجد ملفات لهذا الموظف
-                                </EmptyTitle>
-                                <EmptyDescription>
-                                  ارفع أول ملف من النموذج المجاور ليظهر هنا وفي
-                                  حساب الموظف مباشرة.
-                                </EmptyDescription>
-                              </EmptyHeader>
-                            </Empty>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card
-                  id="employee-section-leave"
-                  ref={employeeLeaveSectionRef}
-                  className="order-30 scroll-mt-36 gap-0 overflow-hidden border-slate-200/80 bg-white/95 py-0 shadow-sm lg:scroll-mt-44"
-                >
-                  <CardHeader className="border-b border-slate-100 bg-white/90">
-                    <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
-                          <CalendarDays className="h-4 w-4" />
-                          الإجازات
-                        </div>
-                        <div className="text-2xl font-semibold tracking-tight text-slate-950">
-                          آخر إجازة معتمدة وسجل الطلبات
-                        </div>
-                        <p className="max-w-2xl text-sm leading-7 text-slate-500">
-                          يتيح هذا القسم متابعة آخر إجازة معتمدة للموظف بشكل
-                          واضح، مع مراجعة جميع الطلبات السابقة واعتماد الطلبات
-                          المعلقة أو رفضها.
-                        </p>
-                      </div>
-
-                      <div className="grid gap-3 sm:grid-cols-3">
-                        <LeaveOverviewStat
-                          icon={BadgeCheck}
-                          label="الرصيد الحالي"
-                          value={
-                            selectedEmployeeProfile.employment.leaveBalanceLabel
-                          }
-                        />
-                        <LeaveOverviewStat
-                          icon={
-                            latestApprovedLeaveRequest?.status === "approved"
-                              ? CheckCircle2
-                              : latestApprovedLeaveRequest?.status ===
-                                  "rejected"
-                                ? XCircle
-                                : Clock3
-                          }
-                          label="حالة آخر إجازة معتمدة"
-                          value={
-                            latestApprovedLeaveRequest
-                              ? getLeaveStatusMeta(
-                                  latestApprovedLeaveRequest.status
-                                ).label
-                              : "لا توجد إجازات"
-                          }
-                        />
-                        <LeaveOverviewStat
-                          icon={CalendarDays}
-                          label="عدد الأيام"
-                          value={
-                            latestApprovedLeaveRequest
-                              ? formatLeaveDaysLabel(
-                                  latestApprovedLeaveRequest.daysCount
-                                )
-                              : "—"
-                          }
-                        />
-                      </div>
-                    </div>
-                  </CardHeader>
-
-                  <CardContent className="p-5">
-                    <div className="space-y-5">
-                      <div className="rounded-[24px] border border-slate-200/80 bg-slate-50/75 p-5">
-                        {latestApprovedLeaveRequest ? (
-                          <div className="space-y-4">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <Badge
-                                variant="outline"
-                                className="rounded-full border-[#F2B705]/35 bg-[#F2B705]/10 text-[#8b6700] shadow-none"
-                              >
-                                آخر إجازة معتمدة
-                              </Badge>
-                              <Badge variant="outline" className="rounded-full">
-                                {getLeaveTypeLabel(
-                                  latestApprovedLeaveRequest.leaveType
-                                )}
-                              </Badge>
-                              <LeaveStatusBadge
-                                status={latestApprovedLeaveRequest.status}
-                              />
-                            </div>
-
-                            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                              <ReadonlyMeta
-                                icon={CalendarDays}
-                                label="تاريخ البداية"
-                                value={formatDateEN(
-                                  latestApprovedLeaveRequest.startDate
-                                )}
-                              />
-                              <ReadonlyMeta
-                                icon={CalendarDays}
-                                label="تاريخ النهاية"
-                                value={formatDateEN(
-                                  latestApprovedLeaveRequest.endDate
-                                )}
-                              />
-                              <ReadonlyMeta
-                                icon={CalendarDays}
-                                label="عدد الأيام"
-                                value={formatLeaveDaysLabel(
-                                  latestApprovedLeaveRequest.daysCount
-                                )}
-                              />
-                              <ReadonlyMeta
-                                icon={Clock3}
-                                label="تاريخ الطلب"
-                                value={formatDateTimeEN(
-                                  latestApprovedLeaveRequest.createdAt
-                                )}
-                              />
-                            </div>
-
-                            {latestApprovedLeaveRequest.employeeNote ? (
-                              <div className="rounded-[20px] border border-slate-200 bg-white/90 px-4 py-3 text-sm leading-7 text-slate-700">
-                                <span className="font-semibold text-slate-900">
-                                  ملاحظة الموظف:
-                                </span>{" "}
-                                {latestApprovedLeaveRequest.employeeNote}
-                              </div>
-                            ) : null}
-
-                            {latestApprovedLeaveRequest.hrNote ? (
-                              <div className="rounded-[20px] border border-emerald-200 bg-emerald-50/70 px-4 py-3 text-sm leading-7 text-emerald-800">
-                                <span className="font-semibold">
-                                  ملاحظة HR:
-                                </span>{" "}
-                                {latestApprovedLeaveRequest.hrNote}
-                              </div>
-                            ) : null}
-                          </div>
-                        ) : (
-                          <div className="rounded-[22px] border border-dashed border-slate-200 bg-white/90 px-5 py-10 text-center text-sm text-slate-500">
-                            لا توجد أي إجازات أو طلبات إجازة لهذا الموظف حتى
-                            الآن.
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="space-y-3">
-                        <div className="text-sm font-semibold text-slate-900">
-                          سجل الإجازات
-                        </div>
-
-                        {leaveRequestsLoading ? (
-                          <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50/70 px-5 py-10 text-center text-sm text-slate-500">
-                            جاري تحميل طلبات الإجازة...
-                          </div>
-                        ) : leaveRequests.length ? (
-                          leaveRequests.map((request, index) => {
-                            const isPending = request.status === "pending";
-                            const currentReviewNote =
-                              reviewNotes[request.id] ?? request.hrNote ?? "";
-
-                            return (
-                              <div
-                                key={request.id}
-                                className={cn(
-                                  "rounded-[24px] border p-5 shadow-sm",
-                                  index === 0
-                                    ? "border-[#F2B705]/35 bg-[#F2B705]/[0.08]"
-                                    : "border-slate-200/80 bg-slate-50/70"
-                                )}
-                              >
-                                <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                                  <div className="space-y-3">
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      {index === 0 ? (
+                                  <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                                    <div className="space-y-3">
+                                      <div className="flex flex-wrap items-center gap-2">
+                                        {index === 0 ? (
+                                          <Badge
+                                            variant="outline"
+                                            className="rounded-full border-[#F2B705]/35 bg-[#F2B705]/10 text-[#8b6700] shadow-none"
+                                          >
+                                            أحدث طلب
+                                          </Badge>
+                                        ) : null}
                                         <Badge
                                           variant="outline"
-                                          className="rounded-full border-[#F2B705]/35 bg-[#F2B705]/10 text-[#8b6700] shadow-none"
+                                          className="rounded-full"
                                         >
-                                          أحدث طلب
+                                          {getLeaveTypeLabel(request.leaveType)}
                                         </Badge>
-                                      ) : null}
-                                      <Badge
-                                        variant="outline"
-                                        className="rounded-full"
-                                      >
-                                        {getLeaveTypeLabel(request.leaveType)}
-                                      </Badge>
-                                      <LeaveStatusBadge
-                                        status={request.status}
-                                      />
-                                    </div>
+                                        <LeaveStatusBadge
+                                          status={request.status}
+                                        />
+                                      </div>
 
-                                    <div className="grid gap-2 text-sm text-slate-600">
-                                      <div>
-                                        <span className="font-semibold text-slate-900">
-                                          الفترة:
-                                        </span>{" "}
-                                        {formatLeaveDateRange(
-                                          request.startDate,
-                                          request.endDate
-                                        )}
-                                      </div>
-                                      <div>
-                                        <span className="font-semibold text-slate-900">
-                                          عدد الأيام:
-                                        </span>{" "}
-                                        {formatLeaveDaysLabel(
-                                          request.daysCount
-                                        )}
-                                      </div>
-                                      <div>
-                                        <span className="font-semibold text-slate-900">
-                                          تاريخ الإنشاء:
-                                        </span>{" "}
-                                        {formatDateTimeEN(request.createdAt)}
-                                      </div>
-                                      {request.reviewedAt ? (
+                                      <div className="grid gap-2 text-sm text-slate-600">
                                         <div>
                                           <span className="font-semibold text-slate-900">
-                                            تمت المراجعة:
+                                            الفترة:
                                           </span>{" "}
-                                          {formatDateTimeEN(request.reviewedAt)}
+                                          {formatLeaveDateRange(
+                                            request.startDate,
+                                            request.endDate
+                                          )}
+                                        </div>
+                                        <div>
+                                          <span className="font-semibold text-slate-900">
+                                            عدد الأيام:
+                                          </span>{" "}
+                                          {formatLeaveDaysLabel(
+                                            request.daysCount
+                                          )}
+                                        </div>
+                                        <div>
+                                          <span className="font-semibold text-slate-900">
+                                            تاريخ الإنشاء:
+                                          </span>{" "}
+                                          {formatDateTimeEN(request.createdAt)}
+                                        </div>
+                                        {request.reviewedAt ? (
+                                          <div>
+                                            <span className="font-semibold text-slate-900">
+                                              تمت المراجعة:
+                                            </span>{" "}
+                                            {formatDateTimeEN(
+                                              request.reviewedAt
+                                            )}
+                                          </div>
+                                        ) : null}
+                                      </div>
+
+                                      {request.employeeNote ? (
+                                        <div className="rounded-[20px] border border-slate-200 bg-white/85 px-4 py-3 text-sm leading-7 text-slate-700">
+                                          <span className="font-semibold text-slate-900">
+                                            ملاحظة الموظف:
+                                          </span>{" "}
+                                          {request.employeeNote}
                                         </div>
                                       ) : null}
                                     </div>
 
-                                    {request.employeeNote ? (
-                                      <div className="rounded-[20px] border border-slate-200 bg-white/85 px-4 py-3 text-sm leading-7 text-slate-700">
+                                    <div className="w-full max-w-xl space-y-3">
+                                      <div className="rounded-[20px] border border-slate-200 bg-white/90 px-4 py-3 text-sm leading-7 text-slate-700">
                                         <span className="font-semibold text-slate-900">
-                                          ملاحظة الموظف:
+                                          ملاحظة HR:
                                         </span>{" "}
-                                        {request.employeeNote}
+                                        {request.hrNote ||
+                                          "لا توجد ملاحظة حتى الآن."}
                                       </div>
-                                    ) : null}
-                                  </div>
 
-                                  <div className="w-full max-w-xl space-y-3">
-                                    <div className="rounded-[20px] border border-slate-200 bg-white/90 px-4 py-3 text-sm leading-7 text-slate-700">
-                                      <span className="font-semibold text-slate-900">
-                                        ملاحظة HR:
-                                      </span>{" "}
-                                      {request.hrNote ||
-                                        "لا توجد ملاحظة حتى الآن."}
-                                    </div>
-
-                                    {isPending ? (
-                                      <div className="space-y-3 rounded-[20px] border border-slate-200 bg-white/90 p-4">
-                                        <Label className="text-sm font-semibold text-slate-800">
-                                          ملاحظة إدارية للطلب
-                                        </Label>
-                                        <Textarea
-                                          value={currentReviewNote}
-                                          onChange={event =>
-                                            handleReviewNoteChange(
-                                              request.id,
-                                              event.target.value
-                                            )
-                                          }
-                                          placeholder="اكتب ملاحظة عند الاعتماد أو الرفض"
-                                          className="min-h-28"
-                                          disabled={
-                                            !canManageEmployees ||
-                                            reviewingLeaveRequestId ===
-                                              request.id
-                                          }
-                                        />
-
-                                        <div className="flex flex-wrap gap-3">
-                                          <Button
-                                            type="button"
-                                            className="bg-emerald-600 text-white hover:bg-emerald-700"
+                                      {isPending ? (
+                                        <div className="space-y-3 rounded-[20px] border border-slate-200 bg-white/90 p-4">
+                                          <Label className="text-sm font-semibold text-slate-800">
+                                            ملاحظة إدارية للطلب
+                                          </Label>
+                                          <Textarea
+                                            value={currentReviewNote}
+                                            onChange={event =>
+                                              handleReviewNoteChange(
+                                                request.id,
+                                                event.target.value
+                                              )
+                                            }
+                                            placeholder="اكتب ملاحظة عند الاعتماد أو الرفض"
+                                            className="min-h-28"
                                             disabled={
                                               !canManageEmployees ||
                                               reviewingLeaveRequestId ===
                                                 request.id
                                             }
-                                            onClick={() =>
-                                              void handleReviewLeaveRequest(
-                                                request,
-                                                "approved"
-                                              )
-                                            }
-                                          >
-                                            {reviewingLeaveRequestId ===
-                                            request.id ? (
-                                              <Clock3 className="ml-2 h-4 w-4 animate-pulse" />
-                                            ) : (
-                                              <CheckCircle2 className="ml-2 h-4 w-4" />
-                                            )}
-                                            اعتماد الطلب
-                                          </Button>
-                                          <Button
-                                            type="button"
-                                            variant="outline"
-                                            className="border-rose-200 text-rose-700 hover:bg-rose-50 hover:text-rose-800"
-                                            disabled={
-                                              !canManageEmployees ||
-                                              reviewingLeaveRequestId ===
-                                                request.id
-                                            }
-                                            onClick={() =>
-                                              void handleReviewLeaveRequest(
-                                                request,
-                                                "rejected"
-                                              )
-                                            }
-                                          >
-                                            <XCircle className="ml-2 h-4 w-4" />
-                                            رفض الطلب
-                                          </Button>
+                                          />
+
+                                          <div className="flex flex-wrap gap-3">
+                                            <Button
+                                              type="button"
+                                              className="bg-emerald-600 text-white hover:bg-emerald-700"
+                                              disabled={
+                                                !canManageEmployees ||
+                                                reviewingLeaveRequestId ===
+                                                  request.id
+                                              }
+                                              onClick={() =>
+                                                void handleReviewLeaveRequest(
+                                                  request,
+                                                  "approved"
+                                                )
+                                              }
+                                            >
+                                              {reviewingLeaveRequestId ===
+                                              request.id ? (
+                                                <Clock3 className="ml-2 h-4 w-4 animate-pulse" />
+                                              ) : (
+                                                <CheckCircle2 className="ml-2 h-4 w-4" />
+                                              )}
+                                              اعتماد الطلب
+                                            </Button>
+                                            <Button
+                                              type="button"
+                                              variant="outline"
+                                              className="border-rose-200 text-rose-700 hover:bg-rose-50 hover:text-rose-800"
+                                              disabled={
+                                                !canManageEmployees ||
+                                                reviewingLeaveRequestId ===
+                                                  request.id
+                                              }
+                                              onClick={() =>
+                                                void handleReviewLeaveRequest(
+                                                  request,
+                                                  "rejected"
+                                                )
+                                              }
+                                            >
+                                              <XCircle className="ml-2 h-4 w-4" />
+                                              رفض الطلب
+                                            </Button>
+                                          </div>
                                         </div>
-                                      </div>
-                                    ) : null}
+                                      ) : null}
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
-                            );
-                          })
-                        ) : (
-                          <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50/70 px-5 py-10 text-center text-sm text-slate-500">
-                            لا توجد طلبات إجازة مسجلة لهذا الموظف.
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card className="order-20 gap-0 overflow-hidden border-slate-200/80 bg-white/95 py-0 shadow-sm">
-                  <CardHeader className="border-b border-slate-100 bg-white/90 px-6 pt-6 pb-4">
-                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                      <div className="space-y-1">
-                        <CardTitle className="flex items-center gap-2 text-xl text-slate-950">
-                          <ShieldCheck className="h-5 w-5 text-[#030640]" />
-                          تفاصيل البيانات الوظيفية
-                        </CardTitle>
-                        <CardDescription className="text-sm leading-6 text-slate-500">
-                          حدّث المعلومات الأساسية للموظف من مكان واحد منظم، مع
-                          فصل واضح بين بيانات الملف وبقية الأقسام التشغيلية.
-                        </CardDescription>
-                      </div>
-
-                      <Badge
-                        variant="outline"
-                        className={cn(
-                          "w-fit rounded-full shadow-none",
-                          canManageEmployees
-                            ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                            : "border-slate-200 bg-slate-100 text-slate-600"
-                        )}
-                      >
-                        {canManageEmployees ? "تعديل مفعل" : "عرض فقط"}
-                      </Badge>
-                    </div>
-                  </CardHeader>
-
-                  <CardContent className="space-y-6 p-6">
-                    <div className="grid gap-5 md:grid-cols-2">
-                      <Field label="اسم الموظف">
-                        <Input
-                          value={form.fullName}
-                          onChange={event =>
-                            handleFormChange("fullName", event.target.value)
-                          }
-                          placeholder="مثال: نواف العليان"
-                          disabled={!canManageEmployees || saving}
-                        />
-                      </Field>
-
-                      <Field label="البريد الإلكتروني">
-                        <Input
-                          type="email"
-                          dir="ltr"
-                          value={form.email}
-                          onChange={event =>
-                            handleFormChange("email", event.target.value)
-                          }
-                          placeholder="name@example.com"
-                          disabled={!canManageEmployees || saving}
-                        />
-                      </Field>
-
-                      <Field label="رقم الجوال">
-                        <Input
-                          dir="ltr"
-                          value={form.phone}
-                          onChange={event =>
-                            handleFormChange("phone", event.target.value)
-                          }
-                          placeholder="05xxxxxxxx"
-                          disabled={!canManageEmployees || saving}
-                        />
-                      </Field>
-                      <Field label="المسمى الوظيفي">
-                        <Input
-                          value={form.jobTitle}
-                          onChange={event =>
-                            handleFormChange("jobTitle", event.target.value)
-                          }
-                          placeholder="مثال: مسؤول عمليات"
-                          disabled={!canManageEmployees || saving}
-                        />
-                      </Field>
-
-                      <Field label="القسم / الإدارة">
-                        <Input
-                          value={form.department}
-                          onChange={event =>
-                            handleFormChange("department", event.target.value)
-                          }
-                          placeholder="مثال: الموارد البشرية"
-                          disabled={!canManageEmployees || saving}
-                        />
-                      </Field>
-
-                      <Field label="الحالة الوظيفية">
-                        <Select
-                          value={form.employmentStatus}
-                          onValueChange={value =>
-                            handleFormChange("employmentStatus", value)
-                          }
-                          disabled={!canManageEmployees || saving}
-                        >
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder="اختر الحالة الوظيفية" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {EMPLOYMENT_STATUS_OPTIONS.map(option => (
-                              <SelectItem
-                                key={option.value}
-                                value={option.value}
-                              >
-                                {option.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </Field>
-
-                      <Field label="تاريخ بداية العمل">
-                        <Input
-                          type="date"
-                          value={form.startDate}
-                          onChange={event =>
-                            handleFormChange("startDate", event.target.value)
-                          }
-                          disabled={!canManageEmployees || saving}
-                        />
-                      </Field>
-
-                      <Field
-                        label="رقم البصمة"
-                        description="حقل اختياري، ويجب ألا يتكرر بين الموظفين عند إدخاله."
-                      >
-                        <Input
-                          dir="ltr"
-                          value={form.fingerprintNumber}
-                          onChange={event =>
-                            handleFormChange(
-                              "fingerprintNumber",
-                              event.target.value
-                            )
-                          }
-                          placeholder="مثال: 10245"
-                          disabled={!canManageEmployees || saving}
-                        />
-                      </Field>
-
-                      <Field
-                        label="رصيد الإجازات"
-                        description="يُحفظ كرقم ويمكن لاحقًا ربطه بطلبات الإجازة."
-                      >
-                        <Input
-                          type="number"
-                          inputMode="decimal"
-                          step="0.5"
-                          value={form.leaveBalance}
-                          onChange={event =>
-                            handleFormChange("leaveBalance", event.target.value)
-                          }
-                          placeholder="مثال: 21"
-                          disabled={!canManageEmployees || saving}
-                        />
-                      </Field>
-
-                      <Field
-                        label="صلاحية الصفحة"
-                        description={
-                          canManageEmployees
-                            ? "يمكنك تعديل بيانات العمل وحفظها من هذه الصفحة."
-                            : "تمتلك صلاحية عرض فقط، والحفظ معطل لهذا الحساب."
-                        }
-                      >
-                        <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-                          {canManageEmployees
-                            ? "إدارة كاملة لبيانات الموظف الوظيفية"
-                            : "عرض بيانات الموظف الوظيفية فقط"}
+                              );
+                            })
+                          ) : (
+                            <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50/70 px-5 py-10 text-center text-sm text-slate-500">
+                              لا توجد طلبات إجازة مسجلة لهذا الموظف.
+                            </div>
+                          )}
                         </div>
-                      </Field>
-                    </div>
-
-                    <Field
-                      label="ملاحظات إدارية"
-                      description="ملاحظات داخلية مخصصة للإدارة والموارد البشرية."
-                    >
-                      <Textarea
-                        value={form.adminNotes}
-                        onChange={event =>
-                          handleFormChange("adminNotes", event.target.value)
-                        }
-                        placeholder="اكتب أي ملاحظات إدارية داخلية هنا"
-                        className="min-h-36"
-                        disabled={!canManageEmployees || saving}
-                      />
-                    </Field>
-
-                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-[22px] border border-slate-200 bg-slate-50/80 px-4 py-4">
-                      <div className="text-sm text-slate-500">
-                        {isDirty
-                          ? "هناك تغييرات غير محفوظة على ملف الموظف."
-                          : "البيانات الوظيفية الحالية متزامنة ومحفوظة."}
                       </div>
+                    </CardContent>
+                  </Card>
+                ) : null}
 
-                      <div className="flex flex-wrap gap-3">
-                        <Button
-                          type="button"
+                {activeEmployeeWorkspaceSection === "profile" ? (
+                  <Card className="gap-0 overflow-hidden border-slate-200/80 bg-white/95 py-0 shadow-sm">
+                    <CardHeader className="border-b border-slate-100 bg-white/90 px-6 pt-6 pb-4">
+                      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                        <div className="space-y-1">
+                          <CardTitle className="flex items-center gap-2 text-xl text-slate-950">
+                            <ShieldCheck className="h-5 w-5 text-[#030640]" />
+                            تفاصيل البيانات الوظيفية
+                          </CardTitle>
+                          <CardDescription className="text-sm leading-6 text-slate-500">
+                            حدّث المعلومات الأساسية للموظف من مكان واحد منظم، مع
+                            فصل واضح بين بيانات الملف وبقية الأقسام التشغيلية.
+                          </CardDescription>
+                        </div>
+
+                        <Badge
                           variant="outline"
-                          onClick={handleReset}
-                          disabled={!isDirty || saving}
+                          className={cn(
+                            "w-fit rounded-full shadow-none",
+                            canManageEmployees
+                              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                              : "border-slate-200 bg-slate-100 text-slate-600"
+                          )}
                         >
-                          إعادة ضبط
-                        </Button>
-                        <Button
-                          type="button"
-                          onClick={() => void handleSave()}
-                          disabled={!canManageEmployees || !isDirty || saving}
-                          className="bg-[#F2B705] text-slate-950 hover:bg-[#e0ab00]"
-                        >
-                          <Save className="ml-2 h-4 w-4" />
-                          {saving ? "جارٍ الحفظ..." : "حفظ البيانات الوظيفية"}
-                        </Button>
+                          {canManageEmployees ? "تعديل مفعل" : "عرض فقط"}
+                        </Badge>
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
+                    </CardHeader>
+
+                    <CardContent className="space-y-6 p-6">
+                      <div className="grid gap-5 md:grid-cols-2">
+                        <Field label="اسم الموظف">
+                          <Input
+                            value={form.fullName}
+                            onChange={event =>
+                              handleFormChange("fullName", event.target.value)
+                            }
+                            placeholder="مثال: نواف العليان"
+                            disabled={!canManageEmployees || saving}
+                          />
+                        </Field>
+
+                        <Field label="البريد الإلكتروني">
+                          <Input
+                            type="email"
+                            dir="ltr"
+                            value={form.email}
+                            onChange={event =>
+                              handleFormChange("email", event.target.value)
+                            }
+                            placeholder="name@example.com"
+                            disabled={!canManageEmployees || saving}
+                          />
+                        </Field>
+
+                        <Field label="رقم الجوال">
+                          <Input
+                            dir="ltr"
+                            value={form.phone}
+                            onChange={event =>
+                              handleFormChange("phone", event.target.value)
+                            }
+                            placeholder="05xxxxxxxx"
+                            disabled={!canManageEmployees || saving}
+                          />
+                        </Field>
+                        <Field label="المسمى الوظيفي">
+                          <Input
+                            value={form.jobTitle}
+                            onChange={event =>
+                              handleFormChange("jobTitle", event.target.value)
+                            }
+                            placeholder="مثال: مسؤول عمليات"
+                            disabled={!canManageEmployees || saving}
+                          />
+                        </Field>
+
+                        <Field label="القسم / الإدارة">
+                          <Input
+                            value={form.department}
+                            onChange={event =>
+                              handleFormChange("department", event.target.value)
+                            }
+                            placeholder="مثال: الموارد البشرية"
+                            disabled={!canManageEmployees || saving}
+                          />
+                        </Field>
+
+                        <Field label="الحالة الوظيفية">
+                          <Select
+                            value={form.employmentStatus}
+                            onValueChange={value =>
+                              handleFormChange("employmentStatus", value)
+                            }
+                            disabled={!canManageEmployees || saving}
+                          >
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder="اختر الحالة الوظيفية" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {EMPLOYMENT_STATUS_OPTIONS.map(option => (
+                                <SelectItem
+                                  key={option.value}
+                                  value={option.value}
+                                >
+                                  {option.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </Field>
+
+                        <Field label="تاريخ بداية العمل">
+                          <Input
+                            type="date"
+                            value={form.startDate}
+                            onChange={event =>
+                              handleFormChange("startDate", event.target.value)
+                            }
+                            disabled={!canManageEmployees || saving}
+                          />
+                        </Field>
+
+                        <Field
+                          label="رقم البصمة"
+                          description="حقل اختياري، ويجب ألا يتكرر بين الموظفين عند إدخاله."
+                        >
+                          <Input
+                            dir="ltr"
+                            value={form.fingerprintNumber}
+                            onChange={event =>
+                              handleFormChange(
+                                "fingerprintNumber",
+                                event.target.value
+                              )
+                            }
+                            placeholder="مثال: 10245"
+                            disabled={!canManageEmployees || saving}
+                          />
+                        </Field>
+
+                        <Field
+                          label="رصيد الإجازات"
+                          description="يُحفظ كرقم ويمكن لاحقًا ربطه بطلبات الإجازة."
+                        >
+                          <Input
+                            type="number"
+                            inputMode="decimal"
+                            step="0.5"
+                            value={form.leaveBalance}
+                            onChange={event =>
+                              handleFormChange(
+                                "leaveBalance",
+                                event.target.value
+                              )
+                            }
+                            placeholder="مثال: 21"
+                            disabled={!canManageEmployees || saving}
+                          />
+                        </Field>
+
+                        <Field
+                          label="صلاحية الصفحة"
+                          description={
+                            canManageEmployees
+                              ? "يمكنك تعديل بيانات العمل وحفظها من هذه الصفحة."
+                              : "تمتلك صلاحية عرض فقط، والحفظ معطل لهذا الحساب."
+                          }
+                        >
+                          <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                            {canManageEmployees
+                              ? "إدارة كاملة لبيانات الموظف الوظيفية"
+                              : "عرض بيانات الموظف الوظيفية فقط"}
+                          </div>
+                        </Field>
+                      </div>
+
+                      <Field
+                        label="ملاحظات إدارية"
+                        description="ملاحظات داخلية مخصصة للإدارة والموارد البشرية."
+                      >
+                        <Textarea
+                          value={form.adminNotes}
+                          onChange={event =>
+                            handleFormChange("adminNotes", event.target.value)
+                          }
+                          placeholder="اكتب أي ملاحظات إدارية داخلية هنا"
+                          className="min-h-36"
+                          disabled={!canManageEmployees || saving}
+                        />
+                      </Field>
+
+                      <div className="flex flex-wrap items-center justify-between gap-3 rounded-[22px] border border-slate-200 bg-slate-50/80 px-4 py-4">
+                        <div className="text-sm text-slate-500">
+                          {isDirty
+                            ? "هناك تغييرات غير محفوظة على ملف الموظف."
+                            : "البيانات الوظيفية الحالية متزامنة ومحفوظة."}
+                        </div>
+
+                        <div className="flex flex-wrap gap-3">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={handleReset}
+                            disabled={!isDirty || saving}
+                          >
+                            إعادة ضبط
+                          </Button>
+                          <Button
+                            type="button"
+                            onClick={() => void handleSave()}
+                            disabled={!canManageEmployees || !isDirty || saving}
+                            className="bg-[#F2B705] text-slate-950 hover:bg-[#e0ab00]"
+                          >
+                            <Save className="ml-2 h-4 w-4" />
+                            {saving ? "جارٍ الحفظ..." : "حفظ البيانات الوظيفية"}
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : null}
               </div>
             ) : (
               <Card className="gap-0 overflow-hidden border-slate-200/80 bg-white/95 py-0 shadow-sm">
