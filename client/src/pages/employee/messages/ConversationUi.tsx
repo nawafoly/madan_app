@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Check, ChevronDown, Inbox, Search } from "lucide-react";
+import { Inbox, Search } from "lucide-react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -12,11 +12,6 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { Input } from "@/components/ui/input";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { formatDateTimeEN } from "@/lib/formatters";
 import type { EmployeeCoworkerOption } from "@/lib/employeeCoworkers";
@@ -104,84 +99,46 @@ function RecipientOptionCard({
   disabled?: boolean;
   onSelect: () => void;
 }) {
-  const metaItems = [option.title, option.department].filter(Boolean);
-
   return (
     <button
       type="button"
-      disabled={disabled}
       onClick={onSelect}
+      disabled={disabled}
       className={cn(
-        "w-full rounded-[20px] border px-3.5 py-3 text-right transition-all",
+        "group flex min-w-[84px] shrink-0 flex-col items-center gap-2 rounded-[20px] px-2 py-2 text-center transition-all",
         isSelected
-          ? "border-sky-200 bg-sky-50/75 shadow-[0_18px_38px_-32px_rgba(2,132,199,0.35)]"
-          : "border-slate-200/80 bg-white hover:border-slate-300 hover:bg-slate-50/80"
+          ? "bg-sky-50 ring-2 ring-sky-500/70"
+          : "hover:bg-slate-50",
+        disabled && "cursor-not-allowed opacity-60"
       )}
       dir="rtl"
+      title={option.name}
     >
-      <div className="flex items-start gap-3">
-        <Avatar
+      <Avatar
+        className={cn(
+          "h-14 w-14 border bg-slate-100 shadow-sm transition-all",
+          isSelected ? "border-sky-300" : "border-slate-200"
+        )}
+      >
+        <AvatarImage
+          src={option.avatarUrl || undefined}
+          alt={option.name}
+          className="object-cover"
+        />
+        <AvatarFallback className="bg-slate-900 text-xs font-semibold text-white">
+          {initialsFromName(option.name, option.email)}
+        </AvatarFallback>
+      </Avatar>
+
+      <div className="w-full">
+        <div
           className={cn(
-            "mt-0.5 h-10 w-10 shrink-0 border bg-slate-100 shadow-sm",
-            isSelected ? "border-sky-200" : "border-slate-200"
+            "mx-auto max-w-[88px] truncate text-xs font-semibold transition-colors",
+            isSelected ? "text-sky-700" : "text-slate-800"
           )}
+          title={option.name}
         >
-          <AvatarImage
-            src={option.avatarUrl || undefined}
-            alt={option.name}
-            className="object-cover"
-          />
-          <AvatarFallback className="bg-slate-900 text-[11px] font-semibold text-white">
-            {initialsFromName(option.name, option.email)}
-          </AvatarFallback>
-        </Avatar>
-
-        <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="truncate text-sm font-semibold text-slate-950">
-                {option.name}
-              </div>
-              <div className="mt-1 truncate text-xs text-slate-500">
-                {option.email || "لا يوجد بريد إلكتروني"}
-              </div>
-            </div>
-
-            <span
-              className={cn(
-                "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border transition-colors",
-                isSelected
-                  ? "border-sky-200 bg-white text-sky-700"
-                  : "border-slate-200 bg-slate-50 text-transparent"
-              )}
-              aria-hidden="true"
-            >
-              <Check className="h-3.5 w-3.5" />
-            </span>
-          </div>
-
-          <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px]">
-            {metaItems.length ? (
-              metaItems.map(item => (
-                <Badge
-                  key={item}
-                  variant="outline"
-                  className={cn(
-                    "rounded-full px-2.5 py-0.5 shadow-none",
-                    isSelected
-                      ? "border-sky-200/80 bg-white text-sky-700"
-                      : "border-slate-200 bg-slate-50 text-slate-600"
-                  )}
-                >
-                  {item}
-                </Badge>
-              ))
-            ) : (
-              <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-slate-500">
-                بيانات وظيفية محدودة
-              </span>
-            )}
-          </div>
+          {option.name}
         </div>
       </div>
     </button>
@@ -206,9 +163,6 @@ export function RecipientPicker({
   onSelect: (uid: string) => void;
 }) {
   const [searchQuery, setSearchQuery] = useState("");
-  const selectedMeta = [selectedRecipient?.title, selectedRecipient?.department]
-    .filter(Boolean)
-    .join(" - ");
 
   const filteredOptions = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLocaleLowerCase();
@@ -233,155 +187,87 @@ export function RecipientPicker({
     }
   }, [open]);
 
-  const helperText = selectedRecipient
-    ? selectedRecipient.email || selectedMeta || "جاهز لبدء محادثة داخلية"
-    : "ابحث بالاسم أو البريد أو القسم ثم اختر الموظف المناسب";
+  useEffect(() => {
+    onOpenChange(true);
+  }, [onOpenChange]);
 
   return (
-    <Popover
-      open={open}
-      onOpenChange={nextOpen => {
-        if (!nextOpen) {
-          setSearchQuery("");
-        }
-        onOpenChange(nextOpen);
-      }}
+    <div
+      className="space-y-4 rounded-[24px] border border-slate-200/90 bg-white p-4 shadow-sm"
+      dir="rtl"
     >
-      <PopoverTrigger asChild>
-        <Button
-          type="button"
-          variant="outline"
-          role="combobox"
-          disabled={disabled}
-          className="h-auto w-full justify-between rounded-[22px] border-slate-200/90 bg-white px-4 py-3 text-right text-sm text-slate-900 shadow-sm transition-all hover:border-slate-300 hover:bg-slate-50/80"
-        >
-          <div className="flex min-w-0 flex-1 items-center gap-3">
-            <Avatar className="h-10 w-10 border border-slate-200 bg-slate-100 shadow-sm">
-              <AvatarImage
-                src={selectedRecipient?.avatarUrl || undefined}
-                alt={selectedRecipient?.name || "المستلم"}
-                className="object-cover"
-              />
-              <AvatarFallback className="bg-slate-900 text-xs font-semibold text-white">
-                {selectedRecipient
-                  ? initialsFromName(
-                      selectedRecipient.name,
-                      selectedRecipient.email
-                    )
-                  : "مو"}
-              </AvatarFallback>
-            </Avatar>
-
-            <div className="min-w-0 flex-1 text-right" dir="rtl">
-              <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold tracking-[0.12em] text-slate-500">
-                <span>المستلم</span>
-                {selectedRecipient ? (
-                  <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[10px] tracking-normal text-slate-600">
-                    نشط
-                  </span>
-                ) : null}
-              </div>
-              <div className="mt-1 truncate text-sm font-semibold text-slate-950">
-                {selectedRecipient
-                  ? selectedRecipient.name
-                  : loading
-                    ? "جارٍ تحميل الموظفين..."
-                    : "اختر موظفًا لإرسال الرسالة"}
-              </div>
-              <div className="mt-1 truncate text-xs text-slate-500">
-                {helperText}
-              </div>
-            </div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="space-y-1 text-right">
+          <div className="text-sm font-semibold text-slate-950">
+            اختر الموظف
           </div>
-
-          <div className="flex shrink-0 items-center gap-2 ps-3">
-            {selectedRecipient ? (
-              <span className="hidden rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-600 md:inline-flex">
-                تغيير
-              </span>
-            ) : null}
-            <ChevronDown
-              className={cn(
-                "h-5 w-5 shrink-0 text-slate-500 transition-transform",
-                open ? "rotate-180" : ""
-              )}
-            />
-          </div>
-        </Button>
-      </PopoverTrigger>
-
-      <PopoverContent
-        align="end"
-        sideOffset={8}
-        className="max-w-[calc(100vw-2rem)] rounded-[24px] border border-slate-200/90 bg-white p-0 shadow-[0_28px_80px_-44px_rgba(15,23,42,0.34)]"
-        style={{ width: "min(var(--radix-popover-trigger-width), 34rem)" }}
-      >
-        <div
-          className="border-b border-slate-200/80 px-4 py-4 text-right"
-          dir="rtl"
-        >
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="space-y-1 text-right">
-              <div className="text-sm font-semibold text-slate-950">
-                اختر الموظف
-              </div>
-              <p className="text-xs leading-6 text-slate-500">
-                ابحث ثم اختر مباشرة من القائمة المختصرة.
-              </p>
-            </div>
-            <Badge
-              variant="outline"
-              className="rounded-full border-slate-200 bg-slate-50 text-slate-600 shadow-none"
-            >
-              {searchQuery
-                ? `${filteredOptions.length} نتيجة`
-                : `${options.length} موظف`}
-            </Badge>
-          </div>
-
-          <div className="relative mt-3">
-            <Search className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <Input
-              autoFocus
-              value={searchQuery}
-              onChange={event => setSearchQuery(event.target.value)}
-              placeholder="ابحث بالاسم أو البريد أو المسمى أو القسم"
-              className="h-11 rounded-2xl border-slate-200 bg-slate-50 pr-11 text-right shadow-none placeholder:text-slate-400 focus-visible:border-sky-300 focus-visible:ring-sky-100"
-              dir="rtl"
-            />
-          </div>
+          <p className="text-xs leading-6 text-slate-500">
+            اختر موظفًا نشطًا من زملائك ثم اكتب الرسالة مباشرة.
+          </p>
         </div>
 
-        <ScrollArea className="max-h-[320px]">
-          <div className="space-y-2 p-3">
-            {filteredOptions.length ? (
-              filteredOptions.map(option => (
-                <RecipientOptionCard
-                  key={option.uid}
-                  option={option}
-                  isSelected={selectedRecipient?.uid === option.uid}
-                  disabled={disabled}
-                  onSelect={() => {
-                    onSelect(option.uid);
-                    setSearchQuery("");
-                    onOpenChange(false);
-                  }}
-                />
-              ))
-            ) : (
-              <div className="rounded-[20px] border border-dashed border-slate-200 bg-slate-50/60 px-5 py-8 text-center">
-                <div className="text-sm font-semibold text-slate-900">
-                  لا توجد نتائج مطابقة
-                </div>
-                <p className="mt-2 text-sm leading-7 text-slate-500">
-                  جرّب البحث باسم مختلف أو بالبريد أو بالقسم للعثور على الموظف.
-                </p>
-              </div>
-            )}
+        <Badge
+          variant="outline"
+          className="rounded-full border-slate-200 bg-slate-50 text-slate-600 shadow-none"
+        >
+          {searchQuery
+            ? `${filteredOptions.length} نتيجة`
+            : `${options.length} موظف`}
+        </Badge>
+      </div>
+
+      <div className="relative">
+        <Search className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+        <Input
+          value={searchQuery}
+          onChange={event => setSearchQuery(event.target.value)}
+          placeholder="ابحث بالاسم أو البريد أو المسمى أو القسم"
+          className="h-11 rounded-2xl border-slate-200 bg-slate-50 pr-11 text-right shadow-none placeholder:text-slate-400 focus-visible:border-sky-300 focus-visible:ring-sky-100"
+          dir="rtl"
+          disabled={disabled}
+        />
+      </div>
+
+      {loading ? (
+        <div className="flex items-start gap-3 overflow-x-auto pb-1">
+          {Array.from({ length: 6 }).map((_, index) => (
+            <div
+              key={index}
+              className="flex min-w-[84px] shrink-0 flex-col items-center gap-2 px-2 py-2"
+            >
+              <div className="h-14 w-14 animate-pulse rounded-full bg-slate-200" />
+              <div className="h-3 w-16 animate-pulse rounded-full bg-slate-200" />
+            </div>
+          ))}
+        </div>
+      ) : filteredOptions.length ? (
+        <div className="overflow-x-auto pt-2 pb-2">
+          <div className="flex min-w-max items-start gap-3 pr-1">
+            {filteredOptions.map(option => (
+              <RecipientOptionCard
+                key={option.uid}
+                option={option}
+                isSelected={selectedRecipient?.uid === option.uid}
+                disabled={disabled}
+                onSelect={() => {
+                  onSelect(option.uid);
+                  setSearchQuery("");
+                }}
+              />
+            ))}
           </div>
-        </ScrollArea>
-      </PopoverContent>
-    </Popover>
+        </div>
+      ) : (
+        <div className="rounded-[20px] border border-dashed border-slate-200 bg-slate-50/60 px-5 py-8 text-center">
+          <div className="text-sm font-semibold text-slate-900">
+            لا توجد نتائج مطابقة
+          </div>
+          <p className="mt-2 text-sm leading-7 text-slate-500">
+            جرّب البحث باسم مختلف أو بالبريد أو بالقسم للعثور على الموظف.
+          </p>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -409,37 +295,38 @@ export function ConversationListItem({
       type="button"
       onClick={onClick}
       className={cn(
-        "w-full min-w-0 rounded-[20px] border px-4 py-3.5 text-right shadow-sm transition-all",
+        "w-full min-w-0 rounded-[18px] border px-3.5 py-3 text-right shadow-sm transition-all",
         isActive
           ? "border-sky-200 bg-sky-50/80 shadow-[0_18px_38px_-30px_rgba(2,132,199,0.28)]"
           : "border-slate-200/80 bg-white hover:border-slate-300 hover:bg-slate-50/90"
       )}
       dir="rtl"
     >
-      <div className="flex min-w-0 items-start gap-3">
-        <Avatar
-          className={cn(
-            "mt-0.5 h-11 w-11 shrink-0 border bg-slate-100",
-            isActive ? "border-sky-200" : "border-slate-200"
-          )}
-        >
-          <AvatarImage
-            src={conversation.counterpartyPhoto || undefined}
-            alt={counterpartyName}
-            className="object-cover"
-          />
-          <AvatarFallback className="bg-slate-900 text-[11px] font-semibold text-white">
-            {initialsFromName(counterpartyName, conversation.counterpartyEmail)}
-          </AvatarFallback>
-        </Avatar>
+      <div className="space-y-3">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex min-w-0 flex-1 items-start gap-3 pr-1">
+            <Avatar
+              className={cn(
+                "h-11 w-11 shrink-0 border bg-slate-100",
+                isActive ? "border-sky-200" : "border-slate-200"
+              )}
+            >
+              <AvatarImage
+                src={conversation.counterpartyPhoto || undefined}
+                alt={counterpartyName}
+                className="object-cover"
+              />
+              <AvatarFallback className="bg-slate-900 text-[11px] font-semibold text-white">
+                {initialsFromName(counterpartyName, conversation.counterpartyEmail)}
+              </AvatarFallback>
+            </Avatar>
 
-        <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 items-start justify-between gap-3">
-            <div className="min-w-0 space-y-1.5">
+            <div className="min-w-0 flex-1 space-y-2">
               <div className="flex min-w-0 flex-wrap items-center gap-2">
                 <span className="truncate text-sm font-semibold text-slate-950">
                   {counterpartyName}
                 </span>
+
                 {conversation.unreadCount > 0 ? (
                   <span className="inline-flex min-w-6 items-center justify-center rounded-full bg-[#F2B705] px-2 py-0.5 text-[11px] font-semibold text-slate-950">
                     {conversation.unreadCount}
@@ -459,12 +346,14 @@ export function ConversationListItem({
                 >
                   {conversation.conversationTypeLabel}
                 </Badge>
+
                 <Badge
                   variant="outline"
                   className="rounded-full border-slate-200 bg-slate-50 text-slate-600 shadow-none"
                 >
                   {latestMessage.typeLabel}
                 </Badge>
+
                 {isActive ? (
                   <Badge
                     variant="outline"
@@ -475,28 +364,32 @@ export function ConversationListItem({
                 ) : null}
               </div>
             </div>
-
-            <div className="shrink-0 whitespace-nowrap pt-0.5 text-[11px] text-slate-500">
-              {conversation.lastMessageAtDate
-                ? formatDateTimeEN(conversation.lastMessageAtDate)
-                : "تاريخ غير متوفر"}
-            </div>
           </div>
 
-          <div className="mt-2 min-w-0 text-sm leading-6 text-slate-600 line-clamp-2 whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+          <div className="shrink-0 whitespace-nowrap pt-1 text-[11px] text-slate-500">
+            {conversation.lastMessageAtDate
+              ? formatDateTimeEN(conversation.lastMessageAtDate)
+              : "تاريخ غير متوفر"}
+          </div>
+        </div>
+
+        <div className="rounded-[18px] border border-slate-200 bg-slate-50/70 px-3 py-2.5">
+          <div className="min-w-0 text-[13px] leading-6 text-slate-600 line-clamp-2 whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
             {latestMessage.preview || "لا يوجد نص محفوظ لهذه الرسالة."}
           </div>
 
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500">
             <span className="truncate">
               {latestFromViewer
                 ? "آخر تحديث منك"
                 : `آخر تحديث من ${counterpartyName}`}
             </span>
+
             <div className="flex flex-wrap items-center gap-2">
               <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-600">
                 {conversation.messages.length} رسالة
               </span>
+
               {isOpening ? (
                 <span className="text-sky-700">جارٍ تحديث القراءة...</span>
               ) : null}
@@ -547,14 +440,14 @@ export function MessageBubble({
     <div
       className={cn(
         "flex items-start gap-3",
-        ownMessage ? "justify-end" : "justify-start"
+        ownMessage ? "justify-start" : "justify-start"
       )}
       dir="ltr"
     >
       {ownMessage ? (
         <>
           <div
-            className="max-w-[72%] rounded-2xl border border-slate-200 bg-white px-4 py-3 text-right text-slate-800 shadow-[0_18px_40px_-32px_rgba(15,23,42,0.32)]"
+            className="max-w-[72%] ml-auto rounded-2xl border border-slate-200 bg-white px-4 py-3 text-right text-slate-800 shadow-[0_18px_40px_-32px_rgba(15,23,42,0.32)]"
             dir="rtl"
           >
             <div className="flex flex-wrap items-center gap-2">
@@ -704,7 +597,7 @@ function ConversationListSection({
       </div>
 
       {conversations.length ? (
-        <ScrollArea className="h-[520px] pr-1">
+        <ScrollArea className="h-[520px] pr-1 overflow-visible">
           <div className="space-y-2.5 pl-1">
             {conversations.map(conversation => (
               <ConversationListItem
@@ -772,7 +665,7 @@ export function ConversationWorkspace({
   composer: ReactNode;
 }) {
   return (
-    <div className="grid gap-6 xl:grid-cols-[minmax(0,360px)_minmax(0,1fr)] xl:gap-8">
+    <div className="grid gap-6 xl:grid-cols-[minmax(0,440px)_minmax(0,1fr)] xl:gap-8">
       <ConversationListSection
         listLabel={listLabel}
         listDescription={listDescription}
@@ -801,7 +694,7 @@ export function ConversationWorkspace({
                     <p className="text-sm leading-6 text-slate-500">
                       {activeConversation.counterpartyEmail ||
                         (activeConversation.conversationType ===
-                        "employee_to_employee"
+                          "employee_to_employee"
                           ? "سجل المحادثة الداخلية الحالي بينك وبين الموظف المحدد."
                           : "هذا السجل مخصص للرسائل الرسمية مع HR داخل نفس المسار.")}
                     </p>
@@ -865,8 +758,7 @@ export function ConversationWorkspace({
               <div className="space-y-4 pt-1">
                 {activeConversation.messages.map(message => {
                   const ownMessage = message.fromUserId === currentUserUid;
-                  const senderId =
-                    message.fromUserId || message.senderUid || "";
+                  const senderId = message.fromUserId || message.senderUid || "";
                   const senderProfile = senderId
                     ? messageSenderLookup[senderId]
                     : null;

@@ -10,6 +10,16 @@ import {
 import DashboardLayout from "@/components/DashboardLayout";
 import RecruitmentFormFields from "@/components/recruitment/RecruitmentFormFields";
 import RecruitmentSettingsEditor from "@/components/recruitment/RecruitmentSettingsEditor";
+import SettingsBackupTab from "./settings/SettingsBackupTab";
+import SettingsContentTab from "./settings/SettingsContentTab";
+import SettingsDatabaseTab from "./settings/SettingsDatabaseTab";
+import SettingsFlagsTab from "./settings/SettingsFlagsTab";
+import SettingsGeneralTab from "./settings/SettingsGeneralTab";
+import SettingsLabelsTab from "./settings/SettingsLabelsTab";
+import SettingsLayout from "./settings/SettingsLayout";
+import SettingsNotificationsTab from "./settings/SettingsNotificationsTab";
+import SettingsRolesTab from "./settings/SettingsRolesTab";
+import SettingsSecurityTab from "./settings/SettingsSecurityTab";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,7 +30,6 @@ import {
   InputGroupText,
 } from "@/components/ui/input-group";
 import { Label } from "@/components/ui/label";
-import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Card,
@@ -29,7 +38,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { TabsContent } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -62,7 +71,6 @@ import {
   Trash2,
   SlidersHorizontal,
   FileDown,
-  FileUp,
   Type,
   Archive,
   Building2,
@@ -76,7 +84,6 @@ import {
   Landmark,
   Mail,
   RefreshCw,
-  Save,
   Sparkles,
   ServerCog,
   TrendingUp,
@@ -1125,9 +1132,9 @@ export default function Settings() {
       databaseWorkerUrl
         ? EMPTY_DATABASE_DASHBOARD
         : createUnavailableDatabaseDashboard(
-            "not_ready",
-            "Missing VITE_R2_UPLOAD_WORKER_URL"
-          )
+          "not_ready",
+          "Missing VITE_R2_UPLOAD_WORKER_URL"
+        )
     );
   const [databaseRefreshing, setDatabaseRefreshing] = useState(false);
   const [databaseLoaded, setDatabaseLoaded] = useState(
@@ -1449,27 +1456,27 @@ export default function Settings() {
 
       const nextApp = appSnap.exists()
         ? ({
-            ...DEFAULT_APP_SETTINGS,
-            ...((appSnap.data() as any) || {}),
-          } as AppSettings)
+          ...DEFAULT_APP_SETTINGS,
+          ...((appSnap.data() as any) || {}),
+        } as AppSettings)
         : DEFAULT_APP_SETTINGS;
       setApp(nextApp);
       setSavedApp(nextApp);
       setAppSubmitAttempted(false);
       const nextNotifications = notifSnap.exists()
         ? ({
-            ...createDefaultNotificationSettings(),
-            ...((notifSnap.data() as any) || {}),
-          } as NotificationSettings)
+          ...createDefaultNotificationSettings(),
+          ...((notifSnap.data() as any) || {}),
+        } as NotificationSettings)
         : createDefaultNotificationSettings();
       setNotifications(nextNotifications);
       setSavedNotifications(nextNotifications);
 
       const nextSecurity = secSnap.exists()
         ? ({
-            ...createDefaultSecuritySettings(),
-            ...((secSnap.data() as any) || {}),
-          } as SecuritySettings)
+          ...createDefaultSecuritySettings(),
+          ...((secSnap.data() as any) || {}),
+        } as SecuritySettings)
         : createDefaultSecuritySettings();
       setSecurity(nextSecurity);
       setSavedSecurity(nextSecurity);
@@ -1477,18 +1484,18 @@ export default function Settings() {
       const defaultLabels = createDefaultLabelsSettings();
       const nextLabels = labelsSnap.exists()
         ? (() => {
-            const d = labelsSnap.data() as any;
-            return {
-              ...defaultLabels,
-              ...(d || {}),
-              projectTypes: d?.projectTypes ?? defaultLabels.projectTypes,
-              projectStatuses:
-                d?.projectStatuses ?? defaultLabels.projectStatuses,
-              investmentStatuses:
-                d?.investmentStatuses ?? defaultLabels.investmentStatuses,
-              uiRoles: d?.uiRoles ?? defaultLabels.uiRoles,
-            } satisfies LabelsSettings;
-          })()
+          const d = labelsSnap.data() as any;
+          return {
+            ...defaultLabels,
+            ...(d || {}),
+            projectTypes: d?.projectTypes ?? defaultLabels.projectTypes,
+            projectStatuses:
+              d?.projectStatuses ?? defaultLabels.projectStatuses,
+            investmentStatuses:
+              d?.investmentStatuses ?? defaultLabels.investmentStatuses,
+            uiRoles: d?.uiRoles ?? defaultLabels.uiRoles,
+          } satisfies LabelsSettings;
+        })()
         : defaultLabels;
       setLabels(nextLabels);
       setSavedLabels(nextLabels);
@@ -1500,18 +1507,18 @@ export default function Settings() {
 
       const nextFlags = flagsSnap.exists()
         ? ({
-            ...createDefaultFlagsSettings(),
-            ...((flagsSnap.data() as any) || {}),
-          } as FlagsSettings)
+          ...createDefaultFlagsSettings(),
+          ...((flagsSnap.data() as any) || {}),
+        } as FlagsSettings)
         : createDefaultFlagsSettings();
       setFlags(nextFlags);
       setSavedFlags(nextFlags);
 
       const nextContent = contentSnap.exists()
         ? ({
-            ...createDefaultContentSettings(),
-            ...((contentSnap.data() as any) || {}),
-          } as ContentSettings)
+          ...createDefaultContentSettings(),
+          ...((contentSnap.data() as any) || {}),
+        } as ContentSettings)
         : createDefaultContentSettings();
       setContent(nextContent);
       setSavedContent(nextContent);
@@ -1634,8 +1641,8 @@ export default function Settings() {
       }
     } catch (error) {
       console.error("contract export candidates failed:", error);
-        const message =
-          error instanceof Error ? error.message : "فشل تحميل العقود.";
+      const message =
+        error instanceof Error ? error.message : "فشل تحميل العقود.";
       setContractExportError(message);
       if (manual) {
         toast.error("فشل تحديث قائمة العقود.");
@@ -1964,8 +1971,8 @@ export default function Settings() {
                 patch.type === "date" || patch.type === "file"
                   ? ""
                   : typeof patch.placeholder === "string"
-                  ? patch.placeholder
-                  : field.placeholder,
+                    ? patch.placeholder
+                    : field.placeholder,
             },
             index
           );
@@ -2036,9 +2043,9 @@ export default function Settings() {
             options: (field.options || []).map((option) =>
               option.id === optionId
                 ? createRecruitmentOption({
-                    id: option.id,
-                    label,
-                  })
+                  id: option.id,
+                  label,
+                })
                 : option
             ),
           },
@@ -2192,6 +2199,24 @@ export default function Settings() {
     } catch (e) {
       console.error(e);
       toast.error("فشل حذف الدور");
+    }
+  };
+
+  const handleToggleRoleActive = async (roleKey: string) => {
+    const role = roles.find(item => item.key === roleKey);
+    if (!role) return;
+
+    const next = roles.map(item =>
+      item.key === roleKey ? { ...item, isActive: !item.isActive } : item
+    );
+
+    try {
+      await saveRolesDoc(next);
+      setRoles(next);
+      toast.success(role.isActive ? "تم إيقاف الدور" : "تم تفعيل الدور");
+    } catch (e) {
+      console.error(e);
+      toast.error("فشل تحديث الدور");
     }
   };
 
@@ -2962,9 +2987,9 @@ export default function Settings() {
       // ✅ (1) تحديث role داخل users
       const displayName = String(
         beforeAdminData?.displayName ||
-          userData?.displayName ||
-          userData?.name ||
-          email.split("@")[0]
+        userData?.displayName ||
+        userData?.name ||
+        email.split("@")[0]
       ).trim();
       const title = String(
         beforeAdminData?.title || userData?.title || ""
@@ -3586,9 +3611,9 @@ export default function Settings() {
               : !databaseLoaded
                 ? "جاري القراءة"
                 : formatDatabaseMetricSource(
-                    databaseDashboard.sources.totalFiles,
-                    databaseDashboard.metrics.totalFiles !== null
-                  ),
+                  databaseDashboard.sources.totalFiles,
+                  databaseDashboard.metrics.totalFiles !== null
+                ),
           };
         case "totalBytes":
           return {
@@ -3599,9 +3624,9 @@ export default function Settings() {
               : !databaseLoaded
                 ? "جاري القراءة"
                 : formatDatabaseMetricSource(
-                    databaseDashboard.sources.totalBytes,
-                    databaseDashboard.metrics.totalBytes !== null
-                  ),
+                  databaseDashboard.sources.totalBytes,
+                  databaseDashboard.metrics.totalBytes !== null
+                ),
           };
         case "latestUploadAt":
           return {
@@ -3614,9 +3639,9 @@ export default function Settings() {
               : !databaseLoaded
                 ? "جاري القراءة"
                 : formatDatabaseMetricSource(
-                    databaseDashboard.sources.latestUploadAt,
-                    databaseDashboard.metrics.latestUploadAt !== null
-                  ),
+                  databaseDashboard.sources.latestUploadAt,
+                  databaseDashboard.metrics.latestUploadAt !== null
+                ),
           };
         case "d1Records":
         default:
@@ -3628,9 +3653,9 @@ export default function Settings() {
               : !databaseLoaded
                 ? "جاري القراءة"
                 : formatDatabaseMetricSource(
-                    databaseDashboard.sources.d1Records,
-                    databaseDashboard.metrics.d1Records !== null
-                  ),
+                  databaseDashboard.sources.d1Records,
+                  databaseDashboard.metrics.d1Records !== null
+                ),
           };
       }
     });
@@ -3664,6 +3689,48 @@ export default function Settings() {
     );
     return notes;
   }, [databaseDashboard.checkedAt, databaseLoaded]);
+
+  const backupHeroStats = [
+    {
+      icon: FileDown,
+      label: "المحدد",
+      value: formatNumberEN(selectedContractIds.length),
+      helper: "العقود المحددة للتصدير",
+    },
+    {
+      icon: Files,
+      label: "المفلتر",
+      value: formatNumberEN(filteredContractExportItems.length),
+      helper: "العقود المطابقة للفلاتر الحالية",
+    },
+    {
+      icon: Archive,
+      label: "التصدير",
+      value:
+        contractExportSummary || contractExcelExportSummary
+          ? "جاهزة"
+          : "قيد التحضير",
+      helper: "آخر حالة تصدير معروفة",
+    },
+  ];
+
+  const backupHeroMetrics = [
+    {
+      label: "إعدادات المنصة",
+      value: importing ? "جارٍ الاستيراد" : "JSON جاهز",
+      helper: "تصدير واستيراد الإعدادات",
+    },
+    {
+      label: "حزمة النظام",
+      value: contractExportSummary ? "جاهزة" : "قيد الانتظار",
+      helper: "CSV + المرفقات + ملف الوصف",
+    },
+    {
+      label: "حزمة Excel",
+      value: contractExcelExportSummary ? "جاهزة" : "قيد الانتظار",
+      helper: "تصدير مناسب للمراجعة",
+    },
+  ];
 
   const settingsTabs = [
     {
@@ -3770,155 +3837,155 @@ export default function Settings() {
   }> =
     activeTab === "general"
       ? [
+        {
+          label: appDirty
+            ? `${formatNumberEN(changedAppFields.length)} تغييرات غير محفوظة`
+            : "جميع التغييرات محفوظة",
+          tone: appDirty ? "warning" : "success",
+        },
+        {
+          label: `${formatNumberEN(appValidation.completedFields)}/${formatNumberEN(APP_SETTINGS_KEYS.length)} حقول مكتملة`,
+          tone: "neutral",
+        },
+        {
+          label: appValidation.isValid
+            ? "جاهزة للحفظ"
+            : `${formatNumberEN(appIssues.length)} ملاحظات تحتاج مراجعة`,
+          tone: appValidation.isValid ? "success" : "warning",
+        },
+      ]
+      : activeTab === "notifications"
+        ? [
           {
-            label: appDirty
-              ? `${formatNumberEN(changedAppFields.length)} تغييرات غير محفوظة`
-              : "جميع التغييرات محفوظة",
-            tone: appDirty ? "warning" : "success",
+            label: `${formatNumberEN(notificationsEnabledCount)} عناصر مفعلة`,
+            tone: "success",
           },
           {
-            label: `${formatNumberEN(appValidation.completedFields)}/${formatNumberEN(APP_SETTINGS_KEYS.length)} حقول مكتملة`,
+            label: "قنوات وتنبيهات تشغيلية",
             tone: "neutral",
           },
           {
-            label: appValidation.isValid
-              ? "جاهزة للحفظ"
-              : `${formatNumberEN(appIssues.length)} ملاحظات تحتاج مراجعة`,
-            tone: appValidation.isValid ? "success" : "warning",
+            label: "تجربة موحدة مع بقية التبويبات",
+            tone: "info",
           },
         ]
-      : activeTab === "notifications"
-        ? [
+        : activeTab === "security"
+          ? [
             {
-              label: `${formatNumberEN(notificationsEnabledCount)} عناصر مفعلة`,
+              label: `${formatNumberEN(securityEnabledCount)} سياسات مفعلة`,
               tone: "success",
             },
             {
-              label: "قنوات وتنبيهات تشغيلية",
+              label: "مراجعة المصادقة والوصول",
               tone: "neutral",
             },
             {
-              label: "تجربة موحدة مع بقية التبويبات",
+              label: "واجهة أمان موحدة",
               tone: "info",
             },
           ]
-        : activeTab === "security"
-          ? [
+          : activeTab === "roles"
+            ? [
               {
-                label: `${formatNumberEN(securityEnabledCount)} سياسات مفعلة`,
+                label: `${formatNumberEN(activeRolesCount)} أدوار نشطة`,
                 tone: "success",
               },
               {
-                label: "مراجعة المصادقة والوصول",
+                label: `${formatNumberEN(systemRolesCount)} أدوار نظام`,
                 tone: "neutral",
               },
               {
-                label: "واجهة أمان موحدة",
+                label: "دليل صلاحيات منظم",
                 tone: "info",
               },
             ]
-          : activeTab === "roles"
-            ? [
+            : activeTab === "admins"
+              ? [
                 {
-                  label: `${formatNumberEN(activeRolesCount)} أدوار نشطة`,
+                  label: `${formatNumberEN(activeAdminsCount)} حسابات نشطة`,
                   tone: "success",
                 },
                 {
-                  label: `${formatNumberEN(systemRolesCount)} أدوار نظام`,
+                  label: `${formatNumberEN(activeInvitesCount)} دعوات فعالة`,
                   tone: "neutral",
                 },
                 {
-                  label: "دليل صلاحيات منظم",
+                  label: "ربط الأدوار بالحسابات",
                   tone: "info",
                 },
               ]
-            : activeTab === "admins"
-              ? [
+              : activeTab === "labels"
+                ? [
                   {
-                    label: `${formatNumberEN(activeAdminsCount)} حسابات نشطة`,
+                    label: `${formatNumberEN(totalLabelEntries)} تسمية معرفة`,
                     tone: "success",
                   },
                   {
-                    label: `${formatNumberEN(activeInvitesCount)} دعوات فعالة`,
+                    label: "عربي / إنجليزي",
                     tone: "neutral",
                   },
                   {
-                    label: "ربط الأدوار بالحسابات",
+                    label: "محررات موحدة",
                     tone: "info",
                   },
                 ]
-              : activeTab === "labels"
-                ? [
+                : activeTab === "flags"
+                  ? [
                     {
-                      label: `${formatNumberEN(totalLabelEntries)} تسمية معرفة`,
+                      label: `${formatNumberEN(enabledFlagsCount)} ميزات مفعلة`,
                       tone: "success",
                     },
                     {
-                      label: "عربي / إنجليزي",
+                      label: `${formatNumberEN(Object.keys(flags).length)} مفاتيح إجمالاً`,
                       tone: "neutral",
                     },
                     {
-                      label: "محررات موحدة",
+                      label: "تحكم تدريجي بالخصائص",
                       tone: "info",
                     },
                   ]
-                : activeTab === "flags"
-                  ? [
+                  : activeTab === "content"
+                    ? [
                       {
-                        label: `${formatNumberEN(enabledFlagsCount)} ميزات مفعلة`,
+                        label: `${formatNumberEN(contentCompletedCount)} حقول مكتملة`,
                         tone: "success",
                       },
                       {
-                        label: `${formatNumberEN(Object.keys(flags).length)} مفاتيح إجمالاً`,
+                        label: `${formatNumberEN(Object.keys(content).length)} حقول إجمالاً`,
                         tone: "neutral",
                       },
                       {
-                        label: "تحكم تدريجي بالخصائص",
+                        label: "تحرير محتوى موحد",
                         tone: "info",
                       },
                     ]
-                  : activeTab === "content"
-                    ? [
+                    : activeTab === "recruitment"
+                      ? [
                         {
-                          label: `${formatNumberEN(contentCompletedCount)} حقول مكتملة`,
-                          tone: "success",
+                          label: recruitment.isPublished
+                            ? "النموذج منشور"
+                            : "النموذج غير منشور",
+                          tone: recruitment.isPublished
+                            ? "success"
+                            : "warning",
                         },
                         {
-                          label: `${formatNumberEN(Object.keys(content).length)} حقول إجمالاً`,
+                          label: `${formatNumberEN(recruitment.fields.length)} حقول`,
                           tone: "neutral",
                         },
                         {
-                          label: "تحرير محتوى موحد",
-                          tone: "info",
+                          label:
+                            recruitmentIssuesCount === 0
+                              ? "جاهز للعرض العام"
+                              : `${formatNumberEN(recruitmentIssuesCount)} ملاحظات`,
+                          tone:
+                            recruitmentIssuesCount === 0
+                              ? "info"
+                              : "warning",
                         },
                       ]
-                    : activeTab === "recruitment"
-                      ? [
-                          {
-                            label: recruitment.isPublished
-                              ? "النموذج منشور"
-                              : "النموذج غير منشور",
-                            tone: recruitment.isPublished
-                              ? "success"
-                              : "warning",
-                          },
-                          {
-                            label: `${formatNumberEN(recruitment.fields.length)} حقول`,
-                            tone: "neutral",
-                          },
-                          {
-                            label:
-                              recruitmentIssuesCount === 0
-                                ? "جاهز للعرض العام"
-                                : `${formatNumberEN(recruitmentIssuesCount)} ملاحظات`,
-                            tone:
-                              recruitmentIssuesCount === 0
-                                ? "info"
-                                : "warning",
-                          },
-                        ]
-                    : activeTab === "backup"
-                      ? [
+                      : activeTab === "backup"
+                        ? [
                           {
                             label: `${formatNumberEN(selectedContractIds.length)} عقود محددة`,
                             tone: selectedContractIds.length
@@ -3940,7 +4007,7 @@ export default function Settings() {
                               : "neutral",
                           },
                         ]
-                      : [
+                        : [
                           {
                             label: `${formatNumberEN(databaseHealthyServicesCount)} خدمات سليمة`,
                             tone: "success",
@@ -3956,13 +4023,6 @@ export default function Settings() {
                             tone: "info",
                           },
                         ];
-
-  const headerBadgeToneClassName = {
-    success: "border-emerald-200 bg-emerald-50 text-emerald-700",
-    warning: "border-amber-200 bg-amber-50 text-amber-700",
-    neutral: "border-slate-200 bg-white text-slate-600",
-    info: "border-sky-200 bg-sky-50 text-sky-700",
-  } as const;
 
   const tabActionConfigs: Partial<
     Record<
@@ -4054,2701 +4114,1201 @@ export default function Settings() {
 
   return (
     <DashboardLayout>
-      <div dir="rtl" className="space-y-6 text-right">
-        <Tabs
-          dir="rtl"
-          value={activeTab}
-          onValueChange={setActiveTab}
-          className="space-y-0"
-        >
-          <div className="flex flex-col gap-6 xl:flex-row xl:items-start">
-            <aside className="w-full xl:sticky xl:top-0 xl:h-screen xl:w-[320px] xl:shrink-0">
-              <div className="flex h-full flex-col overflow-hidden rounded-[30px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(8,18,47,0.98),rgba(2,6,23,0.97))] text-white shadow-[0_30px_80px_-46px_rgba(2,6,23,0.82)]">
-                <div className="border-b border-white/10 px-5 py-6">
-                  <Badge className="w-fit rounded-full border border-[#F2B705]/25 bg-[#F2B705]/10 px-3 py-1 text-[11px] font-semibold tracking-[0.16em] text-[#F2B705] shadow-none">
-                    التنقل الداخلي
-                  </Badge>
-                  <h1 className="mt-4 text-2xl font-semibold tracking-tight sm:text-[1.9rem]">
-                    الإعدادات
-                  </h1>
-                  <p className="mt-3 text-sm leading-7 text-white/70">
-                    شريط جانبي ثابت ومستقل لتنظيم جميع أقسام الإعدادات في
-                    واجهة عربية واضحة ومتسقة من اليمين إلى اليسار.
-                  </p>
-                  <div className="mt-5 flex flex-wrap gap-2">
-                    <Badge
-                      variant="outline"
-                      className="rounded-full border-white/15 bg-white/5 px-3 py-1 text-xs font-medium text-white/80 shadow-none"
-                    >
-                      {formatNumberEN(settingsTabs.length)} أقسام
-                    </Badge>
-                    <Badge className="rounded-full border border-[#F2B705]/25 bg-[#F2B705]/12 px-3 py-1 text-xs font-medium text-[#F2B705] shadow-none">
-                      {activeTabMeta.label}
-                    </Badge>
-                  </div>
-                </div>
+      <SettingsLayout
+        activeTab={activeTab}
+        onActiveTabChange={setActiveTab}
+        settingsTabs={settingsTabs}
+        activeTabMeta={activeTabMeta}
+        activeTabDescription={activeTabDescription}
+        activeTabHeaderBadges={activeTabHeaderBadges}
+        error={error}
+        activeBottomBarAction={activeBottomBarAction}
+        dirtyTabsCount={dirtyTabsCount}
+        prioritizedActionKey={prioritizedActionKey}
+      >
 
-                <TabsList className="h-auto w-full flex-1 flex-col items-stretch justify-start gap-2 overflow-y-auto bg-transparent p-3">
-                  {settingsTabs.map(tab => {
-                    const Icon = tab.icon;
-                    const isActive = activeTab === tab.value;
-
-                    return (
-                      <TabsTrigger
-                        key={tab.value}
-                        value={tab.value}
-                        className={cn(
-                          "h-auto w-full flex-none items-start justify-between rounded-[24px] border border-transparent px-4 py-4 text-right transition-all",
-                          isActive
-                            ? "border-[#F2B705]/30 bg-white text-slate-950 shadow-[0_18px_40px_-28px_rgba(15,23,42,0.35)]"
-                            : "bg-white/[0.03] text-white/90 hover:bg-white/[0.06] hover:text-white"
-                        )}
-                      >
-                        <div className="flex min-w-0 items-start gap-3">
-                          <div
-                            className={cn(
-                              "rounded-2xl border p-2",
-                              isActive
-                                ? "border-[#F2B705]/30 bg-[#F2B705]/12 text-[#8d6700]"
-                                : "border-white/10 bg-white/[0.05] text-white/75"
-                            )}
-                          >
-                            <Icon className="h-4 w-4" />
-                          </div>
-                          <div className="min-w-0 space-y-1">
-                            <div className="text-sm font-semibold">
-                              {tab.label}
-                            </div>
-                            <div
-                              className={cn(
-                                "text-xs leading-6",
-                                isActive ? "text-slate-600" : "text-white/60"
-                              )}
-                            >
-                              {tab.helper}
-                            </div>
-                          </div>
-                        </div>
-                        <span
-                          className={cn(
-                            "mt-1 h-2.5 w-2.5 shrink-0 rounded-full",
-                            isActive ? "bg-[#F2B705]" : "bg-white/15"
-                          )}
-                        />
-                      </TabsTrigger>
-                    );
-                  })}
-                </TabsList>
-              </div>
-            </aside>
-
-            <div className="min-w-0 flex-1 space-y-8 pb-28 xl:pb-32">
-              <div className="space-y-5 pt-1 xl:pt-4">
-                <div className="space-y-3">
-                  <Badge className="w-fit rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold tracking-[0.16em] text-slate-600 shadow-none">
-                    {activeTabMeta.label}
-                  </Badge>
-                  <div className="space-y-2">
-                    <h2 className="text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
-                      {activeTabMeta.label}
-                    </h2>
-                    <p className="max-w-3xl text-sm leading-7 text-slate-600">
-                      {activeTabDescription}
-                    </p>
-                  </div>
-                  {error ? (
-                    <p className="text-sm font-medium text-red-600">{error}</p>
-                  ) : null}
-                </div>
-
-                {activeTabHeaderBadges.length ? (
-                  <div className="flex flex-wrap gap-2">
-                    {activeTabHeaderBadges.map(badge => (
-                      <Badge
-                        key={badge.label}
-                        variant="outline"
-                        className={cn(
-                          "rounded-full px-3 py-1 text-sm font-medium",
-                          headerBadgeToneClassName[badge.tone]
-                        )}
-                      >
-                        {badge.label}
-                      </Badge>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-
-          {/* =========================
+        {/* =========================
               General
           ========================= */}
-          <TabsContent value="general" className="space-y-6">
-            <Card className="overflow-hidden border-slate-200/80 bg-[radial-gradient(circle_at_top_right,rgba(242,183,5,0.14),transparent_25%),linear-gradient(135deg,#ffffff_0%,#f8fafc_48%,#eef4ff_100%)] shadow-[0_28px_75px_-44px_rgba(15,23,42,0.35)]">
-              <CardContent className="px-6 py-6 sm:px-8 sm:py-8">
-                <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(280px,0.85fr)] xl:items-end">
-                  <div className="space-y-5">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge className="rounded-full border border-[#F2B705]/30 bg-[#F2B705]/12 px-3 py-1 text-xs font-semibold text-[#8d6700] shadow-none">
-                        <Sparkles className="h-3.5 w-3.5" />
-                        تجربة الإعدادات
-                      </Badge>
-                      <Badge
-                        variant="outline"
-                        className={cn(
-                          "rounded-full px-3 py-1 text-xs font-semibold shadow-none",
-                          appDirty
-                            ? "border-amber-200 bg-amber-50 text-amber-700"
-                            : "border-emerald-200 bg-emerald-50 text-emerald-700"
-                        )}
-                      >
-                        {appDirty
-                          ? `${formatNumberEN(changedAppFields.length)} تغييرات قيد المراجعة`
-                          : "جميع القيم متزامنة"}
-                      </Badge>
-                    </div>
+        <SettingsGeneralTab
+          app={app}
+          appDirty={appDirty}
+          appValidation={appValidation}
+          appIssuesCount={appIssues.length}
+          appSettingsFieldsCount={APP_SETTINGS_KEYS.length}
+          changedAppFieldsCount={changedAppFields.length}
+          investmentRangePreview={investmentRangePreview}
+          returnProfilePreview={returnProfilePreview}
+          shouldShowAppFieldFeedback={shouldShowAppFieldFeedback}
+          onAppFieldChange={(key, value) => setApp({ ...app, [key]: value })}
+        />
 
-                    <div className="space-y-3">
-                      <h2 className="text-2xl font-semibold tracking-tight text-slate-950 sm:text-[2rem]">
-                        إعدادات المنصة الأساسية
-                      </h2>
-                      <p className="max-w-2xl text-sm leading-7 text-slate-600">
-                        لوحة تحكم مقسمة إلى وحدات واضحة للهوية، التواصل، سياسات
-                        الاستثمار، والإعدادات المالية الافتراضية.
-                      </p>
-                    </div>
-
-                    <div className="grid gap-3 sm:grid-cols-3">
-                      <SettingsOverviewStat
-                        icon={Building2}
-                        label="المنصة"
-                        value={app.name || "غير محدد"}
-                        helper="هوية المنصة في النظام"
-                      />
-                      <SettingsOverviewStat
-                        icon={Landmark}
-                        label="نطاق الاستثمار"
-                        value={investmentRangePreview}
-                        helper="النطاق المرجعي للاستثمار"
-                      />
-                      <SettingsOverviewStat
-                        icon={TrendingUp}
-                        label="ملف العائد"
-                        value={returnProfilePreview}
-                        helper="العائد والمدة الافتراضية"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="rounded-[28px] border border-[#1e3358] bg-[linear-gradient(180deg,rgba(8,18,47,0.98),rgba(2,6,23,0.96))] p-6 text-white shadow-[0_28px_60px_-42px_rgba(2,6,23,0.85)]">
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/45">
-                          ملخص الحالة
-                        </p>
-                        <h3 className="mt-3 text-xl font-semibold tracking-tight">
-                          جاهزية الإعدادات
-                        </h3>
-                      </div>
-                      <Badge
-                        variant="outline"
-                        className={cn(
-                          "rounded-full border px-3 py-1 text-[11px] font-semibold shadow-none",
-                          appValidation.isValid
-                            ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-200"
-                            : "border-amber-400/30 bg-amber-400/10 text-amber-200"
-                        )}
-                      >
-                        {appValidation.isValid ? "Stable" : "Needs Review"}
-                      </Badge>
-                    </div>
-
-                    <div className="mt-6 grid gap-3">
-                      <SettingsSidebarMetric
-                        label="الحقول المكتملة"
-                        value={`${formatNumberEN(appValidation.completedFields)}/${formatNumberEN(APP_SETTINGS_KEYS.length)}`}
-                        helper="مستوى اكتمال الإعدادات الأساسية"
-                      />
-                      <SettingsSidebarMetric
-                        label="التواصل الرسمي"
-                        value={app.email || "غير محدد"}
-                        helper={app.phone || "أضف رقم خدمة عملاء رسمي"}
-                      />
-                      <SettingsSidebarMetric
-                        label="المراجعات المطلوبة"
-                        value={
-                          appIssues.length === 0
-                            ? "لا توجد ملاحظات حرجة"
-                            : `${formatNumberEN(appIssues.length)} ملاحظات`
-                        }
-                        helper="نفس الحقول ستُحفظ إلى settings/app"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <div className="space-y-6">
-              <div className="space-y-6">
-                <SettingsSectionCard
-                  icon={Building2}
-                  eyebrow="الوحدة 01"
-                  title="معلومات المنصة"
-                  description="الهوية الأساسية للمنصة كما تظهر داخليًا وفي الواجهات الرسمية."
-                >
-                  <div className="grid gap-5 md:grid-cols-2">
-                    <SettingsField
-                      label="اسم المنصة"
-                      description="الاسم الرسمي المستخدم في التقارير والواجهات."
-                      placeholder="مثال: منصة معدن البناء"
-                      value={app.name}
-                      onChange={v => setApp({ ...app, name: v })}
-                      error={
-                        shouldShowAppFieldFeedback("name")
-                          ? appValidation.errors.name
-                          : undefined
-                      }
-                    />
-                    <SettingsField
-                      label="العنوان"
-                      description="عنوان مختصر للمقر أو الجهة التشغيلية."
-                      placeholder="الرياض، المملكة العربية السعودية"
-                      value={app.address}
-                      onChange={v => setApp({ ...app, address: v })}
-                      textarea
-                      rows={4}
-                      containerClassName="md:col-span-2"
-                      className="min-h-[124px]"
-                      error={
-                        shouldShowAppFieldFeedback("address")
-                          ? appValidation.errors.address
-                          : undefined
-                      }
-                    />
-                  </div>
-                </SettingsSectionCard>
-
-                <SettingsSectionCard
-                  icon={Mail}
-                  eyebrow="الوحدة 02"
-                  title="بيانات التواصل"
-                  description="بيانات التواصل الرسمية التي يعتمد عليها المستخدمون والإدارة."
-                >
-                  <div className="grid gap-5 md:grid-cols-2">
-                    <SettingsField
-                      label="البريد الإلكتروني"
-                      description="البريد المعتمد للدعم والتواصل الرسمي."
-                      placeholder="support@maedin.sa"
-                      value={app.email}
-                      onChange={v => setApp({ ...app, email: v })}
-                      type="email"
-                      dir="ltr"
-                      inputClassName="text-left"
-                      error={
-                        shouldShowAppFieldFeedback("email")
-                          ? appValidation.errors.email
-                          : undefined
-                      }
-                    />
-                    <SettingsField
-                      label="رقم الهاتف"
-                      description="رقم خدمة العملاء أو خط الدعم الأساسي."
-                      placeholder="+966 5X XXX XXXX"
-                      value={app.phone}
-                      onChange={v => setApp({ ...app, phone: v })}
-                      dir="ltr"
-                      inputClassName="text-left"
-                      error={
-                        shouldShowAppFieldFeedback("phone")
-                          ? appValidation.errors.phone
-                          : undefined
-                      }
-                    />
-                  </div>
-                </SettingsSectionCard>
-
-                <SettingsSectionCard
-                  icon={Landmark}
-                  eyebrow="الوحدة 03"
-                  title="ضوابط الاستثمار"
-                  description="الحدود التشغيلية الافتراضية لطلبات الاستثمار الجديدة."
-                >
-                  <div className="grid gap-5 md:grid-cols-2">
-                    <SettingsField
-                      label="الحد الأدنى للاستثمار"
-                      description="أقل قيمة مسموحة لبدء طلب استثماري."
-                      placeholder="50000"
-                      value={app.minInvestment}
-                      onChange={v => setApp({ ...app, minInvestment: v })}
-                      suffix="ر.س"
-                      inputMode="decimal"
-                      dir="ltr"
-                      inputClassName="text-right font-semibold tabular-nums"
-                      helper={
-                        appValidation.minInvestmentValue !== null
-                          ? `القيمة الحالية: ${formatNumberEN(appValidation.minInvestmentValue)} ر.س`
-                          : "اكتب الرقم بدون نصوص إضافية."
-                      }
-                      error={
-                        shouldShowAppFieldFeedback("minInvestment")
-                          ? appValidation.errors.minInvestment
-                          : undefined
-                      }
-                    />
-                    <SettingsField
-                      label="الحد الأعلى للاستثمار"
-                      description="السقف الافتراضي لكل استثمار داخل المنصة."
-                      placeholder="500000"
-                      value={app.maxInvestment}
-                      onChange={v => setApp({ ...app, maxInvestment: v })}
-                      suffix="ر.س"
-                      inputMode="decimal"
-                      dir="ltr"
-                      inputClassName="text-right font-semibold tabular-nums"
-                      helper={
-                        appValidation.maxInvestmentValue !== null
-                          ? `القيمة الحالية: ${formatNumberEN(appValidation.maxInvestmentValue)} ر.س`
-                          : "اكتب الرقم بدون نصوص إضافية."
-                      }
-                      error={
-                        shouldShowAppFieldFeedback("maxInvestment")
-                          ? appValidation.errors.maxInvestment
-                          : undefined
-                      }
-                    />
-                  </div>
-                </SettingsSectionCard>
-
-                <SettingsSectionCard
-                  icon={TrendingUp}
-                  eyebrow="الوحدة 04"
-                  title="الإعدادات المالية الافتراضية"
-                  description="العائد والمدة المرجعية للمشاريع والاستثمارات الجديدة."
-                >
-                  <div className="grid gap-5 md:grid-cols-2">
-                    <SettingsField
-                      label="العائد الافتراضي"
-                      description="نسبة عائد مرجعية قبل تخصيص كل مشروع."
-                      placeholder="12"
-                      value={app.defaultReturn}
-                      onChange={v => setApp({ ...app, defaultReturn: v })}
-                      suffix="%"
-                      inputMode="decimal"
-                      dir="ltr"
-                      inputClassName="text-right font-semibold tabular-nums"
-                      helper={
-                        appValidation.defaultReturnValue !== null
-                          ? `المعدل الحالي: ${formatNumberEN(appValidation.defaultReturnValue)}%`
-                          : "أدخل نسبة مرجعية للمشاريع الجديدة."
-                      }
-                      error={
-                        shouldShowAppFieldFeedback("defaultReturn")
-                          ? appValidation.errors.defaultReturn
-                          : undefined
-                      }
-                    />
-                    <SettingsField
-                      label="الأفق الافتراضي"
-                      description="المدة الأساسية للاستثمار قبل التخصيص."
-                      placeholder="3"
-                      value={app.defaultHorizonYears}
-                      onChange={v => setApp({ ...app, defaultHorizonYears: v })}
-                      suffix="سنة"
-                      inputMode="decimal"
-                      dir="ltr"
-                      inputClassName="text-right font-semibold tabular-nums"
-                      helper={
-                        appValidation.defaultHorizonValue !== null
-                          ? `المدة الحالية: ${formatNumberEN(appValidation.defaultHorizonValue)} سنة`
-                          : "استخدم رقمًا يمثل عدد السنوات."
-                      }
-                      error={
-                        shouldShowAppFieldFeedback("defaultHorizonYears")
-                          ? appValidation.errors.defaultHorizonYears
-                          : undefined
-                      }
-                    />
-                  </div>
-                </SettingsSectionCard>
-              </div>
-
-            </div>
-          </TabsContent>
-
-          {/* =========================
+        {/* =========================
               Notifications
           ========================= */}
-          <TabsContent value="notifications" className="space-y-6">
-            <SettingsTabHero
-              eyebrow="مركز الإشعارات"
-              title="إعدادات الإشعارات"
-              description="تحكم في قنوات التنبيه والأحداث التي تستحق إشعارًا داخل النظام، مع فصل واضح بين قنوات الإرسال ومحفزات التنبيه."
-              stats={[
-                {
-                  icon: Bell,
-                  label: "المفعّل",
-                  value: formatNumberEN(notificationsEnabledCount),
-                  helper: "عدد الإعدادات المفعلة حاليًا",
-                },
-                {
-                  icon: Mail,
-                  label: "القنوات",
-                  value: formatNumberEN(
-                    [notifications.email, notifications.sms].filter(Boolean)
-                      .length
-                  ),
-                  helper: "قنوات الإرسال النشطة",
-                },
-                {
-                  icon: Globe,
-                  label: "المحفزات",
-                  value: formatNumberEN(
-                    [notifications.investments, notifications.messages].filter(
-                      Boolean
-                    ).length
-                  ),
-                  helper: "الأحداث التي تولد إشعارات",
-                },
-              ]}
-              panel={
-                <SettingsHeroPanel
-                  status={
-                    notificationsEnabledCount > 0 ? "نشط" : "هادئ"
-                  }
-                  title="تنبيهات النظام"
-                  description="يمكنك ضبط القنوات ومحفزات التنبيه من دون تغيير أي منطق تشغيلي أو طرق الإرسال."
-                  metrics={[
-                    {
-                      label: "البريد الإلكتروني",
-                      value: notifications.email ? "مفعّل" : "معطّل",
-                      helper: "القناة الرسمية الأساسية",
-                    },
-                    {
-                      label: "الرسائل النصية",
-                      value: notifications.sms ? "مفعّل" : "معطّل",
-                      helper: "للتنبيهات الحساسة أو العاجلة",
-                    },
-                    {
-                      label: "الأحداث الرئيسية",
-                      value:
-                        notifications.investments || notifications.messages
-                          ? "نشطة"
-                          : "صامتة",
-                      helper: "الاستشارات والرسائل الجديدة",
-                    },
-                  ]}
-                />
-              }
-            />
+        <SettingsNotificationsTab
+          notifications={notifications}
+          notificationsEnabledCount={notificationsEnabledCount}
+          sections={NOTIFICATION_SECTION_CONFIG}
+          onNotificationFieldChange={updateNotificationField}
+        />
 
-            <div className="space-y-5">
-              {NOTIFICATION_SECTION_CONFIG.map(section => (
-                <SettingsSectionCard
-                  key={section.key}
-                  icon={section.icon}
-                  eyebrow={section.eyebrow}
-                  title={section.title}
-                  description={section.description}
-                  headerClassName="pb-4"
-                  contentClassName="pt-4"
-                >
-                  <div className="grid gap-3 md:grid-cols-2">
-                    {section.items.map(item => (
-                      <Toggle
-                        key={item.key}
-                        label={item.label}
-                        description={item.description}
-                        value={notifications[item.key]}
-                        onChange={(value: boolean) =>
-                          updateNotificationField(item.key, value)
-                        }
-                      />
-                    ))}
-                  </div>
-                </SettingsSectionCard>
-              ))}
-            </div>
-          </TabsContent>
-
-          {/* =========================
+        {/* =========================
               Security
           ========================= */}
-          <TabsContent value="security" className="space-y-6">
-            <SettingsTabHero
-              eyebrow="ضوابط الأمان"
-              title="إعدادات الأمان"
-              description="لوحة موحدة للتحكم في إعدادات الأمان العامة للمنصة مع إبراز الحالة الحالية والجاهزية التشغيلية."
-              stats={[
-                {
-                  icon: Shield,
-                  label: "السياسات",
-                  value: formatNumberEN(Object.keys(security).length),
-                  helper: "سياسات أمنية مرتبطة بالإعدادات",
-                },
-                {
-                  icon: CheckCircle2,
-                  label: "المفعّل",
-                  value: formatNumberEN(securityEnabledCount),
-                  helper: "عدد السياسات المفعلة حاليًا",
-                },
-                {
-                  icon: KeyRound,
-                  label: "التحقق الثنائي",
-                  value: security.twoFactor ? "مفعّل" : "متوقف",
-                  helper: "المصادقة الثنائية للإدارة",
-                },
-              ]}
-              panel={
-                <SettingsHeroPanel
-                  status={security.twoFactor ? "محمي" : "أساسي"}
-                  title="حالة الأمان"
-                  description="هذا التبويب يحافظ على نفس المنطق الحالي مع تحسين واضح في العرض والقراءة واتخاذ القرار."
-                  metrics={[
-                    {
-                      label: "المصادقة الثنائية",
-                      value: security.twoFactor ? "مفعلة" : "غير مفعلة",
-                      helper: "للتحقق الإضافي أثناء تسجيل الدخول",
-                    },
-                    {
-                      label: "جاهزية المراجعة",
-                      value: "فورية",
-                      helper: "التغيير ينعكس فقط على واجهة الإعدادات الحالية",
-                    },
-                  ]}
-                />
-              }
-            />
+        <SettingsSecurityTab
+          security={security}
+          securityEnabledCount={securityEnabledCount}
+          onTwoFactorChange={(twoFactor: boolean) =>
+            setSecurity({ twoFactor })
+          }
+        />
 
-            <div className="space-y-6">
-              <div className="space-y-6">
-                <SettingsSectionCard
-                  icon={Shield}
-                  eyebrow="الوحدة 01"
-                  title="سياسة المصادقة"
-                  description="التحكم في إعداد التحقق الإضافي للإدارة من داخل لوحة إعدادات موحدة وأكثر وضوحًا."
-                >
-                  <div className="grid gap-4">
-                    <Toggle
-                      label="المصادقة الثنائية"
-                      description="إضافة طبقة تحقق إضافية لحسابات الإدارة عند تسجيل الدخول."
-                      value={security.twoFactor}
-                      onChange={(v: boolean) => setSecurity({ twoFactor: v })}
-                    />
-                  </div>
-                </SettingsSectionCard>
-
-                <SettingsSectionCard
-                  icon={CircleAlert}
-                  eyebrow="الوحدة 02"
-                  title="إرشادات الأمان"
-                  description="توصيات تشغيلية سريعة للحفاظ على مستوى موثوق من الأمان داخل لوحة الإدارة."
-                >
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <Alert className="border-slate-200 bg-slate-50">
-                      <Shield className="h-4 w-4" />
-                      <AlertTitle>وضع الحماية</AlertTitle>
-                      <AlertDescription className="leading-7">
-                        عند تفعيل المصادقة الثنائية، تصبح حسابات الإدارة أكثر
-                        مقاومة للوصول غير المصرح به.
-                      </AlertDescription>
-                    </Alert>
-                    <Alert className="border-slate-200 bg-slate-50">
-                      <KeyRound className="h-4 w-4" />
-                      <AlertTitle>بدون تغيير في المنطق</AlertTitle>
-                      <AlertDescription className="leading-7">
-                        التعديل هنا بصري فقط، مع الحفاظ على نفس بنية المستند
-                        الحالية ونفس سلوك الحفظ.
-                      </AlertDescription>
-                    </Alert>
-                  </div>
-                </SettingsSectionCard>
-              </div>
-
-            </div>
-          </TabsContent>
-
-          {/* =========================
+        {/* =========================
               الأدوار والصلاحيات
           ========================= */}
-          <TabsContent value="roles" className="space-y-6">
-            <SettingsTabHero
-              eyebrow="الأدوار والصلاحيات"
-              title="الأدوار والصلاحيات"
-              description="إدارة الأدوار وصلاحياتها من خلال لوحة أكثر تنظيمًا، مع إبراز الأدوار الأساسية، الأدوار النشطة، وحجم كتالوج الصلاحيات المتاح."
-              stats={[
-                {
-                  icon: KeyRound,
-                  label: "الأدوار",
-                  value: formatNumberEN(roles.length),
-                  helper: "إجمالي الأدوار المحفوظة",
-                },
-                {
-                  icon: CheckCircle2,
-                  label: "النشطة",
-                  value: formatNumberEN(activeRolesCount),
-                  helper: "عدد الأدوار النشطة حاليًا",
-                },
-                {
-                  icon: Shield,
-                  label: "الصلاحيات",
-                  value: formatNumberEN(CENTRAL_PERMISSION_DEFINITIONS.length),
-                  helper: "كتالوج الصلاحيات المتاح",
-                },
-              ]}
-              panel={
-                <SettingsHeroPanel
-                  status="Governed"
-                  title="حوكمة الوصول"
-                  description="كل الأدوار هنا تعتمد على نفس البنية الحالية في Firestore، لكن الواجهة الآن أوضح في عرض الحالة والصلاحيات والإجراءات."
-                  metrics={[
-                    {
-                      label: "الأدوار الأساسية",
-                      value: formatNumberEN(systemRolesCount),
-                      helper: "System roles",
-                    },
-                    {
-                      label: "الأدوار المخصصة",
-                      value: formatNumberEN(roles.length - systemRolesCount),
-                      helper: "Custom roles",
-                    },
-                    {
-                      label: "الحالة العامة",
-                      value: activeRolesCount > 0 ? "نشطة" : "فارغة",
-                      helper: "بحسب عدد الأدوار المفعلة",
-                    },
-                  ]}
-                />
-              }
-            />
+        <SettingsRolesTab
+          activeRolesCount={activeRolesCount}
+          formatNumberEN={formatNumberEN}
+          getRoleDisplayLabel={roleKey =>
+            getRoleDisplayLabel(roleKey) || roleKey
+          }
+          onCreateRole={openCreateRole}
+          onDeleteRole={handleDeleteRole}
+          onEditRole={openEditRole}
+          onToggleRoleActive={handleToggleRoleActive}
+          permissionDefinitions={CENTRAL_PERMISSION_DEFINITIONS}
+          roles={roles}
+          systemRoleKeys={SYSTEM_ROLE_KEYS}
+          systemRolesCount={systemRolesCount}
+        />
 
-            <SettingsSectionCard
-              icon={KeyRound}
-                  eyebrow="الوحدة 01"
-                  title="دليل الأدوار"
-              description="أنشئ أدوارًا جديدة أو راجع الأدوار الحالية وصلاحياتها من بطاقة موحدة لكل دور."
-              action={
-                <Button
-                  onClick={openCreateRole}
-                  className="bg-[#F2B705] text-slate-950 hover:bg-[#e0ab00]"
-                >
-                  <Plus className="w-4 h-4 ml-2" /> دور جديد
-                </Button>
-              }
-            >
-              {roles.length ? (
-                <div className="grid gap-4 xl:grid-cols-2">
-                  {roles
-                    .slice()
-                    .sort((a, b) => a.key.localeCompare(b.key))
-                    .map(r => (
-                      <div
-                        key={r.key}
-                        className="rounded-[24px] border border-slate-200/80 bg-slate-50/60 p-5 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.24)]"
-                      >
-                        <div className="flex flex-wrap items-start justify-between gap-4">
-                          <div className="space-y-3">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <Badge variant="outline" className="rounded-full">
-                                {getRoleDisplayLabel(r.key) || r.key}
-                              </Badge>
-                              <Badge
-                                variant="outline"
-                                className={cn(
-                                  "rounded-full",
-                                  r.isActive
-                                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                                    : "border-slate-200 bg-white text-slate-500"
-                                )}
-                              >
-                                {r.isActive ? "نشط" : "موقوف"}
-                              </Badge>
-                              {SYSTEM_ROLE_KEYS.includes(r.key) ? (
-                                <Badge className="rounded-full">أساسي</Badge>
-                              ) : null}
-                            </div>
-
-                            <div>
-                              <div className="text-lg font-semibold tracking-tight text-slate-950">
-                                {r.nameAr}
-                              </div>
-                              <div className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-500">
-                                {r.nameEn || r.key}
-                              </div>
-                            </div>
-
-                            <p className="min-h-[48px] text-sm leading-7 text-slate-600">
-                              {r.description ||
-                                "لا يوجد وصف مخصص لهذا الدور بعد."}
-                            </p>
-                          </div>
-
-                          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-center">
-                            <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
-                              الصلاحيات
-                            </div>
-                            <div className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">
-                              {formatNumberEN(r.permissions?.length || 0)}
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="mt-5 flex flex-wrap gap-2">
-                          {r.permissions?.length ? (
-                            r.permissions.slice(0, 8).map(permission => (
-                              <Badge
-                                key={permission}
-                                variant="secondary"
-                                className="rounded-full"
-                              >
-                                {permission}
-                              </Badge>
-                            ))
-                          ) : (
-                            <span className="text-sm text-slate-500">
-                              لا توجد صلاحيات مرتبطة بهذا الدور.
-                            </span>
-                          )}
-                          {(r.permissions?.length || 0) > 8 ? (
-                            <Badge variant="outline" className="rounded-full">
-                              +{(r.permissions?.length || 0) - 8}
-                            </Badge>
-                          ) : null}
-                        </div>
-
-                        <div className="mt-5 flex flex-wrap gap-2">
-                          <Button
-                            variant="outline"
-                            onClick={() => openEditRole(r)}
-                          >
-                            <Pencil className="w-4 h-4 ml-2" /> تعديل
-                          </Button>
-                          <Button
-                            variant="outline"
-                            onClick={async () => {
-                              const next = roles.map(x =>
-                                x.key === r.key
-                                  ? { ...x, isActive: !x.isActive }
-                                  : x
-                              );
-                              try {
-                                await saveRolesDoc(next);
-                                setRoles(next);
-                                toast.success(
-                                  r.isActive
-                                    ? "تم إيقاف الدور"
-                                    : "تم تفعيل الدور"
-                                );
-                              } catch (e) {
-                                console.error(e);
-                                toast.error("فشل تحديث الدور");
-                              }
-                            }}
-                          >
-                            {r.isActive ? "إيقاف" : "تفعيل"}
-                          </Button>
-                          <Button
-                            variant="destructive"
-                            onClick={() => handleDeleteRole(r.key)}
-                            disabled={SYSTEM_ROLE_KEYS.includes(r.key)}
-                          >
-                            <Trash2 className="w-4 h-4 ml-2" /> حذف
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                </div>
-              ) : (
-                <div className="rounded-[22px] border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-500">
-                  لا توجد أدوار محفوظة بعد. ابدأ بإنشاء دور جديد لإكمال الهيكل.
-                </div>
-              )}
-            </SettingsSectionCard>
-
-            <SettingsSectionCard
-              icon={Shield}
-                  eyebrow="الوحدة 02"
-                  title="دليل الصلاحيات"
-              description="مرجع سريع للصلاحيات المتاحة داخل النظام كما يتم استخدامها حاليًا."
-            >
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {CENTRAL_PERMISSION_DEFINITIONS.map(permission => (
-                  <div
-                    key={permission.key}
-                    className="rounded-[20px] border border-slate-200 bg-white p-4"
-                  >
-                    <div className="text-sm font-semibold text-slate-950">
-                      {permission.label}
-                    </div>
-                    <div className="mt-2 text-xs leading-6 text-slate-500">
-                      {permission.key}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </SettingsSectionCard>
-          </TabsContent>
-
-          {/* =========================
+        {/* =========================
               Admin Accounts
           ========================= */}
-          <TabsContent value="admins" className="space-y-6">
-            <SettingsTabHero
-              eyebrow="وصول الإدارة"
-              title="حسابات الإدارة"
-              description="إدارة الترقية، الدعوات، والحسابات الإدارية من تبويب واحد منظم يعرض الحالة الحالية، القنوات المفتوحة، وعدد الحسابات النشطة بوضوح."
-              stats={[
-                {
-                  icon: Users,
-                  label: "الحسابات",
-                  value: formatNumberEN(adminUsers.length),
-                  helper: "إجمالي حسابات الإدارة",
-                },
-                {
-                  icon: CheckCircle2,
-                  label: "النشطة",
-                  value: formatNumberEN(activeAdminsCount),
-                  helper: "الحسابات المفعلة حاليًا",
-                },
-                {
-                  icon: Mail,
-                  label: "الدعوات",
-                  value: formatNumberEN(roleInvites.length),
-                  helper: "دعوات وربط أدوار عبر البريد",
-                },
-              ]}
-              panel={
-                <SettingsHeroPanel
-                  status="وصول منظم"
-                  title="إدارة الوصول"
-                  description="يمكنك هنا الترقية المباشرة، إنشاء دعوات بالدور، وإدارة الحسابات الإدارية القائمة بنفس المنطق الحالي."
-                  metrics={[
-                    {
-                      label: "الدعوات المفعلة",
-                      value: formatNumberEN(activeInvitesCount),
-                      helper: "الدعوات النشطة للأدوار",
-                    },
-                    {
-                      label: "الحسابات المباشرة",
-                      value: formatNumberEN(adminUsers.length),
-                      helper: "Firestore admin_users",
-                    },
-                    {
-                      label: "الجاهزية الحالية",
-                      value: adminUsers.length > 0 ? "مكتملة" : "قيد الإعداد",
-                      helper: "بحسب وجود حسابات إدارية",
-                    },
-                  ]}
-                />
-              }
-            />
+        <TabsContent value="admins" className="space-y-6">
+          <SettingsTabHero
+            eyebrow="وصول الإدارة"
+            title="حسابات الإدارة"
+            description="إدارة الترقية، الدعوات، والحسابات الإدارية من تبويب واحد منظم يعرض الحالة الحالية، القنوات المفتوحة، وعدد الحسابات النشطة بوضوح."
+            stats={[
+              {
+                icon: Users,
+                label: "الحسابات",
+                value: formatNumberEN(adminUsers.length),
+                helper: "إجمالي حسابات الإدارة",
+              },
+              {
+                icon: CheckCircle2,
+                label: "النشطة",
+                value: formatNumberEN(activeAdminsCount),
+                helper: "الحسابات المفعلة حاليًا",
+              },
+              {
+                icon: Mail,
+                label: "الدعوات",
+                value: formatNumberEN(roleInvites.length),
+                helper: "دعوات وربط أدوار عبر البريد",
+              },
+            ]}
+            panel={
+              <SettingsHeroPanel
+                status="وصول منظم"
+                title="إدارة الوصول"
+                description="يمكنك هنا الترقية المباشرة، إنشاء دعوات بالدور، وإدارة الحسابات الإدارية القائمة بنفس المنطق الحالي."
+                metrics={[
+                  {
+                    label: "الدعوات المفعلة",
+                    value: formatNumberEN(activeInvitesCount),
+                    helper: "الدعوات النشطة للأدوار",
+                  },
+                  {
+                    label: "الحسابات المباشرة",
+                    value: formatNumberEN(adminUsers.length),
+                    helper: "Firestore admin_users",
+                  },
+                  {
+                    label: "الجاهزية الحالية",
+                    value: adminUsers.length > 0 ? "مكتملة" : "قيد الإعداد",
+                    helper: "بحسب وجود حسابات إدارية",
+                  },
+                ]}
+              />
+            }
+          />
 
-            <SettingsSectionCard
-              icon={Users}
-                  eyebrow="الوحدة 01"
-                  title="ترقية مباشرة"
-              description="ترقية مستخدم موجود داخل users مباشرةً عبر البريد الإلكتروني، من دون إنشاء حساب جديد."
-            >
-              <div className="grid gap-5 md:grid-cols-3">
-                <SettingsField
-                  label="الإيميل"
-                  description="البريد الخاص بالمستخدم الموجود مسبقًا داخل users."
-                  placeholder="info@madanalbena.com"
-                  value={promoteEmail}
-                  onChange={setPromoteEmail}
-                  dir="ltr"
-                  inputClassName="text-left"
-                  containerClassName="md:col-span-2"
-                />
+          <SettingsSectionCard
+            icon={Users}
+            eyebrow="الوحدة 01"
+            title="ترقية مباشرة"
+            description="ترقية مستخدم موجود داخل users مباشرةً عبر البريد الإلكتروني، من دون إنشاء حساب جديد."
+          >
+            <div className="grid gap-5 md:grid-cols-3">
+              <SettingsField
+                label="الإيميل"
+                description="البريد الخاص بالمستخدم الموجود مسبقًا داخل users."
+                placeholder="info@madanalbena.com"
+                value={promoteEmail}
+                onChange={setPromoteEmail}
+                dir="ltr"
+                inputClassName="text-left"
+                containerClassName="md:col-span-2"
+              />
 
-                <SettingsSelectField
-                  label="الدور"
-                  description="الدور الذي سيتم تعيينه مباشرة للمستخدم."
+              <SettingsSelectField
+                label="الدور"
+                description="الدور الذي سيتم تعيينه مباشرة للمستخدم."
+              >
+                <Select
+                  value={promoteRoleKey}
+                  onValueChange={(v: any) =>
+                    setPromoteRoleKey(normalizeAdminRoleKey(v))
+                  }
                 >
-                  <Select
-                    value={promoteRoleKey}
-                    onValueChange={(v: any) =>
-                      setPromoteRoleKey(normalizeAdminRoleKey(v))
-                    }
-                  >
-                    <SelectTrigger className="h-12 rounded-xl border-slate-200 bg-white px-4 shadow-none">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="staff">موظف (staff)</SelectItem>
-                      <SelectItem value="hr">
-                        الموارد البشرية (hr)
-                      </SelectItem>
-                      <SelectItem value="accountant">
-                        محاسب (accountant)
-                      </SelectItem>
-                      <SelectItem value="admin">أدمن (admin)</SelectItem>
-                      <SelectItem value="owner">المالك (owner)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </SettingsSelectField>
-              </div>
+                  <SelectTrigger className="h-12 rounded-xl border-slate-200 bg-white px-4 shadow-none">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="staff">موظف (staff)</SelectItem>
+                    <SelectItem value="hr">
+                      الموارد البشرية (hr)
+                    </SelectItem>
+                    <SelectItem value="accountant">
+                      محاسب (accountant)
+                    </SelectItem>
+                    <SelectItem value="admin">أدمن (admin)</SelectItem>
+                    <SelectItem value="owner">المالك (owner)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </SettingsSelectField>
+            </div>
 
-              <div className="mt-5 flex flex-wrap gap-3">
-                <Button
-                  className="bg-[#F2B705] text-slate-950 hover:bg-[#e0ab00]"
-                  onClick={promoteExistingUserByEmail}
-                  disabled={promoting}
+            <div className="mt-5 flex flex-wrap gap-3">
+              <Button
+                className="bg-[#F2B705] text-slate-950 hover:bg-[#e0ab00]"
+                onClick={promoteExistingUserByEmail}
+                disabled={promoting}
+              >
+                {promoting ? "جاري الترقية..." : "ترقية الآن"}
+              </Button>
+            </div>
+          </SettingsSectionCard>
+
+          <SettingsSectionCard
+            icon={Mail}
+            eyebrow="الوحدة 02"
+            title="دعوات الأدوار"
+            description="ربط دور ببريد إلكتروني حتى يتم تطبيقه تلقائيًا عند تسجيل الدخول أو إنشاء الحساب."
+          >
+            <div className="grid gap-5 md:grid-cols-3">
+              <SettingsField
+                label="الإيميل"
+                description="البريد الذي سيحمل الدعوة أو الترقية المؤجلة."
+                placeholder="accountant@example.com"
+                value={inviteEmail}
+                onChange={setInviteEmail}
+                dir="ltr"
+                inputClassName="text-left"
+                containerClassName="md:col-span-2"
+              />
+
+              <SettingsSelectField
+                label="الدور"
+                description="الدور الافتراضي عند تطبيق الدعوة."
+              >
+                <Select
+                  value={inviteRoleKey}
+                  onValueChange={(v: any) =>
+                    setInviteRoleKey(normalizeAdminRoleKey(v))
+                  }
                 >
-                  {promoting ? "جاري الترقية..." : "ترقية الآن"}
-                </Button>
-              </div>
-            </SettingsSectionCard>
+                  <SelectTrigger className="h-12 rounded-xl border-slate-200 bg-white px-4 shadow-none">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="staff">موظف (staff)</SelectItem>
+                    <SelectItem value="hr">
+                      الموارد البشرية (hr)
+                    </SelectItem>
+                    <SelectItem value="accountant">
+                      محاسب (accountant)
+                    </SelectItem>
+                    <SelectItem value="admin">أدمن (admin)</SelectItem>
+                    <SelectItem value="owner">المالك (owner)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </SettingsSelectField>
 
-            <SettingsSectionCard
-              icon={Mail}
-                  eyebrow="الوحدة 02"
-                  title="دعوات الأدوار"
-              description="ربط دور ببريد إلكتروني حتى يتم تطبيقه تلقائيًا عند تسجيل الدخول أو إنشاء الحساب."
-            >
-              <div className="grid gap-5 md:grid-cols-3">
-                <SettingsField
-                  label="الإيميل"
-                  description="البريد الذي سيحمل الدعوة أو الترقية المؤجلة."
-                  placeholder="accountant@example.com"
-                  value={inviteEmail}
-                  onChange={setInviteEmail}
-                  dir="ltr"
-                  inputClassName="text-left"
-                  containerClassName="md:col-span-2"
-                />
+              <SettingsField
+                label="ملاحظات (اختياري)"
+                description="تفاصيل إضافية توضح غرض الدعوة أو الجهة المسؤولة."
+                placeholder="مثال: محاسب رسمي"
+                value={inviteNotes}
+                onChange={setInviteNotes}
+                textarea
+                rows={3}
+                containerClassName="md:col-span-3"
+              />
+            </div>
 
-                <SettingsSelectField
-                  label="الدور"
-                  description="الدور الافتراضي عند تطبيق الدعوة."
-                >
-                  <Select
-                    value={inviteRoleKey}
-                    onValueChange={(v: any) =>
-                      setInviteRoleKey(normalizeAdminRoleKey(v))
-                    }
-                  >
-                    <SelectTrigger className="h-12 rounded-xl border-slate-200 bg-white px-4 shadow-none">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="staff">موظف (staff)</SelectItem>
-                      <SelectItem value="hr">
-                        الموارد البشرية (hr)
-                      </SelectItem>
-                      <SelectItem value="accountant">
-                        محاسب (accountant)
-                      </SelectItem>
-                      <SelectItem value="admin">أدمن (admin)</SelectItem>
-                      <SelectItem value="owner">المالك (owner)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </SettingsSelectField>
+            <div className="mt-5 flex flex-wrap gap-3">
+              <Button
+                className="bg-[#F2B705] text-slate-950 hover:bg-[#e0ab00]"
+                onClick={upsertRoleInvite}
+              >
+                حفظ الدعوة
+              </Button>
+            </div>
 
-                <SettingsField
-                  label="ملاحظات (اختياري)"
-                  description="تفاصيل إضافية توضح غرض الدعوة أو الجهة المسؤولة."
-                  placeholder="مثال: محاسب رسمي"
-                  value={inviteNotes}
-                  onChange={setInviteNotes}
-                  textarea
-                  rows={3}
-                  containerClassName="md:col-span-3"
-                />
-              </div>
-
-              <div className="mt-5 flex flex-wrap gap-3">
-                <Button
-                  className="bg-[#F2B705] text-slate-950 hover:bg-[#e0ab00]"
-                  onClick={upsertRoleInvite}
-                >
-                  حفظ الدعوة
-                </Button>
-              </div>
-
-              <div className="mt-8 space-y-4 border-t border-slate-200 pt-6">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <div className="text-base font-semibold text-slate-950">
-                      الدعوات الحالية
-                    </div>
-                    <div className="text-sm text-slate-500">
-                      مراجعة الدعوات النشطة أو الموقوفة وإدارتها من هنا.
-                    </div>
+            <div className="mt-8 space-y-4 border-t border-slate-200 pt-6">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-base font-semibold text-slate-950">
+                    الدعوات الحالية
                   </div>
-                  <Badge variant="outline" className="rounded-full">
-                    {formatNumberEN(roleInvites.length)}
-                  </Badge>
+                  <div className="text-sm text-slate-500">
+                    مراجعة الدعوات النشطة أو الموقوفة وإدارتها من هنا.
+                  </div>
                 </div>
-
-                {roleInvites.length ? (
-                  <div className="grid gap-4">
-                    {roleInvites.map(inv => (
-                      <div
-                        key={inv.id}
-                        className="rounded-[22px] border border-slate-200 bg-slate-50/70 p-5"
-                      >
-                        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                          <div className="space-y-3">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <Badge variant="outline" className="rounded-full">
-                                {inv.email}
-                              </Badge>
-                              <Badge
-                                variant="secondary"
-                                className="rounded-full"
-                              >
-                                {getRoleDisplayLabel(inv.roleKey) ||
-                                  inv.roleKey}
-                              </Badge>
-                              <Badge
-                                variant="outline"
-                                className={cn(
-                                  "rounded-full",
-                                  inv.isActive
-                                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                                    : "border-slate-200 bg-white text-slate-500"
-                                )}
-                              >
-                                {inv.isActive ? "مفعلة" : "موقوفة"}
-                              </Badge>
-                            </div>
-
-                            <p className="text-sm leading-7 text-slate-600">
-                              {inv.notes ||
-                                "لا توجد ملاحظات مضافة لهذه الدعوة."}
-                            </p>
-                          </div>
-
-                          <div className="flex flex-wrap gap-2">
-                            <Button
-                              variant="outline"
-                              onClick={() => toggleInviteActive(inv)}
-                            >
-                              {inv.isActive ? "تعطيل" : "تفعيل"}
-                            </Button>
-                            <Button
-                              variant="destructive"
-                              onClick={() => deleteInvite(inv.id)}
-                            >
-                              حذف
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="rounded-[22px] border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-500">
-                    لا توجد دعوات محفوظة حتى الآن.
-                  </div>
-                )}
+                <Badge variant="outline" className="rounded-full">
+                  {formatNumberEN(roleInvites.length)}
+                </Badge>
               </div>
-            </SettingsSectionCard>
 
-            <SettingsSectionCard
-              icon={Users}
-                  eyebrow="الوحدة 03"
-                  title="دليل الحسابات الإدارية"
-              description="إدارة الحسابات الإدارية الحالية ومراجعة صلاحياتها الفعلية وحالتها التشغيلية."
-              action={
-                <Button
-                  onClick={openCreateAdmin}
-                  className="bg-[#F2B705] text-slate-950 hover:bg-[#e0ab00]"
-                >
-                  <Plus className="w-4 h-4 ml-2" /> حساب إداري جديد
-                </Button>
-              }
-            >
-              {adminUsers.length ? (
-                <div className="grid gap-4 xl:grid-cols-2">
-                  {adminUsers
-                    .slice()
-                    .sort((a, b) =>
-                      String(a.email || "").localeCompare(String(b.email || ""))
-                    )
-                    .map(u => (
-                      <div
-                        key={u.id}
-                        className="rounded-[24px] border border-slate-200/80 bg-slate-50/60 p-5 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.24)]"
-                      >
-                        <div className="flex flex-wrap items-start justify-between gap-4">
-                          <div className="space-y-3">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <Badge variant="outline" className="rounded-full">
-                                ID: {u.id}
-                              </Badge>
-                              <Badge
-                                variant="outline"
-                                className={cn(
-                                  "rounded-full",
-                                  u.isActive
-                                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                                    : "border-slate-200 bg-white text-slate-500"
-                                )}
-                              >
-                                {u.isActive ? "مفعّل" : "معطّل"}
-                              </Badge>
-                              <Badge
-                                variant="secondary"
-                                className="rounded-full"
-                              >
-                                {getRoleDisplayLabel(u.roleKey) || u.roleKey}
-                              </Badge>
-                              {u.title ? (
-                                <Badge
-                                  variant="outline"
-                                  className="rounded-full"
-                                >
-                                  {u.title}
-                                </Badge>
-                              ) : null}
-                            </div>
-
-                            <div>
-                              <div className="text-lg font-semibold tracking-tight text-slate-950">
-                                {u.displayName || "بدون اسم"}
-                              </div>
-                              <div className="mt-1 text-sm text-slate-500">
-                                {u.email}
-                              </div>
-                            </div>
-
-                            {getEffectivePermissionKeys(
-                              u.roleKey,
-                              u.permissionsAllow || [],
-                              u.permissionsDeny || []
-                            ).length ? (
-                              <div className="flex flex-wrap gap-2">
-                                {getEffectivePermissionKeys(
-                                  u.roleKey,
-                                  u.permissionsAllow || [],
-                                  u.permissionsDeny || []
-                                )
-                                  .slice(0, 6)
-                                  .map(p => (
-                                    <Badge
-                                      key={`effective-${u.id}-${p}`}
-                                      variant="secondary"
-                                      className="rounded-full"
-                                    >
-                                      {p}
-                                    </Badge>
-                                  ))}
-                              </div>
-                            ) : null}
-
-                            {u.permissionsAllow?.length ||
-                            u.permissionsDeny?.length ? (
-                              <div className="flex flex-wrap gap-2">
-                                {(u.permissionsAllow || [])
-                                  .slice(0, 6)
-                                  .map(p => (
-                                    <Badge
-                                      key={`a-${u.id}-${p}`}
-                                      variant="secondary"
-                                      className="rounded-full"
-                                    >
-                                      + {p}
-                                    </Badge>
-                                  ))}
-                                {(u.permissionsDeny || [])
-                                  .slice(0, 6)
-                                  .map(p => (
-                                    <Badge
-                                      key={`d-${u.id}-${p}`}
-                                      variant="outline"
-                                      className="rounded-full"
-                                    >
-                                      - {p}
-                                    </Badge>
-                                  ))}
-                              </div>
-                            ) : null}
-
-                            <p className="text-sm leading-7 text-slate-600">
-                              {u.notes || "لا توجد ملاحظات مرتبطة بهذا الحساب."}
-                            </p>
-                          </div>
-
-                          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-center">
-                            <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
-                              Effective
-                            </div>
-                            <div className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">
-                              {formatNumberEN(
-                                getEffectivePermissionKeys(
-                                  u.roleKey,
-                                  u.permissionsAllow || [],
-                                  u.permissionsDeny || []
-                                ).length
+              {roleInvites.length ? (
+                <div className="grid gap-4">
+                  {roleInvites.map(inv => (
+                    <div
+                      key={inv.id}
+                      className="rounded-[22px] border border-slate-200 bg-slate-50/70 p-5"
+                    >
+                      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                        <div className="space-y-3">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Badge variant="outline" className="rounded-full">
+                              {inv.email}
+                            </Badge>
+                            <Badge
+                              variant="secondary"
+                              className="rounded-full"
+                            >
+                              {getRoleDisplayLabel(inv.roleKey) ||
+                                inv.roleKey}
+                            </Badge>
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                "rounded-full",
+                                inv.isActive
+                                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                  : "border-slate-200 bg-white text-slate-500"
                               )}
-                            </div>
+                            >
+                              {inv.isActive ? "مفعلة" : "موقوفة"}
+                            </Badge>
                           </div>
+
+                          <p className="text-sm leading-7 text-slate-600">
+                            {inv.notes ||
+                              "لا توجد ملاحظات مضافة لهذه الدعوة."}
+                          </p>
                         </div>
 
-                        <div className="mt-5 flex flex-wrap gap-2">
+                        <div className="flex flex-wrap gap-2">
                           <Button
                             variant="outline"
-                            onClick={() => openEditAdmin(u)}
+                            onClick={() => toggleInviteActive(inv)}
                           >
-                            <Pencil className="w-4 h-4 ml-2" /> تعديل
-                          </Button>
-                          <Button
-                            variant="outline"
-                            onClick={() => handleToggleAdminActive(u)}
-                          >
-                            {u.isActive ? "تعطيل" : "تفعيل"}
+                            {inv.isActive ? "تعطيل" : "تفعيل"}
                           </Button>
                           <Button
                             variant="destructive"
-                            onClick={() => handleDeleteAdmin(u)}
+                            onClick={() => deleteInvite(inv.id)}
                           >
-                            <Trash2 className="w-4 h-4 ml-2" /> حذف
+                            حذف
                           </Button>
                         </div>
                       </div>
-                    ))}
+                    </div>
+                  ))}
                 </div>
               ) : (
                 <div className="rounded-[22px] border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-500">
-                  لا توجد حسابات إدارة محفوظة حتى الآن.
+                  لا توجد دعوات محفوظة حتى الآن.
                 </div>
               )}
-            </SettingsSectionCard>
-          </TabsContent>
-
-          {/* =========================
-              Labels
-          ========================= */}
-          <TabsContent value="labels" className="space-y-6">
-            <SettingsTabHero
-              eyebrow="إدارة المسميات"
-              title="المسميات"
-              description="إدارة نصوص العرض المركزية للأنواع والحالات والأدوار من داخل لوحة موحدة، بحيث تبقى الهوية اللغوية للنظام متماسكة وسهلة الصيانة."
-              stats={[
-                {
-                  icon: Tags,
-                  label: "Entries",
-                  value: formatNumberEN(totalLabelEntries),
-                  helper: "إجمالي المسميات المحفوظة",
-                },
-                {
-                  icon: FolderOpen,
-                  label: "Categories",
-                  value: "4",
-                  helper: "أنواع، حالات، أدوار، استثمارات",
-                },
-                {
-                  icon: Globe,
-                  label: "Languages",
-                  value: "عربي / إنجليزي",
-                  helper: "حقول العرض المتاحة",
-                },
-              ]}
-              panel={
-                <SettingsHeroPanel
-                  status="Centralized"
-                  title="قاموس العرض"
-                  description="التحكم في نصوص الواجهة من مكان واحد يساعد على الحفاظ على التناسق بين صفحات الإدارة والعملاء."
-                  metrics={[
-                    {
-                      label: "أنواع المشاريع",
-                      value: formatNumberEN(
-                        Object.keys(labels.projectTypes || {}).length
-                      ),
-                      helper: "أنواع المشاريع",
-                    },
-                    {
-                      label: "حالات المشاريع",
-                      value: formatNumberEN(
-                        Object.keys(labels.projectStatuses || {}).length
-                      ),
-                      helper: "حالات المشاريع",
-                    },
-                    {
-                      label: "حالات الاستثمار",
-                      value: formatNumberEN(
-                        Object.keys(labels.investmentStatuses || {}).length
-                      ),
-                      helper: "حالات الاستثمار ومسميات الأدوار",
-                    },
-                  ]}
-                />
-              }
-            />
-
-            <div className="space-y-6">
-              <div className="space-y-6">
-                <SettingsSectionCard
-                  icon={Tags}
-                  eyebrow="الوحدة 01"
-                  title="أنواع المشاريع"
-                  description="مسميات أنواع المشاريع التي تظهر في صفحات الإدارة والعرض."
-                >
-                  <LabelsEditor
-                    title="مسميات أنواع المشاريع"
-                    data={labels.projectTypes}
-                    onChange={next =>
-                      setLabels(p => ({ ...p, projectTypes: next }))
-                    }
-                  />
-                </SettingsSectionCard>
-
-                <SettingsSectionCard
-                  icon={FolderOpen}
-                  eyebrow="الوحدة 02"
-                  title="حالات المشاريع"
-                  description="حالات المشاريع المعروضة في النظام للمستخدمين والإدارة."
-                >
-                  <LabelsEditor
-                    title="مسميات حالات المشاريع"
-                    data={labels.projectStatuses}
-                    onChange={next =>
-                      setLabels(p => ({ ...p, projectStatuses: next }))
-                    }
-                  />
-                </SettingsSectionCard>
-
-                <SettingsSectionCard
-                  icon={TrendingUp}
-                  eyebrow="الوحدة 03"
-                  title="حالات الاستثمار"
-                  description="النصوص المستخدمة لوصف مراحل وحالات الاستثمار داخل النظام."
-                >
-                  <LabelsEditor
-                    title="مسميات حالات الاستثمارات"
-                    data={labels.investmentStatuses}
-                    onChange={next =>
-                      setLabels(p => ({ ...p, investmentStatuses: next }))
-                    }
-                  />
-                </SettingsSectionCard>
-
-                <SettingsSectionCard
-                  icon={Users}
-                  eyebrow="الوحدة 04"
-                  title="مسميات الأدوار في الواجهة"
-                  description="مسميات العرض للأدوار المختلفة كما تظهر في واجهات النظام."
-                >
-                  <LabelsEditor
-                    title="مسميات الأدوار للعرض"
-                    data={labels.uiRoles}
-                    onChange={next => setLabels(p => ({ ...p, uiRoles: next }))}
-                  />
-                </SettingsSectionCard>
-              </div>
-
             </div>
-          </TabsContent>
+          </SettingsSectionCard>
 
-          {/* =========================
-              Flags
-          ========================= */}
-          <TabsContent value="flags" className="space-y-6">
-            <SettingsTabHero
-              eyebrow="مركز الميزات التجريبية"
-              title="الميزات التجريبية"
-              description="إدارة مفاتيح التحكم التشغيلي بشكل أوضح، مع فصل الإعدادات المتعلقة بالإتاحة العامة عن الإعدادات الخاصة بجمهور VIP."
-              stats={[
-                {
-                  icon: SlidersHorizontal,
-                  label: "المفاتيح",
-                  value: formatNumberEN(Object.keys(flags).length),
-                  helper: "إجمالي مفاتيح التحكم",
-                },
-                {
-                  icon: CheckCircle2,
-                  label: "المفعّل",
-                  value: formatNumberEN(enabledFlagsCount),
-                  helper: "عدد المفاتيح المفعلة",
-                },
-                {
-                  icon: Globe,
-                  label: "الجمهور",
-                  value: flags.vipOnlyMode ? "VIP" : "عام",
-                  helper: "وضع إتاحة المحتوى الحالي",
-                },
-              ]}
-              panel={
-                <SettingsHeroPanel
-                  status={enabledFlagsCount > 0 ? "منظّم" : "افتراضي"}
-                  title="مفاتيح التحكم"
-                  description="استخدم هذا التبويب لتفعيل أو تعطيل سلوكيات واجهة محددة من دون أي تغيير في منطق الأعمال."
-                  metrics={[
-                    {
-                      label: "وضع الصيانة",
-                      value: flags.maintenanceMode ? "مفعل" : "مغلق",
-                      helper: "وضع الصيانة",
-                    },
-                    {
-                      label: "الاستثمارات",
-                      value: flags.disableInvestments ? "معطلة" : "متاحة",
-                      helper: "إنشاء استثمار جديد",
-                    },
-                    {
-                      label: "قناة VIP",
-                      value: flags.vipOnlyMode ? "حصرية" : "عامة",
-                      helper: "VIP فقط / إخفاء مشاريع VIP",
-                    },
-                  ]}
-                />
-              }
-            />
-
-            <div className="space-y-6">
-              <div className="space-y-6">
-                <SettingsSectionCard
-                  icon={SlidersHorizontal}
-                  eyebrow="الوحدة 01"
-                  title="إتاحة المنصة"
-                  description="مفاتيح تؤثر على إتاحة أجزاء النظام للعامة أو للإدارة."
-                >
-                  <div className="grid gap-4">
-                    <Toggle
-                      label="وضع الصيانة"
-                      description="إيقاف واجهة الموقع مؤقتًا أو إظهار وضع الصيانة."
-                      value={flags.maintenanceMode}
-                      onChange={(v: boolean) =>
-                        setFlags(p => ({ ...p, maintenanceMode: v }))
-                      }
-                    />
-                    <Toggle
-                      label="تعطيل الاستثمارات"
-                      description="منع إنشاء استثمار جديد من الواجهة الحالية."
-                      value={flags.disableInvestments}
-                      onChange={(v: boolean) =>
-                        setFlags(p => ({ ...p, disableInvestments: v }))
-                      }
-                    />
-                    <Toggle
-                      label="تعطيل الرسائل"
-                      description="إخفاء أو إيقاف نموذج وصفحة الرسائل للمستخدمين."
-                      value={flags.disableMessages}
-                      onChange={(v: boolean) =>
-                        setFlags(p => ({ ...p, disableMessages: v }))
-                      }
-                    />
-                  </div>
-                </SettingsSectionCard>
-
-                <SettingsSectionCard
-                  icon={Users}
-                  eyebrow="الوحدة 02"
-                  title="ضوابط الجمهور"
-                  description="مفاتيح التحكم في ظهور المحتوى الخاص بالمستخدمين العامين أو جمهور VIP."
-                >
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <Toggle
-                      label="وضع VIP فقط"
-                      description="عرض محتوى VIP فقط داخل الواجهة العامة."
-                      value={flags.vipOnlyMode}
-                      onChange={(v: boolean) =>
-                        setFlags(p => ({ ...p, vipOnlyMode: v }))
-                      }
-                    />
-                    <Toggle
-                      label="إخفاء مشاريع VIP من العامة"
-                      description="إخفاء مشاريع VIP من الواجهات العامة غير المخصصة."
-                      value={flags.hideVipProjects}
-                      onChange={(v: boolean) =>
-                        setFlags(p => ({ ...p, hideVipProjects: v }))
-                      }
-                    />
-                  </div>
-                </SettingsSectionCard>
-              </div>
-
-            </div>
-          </TabsContent>
-
-          {/* =========================
-              Content CMS
-          ========================= */}
-          <TabsContent value="content" className="space-y-6">
-            <SettingsTabHero
-              eyebrow="إدارة المحتوى"
-              title="محتوى الموقع"
-              description="إدارة النصوص العامة للواجهة من داخل لوحة منظمة تشبه الأنظمة الإدارية الاحترافية، مع فصل واضح بين الواجهة الرئيسية والتذييل وبيانات التواصل."
-              stats={[
-                {
-                  icon: Type,
-                  label: "الحقول",
-                  value: formatNumberEN(Object.keys(content).length),
-                  helper: "إجمالي حقول المحتوى المتاحة",
-                },
-                {
-                  icon: CheckCircle2,
-                  label: "المكتمل",
-                  value: formatNumberEN(contentCompletedCount),
-                  helper: "الحقول التي تحتوي على قيمة",
-                },
-                {
-                  icon: Globe,
-                  label: "اللغات",
-                  value: "عربي / إنجليزي",
-                  helper: "محتوى عربي وإنجليزي",
-                },
-              ]}
-              panel={
-                <SettingsHeroPanel
-                  status="تحرير المحتوى"
-                  title="واجهة المحتوى"
-                  description="يتم هنا ضبط النصوص العامة للمنصة من دون أي تغيير على بنية الصفحات أو منطق عرضها."
-                  metrics={[
-                    {
-                      label: "الواجهة الرئيسية",
-                      value:
-                        content.heroTitleAr || content.heroTitleEn
-                          ? "مكتمل جزئيًا"
-                          : "فارغ",
-                      helper: "العنوان والوصف الرئيسي",
-                    },
-                    {
-                      label: "التذييل",
-                      value:
-                        content.footerAboutAr || content.footerAboutEn
-                          ? "مكتمل جزئيًا"
-                          : "فارغ",
-                      helper: "نص تعريف المنصة",
-                    },
-                    {
-                      label: "التواصل",
-                      value:
-                        content.contactEmail || content.contactPhone
-                          ? "جاهز"
-                          : "غير مكتمل",
-                      helper: "قنوات التواصل في الواجهة",
-                    },
-                  ]}
-                />
-              }
-            />
-
-            <div className="space-y-6">
-              <div className="space-y-6">
-                <SettingsSectionCard
-                  icon={Type}
-                  eyebrow="الوحدة 01"
-                  title="محتوى الواجهة الرئيسية"
-                  description="النصوص الرئيسية التي تشكل الانطباع الأول داخل الواجهة."
-                >
-                  <div className="grid gap-5 md:grid-cols-2">
-                    <SettingsField
-                      label="العنوان الرئيسي (عربي)"
-                      description="العنوان الرئيسي للواجهة باللغة العربية."
-                      placeholder="اكتب العنوان العربي"
-                      value={content.heroTitleAr}
-                      onChange={value =>
-                        setContent(p => ({ ...p, heroTitleAr: value }))
-                      }
-                    />
-                    <SettingsField
-                      label="العنوان الرئيسي (إنجليزي)"
-                      description="العنوان الرئيسي للواجهة باللغة الإنجليزية."
-                      placeholder="اكتب العنوان الإنجليزي"
-                      value={content.heroTitleEn}
-                      onChange={value =>
-                        setContent(p => ({ ...p, heroTitleEn: value }))
-                      }
-                      dir="ltr"
-                      inputClassName="text-left"
-                    />
-                    <SettingsField
-                      label="الوصف الرئيسي (عربي)"
-                      description="وصف مختصر يشرح القيمة الأساسية للمنصة."
-                      placeholder="اكتب الوصف العربي"
-                      value={content.heroSubtitleAr}
-                      onChange={value =>
-                        setContent(p => ({ ...p, heroSubtitleAr: value }))
-                      }
-                      textarea
-                      rows={4}
-                      containerClassName="md:col-span-2"
-                    />
-                    <SettingsField
-                      label="الوصف الرئيسي (إنجليزي)"
-                      description="الوصف الداعم للواجهة باللغة الإنجليزية."
-                      placeholder="اكتب الوصف الإنجليزي"
-                      value={content.heroSubtitleEn}
-                      onChange={value =>
-                        setContent(p => ({ ...p, heroSubtitleEn: value }))
-                      }
-                      textarea
-                      rows={4}
-                      dir="ltr"
-                      inputClassName="text-left"
-                      containerClassName="md:col-span-2"
-                    />
-                  </div>
-                </SettingsSectionCard>
-
-                <SettingsSectionCard
-                  icon={Archive}
-                  eyebrow="الوحدة 02"
-                  title="محتوى التذييل"
-                  description="المحتوى التعريفي في تذييل المنصة باللغتين العربية والإنجليزية."
-                >
-                  <div className="grid gap-5 md:grid-cols-2">
-                    <SettingsField
-                      label="نبذة التذييل (عربي)"
-                      description="النص التعريفي العربي المختصر في التذييل."
-                      placeholder="اكتب وصفًا مختصرًا للمنصة"
-                      value={content.footerAboutAr}
-                      onChange={value =>
-                        setContent(p => ({ ...p, footerAboutAr: value }))
-                      }
-                      textarea
-                      rows={4}
-                    />
-                    <SettingsField
-                      label="نبذة التذييل (إنجليزي)"
-                      description="الوصف الإنجليزي المختصر في التذييل."
-                      placeholder="اكتب وصفًا مختصرًا باللغة الإنجليزية"
-                      value={content.footerAboutEn}
-                      onChange={value =>
-                        setContent(p => ({ ...p, footerAboutEn: value }))
-                      }
-                      textarea
-                      rows={4}
-                      dir="ltr"
-                      inputClassName="text-left"
-                    />
-                  </div>
-                </SettingsSectionCard>
-
-                <SettingsSectionCard
-                  icon={Mail}
-                  eyebrow="الوحدة 03"
-                  title="محتوى التواصل"
-                  description="بيانات التواصل التي تعرض للمستخدمين داخل واجهة المنصة."
-                >
-                  <div className="grid gap-5 md:grid-cols-2">
-                    <SettingsField
-                      label="بريد التواصل"
-                      description="البريد الظاهر للمستخدمين في الواجهة."
-                      placeholder="support@maedin.sa"
-                      value={content.contactEmail}
-                      onChange={value =>
-                        setContent(p => ({ ...p, contactEmail: value }))
-                      }
-                      dir="ltr"
-                      inputClassName="text-left"
-                    />
-                    <SettingsField
-                      label="هاتف التواصل"
-                      description="رقم الهاتف المعروض في بيانات التواصل."
-                      placeholder="+966 5X XXX XXXX"
-                      value={content.contactPhone}
-                      onChange={value =>
-                        setContent(p => ({ ...p, contactPhone: value }))
-                      }
-                      dir="ltr"
-                      inputClassName="text-left"
-                    />
-                  </div>
-                </SettingsSectionCard>
-              </div>
-
-            </div>
-          </TabsContent>
-
-          {/* =========================
-              Recruitment
-          ========================= */}
-          <TabsContent value="recruitment" className="space-y-6">
-            <RecruitmentSettingsEditor
-              recruitment={recruitment}
-              recruitmentPreviewValues={recruitmentPreviewValues}
-              requiredRecruitmentFieldsCount={requiredRecruitmentFieldsCount}
-              selectRecruitmentFieldsCount={selectRecruitmentFieldsCount}
-              recruitmentIssuesCount={recruitmentIssuesCount}
-              recruitmentValidation={recruitmentValidation}
-              onPublishedChange={(value) =>
-                setRecruitment((current) => ({
-                  ...current,
-                  isPublished: value,
-                }))
-              }
-              onAddField={addRecruitmentField}
-              onUpdateField={updateRecruitmentField}
-              onMoveField={moveRecruitmentFieldBy}
-              onRemoveField={removeRecruitmentField}
-              onAddOption={addRecruitmentOption}
-              onUpdateOption={updateRecruitmentOption}
-              onRemoveOption={removeRecruitmentOption}
-              onPreviewValueChange={(fieldId, value) =>
-                setRecruitmentPreviewValues((current) => ({
-                  ...current,
-                  [fieldId]: value,
-                }))
-              }
-            />
-            {false ? (
-              <>
-            <SettingsTabHero
-              eyebrow="محرر نموذج التوظيف"
-              title="إعدادات نموذج التوظيف العام"
-              description="أضف الحقول المطلوبة، اختر نوع كل حقل، وحدد ما إذا كان إلزاميًا، ثم ستظهر نفس الحقول تلقائيًا في صفحة التوظيف العامة بنفس الترتيب ومن دون أي تعديل يدوي إضافي."
-              stats={[
-                {
-                  icon: BriefcaseBusiness,
-                  label: "الحقول",
-                  value: formatNumberEN(recruitment.fields.length),
-                  helper: "إجمالي الحقول الحالية في النموذج",
-                },
-                {
-                  icon: CheckCircle2,
-                  label: "المطلوب",
-                  value: formatNumberEN(requiredRecruitmentFieldsCount),
-                  helper: "الحقول الإلزامية للمتقدّم",
-                },
-                {
-                  icon: Type,
-                  label: "القوائم",
-                  value: formatNumberEN(selectRecruitmentFieldsCount),
-                  helper: "حقول Select التي تحتوي على خيارات",
-                },
-              ]}
-              panel={
-                <SettingsHeroPanel
-                  status={recruitment.isPublished ? "منشور" : "متوقف"}
-                  title="الربط مباشر مع الصفحة العامة"
-                  description="يعتمد هذا القسم على المستند settings/recruitment، لذلك أي حفظ هنا ينعكس مباشرة على صفحة /careers ويغيّر ترتيب الحقول ونوعها كما هو."
-                  metrics={[
-                    {
-                      label: "مسار الصفحة",
-                      value: "/careers",
-                      helper: "الصفحة العامة الظاهرة للزوار",
-                    },
-                    {
-                      label: "الحالة",
-                      value: recruitment.isPublished
-                        ? "استقبال الطلبات مفعل"
-                        : "استقبال الطلبات متوقف",
-                      helper: "يمكن إيقاف الاستقبال دون حذف الحقول",
-                    },
-                    {
-                      label: "سلامة الإعدادات",
-                      value:
-                        recruitmentIssuesCount === 0
-                          ? "جاهز للحفظ"
-                          : `${formatNumberEN(recruitmentIssuesCount)} ملاحظات`,
-                      helper: "مراجعة الحقول قبل نشر التعديلات",
-                    },
-                  ]}
-                />
-              }
-            />
-
-            <div className="space-y-6">
-              <SettingsSectionCard
-                icon={BriefcaseBusiness}
-                eyebrow="الوحدة 01"
-                title="حالة النموذج"
-                description="تحكم سريع في إتاحة صفحة التوظيف العامة، مع ملخص فوري عن جودة الإعدادات وعدد الملاحظات التي تحتاج مراجعة."
+          <SettingsSectionCard
+            icon={Users}
+            eyebrow="الوحدة 03"
+            title="دليل الحسابات الإدارية"
+            description="إدارة الحسابات الإدارية الحالية ومراجعة صلاحياتها الفعلية وحالتها التشغيلية."
+            action={
+              <Button
+                onClick={openCreateAdmin}
+                className="bg-[#F2B705] text-slate-950 hover:bg-[#e0ab00]"
               >
-                <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
-                  <div className="space-y-4">
-                    <Toggle
-                      label="استقبال طلبات التوظيف"
-                      description="عند الإيقاف ستبقى الصفحة العامة موجودة، لكن سيظهر للزائر أن استقبال الطلبات متوقف مؤقتًا."
-                      value={recruitment.isPublished}
-                      onChange={(value) =>
-                        setRecruitment((current) => ({
-                          ...current,
-                          isPublished: value,
-                        }))
-                      }
-                    />
-
-                    {recruitmentValidation.formErrors.length > 0 ? (
-                      <Alert className="border-amber-200 bg-amber-50 text-amber-900">
-                        <CircleAlert className="h-4 w-4" />
-                        <AlertTitle>ملاحظات عامة على النموذج</AlertTitle>
-                        <AlertDescription className="space-y-1 pt-2 leading-7">
-                          {recruitmentValidation.formErrors.map((issue) => (
-                            <p key={issue}>{issue}</p>
-                          ))}
-                        </AlertDescription>
-                      </Alert>
-                    ) : null}
-
-                    <Alert className="border-slate-200 bg-slate-50">
-                      <Globe className="h-4 w-4" />
-                      <AlertTitle>آلية الانعكاس المباشر</AlertTitle>
-                      <AlertDescription className="leading-7">
-                        يتم حفظ تعريف الحقول في مستند إعدادات واحد، والصفحة
-                        العامة تقرأه مباشرة من Firestore. هذا يجعل الداشبورد
-                        هو محرر النموذج، والصفحة العامة هي مكان التعبئة فقط.
-                      </AlertDescription>
-                    </Alert>
-                  </div>
-
-                  <div className="rounded-[26px] border border-slate-200/80 bg-slate-50/70 p-5">
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-                      Snapshot
-                    </div>
-
-                    <div className="mt-5 space-y-3">
-                      <div className="rounded-2xl border border-white/90 bg-white px-4 py-3 shadow-sm">
-                        <div className="text-xs text-slate-500">الحقول الحالية</div>
-                        <div className="mt-2 text-xl font-semibold text-slate-950">
-                          {formatNumberEN(recruitment.fields.length)}
-                        </div>
-                      </div>
-
-                      <div className="rounded-2xl border border-white/90 bg-white px-4 py-3 shadow-sm">
-                        <div className="text-xs text-slate-500">حقول Select</div>
-                        <div className="mt-2 text-xl font-semibold text-slate-950">
-                          {formatNumberEN(selectRecruitmentFieldsCount)}
-                        </div>
-                      </div>
-
-                      <div className="rounded-2xl border border-white/90 bg-white px-4 py-3 shadow-sm">
-                        <div className="text-xs text-slate-500">ملاحظات تحتاج مراجعة</div>
-                        <div className="mt-2 text-xl font-semibold text-slate-950">
-                          {formatNumberEN(recruitmentIssuesCount)}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </SettingsSectionCard>
-
-              <SettingsSectionCard
-                icon={Type}
-                eyebrow="الوحدة 02"
-                title="محرر الحقول"
-                description="أضف الحقول الأساسية من هنا، ثم عدّل عنوان الحقل ونوعه وخصائصه. الترتيب الحالي هو نفسه الذي سيظهر للزائر في الصفحة العامة."
-              >
-                <div className="space-y-5">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => addRecruitmentField("text")}
+                <Plus className="w-4 h-4 ml-2" /> حساب إداري جديد
+              </Button>
+            }
+          >
+            {adminUsers.length ? (
+              <div className="grid gap-4 xl:grid-cols-2">
+                {adminUsers
+                  .slice()
+                  .sort((a, b) =>
+                    String(a.email || "").localeCompare(String(b.email || ""))
+                  )
+                  .map(u => (
+                    <div
+                      key={u.id}
+                      className="rounded-[24px] border border-slate-200/80 bg-slate-50/60 p-5 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.24)]"
                     >
-                      <Plus className="ml-2 h-4 w-4" />
-                      حقل نصي
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => addRecruitmentField("number")}
-                    >
-                      <Plus className="ml-2 h-4 w-4" />
-                      حقل رقمي
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => addRecruitmentField("date")}
-                    >
-                      <Plus className="ml-2 h-4 w-4" />
-                      حقل تاريخ
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => addRecruitmentField("select")}
-                    >
-                      <Plus className="ml-2 h-4 w-4" />
-                      قائمة خيارات
-                    </Button>
-                  </div>
-
-                  {recruitment.fields.length ? (
-                    <div className="space-y-4">
-                      {recruitment.fields.map((field, index) => {
-                        const fieldIssues =
-                          recruitmentValidation.fieldErrors[field.id] || [];
-
-                        return (
-                          <div
-                            key={field.id}
-                            className="rounded-[26px] border border-slate-200/80 bg-slate-50/70 p-5 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.24)]"
-                          >
-                            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                              <div className="space-y-3">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <Badge variant="outline" className="rounded-full">
-                                    الحقل {formatNumberEN(index + 1)}
-                                  </Badge>
-                                  <Badge
-                                    variant="outline"
-                                    className="rounded-full border-sky-200 bg-sky-50 text-sky-700"
-                                  >
-                                    {getRecruitmentFieldTypeLabel(field.type)}
-                                  </Badge>
-                                  {field.type === "number" ? (
-                                    <Badge
-                                      variant="outline"
-                                      className="rounded-full border-amber-200 bg-amber-50 text-amber-700"
-                                    >
-                                      {getRecruitmentNumberModeLabel(
-                                        field.numberMode || "default"
-                                      )}
-                                    </Badge>
-                                  ) : null}
-                                  <Badge
-                                    variant="outline"
-                                    className={cn(
-                                      "rounded-full",
-                                      field.required
-                                        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                                        : "border-slate-200 bg-white text-slate-500"
-                                    )}
-                                  >
-                                    {field.required ? "مطلوب" : "اختياري"}
-                                  </Badge>
-                                </div>
-
-                                <div>
-                                  <div className="text-lg font-semibold text-slate-950">
-                                    {field.label || "حقل بدون عنوان"}
-                                  </div>
-                                  <div className="mt-1 text-sm leading-7 text-slate-500">
-                                    {getRecruitmentFieldHint(field)}
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div className="flex flex-wrap items-center gap-2">
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="icon"
-                                  onClick={() =>
-                                    moveRecruitmentFieldBy(field.id, "up")
-                                  }
-                                  disabled={index === 0}
-                                  title="نقل للأعلى"
-                                >
-                                  <ArrowUp className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="icon"
-                                  onClick={() =>
-                                    moveRecruitmentFieldBy(field.id, "down")
-                                  }
-                                  disabled={index === recruitment.fields.length - 1}
-                                  title="نقل للأسفل"
-                                >
-                                  <ArrowDown className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  type="button"
-                                  variant="destructive"
-                                  size="icon"
-                                  onClick={() => removeRecruitmentField(field.id)}
-                                  title="حذف الحقل"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </div>
-
-                            <div className="mt-5 grid gap-5 md:grid-cols-2">
-                              <SettingsField
-                                label="عنوان الحقل"
-                                description="الاسم الظاهر للمتقدّم في الصفحة العامة."
-                                value={field.label}
-                                onChange={(value) =>
-                                  updateRecruitmentField(field.id, {
-                                    label: value,
-                                  })
-                                }
-                                placeholder="مثال: الاسم"
-                              />
-
-                              <SettingsSelectField
-                                label="نوع الحقل"
-                                description="حدد نوع الإدخال المناسب لهذا الحقل."
-                              >
-                                <Select
-                                  value={field.type}
-                                  onValueChange={(value) =>
-                                    updateRecruitmentField(field.id, {
-                                      type: value as RecruitmentFieldType,
-                                    })
-                                  }
-                                >
-                                  <SelectTrigger className="h-12 rounded-xl border-slate-200 bg-white shadow-none">
-                                    <SelectValue placeholder="اختر النوع" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="text">نصي</SelectItem>
-                                    <SelectItem value="email">
-                                      بريد إلكتروني
-                                    </SelectItem>
-                                    <SelectItem value="number">رقمي</SelectItem>
-                                    <SelectItem value="date">تاريخ</SelectItem>
-                                    <SelectItem value="select">قائمة</SelectItem>
-                                    <SelectItem value="textarea">
-                                      نص طويل
-                                    </SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              </SettingsSelectField>
-
-                              {field.type !== "date" ? (
-                                <SettingsField
-                                  label="Placeholder"
-                                  description="نص إرشادي داخل الحقل عند الحاجة."
-                                  value={field.placeholder || ""}
-                                  onChange={(value) =>
-                                    updateRecruitmentField(field.id, {
-                                      placeholder: value,
-                                    })
-                                  }
-                                  placeholder="مثال: اكتب الإجابة"
-                                />
-                              ) : (
-                                <div className="space-y-3">
-                                  <Label className="text-[13px] font-semibold text-slate-900">
-                                    Placeholder
-                                  </Label>
-                                  <div className="rounded-[20px] border border-slate-200 bg-slate-50/70 px-4 py-4 text-sm leading-7 text-slate-500">
-                                    حقول التاريخ تستخدم Date Picker مباشر، لذلك
-                                    لا يظهر الـ Placeholder عادة في الواجهة.
-                                  </div>
-                                </div>
+                      <div className="flex flex-wrap items-start justify-between gap-4">
+                        <div className="space-y-3">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Badge variant="outline" className="rounded-full">
+                              ID: {u.id}
+                            </Badge>
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                "rounded-full",
+                                u.isActive
+                                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                  : "border-slate-200 bg-white text-slate-500"
                               )}
-
-                              <div className="space-y-3">
-                                <Label className="text-[13px] font-semibold text-slate-900">
-                                  خصائص الحقل
-                                </Label>
-
-                                <div className="rounded-[20px] border border-slate-200 bg-white px-4 py-4">
-                                  <div className="flex items-center justify-between gap-4">
-                                    <div className="space-y-1">
-                                      <div className="font-semibold text-slate-900">
-                                        هل الحقل مطلوب؟
-                                      </div>
-                                      <p className="text-sm leading-6 text-slate-500">
-                                        إذا كان مطلوبًا فلن يتم إرسال الطلب قبل
-                                        تعبئته.
-                                      </p>
-                                    </div>
-
-                                    <Checkbox
-                                      checked={field.required}
-                                      onCheckedChange={(checked) =>
-                                        updateRecruitmentField(field.id, {
-                                          required: Boolean(checked),
-                                        })
-                                      }
-                                    />
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-
-                            {field.type === "number" ? (
-                              <div className="mt-5">
-                                <SettingsSelectField
-                                  label="نمط الرقم"
-                                  description="اختر ما إذا كان هذا الحقل رقمًا عامًا أو رقم جوال."
-                                >
-                                  <Select
-                                    value={field.numberMode || "default"}
-                                    onValueChange={(value) =>
-                                      updateRecruitmentField(field.id, {
-                                        numberMode: value as
-                                          | "default"
-                                          | "phone",
-                                      })
-                                    }
-                                  >
-                                    <SelectTrigger className="h-12 rounded-xl border-slate-200 bg-white shadow-none">
-                                      <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      <SelectItem value="default">
-                                        رقم عادي
-                                      </SelectItem>
-                                      <SelectItem value="phone">
-                                        رقم جوال
-                                      </SelectItem>
-                                    </SelectContent>
-                                  </Select>
-                                </SettingsSelectField>
-                              </div>
-                            ) : null}
-
-                            {field.type === "select" ? (
-                              <div className="mt-5 space-y-4">
-                                <div className="flex items-center justify-between gap-3">
-                                  <div>
-                                    <div className="text-sm font-semibold text-slate-950">
-                                      خيارات القائمة
-                                    </div>
-                                    <div className="text-sm text-slate-500">
-                                      هذه الخيارات ستظهر كما هي داخل القائمة
-                                      المنسدلة في الصفحة العامة.
-                                    </div>
-                                  </div>
-
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    onClick={() => addRecruitmentOption(field.id)}
-                                  >
-                                    <Plus className="ml-2 h-4 w-4" />
-                                    خيار جديد
-                                  </Button>
-                                </div>
-
-                                <div className="space-y-3">
-                                  {(field.options || []).map((option, optionIndex) => (
-                                    <div
-                                      key={option.id}
-                                      className="flex items-center gap-3 rounded-[20px] border border-slate-200 bg-white px-4 py-3"
-                                    >
-                                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-600">
-                                        {formatNumberEN(optionIndex + 1)}
-                                      </div>
-
-                                      <Input
-                                        value={option.label}
-                                        onChange={(event) =>
-                                          updateRecruitmentOption(
-                                            field.id,
-                                            option.id,
-                                            event.target.value
-                                          )
-                                        }
-                                        placeholder="اكتب اسم الخيار"
-                                        className="h-11 rounded-xl border-slate-200 bg-white shadow-none"
-                                      />
-
-                                      <Button
-                                        type="button"
-                                        variant="ghost"
-                                        className="text-rose-600 hover:bg-rose-50 hover:text-rose-700"
-                                        onClick={() =>
-                                          removeRecruitmentOption(
-                                            field.id,
-                                            option.id
-                                          )
-                                        }
-                                      >
-                                        <Trash2 className="h-4 w-4" />
-                                      </Button>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            ) : null}
-
-                            {fieldIssues.length ? (
-                              <Alert className="mt-5 border-amber-200 bg-amber-50 text-amber-900">
-                                <CircleAlert className="h-4 w-4" />
-                                <AlertTitle>هذا الحقل يحتاج مراجعة</AlertTitle>
-                                <AlertDescription className="space-y-1 pt-2 leading-7">
-                                  {fieldIssues.map((issue) => (
-                                    <p key={issue}>{issue}</p>
-                                  ))}
-                                </AlertDescription>
-                              </Alert>
+                            >
+                              {u.isActive ? "مفعّل" : "معطّل"}
+                            </Badge>
+                            <Badge
+                              variant="secondary"
+                              className="rounded-full"
+                            >
+                              {getRoleDisplayLabel(u.roleKey) || u.roleKey}
+                            </Badge>
+                            {u.title ? (
+                              <Badge
+                                variant="outline"
+                                className="rounded-full"
+                              >
+                                {u.title}
+                              </Badge>
                             ) : null}
                           </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="rounded-[26px] border border-dashed border-slate-300 bg-slate-50/80 px-6 py-14 text-center text-slate-500">
-                      أضف أول حقل ليبدأ تكوين نموذج التوظيف العام.
-                    </div>
-                  )}
-                </div>
-              </SettingsSectionCard>
 
-              <SettingsSectionCard
-                icon={Globe}
-                eyebrow="الوحدة 03"
-                title="معاينة الصفحة العامة"
-                description="معاينة سريعة لنفس الحقول التي ستظهر للزائر في صفحة /careers، مع الحفاظ على الترتيب الحالي للنموذج."
-              >
-                {recruitment.fields.length ? (
-                  <div className="rounded-[30px] border border-slate-200/80 bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] p-6 shadow-[0_20px_52px_-40px_rgba(15,23,42,0.25)] sm:p-8">
-                    <div className="flex flex-col gap-2 border-b border-slate-100 pb-6 text-right">
-                      <div className="text-sm font-semibold text-[#8d6700]">
-                        صفحة التوظيف العامة
+                          <div>
+                            <div className="text-lg font-semibold tracking-tight text-slate-950">
+                              {u.displayName || "بدون اسم"}
+                            </div>
+                            <div className="mt-1 text-sm text-slate-500">
+                              {u.email}
+                            </div>
+                          </div>
+
+                          {getEffectivePermissionKeys(
+                            u.roleKey,
+                            u.permissionsAllow || [],
+                            u.permissionsDeny || []
+                          ).length ? (
+                            <div className="flex flex-wrap gap-2">
+                              {getEffectivePermissionKeys(
+                                u.roleKey,
+                                u.permissionsAllow || [],
+                                u.permissionsDeny || []
+                              )
+                                .slice(0, 6)
+                                .map(p => (
+                                  <Badge
+                                    key={`effective-${u.id}-${p}`}
+                                    variant="secondary"
+                                    className="rounded-full"
+                                  >
+                                    {p}
+                                  </Badge>
+                                ))}
+                            </div>
+                          ) : null}
+
+                          {u.permissionsAllow?.length ||
+                            u.permissionsDeny?.length ? (
+                            <div className="flex flex-wrap gap-2">
+                              {(u.permissionsAllow || [])
+                                .slice(0, 6)
+                                .map(p => (
+                                  <Badge
+                                    key={`a-${u.id}-${p}`}
+                                    variant="secondary"
+                                    className="rounded-full"
+                                  >
+                                    + {p}
+                                  </Badge>
+                                ))}
+                              {(u.permissionsDeny || [])
+                                .slice(0, 6)
+                                .map(p => (
+                                  <Badge
+                                    key={`d-${u.id}-${p}`}
+                                    variant="outline"
+                                    className="rounded-full"
+                                  >
+                                    - {p}
+                                  </Badge>
+                                ))}
+                            </div>
+                          ) : null}
+
+                          <p className="text-sm leading-7 text-slate-600">
+                            {u.notes || "لا توجد ملاحظات مرتبطة بهذا الحساب."}
+                          </p>
+                        </div>
+
+                        <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-center">
+                          <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
+                            Effective
+                          </div>
+                          <div className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">
+                            {formatNumberEN(
+                              getEffectivePermissionKeys(
+                                u.roleKey,
+                                u.permissionsAllow || [],
+                                u.permissionsDeny || []
+                              ).length
+                            )}
+                          </div>
+                        </div>
                       </div>
-                      <div className="text-2xl font-semibold tracking-tight text-slate-950">
-                        نموذج التقديم كما سيظهر للزائر
-                      </div>
-                      <div className="text-sm leading-7 text-slate-500">
-                        يمكن اختبار ترتيب الحقول والسلوك العام مباشرة من هنا قبل
-                        الحفظ النهائي.
+
+                      <div className="mt-5 flex flex-wrap gap-2">
+                        <Button
+                          variant="outline"
+                          onClick={() => openEditAdmin(u)}
+                        >
+                          <Pencil className="w-4 h-4 ml-2" /> تعديل
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={() => handleToggleAdminActive(u)}
+                        >
+                          {u.isActive ? "تعطيل" : "تفعيل"}
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          onClick={() => handleDeleteAdmin(u)}
+                        >
+                          <Trash2 className="w-4 h-4 ml-2" /> حذف
+                        </Button>
                       </div>
                     </div>
+                  ))}
+              </div>
+            ) : (
+              <div className="rounded-[22px] border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-500">
+                لا توجد حسابات إدارة محفوظة حتى الآن.
+              </div>
+            )}
+          </SettingsSectionCard>
+        </TabsContent>
 
-                    <div className="mt-8 space-y-8">
-                      <RecruitmentFormFields
-                        idPrefix="recruitment-preview"
-                        fields={recruitment.fields}
-                        values={recruitmentPreviewValues}
-                        onValueChange={(fieldId, value) =>
-                          setRecruitmentPreviewValues((current) => ({
+        {/* =========================
+              Labels
+          ========================= */}
+        <SettingsLabelsTab
+          labels={labels}
+          totalLabelEntries={totalLabelEntries}
+          onLabelsFieldChange={(key, value) =>
+            setLabels(previous => ({ ...previous, [key]: value }))
+          }
+        />
+
+        {/* =========================
+              Flags
+          ========================= */}
+        <SettingsFlagsTab
+          flags={flags}
+          enabledFlagsCount={enabledFlagsCount}
+          onFlagChange={(key, value) =>
+            setFlags(previous => ({ ...previous, [key]: value }))
+          }
+        />
+
+        {/* =========================
+              Content CMS
+          ========================= */}
+        <SettingsContentTab
+          content={content}
+          contentCompletedCount={contentCompletedCount}
+          onContentFieldChange={(key, value) =>
+            setContent(previous => ({ ...previous, [key]: value }))
+          }
+        />
+
+        {/* =========================
+              Recruitment
+          ========================= */}
+        <TabsContent value="recruitment" className="space-y-6">
+          <RecruitmentSettingsEditor
+            recruitment={recruitment}
+            recruitmentPreviewValues={recruitmentPreviewValues}
+            requiredRecruitmentFieldsCount={requiredRecruitmentFieldsCount}
+            selectRecruitmentFieldsCount={selectRecruitmentFieldsCount}
+            recruitmentIssuesCount={recruitmentIssuesCount}
+            recruitmentValidation={recruitmentValidation}
+            onPublishedChange={(value) =>
+              setRecruitment((current) => ({
+                ...current,
+                isPublished: value,
+              }))
+            }
+            onAddField={addRecruitmentField}
+            onUpdateField={updateRecruitmentField}
+            onMoveField={moveRecruitmentFieldBy}
+            onRemoveField={removeRecruitmentField}
+            onAddOption={addRecruitmentOption}
+            onUpdateOption={updateRecruitmentOption}
+            onRemoveOption={removeRecruitmentOption}
+            onPreviewValueChange={(fieldId, value) =>
+              setRecruitmentPreviewValues((current) => ({
+                ...current,
+                [fieldId]: value,
+              }))
+            }
+          />
+          {false ? (
+            <>
+              <SettingsTabHero
+                eyebrow="محرر نموذج التوظيف"
+                title="إعدادات نموذج التوظيف العام"
+                description="أضف الحقول المطلوبة، اختر نوع كل حقل، وحدد ما إذا كان إلزاميًا، ثم ستظهر نفس الحقول تلقائيًا في صفحة التوظيف العامة بنفس الترتيب ومن دون أي تعديل يدوي إضافي."
+                stats={[
+                  {
+                    icon: BriefcaseBusiness,
+                    label: "الحقول",
+                    value: formatNumberEN(recruitment.fields.length),
+                    helper: "إجمالي الحقول الحالية في النموذج",
+                  },
+                  {
+                    icon: CheckCircle2,
+                    label: "المطلوب",
+                    value: formatNumberEN(requiredRecruitmentFieldsCount),
+                    helper: "الحقول الإلزامية للمتقدّم",
+                  },
+                  {
+                    icon: Type,
+                    label: "القوائم",
+                    value: formatNumberEN(selectRecruitmentFieldsCount),
+                    helper: "حقول Select التي تحتوي على خيارات",
+                  },
+                ]}
+                panel={
+                  <SettingsHeroPanel
+                    status={recruitment.isPublished ? "منشور" : "متوقف"}
+                    title="الربط مباشر مع الصفحة العامة"
+                    description="يعتمد هذا القسم على المستند settings/recruitment، لذلك أي حفظ هنا ينعكس مباشرة على صفحة /careers ويغيّر ترتيب الحقول ونوعها كما هو."
+                    metrics={[
+                      {
+                        label: "مسار الصفحة",
+                        value: "/careers",
+                        helper: "الصفحة العامة الظاهرة للزوار",
+                      },
+                      {
+                        label: "الحالة",
+                        value: recruitment.isPublished
+                          ? "استقبال الطلبات مفعل"
+                          : "استقبال الطلبات متوقف",
+                        helper: "يمكن إيقاف الاستقبال دون حذف الحقول",
+                      },
+                      {
+                        label: "سلامة الإعدادات",
+                        value:
+                          recruitmentIssuesCount === 0
+                            ? "جاهز للحفظ"
+                            : `${formatNumberEN(recruitmentIssuesCount)} ملاحظات`,
+                        helper: "مراجعة الحقول قبل نشر التعديلات",
+                      },
+                    ]}
+                  />
+                }
+              />
+
+              <div className="space-y-6">
+                <SettingsSectionCard
+                  icon={BriefcaseBusiness}
+                  eyebrow="الوحدة 01"
+                  title="حالة النموذج"
+                  description="تحكم سريع في إتاحة صفحة التوظيف العامة، مع ملخص فوري عن جودة الإعدادات وعدد الملاحظات التي تحتاج مراجعة."
+                >
+                  <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+                    <div className="space-y-4">
+                      <Toggle
+                        label="استقبال طلبات التوظيف"
+                        description="عند الإيقاف ستبقى الصفحة العامة موجودة، لكن سيظهر للزائر أن استقبال الطلبات متوقف مؤقتًا."
+                        value={recruitment.isPublished}
+                        onChange={(value) =>
+                          setRecruitment((current) => ({
                             ...current,
-                            [fieldId]: value,
+                            isPublished: value,
                           }))
                         }
                       />
 
-                      <div className="flex justify-end">
-                        <Button
-                          type="button"
-                          className="h-12 rounded-full bg-[#0f172a] px-8 text-sm font-semibold text-white hover:bg-[#111f38]"
-                          disabled
-                        >
-                          إرسال الطلب
-                        </Button>
+                      {recruitmentValidation.formErrors.length > 0 ? (
+                        <Alert className="border-amber-200 bg-amber-50 text-amber-900">
+                          <CircleAlert className="h-4 w-4" />
+                          <AlertTitle>ملاحظات عامة على النموذج</AlertTitle>
+                          <AlertDescription className="space-y-1 pt-2 leading-7">
+                            {recruitmentValidation.formErrors.map((issue) => (
+                              <p key={issue}>{issue}</p>
+                            ))}
+                          </AlertDescription>
+                        </Alert>
+                      ) : null}
+
+                      <Alert className="border-slate-200 bg-slate-50">
+                        <Globe className="h-4 w-4" />
+                        <AlertTitle>آلية الانعكاس المباشر</AlertTitle>
+                        <AlertDescription className="leading-7">
+                          يتم حفظ تعريف الحقول في مستند إعدادات واحد، والصفحة
+                          العامة تقرأه مباشرة من Firestore. هذا يجعل الداشبورد
+                          هو محرر النموذج، والصفحة العامة هي مكان التعبئة فقط.
+                        </AlertDescription>
+                      </Alert>
+                    </div>
+
+                    <div className="rounded-[26px] border border-slate-200/80 bg-slate-50/70 p-5">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                        Snapshot
+                      </div>
+
+                      <div className="mt-5 space-y-3">
+                        <div className="rounded-2xl border border-white/90 bg-white px-4 py-3 shadow-sm">
+                          <div className="text-xs text-slate-500">الحقول الحالية</div>
+                          <div className="mt-2 text-xl font-semibold text-slate-950">
+                            {formatNumberEN(recruitment.fields.length)}
+                          </div>
+                        </div>
+
+                        <div className="rounded-2xl border border-white/90 bg-white px-4 py-3 shadow-sm">
+                          <div className="text-xs text-slate-500">حقول Select</div>
+                          <div className="mt-2 text-xl font-semibold text-slate-950">
+                            {formatNumberEN(selectRecruitmentFieldsCount)}
+                          </div>
+                        </div>
+
+                        <div className="rounded-2xl border border-white/90 bg-white px-4 py-3 shadow-sm">
+                          <div className="text-xs text-slate-500">ملاحظات تحتاج مراجعة</div>
+                          <div className="mt-2 text-xl font-semibold text-slate-950">
+                            {formatNumberEN(recruitmentIssuesCount)}
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
-                ) : (
-                  <div className="rounded-[26px] border border-dashed border-slate-300 bg-slate-50/80 px-6 py-14 text-center text-slate-500">
-                    ستظهر المعاينة هنا بعد إضافة الحقول إلى النموذج.
-                  </div>
-                )}
-              </SettingsSectionCard>
-            </div>
-              </>
-            ) : null}
-          </TabsContent>
+                </SettingsSectionCard>
 
-          {/* =========================
-              Backup
-          ========================= */}
-          <TabsContent value="backup" className="space-y-6">
-            <SettingsTabHero
-              eyebrow="النسخ الاحتياطي والتصدير"
-              title="النسخ الاحتياطي والتصدير"
-              description="واجهة موحدة لحفظ إعدادات المنصة وتصدير حزم العقود والبيانات المرتبطة بها من مصادر النظام الحية."
-              stats={[
-                {
-                  icon: FileDown,
-                  label: "المحدد",
-                  value: formatNumberEN(selectedContractIds.length),
-                  helper: "العقود المحددة للتصدير",
-                },
-                {
-                  icon: Files,
-                  label: "المفلتر",
-                  value: formatNumberEN(filteredContractExportItems.length),
-                  helper: "العقود المطابقة للفلاتر الحالية",
-                },
-                {
-                  icon: Archive,
-                  label: "التصدير",
-                  value:
-                    contractExportSummary || contractExcelExportSummary
-                      ? "جاهزة"
-                      : "قيد التحضير",
-                  helper: "آخر حالة تصدير معروفة",
-                },
-              ]}
-              panel={
-                <SettingsHeroPanel
-                  status="جاهز للنقل"
-                  title="حركة البيانات"
-                  description="هذا التبويب يركّز على نقل إعدادات المنصة وتوليد باقات العقود من دون أي تعديل على بنية البيانات الأصلية."
-                  metrics={[
-                    {
-                      label: "إعدادات المنصة",
-                      value: importing ? "جارٍ الاستيراد" : "JSON جاهز",
-                      helper: "تصدير واستيراد الإعدادات",
-                    },
-                    {
-                      label: "حزمة النظام",
-                      value: contractExportSummary ? "جاهزة" : "قيد الانتظار",
-                      helper: "CSV + المرفقات + ملف الوصف",
-                    },
-                    {
-                      label: "حزمة Excel",
-                      value: contractExcelExportSummary
-                        ? "جاهزة"
-                        : "قيد الانتظار",
-                      helper: "تصدير مناسب للمراجعة",
-                    },
-                  ]}
-                />
-              }
-            />
-
-            <Card className="overflow-hidden rounded-[26px] border border-slate-200/80 bg-white shadow-[0_24px_54px_-40px_rgba(15,23,42,0.28)]">
-              <CardHeader className="border-b border-slate-100/80 pb-6">
-                <CardTitle className="text-[1.1rem] font-semibold tracking-tight text-slate-950">
-                  النسخ والاستعادة
-                </CardTitle>
-                <CardDescription className="max-w-2xl text-sm leading-7 text-slate-600">
-                  تصدير واستيراد إعدادات المنصة بسرعة من خلال ملف JSON محفوظ.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4 pt-6">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <Button variant="outline" onClick={handleExport}>
-                    <FileDown className="w-4 h-4 ml-2" /> تصدير JSON
-                  </Button>
-
-                  <Button
-                    variant="outline"
-                    onClick={handlePickImportFile}
-                    disabled={importing}
-                  >
-                    <FileUp className="w-4 h-4 ml-2" />
-                    {importing ? "جاري الاستيراد..." : "استيراد JSON"}
-                  </Button>
-
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="application/json"
-                    className="hidden"
-                    onChange={handleImportFileChange}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="overflow-hidden rounded-[26px] border border-slate-200/80 bg-white shadow-[0_24px_54px_-40px_rgba(15,23,42,0.28)]">
-              <CardHeader className="gap-4 border-b border-slate-100/80 pb-6">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                  <div className="space-y-2">
-                    <CardTitle className="text-[1.1rem] font-semibold tracking-tight text-slate-950">
-                      تصدير العقود
-                    </CardTitle>
-                    <CardDescription className="max-w-2xl text-sm leading-7 text-slate-600">
-                      Generate either the system package or the human-readable
-                      Excel bundle from the current live sources: Firestore
-                      business data, D1 file metadata, and R2 file references.
-                    </CardDescription>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    <Badge variant="outline">
-                      {formatNumberEN(selectedContractIds.length)} محدد
-                    </Badge>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        void loadContractExportItems({ manual: true })
-                      }
-                      disabled={
-                        contractExportLoading ||
-                        contractExporting ||
-                        contractExcelExporting
-                      }
-                    >
-                      <RefreshCw
-                        className={cn(
-                          "mr-2 h-4 w-4",
-                          contractExportLoading && "animate-spin"
-                        )}
-                      />
-                      تحديث العقود
-                    </Button>
-                  </div>
-                </div>
-              </CardHeader>
-
-              <CardContent className="space-y-4">
-                {contractExportError ? (
-                  <Alert className="border-red-500/40 bg-red-500/5 text-red-700">
-                    <CircleAlert className="h-4 w-4" />
-                    <AlertTitle>خطأ في تصدير العقود</AlertTitle>
-                    <AlertDescription>{contractExportError}</AlertDescription>
-                  </Alert>
-                ) : null}
-
-                {contractExcelExportError ? (
-                  <Alert className="border-red-500/40 bg-red-500/5 text-red-700">
-                    <CircleAlert className="h-4 w-4" />
-                    <AlertTitle>خطأ في تصدير Excel</AlertTitle>
-                    <AlertDescription>
-                      {contractExcelExportError}
-                    </AlertDescription>
-                  </Alert>
-                ) : null}
-
-                {contractExportSummary ? (
-                  <Alert className="border-emerald-500/30 bg-emerald-500/5 text-emerald-700">
-                    <CheckCircle2 className="h-4 w-4" />
-                    <AlertTitle>آخر تصدير لحزمة النظام</AlertTitle>
-                    <AlertDescription className="space-y-1">
-                      <p>
-                        تم إنشاء الملف {contractExportSummary.fileName} في{" "}
-                        {formatDatabaseTimestamp(
-                          contractExportSummary.generatedAt
-                        )}
-                        .
-                      </p>
-                      <p>
-                        العقود: {contractExportSummary.rowCounts.contracts} |
-                        الاستثمارات:{" "}
-                        {contractExportSummary.rowCounts.investments} |
-                        المرفقات: {contractExportSummary.attachmentCount} |
-                        التحذيرات: {contractExportSummary.warningCount}
-                      </p>
-                    </AlertDescription>
-                  </Alert>
-                ) : null}
-
-                {contractExcelExportSummary ? (
-                  <Alert className="border-sky-500/30 bg-sky-500/5 text-sky-700">
-                    <CheckCircle2 className="h-4 w-4" />
-                    <AlertTitle>آخر تصدير Excel</AlertTitle>
-                    <AlertDescription className="space-y-1">
-                      <p>
-                        تم إنشاء الملف {contractExcelExportSummary.fileName} في{" "}
-                        {formatDatabaseTimestamp(
-                          contractExcelExportSummary.generatedAt
-                        )}
-                        .
-                      </p>
-                      <p>
-                        المصنفات: {contractExcelExportSummary.workbookCount} |
-                        العقود:{" "}
-                        {contractExcelExportSummary.rowCounts.contracts} |
-                        الملفات: {contractExcelExportSummary.rowCounts.files} |
-                        التحذيرات: {contractExcelExportSummary.warningCount}
-                      </p>
-                    </AlertDescription>
-                  </Alert>
-                ) : null}
-
-                <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_220px]">
-                  <div className="space-y-2">
-                    <Label htmlFor="contract-export-search">
-                      البحث في العقود
-                    </Label>
-                    <Input
-                      id="contract-export-search"
-                      value={contractSearch}
-                      onChange={event => setContractSearch(event.target.value)}
-                      placeholder="Search by contract, project, investor, or investment ID"
-                      disabled={contractExporting || contractExcelExporting}
-                      className="h-12 rounded-xl border-slate-200 bg-white shadow-none"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>تصفية الحالة</Label>
-                    <Select
-                      value={contractStatusFilter}
-                      onValueChange={setContractStatusFilter}
-                    >
-                      <SelectTrigger
-                        className="h-12 rounded-xl border-slate-200 bg-white px-4 shadow-none"
-                        disabled={contractExporting || contractExcelExporting}
+                <SettingsSectionCard
+                  icon={Type}
+                  eyebrow="الوحدة 02"
+                  title="محرر الحقول"
+                  description="أضف الحقول الأساسية من هنا، ثم عدّل عنوان الحقل ونوعه وخصائصه. الترتيب الحالي هو نفسه الذي سيظهر للزائر في الصفحة العامة."
+                >
+                  <div className="space-y-5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => addRecruitmentField("text")}
                       >
-                        <SelectValue placeholder="جميع الحالات" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">جميع الحالات</SelectItem>
-                        {contractStatusOptions.map(status => (
-                          <SelectItem key={status} value={status}>
-                            {status}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    variant="outline"
-                    onClick={() =>
-                      toggleSelectAllFilteredContracts(!allFilteredSelected)
-                    }
-                    disabled={
-                      !filteredContractExportItems.length ||
-                      contractExportLoading ||
-                      contractExporting ||
-                      contractExcelExporting
-                    }
-                  >
-                    {allFilteredSelected
-                      ? "إلغاء تحديد المفلتر"
-                      : "تحديد المفلتر"}
-                  </Button>
-
-                  <Button
-                    variant="outline"
-                    onClick={() => setSelectedContractIds([])}
-                    disabled={
-                      !selectedContractIds.length ||
-                      contractExporting ||
-                      contractExcelExporting
-                    }
-                  >
-                    إلغاء التحديد
-                  </Button>
-
-                  <Button
-                    className="bg-[#F2B705] text-black hover:bg-[#d7a404]"
-                    onClick={() => void handleContractExport()}
-                    disabled={
-                      !selectedContractIds.length ||
-                      contractExportLoading ||
-                      contractExporting ||
-                      contractExcelExporting
-                    }
-                  >
-                    <Archive className="mr-2 h-4 w-4" />
-                    {contractExporting
-                      ? "جارٍ إنشاء حزمة النظام..."
-                      : "تصدير العقود (حزمة النظام)"}
-                  </Button>
-
-                  <Button
-                    variant="outline"
-                    className="border-[#F2B705] text-[#7a5b00] hover:bg-[#fff7d1] hover:text-[#5e4600]"
-                    onClick={() => void handleBusinessExcelExport()}
-                    disabled={
-                      !selectedContractIds.length ||
-                      contractExportLoading ||
-                      contractExporting ||
-                      contractExcelExporting
-                    }
-                  >
-                    <Files className="mr-2 h-4 w-4" />
-                    {contractExcelExporting
-                      ? "جارٍ إنشاء حزمة Excel..."
-                      : "تصدير العقود (Excel)"}
-                  </Button>
-                </div>
-
-                <div className="rounded-[24px] border border-slate-200 bg-slate-50/40">
-                  {contractExportLoading ? (
-                    <div className="p-6 text-sm text-muted-foreground">
-                      جاري تحميل العقود للتصدير...
+                        <Plus className="ml-2 h-4 w-4" />
+                        حقل نصي
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => addRecruitmentField("number")}
+                      >
+                        <Plus className="ml-2 h-4 w-4" />
+                        حقل رقمي
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => addRecruitmentField("date")}
+                      >
+                        <Plus className="ml-2 h-4 w-4" />
+                        حقل تاريخ
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => addRecruitmentField("select")}
+                      >
+                        <Plus className="ml-2 h-4 w-4" />
+                        قائمة خيارات
+                      </Button>
                     </div>
-                  ) : filteredContractExportItems.length ? (
-                    <div className="max-h-[420px] divide-y overflow-y-auto">
-                      {filteredContractExportItems.map(item => {
-                        const checked = selectedContractIdSet.has(item.id);
-                        return (
-                          <label
-                            key={item.id}
-                            className="flex cursor-pointer items-start gap-3 p-4 transition hover:bg-white"
-                          >
-                            <Checkbox
-                              checked={checked}
-                              onCheckedChange={value =>
-                                toggleContractSelection(item.id, value === true)
-                              }
-                              className="mt-1"
-                              disabled={
-                                contractExporting || contractExcelExporting
-                              }
-                            />
 
-                            <div className="min-w-0 flex-1 space-y-2">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <p className="font-medium">
-                                  {getContractBusinessId(item) || item.id}
-                                </p>
-                                <Badge
-                                  variant="outline"
-                                  className="rounded-full"
-                                >
-                                  {item.status}
-                                </Badge>
-                                {item.projectTitle ? (
-                                  <Badge
-                                    variant="secondary"
-                                    className="max-w-full truncate rounded-full"
+                    {recruitment.fields.length ? (
+                      <div className="space-y-4">
+                        {recruitment.fields.map((field, index) => {
+                          const fieldIssues =
+                            recruitmentValidation.fieldErrors[field.id] || [];
+
+                          return (
+                            <div
+                              key={field.id}
+                              className="rounded-[26px] border border-slate-200/80 bg-slate-50/70 p-5 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.24)]"
+                            >
+                              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                                <div className="space-y-3">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <Badge variant="outline" className="rounded-full">
+                                      الحقل {formatNumberEN(index + 1)}
+                                    </Badge>
+                                    <Badge
+                                      variant="outline"
+                                      className="rounded-full border-sky-200 bg-sky-50 text-sky-700"
+                                    >
+                                      {getRecruitmentFieldTypeLabel(field.type)}
+                                    </Badge>
+                                    {field.type === "number" ? (
+                                      <Badge
+                                        variant="outline"
+                                        className="rounded-full border-amber-200 bg-amber-50 text-amber-700"
+                                      >
+                                        {getRecruitmentNumberModeLabel(
+                                          field.numberMode || "default"
+                                        )}
+                                      </Badge>
+                                    ) : null}
+                                    <Badge
+                                      variant="outline"
+                                      className={cn(
+                                        "rounded-full",
+                                        field.required
+                                          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                          : "border-slate-200 bg-white text-slate-500"
+                                      )}
+                                    >
+                                      {field.required ? "مطلوب" : "اختياري"}
+                                    </Badge>
+                                  </div>
+
+                                  <div>
+                                    <div className="text-lg font-semibold text-slate-950">
+                                      {field.label || "حقل بدون عنوان"}
+                                    </div>
+                                    <div className="mt-1 text-sm leading-7 text-slate-500">
+                                      {getRecruitmentFieldHint(field)}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="icon"
+                                    onClick={() =>
+                                      moveRecruitmentFieldBy(field.id, "up")
+                                    }
+                                    disabled={index === 0}
+                                    title="نقل للأعلى"
                                   >
-                                    {item.projectTitle}
-                                  </Badge>
-                                ) : null}
+                                    <ArrowUp className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="icon"
+                                    onClick={() =>
+                                      moveRecruitmentFieldBy(field.id, "down")
+                                    }
+                                    disabled={index === recruitment.fields.length - 1}
+                                    title="نقل للأسفل"
+                                  >
+                                    <ArrowDown className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="destructive"
+                                    size="icon"
+                                    onClick={() => removeRecruitmentField(field.id)}
+                                    title="حذف الحقل"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </div>
                               </div>
 
-                              <p className="text-sm text-muted-foreground">
-                                المستثمر: {item.investorName || "غير معروف"}{" "}
-                                {item.investorEmail
-                                  ? `(${item.investorEmail})`
-                                  : ""}
-                              </p>
+                              <div className="mt-5 grid gap-5 md:grid-cols-2">
+                                <SettingsField
+                                  label="عنوان الحقل"
+                                  description="الاسم الظاهر للمتقدّم في الصفحة العامة."
+                                  value={field.label}
+                                  onChange={(value) =>
+                                    updateRecruitmentField(field.id, {
+                                      label: value,
+                                    })
+                                  }
+                                  placeholder="مثال: الاسم"
+                                />
 
-                              <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                                <span>
-                                  Investment: {getInvestmentBusinessId(item) || item.investmentId || "-"}
-                                </span>
-                                <span>المشروع: {item.projectId || "-"}</span>
-                                <span>
-                                  Updated:{" "}
-                                  {formatDatabaseTimestamp(
-                                    item.updatedAt ||
-                                      item.signedAt ||
-                                      item.createdAt
-                                  )}
-                                </span>
+                                <SettingsSelectField
+                                  label="نوع الحقل"
+                                  description="حدد نوع الإدخال المناسب لهذا الحقل."
+                                >
+                                  <Select
+                                    value={field.type}
+                                    onValueChange={(value) =>
+                                      updateRecruitmentField(field.id, {
+                                        type: value as RecruitmentFieldType,
+                                      })
+                                    }
+                                  >
+                                    <SelectTrigger className="h-12 rounded-xl border-slate-200 bg-white shadow-none">
+                                      <SelectValue placeholder="اختر النوع" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="text">نصي</SelectItem>
+                                      <SelectItem value="email">
+                                        بريد إلكتروني
+                                      </SelectItem>
+                                      <SelectItem value="number">رقمي</SelectItem>
+                                      <SelectItem value="date">تاريخ</SelectItem>
+                                      <SelectItem value="select">قائمة</SelectItem>
+                                      <SelectItem value="textarea">
+                                        نص طويل
+                                      </SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </SettingsSelectField>
+
+                                {field.type !== "date" ? (
+                                  <SettingsField
+                                    label="Placeholder"
+                                    description="نص إرشادي داخل الحقل عند الحاجة."
+                                    value={field.placeholder || ""}
+                                    onChange={(value) =>
+                                      updateRecruitmentField(field.id, {
+                                        placeholder: value,
+                                      })
+                                    }
+                                    placeholder="مثال: اكتب الإجابة"
+                                  />
+                                ) : (
+                                  <div className="space-y-3">
+                                    <Label className="text-[13px] font-semibold text-slate-900">
+                                      Placeholder
+                                    </Label>
+                                    <div className="rounded-[20px] border border-slate-200 bg-slate-50/70 px-4 py-4 text-sm leading-7 text-slate-500">
+                                      حقول التاريخ تستخدم Date Picker مباشر، لذلك
+                                      لا يظهر الـ Placeholder عادة في الواجهة.
+                                    </div>
+                                  </div>
+                                )}
+
+                                <div className="space-y-3">
+                                  <Label className="text-[13px] font-semibold text-slate-900">
+                                    خصائص الحقل
+                                  </Label>
+
+                                  <div className="rounded-[20px] border border-slate-200 bg-white px-4 py-4">
+                                    <div className="flex items-center justify-between gap-4">
+                                      <div className="space-y-1">
+                                        <div className="font-semibold text-slate-900">
+                                          هل الحقل مطلوب؟
+                                        </div>
+                                        <p className="text-sm leading-6 text-slate-500">
+                                          إذا كان مطلوبًا فلن يتم إرسال الطلب قبل
+                                          تعبئته.
+                                        </p>
+                                      </div>
+
+                                      <Checkbox
+                                        checked={field.required}
+                                        onCheckedChange={(checked) =>
+                                          updateRecruitmentField(field.id, {
+                                            required: Boolean(checked),
+                                          })
+                                        }
+                                      />
+                                    </div>
+                                  </div>
+                                </div>
                               </div>
+
+                              {field.type === "number" ? (
+                                <div className="mt-5">
+                                  <SettingsSelectField
+                                    label="نمط الرقم"
+                                    description="اختر ما إذا كان هذا الحقل رقمًا عامًا أو رقم جوال."
+                                  >
+                                    <Select
+                                      value={field.numberMode || "default"}
+                                      onValueChange={(value) =>
+                                        updateRecruitmentField(field.id, {
+                                          numberMode: value as
+                                            | "default"
+                                            | "phone",
+                                        })
+                                      }
+                                    >
+                                      <SelectTrigger className="h-12 rounded-xl border-slate-200 bg-white shadow-none">
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="default">
+                                          رقم عادي
+                                        </SelectItem>
+                                        <SelectItem value="phone">
+                                          رقم جوال
+                                        </SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                  </SettingsSelectField>
+                                </div>
+                              ) : null}
+
+                              {field.type === "select" ? (
+                                <div className="mt-5 space-y-4">
+                                  <div className="flex items-center justify-between gap-3">
+                                    <div>
+                                      <div className="text-sm font-semibold text-slate-950">
+                                        خيارات القائمة
+                                      </div>
+                                      <div className="text-sm text-slate-500">
+                                        هذه الخيارات ستظهر كما هي داخل القائمة
+                                        المنسدلة في الصفحة العامة.
+                                      </div>
+                                    </div>
+
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      onClick={() => addRecruitmentOption(field.id)}
+                                    >
+                                      <Plus className="ml-2 h-4 w-4" />
+                                      خيار جديد
+                                    </Button>
+                                  </div>
+
+                                  <div className="space-y-3">
+                                    {(field.options || []).map((option, optionIndex) => (
+                                      <div
+                                        key={option.id}
+                                        className="flex items-center gap-3 rounded-[20px] border border-slate-200 bg-white px-4 py-3"
+                                      >
+                                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-600">
+                                          {formatNumberEN(optionIndex + 1)}
+                                        </div>
+
+                                        <Input
+                                          value={option.label}
+                                          onChange={(event) =>
+                                            updateRecruitmentOption(
+                                              field.id,
+                                              option.id,
+                                              event.target.value
+                                            )
+                                          }
+                                          placeholder="اكتب اسم الخيار"
+                                          className="h-11 rounded-xl border-slate-200 bg-white shadow-none"
+                                        />
+
+                                        <Button
+                                          type="button"
+                                          variant="ghost"
+                                          className="text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+                                          onClick={() =>
+                                            removeRecruitmentOption(
+                                              field.id,
+                                              option.id
+                                            )
+                                          }
+                                        >
+                                          <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : null}
+
+                              {fieldIssues.length ? (
+                                <Alert className="mt-5 border-amber-200 bg-amber-50 text-amber-900">
+                                  <CircleAlert className="h-4 w-4" />
+                                  <AlertTitle>هذا الحقل يحتاج مراجعة</AlertTitle>
+                                  <AlertDescription className="space-y-1 pt-2 leading-7">
+                                    {fieldIssues.map((issue) => (
+                                      <p key={issue}>{issue}</p>
+                                    ))}
+                                  </AlertDescription>
+                                </Alert>
+                              ) : null}
                             </div>
-                          </label>
-                        );
-                      })}
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="rounded-[26px] border border-dashed border-slate-300 bg-slate-50/80 px-6 py-14 text-center text-slate-500">
+                        أضف أول حقل ليبدأ تكوين نموذج التوظيف العام.
+                      </div>
+                    )}
+                  </div>
+                </SettingsSectionCard>
+
+                <SettingsSectionCard
+                  icon={Globe}
+                  eyebrow="الوحدة 03"
+                  title="معاينة الصفحة العامة"
+                  description="معاينة سريعة لنفس الحقول التي ستظهر للزائر في صفحة /careers، مع الحفاظ على الترتيب الحالي للنموذج."
+                >
+                  {recruitment.fields.length ? (
+                    <div className="rounded-[30px] border border-slate-200/80 bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] p-6 shadow-[0_20px_52px_-40px_rgba(15,23,42,0.25)] sm:p-8">
+                      <div className="flex flex-col gap-2 border-b border-slate-100 pb-6 text-right">
+                        <div className="text-sm font-semibold text-[#8d6700]">
+                          صفحة التوظيف العامة
+                        </div>
+                        <div className="text-2xl font-semibold tracking-tight text-slate-950">
+                          نموذج التقديم كما سيظهر للزائر
+                        </div>
+                        <div className="text-sm leading-7 text-slate-500">
+                          يمكن اختبار ترتيب الحقول والسلوك العام مباشرة من هنا قبل
+                          الحفظ النهائي.
+                        </div>
+                      </div>
+
+                      <div className="mt-8 space-y-8">
+                        <RecruitmentFormFields
+                          idPrefix="recruitment-preview"
+                          fields={recruitment.fields}
+                          values={recruitmentPreviewValues}
+                          onValueChange={(fieldId, value) =>
+                            setRecruitmentPreviewValues((current) => ({
+                              ...current,
+                              [fieldId]: value,
+                            }))
+                          }
+                        />
+
+                        <div className="flex justify-end">
+                          <Button
+                            type="button"
+                            className="h-12 rounded-full bg-[#0f172a] px-8 text-sm font-semibold text-white hover:bg-[#111f38]"
+                            disabled
+                          >
+                            إرسال الطلب
+                          </Button>
+                        </div>
+                      </div>
                     </div>
                   ) : (
-                    <div className="p-6 text-sm text-muted-foreground">
-                      No contracts match the current filters.
+                    <div className="rounded-[26px] border border-dashed border-slate-300 bg-slate-50/80 px-6 py-14 text-center text-slate-500">
+                      ستظهر المعاينة هنا بعد إضافة الحقول إلى النموذج.
                     </div>
                   )}
-                </div>
+                </SettingsSectionCard>
+              </div>
+            </>
+          ) : null}
+        </TabsContent>
 
-                <p className="text-xs leading-5 text-muted-foreground">
-                  محتويات الحزمة: `investors.csv` و`projects.csv` و
-                  `investments.csv` و`contracts.csv` و
-                  `interest_requests.csv` و`files.csv` ومجلد `attachments/`
-                  وملف `manifest.json` و`README.md`.
-                </p>
-              </CardContent>
-            </Card>
-          </TabsContent>
+        {/* =========================
+              Backup
+          ========================= */}
+        <SettingsBackupTab
+          allFilteredSelected={allFilteredSelected}
+          contractExcelExportError={contractExcelExportError}
+          contractExcelExportSummary={contractExcelExportSummary}
+          contractExcelExporting={contractExcelExporting}
+          contractExportError={contractExportError}
+          contractExportLoading={contractExportLoading}
+          contractExportSummary={contractExportSummary}
+          contractExporting={contractExporting}
+          contractSearch={contractSearch}
+          contractStatusFilter={contractStatusFilter}
+          contractStatusOptions={contractStatusOptions}
+          fileInputRef={fileInputRef}
+          filteredContractExportItems={filteredContractExportItems}
+          formatDatabaseTimestamp={formatDatabaseTimestamp}
+          heroDescription="واجهة موحدة لحفظ إعدادات المنصة وتصدير حزم العقود والبيانات المرتبطة بها من مصادر النظام الحية."
+          heroEyebrow="النسخ الاحتياطي والتصدير"
+          heroPanelDescription="هذا التبويب يركّز على نقل إعدادات المنصة وتوليد باقات العقود من دون أي تعديل على بنية البيانات الأصلية."
+          heroPanelMetrics={backupHeroMetrics}
+          heroPanelStatus="جاهز للنقل"
+          heroPanelTitle="حركة البيانات"
+          heroStats={backupHeroStats}
+          heroTitle="النسخ الاحتياطي والتصدير"
+          importing={importing}
+          onBusinessExcelExport={() => void handleBusinessExcelExport()}
+          onClearSelectedContracts={() => setSelectedContractIds([])}
+          onContractExport={() => void handleContractExport()}
+          onContractSearchChange={setContractSearch}
+          onContractStatusFilterChange={setContractStatusFilter}
+          onExport={handleExport}
+          onImportFileChange={handleImportFileChange}
+          onPickImportFile={handlePickImportFile}
+          onRefreshContractExportItems={() =>
+            void loadContractExportItems({ manual: true })
+          }
+          onToggleContractSelection={toggleContractSelection}
+          onToggleSelectAllFilteredContracts={toggleSelectAllFilteredContracts}
+          selectedContractCountLabel={formatNumberEN(selectedContractIds.length)}
+          selectedContractIds={selectedContractIds}
+          selectedContractIdSet={selectedContractIdSet}
+        />
 
-          {/* =========================
+        {/* =========================
               Database
           ========================= */}
-          <TabsContent value="database" className="space-y-6">
+        <SettingsDatabaseTab
+          actionCards={DATABASE_ACTION_CARDS}
+          d1Status={
+            databaseRefreshing ? "checking" : databaseDashboard.services.d1.status
+          }
+          d1StatusLabel={getDatabaseStatusLabel(
+            databaseRefreshing ? "checking" : databaseDashboard.services.d1.status
+          )}
+          databaseNotes={databaseNotes}
+          databaseRefreshing={databaseRefreshing}
+          employeeDirectorySyncSummary={employeeDirectorySyncSummary}
+          employeeDirectorySyncing={employeeDirectorySyncing}
+          formatDatabaseTimestamp={formatDatabaseTimestamp}
+          formatNumberEN={formatNumberEN}
+          getDatabaseStatusTone={getDatabaseStatusTone}
+          hero={
             <SettingsTabHero
-              eyebrow="Infrastructure Overview"
-              title="قاعدة البيانات والتخزين"
-              description="عرض تشغيلي موحد لبنية Cloudflare الحالية، يشمل الحالة العامة للخدمات، حركة البيانات، والمقاييس الحية المرتبطة بالتخزين."
+              eyebrow="نظرة عامة على البنية"
+              title="حالة نظام التخزين"
+              description="هذه اللوحة تعرض حالة خدمات Cloudflare (Worker, D1, R2)، مع توضيح الجاهزية، الأخطاء، والمؤشرات التشغيلية للنظام."
               stats={[
                 {
                   icon: Database,
                   label: "Healthy",
                   value: formatNumberEN(databaseHealthyServicesCount),
-                  helper: "الخدمات الجاهزة حاليًا",
+                  helper: "الخدمات السليمة حاليًا",
                 },
                 {
                   icon: Files,
                   label: "Metrics",
                   value: formatNumberEN(databaseActiveMetricCount),
-                  helper: "المقاييس التي تحمل قيمة",
+                  helper: "المؤشرات التي لها بيانات",
                 },
                 {
                   icon: ServerCog,
                   label: "Status",
                   value: databaseRefreshing ? "جارٍ الفحص" : "مباشر",
-                  helper: "فحص حالة الخدمات",
+                  helper: "حالة القراءة الحالية",
                 },
               ]}
               panel={
                 <SettingsHeroPanel
                   status={databaseRefreshing ? "جارٍ الفحص" : "Cloudflare"}
-                  title="طبقة التخزين"
-                  description="جميع البيانات هنا للعرض والمراجعة التشغيلية فقط، مع إبقاء نفس مصادر القراءة والمنطق القائم."
+                  title="مراقبة الخدمات"
+                  description="تعرض هذه اللوحة حالة الخدمات المرتبطة بالتخزين، وتساعدك على معرفة إذا كانت البنية جاهزة أو تحتاج تدخل."
                   metrics={[
                     {
                       label: "Worker",
@@ -6757,7 +5317,7 @@ export default function Settings() {
                           ? "checking"
                           : databaseDashboard.services.worker.status
                       ),
-                      helper: "حالة عامل Cloudflare",
+                      helper: "حالة خدمة Cloudflare Worker",
                     },
                     {
                       label: "D1 / R2",
@@ -6770,611 +5330,49 @@ export default function Settings() {
                           ? "checking"
                           : databaseDashboard.services.r2.status
                       )}`,
-                      helper: "طبقات التخزين",
+                      helper: "حالة قواعد البيانات والتخزين",
                     },
                     {
                       label: "آخر فحص",
                       value: databaseDashboard.checkedAt
                         ? formatDatabaseTimestamp(databaseDashboard.checkedAt)
                         : "غير متاح",
-                      helper: "آخر تحديث معروف للحالة",
+                      helper: "آخر وقت تم فيه الفحص",
                     },
                   ]}
                 />
               }
             />
+          }
+          metricCards={databaseMetricCards}
+          onRefresh={() =>
+            void refreshDatabaseDashboard({
+              manual: true,
+            })
+          }
+          onSyncEmployeeDirectory={() => void handleSyncEmployeeDirectory()}
+          overviewCards={databaseOverviewCards}
+          r2Status={
+            databaseRefreshing ? "checking" : databaseDashboard.services.r2.status
+          }
+          r2StatusLabel={getDatabaseStatusLabel(
+            databaseRefreshing ? "checking" : databaseDashboard.services.r2.status
+          )}
+          technicalDetails={databaseTechnicalDetails}
+          workerStatus={
+            databaseRefreshing
+              ? "checking"
+              : databaseDashboard.services.worker.status
+          }
+          workerStatusLabel={getDatabaseStatusLabel(
+            databaseRefreshing
+              ? "checking"
+              : databaseDashboard.services.worker.status
+          )}
+          workerUrl={databaseWorkerUrl}
+        />
 
-            <Card className="overflow-hidden rounded-[26px] border border-slate-200/80 bg-white shadow-[0_24px_54px_-40px_rgba(15,23,42,0.28)]">
-              <CardHeader className="gap-4 border-b border-slate-100/80 pb-6">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2 text-sm text-slate-500">
-                      <Database className="h-4 w-4" />
-                      <span>قاعدة البيانات / التخزين</span>
-                    </div>
-                    <CardTitle className="text-2xl font-semibold tracking-tight text-slate-950">
-                      قاعدة البيانات والتخزين
-                    </CardTitle>
-                    <CardDescription className="max-w-2xl text-sm leading-7 text-slate-600">
-                      إدارة بنية الملفات الحالية عبر Cloudflare D1 وR2 وWorkers
-                    </CardDescription>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    <Badge variant="outline">Cloudflare</Badge>
-                    <Badge variant="secondary">بيئة الإنتاج</Badge>
-                  </div>
-                </div>
-              </CardHeader>
-
-              <CardContent className="pt-6">
-                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                  {databaseOverviewCards.map(card => {
-                    const Icon = card.icon;
-
-                    return (
-                      <div
-                        key={card.title}
-                        className="rounded-[22px] border border-slate-200 bg-slate-50/60 p-4 shadow-[0_16px_34px_-30px_rgba(15,23,42,0.22)]"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="space-y-1">
-                            <p className="text-sm font-medium text-foreground">
-                              {card.title}
-                            </p>
-                            <p
-                              className="text-lg font-semibold tracking-tight"
-                              dir={card.valueDir}
-                            >
-                              {card.value}
-                            </p>
-                            <Badge
-                              variant="outline"
-                              className={cn(
-                                "mt-2",
-                                getDatabaseStatusTone(card.status)
-                              )}
-                            >
-                              {card.statusLabel}
-                            </Badge>
-                          </div>
-
-                          <div className="rounded-xl border bg-background p-2 text-muted-foreground">
-                            <Icon className="h-4 w-4" />
-                          </div>
-                        </div>
-
-                        <p
-                          className="mt-4 text-sm text-muted-foreground"
-                          dir={card.valueDir}
-                        >
-                          {card.subtitle}
-                        </p>
-
-                        {card.statusDetail ? (
-                          <p className="mt-2 text-xs leading-5 text-muted-foreground">
-                            {card.statusDetail}
-                          </p>
-                        ) : null}
-                      </div>
-                    );
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="overflow-hidden rounded-[26px] border border-slate-200/80 bg-white shadow-[0_24px_54px_-40px_rgba(15,23,42,0.28)]">
-              <CardHeader className="border-b border-slate-100/80 pb-6">
-                <CardTitle className="text-[1.1rem] font-semibold tracking-tight text-slate-950">
-                  المعمارية الحالية
-                </CardTitle>
-                <CardDescription className="max-w-2xl text-sm leading-7 text-slate-600">
-                  تدفق الملفات والبيانات من واجهة المنصة إلى طبقة الرفع ثم إلى
-                  Cloudflare D1 وR2.
-                </CardDescription>
-              </CardHeader>
-
-              <CardContent className="space-y-6 pt-6">
-                <div className="rounded-[22px] border border-slate-200 bg-slate-50/60 p-4">
-                  <div
-                    className="flex flex-col gap-3 lg:flex-row lg:items-center"
-                    dir="ltr"
-                  >
-                    <div className="flex-1 rounded-xl border border-slate-200 bg-white p-4 text-right">
-                      <div className="flex items-center gap-3">
-                        <div className="rounded-xl border bg-muted/30 p-2 text-muted-foreground">
-                          <Globe className="h-4 w-4" />
-                        </div>
-                        <div className="space-y-1">
-                          <div className="text-sm text-muted-foreground">
-                            الموقع
-                          </div>
-                          <div className="font-semibold">واجهة المنصة</div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="shrink-0 px-2 text-center text-lg text-muted-foreground">
-                      →
-                    </div>
-
-                    <div className="flex-1 rounded-xl border border-slate-200 bg-white p-4 text-right">
-                      <div className="flex items-center gap-3">
-                        <div className="rounded-xl border bg-muted/30 p-2 text-muted-foreground">
-                          <ServerCog className="h-4 w-4" />
-                        </div>
-                        <div className="space-y-1">
-                          <div className="text-sm text-muted-foreground">
-                            Cloudflare Worker
-                          </div>
-                          <div className="font-semibold" dir="ltr">
-                            {databaseWorkerUrl || "upload.maedin.workers.dev"}
-                          </div>
-                          <div className="pt-2">
-                            <Badge
-                              variant="outline"
-                              className={cn(
-                                getDatabaseStatusTone(
-                                  databaseRefreshing
-                                    ? "checking"
-                                    : databaseDashboard.services.worker.status
-                                )
-                              )}
-                            >
-                              العامل:{" "}
-                              {getDatabaseStatusLabel(
-                                databaseRefreshing
-                                  ? "checking"
-                                  : databaseDashboard.services.worker.status
-                              )}
-                            </Badge>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="shrink-0 px-2 text-center text-lg text-muted-foreground">
-                      →
-                    </div>
-
-                    <div className="flex-1 rounded-xl border border-slate-200 bg-white p-4 text-right">
-                      <div className="flex items-center gap-3">
-                        <div className="rounded-xl border bg-muted/30 p-2 text-muted-foreground">
-                          <Database className="h-4 w-4" />
-                        </div>
-                        <div className="space-y-1">
-                          <div className="text-sm text-muted-foreground">
-                            طبقة التخزين
-                          </div>
-                          <div className="font-semibold" dir="ltr">
-                            D1 + R2
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="mt-4 flex flex-wrap gap-2" dir="ltr">
-                        <Badge variant="outline">maedin-documents</Badge>
-                        <Badge variant="outline">maedin-storage</Badge>
-                      </div>
-
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            getDatabaseStatusTone(
-                              databaseRefreshing
-                                ? "checking"
-                                : databaseDashboard.services.d1.status
-                            )
-                          )}
-                        >
-                          D1:{" "}
-                          {getDatabaseStatusLabel(
-                            databaseRefreshing
-                              ? "checking"
-                              : databaseDashboard.services.d1.status
-                          )}
-                        </Badge>
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            getDatabaseStatusTone(
-                              databaseRefreshing
-                                ? "checking"
-                                : databaseDashboard.services.r2.status
-                            )
-                          )}
-                        >
-                          R2:{" "}
-                          {getDatabaseStatusLabel(
-                            databaseRefreshing
-                              ? "checking"
-                              : databaseDashboard.services.r2.status
-                          )}
-                        </Badge>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid gap-4 md:grid-cols-3">
-                  <div className="rounded-[22px] border border-slate-200 bg-slate-50/60 p-4">
-                    <div className="flex items-center gap-3">
-                      <div className="rounded-xl border bg-background p-2 text-muted-foreground">
-                        <Database className="h-4 w-4" />
-                      </div>
-                      <div className="font-medium">بيانات الملفات</div>
-                    </div>
-                    <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                      يتم حفظ بيانات الملفات وسجلاتها المرجعية داخل Cloudflare
-                      D1.
-                    </p>
-                  </div>
-
-                  <div className="rounded-[22px] border border-slate-200 bg-slate-50/60 p-4">
-                    <div className="flex items-center gap-3">
-                      <div className="rounded-xl border bg-background p-2 text-muted-foreground">
-                        <HardDrive className="h-4 w-4" />
-                      </div>
-                      <div className="font-medium">الملفات الفعلية</div>
-                    </div>
-                    <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                      يتم حفظ الملفات الفعلية والأصول المرفوعة داخل Cloudflare
-                      R2.
-                    </p>
-                  </div>
-
-                  <div className="rounded-[22px] border border-slate-200 bg-slate-50/60 p-4">
-                    <div className="flex items-center gap-3">
-                      <div className="rounded-xl border bg-background p-2 text-muted-foreground">
-                        <ServerCog className="h-4 w-4" />
-                      </div>
-                      <div className="font-medium">عمليات الرفع والتحقق</div>
-                    </div>
-                    <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                      تتم عمليات الرفع والتحقق والربط بين D1 وR2 عبر Cloudflare
-                      Workers.
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="overflow-hidden rounded-[26px] border border-slate-200/80 bg-white shadow-[0_24px_54px_-40px_rgba(15,23,42,0.28)]">
-              <CardHeader className="border-b border-slate-100/80 pb-6">
-                <CardTitle className="text-[1.1rem] font-semibold tracking-tight text-slate-950">
-                  إحصاءات تشغيلية
-                </CardTitle>
-                <CardDescription className="max-w-2xl text-sm leading-7 text-slate-600">
-                  يتم تحديثها من بيانات التخزين الحالية عبر Cloudflare Worker.
-                </CardDescription>
-              </CardHeader>
-
-              <CardContent className="pt-6">
-                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                  {databaseMetricCards.map(metric => {
-                    const Icon = metric.icon;
-
-                    return (
-                      <div
-                        key={metric.title}
-                        className="rounded-[22px] border border-slate-200 bg-slate-50/60 p-4"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="space-y-1">
-                            <p className="text-sm font-medium text-foreground">
-                              {metric.title}
-                            </p>
-                            <p
-                              className="text-3xl font-semibold tracking-tight"
-                              dir={metric.valueDir}
-                            >
-                              {metric.value}
-                            </p>
-                          </div>
-
-                          <div className="flex flex-col items-end gap-2">
-                            <Badge variant="secondary">{metric.helper}</Badge>
-                            <div className="rounded-xl border bg-background p-2 text-muted-foreground">
-                              <Icon className="h-4 w-4" />
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="overflow-hidden rounded-[26px] border border-slate-200/80 bg-white shadow-[0_24px_54px_-40px_rgba(15,23,42,0.28)]">
-              <CardHeader className="border-b border-slate-100/80 pb-6">
-                <CardTitle className="text-[1.1rem] font-semibold tracking-tight text-slate-950">
-                  عمليات إدارية
-                </CardTitle>
-                <CardDescription className="max-w-2xl text-sm leading-7 text-slate-600">
-                  المتاح حاليًا هو إعادة فحص الخدمات وتحديث القيم المعروضة فقط.
-                </CardDescription>
-              </CardHeader>
-
-              <CardContent className="pt-6">
-                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-                  {DATABASE_ACTION_CARDS.map(action => {
-                    const Icon = action.icon;
-                    const isRefreshAction = action.key === "refreshStatus";
-                    const isBusy = isRefreshAction && databaseRefreshing;
-                    const status: DatabaseUiStatus = isRefreshAction
-                      ? databaseRefreshing
-                        ? "checking"
-                        : "success"
-                      : "not_ready";
-
-                    return (
-                      <div
-                        key={action.title}
-                        className="rounded-[22px] border border-slate-200 bg-slate-50/60 p-4"
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="rounded-xl border bg-background p-2 text-muted-foreground">
-                            <Icon
-                              className={cn(
-                                "h-4 w-4",
-                                isBusy && "animate-spin"
-                              )}
-                            />
-                          </div>
-                          <Badge
-                            variant={isRefreshAction ? "outline" : "secondary"}
-                            className={
-                              isRefreshAction
-                                ? cn(getDatabaseStatusTone(status))
-                                : undefined
-                            }
-                          >
-                            {isRefreshAction
-                              ? databaseRefreshing
-                                ? "جارٍ الفحص"
-                                : "مفعل"
-                              : "قريبًا"}
-                          </Badge>
-                        </div>
-
-                        <div className="mt-4 space-y-2">
-                          <div className="font-medium">{action.title}</div>
-                          <p className="text-sm leading-6 text-muted-foreground">
-                            {action.description}
-                          </p>
-                        </div>
-
-                        <Button
-                          variant="outline"
-                          disabled={!isRefreshAction || databaseRefreshing}
-                          className="mt-4 w-full"
-                          onClick={
-                            isRefreshAction
-                              ? () =>
-                                  void refreshDatabaseDashboard({
-                                    manual: true,
-                                  })
-                              : undefined
-                          }
-                        >
-                          {isRefreshAction
-                            ? databaseRefreshing
-                              ? "جارٍ التحديث..."
-                              : "تحديث الآن"
-                            : "غير متاح حاليًا"}
-                        </Button>
-                      </div>
-                    );
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="overflow-hidden rounded-[26px] border border-slate-200/80 bg-white shadow-[0_24px_54px_-40px_rgba(15,23,42,0.28)]">
-              <CardHeader className="border-b border-slate-100/80 pb-6">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                  <div className="space-y-2">
-                    <CardTitle className="text-[1.1rem] font-semibold tracking-tight text-slate-950">
-                      مزامنة دليل الموظفين
-                    </CardTitle>
-                    <CardDescription className="max-w-2xl text-sm leading-7 text-slate-600">
-                      تشغيل مزامنة `employee_directory` من Firestore إلى D1 عبر
-                      Cloudflare Worker، بدون الحاجة إلى سكربت يدوي من التيرمنل.
-                    </CardDescription>
-                  </div>
-
-                  <Badge
-                    variant="outline"
-                    className={cn(
-                      getDatabaseStatusTone(
-                        employeeDirectorySyncing
-                          ? "checking"
-                          : employeeDirectorySyncSummary?.syncedAt
-                            ? "success"
-                            : "not_ready"
-                      )
-                    )}
-                  >
-                    {employeeDirectorySyncing
-                      ? "جارٍ التنفيذ"
-                      : employeeDirectorySyncSummary?.syncedAt
-                        ? "تمت آخر مزامنة"
-                        : "مزامنة يدوية"}
-                  </Badge>
-                </div>
-              </CardHeader>
-
-              <CardContent className="pt-6">
-                <div className="grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
-                  <div className="rounded-[22px] border border-slate-200 bg-slate-50/60 p-4">
-                    <div className="flex items-start gap-3">
-                      <div className="rounded-xl border bg-background p-2 text-muted-foreground">
-                        <Users className="h-4 w-4" />
-                      </div>
-                      <div className="space-y-2">
-                        <div className="font-medium">
-                          تحديث قائمة الموظفين النشطين المعروضة للـ coworkers
-                        </div>
-                        <p className="text-sm leading-6 text-muted-foreground">
-                          هذا الإجراء يقرأ سجلات `users` المسموح بها، يعيد
-                          توليد صفوف `employee_directory`، ثم يحدّث D1 ليبقى
-                          مصدر العرض من الـ Worker مباشرة.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="rounded-[22px] border border-slate-200 bg-slate-50/60 p-4">
-                    <div className="space-y-3">
-                      <div className="text-sm text-muted-foreground">
-                        {employeeDirectorySyncSummary?.syncedAt
-                          ? `آخر مزامنة: ${formatDatabaseTimestamp(
-                              employeeDirectorySyncSummary.syncedAt
-                            )}`
-                          : "لم تُنفذ المزامنة من داخل النظام بعد."}
-                      </div>
-
-                      {employeeDirectorySyncSummary ? (
-                        <div className="flex flex-wrap gap-2">
-                          <Badge variant="secondary">
-                            {formatNumberEN(
-                              employeeDirectorySyncSummary.employeesSynced
-                            )}{" "}
-                            سجل
-                          </Badge>
-                          <Badge variant="outline">
-                            حذف {formatNumberEN(
-                              employeeDirectorySyncSummary.employeesDeleted
-                            )}
-                          </Badge>
-                          <Badge variant="outline">
-                            المصدر {formatNumberEN(
-                              employeeDirectorySyncSummary.sourceCount
-                            )}
-                          </Badge>
-                        </div>
-                      ) : null}
-
-                      <Button
-                        className="w-full"
-                        disabled={employeeDirectorySyncing || !databaseWorkerUrl}
-                        onClick={() => void handleSyncEmployeeDirectory()}
-                      >
-                        {employeeDirectorySyncing
-                          ? "جارٍ مزامنة دليل الموظفين..."
-                          : "مزامنة دليل الموظفين"}
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-              <Card className="overflow-hidden rounded-[26px] border border-slate-200/80 bg-white shadow-[0_24px_54px_-40px_rgba(15,23,42,0.28)]">
-                <CardHeader className="border-b border-slate-100/80 pb-6">
-                  <CardTitle className="text-[1.1rem] font-semibold tracking-tight text-slate-950">
-                    تفاصيل تقنية
-                  </CardTitle>
-                  <CardDescription className="max-w-2xl text-sm leading-7 text-slate-600">
-                    معلومات read-only عن البنية الحالية المعتمدة لهذا القسم.
-                  </CardDescription>
-                </CardHeader>
-
-                <CardContent className="pt-6">
-                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-                    {databaseTechnicalDetails.map(item => (
-                      <div
-                        key={item.label}
-                        className="rounded-[22px] border border-slate-200 bg-slate-50/60 p-4"
-                      >
-                        <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                          {item.label}
-                        </div>
-                        <div
-                          className="mt-3 font-mono text-sm font-medium text-foreground"
-                          dir={item.valueDir}
-                        >
-                          {item.value}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="overflow-hidden rounded-[26px] border border-slate-200/80 bg-white shadow-[0_24px_54px_-40px_rgba(15,23,42,0.28)]">
-                <CardHeader className="border-b border-slate-100/80 pb-6">
-                  <CardTitle className="text-[1.1rem] font-semibold tracking-tight text-slate-950">
-                    ملاحظات
-                  </CardTitle>
-                  <CardDescription className="max-w-2xl text-sm leading-7 text-slate-600">
-                    توضيحات تشغيلية مهمة مرتبطة ببنية التخزين الحالية.
-                  </CardDescription>
-                </CardHeader>
-
-                <CardContent className="space-y-4 pt-6">
-                  <Alert className="border-dashed border-slate-200 bg-slate-50/60">
-                    <CircleAlert className="h-4 w-4" />
-                    <AlertTitle>بيئة Cloudflare فقط</AlertTitle>
-                    <AlertDescription>
-                      {databaseNotes.map(note => (
-                        <p key={note}>{note}</p>
-                      ))}
-                    </AlertDescription>
-                  </Alert>
-
-                  <div className="flex flex-wrap gap-2">
-                    <Badge variant="outline">بدون Firebase</Badge>
-                    <Badge variant="outline">D1 + R2 + Workers</Badge>
-                    <Badge variant="secondary">النسخ الاحتياطي المتقدم قريبًا</Badge>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-
-              {activeBottomBarAction ? (
-                <SettingsBottomSaveBar
-                  badgeLabel={activeBottomBarAction.tabLabel}
-                  title={
-                    dirtyTabsCount > 1
-                      ? `لديك تغييرات غير محفوظة في ${formatNumberEN(dirtyTabsCount)} تبويبات`
-                      : "لديك تغييرات غير محفوظة"
-                  }
-                  description={
-                    prioritizedActionKey === activeTab
-                      ? "احفظ التعديلات الحالية أو تجاهلها من الشريط السفلي الموحد."
-                      : `التبويب الأقرب للحفظ الآن: ${activeBottomBarAction.tabLabel}.`
-                  }
-                  primaryLabel={
-                    prioritizedActionKey === activeTab && dirtyTabsCount === 1
-                      ? "حفظ التغييرات"
-                      : `حفظ ${activeBottomBarAction.tabLabel}`
-                  }
-                  primaryBusyLabel="جارٍ حفظ التغييرات..."
-                  onPrimary={activeBottomBarAction.onSave}
-                  isPrimaryBusy={activeBottomBarAction.saving}
-                  secondaryLabel={
-                    prioritizedActionKey === activeTab
-                      ? "إلغاء التعديلات"
-                      : `الانتقال إلى ${activeBottomBarAction.tabLabel}`
-                  }
-                  onSecondary={
-                    prioritizedActionKey === activeTab
-                      ? activeBottomBarAction.onReset
-                      : () => {
-                          if (prioritizedActionKey) setActiveTab(prioritizedActionKey);
-                        }
-                  }
-                />
-              ) : null}
-            </div>
-          </div>
-        </Tabs>
-      </div>
+      </SettingsLayout>
 
       {/* =========================
           Role Dialog
@@ -7794,7 +5792,7 @@ export default function Settings() {
                     )
                   )}
                   {adminFormPermissionOverrides.permissionsAllow.length === 0 &&
-                  adminFormPermissionOverrides.permissionsDeny.length === 0 ? (
+                    adminFormPermissionOverrides.permissionsDeny.length === 0 ? (
                     <span className="text-sm text-muted-foreground">
                       لا توجد تعديلات يدوية حالياً. الحساب يستخدم صلاحيات الدور
                       الافتراضية فقط.
@@ -7808,7 +5806,7 @@ export default function Settings() {
                     onClick={resetAdminPermissionOverrides}
                     disabled={
                       adminFormPermissionOverrides.permissionsAllow.length ===
-                        0 &&
+                      0 &&
                       adminFormPermissionOverrides.permissionsDeny.length === 0
                     }
                   >
@@ -7839,82 +5837,6 @@ export default function Settings() {
 /* =========================
  Small UI helpers
 ========================= */
-
-function SettingsBottomSaveBar({
-  badgeLabel,
-  title,
-  description,
-  primaryLabel,
-  primaryBusyLabel,
-  onPrimary,
-  isPrimaryBusy = false,
-  secondaryLabel,
-  onSecondary,
-}: {
-  badgeLabel: string;
-  title: string;
-  description: string;
-  primaryLabel: string;
-  primaryBusyLabel: string;
-  onPrimary: () => void;
-  isPrimaryBusy?: boolean;
-  secondaryLabel?: string;
-  onSecondary?: () => void;
-}) {
-  return (
-    <div className="pointer-events-none fixed inset-x-3 bottom-4 z-40 sm:inset-x-4 sm:bottom-5 xl:left-8 xl:right-[calc(320px+2rem)]">
-      <div className="pointer-events-auto mx-auto w-full max-w-5xl rounded-[24px] border border-slate-200/90 bg-white/96 px-4 py-3.5 shadow-[0_22px_42px_-24px_rgba(15,23,42,0.3)] backdrop-blur sm:px-5">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div className="min-w-0 space-y-2">
-            <Badge
-              variant="outline"
-              className="w-fit rounded-full border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600 shadow-none"
-            >
-              {badgeLabel}
-            </Badge>
-            <div className="space-y-1">
-              <p className="text-sm font-semibold text-slate-950">{title}</p>
-              <p className="text-sm leading-6 text-slate-500">{description}</p>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            {secondaryLabel && onSecondary ? (
-              <Button
-                type="button"
-                variant="outline"
-                className="h-10 rounded-2xl border-slate-200 bg-white px-5 text-slate-700 hover:bg-slate-50"
-                onClick={onSecondary}
-                disabled={isPrimaryBusy}
-              >
-                {secondaryLabel}
-              </Button>
-            ) : null}
-
-            <Button
-              type="button"
-              className="h-10 rounded-2xl bg-[#0f172a] px-5 text-white hover:bg-[#111f38]"
-              onClick={onPrimary}
-              disabled={isPrimaryBusy}
-            >
-              {isPrimaryBusy ? (
-                <>
-                  <Spinner className="h-4 w-4" />
-                  {primaryBusyLabel}
-                </>
-              ) : (
-                <>
-                  <Save className="h-4 w-4" />
-                  {primaryLabel}
-                </>
-              )}
-            </Button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function SettingsTabHero({
   eyebrow,

@@ -1270,9 +1270,19 @@ async function resolveRequesterContext(request) {
     };
   }
 
+  console.log("[worker] requester context debug", {
+    projectId,
+    uid,
+    email,
+    userFound: userDocResult?.found ?? null,
+    adminFound: adminUserDocResult?.found ?? null,
+    userData: userDocResult?.data ?? null,
+    adminData: adminUserDocResult?.data ?? null,
+  });
+  
   const runtime = resolveEffectiveRuntime(
-    userDocResult.found ? userDocResult.data : null,
-    adminUserDocResult.found ? adminUserDocResult.data : null
+    userDocResult.found ? userDocResult.data?.data ?? null : null,
+    adminUserDocResult.found ? adminUserDocResult.data?.data ?? null : null
   );
 
   return {

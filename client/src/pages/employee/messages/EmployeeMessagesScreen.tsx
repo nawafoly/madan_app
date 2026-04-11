@@ -285,16 +285,6 @@ export default function EmployeeMessagesScreen() {
     }
   }, [conversations, requestedConversationId, requestedMessageId, search]);
 
-  useEffect(() => {
-    if (
-      activeSection === "hr" &&
-      !hrConversations.length &&
-      internalConversations.length
-    ) {
-      setActiveSection("internal");
-    }
-  }, [activeSection, hrConversations.length, internalConversations.length]);
-
   const activeHrConversation = useMemo(
     () =>
       hrConversations.find(
@@ -349,11 +339,12 @@ export default function EmployeeMessagesScreen() {
     coworkersByUid,
     selectedInternalRecipientUid,
   ]);
+
   const internalEmptyConversationContent = useMemo(() => {
     if (!selectedInternalRecipient) return null;
 
     return (
-      <div className="min-h-[320px] rounded-[24px] border border-sky-100 bg-sky-50/40 p-6 text-right">
+      <div className="min-h-[420px] rounded-[24px] border border-sky-100 bg-sky-50/40 p-6 text-right">
         <div className="flex flex-wrap items-center gap-2">
           <Badge
             variant="outline"
@@ -414,7 +405,12 @@ export default function EmployeeMessagesScreen() {
         </div>
       </div>
     );
-  }, [selectedInternalRecipient]);
+  }, [
+    coworkersError,
+    internalMessageBody,
+    selectedInternalRecipient,
+    sendingInternalMessage,
+  ]);
 
   useEffect(() => {
     if (activeInternalConversation?.counterpartyUid) {
@@ -676,8 +672,9 @@ export default function EmployeeMessagesScreen() {
       const messageRef = doc(collection(db, EMPLOYEE_MESSAGES_COLLECTION));
       const parentMessage =
         activeInternalConversation?.messages[
-          activeInternalConversation.messages.length - 1
+        activeInternalConversation.messages.length - 1
         ] || null;
+
       await setDoc(messageRef, {
         employeeId: null,
         employeeUid: null,
@@ -805,6 +802,7 @@ export default function EmployeeMessagesScreen() {
                     ) : null}
                   </span>
                 </TabsTrigger>
+
                 <TabsTrigger
                   value="internal"
                   className="rounded-[18px] px-4 py-3 text-sm data-[state=active]:bg-white data-[state=active]:shadow-sm"
@@ -863,6 +861,7 @@ export default function EmployeeMessagesScreen() {
                           التسلسل الزمني وحالة القراءة.
                         </p>
                       </div>
+
                       <Textarea
                         value={hrReplyBody}
                         onChange={event => setHrReplyBody(event.target.value)}
@@ -874,30 +873,96 @@ export default function EmployeeMessagesScreen() {
                         className="min-h-36 resize-y bg-white text-right leading-7 [direction:rtl]"
                         disabled={!activeHrConversation || sendingHrReply}
                       />
-                      <div className="mt-4 flex flex-wrap justify-end gap-3">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => setHrReplyBody("")}
-                          disabled={sendingHrReply || !hrReplyBody.trim()}
-                        >
-                          إعادة ضبط
-                        </Button>
-                        <Button
-                          type="button"
-                          className="bg-[#F2B705] text-slate-950 hover:bg-[#e0ab00]"
-                          onClick={() => void handleSendHrReply()}
-                          disabled={!activeHrConversation || sendingHrReply}
-                        >
-                          {sendingHrReply ? "جارٍ الإرسال..." : "إرسال الرد"}
-                        </Button>
+                      <div className="mt-4 border-t border-slate-200 pt-4">
+                        <div className="flex flex-row-reverse items-center gap-3">
+                          <Button
+                            type="button"
+                            className="bg-[#F2B705] text-slate-950 hover:bg-[#e0ab00]"
+                            onClick={() => void handleSendHrReply()}
+                            disabled={!activeHrConversation || sendingHrReply}
+                          >
+                            {sendingHrReply ? "جارٍ الإرسال..." : "إرسال الرد"}
+                          </Button>
+
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setHrReplyBody("")}
+                            disabled={sendingHrReply || !hrReplyBody.trim()}
+                          >
+                            إعادة ضبط
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   }
                 />
               </TabsContent>
 
-              <TabsContent value="internal" className="mt-0">
+              <TabsContent value="internal" className="mt-0 space-y-6">
+                <div className="rounded-[24px] border border-slate-200/70 bg-slate-50/60 p-5">
+                  <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+                    <div className="space-y-1">
+                      <div className="text-sm font-semibold text-slate-900">
+                        رسالة إلى موظف
+                      </div>
+                      <p className="text-sm leading-6 text-slate-500">
+                        اختر موظفًا نشطًا من زملائك ثم أرسل رسالة نصية داخلية.
+                      </p>
+                    </div>
+
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setActiveSection("internal");
+                        setActiveInternalConversationId(null);
+                        setSelectedInternalRecipientUid("");
+                        setRecipientPickerOpen(true);
+                      }}
+                    >
+                      رسالة جديدة
+                    </Button>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="flex justify-end">
+                      <div className="w-full">
+                        <RecipientPicker
+                          options={coworkers}
+                          selectedRecipient={selectedInternalRecipient}
+                          loading={coworkersLoading}
+                          disabled={coworkersLoading || sendingInternalMessage}
+                          open={recipientPickerOpen}
+                          onOpenChange={setRecipientPickerOpen}
+                          onSelect={uid => {
+                            setActiveSection("internal");
+                            setSelectedInternalRecipientUid(uid);
+                            const existingConversation =
+                              internalConversations.find(
+                                conversation =>
+                                  conversation.counterpartyUid === uid
+                              ) || null;
+                            setActiveInternalConversationId(
+                              existingConversation?.id || null
+                            );
+                            if (existingConversation) {
+                              void markConversationAsRead(existingConversation);
+                            }
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {coworkersError ? (
+                      <p className="text-xs leading-6 text-rose-600">
+                        {coworkersError}
+                      </p>
+                    ) : null}
+
+                  </div>
+                </div>
+
                 <ConversationWorkspace
                   sectionLabel="الموظف"
                   listLabel="المحادثات الداخلية"
@@ -933,97 +998,24 @@ export default function EmployeeMessagesScreen() {
                       : "ابدأ رسالة جديدة إلى أحد زملائك وسيظهر السجل هنا مباشرة."
                   }
                   emptyConversationTitle="اختر محادثة داخلية أو ابدأ رسالة جديدة"
-                  emptyConversationDescription="يمكنك فتح أي محادثة داخلية من القائمة أو اختيار موظف جديد من أداة الإرسال أدناه."
+                  emptyConversationDescription="يمكنك فتح أي محادثة داخلية من القائمة أو اختيار موظف جديد من قسم الإرسال بالأعلى."
                   emptyConversationContent={internalEmptyConversationContent}
                   composer={
-                    <div className="rounded-[24px] border border-slate-200/70 bg-slate-50/60 p-5">
-                      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-                        <div className="space-y-1">
-                          <div className="text-sm font-semibold text-slate-900">
-                            رسالة إلى موظف
-                          </div>
-                          <p className="text-sm leading-6 text-slate-500">
-                            اختر موظفًا نشطًا من زملائك ثم أرسل رسالة نصية
-                            داخلية.
-                          </p>
-                        </div>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => {
-                            setActiveSection("internal");
-                            setActiveInternalConversationId(null);
-                            setSelectedInternalRecipientUid("");
-                            setRecipientPickerOpen(true);
-                          }}
-                        >
-                          رسالة جديدة
-                        </Button>
-                      </div>
+                    <div className="rounded-[22px] border border-slate-200 bg-white p-4">
+                      <Textarea
+                        value={internalMessageBody}
+                        onChange={event => setInternalMessageBody(event.target.value)}
+                        placeholder={
+                          selectedInternalRecipient
+                            ? `اكتب رسالتك إلى ${selectedInternalRecipient.name}`
+                            : "اختر الموظف المستلم أولًا ثم اكتب الرسالة"
+                        }
+                        className="min-h-[180px] resize-y border-0 bg-transparent p-0 text-right leading-8 shadow-none focus-visible:ring-0 [direction:rtl]"
+                        disabled={!selectedInternalRecipient || sendingInternalMessage}
+                      />
 
-                      <div className="space-y-4">
-                        <div className="flex justify-end">
-                          <div className="w-full max-w-2xl">
-                            <RecipientPicker
-                              options={coworkers}
-                              selectedRecipient={selectedInternalRecipient}
-                              loading={coworkersLoading}
-                              disabled={
-                                coworkersLoading || sendingInternalMessage
-                              }
-                              open={recipientPickerOpen}
-                              onOpenChange={setRecipientPickerOpen}
-                              onSelect={uid => {
-                                setActiveSection("internal");
-                                setSelectedInternalRecipientUid(uid);
-                                const existingConversation =
-                                  internalConversations.find(
-                                    conversation =>
-                                      conversation.counterpartyUid === uid
-                                  ) || null;
-                                setActiveInternalConversationId(
-                                  existingConversation?.id || null
-                                );
-                                if (existingConversation)
-                                  void markConversationAsRead(
-                                    existingConversation
-                                  );
-                              }}
-                            />
-                          </div>
-                        </div>
-                        {coworkersError ? (
-                          <p className="text-xs leading-6 text-rose-600">
-                            {coworkersError}
-                          </p>
-                        ) : null}
-                        <Textarea
-                          value={internalMessageBody}
-                          onChange={event =>
-                            setInternalMessageBody(event.target.value)
-                          }
-                          placeholder={
-                            selectedInternalRecipient
-                              ? `اكتب رسالتك إلى ${selectedInternalRecipient.name}`
-                              : "اختر الموظف المستلم أولًا ثم اكتب الرسالة"
-                          }
-                          className="min-h-36 resize-y bg-white text-right leading-7 [direction:rtl]"
-                          disabled={
-                            !selectedInternalRecipient || sendingInternalMessage
-                          }
-                        />
-                        <div className="flex flex-wrap justify-end gap-3">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => setInternalMessageBody("")}
-                            disabled={
-                              sendingInternalMessage ||
-                              !internalMessageBody.trim()
-                            }
-                          >
-                            إعادة ضبط
-                          </Button>
+                      <div className="mt-4 border-t border-slate-200 pt-4">
+                        <div className="flex flex-row-reverse items-center gap-3">
                           <Button
                             type="button"
                             className="bg-sky-700 text-white hover:bg-sky-800"
@@ -1037,6 +1029,15 @@ export default function EmployeeMessagesScreen() {
                             {sendingInternalMessage
                               ? "جارٍ الإرسال..."
                               : "إرسال الرسالة الداخلية"}
+                          </Button>
+
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setInternalMessageBody("")}
+                            disabled={sendingInternalMessage || !internalMessageBody.trim()}
+                          >
+                            إعادة ضبط
                           </Button>
                         </div>
                       </div>

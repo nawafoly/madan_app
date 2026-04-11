@@ -93,15 +93,6 @@ import {
   sortEmployeeLeaveRequests,
   type EmployeeLeaveRequestRecord,
 } from "@/lib/employeeLeave";
-import {
-  AVATAR_CROP_FRAME_INSET_RATIO,
-  clampAvatarCropPosition,
-  clampNumber,
-  getAvatarCroppedAreaPixels,
-  getAvatarCropMetrics,
-  type AvatarCroppedAreaPixels,
-  type AvatarCropPosition,
-} from "@/lib/avatarCrop";
 import { uploadDocumentToCloudflare } from "@/lib/documentUploadService";
 import { formatDateEN, formatDateTimeEN } from "@/lib/formatters";
 import { cn } from "@/lib/utils";
@@ -125,6 +116,18 @@ type AvatarCropDraft = {
   fileType: string;
   naturalWidth: number;
   naturalHeight: number;
+};
+
+type AvatarCropPosition = {
+  x: number;
+  y: number;
+};
+
+type AvatarCropMetrics = {
+  width: number;
+  height: number;
+  maxOffsetX: number;
+  maxOffsetY: number;
 };
 
 function initialsFromName(name: string, email: string) {
@@ -169,6 +172,49 @@ function validateAvatarFile(file: File) {
   if (file.size > AVATAR_MAX_SIZE_BYTES) {
     throw new Error("حجم الصورة كبير. الحد الأعلى 5MB.");
   }
+}
+
+function clampNumber(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function getAvatarCropMetrics(input: {
+  naturalWidth: number;
+  naturalHeight: number;
+  viewportSize: number;
+  zoom: number;
+}): AvatarCropMetrics {
+  const viewportSize = Math.max(1, input.viewportSize);
+  const naturalWidth = Math.max(1, input.naturalWidth);
+  const naturalHeight = Math.max(1, input.naturalHeight);
+  const zoom = clampNumber(
+    input.zoom,
+    AVATAR_CROP_MIN_ZOOM,
+    AVATAR_CROP_MAX_ZOOM
+  );
+  const coverScale = Math.max(
+    viewportSize / naturalWidth,
+    viewportSize / naturalHeight
+  );
+  const width = naturalWidth * coverScale * zoom;
+  const height = naturalHeight * coverScale * zoom;
+
+  return {
+    width,
+    height,
+    maxOffsetX: Math.max(0, (width - viewportSize) / 2),
+    maxOffsetY: Math.max(0, (height - viewportSize) / 2),
+  };
+}
+
+function clampAvatarCropPosition(
+  position: AvatarCropPosition,
+  metrics: AvatarCropMetrics
+): AvatarCropPosition {
+  return {
+    x: clampNumber(position.x, -metrics.maxOffsetX, metrics.maxOffsetX),
+    y: clampNumber(position.y, -metrics.maxOffsetY, metrics.maxOffsetY),
+  };
 }
 
 function loadImageElement(src: string) {
@@ -216,9 +262,19 @@ function resolveAvatarOutputType(fileType: string) {
 
 async function buildCroppedAvatarFile(input: {
   draft: AvatarCropDraft;
-  croppedAreaPixels: AvatarCroppedAreaPixels;
+  viewportSize: number;
+  zoom: number;
+  position: AvatarCropPosition;
 }) {
+  const viewportSize = Math.max(1, input.viewportSize);
   const image = await loadImageElement(input.draft.objectUrl);
+  const metrics = getAvatarCropMetrics({
+    naturalWidth: input.draft.naturalWidth,
+    naturalHeight: input.draft.naturalHeight,
+    viewportSize,
+    zoom: input.zoom,
+  });
+  const position = clampAvatarCropPosition(input.position, metrics);
   const outputType = resolveAvatarOutputType(input.draft.fileType);
   const canvas = document.createElement("canvas");
   const context = canvas.getContext("2d");
@@ -229,40 +285,20 @@ async function buildCroppedAvatarFile(input: {
 
   canvas.width = AVATAR_CROP_OUTPUT_SIZE;
   canvas.height = AVATAR_CROP_OUTPUT_SIZE;
-  const cropWidth = clampNumber(
-    input.croppedAreaPixels.width,
-    1,
-    input.draft.naturalWidth
-  );
-  const cropHeight = clampNumber(
-    input.croppedAreaPixels.height,
-    1,
-    input.draft.naturalHeight
-  );
-  const cropX = clampNumber(
-    input.croppedAreaPixels.x,
-    0,
-    Math.max(0, input.draft.naturalWidth - cropWidth)
-  );
-  const cropY = clampNumber(
-    input.croppedAreaPixels.y,
-    0,
-    Math.max(0, input.draft.naturalHeight - cropHeight)
-  );
+
+  const scale = AVATAR_CROP_OUTPUT_SIZE / viewportSize;
+  const drawX = ((viewportSize - metrics.width) / 2 + position.x) * scale;
+  const drawY = ((viewportSize - metrics.height) / 2 + position.y) * scale;
 
   context.clearRect(0, 0, canvas.width, canvas.height);
   context.imageSmoothingEnabled = true;
   context.imageSmoothingQuality = "high";
   context.drawImage(
     image,
-    cropX,
-    cropY,
-    cropWidth,
-    cropHeight,
-    0,
-    0,
-    canvas.width,
-    canvas.height
+    drawX,
+    drawY,
+    metrics.width * scale,
+    metrics.height * scale
   );
 
   const blob = await new Promise<Blob | null>(resolve => {
@@ -599,25 +635,6 @@ export default function EmployeeProfilePage() {
         : null,
     [avatarCropDraft, avatarCropViewportSize, avatarCropZoom]
   );
-  const avatarCroppedAreaPixels = useMemo(
-    () =>
-      avatarCropDraft
-        ? getAvatarCroppedAreaPixels({
-            naturalWidth: avatarCropDraft.naturalWidth,
-            naturalHeight: avatarCropDraft.naturalHeight,
-            viewportSize: avatarCropViewportSize,
-            zoom: avatarCropZoom,
-            position: avatarCropPosition,
-            insetRatio: AVATAR_CROP_FRAME_INSET_RATIO,
-          })
-        : null,
-    [
-      avatarCropDraft,
-      avatarCropPosition,
-      avatarCropViewportSize,
-      avatarCropZoom,
-    ]
-  );
   const avatarCropImageStyle = useMemo(() => {
     if (!avatarCropMetrics) return undefined;
 
@@ -638,18 +655,27 @@ export default function EmployeeProfilePage() {
     };
   }, [avatarCropMetrics, avatarCropPosition, avatarCropViewportSize]);
   const avatarCropMiniPreviewStyle = useMemo(() => {
-    if (!avatarCropDraft || !avatarCroppedAreaPixels) return undefined;
+    if (!avatarCropMetrics) return undefined;
 
     const previewSize = 112;
-    const scale = previewSize / Math.max(1, avatarCroppedAreaPixels.width);
+    const scale = previewSize / Math.max(1, avatarCropViewportSize);
+    const position = clampAvatarCropPosition(
+      avatarCropPosition,
+      avatarCropMetrics
+    );
 
     return {
-      width: `${avatarCropDraft.naturalWidth * scale}px`,
-      height: `${avatarCropDraft.naturalHeight * scale}px`,
-      left: `${-avatarCroppedAreaPixels.x * scale}px`,
-      top: `${-avatarCroppedAreaPixels.y * scale}px`,
+      width: `${avatarCropMetrics.width * scale}px`,
+      height: `${avatarCropMetrics.height * scale}px`,
+      left: `${
+        (previewSize - avatarCropMetrics.width * scale) / 2 + position.x * scale
+      }px`,
+      top: `${
+        (previewSize - avatarCropMetrics.height * scale) / 2 +
+        position.y * scale
+      }px`,
     };
-  }, [avatarCropDraft, avatarCroppedAreaPixels]);
+  }, [avatarCropMetrics, avatarCropPosition, avatarCropViewportSize]);
   const avatarCropZoomLabel = `${Math.round(avatarCropZoom * 100)}%`;
 
   useEffect(() => {
@@ -933,20 +959,15 @@ export default function EmployeeProfilePage() {
   };
 
   const handleConfirmAvatarCrop = async () => {
-    if (
-      !avatarCropDraft ||
-      !avatarCroppedAreaPixels ||
-      !user?.uid ||
-      !employeeProfileSource
-    ) {
-      return;
-    }
+    if (!avatarCropDraft || !user?.uid || !employeeProfileSource) return;
 
     setUploadingAvatar(true);
     try {
       const croppedFile = await buildCroppedAvatarFile({
         draft: avatarCropDraft,
-        croppedAreaPixels: avatarCroppedAreaPixels,
+        viewportSize: avatarCropViewportSize,
+        zoom: avatarCropZoom,
+        position: avatarCropPosition,
       });
       const uploaded = await uploadDocumentToCloudflare({
         entityType: "employee",
@@ -1794,12 +1815,7 @@ export default function EmployeeProfilePage() {
                   />
                 ) : null}
                 <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0,transparent_58%,rgba(15,23,42,0.5)_59%,rgba(15,23,42,0.75)_100%)]" />
-                <div
-                  className="pointer-events-none absolute rounded-full border-[3px] border-white/95 shadow-[0_0_0_1px_rgba(255,255,255,0.12)]"
-                  style={{
-                    inset: `${AVATAR_CROP_FRAME_INSET_RATIO * 100}%`,
-                  }}
-                />
+                <div className="pointer-events-none absolute inset-[9%] rounded-full border-[3px] border-white/95 shadow-[0_0_0_1px_rgba(255,255,255,0.12)]" />
               </div>
 
               <div className="rounded-[24px] border border-slate-200 bg-slate-50/85 p-4">

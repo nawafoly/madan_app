@@ -501,7 +501,6 @@ export async function logAuditEvent(payload: AuditLogInput) {
   };
 
   if (shouldSkipRemoteAuditLogging()) {
-    warnRemoteAuditSkippedOnce();
     return;
   }
 
