@@ -153,6 +153,7 @@ type EmployeeFormValues = {
   baseSalary: string;
   expectedWorkHours: string;
   actualWorkedHours: string;
+  overtimeHourlyRate: string;
   insuranceDeduction: string;
   adminNotes: string;
 };
@@ -225,6 +226,9 @@ function resolveEmployeeWorkspaceSection(
       return null;
   }
 }
+
+const EMPLOYEE_LEAVE_BALANCE_ADJUSTMENTS_COLLECTION =
+  "employee_leave_balance_adjustments";
 
 const EMPLOYMENT_STATUS_OPTIONS: Array<{
   value: EmployeeEmploymentStatus;
@@ -455,6 +459,10 @@ function buildEmployeeFormValues(
       employment.actualWorkedHours === 0
         ? "0"
         : pickText(employment.actualWorkedHours),
+    overtimeHourlyRate:
+      employment.overtimeHourlyRate === 0
+        ? "0"
+        : pickText(employment.overtimeHourlyRate),
     insuranceDeduction:
       employment.insuranceDeduction === 0
         ? "0"
@@ -624,6 +632,30 @@ function LeaveStatusBadge({ status }: { status: unknown }) {
   );
 }
 
+function LeaveImpactBadge({ status }: { status: unknown }) {
+  const normalizedStatus = String(status || "").trim().toLowerCase();
+
+  return (
+    <Badge
+      variant="outline"
+      className={cn(
+        "rounded-full shadow-none",
+        normalizedStatus === "approved"
+          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+          : normalizedStatus === "pending"
+            ? "border-amber-200 bg-amber-50 text-amber-700"
+            : "border-rose-200 bg-rose-50 text-rose-700"
+      )}
+    >
+      {normalizedStatus === "approved"
+        ? "تم الخصم من الرصيد"
+        : normalizedStatus === "pending"
+          ? "بانتظار القرار"
+          : "لم يتم الخصم"}
+    </Badge>
+  );
+}
+
 function LeaveOverviewStat({
   label,
   value,
@@ -734,6 +766,14 @@ export default function EmployeesManagementPage() {
   >([]);
   const [leaveRequestsLoading, setLeaveRequestsLoading] = useState(false);
   const [reviewNotes, setReviewNotes] = useState<Record<string, string>>({});
+  const [manualLeaveBalance, setManualLeaveBalance] = useState("");
+  const [manualLeaveAdjustmentReason, setManualLeaveAdjustmentReason] = useState("");
+  const [savingManualLeaveBalance, setSavingManualLeaveBalance] = useState(false);
+  const [leaveBalanceAdjustments, setLeaveBalanceAdjustments] = useState<
+    Array<Record<string, any>>
+  >([]);
+  const [leaveBalanceAdjustmentsLoading, setLeaveBalanceAdjustmentsLoading] =
+    useState(false);
   const [reviewingLeaveRequestId, setReviewingLeaveRequestId] = useState<
     string | null
   >(null);
@@ -1038,6 +1078,7 @@ export default function EmployeesManagementPage() {
 
     setReviewNotes({});
     setLeaveRequestsLoading(true);
+
     const unsubscribe = onSnapshot(
       query(
         collection(db, EMPLOYEE_LEAVE_REQUESTS_COLLECTION),
@@ -1065,6 +1106,49 @@ export default function EmployeesManagementPage() {
         );
         setLeaveRequests([]);
         setLeaveRequestsLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [selectedEmployeeAuthUid]);
+
+  useEffect(() => {
+    if (!selectedEmployeeAuthUid) {
+      setLeaveBalanceAdjustments([]);
+      setLeaveBalanceAdjustmentsLoading(false);
+      return;
+    }
+
+    setLeaveBalanceAdjustmentsLoading(true);
+
+    const unsubscribe = onSnapshot(
+      query(
+        collection(db, EMPLOYEE_LEAVE_BALANCE_ADJUSTMENTS_COLLECTION),
+        where("employeeUid", "==", selectedEmployeeAuthUid)
+      ),
+      snapshot => {
+        const rows = snapshot.docs
+          .map(docSnapshot => {
+            const data = (docSnapshot.data() as Record<string, any>) || {};
+            return {
+              id: docSnapshot.id,
+              ...data,
+              createdAtDate: toDateSafe(data.createdAt),
+            };
+          })
+          .sort((a, b) => {
+            const aTime = a.createdAtDate?.getTime() || 0;
+            const bTime = b.createdAtDate?.getTime() || 0;
+            return bTime - aTime;
+          });
+
+        setLeaveBalanceAdjustments(rows);
+        setLeaveBalanceAdjustmentsLoading(false);
+      },
+      error => {
+        console.error("leave_balance_adjustments_snapshot_error", error);
+        setLeaveBalanceAdjustments([]);
+        setLeaveBalanceAdjustmentsLoading(false);
       }
     );
 
@@ -1157,7 +1241,6 @@ export default function EmployeesManagementPage() {
     setForm(initialForm);
   }, [initialForm, selectedEmployeeId]);
 
-
   useEffect(() => {
     const employment = (selectedEmployee?.employeeProfile?.employment ||
       selectedEmployee?.employment ||
@@ -1188,6 +1271,108 @@ export default function EmployeesManagementPage() {
     () => getLatestApprovedEmployeeLeaveRequest(leaveRequests),
     [leaveRequests]
   );
+
+  const approvedLeaveRequests = useMemo(
+    () => leaveRequests.filter(request => request.status === "approved"),
+    [leaveRequests]
+  );
+
+  const pendingLeaveRequestsCount = useMemo(
+    () => leaveRequests.filter(request => request.status === "pending").length,
+    [leaveRequests]
+  );
+
+  const approvedLeaveDaysTotal = useMemo(
+    () =>
+      approvedLeaveRequests.reduce(
+        (sum, request) => sum + (Number(request.daysCount) || 0),
+        0
+      ),
+    [approvedLeaveRequests]
+  );
+
+  const latestDeductedLeaveRequest = useMemo(
+    () => approvedLeaveRequests[0] || null,
+    [approvedLeaveRequests]
+  );
+
+  const currentLeaveBalanceNumber = useMemo(() => {
+    const parsed = Number(form.leaveBalance || 0);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }, [form.leaveBalance]);
+
+  useEffect(() => {
+    setManualLeaveBalance(
+      Number.isFinite(currentLeaveBalanceNumber)
+        ? String(currentLeaveBalanceNumber)
+        : ""
+    );
+    setManualLeaveAdjustmentReason("");
+  }, [selectedEmployeeId, currentLeaveBalanceNumber]);
+
+  const previousLeaveBalanceBeforeLastApproval = useMemo(() => {
+    if (!latestDeductedLeaveRequest) return currentLeaveBalanceNumber;
+    return currentLeaveBalanceNumber + (Number(latestDeductedLeaveRequest.daysCount) || 0);
+  }, [currentLeaveBalanceNumber, latestDeductedLeaveRequest]);
+
+  const latestManualLeaveAdjustmentMeta = useMemo(() => {
+    const employment = (selectedEmployee?.employeeProfile?.employment ||
+      selectedEmployee?.employment ||
+      {}) as Record<string, any>;
+
+    return (employment.leaveBalanceAdjustmentMeta ||
+      null) as Record<string, any> | null;
+  }, [selectedEmployee]);
+
+  const approvedLeaveRequestIds = useMemo(
+    () =>
+      new Set(
+        approvedLeaveRequests.map(request => String(request.id || "").trim())
+      ),
+    [approvedLeaveRequests]
+  );
+
+  const approvedLeaveDaysAfterRequest = useMemo(() => {
+    let runningApprovedDays = 0;
+    const map = new Map<string, number>();
+
+    const chronologicalApproved = [...approvedLeaveRequests]
+      .filter(request => request.status === "approved")
+      .sort((a, b) => {
+        const aTime = toDateSafe(a.reviewedAt || a.updatedAt || a.createdAt)?.getTime() || 0;
+        const bTime = toDateSafe(b.reviewedAt || b.updatedAt || b.createdAt)?.getTime() || 0;
+        return aTime - bTime;
+      });
+
+    chronologicalApproved.forEach(request => {
+      runningApprovedDays += Number(request.daysCount) || 0;
+      map.set(String(request.id || "").trim(), runningApprovedDays);
+    });
+
+    return map;
+  }, [approvedLeaveRequests]);
+
+  const getLeaveBalanceBeforeRequest = (request: EmployeeLeaveRequestRecord) => {
+    if (request.status !== "approved") return null;
+
+    const requestId = String(request.id || "").trim();
+    const approvedUsedAfterThisRequest =
+      approvedLeaveDaysAfterRequest.get(requestId) || 0;
+
+    const approvedUsedBeforeThisRequest =
+      approvedUsedAfterThisRequest - (Number(request.daysCount) || 0);
+
+    return currentLeaveBalanceNumber + approvedLeaveDaysTotal - approvedUsedBeforeThisRequest;
+  };
+
+  const getLeaveBalanceAfterRequest = (request: EmployeeLeaveRequestRecord) => {
+    if (request.status !== "approved") return null;
+
+    const before = getLeaveBalanceBeforeRequest(request);
+    if (before === null) return null;
+
+    return before - (Number(request.daysCount) || 0);
+  };
   const visibleEmployeeFiles = useMemo(
     () =>
       filterActiveEmployeeFiles(employeeFiles).filter(
@@ -1362,6 +1547,7 @@ export default function EmployeesManagementPage() {
   const baseSalaryNumber = Number(form.baseSalary || 0);
   const expectedWorkHoursNumber = Number(form.expectedWorkHours || 0);
   const actualWorkedHoursNumber = Number(form.actualWorkedHours || 0);
+  const overtimeHourlyRateInputNumber = Number(form.overtimeHourlyRate || 0);
   const insuranceDeductionNumber = Number(form.insuranceDeduction || 0);
 
   const totalSalaryDeductions = useMemo(
@@ -1376,16 +1562,57 @@ export default function EmployeesManagementPage() {
     [salaryDeductions, insuranceDeductionNumber]
   );
 
-  const calculatedGrossSalary = useMemo(() => {
+  const calculatedHourlyRate = useMemo(() => {
     if (!Number.isFinite(baseSalaryNumber) || baseSalaryNumber <= 0) return 0;
     if (!Number.isFinite(expectedWorkHoursNumber) || expectedWorkHoursNumber <= 0)
       return 0;
 
-    const safeActualHours = Math.max(0, actualWorkedHoursNumber);
-    const cappedActualHours = Math.min(safeActualHours, expectedWorkHoursNumber);
+    return baseSalaryNumber / expectedWorkHoursNumber;
+  }, [baseSalaryNumber, expectedWorkHoursNumber]);
 
-    return (baseSalaryNumber / expectedWorkHoursNumber) * cappedActualHours;
-  }, [baseSalaryNumber, expectedWorkHoursNumber, actualWorkedHoursNumber]);
+  const calculatedHoursDifference = useMemo(() => {
+    const safeExpectedHours = Math.max(0, expectedWorkHoursNumber || 0);
+    const safeActualHours = Math.max(0, actualWorkedHoursNumber || 0);
+    return safeActualHours - safeExpectedHours;
+  }, [expectedWorkHoursNumber, actualWorkedHoursNumber]);
+
+  const calculatedOvertimeHours = useMemo(() => {
+    return Math.max(0, calculatedHoursDifference);
+  }, [calculatedHoursDifference]);
+
+  const calculatedMissingHours = useMemo(() => {
+    return Math.max(0, -calculatedHoursDifference);
+  }, [calculatedHoursDifference]);
+
+  const effectiveOvertimeHourlyRate = useMemo(() => {
+    if (
+      Number.isFinite(overtimeHourlyRateInputNumber) &&
+      overtimeHourlyRateInputNumber > 0
+    ) {
+      return overtimeHourlyRateInputNumber;
+    }
+
+    return calculatedHourlyRate;
+  }, [overtimeHourlyRateInputNumber, calculatedHourlyRate]);
+
+  const calculatedOvertimeAmount = useMemo(() => {
+    if (!Number.isFinite(effectiveOvertimeHourlyRate) || effectiveOvertimeHourlyRate <= 0)
+      return 0;
+
+    return calculatedOvertimeHours * effectiveOvertimeHourlyRate;
+  }, [calculatedOvertimeHours, effectiveOvertimeHourlyRate]);
+
+  const calculatedMissingDeduction = useMemo(() => {
+    if (!Number.isFinite(calculatedHourlyRate) || calculatedHourlyRate <= 0) return 0;
+
+    return calculatedMissingHours * calculatedHourlyRate;
+  }, [calculatedMissingHours, calculatedHourlyRate]);
+
+  const calculatedGrossSalary = useMemo(() => {
+    if (!Number.isFinite(baseSalaryNumber) || baseSalaryNumber <= 0) return 0;
+
+    return Math.max(0, baseSalaryNumber + calculatedOvertimeAmount - calculatedMissingDeduction);
+  }, [baseSalaryNumber, calculatedOvertimeAmount, calculatedMissingDeduction]);
 
   const calculatedNetSalary = useMemo(
     () => Math.max(0, calculatedGrossSalary - totalSalaryDeductions),
@@ -2097,6 +2324,7 @@ export default function EmployeesManagementPage() {
     const baseSalary = toNullableNumber(form.baseSalary);
     const expectedWorkHours = toNullableNumber(form.expectedWorkHours);
     const actualWorkedHours = toNullableNumber(form.actualWorkedHours);
+    const overtimeHourlyRate = toNullableNumber(form.overtimeHourlyRate);
     const insuranceDeduction = toNullableNumber(form.insuranceDeduction);
     if (!normalizedFullName) {
       toast.error("يجب إدخال اسم الموظف.");
@@ -2125,8 +2353,13 @@ export default function EmployeesManagementPage() {
       return;
     }
 
-    if (form.insuranceDeduction.trim() && insuranceDeduction === null) {
-      toast.error("خصم التأمينات يجب أن يكون رقمًا صالحًا.");
+    if (form.actualWorkedHours.trim() && actualWorkedHours === null) {
+      toast.error("عدد الساعات الفعلية يجب أن يكون رقمًا صالحًا.");
+      return;
+    }
+
+    if (form.overtimeHourlyRate.trim() && overtimeHourlyRate === null) {
+      toast.error("سعر ساعة الأوفر تايم يجب أن يكون رقمًا صالحًا.");
       return;
     }
 
@@ -2196,6 +2429,13 @@ export default function EmployeesManagementPage() {
         baseSalary,
         expectedWorkHours,
         actualWorkedHours,
+        overtimeHours: calculatedOvertimeHours,
+        missingHours: calculatedMissingHours,
+        hoursDifference: calculatedHoursDifference,
+        overtimeHourlyRate: effectiveOvertimeHourlyRate,
+        calculatedHourlyRate,
+        calculatedOvertimeAmount,
+        calculatedMissingDeduction,
         insuranceDeduction,
         salaryDeductions: normalizedSalaryDeductions,
         totalSalaryDeductions,
@@ -2254,6 +2494,13 @@ export default function EmployeesManagementPage() {
             baseSalary,
             expectedWorkHours,
             actualWorkedHours,
+            overtimeHours: calculatedOvertimeHours,
+            missingHours: calculatedMissingHours,
+            hoursDifference: calculatedHoursDifference,
+            overtimeHourlyRate: effectiveOvertimeHourlyRate,
+            calculatedHourlyRate,
+            calculatedOvertimeAmount,
+            calculatedMissingDeduction,
             insuranceDeduction,
             totalSalaryDeductions,
             calculatedGrossSalary,
@@ -2316,6 +2563,168 @@ export default function EmployeesManagementPage() {
     }
   };
 
+  const handleSaveManualLeaveBalance = async () => {
+    if (!selectedEmployee || !selectedEmployeeProfile) return;
+    if (!canManageEmployees) {
+      toast.error("لا تملك صلاحية تعديل رصيد الإجازات.");
+      return;
+    }
+
+    const nextBalance = Number(manualLeaveBalance);
+    const reason = String(manualLeaveAdjustmentReason || "").trim();
+
+    if (!Number.isFinite(nextBalance) || nextBalance < 0) {
+      toast.error("أدخل رصيد إجازات صالحًا.");
+      return;
+    }
+
+    if (!reason) {
+      toast.error("اكتب سبب تعديل الرصيد.");
+      return;
+    }
+
+    setSavingManualLeaveBalance(true);
+    try {
+      const linkedUserUid =
+        String(selectedEmployee.uid || selectedEmployee.id || "").trim() ||
+        selectedEmployee.id;
+
+      const userRef = doc(db, "users", selectedEmployee.id);
+      const employeeDocId = String(selectedEmployee.linkedEmployeeId || "").trim();
+      const employeeRef = employeeDocId ? doc(db, "employees", employeeDocId) : null;
+
+      const adjustmentRef = doc(
+        collection(db, EMPLOYEE_LEAVE_BALANCE_ADJUSTMENTS_COLLECTION)
+      );
+
+      await runTransaction(db, async tx => {
+        const userSnap = await tx.get(userRef);
+        if (!userSnap.exists()) {
+          throw new Error("employee_user_not_found");
+        }
+
+        const userData = (userSnap.data() as Record<string, any>) || {};
+        const userEmployment = (userData.employeeProfile?.employment ||
+          userData.employment ||
+          {}) as Record<string, any>;
+
+        const employeeSnap = employeeRef ? await tx.get(employeeRef) : null;
+        const employeeData =
+          employeeSnap?.exists() && employeeSnap.data()
+            ? ((employeeSnap.data() as Record<string, any>) || {})
+            : null;
+
+        const employeeEmployment = (employeeData?.employeeProfile?.employment ||
+          employeeData?.employment ||
+          {}) as Record<string, any>;
+
+        const previousBalance = resolveEmploymentLeaveBalance(userData, employeeData);
+
+        const leaveBalanceAdjustmentMeta = {
+          previousBalance,
+          nextBalance,
+          reason,
+          adjustedAt: serverTimestamp(),
+          adjustedByUid: user?.uid || null,
+          adjustedByEmail: user?.email || null,
+          adjustedByName: user?.displayName || user?.email || null,
+        };
+
+        const nextUserEmployment = {
+          ...userEmployment,
+          leaveBalance: nextBalance,
+          leaveBalanceAdjustmentMeta,
+          updatedAt: serverTimestamp(),
+          updatedByUid: user?.uid || null,
+          updatedByEmail: user?.email || null,
+        };
+
+        tx.set(
+          userRef,
+          {
+            leaveBalance: nextBalance,
+            updatedAt: serverTimestamp(),
+            employment: nextUserEmployment,
+            employeeProfile: {
+              personal: (userData.employeeProfile?.personal ||
+                userData.personal ||
+                null) as Record<string, any> | null,
+              employment: nextUserEmployment,
+            },
+          },
+          { merge: true }
+        );
+
+        if (employeeRef) {
+          const nextEmployeeEmployment = {
+            ...employeeEmployment,
+            leaveBalance: nextBalance,
+            leaveBalanceAdjustmentMeta,
+            updatedAt: serverTimestamp(),
+            updatedByUid: user?.uid || null,
+            updatedByEmail: user?.email || null,
+          };
+
+          tx.set(
+            employeeRef,
+            {
+              uid: linkedUserUid,
+              linkedUserUid,
+              leaveBalance: nextBalance,
+              updatedAt: serverTimestamp(),
+              employment: nextEmployeeEmployment,
+              employeeProfile: {
+                personal: (employeeData?.employeeProfile?.personal ||
+                  employeeData?.personal ||
+                  null) as Record<string, any> | null,
+                employment: nextEmployeeEmployment,
+              },
+            },
+            { merge: true }
+          );
+        }
+
+        tx.set(adjustmentRef, {
+          employeeId:
+            String(selectedEmployee.linkedEmployeeId || "").trim() ||
+            selectedEmployee.id,
+          employeeUid: selectedEmployeeAuthUid || selectedEmployee.id,
+          userId: selectedEmployee.id,
+          employeeName:
+            selectedEmployeeProfile.personal.name !== EMPLOYEE_EMPTY_VALUE
+              ? selectedEmployeeProfile.personal.name
+              : selectedEmployee.displayName ||
+              selectedEmployee.name ||
+              selectedEmployee.email ||
+              "الموظف",
+          previousBalance,
+          nextBalance,
+          difference: nextBalance - previousBalance,
+          reason,
+          createdAt: serverTimestamp(),
+          createdByUid: user?.uid || null,
+          createdByEmail: user?.email || null,
+          createdByName: user?.displayName || user?.email || null,
+        });
+      });
+
+      setForm(current => ({
+        ...current,
+        leaveBalance: String(nextBalance),
+      }));
+
+      setManualLeaveBalance(String(nextBalance));
+      setManualLeaveAdjustmentReason("");
+
+      toast.success("تم تعديل رصيد الإجازات يدويًا.");
+    } catch (error) {
+      console.error("manual_leave_balance_update_failed", error);
+      toast.error("تعذر تعديل رصيد الإجازات.");
+    } finally {
+      setSavingManualLeaveBalance(false);
+    }
+  };
+
   const handleReviewNoteChange = (requestId: string, value: string) => {
     setReviewNotes(current => ({
       ...current,
@@ -2362,9 +2771,12 @@ export default function EmployeesManagementPage() {
           throw new Error("leave_request_invalid_days");
         }
 
-        const hrNote =
-          String(reviewNotes[request.id] ?? request.hrNote ?? "").trim() ||
-          null;
+        const hrNote = String(reviewNotes[request.id] ?? request.hrNote ?? "").trim();
+
+        if (nextStatus === "rejected" && !hrNote) {
+          throw new Error("leave_rejection_note_required");
+        }
+
         const userRef = doc(db, "users", selectedEmployee.id);
         const userSnap = await tx.get(userRef);
         if (!userSnap.exists()) {
@@ -2517,6 +2929,11 @@ export default function EmployeesManagementPage() {
         reviewError.message === "leave_request_already_reviewed"
       ) {
         toast.error("تمت مراجعة هذا الطلب مسبقًا.");
+      } else if (
+        reviewError instanceof Error &&
+        reviewError.message === "leave_rejection_note_required"
+      ) {
+        toast.error("يجب كتابة ملاحظة عند رفض طلب الإجازة.");
       } else {
         toast.error("تعذر تحديث حالة طلب الإجازة.");
       }
@@ -3719,8 +4136,14 @@ export default function EmployeesManagementPage() {
                         />
                         <LeaveOverviewStat
                           icon={Clock3}
-                          label="إجمالي الخصومات"
-                          value={`${formatNumberEN(totalSalaryDeductions || 0)} ر.س`}
+                          label="فرق الساعات"
+                          value={
+                            calculatedHoursDifference > 0
+                              ? `+${formatNumberEN(calculatedHoursDifference)} ساعة إضافية`
+                              : calculatedHoursDifference < 0
+                                ? `${formatNumberEN(calculatedHoursDifference)} ساعة نقص`
+                                : "0 ساعة"
+                          }
                         />
                         <LeaveOverviewStat
                           icon={CheckCircle2}
@@ -3771,6 +4194,20 @@ export default function EmployeesManagementPage() {
                             handleFormChange("actualWorkedHours", event.target.value)
                           }
                           placeholder="مثال: 228"
+                          disabled={!canManageEmployees || saving}
+                        />
+                      </Field>
+
+                      <Field label="سعر ساعة الأوفر تايم">
+                        <Input
+                          type="number"
+                          inputMode="decimal"
+                          step="0.01"
+                          value={form.overtimeHourlyRate}
+                          onChange={event =>
+                            handleFormChange("overtimeHourlyRate", event.target.value)
+                          }
+                          placeholder="إذا تركته فارغًا سيُستخدم سعر الساعة العادي"
                           disabled={!canManageEmployees || saving}
                         />
                       </Field>
@@ -3871,19 +4308,53 @@ export default function EmployeesManagementPage() {
                         </div>
                       )}
 
-                      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
                         <div className="rounded-[20px] border border-slate-200 bg-white px-4 py-4">
                           <div className="text-xs font-semibold tracking-[0.14em] text-slate-500">
-                            إجمالي الخصومات
+                            فرق الساعات
                           </div>
-                          <div className="mt-2 text-lg font-semibold text-slate-950">
-                            {formatNumberEN(totalSalaryDeductions || 0)} ر.س
+                          <div
+                            className={cn(
+                              "mt-2 text-lg font-semibold",
+                              calculatedHoursDifference > 0 && "text-emerald-600",
+                              calculatedHoursDifference < 0 && "text-red-600",
+                              calculatedHoursDifference === 0 && "text-slate-950"
+                            )}
+                          >                            {calculatedHoursDifference > 0 && (
+                            <>+{formatNumberEN(calculatedHoursDifference)} ساعة إضافية</>
+                          )}
+
+                            {calculatedHoursDifference < 0 && (
+                              <>{formatNumberEN(calculatedHoursDifference)} ساعة نقص</>
+                            )}
+
+                            {calculatedHoursDifference === 0 && (
+                              <>0 ساعة</>
+                            )}
                           </div>
                         </div>
 
                         <div className="rounded-[20px] border border-slate-200 bg-white px-4 py-4">
                           <div className="text-xs font-semibold tracking-[0.14em] text-slate-500">
-                            الراتب بعد الحضور
+                            قيمة الأوفر تايم
+                          </div>
+                          <div className="mt-2 text-lg font-semibold text-slate-950">
+                            {formatNumberEN(calculatedOvertimeAmount || 0)} ر.س
+                          </div>
+                        </div>
+
+                        <div className="rounded-[20px] border border-slate-200 bg-white px-4 py-4">
+                          <div className="text-xs font-semibold tracking-[0.14em] text-slate-500">
+                            خصم نقص الساعات
+                          </div>
+                          <div className="mt-2 text-lg font-semibold text-slate-950">
+                            {formatNumberEN(calculatedMissingDeduction || 0)} ر.س
+                          </div>
+                        </div>
+
+                        <div className="rounded-[20px] border border-slate-200 bg-white px-4 py-4">
+                          <div className="text-xs font-semibold tracking-[0.14em] text-slate-500">
+                            الراتب قبل الخصومات
                           </div>
                           <div className="mt-2 text-lg font-semibold text-slate-950">
                             {formatNumberEN(calculatedGrossSalary || 0)} ر.س
@@ -3915,50 +4386,40 @@ export default function EmployeesManagementPage() {
                           الإجازات
                         </div>
                         <div className="text-2xl font-semibold tracking-tight text-slate-950">
-                          آخر إجازة معتمدة وسجل الطلبات
+                          رصيد الإجازات وسجل الطلبات
                         </div>
                         <p className="max-w-2xl text-sm leading-7 text-slate-500">
-                          يتيح هذا القسم متابعة آخر إجازة معتمدة للموظف بشكل
-                          واضح، مع مراجعة جميع الطلبات السابقة واعتماد الطلبات
-                          المعلقة أو رفضها.
+                          هذا القسم هو المرجع الكامل للإجازات: الرصيد الحالي، آخر خصم تم،
+                          آخر إجازة معتمدة، مجموع الأيام المعتمدة، والطلبات المعلقة وسجل المراجعة.
                         </p>
                       </div>
 
-                      <div className="grid gap-3 sm:grid-cols-3">
+                      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                         <LeaveOverviewStat
                           icon={BadgeCheck}
                           label="الرصيد الحالي"
-                          value={
-                            selectedEmployeeProfile.employment.leaveBalanceLabel
-                          }
+                          value={`${formatNumberEN(currentLeaveBalanceNumber)} يوم`}
                         />
-                        <LeaveOverviewStat
-                          icon={
-                            latestApprovedLeaveRequest?.status === "approved"
-                              ? CheckCircle2
-                              : latestApprovedLeaveRequest?.status ===
-                                "rejected"
-                                ? XCircle
-                                : Clock3
-                          }
-                          label="حالة آخر إجازة معتمدة"
-                          value={
-                            latestApprovedLeaveRequest
-                              ? getLeaveStatusMeta(
-                                latestApprovedLeaveRequest.status
-                              ).label
-                              : "لا توجد إجازات"
-                          }
-                        />
+
                         <LeaveOverviewStat
                           icon={CalendarDays}
-                          label="عدد الأيام"
+                          label="إجمالي الأيام المعتمدة"
+                          value={`${formatNumberEN(approvedLeaveDaysTotal)} يوم`}
+                        />
+
+                        <LeaveOverviewStat
+                          icon={Clock3}
+                          label="طلبات بانتظار المراجعة"
+                          value={formatNumberEN(pendingLeaveRequestsCount)}
+                        />
+
+                        <LeaveOverviewStat
+                          icon={CheckCircle2}
+                          label="آخر خصم تم"
                           value={
-                            latestApprovedLeaveRequest
-                              ? formatLeaveDaysLabel(
-                                latestApprovedLeaveRequest.daysCount
-                              )
-                              : "—"
+                            latestDeductedLeaveRequest
+                              ? formatLeaveDaysLabel(latestDeductedLeaveRequest.daysCount)
+                              : "لا يوجد"
                           }
                         />
                       </div>
@@ -3967,6 +4428,159 @@ export default function EmployeesManagementPage() {
 
                   <CardContent className="p-5">
                     <div className="space-y-5">
+
+                      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                        <div className="rounded-[20px] border border-slate-200 bg-white px-4 py-4">
+                          <div className="text-xs font-semibold tracking-[0.14em] text-slate-500">
+                            الرصيد الحالي
+                          </div>
+                          <div className="mt-2 text-lg font-semibold text-slate-950">
+                            {formatNumberEN(currentLeaveBalanceNumber)} يوم
+                          </div>
+                        </div>
+
+                        <div className="rounded-[20px] border border-slate-200 bg-white px-4 py-4">
+                          <div className="text-xs font-semibold tracking-[0.14em] text-slate-500">
+                            الرصيد قبل آخر خصم
+                          </div>
+                          <div className="mt-2 text-lg font-semibold text-slate-950">
+                            {formatNumberEN(previousLeaveBalanceBeforeLastApproval)} يوم
+                          </div>
+                        </div>
+
+                        <div className="rounded-[20px] border border-slate-200 bg-white px-4 py-4">
+                          <div className="text-xs font-semibold tracking-[0.14em] text-slate-500">
+                            آخر خصم من الرصيد
+                          </div>
+                          <div className="mt-2 text-lg font-semibold text-slate-950">
+                            {latestDeductedLeaveRequest
+                              ? `${formatNumberEN(Number(latestDeductedLeaveRequest.daysCount) || 0)} يوم`
+                              : "لا يوجد"}
+                          </div>
+                        </div>
+
+                        <div className="rounded-[20px] border border-slate-200 bg-white px-4 py-4">
+                          <div className="text-xs font-semibold tracking-[0.14em] text-slate-500">
+                            تاريخ آخر اعتماد
+                          </div>
+                          <div className="mt-2 text-lg font-semibold text-slate-950">
+                            {latestDeductedLeaveRequest?.reviewedAt
+                              ? formatDateTimeEN(latestDeductedLeaveRequest.reviewedAt)
+                              : "غير متوفر"}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="rounded-[24px] border border-slate-200/80 bg-slate-50/75 p-5">
+                        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                          <div className="space-y-2">
+                            <div className="text-base font-semibold text-slate-950">
+                              تعديل رصيد الإجازات يدويًا
+                            </div>
+                            <p className="max-w-2xl text-sm leading-7 text-slate-500">
+                              استخدم هذا الإجراء فقط عند وجود تسوية إدارية أو تصحيح رصيد أو ترحيل رصيد من فترة سابقة.
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="mt-5 grid gap-4 lg:grid-cols-3">
+                          <div className="rounded-[20px] border border-slate-200 bg-white px-4 py-4">
+                            <div className="text-xs font-semibold tracking-[0.14em] text-slate-500">
+                              الرصيد الحالي
+                            </div>
+                            <div className="mt-2 text-lg font-semibold text-slate-950">
+                              {formatNumberEN(currentLeaveBalanceNumber)} يوم
+                            </div>
+                          </div>
+
+                          <div className="rounded-[20px] border border-slate-200 bg-white px-4 py-4">
+                            <div className="text-xs font-semibold tracking-[0.14em] text-slate-500">
+                              آخر رصيد محفوظ
+                            </div>
+                            <div className="mt-2 text-lg font-semibold text-slate-950">
+                              {latestManualLeaveAdjustmentMeta
+                                ? `${formatNumberEN(Number(latestManualLeaveAdjustmentMeta.nextBalance) || 0)} يوم`
+                                : "لا يوجد"}
+                            </div>
+                          </div>
+
+                          <div className="rounded-[20px] border border-slate-200 bg-white px-4 py-4">
+                            <div className="text-xs font-semibold tracking-[0.14em] text-slate-500">
+                              الرصيد السابق
+                            </div>
+                            <div className="mt-2 text-lg font-semibold text-slate-950">
+                              {latestManualLeaveAdjustmentMeta
+                                ? `${formatNumberEN(Number(latestManualLeaveAdjustmentMeta.previousBalance) || 0)} يوم`
+                                : "لا يوجد"}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="mt-5 grid gap-4 lg:grid-cols-2">
+                          <Field label="الرصيد الجديد">
+                            <Input
+                              type="number"
+                              inputMode="decimal"
+                              step="0.5"
+                              value={manualLeaveBalance}
+                              onChange={event => setManualLeaveBalance(event.target.value)}
+                              placeholder="مثال: 18"
+                              disabled={!canManageEmployees || savingManualLeaveBalance}
+                            />
+                          </Field>
+
+                          <Field label="سبب التعديل">
+                            <Textarea
+                              value={manualLeaveAdjustmentReason}
+                              onChange={event => setManualLeaveAdjustmentReason(event.target.value)}
+                              placeholder="مثال: ترحيل رصيد من السنة الماضية أو تصحيح إداري"
+                              className="min-h-28"
+                              disabled={!canManageEmployees || savingManualLeaveBalance}
+                            />
+                          </Field>
+                        </div>
+
+                        <div className="mt-4 flex justify-end">
+                          <Button
+                            type="button"
+                            className="bg-[#F2B705] text-slate-950 hover:bg-[#e0ab00]"
+                            onClick={() => void handleSaveManualLeaveBalance()}
+                            disabled={!canManageEmployees || savingManualLeaveBalance}
+                          >
+                            <Save className="ml-2 h-4 w-4" />
+                            {savingManualLeaveBalance ? "جارٍ الحفظ..." : "حفظ الرصيد"}
+                          </Button>
+                        </div>
+
+                        {latestManualLeaveAdjustmentMeta ? (
+                          <div className="mt-4 rounded-[20px] border border-slate-200 bg-white px-4 py-4 text-sm leading-7 text-slate-700">
+                            <div>
+                              <span className="font-semibold text-slate-900">آخر تعديل:</span>{" "}
+                              {latestManualLeaveAdjustmentMeta.adjustedAt
+                                ? formatDateTimeEN(latestManualLeaveAdjustmentMeta.adjustedAt)
+                                : "غير متوفر"}
+                            </div>
+                            <div>
+                              <span className="font-semibold text-slate-900">من:</span>{" "}
+                              {formatNumberEN(Number(latestManualLeaveAdjustmentMeta.previousBalance) || 0)} يوم
+                            </div>
+                            <div>
+                              <span className="font-semibold text-slate-900">إلى:</span>{" "}
+                              {formatNumberEN(Number(latestManualLeaveAdjustmentMeta.nextBalance) || 0)} يوم
+                            </div>
+                            <div>
+                              <span className="font-semibold text-slate-900">السبب:</span>{" "}
+                              {latestManualLeaveAdjustmentMeta.reason || "غير متوفر"}
+                            </div>
+                            <div>
+                              <span className="font-semibold text-slate-900">بواسطة:</span>{" "}
+                              {latestManualLeaveAdjustmentMeta.adjustedByName ||
+                                latestManualLeaveAdjustmentMeta.adjustedByEmail ||
+                                "غير متوفر"}
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
                       <div className="rounded-[24px] border border-slate-200/80 bg-slate-50/75 p-5">
                         {latestApprovedLeaveRequest ? (
                           <div className="space-y-4">
@@ -4046,6 +4660,62 @@ export default function EmployeesManagementPage() {
 
                       <div className="space-y-3">
                         <div className="text-sm font-semibold text-slate-900">
+                          سجل تعديلات الرصيد اليدوية
+                        </div>
+
+                        {leaveBalanceAdjustmentsLoading ? (
+                          <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50/70 px-5 py-10 text-center text-sm text-slate-500">
+                            جاري تحميل سجل تعديلات الرصيد...
+                          </div>
+                        ) : leaveBalanceAdjustments.length ? (
+                          <div className="space-y-3">
+                            {leaveBalanceAdjustments.slice(0, 5).map(item => (
+                              <div
+                                key={item.id}
+                                className="rounded-[20px] border border-slate-200 bg-white px-4 py-4"
+                              >
+                                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                                  <div className="space-y-2 text-sm text-slate-700">
+                                    <div>
+                                      <span className="font-semibold text-slate-900">من:</span>{" "}
+                                      {formatNumberEN(Number(item.previousBalance) || 0)} يوم
+                                    </div>
+                                    <div>
+                                      <span className="font-semibold text-slate-900">إلى:</span>{" "}
+                                      {formatNumberEN(Number(item.nextBalance) || 0)} يوم
+                                    </div>
+                                    <div>
+                                      <span className="font-semibold text-slate-900">الفرق:</span>{" "}
+                                      {formatNumberEN(Number(item.difference) || 0)} يوم
+                                    </div>
+                                    <div>
+                                      <span className="font-semibold text-slate-900">السبب:</span>{" "}
+                                      {item.reason || "غير متوفر"}
+                                    </div>
+                                    <div>
+                                      <span className="font-semibold text-slate-900">بواسطة:</span>{" "}
+                                      {item.createdByName || item.createdByEmail || "غير متوفر"}
+                                    </div>
+                                  </div>
+
+                                  <div className="text-xs text-slate-500">
+                                    {item.createdAtDate
+                                      ? formatDateTimeEN(item.createdAtDate)
+                                      : "تاريخ غير متوفر"}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50/70 px-5 py-10 text-center text-sm text-slate-500">
+                            لا توجد تعديلات يدوية على الرصيد حتى الآن.
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="space-y-3">
+                        <div className="text-sm font-semibold text-slate-900">
                           سجل الإجازات
                         </div>
 
@@ -4089,7 +4759,26 @@ export default function EmployeesManagementPage() {
                                       <LeaveStatusBadge
                                         status={request.status}
                                       />
+                                      <LeaveImpactBadge status={request.status} />
                                     </div>
+
+                                    <Badge
+                                      variant="outline"
+                                      className={cn(
+                                        "rounded-full shadow-none",
+                                        request.status === "approved"
+                                          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                          : request.status === "pending"
+                                            ? "border-amber-200 bg-amber-50 text-amber-700"
+                                            : "border-rose-200 bg-rose-50 text-rose-700"
+                                      )}
+                                    >
+                                      {request.status === "approved"
+                                        ? "تم اعتماد الطلب"
+                                        : request.status === "pending"
+                                          ? "بانتظار مراجعة HR"
+                                          : "تم رفض الطلب"}
+                                    </Badge>
 
                                     <div className="grid gap-2 text-sm text-slate-600">
                                       <div>
@@ -4101,20 +4790,21 @@ export default function EmployeesManagementPage() {
                                           request.endDate
                                         )}
                                       </div>
+
                                       <div>
                                         <span className="font-semibold text-slate-900">
                                           عدد الأيام:
                                         </span>{" "}
-                                        {formatLeaveDaysLabel(
-                                          request.daysCount
-                                        )}
+                                        {formatLeaveDaysLabel(request.daysCount)}
                                       </div>
+
                                       <div>
                                         <span className="font-semibold text-slate-900">
                                           تاريخ الإنشاء:
                                         </span>{" "}
                                         {formatDateTimeEN(request.createdAt)}
                                       </div>
+
                                       {request.reviewedAt ? (
                                         <div>
                                           <span className="font-semibold text-slate-900">
@@ -4122,6 +4812,35 @@ export default function EmployeesManagementPage() {
                                           </span>{" "}
                                           {formatDateTimeEN(request.reviewedAt)}
                                         </div>
+                                      ) : null}
+
+                                      <div>
+                                        <span className="font-semibold text-slate-900">
+                                          أثر الطلب على الرصيد:
+                                        </span>{" "}
+                                        {request.status === "approved"
+                                          ? "تم اعتماد الطلب وخصم الأيام من الرصيد"
+                                          : request.status === "pending"
+                                            ? "الطلب ما زال تحت المراجعة ولم يتم الخصم بعد"
+                                            : "تم رفض الطلب ولم يتم الخصم من الرصيد"}
+                                      </div>
+
+                                      {request.status === "approved" ? (
+                                        <>
+                                          <div>
+                                            <span className="font-semibold text-slate-900">
+                                              الرصيد قبل الطلب:
+                                            </span>{" "}
+                                            {formatNumberEN(getLeaveBalanceBeforeRequest(request) || 0)} يوم
+                                          </div>
+
+                                          <div>
+                                            <span className="font-semibold text-slate-900">
+                                              الرصيد بعد الطلب:
+                                            </span>{" "}
+                                            {formatNumberEN(getLeaveBalanceAfterRequest(request) || 0)} يوم
+                                          </div>
+                                        </>
                                       ) : null}
                                     </div>
 
@@ -4368,23 +5087,6 @@ export default function EmployeesManagementPage() {
                       </Field>
 
                       <Field
-                        label="رصيد الإجازات"
-                        description="يُحفظ كرقم ويمكن لاحقًا ربطه بطلبات الإجازة."
-                      >
-                        <Input
-                          type="number"
-                          inputMode="decimal"
-                          step="0.5"
-                          value={form.leaveBalance}
-                          onChange={event =>
-                            handleFormChange("leaveBalance", event.target.value)
-                          }
-                          placeholder="مثال: 21"
-                          disabled={!canManageEmployees || saving}
-                        />
-                      </Field>
-
-                      <Field
                         label="صلاحية الصفحة"
                         description={
                           canManageEmployees
@@ -4610,36 +5312,46 @@ export default function EmployeesManagementPage() {
                         </div>
                       </div>
                     </div>
-
-                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-[22px] border border-slate-200 bg-slate-50/80 px-4 py-4">
-                      <div className="text-sm text-slate-500">
-                        {isDirty
-                          ? "هناك تغييرات غير محفوظة على ملف الموظف."
-                          : "البيانات الوظيفية الحالية متزامنة ومحفوظة."}
-                      </div>
-
-                      <div className="flex flex-wrap gap-3">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={handleReset}
-                          disabled={!isDirty || saving}
-                        >
-                          إعادة ضبط
-                        </Button>
-                        <Button
-                          type="button"
-                          onClick={() => void handleSave()}
-                          disabled={!canManageEmployees || !isDirty || saving}
-                          className="bg-[#F2B705] text-slate-950 hover:bg-[#e0ab00]"
-                        >
-                          <Save className="ml-2 h-4 w-4" />
-                          {saving ? "جارٍ الحفظ..." : "حفظ البيانات الوظيفية"}
-                        </Button>
-                      </div>
-                    </div>
                   </CardContent>
                 </Card>
+                {isDirty ? (
+                  <div className="pointer-events-none fixed inset-x-3 bottom-4 z-40 sm:inset-x-4 sm:bottom-5 xl:left-[calc(360px+2rem)] xl:right-8">
+                    <div className="pointer-events-auto rounded-[28px] border border-slate-200 bg-white/95 px-5 py-4 shadow-[0_20px_45px_-24px_rgba(15,23,42,0.28)] backdrop-blur">
+                      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                        <div className="space-y-1 text-right">
+                          <div className="text-base font-semibold text-slate-950">
+                            إجراءات الحفظ
+                          </div>
+                          <div className="text-sm text-slate-500">
+                            هناك تعديلات غير محفوظة، يمكنك حفظها الآن أو استعادتها لآخر نسخة محفوظة.
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-3">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={handleReset}
+                            disabled={!isDirty || saving}
+                            className="h-12 rounded-[18px] px-5"
+                          >
+                            العودة إلى المحفوظ
+                          </Button>
+
+                          <Button
+                            type="button"
+                            onClick={() => void handleSave()}
+                            disabled={!canManageEmployees || !isDirty || saving}
+                            className="h-12 rounded-[18px] bg-slate-950 px-5 text-white hover:bg-slate-900"
+                          >
+                            <Save className="ml-2 h-4 w-4" />
+                            {saving ? "جارٍ الحفظ..." : "حفظ التغييرات"}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
               </div>
             ) : (
               <Card className="gap-0 overflow-hidden border-slate-200/80 bg-white/95 py-0 shadow-sm">

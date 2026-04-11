@@ -64,17 +64,26 @@ export type EmployeeEmploymentStatus =
     baseSalary?: number | null;
     expectedWorkHours?: number | null;
     actualWorkedHours?: number | null;
-    insuranceDeduction?: number | null;
     
-    salaryDeductions?: Array<{
-      id?: string | null;
-      title?: string | null;
-      amount?: number | null;
-    }> | null;
-  
+    hoursDifference?: number | null;
+    overtimeHours?: number | null;
+    missingHours?: number | null;
+    
+    overtimeHourlyRate?: number | null;
+    calculatedHourlyRate?: number | null;
+    calculatedOvertimeAmount?: number | null;
+    calculatedMissingDeduction?: number | null;
+    
+    insuranceDeduction?: number | null;
     totalSalaryDeductions?: number | null;
     calculatedGrossSalary?: number | null;
     calculatedNetSalary?: number | null;
+    
+    salaryDeductions?: Array<{
+      id?: string;
+      title?: string;
+      amount?: number;
+    }> | null;
   
     status?: EmployeeEmploymentStatus | null;
     employmentStatus?: EmployeeEmploymentStatus | null;

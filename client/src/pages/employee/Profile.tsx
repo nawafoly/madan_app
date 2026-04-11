@@ -18,6 +18,7 @@ import {
   collection,
   doc,
   getDoc,
+  getDocs,
   onSnapshot,
   or,
   query,
@@ -104,6 +105,7 @@ import {
   type EmployeeLeaveRequestRecord,
 } from "@/lib/employeeLeave";
 import { uploadDocumentToCloudflare } from "@/lib/documentUploadService";
+import { createInAppNotification } from "@/lib/inAppNotifications";
 import { formatDateEN, formatDateTimeEN } from "@/lib/formatters";
 import { cn } from "@/lib/utils";
 import {
@@ -1131,7 +1133,7 @@ export default function EmployeeProfilePage() {
           ? employeeProfileSource.docId
           : String(user.linkedEmployeeId || "").trim()) || null;
 
-      await addDoc(collection(db, EMPLOYEE_LEAVE_REQUESTS_COLLECTION), {
+      const docRef = await addDoc(collection(db, EMPLOYEE_LEAVE_REQUESTS_COLLECTION), {
         ...buildEmployeeLeaveRequestPayload({
           authUid: user.uid,
           employeeDocId,
@@ -1152,6 +1154,27 @@ export default function EmployeeProfilePage() {
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
+
+      const hrUsers = await getDocs(
+        query(
+          collection(db, "users"),
+          where("role", "in", ["owner", "admin", "hr"])
+        )
+      );
+
+      await Promise.all(
+        hrUsers.docs.map(docSnap => {
+          return createInAppNotification({
+            userId: docSnap.id,
+            title: "طلب إجازة جديد",
+            body: `طلب إجازة جديد من ${user.displayName || user.email}`,
+            type: "leave_request_submitted",
+            relatedId: docRef.id,
+            relatedTo: "leave_request",
+            relatedPath: `/admin/employees?employeeId=${user.uid}&panel=leave`,
+          });
+        })
+      );
 
       setLeaveForm({
         leaveType: "annual",
