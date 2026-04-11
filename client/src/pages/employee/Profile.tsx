@@ -30,6 +30,9 @@ import {
   Clock3,
   Camera,
   CheckCircle2,
+  Download,
+  Eye,
+  FileText,
   Loader2,
   Mail,
   Minus,
@@ -78,6 +81,13 @@ import {
   normalizeEmployeeProfile,
   type EmployeeProfileUserDoc,
 } from "@/lib/employeeProfile";
+import {
+  EMPLOYEE_FILES_COLLECTION,
+  filterActiveEmployeeFiles,
+  normalizeEmployeeFileRecord,
+  sortEmployeeFiles,
+  type EmployeeFileRecord,
+} from "@/lib/employeeFiles";
 import {
   EMPLOYEE_LEAVE_REQUESTS_COLLECTION,
   EMPLOYEE_LEAVE_TYPE_OPTIONS,
@@ -247,9 +257,9 @@ async function createAvatarCropDraft(file: File): Promise<AvatarCropDraft> {
 
 function resolveAvatarOutputType(fileType: string) {
   switch (
-    String(fileType || "")
-      .trim()
-      .toLowerCase()
+  String(fileType || "")
+    .trim()
+    .toLowerCase()
   ) {
     case "image/png":
       return "image/png";
@@ -510,6 +520,8 @@ export default function EmployeeProfilePage() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [changingPassword, setChangingPassword] = useState(false);
+  const [employeeFiles, setEmployeeFiles] = useState<EmployeeFileRecord[]>([]);
+  const [employeeFilesLoading, setEmployeeFilesLoading] = useState(true);
   const [employeeProfileSource, setEmployeeProfileSource] = useState<{
     collectionName: "employees" | "users";
     docId: string;
@@ -595,11 +607,11 @@ export default function EmployeeProfilePage() {
         setUserDoc(
           snapshot.exists()
             ? ({
-                ...(snapshotData || {}),
-                uid:
-                  String(snapshotData?.uid || user.uid || snapshot.id).trim() ||
-                  snapshot.id,
-              } as EmployeeProfileUserDoc)
+              ...(snapshotData || {}),
+              uid:
+                String(snapshotData?.uid || user.uid || snapshot.id).trim() ||
+                snapshot.id,
+            } as EmployeeProfileUserDoc)
             : null
         );
         setLoading(false);
@@ -627,11 +639,11 @@ export default function EmployeeProfilePage() {
     () =>
       avatarCropDraft
         ? getAvatarCropMetrics({
-            naturalWidth: avatarCropDraft.naturalWidth,
-            naturalHeight: avatarCropDraft.naturalHeight,
-            viewportSize: avatarCropViewportSize,
-            zoom: avatarCropZoom,
-          })
+          naturalWidth: avatarCropDraft.naturalWidth,
+          naturalHeight: avatarCropDraft.naturalHeight,
+          viewportSize: avatarCropViewportSize,
+          zoom: avatarCropZoom,
+        })
         : null,
     [avatarCropDraft, avatarCropViewportSize, avatarCropZoom]
   );
@@ -646,12 +658,10 @@ export default function EmployeeProfilePage() {
     return {
       width: `${avatarCropMetrics.width}px`,
       height: `${avatarCropMetrics.height}px`,
-      left: `${
-        (avatarCropViewportSize - avatarCropMetrics.width) / 2 + position.x
-      }px`,
-      top: `${
-        (avatarCropViewportSize - avatarCropMetrics.height) / 2 + position.y
-      }px`,
+      left: `${(avatarCropViewportSize - avatarCropMetrics.width) / 2 + position.x
+        }px`,
+      top: `${(avatarCropViewportSize - avatarCropMetrics.height) / 2 + position.y
+        }px`,
     };
   }, [avatarCropMetrics, avatarCropPosition, avatarCropViewportSize]);
   const avatarCropMiniPreviewStyle = useMemo(() => {
@@ -667,13 +677,11 @@ export default function EmployeeProfilePage() {
     return {
       width: `${avatarCropMetrics.width * scale}px`,
       height: `${avatarCropMetrics.height * scale}px`,
-      left: `${
-        (previewSize - avatarCropMetrics.width * scale) / 2 + position.x * scale
-      }px`,
-      top: `${
-        (previewSize - avatarCropMetrics.height * scale) / 2 +
+      left: `${(previewSize - avatarCropMetrics.width * scale) / 2 + position.x * scale
+        }px`,
+      top: `${(previewSize - avatarCropMetrics.height * scale) / 2 +
         position.y * scale
-      }px`,
+        }px`,
     };
   }, [avatarCropMetrics, avatarCropPosition, avatarCropViewportSize]);
   const avatarCropZoomLabel = `${Math.round(avatarCropZoom * 100)}%`;
@@ -718,6 +726,42 @@ export default function EmployeeProfilePage() {
       clampAvatarCropPosition(current, avatarCropMetrics)
     );
   }, [avatarCropMetrics]);
+
+
+  useEffect(() => {
+    if (!user?.uid) {
+      setEmployeeFiles([]);
+      setEmployeeFilesLoading(false);
+      return;
+    }
+
+    setEmployeeFilesLoading(true);
+    const unsubscribe = onSnapshot(
+      query(
+        collection(db, EMPLOYEE_FILES_COLLECTION),
+        where("employeeUid", "==", user.uid)
+      ),
+      snapshot => {
+        const rows = sortEmployeeFiles(
+          snapshot.docs.map(docSnapshot =>
+            normalizeEmployeeFileRecord(
+              docSnapshot.id,
+              (docSnapshot.data() as Record<string, any>) || {}
+            )
+          )
+        );
+        setEmployeeFiles(rows);
+        setEmployeeFilesLoading(false);
+      },
+      error => {
+        console.error("employee_profile_files_snapshot_error", error);
+        setEmployeeFiles([]);
+        setEmployeeFilesLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [user?.uid]);
 
   useEffect(() => {
     if (!user?.uid) {
@@ -767,9 +811,38 @@ export default function EmployeeProfilePage() {
     () => calculateLeaveDaysCount(leaveForm.startDate, leaveForm.endDate),
     [leaveForm.endDate, leaveForm.startDate]
   );
+
   const latestApprovedLeaveRequest = useMemo(
     () => getLatestApprovedEmployeeLeaveRequest(leaveRequests),
     [leaveRequests]
+  );
+
+  const employeeOfficialFiles = useMemo(
+    () =>
+      filterActiveEmployeeFiles(employeeFiles).filter(file =>
+        ["cv", "education_certificate"].includes(
+          String(file.fileType || "").trim().toLowerCase()
+        )
+      ),
+    [employeeFiles]
+  );
+
+  const employeeOfficialCvFile = useMemo(
+    () =>
+      employeeOfficialFiles.find(
+        file => String(file.fileType || "").trim().toLowerCase() === "cv"
+      ) || null,
+    [employeeOfficialFiles]
+  );
+
+  const employeeOfficialCertificateFile = useMemo(
+    () =>
+      employeeOfficialFiles.find(
+        file =>
+          String(file.fileType || "").trim().toLowerCase() ===
+          "education_certificate"
+      ) || null,
+    [employeeOfficialFiles]
   );
 
   const handleSavePhone = async () => {
@@ -1395,6 +1468,136 @@ export default function EmployeeProfilePage() {
                 بيانات العمل هنا للعرض فقط. لا يمكنك تعديل المسمى الوظيفي أو
                 رصيد الإجازات أو الحالة الوظيفية بنفسك من هذه الصفحة.
               </div>
+
+              <div className="space-y-4 rounded-[24px] border border-slate-200 bg-slate-50/70 p-5">
+                <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                  <FileText className="h-4 w-4" />
+                  المستندات الرسمية
+                </div>
+
+                <div className="text-sm leading-7 text-slate-600">
+                  هذه المستندات جزء من ملفك الوظيفي، وتم رفعها من الموارد البشرية للعرض فقط.
+                </div>
+
+                {employeeFilesLoading ? (
+                  <div className="rounded-[18px] border border-dashed border-slate-200 bg-white px-4 py-6 text-center text-sm text-slate-500">
+                    جاري تحميل المستندات الرسمية...
+                  </div>
+                ) : (
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-3 rounded-[20px] border border-slate-200 bg-white p-4">
+                      <div className="text-sm font-semibold text-slate-900">
+                        السيرة الذاتية
+                      </div>
+
+                      {employeeOfficialCvFile ? (
+                        <>
+                          <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                            <div className="font-semibold text-slate-900">
+                              {employeeOfficialCvFile.fileName}
+                            </div>
+                            <div className="mt-1">
+                              آخر رفع:{" "}
+                              {employeeOfficialCvFile.uploadedAtDate
+                                ? formatDateTimeEN(employeeOfficialCvFile.uploadedAtDate)
+                                : "غير متوفر"}
+                            </div>
+                          </div>
+
+                          <div className="flex flex-wrap gap-2">
+                            {employeeOfficialCvFile.viewUrl ? (
+                              <Button asChild type="button" variant="outline">
+                                <a
+                                  href={employeeOfficialCvFile.viewUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                >
+                                  <Eye className="ml-2 h-4 w-4" />
+                                  عرض
+                                </a>
+                              </Button>
+                            ) : null}
+
+                            {employeeOfficialCvFile.downloadUrl ? (
+                              <Button asChild type="button" variant="outline">
+                                <a
+                                  href={employeeOfficialCvFile.downloadUrl}
+                                  rel="noreferrer"
+                                  download={employeeOfficialCvFile.fileName || true}
+                                >
+                                  <Download className="ml-2 h-4 w-4" />
+                                  تحميل
+                                </a>
+                              </Button>
+                            ) : null}
+                          </div>
+                        </>
+                      ) : (
+                        <div className="rounded-[16px] border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+                          لا يوجد ملف سيرة ذاتية مرفوع حتى الآن.
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="space-y-3 rounded-[20px] border border-slate-200 bg-white p-4">
+                      <div className="text-sm font-semibold text-slate-900">
+                        الشهادة الدراسية
+                      </div>
+
+                      {employeeOfficialCertificateFile ? (
+                        <>
+                          <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                            <div className="font-semibold text-slate-900">
+                              {employeeOfficialCertificateFile.fileName}
+                            </div>
+                            <div className="mt-1">
+                              آخر رفع:{" "}
+                              {employeeOfficialCertificateFile.uploadedAtDate
+                                ? formatDateTimeEN(
+                                  employeeOfficialCertificateFile.uploadedAtDate
+                                )
+                                : "غير متوفر"}
+                            </div>
+                          </div>
+
+                          <div className="flex flex-wrap gap-2">
+                            {employeeOfficialCertificateFile.viewUrl ? (
+                              <Button asChild type="button" variant="outline">
+                                <a
+                                  href={employeeOfficialCertificateFile.viewUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                >
+                                  <Eye className="ml-2 h-4 w-4" />
+                                  عرض
+                                </a>
+                              </Button>
+                            ) : null}
+
+                            {employeeOfficialCertificateFile.downloadUrl ? (
+                              <Button asChild type="button" variant="outline">
+                                <a
+                                  href={employeeOfficialCertificateFile.downloadUrl}
+                                  rel="noreferrer"
+                                  download={employeeOfficialCertificateFile.fileName || true}
+                                >
+                                  <Download className="ml-2 h-4 w-4" />
+                                  تحميل
+                                </a>
+                              </Button>
+                            ) : null}
+                          </div>
+                        </>
+                      ) : (
+                        <div className="rounded-[16px] border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+                          لا يوجد ملف شهادة دراسية مرفوع حتى الآن.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
             </CardContent>
           </Card>
         </section>
@@ -1435,7 +1638,7 @@ export default function EmployeeProfilePage() {
                   value={
                     latestApprovedLeaveRequest
                       ? getLeaveStatusMeta(latestApprovedLeaveRequest.status)
-                          .label
+                        .label
                       : "لا توجد إجازات"
                   }
                   icon={
@@ -1451,8 +1654,8 @@ export default function EmployeeProfilePage() {
                   value={
                     latestApprovedLeaveRequest
                       ? formatLeaveDaysLabel(
-                          latestApprovedLeaveRequest.daysCount
-                        )
+                        latestApprovedLeaveRequest.daysCount
+                      )
                       : "—"
                   }
                   icon={CalendarDays}

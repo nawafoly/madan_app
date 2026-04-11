@@ -150,6 +150,10 @@ type EmployeeFormValues = {
   employmentStatus: string;
   startDate: string;
   leaveBalance: string;
+  baseSalary: string;
+  expectedWorkHours: string;
+  actualWorkedHours: string;
+  insuranceDeduction: string;
   adminNotes: string;
 };
 
@@ -165,7 +169,19 @@ type EmployeeMessageFormValues = {
   message: string;
 };
 
-type EmployeeWorkspaceSectionKey = "profile" | "leave" | "messages" | "files";
+type EmployeeSalaryDeductionFormValue = {
+  id: string;
+  title: string;
+  amount: string;
+};
+
+type EmployeeWorkspaceSectionKey =
+  | "profile"
+  | "salary"
+  | "leave"
+  | "messages"
+  | "files";
+
 
 const EMPLOYEE_WORKSPACE_SECTIONS: Array<{
   key: EmployeeWorkspaceSectionKey;
@@ -173,6 +189,7 @@ const EMPLOYEE_WORKSPACE_SECTIONS: Array<{
   icon: typeof ShieldCheck;
 }> = [
     { key: "profile", label: "بيانات الموظف", icon: ShieldCheck },
+    { key: "salary", label: "الرواتب", icon: BadgeCheck },
     { key: "leave", label: "الإجازات", icon: CalendarDays },
     { key: "messages", label: "الرسائل", icon: Mail },
     { key: "files", label: "الملفات", icon: FileText },
@@ -191,6 +208,10 @@ function resolveEmployeeWorkspaceSection(
     case "employee":
     case "employee-info":
       return "profile";
+    case "salary":
+    case "payroll":
+    case "salary-info":
+      return "salary";
     case "leave":
     case "leaves":
     case "vacation":
@@ -422,6 +443,22 @@ function buildEmployeeFormValues(
       employment.leaveBalance === 0 || employee?.leaveBalance === 0
         ? String(employment.leaveBalance ?? employee?.leaveBalance ?? 0)
         : pickText(employment.leaveBalance, employee?.leaveBalance),
+    baseSalary:
+      employment.baseSalary === 0
+        ? "0"
+        : pickText(employment.baseSalary),
+    expectedWorkHours:
+      employment.expectedWorkHours === 0
+        ? "0"
+        : pickText(employment.expectedWorkHours),
+    actualWorkedHours:
+      employment.actualWorkedHours === 0
+        ? "0"
+        : pickText(employment.actualWorkedHours),
+    insuranceDeduction:
+      employment.insuranceDeduction === 0
+        ? "0"
+        : pickText(employment.insuranceDeduction),
     adminNotes: pickText(employment.adminNotes),
   };
 }
@@ -637,6 +674,28 @@ function normalizeEmployeeFileMatchValue(value: unknown) {
     .toLowerCase();
 }
 
+function createEmptySalaryDeduction(): EmployeeSalaryDeductionFormValue {
+  return {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    title: "",
+    amount: "",
+  };
+}
+
+function normalizeSalaryDeductions(value: unknown): EmployeeSalaryDeductionFormValue[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((item, index) => ({
+    id:
+      String((item as any)?.id || "").trim() ||
+      `loaded-${index}-${Math.random().toString(36).slice(2, 8)}`,
+    title: String((item as any)?.title || "").trim(),
+    amount:
+      (item as any)?.amount === 0
+        ? "0"
+        : String((item as any)?.amount ?? "").trim(),
+  }));
+}
+
 function matchesEmployeeFileVersion(
   file: EmployeeFileRecord,
   title: string,
@@ -666,6 +725,9 @@ export default function EmployeesManagementPage() {
   const [form, setForm] = useState<EmployeeFormValues>(() =>
     buildEmployeeFormValues(null)
   );
+  const [salaryDeductions, setSalaryDeductions] = useState<
+    EmployeeSalaryDeductionFormValue[]
+  >([]);
   const [saving, setSaving] = useState(false);
   const [leaveRequests, setLeaveRequests] = useState<
     EmployeeLeaveRequestRecord[]
@@ -716,6 +778,7 @@ export default function EmployeesManagementPage() {
   const employeeFileInputRef = useRef<HTMLInputElement | null>(null);
   const officialCvInputRef = useRef<HTMLInputElement | null>(null);
   const officialCertificateInputRef = useRef<HTMLInputElement | null>(null);
+  const employeeSalarySectionRef = useRef<HTMLDivElement | null>(null);
   const employeeOverviewSectionRef = useRef<HTMLDivElement | null>(null);
   const employeeLeaveSectionRef = useRef<HTMLDivElement | null>(null);
   const employeeMessagesSectionRef = useRef<HTMLDivElement | null>(null);
@@ -1094,10 +1157,33 @@ export default function EmployeesManagementPage() {
     setForm(initialForm);
   }, [initialForm, selectedEmployeeId]);
 
+
+  useEffect(() => {
+    const employment = (selectedEmployee?.employeeProfile?.employment ||
+      selectedEmployee?.employment ||
+      {}) as Record<string, any>;
+
+    setSalaryDeductions(
+      normalizeSalaryDeductions(employment.salaryDeductions)
+    );
+  }, [selectedEmployeeId, selectedEmployee]);
+
+
+  const initialSalaryDeductions = useMemo(() => {
+    const employment = (selectedEmployee?.employeeProfile?.employment ||
+      selectedEmployee?.employment ||
+      {}) as Record<string, any>;
+
+    return normalizeSalaryDeductions(employment.salaryDeductions);
+  }, [selectedEmployee]);
+
   const isDirty = useMemo(
-    () => JSON.stringify(form) !== JSON.stringify(initialForm),
-    [form, initialForm]
+    () =>
+      JSON.stringify(form) !== JSON.stringify(initialForm) ||
+      JSON.stringify(salaryDeductions) !== JSON.stringify(initialSalaryDeductions),
+    [form, initialForm, salaryDeductions, initialSalaryDeductions]
   );
+
   const latestApprovedLeaveRequest = useMemo(
     () => getLatestApprovedEmployeeLeaveRequest(leaveRequests),
     [leaveRequests]
@@ -1220,11 +1306,13 @@ export default function EmployeesManagementPage() {
     const target =
       section === "profile"
         ? employeeOverviewSectionRef.current
-        : section === "leave"
-          ? employeeLeaveSectionRef.current
-          : section === "messages"
-            ? employeeMessagesSectionRef.current
-            : employeeFilesSectionRef.current;
+        : section === "salary"
+          ? employeeSalarySectionRef.current
+          : section === "leave"
+            ? employeeLeaveSectionRef.current
+            : section === "messages"
+              ? employeeMessagesSectionRef.current
+              : employeeFilesSectionRef.current;
 
     target?.scrollIntoView({
       behavior,
@@ -1271,6 +1359,39 @@ export default function EmployeesManagementPage() {
     card => card.profile.employment.statusKey === "probation"
   ).length;
 
+  const baseSalaryNumber = Number(form.baseSalary || 0);
+  const expectedWorkHoursNumber = Number(form.expectedWorkHours || 0);
+  const actualWorkedHoursNumber = Number(form.actualWorkedHours || 0);
+  const insuranceDeductionNumber = Number(form.insuranceDeduction || 0);
+
+  const totalSalaryDeductions = useMemo(
+    () =>
+      salaryDeductions.reduce((sum, item) => {
+        const amount = Number(item.amount || 0);
+        return sum + (Number.isFinite(amount) ? amount : 0);
+      }, 0) +
+      (Number.isFinite(insuranceDeductionNumber)
+        ? insuranceDeductionNumber
+        : 0),
+    [salaryDeductions, insuranceDeductionNumber]
+  );
+
+  const calculatedGrossSalary = useMemo(() => {
+    if (!Number.isFinite(baseSalaryNumber) || baseSalaryNumber <= 0) return 0;
+    if (!Number.isFinite(expectedWorkHoursNumber) || expectedWorkHoursNumber <= 0)
+      return 0;
+
+    const safeActualHours = Math.max(0, actualWorkedHoursNumber);
+    const cappedActualHours = Math.min(safeActualHours, expectedWorkHoursNumber);
+
+    return (baseSalaryNumber / expectedWorkHoursNumber) * cappedActualHours;
+  }, [baseSalaryNumber, expectedWorkHoursNumber, actualWorkedHoursNumber]);
+
+  const calculatedNetSalary = useMemo(
+    () => Math.max(0, calculatedGrossSalary - totalSalaryDeductions),
+    [calculatedGrossSalary, totalSalaryDeductions]
+  );
+
   const handleFormChange = <K extends keyof EmployeeFormValues>(
     key: K,
     value: EmployeeFormValues[K]
@@ -1283,6 +1404,34 @@ export default function EmployeesManagementPage() {
 
   const handleReset = () => {
     setForm(initialForm);
+    setSalaryDeductions(initialSalaryDeductions);
+  };
+
+  const handleSalaryDeductionChange = (
+    deductionId: string,
+    key: "title" | "amount",
+    value: string
+  ) => {
+    setSalaryDeductions(current =>
+      current.map(item =>
+        item.id === deductionId
+          ? {
+            ...item,
+            [key]: value,
+          }
+          : item
+      )
+    );
+  };
+
+  const handleAddSalaryDeduction = () => {
+    setSalaryDeductions(current => [...current, createEmptySalaryDeduction()]);
+  };
+
+  const handleRemoveSalaryDeduction = (deductionId: string) => {
+    setSalaryDeductions(current =>
+      current.filter(item => item.id !== deductionId)
+    );
   };
 
   const handleEmployeeFileFormChange = <
@@ -1945,6 +2094,10 @@ export default function EmployeesManagementPage() {
       form.fingerprintNumber
     );
     const leaveBalance = toNullableNumber(form.leaveBalance);
+    const baseSalary = toNullableNumber(form.baseSalary);
+    const expectedWorkHours = toNullableNumber(form.expectedWorkHours);
+    const actualWorkedHours = toNullableNumber(form.actualWorkedHours);
+    const insuranceDeduction = toNullableNumber(form.insuranceDeduction);
     if (!normalizedFullName) {
       toast.error("يجب إدخال اسم الموظف.");
       return;
@@ -1959,6 +2112,21 @@ export default function EmployeesManagementPage() {
     }
     if (form.leaveBalance.trim() && leaveBalance === null) {
       toast.error("رصيد الإجازات يجب أن يكون رقمًا صالحًا.");
+      return;
+    }
+
+    if (form.baseSalary.trim() && baseSalary === null) {
+      toast.error("الراتب الأساسي يجب أن يكون رقمًا صالحًا.");
+      return;
+    }
+
+    if (form.expectedWorkHours.trim() && expectedWorkHours === null) {
+      toast.error("عدد ساعات العمل يجب أن يكون رقمًا صالحًا.");
+      return;
+    }
+
+    if (form.insuranceDeduction.trim() && insuranceDeduction === null) {
+      toast.error("خصم التأمينات يجب أن يكون رقمًا صالحًا.");
       return;
     }
 
@@ -2010,6 +2178,14 @@ export default function EmployeesManagementPage() {
         phone: normalizedPhone || null,
       };
 
+      const normalizedSalaryDeductions = salaryDeductions
+        .map(item => ({
+          id: item.id,
+          title: String(item.title || "").trim(),
+          amount: Number(item.amount || 0),
+        }))
+        .filter(item => item.title && Number.isFinite(item.amount) && item.amount > 0);
+
       const nextEmployment: EmployeeEmploymentDoc = {
         ...currentEmployment,
         title: form.jobTitle.trim() || null,
@@ -2017,6 +2193,14 @@ export default function EmployeesManagementPage() {
         department: form.department.trim() || null,
         startDate: form.startDate || null,
         leaveBalance,
+        baseSalary,
+        expectedWorkHours,
+        actualWorkedHours,
+        insuranceDeduction,
+        salaryDeductions: normalizedSalaryDeductions,
+        totalSalaryDeductions,
+        calculatedGrossSalary,
+        calculatedNetSalary,
         status: form.employmentStatus || "active",
         employmentStatus: form.employmentStatus || "active",
         fingerprintNumber: normalizedFingerprintNumber || null,
@@ -2067,6 +2251,13 @@ export default function EmployeesManagementPage() {
             employmentStatus: nextEmployment.employmentStatus || null,
             fingerprintNumber: nextEmployment.fingerprintNumber || null,
             leaveBalance,
+            baseSalary,
+            expectedWorkHours,
+            actualWorkedHours,
+            insuranceDeduction,
+            totalSalaryDeductions,
+            calculatedGrossSalary,
+            calculatedNetSalary,
           },
         });
       } catch (error) {
@@ -3263,14 +3454,17 @@ export default function EmployeesManagementPage() {
                                   <SelectValue placeholder="اختر نوع الملف" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  {EMPLOYEE_FILE_TYPE_OPTIONS.map(option => (
-                                    <SelectItem
+                                  {EMPLOYEE_FILE_TYPE_OPTIONS
+                                    .filter(option =>
+                                      !["cv", "education_certificate"].includes(option.value)
+                                    )
+                                    .map(option => (<SelectItem
                                       key={option.value}
                                       value={option.value}
                                     >
                                       {option.label}
                                     </SelectItem>
-                                  ))}
+                                    ))}
                                 </SelectContent>
                               </Select>
                             </Field>
@@ -3496,6 +3690,218 @@ export default function EmployeesManagementPage() {
                   </CardContent>
                 </Card>
 
+                <Card
+                  id="employee-section-salary"
+                  ref={employeeSalarySectionRef}
+                  className="order-25 scroll-mt-36 gap-0 overflow-hidden border-slate-200/80 bg-white/95 py-0 shadow-sm lg:scroll-mt-44"
+                >
+                  <CardHeader className="border-b border-white/70 bg-white/70 px-6 pt-6 pb-4 backdrop-blur">
+                    <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                          <BadgeCheck className="h-4 w-4" />
+                          الرواتب
+                        </div>
+                        <div className="text-2xl font-semibold tracking-tight text-slate-950">
+                          الراتب والحضور والخصومات
+                        </div>
+                        <p className="max-w-2xl text-sm leading-7 text-slate-500">
+                          أدخل الراتب الأساسي وساعات العمل والساعات الفعلية، وسيتم احتساب الراتب
+                          الفعلي تلقائيًا بعد تطبيق الخصومات.
+                        </p>
+                      </div>
+
+                      <div className="grid gap-3 sm:grid-cols-3">
+                        <LeaveOverviewStat
+                          icon={BadgeCheck}
+                          label="الراتب الأساسي"
+                          value={`${formatNumberEN(baseSalaryNumber || 0)} ر.س`}
+                        />
+                        <LeaveOverviewStat
+                          icon={Clock3}
+                          label="إجمالي الخصومات"
+                          value={`${formatNumberEN(totalSalaryDeductions || 0)} ر.س`}
+                        />
+                        <LeaveOverviewStat
+                          icon={CheckCircle2}
+                          label="الراتب الفعلي"
+                          value={`${formatNumberEN(calculatedNetSalary || 0)} ر.س`}
+                        />
+                      </div>
+                    </div>
+                  </CardHeader>
+
+                  <CardContent className="space-y-6 p-5">
+                    <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-5">
+                      <Field label="الراتب الأساسي">
+                        <Input
+                          type="number"
+                          inputMode="decimal"
+                          step="0.01"
+                          value={form.baseSalary}
+                          onChange={event =>
+                            handleFormChange("baseSalary", event.target.value)
+                          }
+                          placeholder="مثال: 4500"
+                          disabled={!canManageEmployees || saving}
+                        />
+                      </Field>
+
+                      <Field label="عدد ساعات العمل">
+                        <Input
+                          type="number"
+                          inputMode="decimal"
+                          step="0.5"
+                          value={form.expectedWorkHours}
+                          onChange={event =>
+                            handleFormChange("expectedWorkHours", event.target.value)
+                          }
+                          placeholder="مثال: 240"
+                          disabled={!canManageEmployees || saving}
+                        />
+                      </Field>
+
+                      <Field label="عدد الساعات الفعلية">
+                        <Input
+                          type="number"
+                          inputMode="decimal"
+                          step="0.5"
+                          value={form.actualWorkedHours}
+                          onChange={event =>
+                            handleFormChange("actualWorkedHours", event.target.value)
+                          }
+                          placeholder="مثال: 228"
+                          disabled={!canManageEmployees || saving}
+                        />
+                      </Field>
+
+                      <Field label="خصم التأمينات">
+                        <Input
+                          type="number"
+                          inputMode="decimal"
+                          step="0.01"
+                          value={form.insuranceDeduction}
+                          onChange={event =>
+                            handleFormChange("insuranceDeduction", event.target.value)
+                          }
+                          placeholder="مثال: 400"
+                          disabled={!canManageEmployees || saving}
+                        />
+                      </Field>
+
+                      <Field label="الراتب قبل الخصومات">
+                        <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900">
+                          {formatNumberEN(calculatedGrossSalary || 0)} ر.س
+                        </div>
+                      </Field>
+                    </div>
+
+                    <div className="space-y-4 rounded-[24px] border border-slate-200 bg-slate-50/70 p-5">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="space-y-1">
+                          <div className="text-base font-semibold text-slate-950">
+                            الخصومات
+                          </div>
+                          <p className="text-sm leading-6 text-slate-500">
+                            أضف أي خصم مثل الغياب أو التأخير أو أي استقطاع آخر.
+                          </p>
+                        </div>
+
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={handleAddSalaryDeduction}
+                          disabled={!canManageEmployees || saving}
+                        >
+                          إضافة خصم
+                        </Button>
+                      </div>
+
+                      {salaryDeductions.length ? (
+                        <div className="space-y-3">
+                          {salaryDeductions.map(item => (
+                            <div
+                              key={item.id}
+                              className="grid gap-3 rounded-[20px] border border-slate-200 bg-white p-4 md:grid-cols-[minmax(0,1fr)_180px_auto]"
+                            >
+                              <Input
+                                value={item.title}
+                                onChange={event =>
+                                  handleSalaryDeductionChange(
+                                    item.id,
+                                    "title",
+                                    event.target.value
+                                  )
+                                }
+                                placeholder="مثال: خصم غياب"
+                                disabled={!canManageEmployees || saving}
+                              />
+
+                              <Input
+                                type="number"
+                                inputMode="decimal"
+                                step="0.01"
+                                value={item.amount}
+                                onChange={event =>
+                                  handleSalaryDeductionChange(
+                                    item.id,
+                                    "amount",
+                                    event.target.value
+                                  )
+                                }
+                                placeholder="قيمة الخصم"
+                                disabled={!canManageEmployees || saving}
+                              />
+
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className="border-rose-200 text-rose-700 hover:bg-rose-50 hover:text-rose-800"
+                                onClick={() => handleRemoveSalaryDeduction(item.id)}
+                                disabled={!canManageEmployees || saving}
+                              >
+                                حذف
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="rounded-[20px] border border-dashed border-slate-200 bg-white px-4 py-6 text-center text-sm text-slate-500">
+                          لا توجد خصومات مضافة حتى الآن.
+                        </div>
+                      )}
+
+                      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                        <div className="rounded-[20px] border border-slate-200 bg-white px-4 py-4">
+                          <div className="text-xs font-semibold tracking-[0.14em] text-slate-500">
+                            إجمالي الخصومات
+                          </div>
+                          <div className="mt-2 text-lg font-semibold text-slate-950">
+                            {formatNumberEN(totalSalaryDeductions || 0)} ر.س
+                          </div>
+                        </div>
+
+                        <div className="rounded-[20px] border border-slate-200 bg-white px-4 py-4">
+                          <div className="text-xs font-semibold tracking-[0.14em] text-slate-500">
+                            الراتب بعد الحضور
+                          </div>
+                          <div className="mt-2 text-lg font-semibold text-slate-950">
+                            {formatNumberEN(calculatedGrossSalary || 0)} ر.س
+                          </div>
+                        </div>
+
+                        <div className="rounded-[20px] border border-emerald-200 bg-emerald-50/70 px-4 py-4">
+                          <div className="text-xs font-semibold tracking-[0.14em] text-emerald-700">
+                            الراتب الفعلي النهائي
+                          </div>
+                          <div className="mt-2 text-lg font-semibold text-emerald-800">
+                            {formatNumberEN(calculatedNetSalary || 0)} ر.س
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
                 <Card
                   id="employee-section-leave"
                   ref={employeeLeaveSectionRef}

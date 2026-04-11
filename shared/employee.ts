@@ -54,21 +54,37 @@ export type EmployeeEmploymentStatus =
   | "terminated"
   | string;
 
-export type EmployeeEmploymentDoc = {
-  title?: string | null;
-  jobTitle?: string | null;
-  department?: string | null;
-  startDate?: unknown;
-  leaveBalance?: number | null;
-  status?: EmployeeEmploymentStatus | null;
-  employmentStatus?: EmployeeEmploymentStatus | null;
-  employeeCode?: string | null;
-  fingerprintNumber?: string | null;
-  adminNotes?: string | null;
-  updatedAt?: unknown;
-  updatedByUid?: string | null;
-  updatedByEmail?: string | null;
-};
+  export type EmployeeEmploymentDoc = {
+    title?: string | null;
+    jobTitle?: string | null;
+    department?: string | null;
+    startDate?: unknown;
+    leaveBalance?: number | null;
+  
+    baseSalary?: number | null;
+    expectedWorkHours?: number | null;
+    actualWorkedHours?: number | null;
+    insuranceDeduction?: number | null;
+    
+    salaryDeductions?: Array<{
+      id?: string | null;
+      title?: string | null;
+      amount?: number | null;
+    }> | null;
+  
+    totalSalaryDeductions?: number | null;
+    calculatedGrossSalary?: number | null;
+    calculatedNetSalary?: number | null;
+  
+    status?: EmployeeEmploymentStatus | null;
+    employmentStatus?: EmployeeEmploymentStatus | null;
+    employeeCode?: string | null;
+    fingerprintNumber?: string | null;
+    adminNotes?: string | null;
+    updatedAt?: unknown;
+    updatedByUid?: string | null;
+    updatedByEmail?: string | null;
+  };
 
 export type EmployeeProfileDoc = {
   personal?: EmployeePersonalDoc | null;
