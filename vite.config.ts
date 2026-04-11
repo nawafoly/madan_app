@@ -3,9 +3,8 @@ import react from "@vitejs/plugin-react";
 import fs from "node:fs";
 import path from "node:path";
 import { defineConfig } from "vite";
-import { vitePluginManusRuntime } from "vite-plugin-manus-runtime";
 
-const plugins = [react(), tailwindcss(), vitePluginManusRuntime()];
+const plugins = [react(), tailwindcss()];
 
 /**
  * ✅ Fix alias/@ reliably regardless of where vite.config.ts lives:
