@@ -3,6 +3,9 @@ export const EMPLOYEE_FILES_COLLECTION = "employee_files" as const;
 export const EMPLOYEE_FILE_CATEGORY = "employee_file" as const;
 export const EMPLOYEE_MESSAGES_COLLECTION = "employee_messages" as const;
 export const EMPLOYEE_NOTIFICATIONS_COLLECTION = "notifications" as const;
+export const EMPLOYEE_ABSENCES_COLLECTION = "employee_absences" as const;
+export const EMPLOYEE_PAYROLL_RECORDS_COLLECTION =
+  "employee_payroll_records" as const;
 export const EMPLOYEE_DEFAULT_FILE_TYPE = "general" as const;
 export const EMPLOYEE_FILE_STATUS_ACTIVE = "active" as const;
 export const EMPLOYEE_FILE_STATUS_REPLACED = "replaced" as const;
@@ -27,6 +30,7 @@ export const EMPLOYEE_FILE_STATUSES = [
   EMPLOYEE_FILE_STATUS_ACTIVE,
   EMPLOYEE_FILE_STATUS_REPLACED,
 ] as const;
+export const EMPLOYEE_ABSENCE_TYPES = ["full_day", "half_day"] as const;
 
 export type EmployeeAvatarDoc = {
   id?: string | null;
@@ -62,8 +66,11 @@ export type EmployeeEmploymentStatus =
     leaveBalance?: number | null;
   
     baseSalary?: number | null;
+    expectedWorkDays?: number | null;
     expectedWorkHours?: number | null;
     actualWorkedHours?: number | null;
+
+    calculatedDailyRate?: number | null;
     
     hoursDifference?: number | null;
     overtimeHours?: number | null;
@@ -110,6 +117,9 @@ export type EmployeeMessageRole = "employee" | "hr" | "system" | string;
 export type EmployeeMessageStatus = "sent" | "read" | string;
 export type EmployeeNotificationType =
   | (typeof EMPLOYEE_NOTIFICATION_TYPES)[number]
+  | string;
+export type EmployeeAbsenceType =
+  | (typeof EMPLOYEE_ABSENCE_TYPES)[number]
   | string;
 
 export type EmployeeFileDoc = {
@@ -188,6 +198,45 @@ export type EmployeeNotificationDoc = {
   isRead: boolean;
   readAt?: unknown | null;
   updatedAt?: unknown;
+};
+
+export type EmployeeAbsenceDoc = {
+  employeeId: string;
+  employeeUid: string;
+  date: string;
+  type: EmployeeAbsenceType;
+  note?: string | null;
+  createdAt?: unknown;
+  createdByUid: string;
+};
+
+export type EmployeePayrollRecordDoc = {
+  employeeId: string;
+  employeeUid: string;
+  payrollMonth: string;
+  monthStart: string;
+  monthEnd: string;
+  baseSalary: number;
+  absenceDays: number;
+  absenceDeduction: number;
+  delayDeduction?: number | null;
+  overtimeBonus?: number | null;
+  insuranceDeduction?: number | null;
+  salaryDeductions?: Array<{
+    id?: string;
+    title?: string;
+    amount?: number;
+  }> | null;
+  totalSalaryDeductions?: number | null;
+  absenceEntries?: Array<{
+    date: string;
+    type: EmployeeAbsenceType;
+    note?: string | null;
+  }> | null;
+  finalSalary: number;
+  createdAt?: unknown;
+  createdByUid?: string | null;
+  createdByEmail?: string | null;
 };
 
 export type EmployeeLeaveRequestStatus =

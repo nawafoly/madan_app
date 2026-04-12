@@ -10,6 +10,7 @@ import { useSearch } from "wouter";
 import {
   collection,
   doc,
+  getDocs,
   onSnapshot,
   or,
   query,
@@ -79,6 +80,19 @@ import {
   logAuditEvent,
 } from "@/lib/auditLog";
 import {
+  EMPLOYEE_ABSENCES_COLLECTION,
+  EMPLOYEE_ABSENCE_TYPE_OPTIONS,
+  buildEmployeeAbsenceDateInput,
+  buildEmployeeAbsencePayload,
+  formatEmployeeAbsenceDate,
+  formatEmployeeAbsenceDays,
+  getEmployeeAbsenceTypeLabel,
+  isValidEmployeeAbsenceDate,
+  normalizeEmployeeAbsence,
+  sortEmployeeAbsences,
+  type EmployeeAbsenceRecord,
+} from "@/lib/employeeAbsence";
+import {
   EMPLOYEE_DEFAULT_FILE_TYPE,
   EMPLOYEE_FILE_CATEGORY,
   EMPLOYEE_FILES_COLLECTION,
@@ -114,6 +128,17 @@ import {
   type EmployeeLeaveRequestRecord,
 } from "@/lib/employeeLeave";
 import {
+  EMPLOYEE_PAYROLL_RECORDS_COLLECTION,
+  buildEmployeePayrollMonthInput,
+  buildEmployeePayrollRecordId,
+  computeEmployeePayroll,
+  formatEmployeePayrollMonthLabel,
+  normalizeEmployeePayrollRecord,
+  parseEmployeePayrollMonth,
+  sortEmployeePayrollRecords,
+  type EmployeePayrollRecord,
+} from "@/lib/employeePayroll";
+import {
   formatDateEN,
   formatDateTimeEN,
   formatFileSizeEN,
@@ -122,6 +147,7 @@ import {
 } from "@/lib/formatters";
 import { cn } from "@/lib/utils";
 import type {
+  EmployeeAbsenceType,
   EmployeeEmploymentDoc,
   EmployeeEmploymentStatus,
   EmployeeFileDoc,
@@ -151,6 +177,7 @@ type EmployeeFormValues = {
   startDate: string;
   leaveBalance: string;
   baseSalary: string;
+  expectedWorkDays: string;
   expectedWorkHours: string;
   actualWorkedHours: string;
   overtimeHourlyRate: string;
@@ -174,6 +201,12 @@ type EmployeeSalaryDeductionFormValue = {
   id: string;
   title: string;
   amount: string;
+};
+
+type EmployeeAbsenceFormValues = {
+  date: string;
+  type: EmployeeAbsenceType;
+  note: string;
 };
 
 type EmployeeWorkspaceSectionKey =
@@ -451,6 +484,10 @@ function buildEmployeeFormValues(
       employment.baseSalary === 0
         ? "0"
         : pickText(employment.baseSalary),
+    expectedWorkDays:
+      employment.expectedWorkDays === 0
+        ? "0"
+        : pickText(employment.expectedWorkDays),
     expectedWorkHours:
       employment.expectedWorkHours === 0
         ? "0"
@@ -484,6 +521,14 @@ function buildEmployeeMessageFormValues(): EmployeeMessageFormValues {
   return {
     type: "message",
     message: "",
+  };
+}
+
+function buildEmployeeAbsenceFormValues(): EmployeeAbsenceFormValues {
+  return {
+    date: buildEmployeeAbsenceDateInput(),
+    type: "full_day",
+    note: "",
   };
 }
 
@@ -700,6 +745,10 @@ function resolveEmployeeAuthUid(employee: EmployeeRecord | null | undefined) {
   return String(employee?.uid || employee?.id || "").trim();
 }
 
+function resolveEmployeeDocumentId(employee: EmployeeRecord | null | undefined) {
+  return String(employee?.linkedEmployeeId || employee?.id || "").trim();
+}
+
 function normalizeEmployeeFileMatchValue(value: unknown) {
   return String(value ?? "")
     .trim()
@@ -726,6 +775,18 @@ function normalizeSalaryDeductions(value: unknown): EmployeeSalaryDeductionFormV
         ? "0"
         : String((item as any)?.amount ?? "").trim(),
   }));
+}
+
+function normalizeSalaryDeductionsForPersistence(
+  value: EmployeeSalaryDeductionFormValue[]
+) {
+  return value
+    .map(item => ({
+      id: item.id,
+      title: String(item.title || "").trim(),
+      amount: Number(item.amount || 0),
+    }))
+    .filter(item => item.title && Number.isFinite(item.amount) && item.amount > 0);
 }
 
 function matchesEmployeeFileVersion(
@@ -760,6 +821,23 @@ export default function EmployeesManagementPage() {
   const [salaryDeductions, setSalaryDeductions] = useState<
     EmployeeSalaryDeductionFormValue[]
   >([]);
+  const [employeeAbsences, setEmployeeAbsences] = useState<EmployeeAbsenceRecord[]>(
+    []
+  );
+  const [employeeAbsencesLoading, setEmployeeAbsencesLoading] = useState(false);
+  const [absenceForm, setAbsenceForm] = useState<EmployeeAbsenceFormValues>(
+    buildEmployeeAbsenceFormValues
+  );
+  const [savingAbsence, setSavingAbsence] = useState(false);
+  const [employeePayrollRecords, setEmployeePayrollRecords] = useState<
+    EmployeePayrollRecord[]
+  >([]);
+  const [employeePayrollRecordsLoading, setEmployeePayrollRecordsLoading] =
+    useState(false);
+  const [payrollMonthInput, setPayrollMonthInput] = useState(
+    buildEmployeePayrollMonthInput
+  );
+  const [creatingPayrollRecord, setCreatingPayrollRecord] = useState(false);
   const [saving, setSaving] = useState(false);
   const [leaveRequests, setLeaveRequests] = useState<
     EmployeeLeaveRequestRecord[]
@@ -1052,6 +1130,7 @@ export default function EmployeesManagementPage() {
   const selectedEmployee =
     employees.find(employee => employee.id === selectedEmployeeId) ?? null;
   const selectedEmployeeAuthUid = resolveEmployeeAuthUid(selectedEmployee);
+  const selectedEmployeeDocumentId = resolveEmployeeDocumentId(selectedEmployee);
 
   const selectedEmployeeProfile = useMemo(
     () =>
@@ -1067,6 +1146,90 @@ export default function EmployeesManagementPage() {
         : null,
     [selectedEmployee]
   );
+  const selectedEmployeeLabel = useMemo(
+    () =>
+      selectedEmployeeProfile?.personal.name &&
+        selectedEmployeeProfile.personal.name !== EMPLOYEE_EMPTY_VALUE
+        ? selectedEmployeeProfile.personal.name
+        : pickText(
+          selectedEmployee?.displayName,
+          selectedEmployee?.name,
+          selectedEmployee?.email
+        ) || "الموظف",
+    [selectedEmployee, selectedEmployeeProfile]
+  );
+
+  useEffect(() => {
+    if (!selectedEmployeeDocumentId) {
+      setEmployeeAbsences([]);
+      setEmployeeAbsencesLoading(false);
+      return;
+    }
+
+    setEmployeeAbsencesLoading(true);
+
+    const unsubscribe = onSnapshot(
+      query(
+        collection(db, EMPLOYEE_ABSENCES_COLLECTION),
+        where("employeeId", "==", selectedEmployeeDocumentId)
+      ),
+      snapshot => {
+        const rows = sortEmployeeAbsences(
+          snapshot.docs.map(docSnapshot =>
+            normalizeEmployeeAbsence(
+              docSnapshot.id,
+              (docSnapshot.data() as Record<string, any>) || {}
+            )
+          )
+        );
+        setEmployeeAbsences(rows);
+        setEmployeeAbsencesLoading(false);
+      },
+      error => {
+        console.error("employee_absences_admin_snapshot_error", error);
+        setEmployeeAbsences([]);
+        setEmployeeAbsencesLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [selectedEmployeeDocumentId]);
+
+  useEffect(() => {
+    if (!selectedEmployeeDocumentId) {
+      setEmployeePayrollRecords([]);
+      setEmployeePayrollRecordsLoading(false);
+      return;
+    }
+
+    setEmployeePayrollRecordsLoading(true);
+
+    const unsubscribe = onSnapshot(
+      query(
+        collection(db, EMPLOYEE_PAYROLL_RECORDS_COLLECTION),
+        where("employeeId", "==", selectedEmployeeDocumentId)
+      ),
+      snapshot => {
+        const rows = sortEmployeePayrollRecords(
+          snapshot.docs.map(docSnapshot =>
+            normalizeEmployeePayrollRecord(
+              docSnapshot.id,
+              (docSnapshot.data() as Record<string, any>) || {}
+            )
+          )
+        );
+        setEmployeePayrollRecords(rows);
+        setEmployeePayrollRecordsLoading(false);
+      },
+      error => {
+        console.error("employee_payroll_records_admin_snapshot_error", error);
+        setEmployeePayrollRecords([]);
+        setEmployeePayrollRecordsLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [selectedEmployeeDocumentId]);
 
   useEffect(() => {
     if (!selectedEmployeeAuthUid) {
@@ -1158,6 +1321,8 @@ export default function EmployeesManagementPage() {
   useEffect(() => {
     resetEmployeeFileForm();
     resetEmployeeMessageForm();
+    setAbsenceForm(buildEmployeeAbsenceFormValues());
+    setPayrollMonthInput(buildEmployeePayrollMonthInput());
     setActiveEmployeeWorkspaceSection("profile");
     setActiveEmployeeConversationId(null);
     setComposeEmployeeMessageAsNew(false);
@@ -1265,6 +1430,19 @@ export default function EmployeesManagementPage() {
       JSON.stringify(form) !== JSON.stringify(initialForm) ||
       JSON.stringify(salaryDeductions) !== JSON.stringify(initialSalaryDeductions),
     [form, initialForm, salaryDeductions, initialSalaryDeductions]
+  );
+  const selectedPayrollMonthMeta = useMemo(
+    () => parseEmployeePayrollMonth(payrollMonthInput),
+    [payrollMonthInput]
+  );
+  const selectedPayrollRecord = useMemo(
+    () =>
+      selectedPayrollMonthMeta
+        ? employeePayrollRecords.find(
+          record => record.payrollMonth === selectedPayrollMonthMeta.payrollMonth
+        ) || null
+        : null,
+    [employeePayrollRecords, selectedPayrollMonthMeta]
   );
 
   const latestApprovedLeaveRequest = useMemo(
@@ -1545,6 +1723,7 @@ export default function EmployeesManagementPage() {
   ).length;
 
   const baseSalaryNumber = Number(form.baseSalary || 0);
+  const expectedWorkDaysNumber = Number(form.expectedWorkDays || 0);
   const expectedWorkHoursNumber = Number(form.expectedWorkHours || 0);
   const actualWorkedHoursNumber = Number(form.actualWorkedHours || 0);
   const overtimeHourlyRateInputNumber = Number(form.overtimeHourlyRate || 0);
@@ -1561,6 +1740,14 @@ export default function EmployeesManagementPage() {
         : 0),
     [salaryDeductions, insuranceDeductionNumber]
   );
+
+  const calculatedDailyRate = useMemo(() => {
+    if (!Number.isFinite(baseSalaryNumber) || baseSalaryNumber <= 0) return 0;
+    if (!Number.isFinite(expectedWorkDaysNumber) || expectedWorkDaysNumber <= 0)
+      return 0;
+
+    return baseSalaryNumber / expectedWorkDaysNumber;
+  }, [baseSalaryNumber, expectedWorkDaysNumber]);
 
   const calculatedHourlyRate = useMemo(() => {
     if (!Number.isFinite(baseSalaryNumber) || baseSalaryNumber <= 0) return 0;
@@ -1659,6 +1846,246 @@ export default function EmployeesManagementPage() {
     setSalaryDeductions(current =>
       current.filter(item => item.id !== deductionId)
     );
+  };
+
+  const handleAbsenceFormChange = <K extends keyof EmployeeAbsenceFormValues>(
+    key: K,
+    value: EmployeeAbsenceFormValues[K]
+  ) => {
+    setAbsenceForm(current => ({
+      ...current,
+      [key]: value,
+    }));
+  };
+
+  const handleCreateEmployeeAbsence = async () => {
+    if (!selectedEmployee || !selectedEmployeeDocumentId) return;
+    if (!canManageEmployees) {
+      toast.error("لا تملك صلاحية تسجيل غياب الموظفين.");
+      return;
+    }
+
+    const normalizedDate = String(absenceForm.date || "").trim();
+    const normalizedType = String(absenceForm.type || "")
+      .trim()
+      .toLowerCase();
+
+    if (!isValidEmployeeAbsenceDate(normalizedDate)) {
+      toast.error("اختر تاريخ غياب صالحًا.");
+      return;
+    }
+
+    if (!["full_day", "half_day"].includes(normalizedType)) {
+      toast.error("اختر نوع الغياب.");
+      return;
+    }
+
+    setSavingAbsence(true);
+    try {
+      const absenceRef = doc(collection(db, EMPLOYEE_ABSENCES_COLLECTION));
+      await setDoc(absenceRef, {
+        ...buildEmployeeAbsencePayload({
+          employeeId: selectedEmployeeDocumentId,
+          employeeUid: selectedEmployeeAuthUid || selectedEmployee.id,
+          date: normalizedDate,
+          type: normalizedType as EmployeeAbsenceType,
+          note: absenceForm.note,
+          createdByUid: user?.uid || "",
+        }),
+        createdAt: serverTimestamp(),
+      });
+
+      try {
+        await logAuditEvent({
+          action: "employee_absence_created",
+          category: "user",
+          entityType: "employee_absence",
+          entityId: absenceRef.id,
+          entityPath: absenceRef.path,
+          relatedIds: { userId: selectedEmployee.id },
+          source: buildAuditSource({
+            area: "admin",
+            page: "Employees",
+            method: "create_employee_absence",
+          }),
+          message: `Recorded absence for ${selectedEmployeeLabel}`,
+          meta: {
+            employeeId: selectedEmployeeDocumentId,
+            employeeUid: selectedEmployeeAuthUid || selectedEmployee.id,
+            date: normalizedDate,
+            type: normalizedType,
+            note: String(absenceForm.note || "").trim() || null,
+          },
+        });
+      } catch (auditError) {
+        console.error("employee_absence_audit_failed", auditError);
+      }
+
+      setAbsenceForm(buildEmployeeAbsenceFormValues());
+      toast.success("تم تسجيل الغياب بنجاح.");
+    } catch (error) {
+      console.error("employee_absence_create_failed", error);
+      toast.error("تعذر تسجيل الغياب.");
+    } finally {
+      setSavingAbsence(false);
+    }
+  };
+
+  const handleCreatePayrollRecord = async () => {
+    if (!selectedEmployee || !selectedEmployeeDocumentId) return;
+    if (!canManageEmployees) {
+      toast.error("لا تملك صلاحية إنشاء سجل راتب نهاية الشهر.");
+      return;
+    }
+
+    if (isDirty) {
+      toast.error("احفظ بيانات الراتب أولًا قبل إنشاء سجل نهاية الشهر.");
+      return;
+    }
+
+    if (!selectedPayrollMonthMeta) {
+      toast.error("اختر شهرًا صالحًا لإنشاء سجل الراتب.");
+      return;
+    }
+
+    if (selectedPayrollRecord) {
+      toast.error("يوجد سجل راتب محفوظ لهذا الشهر بالفعل.");
+      return;
+    }
+
+    const baseSalary = toNullableNumber(form.baseSalary);
+    const expectedWorkDays = toNullableNumber(form.expectedWorkDays);
+    const expectedWorkHours = toNullableNumber(form.expectedWorkHours);
+    const actualWorkedHours = toNullableNumber(form.actualWorkedHours);
+    const overtimeHourlyRate = toNullableNumber(form.overtimeHourlyRate);
+    const insuranceDeduction = toNullableNumber(form.insuranceDeduction);
+
+    if (baseSalary === null || baseSalary <= 0) {
+      toast.error("يجب إدخال الراتب الأساسي أولًا.");
+      return;
+    }
+
+    setCreatingPayrollRecord(true);
+    try {
+      const absencesSnapshot = await getDocs(
+        query(
+          collection(db, EMPLOYEE_ABSENCES_COLLECTION),
+          where("employeeId", "==", selectedEmployeeDocumentId)
+        )
+      );
+
+      const monthlyAbsences = sortEmployeeAbsences(
+        absencesSnapshot.docs.map(docSnapshot =>
+          normalizeEmployeeAbsence(
+            docSnapshot.id,
+            (docSnapshot.data() as Record<string, any>) || {}
+          )
+        )
+      ).filter(
+        absence =>
+          absence.date >= selectedPayrollMonthMeta.monthStart &&
+          absence.date <= selectedPayrollMonthMeta.monthEnd
+      );
+
+      const normalizedSalaryDeductions =
+        normalizeSalaryDeductionsForPersistence(salaryDeductions);
+      const payrollComputation = computeEmployeePayroll({
+        baseSalary,
+        expectedWorkDays,
+        expectedWorkHours,
+        actualWorkedHours,
+        overtimeHourlyRate,
+        insuranceDeduction,
+        salaryDeductions: normalizedSalaryDeductions,
+        absences: monthlyAbsences,
+      });
+
+      const payrollRef = doc(
+        db,
+        EMPLOYEE_PAYROLL_RECORDS_COLLECTION,
+        buildEmployeePayrollRecordId(
+          selectedEmployeeDocumentId,
+          selectedPayrollMonthMeta.payrollMonth
+        )
+      );
+
+      await runTransaction(db, async tx => {
+        const existingRecord = await tx.get(payrollRef);
+        if (existingRecord.exists()) {
+          throw new Error("payroll_record_exists");
+        }
+
+        tx.set(payrollRef, {
+          employeeId: selectedEmployeeDocumentId,
+          employeeUid: selectedEmployeeAuthUid || selectedEmployee.id,
+          payrollMonth: selectedPayrollMonthMeta.payrollMonth,
+          monthStart: selectedPayrollMonthMeta.monthStart,
+          monthEnd: selectedPayrollMonthMeta.monthEnd,
+          baseSalary: payrollComputation.baseSalary,
+          absenceDays: payrollComputation.absenceDays,
+          absenceDeduction: payrollComputation.absenceDeduction,
+          delayDeduction: payrollComputation.delayDeduction,
+          overtimeBonus: payrollComputation.overtimeBonus,
+          insuranceDeduction: payrollComputation.insuranceDeduction,
+          salaryDeductions: normalizedSalaryDeductions,
+          totalSalaryDeductions: payrollComputation.totalSalaryDeductions,
+          absenceCount: monthlyAbsences.length,
+          absenceEntriesSummary: monthlyAbsences.map(absence => ({
+            date: absence.date,
+            type: absence.type,
+          })),
+          finalSalary: payrollComputation.finalSalary,
+          createdAt: serverTimestamp(),
+          createdByUid: user?.uid || null,
+          createdByEmail: user?.email || null,
+        });
+      });
+
+      try {
+        await logAuditEvent({
+          action: "employee_payroll_record_created",
+          category: "finance",
+          entityType: "employee_payroll_record",
+          entityId: payrollRef.id,
+          entityPath: payrollRef.path,
+          relatedIds: { userId: selectedEmployee.id },
+          source: buildAuditSource({
+            area: "admin",
+            page: "Employees",
+            method: "create_employee_payroll_record",
+          }),
+          message: `Created payroll record for ${selectedEmployeeLabel}`,
+          meta: {
+            employeeId: selectedEmployeeDocumentId,
+            employeeUid: selectedEmployeeAuthUid || selectedEmployee.id,
+            payrollMonth: selectedPayrollMonthMeta.payrollMonth,
+            baseSalary: payrollComputation.baseSalary,
+            absenceDays: payrollComputation.absenceDays,
+            absenceDeduction: payrollComputation.absenceDeduction,
+            delayDeduction: payrollComputation.delayDeduction,
+            overtimeBonus: payrollComputation.overtimeBonus,
+            totalSalaryDeductions: payrollComputation.totalSalaryDeductions,
+            finalSalary: payrollComputation.finalSalary,
+          },
+        });
+      } catch (auditError) {
+        console.error("employee_payroll_record_audit_failed", auditError);
+      }
+
+      toast.success(
+        `تم إنشاء سجل راتب ${selectedPayrollMonthMeta.label} بنجاح.`
+      );
+    } catch (error) {
+      console.error("employee_payroll_record_create_failed", error);
+
+      if (error instanceof Error && error.message === "payroll_record_exists") {
+        toast.error("يوجد سجل راتب محفوظ لهذا الشهر بالفعل.");
+      } else {
+        toast.error("تعذر إنشاء سجل راتب نهاية الشهر.");
+      }
+    } finally {
+      setCreatingPayrollRecord(false);
+    }
   };
 
   const handleEmployeeFileFormChange = <
@@ -2322,6 +2749,7 @@ export default function EmployeesManagementPage() {
     );
     const leaveBalance = toNullableNumber(form.leaveBalance);
     const baseSalary = toNullableNumber(form.baseSalary);
+    const expectedWorkDays = toNullableNumber(form.expectedWorkDays);
     const expectedWorkHours = toNullableNumber(form.expectedWorkHours);
     const actualWorkedHours = toNullableNumber(form.actualWorkedHours);
     const overtimeHourlyRate = toNullableNumber(form.overtimeHourlyRate);
@@ -2345,6 +2773,11 @@ export default function EmployeesManagementPage() {
 
     if (form.baseSalary.trim() && baseSalary === null) {
       toast.error("الراتب الأساسي يجب أن يكون رقمًا صالحًا.");
+      return;
+    }
+
+    if (form.expectedWorkDays.trim() && expectedWorkDays === null) {
+      toast.error("عدد أيام العمل يجب أن يكون رقمًا صالحًا.");
       return;
     }
 
@@ -2411,13 +2844,8 @@ export default function EmployeesManagementPage() {
         phone: normalizedPhone || null,
       };
 
-      const normalizedSalaryDeductions = salaryDeductions
-        .map(item => ({
-          id: item.id,
-          title: String(item.title || "").trim(),
-          amount: Number(item.amount || 0),
-        }))
-        .filter(item => item.title && Number.isFinite(item.amount) && item.amount > 0);
+      const normalizedSalaryDeductions =
+        normalizeSalaryDeductionsForPersistence(salaryDeductions);
 
       const nextEmployment: EmployeeEmploymentDoc = {
         ...currentEmployment,
@@ -2427,12 +2855,14 @@ export default function EmployeesManagementPage() {
         startDate: form.startDate || null,
         leaveBalance,
         baseSalary,
+        expectedWorkDays,
         expectedWorkHours,
         actualWorkedHours,
         overtimeHours: calculatedOvertimeHours,
         missingHours: calculatedMissingHours,
         hoursDifference: calculatedHoursDifference,
         overtimeHourlyRate: effectiveOvertimeHourlyRate,
+        calculatedDailyRate,
         calculatedHourlyRate,
         calculatedOvertimeAmount,
         calculatedMissingDeduction,
@@ -2492,12 +2922,14 @@ export default function EmployeesManagementPage() {
             fingerprintNumber: nextEmployment.fingerprintNumber || null,
             leaveBalance,
             baseSalary,
+            expectedWorkDays,
             expectedWorkHours,
             actualWorkedHours,
             overtimeHours: calculatedOvertimeHours,
             missingHours: calculatedMissingHours,
             hoursDifference: calculatedHoursDifference,
             overtimeHourlyRate: effectiveOvertimeHourlyRate,
+            calculatedDailyRate,
             calculatedHourlyRate,
             calculatedOvertimeAmount,
             calculatedMissingDeduction,
@@ -3177,6 +3609,7 @@ export default function EmployeesManagementPage() {
                         />
                       ))}
                     </div>
+
                   </CardContent>
                 </Card>
 
@@ -4170,6 +4603,20 @@ export default function EmployeesManagementPage() {
                         />
                       </Field>
 
+                      <Field label="عدد أيام العمل">
+                        <Input
+                          type="number"
+                          inputMode="decimal"
+                          step="1"
+                          value={form.expectedWorkDays}
+                          onChange={event =>
+                            handleFormChange("expectedWorkDays", event.target.value)
+                          }
+                          placeholder="مثال: 26"
+                          disabled={!canManageEmployees || saving}
+                        />
+                      </Field>
+
                       <Field label="عدد ساعات العمل">
                         <Input
                           type="number"
@@ -4336,6 +4783,24 @@ export default function EmployeesManagementPage() {
 
                         <div className="rounded-[20px] border border-slate-200 bg-white px-4 py-4">
                           <div className="text-xs font-semibold tracking-[0.14em] text-slate-500">
+                            راتب اليوم
+                          </div>
+                          <div className="mt-2 text-lg font-semibold text-slate-950">
+                            {formatNumberEN(calculatedDailyRate || 0)} ر.س
+                          </div>
+                        </div>
+
+                        <div className="rounded-[20px] border border-slate-200 bg-white px-4 py-4">
+                          <div className="text-xs font-semibold tracking-[0.14em] text-slate-500">
+                            راتب الساعة
+                          </div>
+                          <div className="mt-2 text-lg font-semibold text-slate-950">
+                            {formatNumberEN(calculatedHourlyRate || 0)} ر.س
+                          </div>
+                        </div>
+
+                        <div className="rounded-[20px] border border-slate-200 bg-white px-4 py-4">
+                          <div className="text-xs font-semibold tracking-[0.14em] text-slate-500">
                             قيمة الأوفر تايم
                           </div>
                           <div className="mt-2 text-lg font-semibold text-slate-950">
@@ -4368,6 +4833,322 @@ export default function EmployeesManagementPage() {
                           <div className="mt-2 text-lg font-semibold text-emerald-800">
                             {formatNumberEN(calculatedNetSalary || 0)} ر.س
                           </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid gap-6 xl:grid-cols-[1fr_1.15fr]">
+                      <div className="space-y-4 rounded-[24px] border border-slate-200 bg-white p-5">
+                        <div className="space-y-1">
+                          <div className="text-base font-semibold text-slate-950">
+                            تسجيل غياب
+                          </div>
+                          <p className="text-sm leading-6 text-slate-500">
+                            يمكن تسجيل الغياب الحالي أو بأثر رجعي، وسيتم احتسابه فقط عند
+                            إنشاء سجل راتب الشهر المحدد.
+                          </p>
+                        </div>
+
+                        <div className="grid gap-4 md:grid-cols-2">
+                          <Field label="تاريخ الغياب">
+                            <Input
+                              type="date"
+                              value={absenceForm.date}
+                              onChange={event =>
+                                handleAbsenceFormChange("date", event.target.value)
+                              }
+                              disabled={!canManageEmployees || savingAbsence}
+                            />
+                          </Field>
+
+                          <Field label="نوع الغياب">
+                            <Select
+                              value={absenceForm.type}
+                              onValueChange={value =>
+                                handleAbsenceFormChange(
+                                  "type",
+                                  value as EmployeeAbsenceType
+                                )
+                              }
+                              disabled={!canManageEmployees || savingAbsence}
+                            >
+                              <SelectTrigger className="w-full">
+                                <SelectValue placeholder="اختر نوع الغياب" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {EMPLOYEE_ABSENCE_TYPE_OPTIONS.map(option => (
+                                  <SelectItem
+                                    key={option.value}
+                                    value={String(option.value)}
+                                  >
+                                    {option.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </Field>
+                        </div>
+
+                        <Field
+                          label="ملاحظات"
+                          description="حقل اختياري لتوضيح سبب الغياب أو أي ملاحظة داخلية."
+                        >
+                          <Textarea
+                            value={absenceForm.note}
+                            onChange={event =>
+                              handleAbsenceFormChange("note", event.target.value)
+                            }
+                            placeholder="مثال: غياب بعذر أو نصف يوم لمراجعة شخصية"
+                            className="min-h-24"
+                            disabled={!canManageEmployees || savingAbsence}
+                          />
+                        </Field>
+
+                        <div className="flex justify-end">
+                          <Button
+                            type="button"
+                            onClick={handleCreateEmployeeAbsence}
+                            disabled={!canManageEmployees || savingAbsence}
+                          >
+                            {savingAbsence ? "جاري التسجيل..." : "تسجيل الغياب"}
+                          </Button>
+                        </div>
+
+                        <div className="space-y-3 border-t border-slate-200 pt-4">
+                          <div className="text-sm font-semibold text-slate-950">
+                            سجل الغياب
+                          </div>
+
+                          {employeeAbsencesLoading ? (
+                            <div className="rounded-[18px] border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-sm text-slate-500">
+                              جاري تحميل الغيابات...
+                            </div>
+                          ) : employeeAbsences.length ? (
+                            <div className="space-y-3">
+                              {employeeAbsences.slice(0, 6).map(absence => (
+                                <div
+                                  key={absence.id}
+                                  className="rounded-[18px] border border-slate-200 bg-slate-50/70 p-4"
+                                >
+                                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                    <div className="space-y-1">
+                                      <div className="text-sm font-semibold text-slate-950">
+                                        {formatEmployeeAbsenceDate(absence.date)}
+                                      </div>
+                                      <div className="text-xs leading-6 text-slate-500">
+                                        {absence.note || "بدون ملاحظات"}
+                                      </div>
+                                    </div>
+
+                                    <div className="flex flex-wrap gap-2">
+                                      <Badge
+                                        variant="outline"
+                                        className="rounded-full border-amber-200 bg-amber-50 text-amber-800"
+                                      >
+                                        {getEmployeeAbsenceTypeLabel(absence.type)}
+                                      </Badge>
+                                      <Badge
+                                        variant="outline"
+                                        className="rounded-full border-slate-200 bg-white text-slate-600"
+                                      >
+                                        {formatDateTimeEN(absence.createdAt)}
+                                      </Badge>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="rounded-[18px] border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-sm text-slate-500">
+                              لا توجد غيابات مسجلة لهذا الموظف حتى الآن.
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="space-y-4 rounded-[24px] border border-slate-200 bg-slate-50/70 p-5">
+                        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+                          <div className="space-y-1">
+                            <div className="text-base font-semibold text-slate-950">
+                              إضافة راتب نهاية الشهر
+                            </div>
+                            <p className="text-sm leading-6 text-slate-500">
+                              يتم إنشاء سجل راتب شهري مستقل للموظف، ويشمل ملخص الغياب لذلك الشهر
+                              ضمن التقرير فقط دون ربط سجل الرواتب بسجل الغياب نفسه.
+                            </p>
+                          </div>
+
+                          <div className="grid gap-3 sm:grid-cols-[180px_auto]">
+                            <Field label="الشهر المستهدف">
+                              <Input
+                                type="month"
+                                value={payrollMonthInput}
+                                onChange={event =>
+                                  setPayrollMonthInput(event.target.value)
+                                }
+                                disabled={
+                                  !canManageEmployees || creatingPayrollRecord
+                                }
+                              />
+                            </Field>
+
+                            <div className="flex items-end">
+                              <Button
+                                type="button"
+                                className="w-full sm:w-auto"
+                                onClick={handleCreatePayrollRecord}
+                                disabled={
+                                  !canManageEmployees ||
+                                  creatingPayrollRecord ||
+                                  !selectedPayrollMonthMeta ||
+                                  !!selectedPayrollRecord ||
+                                  isDirty
+                                }
+                              >
+                                {creatingPayrollRecord
+                                  ? "جاري إنشاء السجل..."
+                                  : "إضافة راتب نهاية الشهر"}
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="rounded-[18px] border border-slate-200 bg-white px-4 py-4 text-sm leading-6 text-slate-600">
+                          {isDirty ? (
+                            <span>
+                              توجد تغييرات غير محفوظة في بيانات الراتب الحالية. احفظها أولًا
+                              ثم أنشئ سجل نهاية الشهر.
+                            </span>
+                          ) : selectedPayrollRecord && selectedPayrollMonthMeta ? (
+                            <span>
+                              يوجد بالفعل سجل راتب محفوظ لشهر{" "}
+                              {selectedPayrollMonthMeta.label}.
+                            </span>
+                          ) : selectedPayrollMonthMeta ? (
+                            <span>
+                              سيتم احتساب جميع غيابات شهر {selectedPayrollMonthMeta.label} ثم
+                              حفظ الراتب النهائي كسجل مستقل لا يتغير تلقائيًا لاحقًا.
+                            </span>
+                          ) : (
+                            <span>اختر شهرًا صالحًا لإنشاء سجل الراتب.</span>
+                          )}
+                        </div>
+
+                        <div className="space-y-3">
+                          <div className="text-sm font-semibold text-slate-950">
+                            سجل الرواتب
+                          </div>
+
+                          {employeePayrollRecordsLoading ? (
+                            <div className="rounded-[18px] border border-dashed border-slate-200 bg-white px-4 py-5 text-sm text-slate-500">
+                              جاري تحميل سجلات الرواتب...
+                            </div>
+                          ) : employeePayrollRecords.length ? (
+                            <div className="space-y-3">
+                              {employeePayrollRecords.map(record => (
+                                <div
+                                  key={record.id}
+                                  className="rounded-[20px] border border-slate-200 bg-white p-4"
+                                >
+                                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                                    <div className="space-y-1">
+                                      <div className="text-base font-semibold text-slate-950">
+                                        {formatEmployeePayrollMonthLabel(
+                                          record.payrollMonth
+                                        )}
+                                      </div>
+                                      <div className="text-xs text-slate-500">
+                                        أضيف في {formatDateTimeEN(record.createdAt)}
+                                      </div>
+                                    </div>
+
+                                    <Badge
+                                      variant="outline"
+                                      className="w-fit rounded-full border-slate-200 bg-slate-50 text-slate-700"
+                                    >
+                                      {record.payrollMonth}
+                                    </Badge>
+                                  </div>
+
+                                  <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                                    <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-4">
+                                      <div className="text-xs font-semibold tracking-[0.14em] text-slate-500">
+                                        الراتب الأساسي
+                                      </div>
+                                      <div className="mt-2 text-base font-semibold text-slate-950">
+                                        {formatNumberEN(record.baseSalary || 0)} ر.س
+                                      </div>
+                                    </div>
+
+                                    <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-4">
+                                      <div className="text-xs font-semibold tracking-[0.14em] text-slate-500">
+                                        أيام الغياب
+                                      </div>
+                                      <div className="mt-2 text-base font-semibold text-slate-950">
+                                        {formatEmployeeAbsenceDays(
+                                          record.absenceDays || 0
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    <div className="rounded-[18px] border border-amber-200 bg-amber-50/70 px-4 py-4">
+                                      <div className="text-xs font-semibold tracking-[0.14em] text-amber-700">
+                                        خصم الغياب
+                                      </div>
+                                      <div className="mt-2 text-base font-semibold text-amber-800">
+                                        {formatNumberEN(record.absenceDeduction || 0)} ر.س
+                                      </div>
+                                    </div>
+
+                                    <div className="rounded-[18px] border border-emerald-200 bg-emerald-50/70 px-4 py-4">
+                                      <div className="text-xs font-semibold tracking-[0.14em] text-emerald-700">
+                                        الراتب النهائي
+                                      </div>
+                                      <div className="mt-2 text-base font-semibold text-emerald-800">
+                                        {formatNumberEN(record.finalSalary || 0)} ر.س
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  <div className="mt-3 grid gap-3 md:grid-cols-3">
+                                    <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3">
+                                      <div className="text-xs font-semibold tracking-[0.14em] text-slate-500">
+                                        خصم التأخير / نقص الساعات
+                                      </div>
+                                      <div className="mt-2 text-sm font-semibold text-slate-900">
+                                        {formatNumberEN(record.delayDeduction || 0)} ر.س
+                                      </div>
+                                    </div>
+
+                                    <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3">
+                                      <div className="text-xs font-semibold tracking-[0.14em] text-slate-500">
+                                        مكافأة الإضافي
+                                      </div>
+                                      <div className="mt-2 text-sm font-semibold text-slate-900">
+                                        {formatNumberEN(record.overtimeBonus || 0)} ر.س
+                                      </div>
+                                    </div>
+
+                                    <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3">
+                                      <div className="text-xs font-semibold tracking-[0.14em] text-slate-500">
+                                        خصومات أخرى
+                                      </div>
+                                      <div className="mt-2 text-sm font-semibold text-slate-900">
+                                        {formatNumberEN(
+                                          record.totalSalaryDeductions || 0
+                                        )}{" "}
+                                        ر.س
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="rounded-[18px] border border-dashed border-slate-200 bg-white px-4 py-5 text-sm text-slate-500">
+                              لا توجد سجلات رواتب محفوظة لهذا الموظف حتى الآن.
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>

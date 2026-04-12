@@ -1241,6 +1241,16 @@ service cloud.firestore {
       allow delete: if canManageEmployeesAdmin();
     }
 
+    match /employee_absences/{absenceId} {
+      allow read: if canReadEmployeesAdmin();
+      allow create, update, delete: if canManageEmployeesAdmin();
+    }
+
+    match /employee_payroll_records/{recordId} {
+      allow read: if canReadEmployeesAdmin();
+      allow create, update, delete: if canManageEmployeesAdmin();
+    }
+
     match /employee_messages/{id} {
       allow read: if canReadEmployeesAdmin()
         || (signedIn() && employeeMessageHasParticipant(resource.data, request.auth.uid));

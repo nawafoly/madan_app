@@ -29,6 +29,12 @@ import {
 
 import { db } from "@/_core/firebase";
 import {
+  syncEmployeeDirectoryFromWorker,
+  type EmployeeDirectorySyncResult,
+} from "@/lib/employeeDirectoryWorker";
+import { formatNumberEN } from "@/lib/formatters";
+import { Badge } from "@/components/ui/badge";
+import {
   collection,
   doc,
   getDoc,
@@ -110,6 +116,10 @@ export default function CreateStaffAccount() {
   const [createdEmailForPromote, setCreatedEmailForPromote] = useState("");
   const [createdNameForPromote, setCreatedNameForPromote] = useState("");
   const [promoting, setPromoting] = useState(false);
+  const [employeeDirectorySyncing, setEmployeeDirectorySyncing] =
+    useState(false);
+  const [employeeDirectorySyncSummary, setEmployeeDirectorySyncSummary] =
+    useState<EmployeeDirectorySyncResult | null>(null);
   const [promoteRoleKey, setPromoteRoleKey] = useState<
     "staff" | "hr" | "accountant" | "admin" | "owner"
   >("staff");
@@ -125,7 +135,12 @@ export default function CreateStaffAccount() {
   }, []);
 
   const normalizeEmail = (value: string) => value.trim().toLowerCase();
-
+  const formatSyncDateTime = (value?: string | null) => {
+    if (!value) return "لم تُنفذ المزامنة من داخل النظام بعد.";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "لم تُنفذ المزامنة من داخل النظام بعد.";
+    return `آخر مزامنة: ${date.toLocaleString("en-GB")}`;
+  };
   const settingsSource = (method: string) =>
     buildAuditSource({
       area: "admin",
@@ -409,10 +424,10 @@ export default function CreateStaffAccount() {
 
       const displayName = String(
         beforeAdminData?.displayName ||
-          userData?.displayName ||
-          userData?.name ||
-          createdNameForPromote ||
-          normalizedTargetEmail.split("@")[0]
+        userData?.displayName ||
+        userData?.name ||
+        createdNameForPromote ||
+        normalizedTargetEmail.split("@")[0]
       ).trim();
 
       const title = String(
@@ -507,6 +522,46 @@ export default function CreateStaffAccount() {
     }
   };
 
+  const handleSyncEmployeeDirectory = async () => {
+    setEmployeeDirectorySyncing(true);
+
+    try {
+      const summary = await syncEmployeeDirectoryFromWorker();
+      setEmployeeDirectorySyncSummary(summary);
+
+      toast.success(
+        `تمت مزامنة دليل الموظفين: ${formatNumberEN(summary.employeesSynced)} سجل`
+      );
+
+      void logAuditEvent({
+        action: "employee_directory_synced",
+        category: "settings",
+        entityType: "employee_directory",
+        entityId: "d1",
+        source: settingsSource("sync_employee_directory_from_create_staff"),
+        message: `Synced employee_directory to D1 (${summary.employeesSynced} rows, ${summary.employeesDeleted} deleted).`,
+        meta: {
+          syncedAt: summary.syncedAt,
+          sourceCount: summary.sourceCount,
+          employeesSynced: summary.employeesSynced,
+          employeesDeleted: summary.employeesDeleted,
+          actorRole: currentRole || null,
+        },
+      }).catch(error => {
+        console.warn("employee_directory_sync_audit_failed", error);
+      });
+    } catch (error) {
+      console.error("employee_directory_sync_failed", error);
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "فشلت مزامنة دليل الموظفين."
+      );
+    } finally {
+      setEmployeeDirectorySyncing(false);
+    }
+  };
+
   return (
     <DashboardLayout>
       <div
@@ -536,6 +591,52 @@ export default function CreateStaffAccount() {
                     أولًا، ثم تنفيذ الترقية الفعلية مباشرة من نفس الصفحة دون الحاجة
                     للانتقال إلى Settings.
                   </p>
+                  <div className="mt-5 rounded-[22px] border border-slate-200 bg-slate-50/70 p-4">
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="text-sm font-medium text-slate-900">
+                          مزامنة دليل الموظفين
+                        </div>
+
+                        <Badge variant="outline" className="rounded-full">
+                          {employeeDirectorySyncing
+                            ? "جارٍ التنفيذ"
+                            : employeeDirectorySyncSummary?.syncedAt
+                              ? "تمت آخر مزامنة"
+                              : "مزامنة يدوية"}
+                        </Badge>
+                      </div>
+
+                      <div className="text-sm text-slate-500">
+                        {formatSyncDateTime(employeeDirectorySyncSummary?.syncedAt)}
+                      </div>
+
+                      {employeeDirectorySyncSummary ? (
+                        <div className="flex flex-wrap gap-2">
+                          <Badge variant="secondary">
+                            {formatNumberEN(employeeDirectorySyncSummary.employeesSynced)} سجل
+                          </Badge>
+                          <Badge variant="outline">
+                            حذف {formatNumberEN(employeeDirectorySyncSummary.employeesDeleted)}
+                          </Badge>
+                          <Badge variant="outline">
+                            المصدر {formatNumberEN(employeeDirectorySyncSummary.sourceCount)}
+                          </Badge>
+                        </div>
+                      ) : null}
+
+                      <Button
+                        type="button"
+                        className="h-12 w-full rounded-full text-sm font-semibold"
+                        disabled={employeeDirectorySyncing}
+                        onClick={handleSyncEmployeeDirectory}
+                      >
+                        {employeeDirectorySyncing
+                          ? "جارٍ مزامنة دليل الموظفين..."
+                          : "مزامنة دليل الموظفين"}
+                      </Button>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="mt-6 space-y-4">

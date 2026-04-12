@@ -452,10 +452,6 @@ export default function SettingsDatabaseTab({
               <CardTitle className="text-[1.1rem] font-semibold tracking-tight text-slate-950">
                 مزامنة دليل الموظفين
               </CardTitle>
-              <CardDescription className="max-w-2xl text-sm leading-7 text-slate-600">
-                تشغيل مزامنة `employee_directory` من Firestore إلى D1 عبر
-                Cloudflare Worker، بدون الحاجة إلى سكربت يدوي من التيرمنل.
-              </CardDescription>
             </div>
 
             <Badge
