@@ -320,25 +320,20 @@ function hasEmployeeProfileSignal(
   const normalizedRole = String(userData.role || "")
     .trim()
     .toLowerCase();
+
   if (normalizedRole === "client" || normalizedRole === "guest") {
     return false;
   }
 
-  const userEmployment = (userData.employeeProfile?.employment ||
-    userData.employment ||
-    {}) as Record<string, any>;
-  const userPersonal = (userData.employeeProfile?.personal ||
-    userData.personal ||
-    {}) as Record<string, any>;
-
   return (
-    !!employeeDoc ||
-    normalizedRole === "staff" ||
-    !!pickText(userData.linkedEmployeeId) ||
-    hasValuesObject(userEmployment) ||
-    hasValuesObject(userPersonal)
+    employeeDoc?.includeInEmployeeManagement === true ||
+    userData.includeInEmployeeManagement === true ||
+    userData.employeeProfile?.includeInEmployeeManagement === true ||
+    employeeDoc?.employeeProfile?.includeInEmployeeManagement === true
   );
 }
+
+
 
 function buildMergedEmployeeRecord(input: {
   userId: string;

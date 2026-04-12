@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { cn } from "@/lib/utils";
+import { cn, formatNumber } from "@/lib/utils";
 import {
   Select,
   SelectContent,
@@ -177,10 +177,9 @@ export function CreateProjectUi({
     }[formData.vipTier] ?? vipTierLabels[formData.vipTier];
   const resolvedFooterDescription =
     footerDescription ??
-    `سيتم حفظ نفس الحقول ونفس قواعد التحقق الحالية. ${
-      hasUploadingAttachment
-        ? "يوجد مرفق قيد الرفع حاليًا."
-        : "راجع العناصر الأساسية ثم أنشئ المشروع."
+    `سيتم حفظ نفس الحقول ونفس قواعد التحقق الحالية. ${hasUploadingAttachment
+      ? "يوجد مرفق قيد الرفع حاليًا."
+      : "راجع العناصر الأساسية ثم أنشئ المشروع."
     }`;
   const resolvedSidebarMetrics = sidebarMetrics ?? [
     {
@@ -264,18 +263,18 @@ export function CreateProjectUi({
     !hasVipRequirement || formData.vipTier !== "none" ? "complete" : "incomplete";
   const completionSectionStatus =
     isCompletionStatus(formData.status) &&
-    completionPayload.errors.length === 0 &&
-    Boolean(completionPayload.value)
+      completionPayload.errors.length === 0 &&
+      Boolean(completionPayload.value)
       ? "complete"
       : "incomplete";
   const completionSectionSummary = isCompletionStatus(formData.status)
-      ? [
-          filledCompletionResults ? `${filledCompletionResults} نتائج` : "",
-          filledCompletionOutputs ? `${filledCompletionOutputs} مخرجات` : "",
-          filledCompletionFinalNotes ? `${filledCompletionFinalNotes} ملاحظات` : "",
-        ]
-          .filter(Boolean)
-          .join(" · ") || "أضف المحتوى الختامي"
+    ? [
+      filledCompletionResults ? `${filledCompletionResults} نتائج` : "",
+      filledCompletionOutputs ? `${filledCompletionOutputs} مخرجات` : "",
+      filledCompletionFinalNotes ? `${filledCompletionFinalNotes} ملاحظات` : "",
+    ]
+      .filter(Boolean)
+      .join(" · ") || "أضف المحتوى الختامي"
     : "متاح بعد الإغلاق";
   const sectionDiagnosticCards = {
     basic: {
@@ -561,88 +560,88 @@ export function CreateProjectUi({
   } as Record<string, SectionDiagnosticCardConfig>;
   const completionChecklistItems = !isCompletionStatus(formData.status)
     ? [
-        {
-          label: "حالة المشروع",
-          ready: false,
-          detail: "يتفعّل هذا الجزء عند تحويل حالة المشروع إلى مغلق أو مكتمل.",
-        },
-        {
-          label: "الجاهزية الحالية",
-          ready: false,
-          detail: "أكمل التنفيذ أولاً، ثم أضف النتائج والمخرجات والمحتوى الختامي هنا.",
-        },
-      ]
+      {
+        label: "حالة المشروع",
+        ready: false,
+        detail: "يتفعّل هذا الجزء عند تحويل حالة المشروع إلى مغلق أو مكتمل.",
+      },
+      {
+        label: "الجاهزية الحالية",
+        ready: false,
+        detail: "أكمل التنفيذ أولاً، ثم أضف النتائج والمخرجات والمحتوى الختامي هنا.",
+      },
+    ]
     : [
-        {
-          label: "نظرة عامة أو ملخص",
-          ready: Boolean(
-            cleanStr(formData.completionOverviewAr) || cleanStr(formData.completionSummaryAr)
-          ),
-          detail:
-            cleanStr(formData.completionOverviewAr) || cleanStr(formData.completionSummaryAr)
-              ? "تمت إضافة مقدمة ختامية للمشروع."
-              : "أضف نظرة عامة أو ملخصًا ختاميًا.",
-        },
-        {
-          label: "النتائج",
-          ready: filledCompletionResults > 0,
-          detail: filledCompletionResults
-            ? `${filledCompletionResults} نتائج موثقة.`
-            : "لا توجد نتائج مضافة بعد.",
-        },
-        {
-          label: "المخرجات",
-          ready: filledCompletionOutputs > 0,
-          detail: filledCompletionOutputs
-            ? `${filledCompletionOutputs} مخرجات نهائية.`
-            : "أضف مخرجًا واحدًا على الأقل.",
-        },
-        {
-          label: "سلامة المحتوى",
-          ready: completionPayload.errors.length === 0,
-          detail: completionPayload.errors[0] || "المحتوى الختامي الحالي سليم.",
-        },
-      ];
+      {
+        label: "نظرة عامة أو ملخص",
+        ready: Boolean(
+          cleanStr(formData.completionOverviewAr) || cleanStr(formData.completionSummaryAr)
+        ),
+        detail:
+          cleanStr(formData.completionOverviewAr) || cleanStr(formData.completionSummaryAr)
+            ? "تمت إضافة مقدمة ختامية للمشروع."
+            : "أضف نظرة عامة أو ملخصًا ختاميًا.",
+      },
+      {
+        label: "النتائج",
+        ready: filledCompletionResults > 0,
+        detail: filledCompletionResults
+          ? `${filledCompletionResults} نتائج موثقة.`
+          : "لا توجد نتائج مضافة بعد.",
+      },
+      {
+        label: "المخرجات",
+        ready: filledCompletionOutputs > 0,
+        detail: filledCompletionOutputs
+          ? `${filledCompletionOutputs} مخرجات نهائية.`
+          : "أضف مخرجًا واحدًا على الأقل.",
+      },
+      {
+        label: "سلامة المحتوى",
+        ready: completionPayload.errors.length === 0,
+        detail: completionPayload.errors[0] || "المحتوى الختامي الحالي سليم.",
+      },
+    ];
   const progressChecklistItems =
     formData.progressMode === "hybrid"
       ? [
-          {
-            label: "طريقة الحساب",
-            ready: true,
-            detail: progressModeLabels[formData.progressMode],
-          },
-          {
-            label: "وزن التمويل",
-            ready: Boolean(cleanStr(formData.progressFundingWeight)),
-            detail:
-              formatDisplayValue(formData.progressFundingWeight, "%") ||
-              "أدخل وزن التمويل.",
-          },
-          {
-            label: "وزن المراحل",
-            ready: Boolean(cleanStr(formData.progressMilestonesWeight)),
-            detail:
-              formatDisplayValue(formData.progressMilestonesWeight, "%") ||
-              "أدخل وزن المراحل.",
-          },
-          {
-            label: "مجموع الأوزان",
-            ready: progressWeightsTotal === 100,
-            detail: `${progressWeightsTotal}% من 100% المطلوبة.`,
-          },
-        ]
+        {
+          label: "طريقة الحساب",
+          ready: true,
+          detail: progressModeLabels[formData.progressMode],
+        },
+        {
+          label: "وزن التمويل",
+          ready: Boolean(cleanStr(formData.progressFundingWeight)),
+          detail:
+            formatDisplayValue(formData.progressFundingWeight, "%") ||
+            "أدخل وزن التمويل.",
+        },
+        {
+          label: "وزن المراحل",
+          ready: Boolean(cleanStr(formData.progressMilestonesWeight)),
+          detail:
+            formatDisplayValue(formData.progressMilestonesWeight, "%") ||
+            "أدخل وزن المراحل.",
+        },
+        {
+          label: "مجموع الأوزان",
+          ready: progressWeightsTotal === 100,
+          detail: `${progressWeightsTotal}% من 100% المطلوبة.`,
+        },
+      ]
       : [
-          {
-            label: "طريقة الحساب",
-            ready: true,
-            detail: progressModeLabels[formData.progressMode],
-          },
-          {
-            label: "جاهزية المنطق",
-            ready: true,
-            detail: "هذا النمط لا يحتاج أوزانًا إضافية.",
-          },
-        ];
+        {
+          label: "طريقة الحساب",
+          ready: true,
+          detail: progressModeLabels[formData.progressMode],
+        },
+        {
+          label: "جاهزية المنطق",
+          ready: true,
+          detail: "هذا النمط لا يحتاج أوزانًا إضافية.",
+        },
+      ];
   const optionsChecklistItems = [
     {
       label: "إبراز المشروع",
@@ -940,21 +939,21 @@ export function CreateProjectUi({
     const intersectionObserver =
       typeof IntersectionObserver !== "undefined"
         ? new IntersectionObserver(
-            () => {
-              scheduleActiveSectionUpdate();
-            },
-            {
-              threshold: [0, 0.12, 0.28, 0.5, 0.72, 1],
-              rootMargin: "-20% 0px -52% 0px",
-            }
-          )
+          () => {
+            scheduleActiveSectionUpdate();
+          },
+          {
+            threshold: [0, 0.12, 0.28, 0.5, 0.72, 1],
+            rootMargin: "-20% 0px -52% 0px",
+          }
+        )
         : null;
 
     const resizeObserver =
       typeof ResizeObserver !== "undefined"
         ? new ResizeObserver(() => {
-            scheduleActiveSectionUpdate();
-          })
+          scheduleActiveSectionUpdate();
+        })
         : null;
 
     sectionElements.forEach((sectionElement) => {
@@ -1125,9 +1124,8 @@ export function CreateProjectUi({
               </p>
               <p className="mt-2 text-2xl font-semibold text-slate-950">{progressWeightsTotal}%</p>
               <p
-                className={`mt-2 text-xs leading-6 ${
-                  progressWeightsTotal === 100 ? "text-emerald-600" : "text-amber-600"
-                }`}
+                className={`mt-2 text-xs leading-6 ${progressWeightsTotal === 100 ? "text-emerald-600" : "text-amber-600"
+                  }`}
               >
                 {progressWeightsTotal === 100
                   ? "التوزيع الحالي متوازن على 100%."
@@ -1734,29 +1732,26 @@ export function CreateProjectUi({
                     aria-controls={section.id}
                     aria-current={isActive ? "step" : undefined}
                     onClick={() => handleSectionSelect(section.id)}
-                    className={`group relative min-w-[116px] shrink-0 snap-center overflow-hidden rounded-[16px] border px-2.5 py-1.5 text-right transition-all sm:min-w-[124px] sm:px-3 sm:py-2 ${
-                      isActive
-                        ? "border-slate-900 bg-slate-900 text-white shadow-[0_16px_30px_-18px_rgba(15,23,42,0.7)]"
-                        : "border-transparent bg-slate-50 text-slate-600 hover:border-slate-200 hover:bg-white"
-                    }`}
+                    className={`group relative min-w-[116px] shrink-0 snap-center overflow-hidden rounded-[16px] border px-2.5 py-1.5 text-right transition-all sm:min-w-[124px] sm:px-3 sm:py-2 ${isActive
+                      ? "border-slate-900 bg-slate-900 text-white shadow-[0_16px_30px_-18px_rgba(15,23,42,0.7)]"
+                      : "border-transparent bg-slate-50 text-slate-600 hover:border-slate-200 hover:bg-white"
+                      }`}
                   >
                     <span
                       aria-hidden="true"
-                      className={`absolute inset-y-0 right-0 w-[3px] ${
-                        isActive
-                          ? sectionStatus === "complete"
-                            ? "bg-emerald-300/80"
-                            : "bg-red-300/80"
-                          : statusAppearance.strip
-                      }`}
+                      className={`absolute inset-y-0 right-0 w-[3px] ${isActive
+                        ? sectionStatus === "complete"
+                          ? "bg-emerald-300/80"
+                          : "bg-red-300/80"
+                        : statusAppearance.strip
+                        }`}
                     />
                     <div className="flex items-center gap-2">
                       <span
-                        className={`flex size-6 shrink-0 items-center justify-center rounded-lg text-[10px] font-semibold ${
-                          isActive
-                            ? "bg-white/12 text-white"
-                            : "bg-white text-slate-700 shadow-sm"
-                        }`}
+                        className={`flex size-6 shrink-0 items-center justify-center rounded-lg text-[10px] font-semibold ${isActive
+                          ? "bg-white/12 text-white"
+                          : "bg-white text-slate-700 shadow-sm"
+                          }`}
                       >
                         {String(index + 1).padStart(2, "0")}
                       </span>
@@ -1764,13 +1759,12 @@ export function CreateProjectUi({
                         <div className="flex items-center justify-end gap-1.5">
                           <span
                             aria-hidden="true"
-                            className={`h-1.5 w-1.5 rounded-full ${
-                              isActive
-                                ? sectionStatus === "complete"
-                                  ? "bg-emerald-300"
-                                  : "bg-red-300"
-                                : statusAppearance.dot
-                            }`}
+                            className={`h-1.5 w-1.5 rounded-full ${isActive
+                              ? sectionStatus === "complete"
+                                ? "bg-emerald-300"
+                                : "bg-red-300"
+                              : statusAppearance.dot
+                              }`}
                           />
                           <p
                             className={`truncate text-[12px] font-semibold leading-4 ${isActive ? "text-white" : "text-slate-900"}`}
@@ -1787,33 +1781,33 @@ export function CreateProjectUi({
           </div>
 
           <form id={formId} onSubmit={handleSubmit} className="space-y-6">
-          <SectionCard
-            id="basic"
-            index={1}
-            title="المعلومات الأساسية"
-            description="ابدأ بهوية المشروع والعناوين والوصفين العربي والإنجليزي داخل تخطيط أكثر اتزانًا."
-            icon={BriefcaseBusiness}
-            status={sectionStatuses.basic}
-            headerAside={
-              <>
-                <Badge className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-700">
-                  {cleanStr(formData.titleAr) ? "العنوان جاهز" : "العنوان بانتظار الإدخال"}
-                </Badge>
-                <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
-                  {cleanStr(formData.descriptionAr) ? "الوصف العربي جاهز" : "الوصف العربي مطلوب"}
-                </Badge>
-              </>
-            }
-          >
-            <SectionBodyLayout
-              contentClassName="grid gap-5 md:grid-cols-2"
-              aside={
-                <SectionDiagnosticCard
-                  status={sectionStatuses.basic}
-                  {...sectionDiagnosticCards.basic}
-                />
+            <SectionCard
+              id="basic"
+              index={1}
+              title="المعلومات الأساسية"
+              description="ابدأ بهوية المشروع والعناوين والوصفين العربي والإنجليزي داخل تخطيط أكثر اتزانًا."
+              icon={BriefcaseBusiness}
+              status={sectionStatuses.basic}
+              headerAside={
+                <>
+                  <Badge className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-700">
+                    {cleanStr(formData.titleAr) ? "العنوان جاهز" : "العنوان بانتظار الإدخال"}
+                  </Badge>
+                  <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
+                    {cleanStr(formData.descriptionAr) ? "الوصف العربي جاهز" : "الوصف العربي مطلوب"}
+                  </Badge>
+                </>
               }
             >
+              <SectionBodyLayout
+                contentClassName="grid gap-5 md:grid-cols-2"
+                aside={
+                  <SectionDiagnosticCard
+                    status={sectionStatuses.basic}
+                    {...sectionDiagnosticCards.basic}
+                  />
+                }
+              >
                 <Field label="العنوان (عربي)" required>
                   <Input
                     dir="rtl"
@@ -1868,31 +1862,31 @@ export function CreateProjectUi({
                     }
                   />
                 </Field>
-            </SectionBodyLayout>
-          </SectionCard>
+              </SectionBodyLayout>
+            </SectionCard>
 
-          <SectionCard
-            id="details"
-            index={2}
-            title="بيانات المشروع"
-            description="تنظيم نوع المشروع وحالته ورقم الإصدار والموقع ضمن شبكة أكثر وضوحًا."
-            icon={Building2}
-            status={sectionStatuses.details}
-            headerAside={
-              <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
-                {projectTypeLabels[formData.projectType]} · {statusLabels[formData.status]}
-              </Badge>
-            }
-          >
-            <SectionBodyLayout
-              contentClassName="grid gap-5 md:grid-cols-2"
-              aside={
-                <SectionDiagnosticCard
-                  status={sectionStatuses.details}
-                  {...sectionDiagnosticCards.details}
-                />
+            <SectionCard
+              id="details"
+              index={2}
+              title="بيانات المشروع"
+              description="تنظيم نوع المشروع وحالته ورقم الإصدار والموقع ضمن شبكة أكثر وضوحًا."
+              icon={Building2}
+              status={sectionStatuses.details}
+              headerAside={
+                <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
+                  {projectTypeLabels[formData.projectType]} · {statusLabels[formData.status]}
+                </Badge>
               }
             >
+              <SectionBodyLayout
+                contentClassName="grid gap-5 md:grid-cols-2"
+                aside={
+                  <SectionDiagnosticCard
+                    status={sectionStatuses.details}
+                    {...sectionDiagnosticCards.details}
+                  />
+                }
+              >
                 <Field label="نوع المشروع">
                   <Select
                     value={formData.projectType}
@@ -1974,1126 +1968,220 @@ export function CreateProjectUi({
                     }
                   />
                 </Field>
-            </SectionBodyLayout>
-          </SectionCard>
-          <SectionCard
-            id="media"
-            index={3}
-            title="الصور والمعرض"
-            description="واجهة رفع أنظف لصورة الغلاف والمعرض مع معاينة مباشرة وتنظيم أفضل للروابط."
-            icon={ImagePlus}
-            status={sectionStatuses.media}
-            headerAside={
-              <>
-                <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
-
-                  {cleanStr(formData.coverImage) ? "جاهز" : "غير مرفوع"}
-                </Badge>
-                <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
-                  {galleryUrls.length} صورة في المعرض
-                </Badge>
-              </>
-            }
-          >
-            <SectionBodyLayout
-              contentClassName="grid gap-6 xl:grid-cols-2"
-              aside={
-                <SectionDiagnosticCard
-                  status={sectionStatuses.media}
-                  {...sectionDiagnosticCards.media}
-                />
-              }
-            >
-              <div className="rounded-[28px] border border-slate-200/80 bg-slate-50/70 p-5 shadow-sm">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <h3 className="text-base font-semibold text-slate-950">صورة الغلاف</h3>
-                    <p className="mt-1 text-xs leading-6 text-slate-500">
-                      أضف الصورة الأساسية التي تمثل المشروع بصريًا داخل البطاقة وصفحة
-                      التفاصيل، ويمكنك استخدام الرابط النصي أو الرفع المباشر.
-                    </p>
-                  </div>
-                  <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
-                    {coverUploading
-                      ? "جارٍ الرفع..."
-                      : cleanStr(formData.coverImage)
-                        ? "مرفوع"
-                        : "بانتظار"}
-                  </Badge>
-                </div>
-
-                <div className="mt-5 overflow-hidden rounded-[24px] border border-slate-200 bg-white">
-                  {cleanStr(formData.coverImage) ? (
-                    <img
-                      src={formData.coverImage}
-                      alt="معاينة صورة الغلاف"
-                      className="aspect-[16/9] h-full w-full object-cover"
-                    />
-                  ) : (
-                    <div className="flex aspect-[16/9] items-center justify-center bg-[linear-gradient(135deg,rgba(248,250,252,1),rgba(226,232,240,0.6))]">
-                      <div className="space-y-2 text-center text-slate-500">
-                        <FileImage className="mx-auto h-7 w-7" />
-                        <p className="text-sm font-semibold">لا توجد صورة غلاف بعد</p>
-                        <p className="text-xs">أضف رابطًا أو ارفع ملفًا لعرض المعاينة هنا.</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                <div className="mt-5 space-y-4">
-                  <Field
-                    label="رابط صورة الغلاف"
-                    required
-                    hint="يمكنك الإبقاء على نفس منطق الرابط النصي الحالي أو استخدام الرفع المباشر."
-                  >
-                    <Input
-                      value={formData.coverImage}
-                      className={inputClassName}
-                      placeholder="project-cover.png أو /project-cover.png أو https://..."
-                      onChange={(e) =>
-                        setFormData((prev) => ({ ...prev, coverImage: e.target.value }))
-                      }
-                    />
-                  </Field>
-
-                  <UploadDropzone
-                    inputId="project-cover-upload"
-                    title="رفع صورة غلاف"
-                    description="اسحب أو اختر صورة تمثل المشروع بصريًا."
-                    accept="image/*"
-                    disabled={coverUploading}
-                    onChange={(e) => {
-                      void handleCoverImageUpload(e.target.files?.[0] ?? null);
-                      e.currentTarget.value = "";
-                    }}
-                  />
-
-                  {cleanStr(formData.coverImage) ? (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      className="h-10 rounded-xl px-3 text-slate-600 hover:bg-slate-100"
-                      onClick={() =>
-                        setFormData((prev) => ({ ...prev, coverImage: "" }))
-                      }
-                    >
-
-                      إزالة صورة الغلاف
-                    </Button>
-                  ) : null}
-                </div>
-              </div>
-
-              <div className="rounded-[28px] border border-slate-200/80 bg-slate-50/70 p-5 shadow-sm">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <h3 className="text-base font-semibold text-slate-950">معرض الصور</h3>
-                    <p className="mt-1 text-xs leading-6 text-slate-500">
-                      أضف صورًا إضافية للمشروع عبر الروابط أو الرفع المباشر، وسيتم تحديث
-                      نفس الحقل الحالي تلقائيًا لعرضها داخل المعرض.
-                    </p>
-                  </div>
-                  <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
-                    {galleryUploading ? "جارٍ الرفع..." : `${galleryUrls.length} صورة`}
-                  </Badge>
-                </div>
-
-                <div className="mt-5 space-y-4">
-                  <Field
-                    label="روابط المعرض"
-                    hint="كل رابط في سطر مستقل. يمكن المزج بين الروابط المكتوبة والملفات المرفوعة."
-                  >
-                    <Textarea
-                      rows={6}
-                      value={formData.galleryText}
-                      className={`${textareaClassName} leading-7`}
-                      placeholder={"image-1.png\n/image-2.png\nhttps://..."}
-                      onChange={(e) =>
-                        setFormData((prev) => ({ ...prev, galleryText: e.target.value }))
-                      }
-                    />
-                  </Field>
-
-                  <UploadDropzone
-                    inputId="project-gallery-upload"
-                    title="رفع صور المعرض"
-                    description="اختر عدة صور وسيتم إلحاق روابطها مباشرة بنفس الحقل الحالي."
-                    accept="image/*"
-                    multiple
-                    disabled={galleryUploading}
-                    onChange={(e) => {
-                      void handleGalleryImageUpload(e.target.files);
-                      e.currentTarget.value = "";
-                    }}
-                  />
-
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    {galleryUrls.length ? (
-                      galleryUrls.map((url, index) => (
-                        <div
-                          key={`${url}-${index}`}
-                          className="overflow-hidden rounded-[22px] border border-slate-200 bg-white shadow-sm"
-                        >
-                          <div className="aspect-[4/3] bg-slate-100">
-                            <img
-                              src={url}
-                              alt={`صورة المعرض ${index + 1}`}
-                              className="h-full w-full object-cover"
-                            />
-                          </div>
-                          <div className="space-y-3 p-3">
-                            <p className="line-clamp-2 text-xs leading-6 text-slate-500">
-                              {url}
-                            </p>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="h-9 rounded-xl"
-                              onClick={() =>
-                                setFormData((prev) => ({
-                                  ...prev,
-                                  galleryText: galleryUrls
-                                    .filter((_, galleryIndex) => galleryIndex !== index)
-                                    .join("\n"),
-                                }))
-                              }
-                            >
-                              <Trash2 className="ml-2 h-4 w-4" />
-
-                              حذف الصورة
-                            </Button>
-                          </div>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="rounded-[22px] border border-dashed border-slate-300 bg-white/80 p-6 text-center text-sm text-slate-500 sm:col-span-2">
-
-                        ستظهر معاينات صور المعرض هنا بعد إضافة الروابط أو رفع الملفات.
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </SectionBodyLayout>
-          </SectionCard>
-
-          <SectionCard
-            id="highlights"
-            index={4}
-            title="المميزات"
-            description="حوّل قائمة المميزات إلى repeater بصري أنظف يساعد على قراءة العرض الاستثماري بسرعة."
-            icon={Sparkles}
-            status={sectionStatuses.highlights}
-            headerAside={
-              <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
-                {filledHighlights} مميزات
-              </Badge>
-            }
-          >
-            <SectionBodyLayout
-              contentClassName="space-y-4"
-              aside={
-                <SectionDiagnosticCard
-                  status={sectionStatuses.attachments}
-                  {...sectionDiagnosticCards.attachments}
-                />
-              }
-            >
-              {highlightRows.map((row, index) => (
-                <div
-                  key={`highlight-${index}`}
-                  className="rounded-[24px] border border-slate-200/80 bg-slate-50/80 p-4 shadow-sm"
-                >
-                  <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-950">الميزة {index + 1}</p>
-                      <p className="text-xs text-slate-500">
-                        اكتب الميزة بصياغة موجزة تبرز قيمة المشروع بشكل واضح وسريع.
-                      </p>
-                    </div>
-
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-9 rounded-xl"
-                      disabled={highlightRows.length === 1}
-                      onClick={() =>
-                        setHighlightRows((prev) =>
-                          prev.length === 1 ? prev : prev.filter((_, rowIndex) => rowIndex !== index)
-                        )
-                      }
-                    >
-                      <Trash2 className="ml-2 h-4 w-4" />
-
-                      حذف
-                    </Button>
-                  </div>
-
-                  <Input
-                    dir="rtl"
-                    className={`${inputClassName} text-right`}
-                    value={row}
-                    placeholder={`الميزة ${index + 1}`}
-                    onChange={(e) =>
-                      setHighlightRows((prev) =>
-                        prev.map((item, rowIndex) =>
-                          rowIndex === index ? e.target.value : item
-                        )
-                      )
-                    }
-                  />
-                </div>
-              ))}
-
-              <Button
-                type="button"
-                variant="outline"
-                className="h-12 w-full rounded-2xl border-dashed"
-                onClick={() => setHighlightRows((prev) => [...prev, ""])}
-              >
-                <Plus className="ml-2 h-4 w-4" />
-
-                إضافة ميزة جديدة
-              </Button>
-            </SectionBodyLayout>
-          </SectionCard>
-          <SectionCard
-            id="attachments"
-            index={5}
-            title="المرفقات"
-            description="كل مرفق يظهر الآن كبطاقة مستقلة تتضمن الاسم والرابط والرفع والمعاينة داخل صف واحد منظم."
-            icon={Paperclip}
-            status={sectionStatuses.attachments}
-            headerAside={
-              <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
-                {filledAttachments} مرفقات
-              </Badge>
-            }
-          >
-            <SectionBodyLayout
-              contentClassName="space-y-4"
-              aside={
-                <SectionDiagnosticCard
-                  status={sectionStatuses.milestones}
-                  {...sectionDiagnosticCards.milestones}
-                />
-              }
-            >
-              {attachmentRows.map((row, index) => (
-                <div
-                  key={`attachment-${index}`}
-                  className="rounded-[26px] border border-slate-200/80 bg-slate-50/80 p-5 shadow-sm"
-                >
-                  <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-950">المرفق {index + 1}</p>
-                      <p className="text-xs text-slate-500">
-                        أضف اسم المرفق ورابطه أو ارفع الملف مباشرة ليظهر ضمن هذا السجل
-                        بشكل منظم وواضح.
-                      </p>
-                    </div>
-
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-9 rounded-xl"
-                      disabled={attachmentRows.length === 1}
-                      onClick={() =>
-                        setAttachmentRows((prev) =>
-                          prev.length === 1 ? prev : prev.filter((_, rowIndex) => rowIndex !== index)
-                        )
-                      }
-                    >
-                      <Trash2 className="ml-2 h-4 w-4" />
-
-                      حذف المرفق
-                    </Button>
-                  </div>
-
-                  <div className="grid gap-4">
-                    <div className="grid gap-4 md:grid-cols-2">
-                      <Field label="الاسم">
-                        <Input
-                          dir="rtl"
-                          className={`${inputClassName} text-right`}
-                          value={row.name}
-                          placeholder={`اسم المرفق ${index + 1}`}
-                          onChange={(e) =>
-                            setAttachmentRows((prev) =>
-                              prev.map((item, rowIndex) =>
-                                rowIndex === index ? { ...item, name: e.target.value } : item
-                              )
-                            )
-                          }
-                        />
-                      </Field>
-
-                      <Field label="الرابط الخارجي (اختياري)">
-                        <Input
-                          dir="ltr"
-                          className={`${inputClassName} text-left`}
-                          value={row.externalUrl}
-                          placeholder="https://example.com"
-                          onChange={(e) =>
-                            setAttachmentRows((prev) =>
-                              prev.map((item, rowIndex) =>
-                                rowIndex === index
-                                  ? { ...item, externalUrl: e.target.value }
-                                  : item
-                              )
-                            )
-                          }
-                        />
-                      </Field>
-                    </div>
-
-                    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_260px]">
-                      <div className="rounded-[22px] border border-slate-200 bg-white p-4">
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="space-y-1">
-                            <p className="text-sm font-semibold text-slate-950">حالة الملف</p>
-                            <p className="text-xs text-slate-500">
-                              {row.uploading
-                                ? "جارٍ رفع الملف إلى التخزين..."
-                                : row.url
-                                  ? "تم رفع الملف وهو جاهز للمراجعة."
-                                  : "لم يتم رفع ملف لهذا المرفق بعد."}
-                            </p>
-                          </div>
-
-                          {row.url ? (
-                            <Badge className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-emerald-700">
-                              Uploaded
-                            </Badge>
-                          ) : null}
-                        </div>
-
-                        <div className="mt-4 flex flex-wrap items-center gap-3">
-                          {row.url ? (
-                            <a
-                              href={row.url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
-                            >
-
-                              عرض الملف المرفوع
-                            </a>
-                          ) : null}
-
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="h-9 rounded-xl"
-                            disabled={!row.url || row.uploading}
-                            onClick={() =>
-                              setAttachmentRows((prev) =>
-                                prev.map((item, rowIndex) =>
-                                  rowIndex === index ? { ...item, url: "" } : item
-                                )
-                              )
-                            }
-                          >
-
-                            إزالة الملف
-                          </Button>
-                        </div>
-                      </div>
-
-                      <UploadDropzone
-                        inputId={`attachment-upload-${index}`}
-                        title="رفع مرفق"
-                        description="ارفع ملف PDF أو صورة أو أي ملف داعم للمشروع."
-                        accept="*/*"
-                        disabled={row.uploading}
-                        onChange={(e) => {
-                          void handleAttachmentFileUpload(index, e.target.files?.[0] ?? null);
-                          e.currentTarget.value = "";
-                        }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              ))}
-
-              <Button
-                type="button"
-                variant="outline"
-                className="h-12 w-full rounded-2xl border-dashed"
-                onClick={() => setAttachmentRows((prev) => [...prev, { name: "", url: "", externalUrl: "" }])}
-              >
-                <Plus className="ml-2 h-4 w-4" />
-
-                إضافة مرفق جديد
-              </Button>
-            </SectionBodyLayout>
-          </SectionCard>
-
-          <SectionCard
-            id="milestones"
-            index={6}
-            title="المراحل"
-            description="مراحل التنفيذ في بطاقات مصغّرة مع تقسيم أوضح بين التاريخ والحالة والوصف."
-            icon={ListChecks}
-            status={sectionStatuses.milestones}
-            headerAside={
-              <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
-                {filledMilestones} مراحل
-              </Badge>
-            }
-          >
-            <SectionBodyLayout
-              contentClassName="space-y-4"
-              aside={
-                <SectionDiagnosticCard
-                  status={sectionStatuses.faq}
-                  {...sectionDiagnosticCards.faq}
-                />
-              }
-            >
-              {milestoneRows.map((row, index) => (
-                <div
-                  key={`milestone-${index}`}
-                  className="rounded-[26px] border border-slate-200/80 bg-slate-50/80 p-5 shadow-sm"
-                >
-                  <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-950">المرحلة {index + 1}</p>
-                      <p className="text-xs text-slate-500">
-                        نسّق عنوان المرحلة وتاريخها وحالتها ووصفها داخل بطاقة واحدة لعرض
-                        الخطة التنفيذية بشكل أوضح.
-                      </p>
-                    </div>
-
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-9 rounded-xl"
-                      disabled={milestoneRows.length === 1}
-                      onClick={() =>
-                        setMilestoneRows((prev) =>
-                          prev.length === 1 ? prev : prev.filter((_, rowIndex) => rowIndex !== index)
-                        )
-                      }
-                    >
-                      <Trash2 className="ml-2 h-4 w-4" />
-
-                      حذف المرحلة
-                    </Button>
-                  </div>
-
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <Field label="العنوان">
-                      <Input
-                        dir="rtl"
-                        className={`${inputClassName} text-right`}
-                        value={row.title}
-                        placeholder={`عنوان المرحلة ${index + 1}`}
-                        onChange={(e) =>
-                          setMilestoneRows((prev) =>
-                            prev.map((item, rowIndex) =>
-                              rowIndex === index ? { ...item, title: e.target.value } : item
-                            )
-                          )
-                        }
-                      />
-                    </Field>
-
-                    <Field label="التاريخ">
-                      <Input
-                        dir="ltr"
-                        className={`${inputClassName} text-left`}
-                        value={row.date}
-                        placeholder="2026-02"
-                        onChange={(e) =>
-                          setMilestoneRows((prev) =>
-                            prev.map((item, rowIndex) =>
-                              rowIndex === index ? { ...item, date: e.target.value } : item
-                            )
-                          )
-                        }
-                      />
-                    </Field>
-
-                    <Field label="الحالة">
-                      <Input
-                        dir="rtl"
-                        className={`${inputClassName} text-right`}
-                        value={row.status}
-                        placeholder="قيد التنفيذ"
-                        onChange={(e) =>
-                          setMilestoneRows((prev) =>
-                            prev.map((item, rowIndex) =>
-                              rowIndex === index ? { ...item, status: e.target.value } : item
-                            )
-                          )
-                        }
-                      />
-                    </Field>
-
-                    <Field label="الوصف">
-                      <Input
-                        dir="rtl"
-                        className={`${inputClassName} text-right`}
-                        value={row.description}
-                        placeholder="وصف مختصر"
-                        onChange={(e) =>
-                          setMilestoneRows((prev) =>
-                            prev.map((item, rowIndex) =>
-                              rowIndex === index
-                                ? { ...item, description: e.target.value }
-                                : item
-                            )
-                          )
-                        }
-                      />
-                    </Field>
-                  </div>
-                </div>
-              ))}
-
-              <Button
-                type="button"
-                variant="outline"
-                className="h-12 w-full rounded-2xl border-dashed"
-                onClick={() =>
-                  setMilestoneRows((prev) => [
-                    ...prev,
-                    { title: "", date: "", status: "", description: "" },
-                  ])
-                }
-              >
-                <Plus className="ml-2 h-4 w-4" />
-
-                إضافة مرحلة جديدة
-              </Button>
-            </SectionBodyLayout>
-          </SectionCard>
-
-          <SectionCard
-            id="faq"
-            index={7}
-            title="الأسئلة الشائعة"
-            description="الأسئلة والأجوبة ضمن بطاقات أكثر ترتيبًا لتسهيل قراءة المحتوى المتكرر."
-            icon={CircleHelp}
-            status={sectionStatuses.faq}
-            headerAside={
-              <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
-                {filledFaq} أسئلة
-              </Badge>
-            }
-          >
-            <SectionBodyLayout
-              contentClassName="space-y-4"
-              aside={
-                <SectionDiagnosticCard
-                  status={sectionStatuses.faq}
-                  {...sectionDiagnosticCards.faq}
-                />
-              }
-            >
-              {faqRows.map((row, index) => (
-                <div
-                  key={`faq-${index}`}
-                  className="rounded-[26px] border border-slate-200/80 bg-slate-50/80 p-5 shadow-sm"
-                >
-                  <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-950">السؤال {index + 1}</p>
-                      <p className="text-xs text-slate-500">
-                        أضف السؤال الشائع بصياغة واضحة، ثم اكتب الإجابة المختصرة التي تساعد
-                        المستخدم على فهم النقطة بسرعة.
-                      </p>
-                    </div>
-
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-9 rounded-xl"
-                      disabled={faqRows.length === 1}
-                      onClick={() =>
-                        setFaqRows((prev) =>
-                          prev.length === 1 ? prev : prev.filter((_, rowIndex) => rowIndex !== index)
-                        )
-                      }
-                    >
-                      <Trash2 className="ml-2 h-4 w-4" />
-
-                      حذف السؤال
-                    </Button>
-                  </div>
-
-                  <div className="grid gap-4">
-                    <Field label="السؤال">
-                      <Input
-                        dir="rtl"
-                        className={`${inputClassName} text-right`}
-                        value={row.q}
-                        placeholder={`السؤال ${index + 1}`}
-                        onChange={(e) =>
-                          setFaqRows((prev) =>
-                            prev.map((item, rowIndex) =>
-                              rowIndex === index ? { ...item, q: e.target.value } : item
-                            )
-                          )
-                        }
-                      />
-                    </Field>
-
-                    <Field label="الجواب">
-                      <Textarea
-                        rows={3}
-                        dir="rtl"
-                        className={`${textareaClassName} min-h-[120px] text-right leading-7`}
-                        value={row.a}
-                        placeholder="اكتب الجواب"
-                        onChange={(e) =>
-                          setFaqRows((prev) =>
-                            prev.map((item, rowIndex) =>
-                              rowIndex === index ? { ...item, a: e.target.value } : item
-                            )
-                          )
-                        }
-                      />
-                    </Field>
-                  </div>
-                </div>
-              ))}
-
-              <Button
-                type="button"
-                variant="outline"
-                className="h-12 w-full rounded-2xl border-dashed"
-                onClick={() => setFaqRows((prev) => [...prev, { q: "", a: "" }])}
-              >
-                <Plus className="ml-2 h-4 w-4" />
-
-                إضافة سؤال جديد
-              </Button>
-            </SectionBodyLayout>
-          </SectionCard>
-          {false && (
-            <>
-              {isCompletionStatus(formData.status) ? (
+              </SectionBodyLayout>
+            </SectionCard>
             <SectionCard
-              id="completion"
-              index={visibleSections.findIndex((section) => section.id === "completion") + 1}
-              title="المحتوى الختامي"
-              description="محتوى خاص بالمشاريع المكتملة والمغلقة يعرض ما بعد التنفيذ بشكل توثيقي واضح، بعيدًا عن لغة الاستثمار النشط."
-              icon={CheckCircle2}
-              status={sectionStatuses.completion}
+              id="media"
+              index={3}
+              title="الصور والمعرض"
+              description="واجهة رفع أنظف لصورة الغلاف والمعرض مع معاينة مباشرة وتنظيم أفضل للروابط."
+              icon={ImagePlus}
+              status={sectionStatuses.media}
               headerAside={
-                <Badge className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-700">
-                  {[
-                    filledCompletionResults ? `${filledCompletionResults} نتائج` : "",
-                    filledCompletionOutputs ? `${filledCompletionOutputs} مخرجات` : "",
-                    filledCompletionFinalNotes ? `${filledCompletionFinalNotes} ملاحظات` : "",
-                  ]
-                    .filter(Boolean)
-                    .join(" · ") || "أضف النتائج النهائية"}
-                </Badge>
+                <>
+                  <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
+
+                    {cleanStr(formData.coverImage) ? "جاهز" : "غير مرفوع"}
+                  </Badge>
+                  <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
+                    {galleryUrls.length} صورة في المعرض
+                  </Badge>
+                </>
               }
             >
               <SectionBodyLayout
-                contentClassName="space-y-6"
+                contentClassName="grid gap-6 xl:grid-cols-2"
                 aside={
                   <SectionDiagnosticCard
-                    status={sectionStatuses.completion}
-                    {...sectionDiagnosticCards.completion}
+                    status={sectionStatuses.media}
+                    {...sectionDiagnosticCards.media}
                   />
                 }
               >
-                <div className="grid gap-5 md:grid-cols-2">
-                    <Field
-                      label="نظرة عامة على المشروع"
-                      className="md:col-span-2"
-                      hint="وصف بصيغة ما بعد التنفيذ يشرح المشروع بعد اكتماله."
-                    >
-                      <Textarea
-                        rows={4}
-                        dir="rtl"
-                        className={`${textareaClassName} text-right leading-7`}
-                        value={formData.completionOverviewAr}
-                        placeholder="اكتب نظرة عامة توضح ما الذي كان عليه المشروع بعد التنفيذ."
-                        onChange={(e) =>
-                          setFormData((prev) => ({
-                            ...prev,
-                            completionOverviewAr: e.target.value,
-                          }))
-                        }
-                      />
-                    </Field>
-
-                    <Field
-                      label="ملخص المشروع"
-                      className="md:col-span-2"
-                      hint="ملخص قصير يظهر في صفحة المشروع المكتمل."
-                    >
-                      <Textarea
-                        rows={3}
-                        dir="rtl"
-                        className={`${textareaClassName} min-h-[120px] text-right leading-7`}
-                        value={formData.completionSummaryAr}
-                        placeholder="اكتب ملخصًا نهائيًا مختصرًا للمشروع بعد إقفاله."
-                        onChange={(e) =>
-                          setFormData((prev) => ({
-                            ...prev,
-                            completionSummaryAr: e.target.value,
-                          }))
-                        }
-                      />
-                    </Field>
-                  </div>
-                <div className="grid gap-6 xl:grid-cols-2">
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <h3 className="text-base font-semibold text-slate-950">نتائج المشروع</h3>
-                        <p className="text-xs text-slate-500">
-                          كل نتيجة تظهر كعنصر مستقل في الصفحة النهائية.
-                        </p>
-                      </div>
-                      <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
-                        {filledCompletionResults}
-                      </Badge>
-                    </div>
-
-                    {completionResultRows.map((row, index) => (
-                      <div
-                        key={`completion-result-${index}`}
-                        className="rounded-[24px] border border-slate-200/80 bg-slate-50/80 p-4 shadow-sm"
-                      >
-                        <div className="mb-3 flex items-center justify-between gap-3">
-                          <p className="text-sm font-semibold text-slate-950">النتيجة {index + 1}</p>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="h-9 rounded-xl"
-                            disabled={completionResultRows.length === 1}
-                            onClick={() =>
-                              setCompletionResultRows((prev) =>
-                                prev.length === 1 ? prev : prev.filter((_, rowIndex) => rowIndex !== index)
-                              )
-                            }
-                          >
-                            <Trash2 className="ml-2 h-4 w-4" />
-
-                            حذف
-                          </Button>
-                        </div>
-
-                        <Textarea
-                          rows={3}
-                          dir="rtl"
-                          className={`${textareaClassName} min-h-[110px] text-right leading-7`}
-                          value={row}
-                          placeholder="مثال: تم تنفيذ أعمال التطوير وتسليم الأصول وفق الخطة المعتمدة."
-                          onChange={(e) =>
-                            setCompletionResultRows((prev) =>
-                              prev.map((item, rowIndex) =>
-                                rowIndex === index ? e.target.value : item
-                              )
-                            )
-                          }
-                        />
-                      </div>
-                    ))}
-
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="h-12 w-full rounded-2xl border-dashed"
-                      onClick={() => setCompletionResultRows((prev) => [...prev, ""])}
-                    >
-                      <Plus className="ml-2 h-4 w-4" />
-
-                      إضافة نتيجة جديدة
-                    </Button>
-                  </div>
-
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <h3 className="text-base font-semibold text-slate-950">
-                          ملخص نهائي / ملاحظات
-                        </h3>
-                        <p className="text-xs text-slate-500">
-                          ملاحظات ختامية أو نقاط توثيقية إضافية.
-                        </p>
-                      </div>
-                      <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
-                        {filledCompletionFinalNotes}
-                      </Badge>
-                    </div>
-
-                    {completionFinalNoteRows.map((row, index) => (
-                      <div
-                        key={`completion-note-${index}`}
-                        className="rounded-[24px] border border-slate-200/80 bg-slate-50/80 p-4 shadow-sm"
-                      >
-                        <div className="mb-3 flex items-center justify-between gap-3">
-                          <p className="text-sm font-semibold text-slate-950">ملاحظة {index + 1}</p>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="h-9 rounded-xl"
-                            disabled={completionFinalNoteRows.length === 1}
-                            onClick={() =>
-                              setCompletionFinalNoteRows((prev) =>
-                                prev.length === 1 ? prev : prev.filter((_, rowIndex) => rowIndex !== index)
-                              )
-                            }
-                          >
-                            <Trash2 className="ml-2 h-4 w-4" />
-
-                            حذف
-                          </Button>
-                        </div>
-
-                        <Textarea
-                          rows={3}
-                          dir="rtl"
-                          className={`${textareaClassName} min-h-[110px] text-right leading-7`}
-                          value={row}
-                          placeholder="أضف ملاحظة نهائية أو ملخصًا ختاميًا للمشروع."
-                          onChange={(e) =>
-                            setCompletionFinalNoteRows((prev) =>
-                              prev.map((item, rowIndex) =>
-                                rowIndex === index ? e.target.value : item
-                              )
-                            )
-                          }
-                        />
-                      </div>
-                    ))}
-
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="h-12 w-full rounded-2xl border-dashed"
-                      onClick={() => setCompletionFinalNoteRows((prev) => [...prev, ""])}
-                    >
-                      <Plus className="ml-2 h-4 w-4" />
-
-                      إضافة ملاحظة ختامية
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between gap-3">
+                <div className="rounded-[28px] border border-slate-200/80 bg-slate-50/70 p-5 shadow-sm">
+                  <div className="flex items-start justify-between gap-4">
                     <div>
-                      <h3 className="text-base font-semibold text-slate-950">مخرجات المشروع</h3>
-                      <p className="text-xs text-slate-500">
-                        أضف المخرجات النهائية التي تم تسليمها أو إنتاجها بعد التنفيذ، مع
-                        عنوان واضح ووصف مختصر لكل مخرج.
+                      <h3 className="text-base font-semibold text-slate-950">صورة الغلاف</h3>
+                      <p className="mt-1 text-xs leading-6 text-slate-500">
+                        أضف الصورة الأساسية التي تمثل المشروع بصريًا داخل البطاقة وصفحة
+                        التفاصيل، ويمكنك استخدام الرابط النصي أو الرفع المباشر.
                       </p>
                     </div>
                     <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
-                      {filledCompletionOutputs}
+                      {coverUploading
+                        ? "جارٍ الرفع..."
+                        : cleanStr(formData.coverImage)
+                          ? "مرفوع"
+                          : "بانتظار"}
                     </Badge>
                   </div>
 
-                  {completionOutputRows.map((row, index) => (
-                    <div
-                      key={`completion-output-${index}`}
-                      className="rounded-[26px] border border-slate-200/80 bg-slate-50/80 p-5 shadow-sm"
-                    >
-                      <div className="mb-5 flex items-center justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-semibold text-slate-950">المخرج {index + 1}</p>
-                          <p className="text-xs text-slate-500">
-                            اكتب اسم المخرج ووصفه المختصر، وأضف وسمًا اختياريًا إذا احتجت
-                            إلى توضيح إضافي.
-                          </p>
-                        </div>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="h-9 rounded-xl"
-                          disabled={completionOutputRows.length === 1}
-                          onClick={() =>
-                            setCompletionOutputRows((prev) =>
-                              prev.length === 1 ? prev : prev.filter((_, rowIndex) => rowIndex !== index)
-                            )
-                          }
-                        >
-                          <Trash2 className="ml-2 h-4 w-4" />
-
-                          حذف
-                        </Button>
-                      </div>
-
-                      <div className="grid gap-4 md:grid-cols-2">
-                        <Field label="العنوان">
-                          <Input
-                            dir="rtl"
-                            className={`${inputClassName} text-right`}
-                            value={row.titleAr}
-                            placeholder={`عنوان المخرج ${index + 1}`}
-                            onChange={(e) =>
-                              setCompletionOutputRows((prev) =>
-                                prev.map((item, rowIndex) =>
-                                  rowIndex === index ? { ...item, titleAr: e.target.value } : item
-                                )
-                              )
-                            }
-                          />
-                        </Field>
-
-                        <Field label="وسم إضافي (اختياري)">
-                          <Input
-                            dir="rtl"
-                            className={`${inputClassName} text-right`}
-                            value={row.metaAr}
-                            placeholder="مثال: تسليم نهائي"
-                            onChange={(e) =>
-                              setCompletionOutputRows((prev) =>
-                                prev.map((item, rowIndex) =>
-                                  rowIndex === index ? { ...item, metaAr: e.target.value } : item
-                                )
-                              )
-                            }
-                          />
-                        </Field>
-
-                        <Field label="الوصف" className="md:col-span-2">
-                          <Textarea
-                            rows={3}
-                            dir="rtl"
-                            className={`${textareaClassName} min-h-[120px] text-right leading-7`}
-                            value={row.descriptionAr}
-                            placeholder="صف هذا المخرج بشكل واضح ومباشر."
-                            onChange={(e) =>
-                              setCompletionOutputRows((prev) =>
-                                prev.map((item, rowIndex) =>
-                                  rowIndex === index
-                                    ? { ...item, descriptionAr: e.target.value }
-                                    : item
-                                )
-                              )
-                            }
-                          />
-                        </Field>
-                      </div>
-                    </div>
-                  ))}
-
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-12 w-full rounded-2xl border-dashed"
-                    onClick={() =>
-                      setCompletionOutputRows((prev) => [
-                        ...prev,
-                        { titleAr: "", descriptionAr: "", metaAr: "" },
-                      ])
-                    }
-                  >
-                    <Plus className="ml-2 h-4 w-4" />
-
-                    إضافة مخرج جديد
-                  </Button>
-                </div>
-
-                <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_260px]">
-                  <Field
-                    label="معرض صور ما بعد التنفيذ"
-                    hint="رابط لكل صورة في سطر مستقل. هذه الصور تُستخدم في صفحة المشروع المكتمل."
-                  >
-                    <Textarea
-                      rows={5}
-                      dir="ltr"
-                      className={`${textareaClassName} min-h-[160px] text-left`}
-                      value={formData.completionGalleryText}
-                      placeholder="https://..."
-                      onChange={(e) =>
-                        setFormData((prev) => ({
-                          ...prev,
-                          completionGalleryText: e.target.value,
-                        }))
-                      }
-                    />
-                  </Field>
-
-                  <UploadDropzone
-                    inputId="project-completion-gallery-upload"
-                    title="رفع صور نهائية"
-                    description="ارفع الصور التي توثق الحالة النهائية للمشروع بعد التنفيذ."
-                    accept="image/*"
-                    multiple
-                    disabled={completionGalleryUploading}
-                    onChange={(e) => {
-                      void handleCompletionGalleryImageUpload(e.target.files);
-                      e.currentTarget.value = "";
-                    }}
-                  />
-                </div>
-
-                {completionGalleryUrls.length ? (
-                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                    {completionGalleryUrls.map((url, index) => (
-                      <div
-                        key={`${url}-${index}`}
-                        className="overflow-hidden rounded-[22px] border border-slate-200 bg-white shadow-sm"
-                      >
-                        <div className="aspect-[4/3] overflow-hidden">
-                          <img
-                            src={url}
-                            alt={`completion-gallery-${index + 1}`}
-                            className="h-full w-full object-cover"
-                          />
-                        </div>
-                        <div className="flex items-center justify-between gap-3 p-3">
-                          <p className="min-w-0 truncate text-xs text-slate-500">
-
-                            الصورة {index + 1}
-                          </p>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="h-8 rounded-xl"
-                            onClick={() =>
-                              setFormData((prev) => ({
-                                ...prev,
-                                completionGalleryText: completionGalleryUrls
-                                  .filter((_, galleryIndex) => galleryIndex !== index)
-                                  .join("\n"),
-                              }))
-                            }
-                          >
-
-                            حذف
-                          </Button>
+                  <div className="mt-5 overflow-hidden rounded-[24px] border border-slate-200 bg-white">
+                    {cleanStr(formData.coverImage) ? (
+                      <img
+                        src={formData.coverImage}
+                        alt="معاينة صورة الغلاف"
+                        className="aspect-[16/9] h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex aspect-[16/9] items-center justify-center bg-[linear-gradient(135deg,rgba(248,250,252,1),rgba(226,232,240,0.6))]">
+                        <div className="space-y-2 text-center text-slate-500">
+                          <FileImage className="mx-auto h-7 w-7" />
+                          <p className="text-sm font-semibold">لا توجد صورة غلاف بعد</p>
+                          <p className="text-xs">أضف رابطًا أو ارفع ملفًا لعرض المعاينة هنا.</p>
                         </div>
                       </div>
-                    ))}
+                    )}
                   </div>
-                ) : null}
+
+                  <div className="mt-5 space-y-4">
+                    <Field
+                      label="رابط صورة الغلاف"
+                      required
+                      hint="يمكنك الإبقاء على نفس منطق الرابط النصي الحالي أو استخدام الرفع المباشر."
+                    >
+                      <Input
+                        value={formData.coverImage}
+                        className={inputClassName}
+                        placeholder="project-cover.png أو /project-cover.png أو https://..."
+                        onChange={(e) =>
+                          setFormData((prev) => ({ ...prev, coverImage: e.target.value }))
+                        }
+                      />
+                    </Field>
+
+                    <UploadDropzone
+                      inputId="project-cover-upload"
+                      title="رفع صورة غلاف"
+                      description="اسحب أو اختر صورة تمثل المشروع بصريًا."
+                      accept="image/*"
+                      disabled={coverUploading}
+                      onChange={(e) => {
+                        void handleCoverImageUpload(e.target.files?.[0] ?? null);
+                        e.currentTarget.value = "";
+                      }}
+                    />
+
+                    {cleanStr(formData.coverImage) ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        className="h-10 rounded-xl px-3 text-slate-600 hover:bg-slate-100"
+                        onClick={() =>
+                          setFormData((prev) => ({ ...prev, coverImage: "" }))
+                        }
+                      >
+
+                        إزالة صورة الغلاف
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div className="rounded-[28px] border border-slate-200/80 bg-slate-50/70 p-5 shadow-sm">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <h3 className="text-base font-semibold text-slate-950">معرض الصور</h3>
+                      <p className="mt-1 text-xs leading-6 text-slate-500">
+                        أضف صورًا إضافية للمشروع عبر الروابط أو الرفع المباشر، وسيتم تحديث
+                        نفس الحقل الحالي تلقائيًا لعرضها داخل المعرض.
+                      </p>
+                    </div>
+                    <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
+                      {galleryUploading ? "جارٍ الرفع..." : `${galleryUrls.length} صورة`}
+                    </Badge>
+                  </div>
+
+                  <div className="mt-5 space-y-4">
+                    <Field
+                      label="روابط المعرض"
+                      hint="كل رابط في سطر مستقل. يمكن المزج بين الروابط المكتوبة والملفات المرفوعة."
+                    >
+                      <Textarea
+                        rows={6}
+                        value={formData.galleryText}
+                        className={`${textareaClassName} leading-7`}
+                        placeholder={"image-1.png\n/image-2.png\nhttps://..."}
+                        onChange={(e) =>
+                          setFormData((prev) => ({ ...prev, galleryText: e.target.value }))
+                        }
+                      />
+                    </Field>
+
+                    <UploadDropzone
+                      inputId="project-gallery-upload"
+                      title="رفع صور المعرض"
+                      description="اختر عدة صور وسيتم إلحاق روابطها مباشرة بنفس الحقل الحالي."
+                      accept="image/*"
+                      multiple
+                      disabled={galleryUploading}
+                      onChange={(e) => {
+                        void handleGalleryImageUpload(e.target.files);
+                        e.currentTarget.value = "";
+                      }}
+                    />
+
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {galleryUrls.length ? (
+                        galleryUrls.map((url, index) => (
+                          <div
+                            key={`${url}-${index}`}
+                            className="overflow-hidden rounded-[22px] border border-slate-200 bg-white shadow-sm"
+                          >
+                            <div className="aspect-[4/3] bg-slate-100">
+                              <img
+                                src={url}
+                                alt={`صورة المعرض ${index + 1}`}
+                                className="h-full w-full object-cover"
+                              />
+                            </div>
+                            <div className="space-y-3 p-3">
+                              <p className="line-clamp-2 text-xs leading-6 text-slate-500">
+                                {url}
+                              </p>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-9 rounded-xl"
+                                onClick={() =>
+                                  setFormData((prev) => ({
+                                    ...prev,
+                                    galleryText: galleryUrls
+                                      .filter((_, galleryIndex) => galleryIndex !== index)
+                                      .join("\n"),
+                                  }))
+                                }
+                              >
+                                <Trash2 className="ml-2 h-4 w-4" />
+
+                                حذف الصورة
+                              </Button>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="rounded-[22px] border border-dashed border-slate-300 bg-white/80 p-6 text-center text-sm text-slate-500 sm:col-span-2">
+
+                          ستظهر معاينات صور المعرض هنا بعد إضافة الروابط أو رفع الملفات.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </SectionBodyLayout>
             </SectionCard>
-          ) : (
-            <SectionCard
-              id="completion"
-              index={visibleSections.findIndex((section) => section.id === "completion") + 1}
-              title="المحتوى الختامي"
-              description="يبقى هذا القسم ظاهرًا ضمن لوحة البناء، ويتحوّل إلى وضع التحرير الكامل عند إغلاق المشروع أو اكتماله."
-              icon={CheckCircle2}
-              status={sectionStatuses.completion}
-              headerAside={
-                <Badge className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-700">
 
-                  متاح بعد الإغلاق
+            <SectionCard
+              id="highlights"
+              index={4}
+              title="المميزات"
+              description="حوّل قائمة المميزات إلى repeater بصري أنظف يساعد على قراءة العرض الاستثماري بسرعة."
+              icon={Sparkles}
+              status={sectionStatuses.highlights}
+              headerAside={
+                <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
+                  {filledHighlights} مميزات
                 </Badge>
               }
             >
@@ -3101,444 +2189,1367 @@ export function CreateProjectUi({
                 contentClassName="space-y-4"
                 aside={
                   <SectionDiagnosticCard
-                    status={sectionStatuses.completion}
-                    {...sectionDiagnosticCards.completion}
+                    status={sectionStatuses.attachments}
+                    {...sectionDiagnosticCards.attachments}
                   />
                 }
               >
-                <div className="rounded-[26px] border border-slate-200/80 bg-slate-50/90 p-5 shadow-sm">
-                  <div className="flex items-start gap-3">
-                    <div className="flex size-10 items-center justify-center rounded-2xl bg-white shadow-sm">
-                      <FileText className="h-4 w-4 text-slate-800" />
+                {highlightRows.map((row, index) => (
+                  <div
+                    key={`highlight-${index}`}
+                    className="rounded-[24px] border border-slate-200/80 bg-slate-50/80 p-4 shadow-sm"
+                  >
+                    <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-950">الميزة {index + 1}</p>
+                        <p className="text-xs text-slate-500">
+                          اكتب الميزة بصياغة موجزة تبرز قيمة المشروع بشكل واضح وسريع.
+                        </p>
+                      </div>
+
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-9 rounded-xl"
+                        disabled={highlightRows.length === 1}
+                        onClick={() =>
+                          setHighlightRows((prev) =>
+                            prev.length === 1 ? prev : prev.filter((_, rowIndex) => rowIndex !== index)
+                          )
+                        }
+                      >
+                        <Trash2 className="ml-2 h-4 w-4" />
+
+                        حذف
+                      </Button>
                     </div>
-                    <div className="space-y-2">
-                      <h3 className="text-sm font-semibold text-slate-950">
-                        القسم مؤجل حتى الإغلاق
-                      </h3>
-                      <p className="text-xs leading-6 text-slate-500">
-                        سيبقى هذا القسم ظاهرًا داخل لوحة البناء، لكنه يتحول إلى مساحة
-                        تحرير كاملة عند إغلاق المشروع أو اكتماله. عندها يمكنك إضافة
-                        النتائج والمخرجات وصور ما بعد التنفيذ والمحتوى الختامي بشكل منظم.
-                      </p>
+
+                    <Input
+                      dir="rtl"
+                      className={`${inputClassName} text-right`}
+                      value={row}
+                      placeholder={`الميزة ${index + 1}`}
+                      onChange={(e) =>
+                        setHighlightRows((prev) =>
+                          prev.map((item, rowIndex) =>
+                            rowIndex === index ? e.target.value : item
+                          )
+                        )
+                      }
+                    />
+                  </div>
+                ))}
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-12 w-full rounded-2xl border-dashed"
+                  onClick={() => setHighlightRows((prev) => [...prev, ""])}
+                >
+                  <Plus className="ml-2 h-4 w-4" />
+
+                  إضافة ميزة جديدة
+                </Button>
+              </SectionBodyLayout>
+            </SectionCard>
+            <SectionCard
+              id="attachments"
+              index={5}
+              title="المرفقات"
+              description="كل مرفق يظهر الآن كبطاقة مستقلة تتضمن الاسم والرابط والرفع والمعاينة داخل صف واحد منظم."
+              icon={Paperclip}
+              status={sectionStatuses.attachments}
+              headerAside={
+                <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
+                  {filledAttachments} مرفقات
+                </Badge>
+              }
+            >
+              <SectionBodyLayout
+                contentClassName="space-y-4"
+                aside={
+                  <SectionDiagnosticCard
+                    status={sectionStatuses.milestones}
+                    {...sectionDiagnosticCards.milestones}
+                  />
+                }
+              >
+                {attachmentRows.map((row, index) => (
+                  <div
+                    key={`attachment-${index}`}
+                    className="rounded-[26px] border border-slate-200/80 bg-slate-50/80 p-5 shadow-sm"
+                  >
+                    <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-950">المرفق {index + 1}</p>
+                        <p className="text-xs text-slate-500">
+                          أضف اسم المرفق ورابطه أو ارفع الملف مباشرة ليظهر ضمن هذا السجل
+                          بشكل منظم وواضح.
+                        </p>
+                      </div>
+
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-9 rounded-xl"
+                        disabled={attachmentRows.length === 1}
+                        onClick={() =>
+                          setAttachmentRows((prev) =>
+                            prev.length === 1 ? prev : prev.filter((_, rowIndex) => rowIndex !== index)
+                          )
+                        }
+                      >
+                        <Trash2 className="ml-2 h-4 w-4" />
+
+                        حذف المرفق
+                      </Button>
+                    </div>
+
+                    <div className="grid gap-4">
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <Field label="الاسم">
+                          <Input
+                            dir="rtl"
+                            className={`${inputClassName} text-right`}
+                            value={row.name}
+                            placeholder={`اسم المرفق ${index + 1}`}
+                            onChange={(e) =>
+                              setAttachmentRows((prev) =>
+                                prev.map((item, rowIndex) =>
+                                  rowIndex === index ? { ...item, name: e.target.value } : item
+                                )
+                              )
+                            }
+                          />
+                        </Field>
+
+                        <Field label="الرابط الخارجي (اختياري)">
+                          <Input
+                            dir="ltr"
+                            className={`${inputClassName} text-left`}
+                            value={row.externalUrl}
+                            placeholder="https://example.com"
+                            onChange={(e) =>
+                              setAttachmentRows((prev) =>
+                                prev.map((item, rowIndex) =>
+                                  rowIndex === index
+                                    ? { ...item, externalUrl: e.target.value }
+                                    : item
+                                )
+                              )
+                            }
+                          />
+                        </Field>
+                      </div>
+
+                      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_260px]">
+                        <div className="rounded-[22px] border border-slate-200 bg-white p-4">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="space-y-1">
+                              <p className="text-sm font-semibold text-slate-950">حالة الملف</p>
+                              <p className="text-xs text-slate-500">
+                                {row.uploading
+                                  ? "جارٍ رفع الملف إلى التخزين..."
+                                  : row.url
+                                    ? "تم رفع الملف وهو جاهز للمراجعة."
+                                    : "لم يتم رفع ملف لهذا المرفق بعد."}
+                              </p>
+                            </div>
+
+                            {row.url ? (
+                              <Badge className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-emerald-700">
+                                Uploaded
+                              </Badge>
+                            ) : null}
+                          </div>
+
+                          <div className="mt-4 flex flex-wrap items-center gap-3">
+                            {row.url ? (
+                              <a
+                                href={row.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+                              >
+
+                                عرض الملف المرفوع
+                              </a>
+                            ) : null}
+
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-9 rounded-xl"
+                              disabled={!row.url || row.uploading}
+                              onClick={() =>
+                                setAttachmentRows((prev) =>
+                                  prev.map((item, rowIndex) =>
+                                    rowIndex === index ? { ...item, url: "" } : item
+                                  )
+                                )
+                              }
+                            >
+
+                              إزالة الملف
+                            </Button>
+                          </div>
+                        </div>
+
+                        <UploadDropzone
+                          inputId={`attachment-upload-${index}`}
+                          title="رفع مرفق"
+                          description="ارفع ملف PDF أو صورة أو أي ملف داعم للمشروع."
+                          accept="*/*"
+                          disabled={row.uploading}
+                          onChange={(e) => {
+                            void handleAttachmentFileUpload(index, e.target.files?.[0] ?? null);
+                            e.currentTarget.value = "";
+                          }}
+                        />
+                      </div>
                     </div>
                   </div>
+                ))}
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-12 w-full rounded-2xl border-dashed"
+                  onClick={() => setAttachmentRows((prev) => [...prev, { name: "", url: "", externalUrl: "" }])}
+                >
+                  <Plus className="ml-2 h-4 w-4" />
+
+                  إضافة مرفق جديد
+                </Button>
+              </SectionBodyLayout>
+            </SectionCard>
+
+            <SectionCard
+              id="milestones"
+              index={6}
+              title="المراحل"
+              description="مراحل التنفيذ في بطاقات مصغّرة مع تقسيم أوضح بين التاريخ والحالة والوصف."
+              icon={ListChecks}
+              status={sectionStatuses.milestones}
+              headerAside={
+                <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
+                  {filledMilestones} مراحل
+                </Badge>
+              }
+            >
+              <SectionBodyLayout
+                contentClassName="space-y-4"
+                aside={
+                  <SectionDiagnosticCard
+                    status={sectionStatuses.faq}
+                    {...sectionDiagnosticCards.faq}
+                  />
+                }
+              >
+                {milestoneRows.map((row, index) => (
+                  <div
+                    key={`milestone-${index}`}
+                    className="rounded-[26px] border border-slate-200/80 bg-slate-50/80 p-5 shadow-sm"
+                  >
+                    <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-950">المرحلة {index + 1}</p>
+                        <p className="text-xs text-slate-500">
+                          نسّق عنوان المرحلة وتاريخها وحالتها ووصفها داخل بطاقة واحدة لعرض
+                          الخطة التنفيذية بشكل أوضح.
+                        </p>
+                      </div>
+
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-9 rounded-xl"
+                        disabled={milestoneRows.length === 1}
+                        onClick={() =>
+                          setMilestoneRows((prev) =>
+                            prev.length === 1 ? prev : prev.filter((_, rowIndex) => rowIndex !== index)
+                          )
+                        }
+                      >
+                        <Trash2 className="ml-2 h-4 w-4" />
+
+                        حذف المرحلة
+                      </Button>
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <Field label="العنوان">
+                        <Input
+                          dir="rtl"
+                          className={`${inputClassName} text-right`}
+                          value={row.title}
+                          placeholder={`عنوان المرحلة ${index + 1}`}
+                          onChange={(e) =>
+                            setMilestoneRows((prev) =>
+                              prev.map((item, rowIndex) =>
+                                rowIndex === index ? { ...item, title: e.target.value } : item
+                              )
+                            )
+                          }
+                        />
+                      </Field>
+
+                      <Field label="التاريخ">
+                        <Input
+                          dir="ltr"
+                          className={`${inputClassName} text-left`}
+                          value={row.date}
+                          placeholder="2026-02"
+                          onChange={(e) =>
+                            setMilestoneRows((prev) =>
+                              prev.map((item, rowIndex) =>
+                                rowIndex === index ? { ...item, date: e.target.value } : item
+                              )
+                            )
+                          }
+                        />
+                      </Field>
+
+                      <Field label="الحالة">
+                        <Input
+                          dir="rtl"
+                          className={`${inputClassName} text-right`}
+                          value={row.status}
+                          placeholder="قيد التنفيذ"
+                          onChange={(e) =>
+                            setMilestoneRows((prev) =>
+                              prev.map((item, rowIndex) =>
+                                rowIndex === index ? { ...item, status: e.target.value } : item
+                              )
+                            )
+                          }
+                        />
+                      </Field>
+
+                      <Field label="الوصف">
+                        <Input
+                          dir="rtl"
+                          className={`${inputClassName} text-right`}
+                          value={row.description}
+                          placeholder="وصف مختصر"
+                          onChange={(e) =>
+                            setMilestoneRows((prev) =>
+                              prev.map((item, rowIndex) =>
+                                rowIndex === index
+                                  ? { ...item, description: e.target.value }
+                                  : item
+                              )
+                            )
+                          }
+                        />
+                      </Field>
+                    </div>
+                  </div>
+                ))}
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-12 w-full rounded-2xl border-dashed"
+                  onClick={() =>
+                    setMilestoneRows((prev) => [
+                      ...prev,
+                      { title: "", date: "", status: "", description: "" },
+                    ])
+                  }
+                >
+                  <Plus className="ml-2 h-4 w-4" />
+
+                  إضافة مرحلة جديدة
+                </Button>
+              </SectionBodyLayout>
+            </SectionCard>
+
+            <SectionCard
+              id="faq"
+              index={7}
+              title="الأسئلة الشائعة"
+              description="الأسئلة والأجوبة ضمن بطاقات أكثر ترتيبًا لتسهيل قراءة المحتوى المتكرر."
+              icon={CircleHelp}
+              status={sectionStatuses.faq}
+              headerAside={
+                <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
+                  {filledFaq} أسئلة
+                </Badge>
+              }
+            >
+              <SectionBodyLayout
+                contentClassName="space-y-4"
+                aside={
+                  <SectionDiagnosticCard
+                    status={sectionStatuses.faq}
+                    {...sectionDiagnosticCards.faq}
+                  />
+                }
+              >
+                {faqRows.map((row, index) => (
+                  <div
+                    key={`faq-${index}`}
+                    className="rounded-[26px] border border-slate-200/80 bg-slate-50/80 p-5 shadow-sm"
+                  >
+                    <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-950">السؤال {index + 1}</p>
+                        <p className="text-xs text-slate-500">
+                          أضف السؤال الشائع بصياغة واضحة، ثم اكتب الإجابة المختصرة التي تساعد
+                          المستخدم على فهم النقطة بسرعة.
+                        </p>
+                      </div>
+
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-9 rounded-xl"
+                        disabled={faqRows.length === 1}
+                        onClick={() =>
+                          setFaqRows((prev) =>
+                            prev.length === 1 ? prev : prev.filter((_, rowIndex) => rowIndex !== index)
+                          )
+                        }
+                      >
+                        <Trash2 className="ml-2 h-4 w-4" />
+
+                        حذف السؤال
+                      </Button>
+                    </div>
+
+                    <div className="grid gap-4">
+                      <Field label="السؤال">
+                        <Input
+                          dir="rtl"
+                          className={`${inputClassName} text-right`}
+                          value={row.q}
+                          placeholder={`السؤال ${index + 1}`}
+                          onChange={(e) =>
+                            setFaqRows((prev) =>
+                              prev.map((item, rowIndex) =>
+                                rowIndex === index ? { ...item, q: e.target.value } : item
+                              )
+                            )
+                          }
+                        />
+                      </Field>
+
+                      <Field label="الجواب">
+                        <Textarea
+                          rows={3}
+                          dir="rtl"
+                          className={`${textareaClassName} min-h-[120px] text-right leading-7`}
+                          value={row.a}
+                          placeholder="اكتب الجواب"
+                          onChange={(e) =>
+                            setFaqRows((prev) =>
+                              prev.map((item, rowIndex) =>
+                                rowIndex === index ? { ...item, a: e.target.value } : item
+                              )
+                            )
+                          }
+                        />
+                      </Field>
+                    </div>
+                  </div>
+                ))}
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-12 w-full rounded-2xl border-dashed"
+                  onClick={() => setFaqRows((prev) => [...prev, { q: "", a: "" }])}
+                >
+                  <Plus className="ml-2 h-4 w-4" />
+
+                  إضافة سؤال جديد
+                </Button>
+              </SectionBodyLayout>
+            </SectionCard>
+            {false && (
+              <>
+                {isCompletionStatus(formData.status) ? (
+                  <SectionCard
+                    id="completion"
+                    index={visibleSections.findIndex((section) => section.id === "completion") + 1}
+                    title="المحتوى الختامي"
+                    description="محتوى خاص بالمشاريع المكتملة والمغلقة يعرض ما بعد التنفيذ بشكل توثيقي واضح، بعيدًا عن لغة الاستثمار النشط."
+                    icon={CheckCircle2}
+                    status={sectionStatuses.completion}
+                    headerAside={
+                      <Badge className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-700">
+                        {[
+                          filledCompletionResults ? `${filledCompletionResults} نتائج` : "",
+                          filledCompletionOutputs ? `${filledCompletionOutputs} مخرجات` : "",
+                          filledCompletionFinalNotes ? `${filledCompletionFinalNotes} ملاحظات` : "",
+                        ]
+                          .filter(Boolean)
+                          .join(" · ") || "أضف النتائج النهائية"}
+                      </Badge>
+                    }
+                  >
+                    <SectionBodyLayout
+                      contentClassName="space-y-6"
+                      aside={
+                        <SectionDiagnosticCard
+                          status={sectionStatuses.completion}
+                          {...sectionDiagnosticCards.completion}
+                        />
+                      }
+                    >
+                      <div className="grid gap-5 md:grid-cols-2">
+                        <Field
+                          label="نظرة عامة على المشروع"
+                          className="md:col-span-2"
+                          hint="وصف بصيغة ما بعد التنفيذ يشرح المشروع بعد اكتماله."
+                        >
+                          <Textarea
+                            rows={4}
+                            dir="rtl"
+                            className={`${textareaClassName} text-right leading-7`}
+                            value={formData.completionOverviewAr}
+                            placeholder="اكتب نظرة عامة توضح ما الذي كان عليه المشروع بعد التنفيذ."
+                            onChange={(e) =>
+                              setFormData((prev) => ({
+                                ...prev,
+                                completionOverviewAr: e.target.value,
+                              }))
+                            }
+                          />
+                        </Field>
+
+                        <Field
+                          label="ملخص المشروع"
+                          className="md:col-span-2"
+                          hint="ملخص قصير يظهر في صفحة المشروع المكتمل."
+                        >
+                          <Textarea
+                            rows={3}
+                            dir="rtl"
+                            className={`${textareaClassName} min-h-[120px] text-right leading-7`}
+                            value={formData.completionSummaryAr}
+                            placeholder="اكتب ملخصًا نهائيًا مختصرًا للمشروع بعد إقفاله."
+                            onChange={(e) =>
+                              setFormData((prev) => ({
+                                ...prev,
+                                completionSummaryAr: e.target.value,
+                              }))
+                            }
+                          />
+                        </Field>
+                      </div>
+                      <div className="grid gap-6 xl:grid-cols-2">
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <h3 className="text-base font-semibold text-slate-950">نتائج المشروع</h3>
+                              <p className="text-xs text-slate-500">
+                                كل نتيجة تظهر كعنصر مستقل في الصفحة النهائية.
+                              </p>
+                            </div>
+                            <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
+                              {filledCompletionResults}
+                            </Badge>
+                          </div>
+
+                          {completionResultRows.map((row, index) => (
+                            <div
+                              key={`completion-result-${index}`}
+                              className="rounded-[24px] border border-slate-200/80 bg-slate-50/80 p-4 shadow-sm"
+                            >
+                              <div className="mb-3 flex items-center justify-between gap-3">
+                                <p className="text-sm font-semibold text-slate-950">النتيجة {index + 1}</p>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-9 rounded-xl"
+                                  disabled={completionResultRows.length === 1}
+                                  onClick={() =>
+                                    setCompletionResultRows((prev) =>
+                                      prev.length === 1 ? prev : prev.filter((_, rowIndex) => rowIndex !== index)
+                                    )
+                                  }
+                                >
+                                  <Trash2 className="ml-2 h-4 w-4" />
+
+                                  حذف
+                                </Button>
+                              </div>
+
+                              <Textarea
+                                rows={3}
+                                dir="rtl"
+                                className={`${textareaClassName} min-h-[110px] text-right leading-7`}
+                                value={row}
+                                placeholder="مثال: تم تنفيذ أعمال التطوير وتسليم الأصول وفق الخطة المعتمدة."
+                                onChange={(e) =>
+                                  setCompletionResultRows((prev) =>
+                                    prev.map((item, rowIndex) =>
+                                      rowIndex === index ? e.target.value : item
+                                    )
+                                  )
+                                }
+                              />
+                            </div>
+                          ))}
+
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-12 w-full rounded-2xl border-dashed"
+                            onClick={() => setCompletionResultRows((prev) => [...prev, ""])}
+                          >
+                            <Plus className="ml-2 h-4 w-4" />
+
+                            إضافة نتيجة جديدة
+                          </Button>
+                        </div>
+
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <h3 className="text-base font-semibold text-slate-950">
+                                ملخص نهائي / ملاحظات
+                              </h3>
+                              <p className="text-xs text-slate-500">
+                                ملاحظات ختامية أو نقاط توثيقية إضافية.
+                              </p>
+                            </div>
+                            <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
+                              {filledCompletionFinalNotes}
+                            </Badge>
+                          </div>
+
+                          {completionFinalNoteRows.map((row, index) => (
+                            <div
+                              key={`completion-note-${index}`}
+                              className="rounded-[24px] border border-slate-200/80 bg-slate-50/80 p-4 shadow-sm"
+                            >
+                              <div className="mb-3 flex items-center justify-between gap-3">
+                                <p className="text-sm font-semibold text-slate-950">ملاحظة {index + 1}</p>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-9 rounded-xl"
+                                  disabled={completionFinalNoteRows.length === 1}
+                                  onClick={() =>
+                                    setCompletionFinalNoteRows((prev) =>
+                                      prev.length === 1 ? prev : prev.filter((_, rowIndex) => rowIndex !== index)
+                                    )
+                                  }
+                                >
+                                  <Trash2 className="ml-2 h-4 w-4" />
+
+                                  حذف
+                                </Button>
+                              </div>
+
+                              <Textarea
+                                rows={3}
+                                dir="rtl"
+                                className={`${textareaClassName} min-h-[110px] text-right leading-7`}
+                                value={row}
+                                placeholder="أضف ملاحظة نهائية أو ملخصًا ختاميًا للمشروع."
+                                onChange={(e) =>
+                                  setCompletionFinalNoteRows((prev) =>
+                                    prev.map((item, rowIndex) =>
+                                      rowIndex === index ? e.target.value : item
+                                    )
+                                  )
+                                }
+                              />
+                            </div>
+                          ))}
+
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-12 w-full rounded-2xl border-dashed"
+                            onClick={() => setCompletionFinalNoteRows((prev) => [...prev, ""])}
+                          >
+                            <Plus className="ml-2 h-4 w-4" />
+
+                            إضافة ملاحظة ختامية
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <h3 className="text-base font-semibold text-slate-950">مخرجات المشروع</h3>
+                            <p className="text-xs text-slate-500">
+                              أضف المخرجات النهائية التي تم تسليمها أو إنتاجها بعد التنفيذ، مع
+                              عنوان واضح ووصف مختصر لكل مخرج.
+                            </p>
+                          </div>
+                          <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
+                            {filledCompletionOutputs}
+                          </Badge>
+                        </div>
+
+                        {completionOutputRows.map((row, index) => (
+                          <div
+                            key={`completion-output-${index}`}
+                            className="rounded-[26px] border border-slate-200/80 bg-slate-50/80 p-5 shadow-sm"
+                          >
+                            <div className="mb-5 flex items-center justify-between gap-3">
+                              <div>
+                                <p className="text-sm font-semibold text-slate-950">المخرج {index + 1}</p>
+                                <p className="text-xs text-slate-500">
+                                  اكتب اسم المخرج ووصفه المختصر، وأضف وسمًا اختياريًا إذا احتجت
+                                  إلى توضيح إضافي.
+                                </p>
+                              </div>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-9 rounded-xl"
+                                disabled={completionOutputRows.length === 1}
+                                onClick={() =>
+                                  setCompletionOutputRows((prev) =>
+                                    prev.length === 1 ? prev : prev.filter((_, rowIndex) => rowIndex !== index)
+                                  )
+                                }
+                              >
+                                <Trash2 className="ml-2 h-4 w-4" />
+
+                                حذف
+                              </Button>
+                            </div>
+
+                            <div className="grid gap-4 md:grid-cols-2">
+                              <Field label="العنوان">
+                                <Input
+                                  dir="rtl"
+                                  className={`${inputClassName} text-right`}
+                                  value={row.titleAr}
+                                  placeholder={`عنوان المخرج ${index + 1}`}
+                                  onChange={(e) =>
+                                    setCompletionOutputRows((prev) =>
+                                      prev.map((item, rowIndex) =>
+                                        rowIndex === index ? { ...item, titleAr: e.target.value } : item
+                                      )
+                                    )
+                                  }
+                                />
+                              </Field>
+
+                              <Field label="وسم إضافي (اختياري)">
+                                <Input
+                                  dir="rtl"
+                                  className={`${inputClassName} text-right`}
+                                  value={row.metaAr}
+                                  placeholder="مثال: تسليم نهائي"
+                                  onChange={(e) =>
+                                    setCompletionOutputRows((prev) =>
+                                      prev.map((item, rowIndex) =>
+                                        rowIndex === index ? { ...item, metaAr: e.target.value } : item
+                                      )
+                                    )
+                                  }
+                                />
+                              </Field>
+
+                              <Field label="الوصف" className="md:col-span-2">
+                                <Textarea
+                                  rows={3}
+                                  dir="rtl"
+                                  className={`${textareaClassName} min-h-[120px] text-right leading-7`}
+                                  value={row.descriptionAr}
+                                  placeholder="صف هذا المخرج بشكل واضح ومباشر."
+                                  onChange={(e) =>
+                                    setCompletionOutputRows((prev) =>
+                                      prev.map((item, rowIndex) =>
+                                        rowIndex === index
+                                          ? { ...item, descriptionAr: e.target.value }
+                                          : item
+                                      )
+                                    )
+                                  }
+                                />
+                              </Field>
+                            </div>
+                          </div>
+                        ))}
+
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="h-12 w-full rounded-2xl border-dashed"
+                          onClick={() =>
+                            setCompletionOutputRows((prev) => [
+                              ...prev,
+                              { titleAr: "", descriptionAr: "", metaAr: "" },
+                            ])
+                          }
+                        >
+                          <Plus className="ml-2 h-4 w-4" />
+
+                          إضافة مخرج جديد
+                        </Button>
+                      </div>
+
+                      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_260px]">
+                        <Field
+                          label="معرض صور ما بعد التنفيذ"
+                          hint="رابط لكل صورة في سطر مستقل. هذه الصور تُستخدم في صفحة المشروع المكتمل."
+                        >
+                          <Textarea
+                            rows={5}
+                            dir="ltr"
+                            className={`${textareaClassName} min-h-[160px] text-left`}
+                            value={formData.completionGalleryText}
+                            placeholder="https://..."
+                            onChange={(e) =>
+                              setFormData((prev) => ({
+                                ...prev,
+                                completionGalleryText: e.target.value,
+                              }))
+                            }
+                          />
+                        </Field>
+
+                        <UploadDropzone
+                          inputId="project-completion-gallery-upload"
+                          title="رفع صور نهائية"
+                          description="ارفع الصور التي توثق الحالة النهائية للمشروع بعد التنفيذ."
+                          accept="image/*"
+                          multiple
+                          disabled={completionGalleryUploading}
+                          onChange={(e) => {
+                            void handleCompletionGalleryImageUpload(e.target.files);
+                            e.currentTarget.value = "";
+                          }}
+                        />
+                      </div>
+
+                      {completionGalleryUrls.length ? (
+                        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                          {completionGalleryUrls.map((url, index) => (
+                            <div
+                              key={`${url}-${index}`}
+                              className="overflow-hidden rounded-[22px] border border-slate-200 bg-white shadow-sm"
+                            >
+                              <div className="aspect-[4/3] overflow-hidden">
+                                <img
+                                  src={url}
+                                  alt={`completion-gallery-${index + 1}`}
+                                  className="h-full w-full object-cover"
+                                />
+                              </div>
+                              <div className="flex items-center justify-between gap-3 p-3">
+                                <p className="min-w-0 truncate text-xs text-slate-500">
+
+                                  الصورة {index + 1}
+                                </p>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-8 rounded-xl"
+                                  onClick={() =>
+                                    setFormData((prev) => ({
+                                      ...prev,
+                                      completionGalleryText: completionGalleryUrls
+                                        .filter((_, galleryIndex) => galleryIndex !== index)
+                                        .join("\n"),
+                                    }))
+                                  }
+                                >
+
+                                  حذف
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                    </SectionBodyLayout>
+                  </SectionCard>
+                ) : (
+                  <SectionCard
+                    id="completion"
+                    index={visibleSections.findIndex((section) => section.id === "completion") + 1}
+                    title="المحتوى الختامي"
+                    description="يبقى هذا القسم ظاهرًا ضمن لوحة البناء، ويتحوّل إلى وضع التحرير الكامل عند إغلاق المشروع أو اكتماله."
+                    icon={CheckCircle2}
+                    status={sectionStatuses.completion}
+                    headerAside={
+                      <Badge className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-700">
+
+                        متاح بعد الإغلاق
+                      </Badge>
+                    }
+                  >
+                    <SectionBodyLayout
+                      contentClassName="space-y-4"
+                      aside={
+                        <SectionDiagnosticCard
+                          status={sectionStatuses.completion}
+                          {...sectionDiagnosticCards.completion}
+                        />
+                      }
+                    >
+                      <div className="rounded-[26px] border border-slate-200/80 bg-slate-50/90 p-5 shadow-sm">
+                        <div className="flex items-start gap-3">
+                          <div className="flex size-10 items-center justify-center rounded-2xl bg-white shadow-sm">
+                            <FileText className="h-4 w-4 text-slate-800" />
+                          </div>
+                          <div className="space-y-2">
+                            <h3 className="text-sm font-semibold text-slate-950">
+                              القسم مؤجل حتى الإغلاق
+                            </h3>
+                            <p className="text-xs leading-6 text-slate-500">
+                              سيبقى هذا القسم ظاهرًا داخل لوحة البناء، لكنه يتحول إلى مساحة
+                              تحرير كاملة عند إغلاق المشروع أو اكتماله. عندها يمكنك إضافة
+                              النتائج والمخرجات وصور ما بعد التنفيذ والمحتوى الختامي بشكل منظم.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="grid gap-3 md:grid-cols-3">
+                        <MetricCard
+                          icon={CheckCircle2}
+                          status="incomplete"
+                          label="حالة القسم"
+                          value="مؤجل حاليًا"
+                        />
+                        <MetricCard
+                          icon={FileText}
+                          status="incomplete"
+                          label="الحالة الحالية"
+                          value={statusLabels[formData.status]}
+                        />
+                        <MetricCard
+                          icon={FileImage}
+                          status="incomplete"
+                          label="يتفعّل عند"
+                          value="إغلاق المشروع"
+                        />
+                      </div>
+                    </SectionBodyLayout>
+                  </SectionCard>
+                )}
+              </>
+            )}
+            <SectionCard
+              id="finance"
+              index={financeSectionIndex}
+              title="البيانات المالية"
+              description="قسم مالي أوضح وأكثر إبرازًا يضع المستهدف والحالي والعائد والمدة ضمن شبكة استثمارية منظمة."
+              icon={Landmark}
+              status={sectionStatuses.finance}
+              toneClassName="bg-[linear-gradient(135deg,rgba(11,23,38,0.07),rgba(242,174,48,0.11),rgba(255,255,255,0.98))] border-b border-slate-200/70 pb-6"
+              headerAside={
+                <Badge className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-700">
+                  ملخص مالي
+                </Badge>
+              }
+            >
+              <SectionBodyLayout
+                contentClassName="space-y-6"
+                aside={
+                  <SectionDiagnosticCard
+                    status={sectionStatuses.finance}
+                    {...sectionDiagnosticCards.finance}
+                  />
+                }
+              >
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                  <MetricCard
+                    icon={Target}
+                    label="المبلغ المستهدف"
+                    value={formatDisplayValue(formData.targetAmount, "ر.س")}
+                  />
+                  <MetricCard
+                    icon={BarChart3}
+                    label="المبلغ الحالي"
+                    value={formatDisplayValue(formData.currentAmount, "ر.س")}
+                  />
+                  <MetricCard
+                    icon={Landmark}
+                    label="الحد الأدنى"
+                    value={formatDisplayValue(formData.minInvestment, "ر.س")}
+                  />
+                  <MetricCard
+                    icon={Sparkles}
+                    label="العائد السنوي"
+                    value={formatDisplayValue(formData.annualReturn, "%")}
+                  />
                 </div>
 
-                <div className="grid gap-3 md:grid-cols-3">
-                  <MetricCard
-                    icon={CheckCircle2}
-                    status="incomplete"
-                    label="حالة القسم"
-                    value="مؤجل حاليًا"
-                  />
-                  <MetricCard
-                    icon={FileText}
-                    status="incomplete"
-                    label="الحالة الحالية"
-                    value={statusLabels[formData.status]}
-                  />
-                  <MetricCard
-                    icon={FileImage}
-                    status="incomplete"
-                    label="يتفعّل عند"
-                    value="إغلاق المشروع"
-                  />
+                <div className="rounded-[26px] border border-slate-200/80 bg-white/90 p-5 shadow-sm">
+                  <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+                    <Field label="المبلغ المستهدف">
+                      <Input
+                        dir="ltr"
+                        inputMode="numeric"
+                        className={`${inputClassName} text-left`}
+                        value={formatNumber(formData.targetAmount)}
+                        onChange={(e) => {
+                          const raw = e.target.value.replace(/,/g, "");
+                          if (!/^\d*$/.test(raw)) return;
+
+                          setFormData((prev) => ({
+                            ...prev,
+                            targetAmount: raw,
+                          }));
+                        }}
+                      />
+                    </Field>
+                    <Field label="المبلغ الحالي">
+                      <Input
+                        dir="ltr"
+                        inputMode="numeric"
+                        className={`${inputClassName} text-left`}
+                        value={formatNumber(formData.currentAmount)}
+                        onChange={(e) => {
+                          const raw = e.target.value.replace(/,/g, "");
+                          if (!/^\d*$/.test(raw)) return;
+
+                          setFormData((prev) => ({
+                            ...prev,
+                            currentAmount: raw,
+                          }));
+                        }}
+                      />
+                    </Field>
+                    <Field label="الحد الأدنى">
+                      <Input
+                        dir="ltr"
+                        inputMode="numeric"
+                        className={`${inputClassName} text-left`}
+                        value={formatNumber(formData.minInvestment)}
+                        onChange={(e) => {
+                          const raw = e.target.value.replace(/,/g, "");
+                          if (!/^\d*$/.test(raw)) return;
+
+                          setFormData((prev) => ({
+                            ...prev,
+                            minInvestment: raw,
+                          }));
+                        }}
+                      />
+                    </Field>
+                    <Field label="العائد السنوي %">
+                      <Input
+                        dir="ltr"
+                        inputMode="numeric"
+                        className={`${inputClassName} text-left`}
+                        value={formData.annualReturn}
+                        onChange={(e) =>
+                          setFormData((prev) => ({ ...prev, annualReturn: e.target.value }))
+                        }
+                      />
+                    </Field>
+                    <Field label="المدة بالشهور">
+                      <Input
+                        dir="ltr"
+                        inputMode="numeric"
+                        className={`${inputClassName} text-left`}
+                        value={formData.duration}
+                        onChange={(e) =>
+                          setFormData((prev) => ({ ...prev, duration: e.target.value }))
+                        }
+                      />
+                    </Field>
+                    <Field label="عدد المستثمرين">
+                      <Input
+                        dir="ltr"
+                        inputMode="numeric"
+                        className={`${inputClassName} text-left`}
+                        value={formData.investorsCount}
+                        onChange={(e) =>
+                          setFormData((prev) => ({ ...prev, investorsCount: e.target.value }))
+                        }
+                      />
+                    </Field>
+                  </div>
                 </div>
               </SectionBodyLayout>
             </SectionCard>
-              )}
-            </>
-          )}
-          <SectionCard
-            id="finance"
-            index={financeSectionIndex}
-            title="البيانات المالية"
-            description="قسم مالي أوضح وأكثر إبرازًا يضع المستهدف والحالي والعائد والمدة ضمن شبكة استثمارية منظمة."
-            icon={Landmark}
-            status={sectionStatuses.finance}
-            toneClassName="bg-[linear-gradient(135deg,rgba(11,23,38,0.07),rgba(242,174,48,0.11),rgba(255,255,255,0.98))] border-b border-slate-200/70 pb-6"
-            headerAside={
-              <Badge className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-700">
-                ملخص مالي
-              </Badge>
-            }
-          >
-            <SectionBodyLayout
-              contentClassName="space-y-6"
-              aside={
-                <SectionDiagnosticCard
-                  status={sectionStatuses.finance}
-                  {...sectionDiagnosticCards.finance}
-                />
+
+            <SectionCard
+              id={FINAL_SETTINGS_SECTION_ID}
+              index={finalSettingsSectionIndex}
+              title="الإعدادات الختامية"
+              description="مرحلة ختامية موحدة تجمع مصدر التقدم وخيارات العرض وامتيازات VIP والمحتوى الختامي قبل الحفظ."
+              icon={CheckCircle2}
+              status={sectionStatuses[FINAL_SETTINGS_SECTION_ID]}
+              headerAside={
+                <Badge className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-700">
+                  {isCompletionSectionEditable ? completionSectionSummary : "3 محاور ختامية"}
+                </Badge>
               }
             >
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                <MetricCard
-                  icon={Target}
-                  label="المبلغ المستهدف"
-                  value={formatDisplayValue(formData.targetAmount, "ر.س")}
-                />
-                <MetricCard
-                  icon={BarChart3}
-                  label="المبلغ الحالي"
-                  value={formatDisplayValue(formData.currentAmount, "ر.س")}
-                />
-                <MetricCard
-                  icon={Landmark}
-                  label="الحد الأدنى"
-                  value={formatDisplayValue(formData.minInvestment, "ر.س")}
-                />
-                <MetricCard
-                  icon={Sparkles}
-                  label="العائد السنوي"
-                  value={formatDisplayValue(formData.annualReturn, "%")}
-                />
-              </div>
-
-              <div className="rounded-[26px] border border-slate-200/80 bg-white/90 p-5 shadow-sm">
-                <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-                  <Field label="المبلغ المستهدف">
-                    <Input
-                      dir="ltr"
-                      inputMode="numeric"
-                      className={`${inputClassName} text-left`}
-                      value={formData.targetAmount}
-                      onChange={(e) =>
-                        setFormData((prev) => ({ ...prev, targetAmount: e.target.value }))
-                      }
-                    />
-                  </Field>
-                  <Field label="المبلغ الحالي">
-                    <Input
-                      dir="ltr"
-                      inputMode="numeric"
-                      className={`${inputClassName} text-left`}
-                      value={formData.currentAmount}
-                      onChange={(e) =>
-                        setFormData((prev) => ({ ...prev, currentAmount: e.target.value }))
-                      }
-                    />
-                  </Field>
-                  <Field label="الحد الأدنى">
-                    <Input
-                      dir="ltr"
-                      inputMode="numeric"
-                      className={`${inputClassName} text-left`}
-                      value={formData.minInvestment}
-                      onChange={(e) =>
-                        setFormData((prev) => ({ ...prev, minInvestment: e.target.value }))
-                      }
-                    />
-                  </Field>
-                  <Field label="العائد السنوي %">
-                    <Input
-                      dir="ltr"
-                      inputMode="numeric"
-                      className={`${inputClassName} text-left`}
-                      value={formData.annualReturn}
-                      onChange={(e) =>
-                        setFormData((prev) => ({ ...prev, annualReturn: e.target.value }))
-                      }
-                    />
-                  </Field>
-                  <Field label="المدة بالشهور">
-                    <Input
-                      dir="ltr"
-                      inputMode="numeric"
-                      className={`${inputClassName} text-left`}
-                      value={formData.duration}
-                      onChange={(e) =>
-                        setFormData((prev) => ({ ...prev, duration: e.target.value }))
-                      }
-                    />
-                  </Field>
-                  <Field label="عدد المستثمرين">
-                    <Input
-                      dir="ltr"
-                      inputMode="numeric"
-                      className={`${inputClassName} text-left`}
-                      value={formData.investorsCount}
-                      onChange={(e) =>
-                        setFormData((prev) => ({ ...prev, investorsCount: e.target.value }))
-                      }
-                    />
-                  </Field>
+              <SectionBodyLayout
+                contentClassName="space-y-6"
+                aside={
+                  <SectionDiagnosticCard
+                    status={sectionStatuses[FINAL_SETTINGS_SECTION_ID]}
+                    {...sectionDiagnosticCards[FINAL_SETTINGS_SECTION_ID]}
+                  />
+                }
+              >
+                <div className="grid gap-3 md:grid-cols-3">
+                  <MetricCard
+                    icon={Gauge}
+                    label="مصدر التقدم"
+                    status={progressSectionStatus}
+                    value={progressModeLabels[formData.progressMode]}
+                  />
+                  <MetricCard
+                    icon={Crown}
+                    label="الخيارات الإضافية"
+                    status={optionsSectionStatus}
+                    value={activeOptionLabels.join(" · ") || "إعدادات افتراضية"}
+                  />
+                  <MetricCard
+                    icon={FileText}
+                    label="المحتوى الختامي"
+                    status={completionSectionStatus}
+                    value={completionSectionSummary}
+                  />
                 </div>
-              </div>
-            </SectionBodyLayout>
-          </SectionCard>
 
-          <SectionCard
-            id={FINAL_SETTINGS_SECTION_ID}
-            index={finalSettingsSectionIndex}
-            title="الإعدادات الختامية"
-            description="مرحلة ختامية موحدة تجمع مصدر التقدم وخيارات العرض وامتيازات VIP والمحتوى الختامي قبل الحفظ."
-            icon={CheckCircle2}
-            status={sectionStatuses[FINAL_SETTINGS_SECTION_ID]}
-            headerAside={
-              <Badge className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-700">
-                {isCompletionSectionEditable ? completionSectionSummary : "3 محاور ختامية"}
-              </Badge>
-            }
-          >
-            <SectionBodyLayout
-              contentClassName="space-y-6"
-              aside={
-                <SectionDiagnosticCard
-                  status={sectionStatuses[FINAL_SETTINGS_SECTION_ID]}
-                  {...sectionDiagnosticCards[FINAL_SETTINGS_SECTION_ID]}
-                />
-              }
-            >
-              <div className="grid gap-3 md:grid-cols-3">
-                <MetricCard
-                  icon={Gauge}
-                  label="مصدر التقدم"
-                  status={progressSectionStatus}
-                  value={progressModeLabels[formData.progressMode]}
-                />
-                <MetricCard
-                  icon={Crown}
-                  label="الخيارات الإضافية"
-                  status={optionsSectionStatus}
-                  value={activeOptionLabels.join(" · ") || "إعدادات افتراضية"}
-                />
-                <MetricCard
-                  icon={FileText}
-                  label="المحتوى الختامي"
-                  status={completionSectionStatus}
-                  value={completionSectionSummary}
-                />
-              </div>
+                {renderFinalProgressSettings()}
+                {renderFinalOptionsSettings()}
+                {renderFinalCompletionSettings()}
+              </SectionBodyLayout>
+            </SectionCard>
 
-              {renderFinalProgressSettings()}
-              {renderFinalOptionsSettings()}
-              {renderFinalCompletionSettings()}
-            </SectionBodyLayout>
-          </SectionCard>
+            {false && (
+              <SectionCard
+                id="progress"
+                index={9}
+                title="مصدر التقدم"
+                description="ربط طريقة الحساب بالأوزان الحالية داخل واجهة أوضح تشرح العلاقة بين التمويل والمراحل."
+                icon={Gauge}
+                status={sectionStatuses.progress}
+                headerAside={
+                  <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
+                    {progressModeLabels[formData.progressMode]}
+                  </Badge>
+                }
+              >
+                <SectionBodyLayout
+                  contentClassName="grid gap-5 md:grid-cols-3"
+                  aside={
+                    <SectionDiagnosticCard
+                      status={sectionStatuses.progress}
+                      {...sectionDiagnosticCards.progress}
+                    />
+                  }
+                >
+                  <Field label="طريقة الحساب" className="md:col-span-3">
+                    <Select
+                      value={formData.progressMode}
+                      onValueChange={(value) =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          progressMode: value as typeof prev.progressMode,
+                        }))
+                      }
+                    >
+                      <SelectTrigger className={`${selectTriggerClassName} text-right`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="funding">{progressModeLabels.funding}</SelectItem>
+                        <SelectItem value="milestones">{progressModeLabels.milestones}</SelectItem>
+                        <SelectItem value="hybrid">{progressModeLabels.hybrid}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </Field>
 
-          {false && (
-          <SectionCard
-            id="progress"
-            index={9}
-            title="مصدر التقدم"
-            description="ربط طريقة الحساب بالأوزان الحالية داخل واجهة أوضح تشرح العلاقة بين التمويل والمراحل."
-            icon={Gauge}
-            status={sectionStatuses.progress}
-            headerAside={
-              <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
-                {progressModeLabels[formData.progressMode]}
-              </Badge>
-            }
-          >
-            <SectionBodyLayout
-              contentClassName="grid gap-5 md:grid-cols-3"
-              aside={
-                <SectionDiagnosticCard
-                  status={sectionStatuses.progress}
-                  {...sectionDiagnosticCards.progress}
-                />
-              }
-            >
-                <Field label="طريقة الحساب" className="md:col-span-3">
-                  <Select
-                    value={formData.progressMode}
-                    onValueChange={(value) =>
-                      setFormData((prev) => ({
-                        ...prev,
-                        progressMode: value as typeof prev.progressMode,
-                      }))
-                    }
-                  >
-                    <SelectTrigger className={`${selectTriggerClassName} text-right`}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="funding">{progressModeLabels.funding}</SelectItem>
-                      <SelectItem value="milestones">{progressModeLabels.milestones}</SelectItem>
-                      <SelectItem value="hybrid">{progressModeLabels.hybrid}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </Field>
+                  {formData.progressMode === "hybrid" ? (
+                    <>
+                      <Field label="معدل التمويل (%)">
+                        <Input
+                          dir="ltr"
+                          inputMode="numeric"
+                          className={`${inputClassName} text-left`}
+                          value={formData.progressFundingWeight}
+                          onChange={(e) =>
+                            setFormData((prev) => ({
+                              ...prev,
+                              progressFundingWeight: e.target.value,
+                            }))
+                          }
+                        />
+                      </Field>
+                      <Field label="معدل المراحل (%)">
+                        <Input
+                          dir="ltr"
+                          inputMode="numeric"
+                          className={`${inputClassName} text-left`}
+                          value={formData.progressMilestonesWeight}
+                          onChange={(e) =>
+                            setFormData((prev) => ({
+                              ...prev,
+                              progressMilestonesWeight: e.target.value,
+                            }))
+                          }
+                        />
+                      </Field>
+                      <div className="rounded-[22px] border border-slate-200 bg-slate-50/80 p-4 shadow-sm">
+                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                          إجمالي الأوزان
+                        </p>
+                        <p className="mt-2 text-2xl font-semibold text-slate-950">
+                          {progressWeightsTotal}%
+                        </p>
+                        <p
+                          className={`mt-2 text-xs leading-6 ${progressWeightsTotal === 100 ? "text-emerald-600" : "text-amber-600"
+                            }`}
+                        >
+                          {progressWeightsTotal === 100
+                            ? "التوزيع الحالي متوازن على 100%."
+                            : "هذا المؤشر بصري فقط ولا يغيّر منطق الحفظ الحالي."}
+                        </p>
+                      </div>
+                    </>
+                  ) : null}
+                </SectionBodyLayout>
+              </SectionCard>
+            )}
 
-                {formData.progressMode === "hybrid" ? (
-                  <>
-                    <Field label="معدل التمويل (%)">
-                      <Input
-                        dir="ltr"
-                        inputMode="numeric"
-                        className={`${inputClassName} text-left`}
-                        value={formData.progressFundingWeight}
-                        onChange={(e) =>
-                          setFormData((prev) => ({
-                            ...prev,
-                            progressFundingWeight: e.target.value,
-                          }))
-                        }
-                      />
-                    </Field>
-                    <Field label="معدل المراحل (%)">
-                      <Input
-                        dir="ltr"
-                        inputMode="numeric"
-                        className={`${inputClassName} text-left`}
-                        value={formData.progressMilestonesWeight}
-                        onChange={(e) =>
-                          setFormData((prev) => ({
-                            ...prev,
-                            progressMilestonesWeight: e.target.value,
-                          }))
-                        }
-                      />
-                    </Field>
-                    <div className="rounded-[22px] border border-slate-200 bg-slate-50/80 p-4 shadow-sm">
-                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                        إجمالي الأوزان
-                      </p>
-                      <p className="mt-2 text-2xl font-semibold text-slate-950">
-                        {progressWeightsTotal}%
-                      </p>
-                      <p
-                        className={`mt-2 text-xs leading-6 ${
-                          progressWeightsTotal === 100 ? "text-emerald-600" : "text-amber-600"
-                        }`}
-                      >
-                        {progressWeightsTotal === 100
-                          ? "التوزيع الحالي متوازن على 100%."
-                          : "هذا المؤشر بصري فقط ولا يغيّر منطق الحفظ الحالي."}
-                      </p>
+            {false && (
+              <SectionCard
+                id="options"
+                index={10}
+                title="خيارات إضافية"
+                description="إدارة ميزة المشروع وامتيازات VIP ضمن بلوك مستقل وواضح بصريًا."
+                icon={Crown}
+                status={sectionStatuses.options}
+                headerAside={
+                  <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
+                    {formData.isVip === "true" || formData.projectType === "vip_exclusive"
+                      ? `VIP ${vipTierDisplayLabel}`
+                      : "إعدادات افتراضية"}
+                  </Badge>
+                }
+              >
+                <SectionBodyLayout
+                  contentClassName="grid gap-5 md:grid-cols-3"
+                  aside={
+                    <SectionDiagnosticCard
+                      status={sectionStatuses.options}
+                      {...sectionDiagnosticCards.options}
+                    />
+                  }
+                >
+                  <Field label="إبراز المشروع">
+                    <Select
+                      value={formData.featured}
+                      onValueChange={(value) =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          featured: value as "true" | "false",
+                        }))
+                      }
+                    >
+                      <SelectTrigger className={`${selectTriggerClassName} text-right`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="false">لا</SelectItem>
+                        <SelectItem value="true">نعم</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                  <Field label="تفعيل VIP">
+                    <Select
+                      value={formData.isVip}
+                      onValueChange={(value) =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          isVip: value as "true" | "false",
+                        }))
+                      }
+                    >
+                      <SelectTrigger className={`${selectTriggerClassName} text-right`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="false">لا</SelectItem>
+                        <SelectItem value="true">نعم</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                  <Field label="مستوى VIP">
+                    <Select
+                      value={formData.vipTier}
+                      onValueChange={(value) =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          vipTier: value as typeof prev.vipTier,
+                        }))
+                      }
+                    >
+                      <SelectTrigger className={`${selectTriggerClassName} text-right`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">بدون</SelectItem>
+                        <SelectItem value="silver">فضي</SelectItem>
+                        <SelectItem value="gold">ذهبي</SelectItem>
+                        <SelectItem value="platinum">بلاتيني</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                </SectionBodyLayout>
+              </SectionCard>
+            )}
+
+            {isDirty ? (
+              <div className="sticky bottom-4 z-30 pt-2">
+                <div className="flex flex-col gap-4 rounded-[26px] border border-slate-200/80 bg-white/92 p-4 shadow-[0_24px_60px_-34px_rgba(15,23,42,0.4)] backdrop-blur md:flex-row md:items-center md:justify-between">
+                  <div className="flex items-start gap-3">
+                    <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-slate-900 text-white shadow-sm">
+                      <Save className="h-4 w-4" />
                     </div>
-                  </>
-                ) : null}
-            </SectionBodyLayout>
-          </SectionCard>
-          )}
-
-          {false && (
-          <SectionCard
-            id="options"
-            index={10}
-            title="خيارات إضافية"
-            description="إدارة ميزة المشروع وامتيازات VIP ضمن بلوك مستقل وواضح بصريًا."
-            icon={Crown}
-            status={sectionStatuses.options}
-            headerAside={
-              <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
-                {formData.isVip === "true" || formData.projectType === "vip_exclusive"
-                  ? `VIP ${vipTierDisplayLabel}`
-                  : "إعدادات افتراضية"}
-              </Badge>
-            }
-          >
-            <SectionBodyLayout
-              contentClassName="grid gap-5 md:grid-cols-3"
-              aside={
-                <SectionDiagnosticCard
-                  status={sectionStatuses.options}
-                  {...sectionDiagnosticCards.options}
-                />
-              }
-            >
-                <Field label="إبراز المشروع">
-                  <Select
-                    value={formData.featured}
-                    onValueChange={(value) =>
-                      setFormData((prev) => ({
-                        ...prev,
-                        featured: value as "true" | "false",
-                      }))
-                    }
-                  >
-                    <SelectTrigger className={`${selectTriggerClassName} text-right`}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="false">لا</SelectItem>
-                      <SelectItem value="true">نعم</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </Field>
-                <Field label="تفعيل VIP">
-                  <Select
-                    value={formData.isVip}
-                    onValueChange={(value) =>
-                      setFormData((prev) => ({
-                        ...prev,
-                        isVip: value as "true" | "false",
-                      }))
-                    }
-                  >
-                    <SelectTrigger className={`${selectTriggerClassName} text-right`}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="false">لا</SelectItem>
-                      <SelectItem value="true">نعم</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </Field>
-                <Field label="مستوى VIP">
-                  <Select
-                    value={formData.vipTier}
-                    onValueChange={(value) =>
-                      setFormData((prev) => ({
-                        ...prev,
-                        vipTier: value as typeof prev.vipTier,
-                      }))
-                    }
-                  >
-                    <SelectTrigger className={`${selectTriggerClassName} text-right`}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">بدون</SelectItem>
-                      <SelectItem value="silver">فضي</SelectItem>
-                      <SelectItem value="gold">ذهبي</SelectItem>
-                      <SelectItem value="platinum">بلاتيني</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </Field>
-            </SectionBodyLayout>
-          </SectionCard>
-          )}
-
-          {isDirty ? (
-            <div className="sticky bottom-4 z-30 pt-2">
-              <div className="flex flex-col gap-4 rounded-[26px] border border-slate-200/80 bg-white/92 p-4 shadow-[0_24px_60px_-34px_rgba(15,23,42,0.4)] backdrop-blur md:flex-row md:items-center md:justify-between">
-                <div className="flex items-start gap-3">
-                  <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-slate-900 text-white shadow-sm">
-                    <Save className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-slate-950">{footerTitle}</p>
-                    <div className="text-xs leading-6 text-slate-500">
-                      {resolvedFooterDescription}
+                    <div>
+                      <p className="text-sm font-semibold text-slate-950">{footerTitle}</p>
+                      <div className="text-xs leading-6 text-slate-500">
+                        {resolvedFooterDescription}
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-12 rounded-2xl px-5"
-                    disabled={isBusy}
-                    onClick={() => setLocation(backPath)}
-                  >
-                    {backLabel}
-                  </Button>
-                  <Button
-                    type="submit"
-                    className="h-12 rounded-2xl bg-slate-900 px-6 text-sm font-semibold text-white shadow-[0_18px_30px_-18px_rgba(15,23,42,0.7)] hover:bg-slate-800"
-                    disabled={isBusy}
-                  >
-                    <Save className="ml-2 h-4 w-4" />
-                    {saving ? primaryActionLoadingLabel : primaryActionLabel}
-                  </Button>
+                  <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-12 rounded-2xl px-5"
+                      disabled={isBusy}
+                      onClick={() => setLocation(backPath)}
+                    >
+                      {backLabel}
+                    </Button>
+                    <Button
+                      type="submit"
+                      className="h-12 rounded-2xl bg-slate-900 px-6 text-sm font-semibold text-white shadow-[0_18px_30px_-18px_rgba(15,23,42,0.7)] hover:bg-slate-800"
+                      disabled={isBusy}
+                    >
+                      <Save className="ml-2 h-4 w-4" />
+                      {saving ? primaryActionLoadingLabel : primaryActionLabel}
+                    </Button>
+                  </div>
                 </div>
               </div>
-            </div>
-          ) : null}
+            ) : null}
           </form>
         </main>
 
@@ -3697,33 +3708,30 @@ export function CreateProjectUi({
                           aria-controls={section.id}
                           aria-current={isActive ? "step" : undefined}
                           onClick={() => handleSectionSelect(section.id)}
-                          className={`relative flex w-full items-center justify-between overflow-hidden rounded-2xl border px-3.5 py-3 text-right transition-all ${
-                            isActive
-                              ? "border-slate-900 bg-slate-900 text-white shadow-[0_16px_30px_-18px_rgba(15,23,42,0.7)]"
-                              : "border-slate-200 bg-white/90 text-slate-700 hover:bg-white"
-                          }`}
+                          className={`relative flex w-full items-center justify-between overflow-hidden rounded-2xl border px-3.5 py-3 text-right transition-all ${isActive
+                            ? "border-slate-900 bg-slate-900 text-white shadow-[0_16px_30px_-18px_rgba(15,23,42,0.7)]"
+                            : "border-slate-200 bg-white/90 text-slate-700 hover:bg-white"
+                            }`}
                         >
                           <span
                             aria-hidden="true"
-                            className={`absolute inset-y-0 right-0 w-[3px] ${
-                              isActive
-                                ? sectionStatus === "complete"
-                                  ? "bg-emerald-300/80"
-                                  : "bg-red-300/80"
-                                : statusAppearance.strip
-                            }`}
+                            className={`absolute inset-y-0 right-0 w-[3px] ${isActive
+                              ? sectionStatus === "complete"
+                                ? "bg-emerald-300/80"
+                                : "bg-red-300/80"
+                              : statusAppearance.strip
+                              }`}
                           />
                           <div className="min-w-0 text-right">
                             <div className="flex items-center justify-end gap-2">
                               <span
                                 aria-hidden="true"
-                                className={`h-1.5 w-1.5 rounded-full ${
-                                  isActive
-                                    ? sectionStatus === "complete"
-                                      ? "bg-emerald-300"
-                                      : "bg-red-300"
-                                    : statusAppearance.dot
-                                }`}
+                                className={`h-1.5 w-1.5 rounded-full ${isActive
+                                  ? sectionStatus === "complete"
+                                    ? "bg-emerald-300"
+                                    : "bg-red-300"
+                                  : statusAppearance.dot
+                                  }`}
                               />
                               <p className="text-sm font-semibold">{section.title}</p>
                             </div>
@@ -3736,11 +3744,10 @@ export function CreateProjectUi({
 
                           <div className="mr-4 flex items-center gap-3">
                             <span
-                              className={`flex size-9 items-center justify-center rounded-xl text-xs font-semibold ${
-                                isActive
-                                  ? "bg-white/12 text-white"
-                                  : "bg-slate-50 text-slate-700 shadow-sm"
-                              }`}
+                              className={`flex size-9 items-center justify-center rounded-xl text-xs font-semibold ${isActive
+                                ? "bg-white/12 text-white"
+                                : "bg-slate-50 text-slate-700 shadow-sm"
+                                }`}
                             >
                               {String(index + 1).padStart(2, "0")}
                             </span>

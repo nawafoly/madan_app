@@ -280,6 +280,7 @@ type RoleDoc = {
 };
 
 type AdminUserDoc = {
+  includeInEmployeeManagement?: boolean;
   id: string;
   displayName: string;
   email: string;
@@ -1170,8 +1171,9 @@ export default function Settings() {
     title: "",
     isActive: true,
     linkedUserUid: "",
-    employeeProfileEnabled: false,
+    employeeProfileEnabled: true,
     linkedEmployeeId: null,
+    includeInEmployeeManagement: true,
     notes: "",
     permissionsAllow: [],
     permissionsDeny: [],
@@ -2360,6 +2362,7 @@ export default function Settings() {
     email,
     title,
     isActive,
+    includeInEmployeeManagement,
   }: {
     employeeProfileEnabled: boolean;
     requestedEmployeeId?: string | null;
@@ -2369,6 +2372,7 @@ export default function Settings() {
     email: string;
     title: string;
     isActive: boolean;
+    includeInEmployeeManagement: boolean;
   }): Promise<string | null> => {
     if (!employeeProfileEnabled) return null;
 
@@ -2429,6 +2433,7 @@ export default function Settings() {
       {
         uid: normalizedLinkedUserUid,
         linkedUserUid: normalizedLinkedUserUid,
+        includeInEmployeeManagement,
         email: email || existingEmployee.email || "",
         displayName:
           displayName ||
@@ -2481,6 +2486,7 @@ export default function Settings() {
     isActive,
     employeeProfileEnabled,
     linkedEmployeeId,
+    includeInEmployeeManagement,
     notes,
     permissionsAllow,
     permissionsDeny,
@@ -2492,6 +2498,7 @@ export default function Settings() {
     isActive: boolean;
     employeeProfileEnabled: boolean;
     linkedEmployeeId: string | null;
+    includeInEmployeeManagement: boolean;
     notes: string;
     permissionsAllow: Permission[];
     permissionsDeny: Permission[];
@@ -2503,6 +2510,7 @@ export default function Settings() {
     isActive,
     employeeProfileEnabled,
     linkedEmployeeId,
+    includeInEmployeeManagement,
     notes,
     permissionsAllow,
     permissionsDeny,
@@ -2515,6 +2523,7 @@ export default function Settings() {
     title,
     isActive,
     employeeProfileEnabled,
+    includeInEmployeeManagement,
     linkedEmployeeId,
     permissionsAllow,
     permissionsDeny,
@@ -2525,6 +2534,7 @@ export default function Settings() {
     title: string;
     isActive: boolean;
     employeeProfileEnabled: boolean;
+    includeInEmployeeManagement: boolean;
     linkedEmployeeId: string | null;
     permissionsAllow: Permission[];
     permissionsDeny: Permission[];
@@ -2534,6 +2544,7 @@ export default function Settings() {
     displayName: displayName || null,
     name: displayName || null,
     title: title || null,
+    includeInEmployeeManagement,
     employeeProfileEnabled,
     linkedEmployeeId,
     permissionsAllow,
@@ -2577,13 +2588,14 @@ export default function Settings() {
     setEditingAdminId(null);
     setAdminEmployeeLinkMode("create");
     setAdminForm({
+      includeInEmployeeManagement: true,
       displayName: "",
       email: "",
       roleKey: "staff",
       title: "",
       isActive: true,
       linkedUserUid: "",
-      employeeProfileEnabled: false,
+      employeeProfileEnabled: true,
       linkedEmployeeId: null,
       notes: "",
       permissionsAllow: [],
@@ -2598,6 +2610,7 @@ export default function Settings() {
       String(u.linkedEmployeeId || "").trim() ? "existing" : "create"
     );
     setAdminForm({
+      includeInEmployeeManagement: !!u.includeInEmployeeManagement,
       displayName: String(u.displayName || "").trim(),
       email: u.email || "",
       roleKey: normalizeAdminRoleKey(u.roleKey),
@@ -2619,6 +2632,7 @@ export default function Settings() {
     const title = String(adminForm.title || "").trim();
     const email = adminForm.email.trim().toLowerCase();
     const employeeProfileEnabled = !!adminForm.employeeProfileEnabled;
+    const includeInEmployeeManagement = !!adminForm.includeInEmployeeManagement;
     const requestedLinkedEmployeeId =
       String(adminForm.linkedEmployeeId || "").trim() || null;
     const needsExistingEmployeeSelection =
@@ -2655,6 +2669,7 @@ export default function Settings() {
       const linkedUserUid = linkedUserDoc?.id || null;
       const linkedEmployeeId = await ensureLinkedEmployeeRecord({
         employeeProfileEnabled,
+        includeInEmployeeManagement,
         requestedEmployeeId: requestedLinkedEmployeeId,
         linkMode: adminEmployeeLinkMode,
         linkedUserUid,
@@ -2674,6 +2689,7 @@ export default function Settings() {
             isActive: adminForm.isActive,
             employeeProfileEnabled,
             linkedEmployeeId,
+            includeInEmployeeManagement,
             notes: String(adminForm.notes || "").trim(),
             permissionsAllow,
             permissionsDeny,
@@ -2724,6 +2740,7 @@ export default function Settings() {
               title,
               isActive: adminForm.isActive,
               employeeProfileEnabled,
+              includeInEmployeeManagement,
               linkedEmployeeId,
               permissionsAllow,
               permissionsDeny,
@@ -2877,15 +2894,9 @@ export default function Settings() {
           ref: doc(db, "users", linkedUserDoc.id),
           data: {
             uid: linkedUserDoc.id,
-            role: "client",
             permissionsAllow: [],
             permissionsDeny: [],
             active: true,
-            title: null,
-            employeeProfileEnabled: false,
-            linkedEmployeeId: null,
-            employeeProfile: null,
-            employment: null,
             updatedAt: serverTimestamp(),
           },
           options: { merge: true },
@@ -2895,40 +2906,15 @@ export default function Settings() {
           entityId: linkedUserDoc.id,
           source: settingsSource("delete_admin_user_users_sync"),
           relatedIds: { userId: linkedUserDoc.id },
-          message: `Demoted primary user ${linkedUserDoc.id} to client after removing admin record`,
+          message: `Removed admin account record for user ${linkedUserDoc.id}`,
           meta: {
             targetUserEmail: id,
-            roleKey: "client",
           },
           ignoreFields: ["updatedAt"],
         });
       }
 
-      for (const employeeDocId of linkedEmployeeDocIds) {
-        await auditedDeleteDoc({
-          ref: doc(db, "employees", employeeDocId),
-          action: AUDIT_ACTIONS.USER_UPDATED,
-          category: "user",
-          entityType: "employee",
-          entityId: employeeDocId,
-          source: settingsSource("delete_admin_user_employee_cleanup"),
-          relatedIds: {
-            userId: linkedUserDocs[0]?.id || u.linkedUserUid || id,
-          },
-          message: `Removed linked employee record ${employeeDocId} after deleting admin user ${id}`,
-          meta: {
-            targetUserEmail: id,
-          },
-        });
-      }
-
-      toast.success(
-        linkedUserDocs.length
-          ? linkedEmployeeDocIds.length
-            ? "تم حذف الحساب الإداري وتنظيف سجل الموظف المرتبط"
-            : "تم حذف الحساب الإداري وإرجاع المستخدم إلى عميل"
-          : "تم حذف الحساب الإداري"
-      );
+      toast.success("تم حذف الحساب الإداري فقط");
     } catch (e) {
       console.error(e);
       toast.error("فشل حذف الحساب");
@@ -4081,22 +4067,12 @@ export default function Settings() {
               <SettingsHeroPanel
                 status="وصول منظم"
                 title="إدارة الوصول"
-                description="يمكنك هنا الترقية المباشرة، إنشاء دعوات بالدور، وإدارة الحسابات الإدارية القائمة بنفس المنطق الحالي."
+                description=""
                 metrics={[
-                  {
-                    label: "الدعوات المفعلة",
-                    value: formatNumberEN(activeInvitesCount),
-                    helper: "الدعوات النشطة للأدوار",
-                  },
                   {
                     label: "الحسابات المباشرة",
                     value: formatNumberEN(adminUsers.length),
-                    helper: "Firestore admin_users",
-                  },
-                  {
-                    label: "الجاهزية الحالية",
-                    value: adminUsers.length > 0 ? "مكتملة" : "قيد الإعداد",
-                    helper: "بحسب وجود حسابات إدارية",
+                    helper: "",
                   },
                 ]}
               />
@@ -4329,13 +4305,13 @@ export default function Settings() {
                                 u.permissionsDeny || []
                               )
                                 .slice(0, 6)
-                                .map(p => (
+                                .map(permissionKey => (
                                   <Badge
-                                    key={`effective-${u.id}-${p}`}
+                                    key={`effective-${u.id}-${permissionKey}`}
                                     variant="secondary"
-                                    className="rounded-full"
+                                    className="rounded-full text-xs"
                                   >
-                                    {p}
+                                    {getPermissionLabel(permissionKey)}
                                   </Badge>
                                 ))}
                             </div>
@@ -4346,24 +4322,25 @@ export default function Settings() {
                             <div className="flex flex-wrap gap-2">
                               {(u.permissionsAllow || [])
                                 .slice(0, 6)
-                                .map(p => (
+                                .map((permissionKey: string) => (
                                   <Badge
-                                    key={`a-${u.id}-${p}`}
+                                    key={`a-${u.id}-${permissionKey}`}
                                     variant="secondary"
-                                    className="rounded-full"
+                                    className="rounded-full text-xs"
                                   >
-                                    + {p}
+                                    + {getPermissionLabel(permissionKey)}
                                   </Badge>
                                 ))}
+
                               {(u.permissionsDeny || [])
                                 .slice(0, 6)
-                                .map(p => (
+                                .map(permissionKey => (
                                   <Badge
-                                    key={`d-${u.id}-${p}`}
+                                    key={`d-${u.id}-${permissionKey}`}
                                     variant="outline"
-                                    className="rounded-full"
+                                    className="rounded-full text-xs"
                                   >
-                                    - {p}
+                                    - {getPermissionLabel(permissionKey)}
                                   </Badge>
                                 ))}
                             </div>
@@ -5400,6 +5377,7 @@ export default function Settings() {
                     يستخدم لبيانات الموظف التشغيلية والظهور في واجهات الموظفين.
                   </p>
                 </div>
+
                 <Switch
                   checked={!!adminForm.employeeProfileEnabled}
                   onCheckedChange={checked =>
@@ -5409,6 +5387,33 @@ export default function Settings() {
                       linkedEmployeeId: checked
                         ? previous.linkedEmployeeId || null
                         : null,
+                    }))
+                  }
+                />
+              </div>
+
+              {adminForm.employeeProfileEnabled ? (
+                <>
+                  {/* طريقة الربط */}
+                </>
+              ) : null}
+            </div>
+
+            <div className="space-y-3 rounded-xl border border-slate-200 p-4">
+              <div className="flex items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <Label>يعامل كموظف</Label>
+                  <p className="text-xs text-muted-foreground">
+                    عند التفعيل سيظهر هذا الحساب داخل صفحة إدارة الموظفين ويمكن إدارة ملفه الوظيفي.
+                    عند الإيقاف لن يظهر في قائمة الموظفين حتى لو كان Owner أو Admin.
+                  </p>
+                </div>
+                <Switch
+                  checked={!!adminForm.includeInEmployeeManagement}
+                  onCheckedChange={checked =>
+                    setAdminForm(previous => ({
+                      ...previous,
+                      includeInEmployeeManagement: checked,
                     }))
                   }
                 />
@@ -5489,29 +5494,44 @@ export default function Settings() {
               ) : null}
 
               {adminForm.employeeProfileEnabled ? (
-                <div className="rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                  <div>
-                    المصدر التشغيلي للموظف:{" "}
-                    <code>
-                      {adminEmployeeLinkMode === "existing"
-                        ? String(adminForm.linkedEmployeeId || "employees/{id}")
-                        : "employees/{linkedUid}"}
-                    </code>
+                <div className="rounded-[18px] border border-slate-200 bg-slate-50/80 p-4">
+                  <div className="mb-3 text-xs font-semibold tracking-[0.12em] text-slate-500">
+                    ملخص الربط
                   </div>
-                  <div>
-                    الدور الحالي يبقى{" "}
-                    <code>{adminForm.roleKey || "staff"}</code> ولا يتم تحويل
-                    الحساب إلى <code>staff</code> بسبب هذا الربط.
-                  </div>
-                  {selectedEmployeeDirectoryEntry ? (
-                    <div>
-                      السجل المختار:{" "}
-                      <code>{selectedEmployeeDirectoryEntry.id}</code>
-                      {selectedEmployeeDirectoryEntry.email
-                        ? ` - ${selectedEmployeeDirectoryEntry.email}`
-                        : ""}
+
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <div className="rounded-[14px] border border-white/80 bg-white px-3 py-3">
+                      <div className="text-[11px] text-slate-500">المصدر التشغيلي</div>
+                      <div className="mt-1 text-sm font-semibold text-slate-900 break-all">
+                        {adminEmployeeLinkMode === "existing"
+                          ? String(adminForm.linkedEmployeeId || "employees/{id}")
+                          : "employees/{linkedUid}"}
+                      </div>
                     </div>
-                  ) : null}
+
+                    <div className="rounded-[14px] border border-white/80 bg-white px-3 py-3">
+                      <div className="text-[11px] text-slate-500">الدور الحالي</div>
+                      <div className="mt-1 text-sm font-semibold text-slate-900">
+                        {adminForm.roleKey || "staff"}
+                      </div>
+                    </div>
+
+                    <div className="rounded-[14px] border border-white/80 bg-white px-3 py-3">
+                      <div className="text-[11px] text-slate-500">السجل المختار</div>
+                      <div className="mt-1 text-sm font-semibold text-slate-900 break-all">
+                        {selectedEmployeeDirectoryEntry
+                          ? `${selectedEmployeeDirectoryEntry.id}${selectedEmployeeDirectoryEntry.email
+                            ? ` - ${selectedEmployeeDirectoryEntry.email}`
+                            : ""
+                          }`
+                          : "لا يوجد سجل محدد"}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 text-xs leading-6 text-slate-500">
+                    هذا الربط ينشئ أو يربط ملف الموظف فقط، ولا يغيّر الدور الفعلي للحساب.
+                  </div>
                 </div>
               ) : null}
             </div>
@@ -5639,7 +5659,7 @@ export default function Settings() {
           </div>
         </DialogContent>
       </Dialog>
-    </DashboardLayout>
+    </DashboardLayout >
   );
 }
 
