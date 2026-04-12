@@ -148,6 +148,14 @@ const menuItems: MenuItem[] = [
   },
 
   {
+    icon: User,
+    label: "إنشاء حساب",
+    path: "/admin/create-staff",
+    allow: ["hr"], // 🔥 فقط HR
+    permission: "employees.view", // أو أي صلاحية عندك للـ HR
+  },
+
+  {
     icon: Settings,
     label: "الإعدادات",
     path: "/admin/settings",

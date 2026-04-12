@@ -712,6 +712,224 @@ const recomputeProjectAggregates = async (projectId, auditContext = {}) => {
   };
 };
 
+exports.createStaffAccount = onCall(
+  HR_ONLY_CALLABLE_OPTIONS,
+  async request => {
+    if (!request.auth?.uid) {
+      throw new HttpsError("unauthenticated", "يجب تسجيل الدخول أولًا.");
+    }
+
+    const actorUid = String(request.auth.uid || "").trim();
+    const actorEmail = String(request.auth.token?.email || "")
+      .trim()
+      .toLowerCase();
+    const actorRole = await getUserRole(actorUid, actorEmail);
+
+    if (actorRole !== "hr") {
+      throw new HttpsError(
+        "permission-denied",
+        "هذه العملية متاحة للموارد البشرية فقط."
+      );
+    }
+
+    const { email, password, fullName, phone } = normalizeCreateStaffInput(
+      request.data
+    );
+
+    if (!fullName) {
+      throw new HttpsError("invalid-argument", "الاسم الكامل مطلوب.");
+    }
+
+    if (!phone) {
+      throw new HttpsError("invalid-argument", "رقم الجوال مطلوب.");
+    }
+
+    if (!email) {
+      throw new HttpsError("invalid-argument", "البريد الإلكتروني مطلوب.");
+    }
+
+    if (!password) {
+      throw new HttpsError("invalid-argument", "كلمة المرور مطلوبة.");
+    }
+
+    if (password.length < 6) {
+      throw new HttpsError(
+        "invalid-argument",
+        "كلمة المرور يجب أن تكون 6 أحرف على الأقل."
+      );
+    }
+
+    let userRecord;
+    try {
+      userRecord = await admin.auth().createUser({
+        email,
+        password,
+        displayName: fullName,
+        disabled: false,
+      });
+    } catch (error) {
+      const code = String(error?.code || "").toLowerCase();
+
+      if (
+        code.includes("email-already-exists") ||
+        code.includes("already-exists")
+      ) {
+        throw new HttpsError("already-exists", "هذا البريد مستخدم بالفعل.");
+      }
+
+      if (code.includes("invalid-password")) {
+        throw new HttpsError(
+          "invalid-argument",
+          "كلمة المرور غير صالحة."
+        );
+      }
+
+      if (code.includes("invalid-email")) {
+        throw new HttpsError(
+          "invalid-argument",
+          "البريد الإلكتروني غير صحيح."
+        );
+      }
+
+      console.error("[createStaffAccount] auth.createUser failed", error);
+      throw new HttpsError("internal", "فشل إنشاء المستخدم في Authentication.");
+    }
+
+    const userRef = db.doc(`users/${userRecord.uid}`);
+    const adminUserRef = db.doc(`admin_users/${email}`);
+
+    const payload = {
+      uid: userRecord.uid,
+      email,
+      displayName: fullName,
+      name: fullName,
+      fullName,
+      phone,
+      role: "staff",
+      roleKey: "staff",
+      title: "",
+      active: true,
+      isActive: true,
+      employeeProfileEnabled: true,
+      linkedEmployeeId: userRecord.uid,
+      permissionsAllow: [],
+      permissionsDeny: [],
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+      source: "hr_create_staff_callable",
+      roleKeySource: "hr_callable",
+      createdByUid: actorUid,
+      createdByRole: "hr",
+      createdByEmail: actorEmail || "",
+    };
+
+    try {
+      await userRef.set(payload, { merge: true });
+
+      await adminUserRef.set(
+        {
+          email,
+          displayName: fullName,
+          role: "staff",
+          roleKey: "staff",
+          title: "",
+          active: true,
+          employeeProfileEnabled: true,
+          linkedUserUid: userRecord.uid,
+          linkedEmployeeId: userRecord.uid,
+          permissionsAllow: [],
+          permissionsDeny: [],
+          createdAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
+          source: "hr_create_staff_callable",
+          createdByUid: actorUid,
+          createdByRole: "hr",
+          createdByEmail: actorEmail || "",
+        },
+        { merge: true }
+      );
+
+      await db.doc(`employees/${userRecord.uid}`).set(
+        {
+          uid: userRecord.uid,
+          linkedUserUid: userRecord.uid,
+          email,
+          displayName: fullName,
+          name: fullName,
+          title: null,
+          active: true,
+          isActive: true,
+          createdAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
+          employeeProfile: {
+            personal: {},
+            employment: {
+              employmentStatus: "active",
+              status: "active",
+              title: null,
+              jobTitle: null,
+              updatedAt: FieldValue.serverTimestamp(),
+            },
+          },
+        },
+        { merge: true }
+      );
+    } catch (error) {
+      console.error("[createStaffAccount] firestore writes failed", error);
+
+      try {
+        await admin.auth().deleteUser(userRecord.uid);
+      } catch (rollbackError) {
+        console.error(
+          "[createStaffAccount] rollback deleteUser failed",
+          rollbackError
+        );
+      }
+
+      throw new HttpsError("internal", "فشل حفظ بيانات المستخدم في Firestore.");
+    }
+
+    await safeWriteAuditLog(
+      db,
+      {
+        action: "user_created",
+        category: "user",
+        severity: "info",
+        status: "success",
+        message: `HR created staff account ${userRecord.uid}`,
+        entityType: "user",
+        entityId: userRecord.uid,
+        entityPath: userRef.path,
+        relatedIds: {
+          userId: userRecord.uid,
+          createdByUid: actorUid,
+        },
+        source: {
+          area: "function",
+          page: "createStaffAccount",
+          route: "functions.createStaffAccount",
+          method: "callable_create_staff",
+        },
+        changes: diffAuditSnapshots(null, payload, {
+          ignoreFields: ["createdAt", "updatedAt"],
+        }),
+        meta: {
+          createdRole: "staff",
+          createdByRole: "hr",
+          createdByEmail: actorEmail || "",
+        },
+      },
+      { auth: request.auth }
+    );
+
+    return {
+      ok: true,
+      uid: userRecord.uid,
+      role: "staff",
+    };
+  }
+);
+
 // ✅ Admin-only callable recompute for one project
 exports.recomputeProjectAggregates = onCall(
   { region: REGION },

@@ -41,6 +41,7 @@ import Vip from "./pages/admin/Vip";
 import EmployeeProfilePage from "@/pages/employee/Profile";
 import EmployeeFilesPage from "@/pages/employee/Files";
 import EmployeeMessagesPage from "@/pages/employee/Messages";
+import CreateStaffAccount from "@/pages/admin/CreateStaffAccount";
 
 // ✅ Client pages
 import ClientDashboard from "@/pages/client/MyInvestments";
@@ -192,6 +193,12 @@ function Router() {
           <RequireAdminPermission permission="settings.manage">
             <Settings />
           </RequireAdminPermission>
+        </Route>
+
+        <Route path="/admin/create-staff">
+          <RequireRole allow={["owner", "admin", "hr"]}>
+            <CreateStaffAccount />
+          </RequireRole>
         </Route>
 
         {/* ===== Admin: Audit Log ===== */}

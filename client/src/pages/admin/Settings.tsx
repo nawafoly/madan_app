@@ -1043,10 +1043,6 @@ export default function Settings() {
   >([]);
 
   // ✅ NEW: role invites
-  const [promoteEmail, setPromoteEmail] = useState("");
-  const [promoteRoleKey, setPromoteRoleKey] =
-    useState<AdminRoleKey>("staff");
-  const [promoting, setPromoting] = useState(false);
   const [roleInvites, setRoleInvites] = useState<RoleInviteDoc[]>([]);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRoleKey, setInviteRoleKey] =
@@ -2943,136 +2939,6 @@ export default function Settings() {
      Role Invites (Promote by Email)
   ========================= */
 
-  const promoteExistingUserByEmail = async () => {
-    const email = promoteEmail.trim().toLowerCase();
-    const roleKey = promoteRoleKey;
-
-    if (!email || !email.includes("@")) return toast.error("البريد غير صحيح");
-    if (!roleKey) return toast.error("اختر الدور");
-
-    setPromoting(true);
-    try {
-      // ✅ ابحث عن المستخدم في users حسب email
-      const q = query(
-        collection(db, "users"),
-        where("email", "==", email),
-        limit(1)
-      );
-      const snap = await getDocs(q);
-
-      if (snap.empty) {
-        toast.error(
-          "هذا الإيميل ما له حساب مسجل (لا يوجد users doc). خليّه يسوي تسجيل مرة واحدة ثم رقّيه."
-        );
-        return;
-      }
-
-      const userDoc = snap.docs[0];
-      const userData = userDoc.data() as any;
-      const beforeAdminSnap = await getDoc(doc(db, "admin_users", email));
-      const beforeAdminData = beforeAdminSnap.exists()
-        ? beforeAdminSnap.data()
-        : null;
-      const { permissionsAllow, permissionsDeny } =
-        normalizePermissionOverrides(
-          beforeAdminData?.permissionsAllow || [],
-          beforeAdminData?.permissionsDeny || []
-        );
-      const effectivePermissions = getEffectivePermissionKeys(
-        roleKey,
-        permissionsAllow,
-        permissionsDeny
-      );
-
-      // ✅ (1) تحديث role داخل users
-      const displayName = String(
-        beforeAdminData?.displayName ||
-        userData?.displayName ||
-        userData?.name ||
-        email.split("@")[0]
-      ).trim();
-      const title = String(
-        beforeAdminData?.title || userData?.title || ""
-      ).trim();
-      const notes = String(beforeAdminData?.notes || "").trim();
-      const isActive = beforeAdminData?.isActive !== false;
-      await updateDoc(doc(db, "users", userDoc.id), {
-        role: roleKey,
-        active: isActive,
-        displayName: displayName || null,
-        name: displayName || null,
-        title: title || null,
-        permissionsAllow,
-        permissionsDeny,
-        updatedAt: serverTimestamp(),
-      });
-
-      // ✅ (2) إنشاء/تحديث سجل داخل admin_users عشان يظهر في قسم حسابات الإدارة
-      // نخلي docId = email (أسهل تعديل لاحقًا)
-      await setDoc(
-        doc(db, "admin_users", email),
-        {
-          displayName: displayName || "",
-          email,
-          roleKey, // نفس المفتاح اللي تستخدمه في الواجهة
-          title,
-          isActive,
-          linkedUserUid: userDoc.id,
-          notes,
-          permissionsAllow,
-          permissionsDeny,
-          updatedAt: serverTimestamp(),
-          createdAt: userData?.createdAt ?? serverTimestamp(),
-        },
-        { merge: true }
-      );
-
-      const refreshedUserSnap = await getDoc(doc(db, "users", userDoc.id));
-      const refreshedAdminSnap = await getDoc(doc(db, "admin_users", email));
-      await logAuditEvent({
-        action: AUDIT_ACTIONS.USER_ROLE_UPDATED,
-        category: "user",
-        entityType: "user",
-        entityId: userDoc.id,
-        entityPath: `users/${userDoc.id}`,
-        source: settingsSource("promote_existing_user"),
-        relatedIds: { userId: userDoc.id },
-        message: `Promoted user ${email} to ${getRoleDisplayLabel(roleKey) || roleKey}`,
-        changes: diffAuditTargets([
-          {
-            label: "user",
-            before: userData,
-            after: refreshedUserSnap.exists() ? refreshedUserSnap.data() : null,
-          },
-          {
-            label: "admin_user",
-            before: beforeAdminData,
-            after: refreshedAdminSnap.exists()
-              ? refreshedAdminSnap.data()
-              : null,
-          },
-        ]),
-        meta: {
-          roleKey,
-          permissionsAllow,
-          permissionsDeny,
-          effectivePermissions,
-          targetUserEmail: email,
-        },
-      });
-
-      toast.success(
-        `تمت الترقية + إضافته لحسابات الإدارة: ${email} → ${getRoleDisplayLabel(roleKey) || roleKey}`
-      );
-      setPromoteEmail("");
-      setPromoteRoleKey("staff");
-    } catch (e) {
-      console.error(e);
-      toast.error("فشل ترقية المستخدم");
-    } finally {
-      setPromoting(false);
-    }
-  };
 
   const upsertRoleInvite = async () => {
     const email = inviteEmail.trim().toLowerCase();
@@ -4238,65 +4104,8 @@ export default function Settings() {
           />
 
           <SettingsSectionCard
-            icon={Users}
-            eyebrow="الوحدة 01"
-            title="ترقية مباشرة"
-            description="ترقية مستخدم موجود داخل users مباشرةً عبر البريد الإلكتروني، من دون إنشاء حساب جديد."
-          >
-            <div className="grid gap-5 md:grid-cols-3">
-              <SettingsField
-                label="الإيميل"
-                description="البريد الخاص بالمستخدم الموجود مسبقًا داخل users."
-                placeholder="info@madanalbena.com"
-                value={promoteEmail}
-                onChange={setPromoteEmail}
-                dir="ltr"
-                inputClassName="text-left"
-                containerClassName="md:col-span-2"
-              />
-
-              <SettingsSelectField
-                label="الدور"
-                description="الدور الذي سيتم تعيينه مباشرة للمستخدم."
-              >
-                <Select
-                  value={promoteRoleKey}
-                  onValueChange={(v: any) =>
-                    setPromoteRoleKey(normalizeAdminRoleKey(v))
-                  }
-                >
-                  <SelectTrigger className="h-12 rounded-xl border-slate-200 bg-white px-4 shadow-none">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="staff">موظف (staff)</SelectItem>
-                    <SelectItem value="hr">
-                      الموارد البشرية (hr)
-                    </SelectItem>
-                    <SelectItem value="accountant">
-                      محاسب (accountant)
-                    </SelectItem>
-                    <SelectItem value="admin">أدمن (admin)</SelectItem>
-                    <SelectItem value="owner">المالك (owner)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </SettingsSelectField>
-            </div>
-
-            <div className="mt-5 flex flex-wrap gap-3">
-              <Button
-                className="bg-[#F2B705] text-slate-950 hover:bg-[#e0ab00]"
-                onClick={promoteExistingUserByEmail}
-                disabled={promoting}
-              >
-                {promoting ? "جاري الترقية..." : "ترقية الآن"}
-              </Button>
-            </div>
-          </SettingsSectionCard>
-
-          <SettingsSectionCard
             icon={Mail}
-            eyebrow="الوحدة 02"
+            eyebrow="الوحدة 01"
             title="دعوات الأدوار"
             description="ربط دور ببريد إلكتروني حتى يتم تطبيقه تلقائيًا عند تسجيل الدخول أو إنشاء الحساب."
           >
