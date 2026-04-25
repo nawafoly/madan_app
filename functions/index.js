@@ -154,9 +154,9 @@ const resolveUserActive = data => {
 const normalizeStringArray = value =>
   Array.isArray(value)
     ? value
-        .filter(entry => typeof entry === "string")
-        .map(entry => entry.trim())
-        .filter(Boolean)
+      .filter(entry => typeof entry === "string")
+      .map(entry => entry.trim())
+      .filter(Boolean)
     : [];
 
 const normalizeKnownRole = value => {
@@ -406,11 +406,11 @@ const buildNotificationEmailHtml = ({
       row => `
         <tr>
           <td style="padding:0 0 10px;color:#64748b;font-size:14px;vertical-align:top;white-space:nowrap;">${escapeHtml(
-            row.label
-          )}</td>
+        row.label
+      )}</td>
           <td style="padding:0 0 10px 16px;color:#0f172a;font-size:14px;line-height:1.8;">${escapeHtml(
-            row.value
-          )}</td>
+        row.value
+      )}</td>
         </tr>
       `
     )
@@ -422,11 +422,11 @@ const buildNotificationEmailHtml = ({
         <div style="padding:24px 24px 18px;background:linear-gradient(180deg,#0f172a 0%,#111827 100%);color:#ffffff;">
           <div style="display:inline-block;background:rgba(242,183,5,0.12);border:1px solid rgba(242,183,5,0.3);color:#f2b705;border-radius:999px;padding:6px 12px;font-size:12px;font-weight:700;">إشعار إداري</div>
           <h2 style="margin:16px 0 0;font-size:24px;line-height:1.5;">${escapeHtml(
-            heading
-          )}</h2>
+    heading
+  )}</h2>
           <p style="margin:12px 0 0;color:rgba(255,255,255,0.78);font-size:14px;line-height:1.8;">${escapeHtml(
-            intro
-          )}</p>
+    intro
+  )}</p>
         </div>
         <div style="padding:24px;">
           <table style="width:100%;border-collapse:collapse;">
@@ -434,10 +434,10 @@ const buildNotificationEmailHtml = ({
           </table>
           <div style="margin-top:24px;">
             <a href="${escapeHtml(
-              actionUrl
-            )}" style="display:inline-block;background:#0f172a;color:#ffffff;text-decoration:none;border-radius:12px;padding:12px 20px;font-size:14px;font-weight:700;">${escapeHtml(
-              actionLabel
-            )}</a>
+    actionUrl
+  )}" style="display:inline-block;background:#0f172a;color:#ffffff;text-decoration:none;border-radius:12px;padding:12px 20px;font-size:14px;font-weight:700;">${escapeHtml(
+    actionLabel
+  )}</a>
           </div>
         </div>
       </div>
@@ -1351,7 +1351,7 @@ exports.onInvestmentWrite = onDocumentWritten(
       String(before.investorUid || "") !== String(after.investorUid || "") ||
       toNumberSafe(before.amount) !== toNumberSafe(after.amount) ||
       toNumberSafe(before.approvedAmount) !==
-        toNumberSafe(after.approvedAmount);
+      toNumberSafe(after.approvedAmount);
 
     if (!hasChanged) return;
 
