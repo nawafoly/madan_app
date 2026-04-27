@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import {
   collection,
   doc,
@@ -10,7 +10,14 @@ import {
   where,
   writeBatch,
 } from "firebase/firestore";
-import { CheckCircle2, Clock3, Mail, MessageSquare, Users } from "lucide-react";
+import {
+  CheckCircle2,
+  ClipboardList,
+  Clock3,
+  Mail,
+  MessageSquare,
+  Users,
+} from "lucide-react";
 import { toast } from "sonner";
 import { useSearch } from "wouter";
 
@@ -22,7 +29,6 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -56,8 +62,9 @@ import {
   EMPLOYEE_MESSAGES_COLLECTION,
   type EmployeeMessageDoc,
 } from "@shared/employee";
+import { WeeklyReportTab } from "@/pages/employee/messages/WeeklyReportTab";
 
-type ConversationSectionKey = "hr" | "internal";
+type ConversationSectionKey = "hr" | "internal" | "weekly_report";
 
 function mergeMessageCollections(collections: EmployeeMessageRecord[][]) {
   const byId = new Map<string, EmployeeMessageRecord>();
@@ -302,7 +309,9 @@ export default function EmployeeMessagesScreen() {
   const activeConversation =
     activeSection === "internal"
       ? activeInternalConversation
-      : activeHrConversation;
+      : activeSection === "hr"
+        ? activeHrConversation
+        : null;
   const coworkersByUid = useMemo(
     () => new Map(coworkers.map(coworker => [coworker.uid, coworker])),
     [coworkers]
@@ -583,6 +592,19 @@ export default function EmployeeMessagesScreen() {
     (sum, conversation) => sum + conversation.unreadCount,
     0
   );
+  const internalUnreadCountsByUid = useMemo(() => {
+    const counts: Record<string, number> = {};
+    internalConversations.forEach(conversation => {
+      if (!conversation.counterpartyUid || conversation.unreadCount <= 0) return;
+      counts[conversation.counterpartyUid] = conversation.unreadCount;
+    });
+
+    if (activeInternalConversation?.counterpartyUid) {
+      counts[activeInternalConversation.counterpartyUid] = 0;
+    }
+
+    return counts;
+  }, [activeInternalConversation?.counterpartyUid, internalConversations]);
 
   const handleSendHrReply = async () => {
     if (!user?.uid || !activeHrConversation) return;
@@ -734,6 +756,24 @@ export default function EmployeeMessagesScreen() {
     }
   };
 
+  const handleInternalMessageKeyDown = (
+    event: KeyboardEvent<HTMLTextAreaElement>
+  ) => {
+    if (event.key !== "Enter" || event.shiftKey) return;
+
+    event.preventDefault();
+    if (
+      !internalMessageBody.trim() ||
+      !selectedInternalRecipient ||
+      sendingInternalMessage ||
+      Boolean(coworkersError)
+    ) {
+      return;
+    }
+
+    void handleSendInternalMessage();
+  };
+
   if (!user) return null;
 
   return (
@@ -764,18 +804,9 @@ export default function EmployeeMessagesScreen() {
 
         <Card className="rounded-[28px] border-slate-200/80 bg-white/95 shadow-[0_28px_80px_-52px_rgba(15,23,42,0.28)]">
           <CardHeader className="space-y-4">
-            <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
-              <MessageSquare className="h-4 w-4" />
-              مركز الرسائل
-            </div>
             <CardTitle className="text-xl font-semibold text-slate-950">
-              رسائل HR والمحادثات الداخلية
+            <MessageSquare className="h-4 w-4" /> رسائل HR والمحادثات الداخلية
             </CardTitle>
-            <CardDescription className="text-sm leading-7 text-slate-600">
-              هذا المسار يعرض نوعين منفصلين بوضوح: رسائل HR الرسمية، والمحادثات
-              الداخلية بين الموظفين. كل محادثة تُعرض مع الطرف الآخر وآخر تحديث
-              وعدد الرسائل غير المقروءة إن وجد.
-            </CardDescription>
           </CardHeader>
 
           <CardContent>
@@ -787,7 +818,7 @@ export default function EmployeeMessagesScreen() {
               dir="rtl"
               className="space-y-6"
             >
-              <TabsList className="grid h-auto w-full grid-cols-2 rounded-[22px] bg-slate-100 p-1">
+              <TabsList className="grid h-auto w-full grid-cols-1 rounded-[22px] bg-slate-100 p-1 md:grid-cols-3">
                 <TabsTrigger
                   value="hr"
                   className="rounded-[18px] px-4 py-3 text-sm data-[state=active]:bg-white data-[state=active]:shadow-sm"
@@ -815,6 +846,16 @@ export default function EmployeeMessagesScreen() {
                         {internalUnreadCount}
                       </Badge>
                     ) : null}
+                  </span>
+                </TabsTrigger>
+
+                <TabsTrigger
+                  value="weekly_report"
+                  className="rounded-[18px] px-4 py-3 text-sm data-[state=active]:bg-white data-[state=active]:shadow-sm"
+                >
+                  <span className="flex items-center gap-2">
+                    <ClipboardList className="h-4 w-4" />
+                    تقرير العمل الأسبوعي
                   </span>
                 </TabsTrigger>
               </TabsList>
@@ -874,7 +915,7 @@ export default function EmployeeMessagesScreen() {
                         disabled={!activeHrConversation || sendingHrReply}
                       />
                       <div className="mt-4 border-t border-slate-200 pt-4">
-                        <div className="flex flex-row-reverse items-center gap-3">
+                        <div className="flex w-full items-center justify-end gap-2">
                           <Button
                             type="button"
                             className="bg-[#F2B705] text-slate-950 hover:bg-[#e0ab00]"
@@ -903,26 +944,7 @@ export default function EmployeeMessagesScreen() {
                 <div className="rounded-[24px] border border-slate-200/70 bg-slate-50/60 p-5">
                   <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
                     <div className="space-y-1">
-                      <div className="text-sm font-semibold text-slate-900">
-                        رسالة إلى موظف
-                      </div>
-                      <p className="text-sm leading-6 text-slate-500">
-                        اختر موظفًا نشطًا من زملائك ثم أرسل رسالة نصية داخلية.
-                      </p>
                     </div>
-
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => {
-                        setActiveSection("internal");
-                        setActiveInternalConversationId(null);
-                        setSelectedInternalRecipientUid("");
-                        setRecipientPickerOpen(true);
-                      }}
-                    >
-                      رسالة جديدة
-                    </Button>
                   </div>
 
                   <div className="space-y-4">
@@ -931,6 +953,7 @@ export default function EmployeeMessagesScreen() {
                         <RecipientPicker
                           options={coworkers}
                           selectedRecipient={selectedInternalRecipient}
+                          unreadCountsByUid={internalUnreadCountsByUid}
                           loading={coworkersLoading}
                           disabled={coworkersLoading || sendingInternalMessage}
                           open={recipientPickerOpen}
@@ -965,6 +988,7 @@ export default function EmployeeMessagesScreen() {
 
                 <ConversationWorkspace
                   sectionLabel="الموظف"
+                  hideConversationList
                   listLabel="المحادثات الداخلية"
                   listDescription="هذه القائمة مخصصة لتواصل الموظفين مع بعضهم داخل النظام."
                   conversations={loading ? [] : internalConversations}
@@ -1001,24 +1025,29 @@ export default function EmployeeMessagesScreen() {
                   emptyConversationDescription="يمكنك فتح أي محادثة داخلية من القائمة أو اختيار موظف جديد من قسم الإرسال بالأعلى."
                   emptyConversationContent={internalEmptyConversationContent}
                   composer={
-                    <div className="rounded-[22px] border border-slate-200 bg-white p-4">
+                    <div
+                      className="rounded-[22px] border border-slate-200 bg-white p-4"
+                      dir="rtl"
+                    >
                       <Textarea
                         value={internalMessageBody}
                         onChange={event => setInternalMessageBody(event.target.value)}
+                        onKeyDown={handleInternalMessageKeyDown}
                         placeholder={
                           selectedInternalRecipient
                             ? `اكتب رسالتك إلى ${selectedInternalRecipient.name}`
                             : "اختر الموظف المستلم أولًا ثم اكتب الرسالة"
                         }
-                        className="min-h-[180px] resize-y border-0 bg-transparent p-0 text-right leading-8 shadow-none focus-visible:ring-0 [direction:rtl]"
+                        className="min-h-[172px] resize-y rounded-[20px] border border-slate-200 bg-slate-50/60 px-4 py-3 text-right leading-8 shadow-sm placeholder:text-right placeholder:text-slate-400 focus-visible:border-sky-300 focus-visible:bg-white focus-visible:ring-4 focus-visible:ring-sky-100 [direction:rtl]"
                         disabled={!selectedInternalRecipient || sendingInternalMessage}
+                        dir="rtl"
                       />
 
-                      <div className="mt-4 border-t border-slate-200 pt-4">
-                        <div className="flex flex-row-reverse items-center gap-3">
+                      <div className="mt-4 border-t border-slate-200 pt-4 text-right">
+                        <div className="inline-flex items-center gap-2">
                           <Button
                             type="button"
-                            className="bg-sky-700 text-white hover:bg-sky-800"
+                            className="h-10 rounded-xl bg-sky-700 px-5 text-white shadow-sm hover:bg-sky-800"
                             onClick={() => void handleSendInternalMessage()}
                             disabled={
                               !selectedInternalRecipient ||
@@ -1034,6 +1063,7 @@ export default function EmployeeMessagesScreen() {
                           <Button
                             type="button"
                             variant="outline"
+                            className="h-10 rounded-xl border-slate-300 bg-white px-4 text-slate-700 hover:bg-slate-50"
                             onClick={() => setInternalMessageBody("")}
                             disabled={sendingInternalMessage || !internalMessageBody.trim()}
                           >
@@ -1044,6 +1074,10 @@ export default function EmployeeMessagesScreen() {
                     </div>
                   }
                 />
+              </TabsContent>
+
+              <TabsContent value="weekly_report" className="mt-0">
+                <WeeklyReportTab user={user} />
               </TabsContent>
             </Tabs>
           </CardContent>

@@ -25,6 +25,8 @@ export const EMPLOYEE_FILE_TYPES = [
   "contract",
   "warning",
   "letter",
+  "cv",
+  "education_certificate",
 ] as const;
 export const EMPLOYEE_FILE_STATUSES = [
   EMPLOYEE_FILE_STATUS_ACTIVE,
@@ -127,6 +129,15 @@ export type EmployeeFileDoc = {
   employeeUid: string;
   userId?: string | null;
   employeeName?: string | null;
+  senderUid?: string | null;
+  senderName?: string | null;
+  senderEmail?: string | null;
+  senderPhoto?: string | null;
+  receiverUid?: string | null;
+  receiverName?: string | null;
+  receiverEmail?: string | null;
+  receiverPhoto?: string | null;
+  participantUids?: string[] | null;
   title: string;
   description?: string | null;
   fileType?: EmployeeFileType | null;
@@ -134,11 +145,15 @@ export type EmployeeFileDoc = {
   fileName: string;
   filePath?: string | null;
   fileUrl: string;
+  storageKey?: string | null;
   contentType?: string | null;
+  mimeType?: string | null;
   fileSize?: number | null;
   category?: string | null;
+  officialDocument?: boolean | null;
   uploadedBy?: string | null;
   uploadedByName?: string | null;
+  createdAt?: unknown;
   uploadedAt?: unknown;
   status?: EmployeeFileStatus | null;
   active?: boolean | null;

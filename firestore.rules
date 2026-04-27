@@ -652,6 +652,64 @@ service cloud.firestore {
           : "");
     }
 
+    function weeklyReportOwnerUid(data) {
+      return (("createdByUid" in data) && (data.createdByUid is string))
+        ? data.createdByUid
+        : "";
+    }
+
+    function weeklyReportReceiverUid(data) {
+      return (("receiverUid" in data) && (data.receiverUid is string))
+        ? data.receiverUid
+        : "";
+    }
+
+    function weeklyReportStatusValue(data) {
+      return (("status" in data) && (data.status is string))
+        ? lower(data.status)
+        : "";
+    }
+
+    function isValidWeeklyReportWrite() {
+      return signedIn()
+        && request.resource.data.createdByUid is string
+        && request.resource.data.createdByUid == request.auth.uid
+        && request.resource.data.receiverUid is string
+        && request.resource.data.receiverUid == "7DMxQMSqKOgtNYYZYRWHMXUH2Bt2"
+        && request.resource.data.receiverEmail is string
+        && lower(request.resource.data.receiverEmail) == "shahd.zaini@madanalbena.com"
+        && request.resource.data.receiverName is string
+        && request.resource.data.receiverName.size() > 0
+        && request.resource.data.createdByName is string
+        && request.resource.data.createdByName.size() > 0
+        && request.resource.data.reportDate is string
+        && request.resource.data.tasks is list
+        && request.resource.data.tasks.size() > 0
+        && request.resource.data.tasks.size() <= 100
+        && request.resource.data.managerNotes is string
+        && weeklyReportStatusValue(request.resource.data) in ["draft", "sent"];
+    }
+
+    function isValidWeeklyReportUpdate() {
+      return signedIn()
+        && weeklyReportOwnerUid(resource.data) == request.auth.uid
+        && weeklyReportStatusValue(resource.data) != "sent"
+        && weeklyReportOwnerUid(request.resource.data) == weeklyReportOwnerUid(resource.data)
+        && weeklyReportReceiverUid(request.resource.data) == weeklyReportReceiverUid(resource.data)
+        && isValidWeeklyReportWrite()
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly([
+          "createdByEmail",
+          "createdByName",
+          "jobTitle",
+          "reportDate",
+          "tasks",
+          "managerNotes",
+          "status",
+          "updatedAt",
+          "sentAt"
+        ]);
+    }
+
     function notificationOwnerUid(data) {
       return (("userId" in data) && (data.userId is string) && data.userId.size() > 0)
         ? data.userId
@@ -1266,6 +1324,21 @@ service cloud.firestore {
       allow delete: if canManageEmployeesAdmin();
     }
 
+    match /weekly_reports/{id} {
+      allow read: if signedIn()
+        && (
+          weeklyReportOwnerUid(resource.data) == request.auth.uid
+          || (
+            weeklyReportReceiverUid(resource.data) == request.auth.uid
+            && weeklyReportStatusValue(resource.data) == "sent"
+          )
+        );
+
+      allow create: if isValidWeeklyReportWrite();
+      allow update: if isValidWeeklyReportUpdate();
+      allow delete: if false;
+    }
+
     /* =========================
        messages
     ========================= */
@@ -1348,14 +1421,74 @@ service cloud.firestore {
 
     match /employee_files/{id} {
       allow read: if canReadEmployeesAdmin()
-        || (signedIn() && resource.data.employeeUid == request.auth.uid);
+        || (
+          signedIn()
+          && (
+            resource.data.employeeUid == request.auth.uid
+            || (
+              ("senderUid" in resource.data)
+              && (resource.data.senderUid is string)
+              && resource.data.senderUid == request.auth.uid
+            )
+            || (
+              ("receiverUid" in resource.data)
+              && (resource.data.receiverUid is string)
+              && resource.data.receiverUid == request.auth.uid
+            )
+          )
+        );
 
-      allow create: if canManageEmployeesAdmin();
+      allow create: if canManageEmployeesAdmin()
+        || (
+          signedIn()
+          && request.resource.data.senderUid is string
+          && request.resource.data.senderUid == request.auth.uid
+          && request.resource.data.senderName is string
+          && request.resource.data.senderName.size() > 0
+          && request.resource.data.senderEmail is string
+          && request.resource.data.senderEmail.size() > 0
+          && request.resource.data.receiverUid is string
+          && request.resource.data.receiverUid.size() > 0
+          && request.resource.data.receiverUid != request.auth.uid
+          && request.resource.data.receiverName is string
+          && request.resource.data.receiverName.size() > 0
+          && request.resource.data.participantUids is list
+          && request.auth.uid in request.resource.data.participantUids
+          && request.resource.data.receiverUid in request.resource.data.participantUids
+          && request.resource.data.participantUids.size() == 2
+          && request.resource.data.employeeUid is string
+          && request.resource.data.employeeUid == request.resource.data.receiverUid
+          && request.resource.data.title is string
+          && request.resource.data.title.size() > 0
+          && request.resource.data.fileName is string
+          && request.resource.data.fileName.size() > 0
+          && request.resource.data.fileUrl is string
+          && request.resource.data.fileUrl.size() > 0
+          && request.resource.data.isRead == false
+          && (
+            !("readAt" in request.resource.data)
+            || request.resource.data.readAt == null
+          )
+          && (
+            !("status" in request.resource.data)
+            || (
+              request.resource.data.status is string
+              && lower(request.resource.data.status) == "active"
+            )
+          )
+        );
 
       allow update: if canManageEmployeesAdmin()
         || (
           signedIn()
-          && resource.data.employeeUid == request.auth.uid
+          && (
+            resource.data.employeeUid == request.auth.uid
+            || (
+              ("receiverUid" in resource.data)
+              && (resource.data.receiverUid is string)
+              && resource.data.receiverUid == request.auth.uid
+            )
+          )
           && request.resource.data.diff(resource.data).changedKeys().hasOnly([
             "isRead",
             "readAt",

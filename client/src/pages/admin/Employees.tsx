@@ -98,6 +98,7 @@ import {
   EMPLOYEE_FILES_COLLECTION,
   EMPLOYEE_FILE_TYPE_OPTIONS,
   filterActiveEmployeeFiles,
+  isOfficialEmployeeFile,
   normalizeEmployeeFileRecord,
   sortEmployeeFiles,
   type EmployeeFileRecord,
@@ -861,18 +862,10 @@ export default function EmployeesManagementPage() {
   const [deletingEmployeeFileId, setDeletingEmployeeFileId] = useState<
     string | null
   >(null);
-  const [employeeOfficialCvFile, setEmployeeOfficialCvFile] =
-    useState<EmployeeFileRecord | null>(null);
-  const [employeeOfficialCertificateFile, setEmployeeOfficialCertificateFile] =
-    useState<EmployeeFileRecord | null>(null);
-
-  const [officialCvUploadFile, setOfficialCvUploadFile] = useState<File | null>(null);
-  const [officialCertificateUploadFile, setOfficialCertificateUploadFile] =
-    useState<File | null>(null);
-
-  const [uploadingOfficialDocumentKey, setUploadingOfficialDocumentKey] = useState<
-    "cv" | "education_certificate" | null
-  >(null);
+  const [officialDocumentForm, setOfficialDocumentForm] =
+    useState<EmployeeFileFormValues>(buildEmployeeFileFormValues);
+  const [uploadingOfficialDocument, setUploadingOfficialDocument] =
+    useState(false);
   const [employeeMessages, setEmployeeMessages] = useState<
     EmployeeMessageRecord[]
   >([]);
@@ -889,8 +882,7 @@ export default function EmployeesManagementPage() {
     useState(false);
   const [sendingEmployeeMessage, setSendingEmployeeMessage] = useState(false);
   const employeeFileInputRef = useRef<HTMLInputElement | null>(null);
-  const officialCvInputRef = useRef<HTMLInputElement | null>(null);
-  const officialCertificateInputRef = useRef<HTMLInputElement | null>(null);
+  const officialDocumentInputRef = useRef<HTMLInputElement | null>(null);
   const employeeSalarySectionRef = useRef<HTMLDivElement | null>(null);
   const employeeOverviewSectionRef = useRef<HTMLDivElement | null>(null);
   const employeeLeaveSectionRef = useRef<HTMLDivElement | null>(null);
@@ -926,6 +918,13 @@ export default function EmployeesManagementPage() {
     setReplacingEmployeeFileId(null);
     if (employeeFileInputRef.current) {
       employeeFileInputRef.current.value = "";
+    }
+  };
+
+  const resetOfficialDocumentForm = () => {
+    setOfficialDocumentForm(buildEmployeeFileFormValues());
+    if (officialDocumentInputRef.current) {
+      officialDocumentInputRef.current.value = "";
     }
   };
 
@@ -1549,10 +1548,7 @@ export default function EmployeesManagementPage() {
   const visibleEmployeeFiles = useMemo(
     () =>
       filterActiveEmployeeFiles(employeeFiles).filter(
-        file =>
-          !["cv", "education_certificate"].includes(
-            String(file.fileType || "").trim().toLowerCase()
-          )
+        file => !isOfficialEmployeeFile(file)
       ),
     [employeeFiles]
   );
@@ -1573,31 +1569,9 @@ export default function EmployeesManagementPage() {
 
 
   const employeeOfficialFiles = useMemo(
-    () =>
-      filterActiveEmployeeFiles(employeeFiles).filter(file =>
-        ["cv", "education_certificate"].includes(
-          String(file.fileType || "").trim().toLowerCase()
-        )
-      ),
+    () => filterActiveEmployeeFiles(employeeFiles).filter(isOfficialEmployeeFile),
     [employeeFiles]
   );
-
-  useEffect(() => {
-    const cvFile =
-      employeeOfficialFiles.find(
-        file => String(file.fileType || "").trim().toLowerCase() === "cv"
-      ) || null;
-
-    const certificateFile =
-      employeeOfficialFiles.find(
-        file =>
-          String(file.fileType || "").trim().toLowerCase() ===
-          "education_certificate"
-      ) || null;
-
-    setEmployeeOfficialCvFile(cvFile);
-    setEmployeeOfficialCertificateFile(certificateFile);
-  }, [employeeOfficialFiles]);
 
   const employeeConversations = useMemo(
     () => groupEmployeeMessageConversations(employeeMessages, user?.uid),
@@ -2103,16 +2077,26 @@ export default function EmployeesManagementPage() {
     }));
   };
 
-  const handleOfficialCvSelected = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0] || null;
-    setOfficialCvUploadFile(file);
+  const handleOfficialDocumentFormChange = <
+    K extends keyof Omit<EmployeeFileFormValues, "file">,
+  >(
+    key: K,
+    value: EmployeeFileFormValues[K]
+  ) => {
+    setOfficialDocumentForm(current => ({
+      ...current,
+      [key]: value,
+    }));
   };
 
-  const handleOfficialCertificateSelected = (
+  const handleOfficialDocumentSelected = (
     event: ChangeEvent<HTMLInputElement>
   ) => {
     const file = event.target.files?.[0] || null;
-    setOfficialCertificateUploadFile(file);
+    setOfficialDocumentForm(current => ({
+      ...current,
+      file,
+    }));
   };
 
   const handleEmployeeMessageFormChange = <
@@ -2309,20 +2293,27 @@ export default function EmployeesManagementPage() {
     }
   };
 
-  const handleUploadOfficialDocument = async (
-    documentKey: "cv" | "education_certificate"
-  ) => {
+  const handleUploadOfficialDocument = async () => {
     if (!selectedEmployee || !selectedEmployeeProfile) return;
     if (!canManageEmployees) {
       toast.error("لا تملك صلاحية رفع المستندات الرسمية.");
       return;
     }
 
-    const selectedFile =
-      documentKey === "cv" ? officialCvUploadFile : officialCertificateUploadFile;
+    const selectedFile = officialDocumentForm.file;
+    const normalizedTitle = officialDocumentForm.title.trim();
+    const normalizedDescription = officialDocumentForm.description.trim();
+    const normalizedFileType =
+      String(officialDocumentForm.fileType || EMPLOYEE_DEFAULT_FILE_TYPE).trim() ||
+      EMPLOYEE_DEFAULT_FILE_TYPE;
 
     if (!selectedFile) {
       toast.error("اختر ملفًا قبل الرفع.");
+      return;
+    }
+
+    if (!normalizedTitle) {
+      toast.error("أدخل عنوان المستند أولًا.");
       return;
     }
 
@@ -2336,20 +2327,7 @@ export default function EmployeesManagementPage() {
       return;
     }
 
-    const title =
-      documentKey === "cv" ? "السيرة الذاتية" : "الشهادة الدراسية";
-
-    const description =
-      documentKey === "cv"
-        ? "مستند رسمي ثابت ضمن الملف الوظيفي: السيرة الذاتية."
-        : "مستند رسمي ثابت ضمن الملف الوظيفي: الشهادة الدراسية.";
-
-    const existingOfficialFile =
-      documentKey === "cv"
-        ? employeeOfficialCvFile
-        : employeeOfficialCertificateFile;
-
-    setUploadingOfficialDocumentKey(documentKey);
+    setUploadingOfficialDocument(true);
 
     try {
       const uploaded = await uploadDocumentToCloudflare({
@@ -2364,6 +2342,14 @@ export default function EmployeesManagementPage() {
 
       const fileRef = doc(collection(db, EMPLOYEE_FILES_COLLECTION));
       const uploadedByName = user?.displayName || user?.email || "HR";
+      const replacedCandidates = employeeOfficialFiles.filter(file => {
+        if (!file.active) return false;
+        return matchesEmployeeFileVersion(
+          file,
+          normalizedTitle,
+          normalizedFileType
+        );
+      });
 
       const fileDoc: EmployeeFileDoc = {
         employeeId,
@@ -2376,18 +2362,22 @@ export default function EmployeesManagementPage() {
             selectedEmployee.name ||
             selectedEmployee.email ||
             null,
-        title,
-        description,
-        fileType: documentKey,
+        title: normalizedTitle,
+        description: normalizedDescription || null,
+        fileType: normalizedFileType,
         fileId: uploaded.id,
         fileName: uploaded.fileName,
         filePath: uploaded.filePath,
         fileUrl: uploaded.fileUrl,
+        storageKey: uploaded.filePath,
         contentType: uploaded.contentType || null,
+        mimeType: uploaded.contentType || null,
         fileSize: uploaded.fileSize,
         category: uploaded.category || EMPLOYEE_FILE_CATEGORY,
+        officialDocument: true,
         uploadedBy: user?.uid || null,
         uploadedByName,
+        createdAt: uploaded.uploadedAt,
         uploadedAt: uploaded.uploadedAt,
         status: "active",
         active: true,
@@ -2395,15 +2385,15 @@ export default function EmployeesManagementPage() {
         replacedBy: null,
         replacedByName: null,
         replacedByFileId: null,
-        replacesFileId: existingOfficialFile?.id || null,
+        replacesFileId: replacedCandidates[0]?.id || null,
         isRead: false,
         readAt: null,
         updatedAt: serverTimestamp(),
       };
 
       await runTransaction(db, async tx => {
-        if (existingOfficialFile?.id) {
-          tx.update(doc(db, EMPLOYEE_FILES_COLLECTION, existingOfficialFile.id), {
+        replacedCandidates.forEach(file => {
+          tx.update(doc(db, EMPLOYEE_FILES_COLLECTION, file.id), {
             status: "replaced",
             active: false,
             replacedAt: serverTimestamp(),
@@ -2412,13 +2402,13 @@ export default function EmployeesManagementPage() {
             replacedByFileId: fileRef.id,
             updatedAt: serverTimestamp(),
           });
-        }
+        });
 
-        tx.set(fileRef, fileDoc as any);
+        tx.set(fileRef, fileDoc);
       });
 
       await logAuditEvent({
-        action: existingOfficialFile
+        action: replacedCandidates.length
           ? "employee_file_replaced"
           : "employee_file_uploaded",
         category: "user",
@@ -2433,33 +2423,33 @@ export default function EmployeesManagementPage() {
         relatedIds: {
           userId: selectedEmployee.id,
         },
-        message: existingOfficialFile
+        message: replacedCandidates.length
           ? `Replaced official employee document for ${selectedEmployeeProfile.personal.name}`
           : `Uploaded official employee document for ${selectedEmployeeProfile.personal.name}`,
         meta: {
           employeeId,
           employeeUid,
           employeeName: fileDoc.employeeName || null,
-          title,
-          description,
+          title: normalizedTitle,
+          description: normalizedDescription || null,
           fileName: uploaded.fileName,
-          fileType: documentKey,
+          fileType: normalizedFileType,
           contentType: uploaded.contentType || null,
           fileSize: uploaded.fileSize,
           officialDocument: true,
+          replacedFileIds: replacedCandidates.map(file => file.id),
         },
       });
 
       try {
         await createInAppNotification({
           userId: employeeUid,
-          title: existingOfficialFile
+          title: replacedCandidates.length
             ? "تم تحديث مستند رسمي في ملفك الوظيفي"
             : "تمت إضافة مستند رسمي إلى ملفك الوظيفي",
-          body:
-            documentKey === "cv"
-              ? "تم رفع أو تحديث السيرة الذاتية داخل ملفك الوظيفي."
-              : "تم رفع أو تحديث الشهادة الدراسية داخل ملفك الوظيفي.",
+          body: replacedCandidates.length
+            ? `تم تحديث "${normalizedTitle}" داخل ملفك الوظيفي.`
+            : `تمت إضافة "${normalizedTitle}" إلى ملفك الوظيفي.`,
           type: "file",
           relatedId: fileRef.id,
           relatedTo: "employee_file",
@@ -2472,20 +2462,10 @@ export default function EmployeesManagementPage() {
         );
       }
 
-      if (documentKey === "cv") {
-        setOfficialCvUploadFile(null);
-        if (officialCvInputRef.current) {
-          officialCvInputRef.current.value = "";
-        }
-      } else {
-        setOfficialCertificateUploadFile(null);
-        if (officialCertificateInputRef.current) {
-          officialCertificateInputRef.current.value = "";
-        }
-      }
+      resetOfficialDocumentForm();
 
       toast.success(
-        existingOfficialFile
+        replacedCandidates.length
           ? "تم استبدال المستند الرسمي بنجاح."
           : "تم رفع المستند الرسمي بنجاح."
       );
@@ -2493,7 +2473,7 @@ export default function EmployeesManagementPage() {
       console.error("official_employee_document_upload_failed", error);
       toast.error("تعذر رفع المستند الرسمي.");
     } finally {
-      setUploadingOfficialDocumentKey(null);
+      setUploadingOfficialDocument(false);
     }
   };
 
@@ -5899,51 +5879,75 @@ export default function EmployeesManagementPage() {
                           المستندات الرسمية
                         </div>
                         <p className="text-sm leading-6 text-slate-500">
-                          هذه المستندات ثابتة ضمن الملف الوظيفي، وتظهر أيضًا للموظف داخل بروفايله
-                          في نفس قسم البيانات الوظيفية.
+                          ارفع أي مستند رسمي يخص الموظف، وسيظهر داخل بياناته الوظيفية.
                         </p>
                       </div>
 
-                      <div className="grid gap-5 xl:grid-cols-2">
+                      <div className="grid gap-5 xl:grid-cols-[minmax(0,360px)_minmax(0,1fr)]">
                         <div className="space-y-4 rounded-[20px] border border-slate-200 bg-white p-4">
-                          <div className="space-y-1">
-                            <div className="text-sm font-semibold text-slate-900">
-                              السيرة الذاتية
-                            </div>
-                            <div className="text-xs text-slate-500">
-                              ملف ثابت ضمن بيانات الموظف الوظيفية.
-                            </div>
-                          </div>
+                          <Field label="عنوان المستند">
+                            <Input
+                              value={officialDocumentForm.title}
+                              onChange={event =>
+                                handleOfficialDocumentFormChange("title", event.target.value)
+                              }
+                              placeholder="مثال: عقد عمل، شهادة خبرة، هوية"
+                              disabled={!canManageEmployees || uploadingOfficialDocument}
+                            />
+                          </Field>
 
-                          <Input
-                            ref={officialCvInputRef}
-                            type="file"
-                            onChange={handleOfficialCvSelected}
-                            disabled={!canManageEmployees || uploadingOfficialDocumentKey === "cv"}
-                          />
+                          <Field label="وصف المستند" description="اختياري">
+                            <Textarea
+                              value={officialDocumentForm.description}
+                              onChange={event =>
+                                handleOfficialDocumentFormChange("description", event.target.value)
+                              }
+                              placeholder="أضف ملاحظة مختصرة عن المستند"
+                              className="min-h-24"
+                              disabled={!canManageEmployees || uploadingOfficialDocument}
+                            />
+                          </Field>
+
+                          <Field label="نوع المستند">
+                            <Select
+                              value={officialDocumentForm.fileType}
+                              onValueChange={value =>
+                                handleOfficialDocumentFormChange("fileType", value)
+                              }
+                              disabled={!canManageEmployees || uploadingOfficialDocument}
+                            >
+                              <SelectTrigger className="w-full bg-white">
+                                <SelectValue placeholder="اختر نوع المستند" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {EMPLOYEE_FILE_TYPE_OPTIONS.map(option => (
+                                  <SelectItem key={option.value} value={option.value}>
+                                    {option.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </Field>
+
+                          <Field label="اختيار الملف">
+                            <Input
+                              ref={officialDocumentInputRef}
+                              type="file"
+                              onChange={handleOfficialDocumentSelected}
+                              disabled={!canManageEmployees || uploadingOfficialDocument}
+                            />
+                          </Field>
 
                           <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                            {officialCvUploadFile ? (
+                            {officialDocumentForm.file ? (
                               <div className="space-y-1">
                                 <div className="font-semibold text-slate-900">
-                                  {officialCvUploadFile.name}
+                                  {officialDocumentForm.file.name}
                                 </div>
-                                <div>الحجم: {formatFileSizeEN(officialCvUploadFile.size)}</div>
-                              </div>
-                            ) : employeeOfficialCvFile ? (
-                              <div className="space-y-1">
-                                <div className="font-semibold text-slate-900">
-                                  {employeeOfficialCvFile.fileName}
-                                </div>
-                                <div>
-                                  آخر رفع:{" "}
-                                  {employeeOfficialCvFile.uploadedAtDate
-                                    ? formatDateTimeEN(employeeOfficialCvFile.uploadedAtDate)
-                                    : "غير متوفر"}
-                                </div>
+                                <div>الحجم: {formatFileSizeEN(officialDocumentForm.file.size)}</div>
                               </div>
                             ) : (
-                              "لا يوجد ملف مرفوع حتى الآن."
+                              "اختر ملف المستند الرسمي الذي تريد إضافته إلى ملف الموظف."
                             )}
                           </div>
 
@@ -5951,140 +5955,118 @@ export default function EmployeesManagementPage() {
                             <Button
                               type="button"
                               className="bg-[#F2B705] text-slate-950 hover:bg-[#e0ab00]"
-                              onClick={() => void handleUploadOfficialDocument("cv")}
-                              disabled={!canManageEmployees || uploadingOfficialDocumentKey === "cv"}
+                              onClick={() => void handleUploadOfficialDocument()}
+                              disabled={!canManageEmployees || uploadingOfficialDocument}
                             >
                               <Upload className="ml-2 h-4 w-4" />
-                              {uploadingOfficialDocumentKey === "cv"
-                                ? "جارٍ الرفع..."
-                                : employeeOfficialCvFile
-                                  ? "استبدال السيرة الذاتية"
-                                  : "رفع السيرة الذاتية"}
+                              {uploadingOfficialDocument ? "جارٍ رفع المستند..." : "رفع المستند"}
                             </Button>
 
-                            {employeeOfficialCvFile?.viewUrl ? (
-                              <Button asChild type="button" variant="outline">
-                                <a
-                                  href={employeeOfficialCvFile.viewUrl}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                >
-                                  <Eye className="ml-2 h-4 w-4" />
-                                  عرض
-                                </a>
-                              </Button>
-                            ) : null}
-
-                            {employeeOfficialCvFile?.downloadUrl ? (
-                              <Button asChild type="button" variant="outline">
-                                <a
-                                  href={employeeOfficialCvFile.downloadUrl}
-                                  rel="noreferrer"
-                                  download={employeeOfficialCvFile.fileName || true}
-                                >
-                                  <Download className="ml-2 h-4 w-4" />
-                                  تحميل
-                                </a>
-                              </Button>
-                            ) : null}
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={resetOfficialDocumentForm}
+                              disabled={!canManageEmployees || uploadingOfficialDocument}
+                            >
+                              إعادة ضبط
+                            </Button>
                           </div>
                         </div>
 
-                        <div className="space-y-4 rounded-[20px] border border-slate-200 bg-white p-4">
-                          <div className="space-y-1">
-                            <div className="text-sm font-semibold text-slate-900">
-                              الشهادة الدراسية
-                            </div>
-                            <div className="text-xs text-slate-500">
-                              ملف ثابت ضمن بيانات الموظف الوظيفية.
-                            </div>
-                          </div>
+                        <div className="space-y-4">
+                          {employeeOfficialFiles.length ? (
+                            employeeOfficialFiles.map(file => (
+                              <div
+                                key={file.id}
+                                className="space-y-4 rounded-[20px] border border-slate-200 bg-white p-4"
+                              >
+                                <div className="flex flex-wrap items-start justify-between gap-3">
+                                  <div className="space-y-2">
+                                    <div className="text-base font-semibold text-slate-950">
+                                      {file.title}
+                                    </div>
+                                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                                      <Badge
+                                        variant="outline"
+                                        className="rounded-full border-slate-200 bg-slate-50 text-slate-600 shadow-none"
+                                      >
+                                        {file.fileTypeLabel}
+                                      </Badge>
+                                      <Badge
+                                        variant="outline"
+                                        className="rounded-full border-emerald-200 bg-emerald-50 text-emerald-700 shadow-none"
+                                      >
+                                        مستند رسمي
+                                      </Badge>
+                                    </div>
+                                  </div>
 
-                          <Input
-                            ref={officialCertificateInputRef}
-                            type="file"
-                            onChange={handleOfficialCertificateSelected}
-                            disabled={
-                              !canManageEmployees ||
-                              uploadingOfficialDocumentKey === "education_certificate"
-                            }
-                          />
-
-                          <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                            {officialCertificateUploadFile ? (
-                              <div className="space-y-1">
-                                <div className="font-semibold text-slate-900">
-                                  {officialCertificateUploadFile.name}
+                                  <div className="text-xs text-slate-500">
+                                    {file.uploadedAtDate
+                                      ? formatDateTimeEN(file.uploadedAtDate)
+                                      : "غير متوفر"}
+                                  </div>
                                 </div>
-                                <div>
-                                  الحجم: {formatFileSizeEN(officialCertificateUploadFile.size)}
+
+                                {file.description ? (
+                                  <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-7 text-slate-600">
+                                    {file.description}
+                                  </div>
+                                ) : null}
+
+                                <div className="grid gap-3 text-sm text-slate-600 md:grid-cols-2 xl:grid-cols-4">
+                                  <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-4 py-3">
+                                    <div className="text-xs text-slate-500">اسم الملف</div>
+                                    <div className="mt-1 font-semibold text-slate-900">
+                                      {file.fileName}
+                                    </div>
+                                  </div>
+                                  <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-4 py-3">
+                                    <div className="text-xs text-slate-500">الحجم</div>
+                                    <div className="mt-1 font-semibold text-slate-900">
+                                      {formatFileSizeEN(file.fileSize ?? null)}
+                                    </div>
+                                  </div>
+                                  <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-4 py-3 md:col-span-2 xl:col-span-2">
+                                    <div className="text-xs text-slate-500">تاريخ الرفع</div>
+                                    <div className="mt-1 font-semibold text-slate-900">
+                                      {file.uploadedAtDate
+                                        ? formatDateTimeEN(file.uploadedAtDate)
+                                        : "غير متوفر"}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="flex flex-wrap gap-2">
+                                  {file.viewUrl ? (
+                                    <Button asChild type="button" variant="outline">
+                                      <a href={file.viewUrl} target="_blank" rel="noreferrer">
+                                        <Eye className="ml-2 h-4 w-4" />
+                                        فتح الملف
+                                      </a>
+                                    </Button>
+                                  ) : null}
+
+                                  {file.downloadUrl ? (
+                                    <Button asChild type="button" variant="outline">
+                                      <a
+                                        href={file.downloadUrl}
+                                        rel="noreferrer"
+                                        download={file.fileName || true}
+                                      >
+                                        <Download className="ml-2 h-4 w-4" />
+                                        تحميل
+                                      </a>
+                                    </Button>
+                                  ) : null}
                                 </div>
                               </div>
-                            ) : employeeOfficialCertificateFile ? (
-                              <div className="space-y-1">
-                                <div className="font-semibold text-slate-900">
-                                  {employeeOfficialCertificateFile.fileName}
-                                </div>
-                                <div>
-                                  آخر رفع:{" "}
-                                  {employeeOfficialCertificateFile.uploadedAtDate
-                                    ? formatDateTimeEN(
-                                      employeeOfficialCertificateFile.uploadedAtDate
-                                    )
-                                    : "غير متوفر"}
-                                </div>
-                              </div>
-                            ) : (
-                              "لا يوجد ملف مرفوع حتى الآن."
-                            )}
-                          </div>
-
-                          <div className="flex flex-wrap gap-2">
-                            <Button
-                              type="button"
-                              className="bg-[#F2B705] text-slate-950 hover:bg-[#e0ab00]"
-                              onClick={() =>
-                                void handleUploadOfficialDocument("education_certificate")
-                              }
-                              disabled={
-                                !canManageEmployees ||
-                                uploadingOfficialDocumentKey === "education_certificate"
-                              }
-                            >
-                              <Upload className="ml-2 h-4 w-4" />
-                              {uploadingOfficialDocumentKey === "education_certificate"
-                                ? "جارٍ الرفع..."
-                                : employeeOfficialCertificateFile
-                                  ? "استبدال الشهادة الدراسية"
-                                  : "رفع الشهادة الدراسية"}
-                            </Button>
-
-                            {employeeOfficialCertificateFile?.viewUrl ? (
-                              <Button asChild type="button" variant="outline">
-                                <a
-                                  href={employeeOfficialCertificateFile.viewUrl}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                >
-                                  <Eye className="ml-2 h-4 w-4" />
-                                  عرض
-                                </a>
-                              </Button>
-                            ) : null}
-
-                            {employeeOfficialCertificateFile?.downloadUrl ? (
-                              <Button asChild type="button" variant="outline">
-                                <a
-                                  href={employeeOfficialCertificateFile.downloadUrl}
-                                  rel="noreferrer"
-                                  download={employeeOfficialCertificateFile.fileName || true}
-                                >
-                                  <Download className="ml-2 h-4 w-4" />
-                                  تحميل
-                                </a>
-                              </Button>
-                            ) : null}
-                          </div>
+                            ))
+                          ) : (
+                            <div className="rounded-[20px] border border-dashed border-slate-200 bg-white px-5 py-10 text-center text-sm text-slate-500">
+                              لا توجد مستندات رسمية مرفوعة لهذا الموظف حتى الآن.
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>

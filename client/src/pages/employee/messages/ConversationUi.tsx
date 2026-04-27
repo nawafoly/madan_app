@@ -91,11 +91,13 @@ export function MetaCard({ label, value }: { label: string; value: string }) {
 function RecipientOptionCard({
   option,
   isSelected,
+  unreadCount = 0,
   disabled,
   onSelect,
 }: {
   option: EmployeeCoworkerOption;
   isSelected: boolean;
+  unreadCount?: number;
   disabled?: boolean;
   onSelect: () => void;
 }) {
@@ -114,21 +116,29 @@ function RecipientOptionCard({
       dir="rtl"
       title={option.name}
     >
-      <Avatar
-        className={cn(
-          "h-14 w-14 border bg-slate-100 shadow-sm transition-all",
-          isSelected ? "border-sky-300" : "border-slate-200"
-        )}
-      >
-        <AvatarImage
-          src={option.avatarUrl || undefined}
-          alt={option.name}
-          className="object-cover"
-        />
-        <AvatarFallback className="bg-slate-900 text-xs font-semibold text-white">
-          {initialsFromName(option.name, option.email)}
-        </AvatarFallback>
-      </Avatar>
+      <div className="relative">
+        <Avatar
+          className={cn(
+            "h-14 w-14 border bg-slate-100 shadow-sm transition-all",
+            isSelected ? "border-sky-300" : "border-slate-200"
+          )}
+        >
+          <AvatarImage
+            src={option.avatarUrl || undefined}
+            alt={option.name}
+            className="object-cover"
+          />
+          <AvatarFallback className="bg-slate-900 text-xs font-semibold text-white">
+            {initialsFromName(option.name, option.email)}
+          </AvatarFallback>
+        </Avatar>
+
+        {unreadCount > 0 ? (
+          <span className="absolute -right-1 -top-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-white bg-rose-600 px-1 text-[10px] font-bold leading-none text-white shadow-sm">
+            {unreadCount}
+          </span>
+        ) : null}
+      </div>
 
       <div className="w-full">
         <div
@@ -148,6 +158,7 @@ function RecipientOptionCard({
 export function RecipientPicker({
   options,
   selectedRecipient,
+  unreadCountsByUid = {},
   loading,
   disabled,
   open,
@@ -156,6 +167,7 @@ export function RecipientPicker({
 }: {
   options: EmployeeCoworkerOption[];
   selectedRecipient: EmployeeCoworkerOption | null;
+  unreadCountsByUid?: Record<string, number>;
   loading: boolean;
   disabled?: boolean;
   open: boolean;
@@ -201,9 +213,6 @@ export function RecipientPicker({
           <div className="text-sm font-semibold text-slate-950">
             اختر الموظف
           </div>
-          <p className="text-xs leading-6 text-slate-500">
-            اختر موظفًا نشطًا من زملائك ثم اكتب الرسالة مباشرة.
-          </p>
         </div>
 
         <Badge
@@ -248,6 +257,7 @@ export function RecipientPicker({
                 key={option.uid}
                 option={option}
                 isSelected={selectedRecipient?.uid === option.uid}
+                unreadCount={unreadCountsByUid[option.uid] || 0}
                 disabled={disabled}
                 onSelect={() => {
                   onSelect(option.uid);
@@ -625,6 +635,7 @@ export function ConversationWorkspace({
   sectionLabel,
   listLabel,
   listDescription,
+  hideConversationList = false,
   conversations,
   activeConversation,
   activeConversationId,
@@ -645,6 +656,7 @@ export function ConversationWorkspace({
   sectionLabel: string;
   listLabel: string;
   listDescription: string;
+  hideConversationList?: boolean;
   conversations: EmployeeMessageConversationRecord[];
   activeConversation: EmployeeMessageConversationRecord | null;
   activeConversationId: string | null;
@@ -665,21 +677,33 @@ export function ConversationWorkspace({
   composer: ReactNode;
 }) {
   return (
-    <div className="grid gap-6 xl:grid-cols-[minmax(0,440px)_minmax(0,1fr)] xl:gap-8">
-      <ConversationListSection
-        listLabel={listLabel}
-        listDescription={listDescription}
-        conversations={conversations}
-        activeConversationId={activeConversationId}
-        openingConversationId={openingConversationId}
-        currentUserUid={currentUserUid}
-        onSelectConversation={onSelectConversation}
-        emptyListTitle={emptyListTitle}
-        emptyListDescription={emptyListDescription}
-      />
+    <div
+      className={cn(
+        "grid gap-6",
+        hideConversationList
+          ? "grid-cols-1"
+          : "xl:grid-cols-[minmax(0,440px)_minmax(0,1fr)] xl:gap-8"
+      )}
+    >
+      {hideConversationList ? null : (
+        <ConversationListSection
+          listLabel={listLabel}
+          listDescription={listDescription}
+          conversations={conversations}
+          activeConversationId={activeConversationId}
+          openingConversationId={openingConversationId}
+          currentUserUid={currentUserUid}
+          onSelectConversation={onSelectConversation}
+          emptyListTitle={emptyListTitle}
+          emptyListDescription={emptyListDescription}
+        />
+      )}
 
       <div
-        className="space-y-4 xl:border-l xl:border-slate-200/70 xl:pl-6"
+        className={cn(
+          "space-y-4",
+          hideConversationList ? "" : "xl:border-l xl:border-slate-200/70 xl:pl-6"
+        )}
         dir="rtl"
       >
         <div className="space-y-5 text-right">
@@ -687,6 +711,18 @@ export function ConversationWorkspace({
             <div className="space-y-5">
               <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-200/80 pb-4">
                 <div className="min-w-0 space-y-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge
+                      variant="outline"
+                      className="rounded-full border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-medium text-slate-600 shadow-none"
+                    >
+                      آخر تحديث:{" "}
+                      {activeConversation.lastMessageAtDate
+                        ? formatDateTimeEN(activeConversation.lastMessageAtDate)
+                        : "غير متوفر"}
+                    </Badge>
+                  </div>
+
                   <div className="space-y-1">
                     <div className="text-lg font-semibold text-slate-950">
                       {activeConversation.counterpartyName || sectionLabel}
@@ -734,25 +770,6 @@ export function ConversationWorkspace({
                 >
                   إغلاق
                 </Button>
-              </div>
-
-              <div className="grid gap-3 md:grid-cols-3">
-                <MetaCard
-                  label="الطرف الآخر"
-                  value={activeConversation.counterpartyName || sectionLabel}
-                />
-                <MetaCard
-                  label="آخر تحديث"
-                  value={
-                    activeConversation.lastMessageAtDate
-                      ? formatDateTimeEN(activeConversation.lastMessageAtDate)
-                      : "غير متوفر"
-                  }
-                />
-                <MetaCard
-                  label="غير المقروء"
-                  value={String(activeConversation.unreadCount)}
-                />
               </div>
 
               <div className="space-y-4 pt-1">

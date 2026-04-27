@@ -27,12 +27,17 @@ export const EMPLOYEE_FILE_TYPE_OPTIONS: Array<{
   { value: "contract", label: "عقد" },
   { value: "warning", label: "إنذار" },
   { value: "letter", label: "خطاب" },
+  { value: "cv", label: "السيرة الذاتية" },
+  { value: "education_certificate", label: "الشهادة الدراسية" },
 ];
+
+export type EmployeeFileDirection = "incoming" | "outgoing";
 
 export type EmployeeFileRecord = EmployeeFileDoc & {
   id: string;
   viewUrl: string;
   downloadUrl: string;
+  createdAtDate: Date | null;
   uploadedAtDate: Date | null;
   readAtDate: Date | null;
   replacedAtDate: Date | null;
@@ -43,6 +48,9 @@ export type EmployeeFileRecord = EmployeeFileDoc & {
   statusTone: "default" | "warning" | "success";
   readStatusLabel: string;
   readStatusTone: "success" | "warning";
+  direction: EmployeeFileDirection;
+  isInternalTransfer: boolean;
+  officialDocument: boolean;
 };
 
 function pickText(...values: unknown[]) {
@@ -101,24 +109,69 @@ export function getEmployeeFileTypeLabel(value: unknown) {
   );
 }
 
+function normalizeEmployeeFileType(value: unknown) {
+  return String(value || EMPLOYEE_DEFAULT_FILE_TYPE)
+    .trim()
+    .toLowerCase();
+}
+
+export function isOfficialEmployeeFile(
+  raw:
+    | Pick<EmployeeFileDoc, "fileType" | "officialDocument">
+    | null
+    | undefined
+) {
+  if (raw?.officialDocument === true) return true;
+  const normalizedFileType = normalizeEmployeeFileType(raw?.fileType);
+  return ["cv", "education_certificate"].includes(normalizedFileType);
+}
+
+export function buildEmployeeFileParticipants(...values: Array<unknown>) {
+  return Array.from(
+    new Set(
+      values
+        .map(value => String(value ?? "").trim())
+        .filter(value => value && value !== "undefined" && value !== "null")
+    )
+  );
+}
+
 export function normalizeEmployeeFileRecord(
   id: string,
-  raw: Record<string, any> | null | undefined
+  raw: Record<string, unknown> | null | undefined,
+  viewerUid?: string | null
 ): EmployeeFileRecord {
   const filePath = pickText(raw?.filePath);
-  const fileUrl = pickText(raw?.fileUrl, filePath ? buildR2DownloadUrl(filePath, false) : "");
-  const viewUrl = fileUrl || (filePath ? buildR2DownloadUrl(filePath, false) : "");
+  const fileUrl = pickText(
+    raw?.fileUrl,
+    filePath ? buildR2DownloadUrl(filePath, false) : ""
+  );
+  const viewUrl =
+    fileUrl || (filePath ? buildR2DownloadUrl(filePath, false) : "");
   const downloadUrl = pickText(
     filePath ? buildR2DownloadUrl(filePath, true) : "",
     fileUrl,
     viewUrl
   );
-  const uploadedAtDate = toDateSafe(raw?.uploadedAt);
+  const createdAtDate = toDateSafe(raw?.createdAt);
+  const uploadedAtDate = toDateSafe(raw?.uploadedAt ?? raw?.createdAt);
   const isRead = Boolean(raw?.isRead);
   const readAtDate = toDateSafe(raw?.readAt);
-  const active = isEmployeeFileActive(raw);
+  const active = isEmployeeFileActive(raw as EmployeeFileDoc);
   const status = normalizeEmployeeFileStatus(raw?.status, active);
   const replacedAtDate = toDateSafe(raw?.replacedAt);
+  const senderUid = pickText(raw?.senderUid);
+  const receiverUid = pickText(raw?.receiverUid, raw?.employeeUid, raw?.userId);
+  const participantUids = Array.isArray(raw?.participantUids)
+    ? raw.participantUids
+        .map((value: unknown) => String(value ?? "").trim())
+        .filter(Boolean)
+    : [];
+  const isInternalTransfer =
+    Boolean(senderUid && receiverUid) || participantUids.length >= 2;
+  const direction: EmployeeFileDirection =
+    viewerUid && senderUid && viewerUid === senderUid ? "outgoing" : "incoming";
+  const officialDocument = isOfficialEmployeeFile(raw as EmployeeFileDoc);
 
   return {
     id,
@@ -126,6 +179,15 @@ export function normalizeEmployeeFileRecord(
     employeeUid: pickText(raw?.employeeUid, raw?.userId),
     userId: pickText(raw?.userId) || null,
     employeeName: pickText(raw?.employeeName) || null,
+    senderUid: senderUid || null,
+    senderName: pickText(raw?.senderName, raw?.uploadedByName) || null,
+    senderEmail: pickText(raw?.senderEmail) || null,
+    senderPhoto: pickText(raw?.senderPhoto) || null,
+    receiverUid: receiverUid || null,
+    receiverName: pickText(raw?.receiverName, raw?.employeeName) || null,
+    receiverEmail: pickText(raw?.receiverEmail) || null,
+    receiverPhoto: pickText(raw?.receiverPhoto) || null,
+    participantUids,
     title: pickText(raw?.title) || "ملف داخلي",
     description: pickText(raw?.description) || null,
     fileType: pickText(raw?.fileType) || EMPLOYEE_DEFAULT_FILE_TYPE,
@@ -133,12 +195,16 @@ export function normalizeEmployeeFileRecord(
     fileName: pickText(raw?.fileName) || "attachment",
     filePath: filePath || null,
     fileUrl: fileUrl || viewUrl,
-    contentType: pickText(raw?.contentType) || null,
+    storageKey: pickText(raw?.storageKey, raw?.filePath) || null,
+    contentType: pickText(raw?.contentType, raw?.mimeType) || null,
+    mimeType: pickText(raw?.mimeType, raw?.contentType) || null,
     fileSize: toNullableNumber(raw?.fileSize),
-    category: pickText(raw?.category, EMPLOYEE_FILE_CATEGORY) || EMPLOYEE_FILE_CATEGORY,
+    category:
+      pickText(raw?.category, EMPLOYEE_FILE_CATEGORY) || EMPLOYEE_FILE_CATEGORY,
     uploadedBy: pickText(raw?.uploadedBy) || null,
     uploadedByName: pickText(raw?.uploadedByName) || null,
-    uploadedAt: raw?.uploadedAt ?? null,
+    createdAt: raw?.createdAt ?? raw?.uploadedAt ?? null,
+    uploadedAt: raw?.uploadedAt ?? raw?.createdAt ?? null,
     status,
     active,
     replacedAt: raw?.replacedAt ?? null,
@@ -151,6 +217,7 @@ export function normalizeEmployeeFileRecord(
     updatedAt: raw?.updatedAt ?? null,
     viewUrl,
     downloadUrl,
+    createdAtDate,
     uploadedAtDate,
     readAtDate,
     replacedAtDate,
@@ -159,6 +226,9 @@ export function normalizeEmployeeFileRecord(
     statusTone: active ? "success" : "default",
     readStatusLabel: isRead ? "مقروء" : "جديد",
     readStatusTone: isRead ? "success" : "warning",
+    direction,
+    isInternalTransfer,
+    officialDocument,
   };
 }
 
@@ -167,8 +237,10 @@ export function sortEmployeeFiles(records: EmployeeFileRecord[]) {
     if (left.active !== right.active) {
       return left.active ? -1 : 1;
     }
-    const leftTime = left.uploadedAtDate?.getTime() ?? 0;
-    const rightTime = right.uploadedAtDate?.getTime() ?? 0;
+    const leftTime =
+      left.createdAtDate?.getTime() ?? left.uploadedAtDate?.getTime() ?? 0;
+    const rightTime =
+      right.createdAtDate?.getTime() ?? right.uploadedAtDate?.getTime() ?? 0;
     if (leftTime !== rightTime) return rightTime - leftTime;
     return left.title.localeCompare(right.title, "ar");
   });
@@ -176,4 +248,31 @@ export function sortEmployeeFiles(records: EmployeeFileRecord[]) {
 
 export function filterActiveEmployeeFiles(records: EmployeeFileRecord[]) {
   return records.filter(record => record.active);
+}
+
+export function filterIncomingEmployeeFiles(
+  records: EmployeeFileRecord[],
+  viewerUid?: string | null
+) {
+  return records.filter(record => {
+    if (!record.active) return false;
+    if (record.direction === "outgoing") return false;
+    if (!record.isInternalTransfer) {
+      return !viewerUid || record.employeeUid === viewerUid;
+    }
+    return !viewerUid || record.receiverUid === viewerUid;
+  });
+}
+
+export function filterSentEmployeeFiles(
+  records: EmployeeFileRecord[],
+  viewerUid?: string | null
+) {
+  return records.filter(
+    record =>
+      record.active &&
+      record.isInternalTransfer &&
+      Boolean(viewerUid) &&
+      record.senderUid === viewerUid
+  );
 }

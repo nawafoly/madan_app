@@ -85,6 +85,7 @@ import {
 import {
   EMPLOYEE_FILES_COLLECTION,
   filterActiveEmployeeFiles,
+  isOfficialEmployeeFile,
   normalizeEmployeeFileRecord,
   sortEmployeeFiles,
   type EmployeeFileRecord,
@@ -106,7 +107,7 @@ import {
 } from "@/lib/employeeLeave";
 import { uploadDocumentToCloudflare } from "@/lib/documentUploadService";
 import { createInAppNotification } from "@/lib/inAppNotifications";
-import { formatDateEN, formatDateTimeEN } from "@/lib/formatters";
+import { formatDateEN, formatDateTimeEN, formatFileSizeEN } from "@/lib/formatters";
 import { cn } from "@/lib/utils";
 import {
   Select,
@@ -820,31 +821,8 @@ export default function EmployeeProfilePage() {
   );
 
   const employeeOfficialFiles = useMemo(
-    () =>
-      filterActiveEmployeeFiles(employeeFiles).filter(file =>
-        ["cv", "education_certificate"].includes(
-          String(file.fileType || "").trim().toLowerCase()
-        )
-      ),
+    () => filterActiveEmployeeFiles(employeeFiles).filter(isOfficialEmployeeFile),
     [employeeFiles]
-  );
-
-  const employeeOfficialCvFile = useMemo(
-    () =>
-      employeeOfficialFiles.find(
-        file => String(file.fileType || "").trim().toLowerCase() === "cv"
-      ) || null,
-    [employeeOfficialFiles]
-  );
-
-  const employeeOfficialCertificateFile = useMemo(
-    () =>
-      employeeOfficialFiles.find(
-        file =>
-          String(file.fileType || "").trim().toLowerCase() ===
-          "education_certificate"
-      ) || null,
-    [employeeOfficialFiles]
   );
 
   const handleSavePhone = async () => {
@@ -1499,7 +1477,7 @@ export default function EmployeeProfilePage() {
                 </div>
 
                 <div className="text-sm leading-7 text-slate-600">
-                  هذه المستندات جزء من ملفك الوظيفي، وتم رفعها من الموارد البشرية للعرض فقط.
+                  ارفع أي مستند رسمي يخص الموظف، وسيظهر داخل بياناته الوظيفية.
                 </div>
 
                 {employeeFilesLoading ? (
@@ -1507,46 +1485,86 @@ export default function EmployeeProfilePage() {
                     جاري تحميل المستندات الرسمية...
                   </div>
                 ) : (
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div className="space-y-3 rounded-[20px] border border-slate-200 bg-white p-4">
-                      <div className="text-sm font-semibold text-slate-900">
-                        السيرة الذاتية
-                      </div>
-
-                      {employeeOfficialCvFile ? (
-                        <>
-                          <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                            <div className="font-semibold text-slate-900">
-                              {employeeOfficialCvFile.fileName}
+                  employeeOfficialFiles.length ? (
+                    <div className="grid gap-4">
+                      {employeeOfficialFiles.map(file => (
+                        <div
+                          key={file.id}
+                          className="space-y-4 rounded-[20px] border border-slate-200 bg-white p-4"
+                        >
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div className="space-y-2">
+                              <div className="text-base font-semibold text-slate-900">
+                                {file.title}
+                              </div>
+                              <div className="flex flex-wrap items-center gap-2 text-xs">
+                                <Badge
+                                  variant="outline"
+                                  className="rounded-full border-slate-200 bg-slate-50 text-slate-600 shadow-none"
+                                >
+                                  {file.fileTypeLabel}
+                                </Badge>
+                                <Badge
+                                  variant="outline"
+                                  className="rounded-full border-emerald-200 bg-emerald-50 text-emerald-700 shadow-none"
+                                >
+                                  مستند رسمي
+                                </Badge>
+                              </div>
                             </div>
-                            <div className="mt-1">
-                              آخر رفع:{" "}
-                              {employeeOfficialCvFile.uploadedAtDate
-                                ? formatDateTimeEN(employeeOfficialCvFile.uploadedAtDate)
+
+                            <div className="text-xs text-slate-500">
+                              {file.uploadedAtDate
+                                ? formatDateTimeEN(file.uploadedAtDate)
                                 : "غير متوفر"}
                             </div>
                           </div>
 
+                          {file.description ? (
+                            <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-7 text-slate-600">
+                              {file.description}
+                            </div>
+                          ) : null}
+
+                          <div className="grid gap-3 text-sm text-slate-600 md:grid-cols-2 xl:grid-cols-4">
+                            <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-4 py-3">
+                              <div className="text-xs text-slate-500">اسم الملف</div>
+                              <div className="mt-1 font-semibold text-slate-900">
+                                {file.fileName}
+                              </div>
+                            </div>
+                            <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-4 py-3">
+                              <div className="text-xs text-slate-500">الحجم</div>
+                              <div className="mt-1 font-semibold text-slate-900">
+                                {formatFileSizeEN(file.fileSize ?? null)}
+                              </div>
+                            </div>
+                            <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-4 py-3 md:col-span-2 xl:col-span-2">
+                              <div className="text-xs text-slate-500">تاريخ الرفع</div>
+                              <div className="mt-1 font-semibold text-slate-900">
+                                {file.uploadedAtDate
+                                  ? formatDateTimeEN(file.uploadedAtDate)
+                                  : "غير متوفر"}
+                              </div>
+                            </div>
+                          </div>
+
                           <div className="flex flex-wrap gap-2">
-                            {employeeOfficialCvFile.viewUrl ? (
+                            {file.viewUrl ? (
                               <Button asChild type="button" variant="outline">
-                                <a
-                                  href={employeeOfficialCvFile.viewUrl}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                >
+                                <a href={file.viewUrl} target="_blank" rel="noreferrer">
                                   <Eye className="ml-2 h-4 w-4" />
-                                  عرض
+                                  فتح الملف
                                 </a>
                               </Button>
                             ) : null}
 
-                            {employeeOfficialCvFile.downloadUrl ? (
+                            {file.downloadUrl ? (
                               <Button asChild type="button" variant="outline">
                                 <a
-                                  href={employeeOfficialCvFile.downloadUrl}
+                                  href={file.downloadUrl}
                                   rel="noreferrer"
-                                  download={employeeOfficialCvFile.fileName || true}
+                                  download={file.fileName || true}
                                 >
                                   <Download className="ml-2 h-4 w-4" />
                                   تحميل
@@ -1554,70 +1572,14 @@ export default function EmployeeProfilePage() {
                               </Button>
                             ) : null}
                           </div>
-                        </>
-                      ) : (
-                        <div className="rounded-[16px] border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
-                          لا يوجد ملف سيرة ذاتية مرفوع حتى الآن.
                         </div>
-                      )}
+                      ))}
                     </div>
-
-                    <div className="space-y-3 rounded-[20px] border border-slate-200 bg-white p-4">
-                      <div className="text-sm font-semibold text-slate-900">
-                        الشهادة الدراسية
-                      </div>
-
-                      {employeeOfficialCertificateFile ? (
-                        <>
-                          <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                            <div className="font-semibold text-slate-900">
-                              {employeeOfficialCertificateFile.fileName}
-                            </div>
-                            <div className="mt-1">
-                              آخر رفع:{" "}
-                              {employeeOfficialCertificateFile.uploadedAtDate
-                                ? formatDateTimeEN(
-                                  employeeOfficialCertificateFile.uploadedAtDate
-                                )
-                                : "غير متوفر"}
-                            </div>
-                          </div>
-
-                          <div className="flex flex-wrap gap-2">
-                            {employeeOfficialCertificateFile.viewUrl ? (
-                              <Button asChild type="button" variant="outline">
-                                <a
-                                  href={employeeOfficialCertificateFile.viewUrl}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                >
-                                  <Eye className="ml-2 h-4 w-4" />
-                                  عرض
-                                </a>
-                              </Button>
-                            ) : null}
-
-                            {employeeOfficialCertificateFile.downloadUrl ? (
-                              <Button asChild type="button" variant="outline">
-                                <a
-                                  href={employeeOfficialCertificateFile.downloadUrl}
-                                  rel="noreferrer"
-                                  download={employeeOfficialCertificateFile.fileName || true}
-                                >
-                                  <Download className="ml-2 h-4 w-4" />
-                                  تحميل
-                                </a>
-                              </Button>
-                            ) : null}
-                          </div>
-                        </>
-                      ) : (
-                        <div className="rounded-[16px] border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
-                          لا يوجد ملف شهادة دراسية مرفوع حتى الآن.
-                        </div>
-                      )}
+                  ) : (
+                    <div className="rounded-[16px] border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+                      لا توجد مستندات رسمية مرفوعة حتى الآن.
                     </div>
-                  </div>
+                  )
                 )}
               </div>
 
