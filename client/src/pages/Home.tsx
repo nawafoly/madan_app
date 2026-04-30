@@ -444,15 +444,14 @@ export default function Home() {
         <section className="relative h-screen min-h-screen min-h-[100svh] overflow-hidden">
           <div className="absolute inset-0">
             <video
+              src="/about-hero.mp4"
               className="h-full w-full object-cover object-top"
               autoPlay
               muted
               loop
               playsInline
               preload="auto"
-            >
-              <source src="/about-hero.mp4" type="video/mp4" />
-            </video>
+            />
           </div>
 
           <div className="absolute inset-0 bg-[linear-gradient(112deg,rgba(6,14,24,0.92)_0%,rgba(8,17,28,0.82)_42%,rgba(9,20,33,0.56)_100%)]" />
