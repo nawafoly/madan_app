@@ -52,7 +52,21 @@ copilot-messages.log
 client/dist/
 .vercel/
 node_modules/
+client/node_modules/
 functions/node_modules/
+workers/node_modules/
+android/
+.gradle/
+**/build/
+*.apk
+**/*.apk
+*.aab
+**/*.aab
+*.jks
+**/*.jks
+*.keystore
+**/*.keystore
+.pnpm-store/
 
 .vercel
 .env*.local

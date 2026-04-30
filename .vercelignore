@@ -1,0 +1,27 @@
+# Local dependencies and package manager stores
+node_modules/
+client/node_modules/
+functions/node_modules/
+workers/node_modules/
+.pnpm-store/
+
+# Android and native build artifacts
+android/
+.gradle/
+**/build/
+*.apk
+**/*.apk
+*.aab
+**/*.aab
+*.jks
+**/*.jks
+*.keystore
+**/*.keystore
+
+# Local and generated output
+client/dist/
+.tmp/
+.vercel/
+
+# Local environment files
+.env*.local
