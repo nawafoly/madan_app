@@ -7,6 +7,7 @@
     "codex-project-manager.paratextReorderMigrationCompleted": true,
     "codex-project-manager.globalReferencesMigrationCompleted": true,
     "codex-project-manager.cellIdsToUuidMigrationCompleted": true,
+    "typescript.tsdk": "node_modules/typescript/lib",
     "git.enabled": true,
     "git.blame.editorDecoration.enabled": true,
     "git.diagnosticsCommitHook.enabled": true,
