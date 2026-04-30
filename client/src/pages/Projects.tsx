@@ -8,6 +8,11 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { useDragScroll } from "@/hooks/useDragScroll";
 import { cn } from "@/lib/utils";
+import {
+  normalizeProjectImagePath,
+  pickAssetPath,
+  PROJECT_IMAGE_FALLBACK,
+} from "@/lib/publicAssets";
 
 import {
   Select,
@@ -91,7 +96,6 @@ const DEFAULT_LABELS: Required<LabelsDoc> = {
   },
 };
 
-const FALLBACK_COVER = "/HOOM-HERO.png";
 const PAGE_SIZE = 12;
 
 type ProjectDoc = {
@@ -110,8 +114,14 @@ type ProjectDoc = {
   issueNumber?: string;
 
   coverImage?: string;
+  coverImageUrl?: string;
   image?: string;
+  imageUrl?: string;
+  heroImage?: string;
+  media?: unknown;
   gallery?: string[];
+  galleryImages?: string[];
+  images?: string[];
   attachments?: AttachmentLink[];
 
   overviewAr?: string;
@@ -427,12 +437,20 @@ function pickLabel(v: unknown, lang: "ar" | "en" = "ar", fallback = "") {
   return fallback;
 }
 
-function normalizePublicImage(src?: string) {
-  const s = (src ?? "").trim();
-  if (!s) return "";
-  if (s.startsWith("http://") || s.startsWith("https://")) return s;
-  if (s.startsWith("/")) return s;
-  return `/${s}`;
+function getProjectImageSource(project: ProjectDoc) {
+  return normalizeProjectImagePath(
+    pickAssetPath(
+      project.coverImage,
+      project.coverImageUrl,
+      project.heroImage,
+      project.imageUrl,
+      project.image,
+      project.media,
+      project.gallery,
+      project.galleryImages,
+      project.images
+    )
+  );
 }
 
 function humanizeFirestoreError(err: unknown): string {
@@ -915,11 +933,7 @@ export default function ProjectsPage() {
   };
 
   const CompletedProjectCard = (project: ProjectDoc) => {
-    const rawCover =
-      (project.coverImage && String(project.coverImage).trim()) ||
-      (project.image && String(project.image).trim()) ||
-      "";
-    const cover = rawCover ? normalizePublicImage(rawCover) : FALLBACK_COVER;
+    const cover = getProjectImageSource(project);
     const title = project.titleAr || project.titleEn || "بدون عنوان";
     const location = project.locationAr || project.locationEn || "—";
     const projectTypeLabel = typeLabel(project.projectType);
@@ -944,8 +958,8 @@ export default function ProjectsPage() {
             draggable={false}
             onError={e => {
               const img = e.currentTarget;
-              if (img.src.includes(FALLBACK_COVER)) return;
-              img.src = FALLBACK_COVER;
+              if (img.src.includes(PROJECT_IMAGE_FALLBACK)) return;
+              img.src = PROJECT_IMAGE_FALLBACK;
             }}
           />
 
@@ -1009,11 +1023,7 @@ export default function ProjectsPage() {
     const displayCurrent =
       mode === "done" && !current && target ? target : current;
     const progress = mode === "done" ? 100 : progressPercent(p);
-    const rawCover =
-      (p.coverImage && String(p.coverImage).trim()) ||
-      (p.image && String(p.image).trim()) ||
-      "";
-    const cover = rawCover ? normalizePublicImage(rawCover) : FALLBACK_COVER;
+    const cover = getProjectImageSource(p);
     const title = p.titleAr || p.titleEn || "بدون عنوان";
     const location = p.locationAr || p.locationEn || "—";
     const description = (
@@ -1104,8 +1114,8 @@ export default function ProjectsPage() {
             draggable={false}
             onError={e => {
               const img = e.currentTarget;
-              if (img.src.includes(FALLBACK_COVER)) return;
-              img.src = FALLBACK_COVER;
+              if (img.src.includes(PROJECT_IMAGE_FALLBACK)) return;
+              img.src = PROJECT_IMAGE_FALLBACK;
             }}
           />
 
@@ -1536,11 +1546,7 @@ export default function ProjectsPage() {
     const current = safeNumber(p.currentAmount);
     const prog = mode === "done" ? 100 : progressPercent(p);
 
-    const rawCover =
-      (p.coverImage && String(p.coverImage).trim()) ||
-      (p.image && String(p.image).trim()) ||
-      "";
-    const cover = rawCover ? normalizePublicImage(rawCover) : FALLBACK_COVER;
+    const cover = getProjectImageSource(p);
 
     const title = p.titleAr || p.titleEn || "بدون عنوان";
     const location = p.locationAr || p.locationEn || "—";
@@ -1563,8 +1569,8 @@ export default function ProjectsPage() {
             draggable={false}
             onError={e => {
               const img = e.currentTarget;
-              if (img.src.includes(FALLBACK_COVER)) return;
-              img.src = FALLBACK_COVER;
+              if (img.src.includes(PROJECT_IMAGE_FALLBACK)) return;
+              img.src = PROJECT_IMAGE_FALLBACK;
             }}
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-transparent" />

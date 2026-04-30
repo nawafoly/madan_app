@@ -6,6 +6,10 @@ import { Link } from "wouter";
 import { TrendingUp, Clock, Users, MapPin } from "lucide-react";
 import { getProjectBusinessId } from "@/lib/businessIds";
 import {
+  normalizeProjectImagePath,
+  PROJECT_IMAGE_FALLBACK,
+} from "@/lib/publicAssets";
+import {
   formatCurrencyEN,
   formatNumberEN,
   formatPercentEN,
@@ -50,6 +54,7 @@ export default function ProjectCard({ project }: ProjectCardProps) {
   const progress = project.targetAmount
     ? (Number(project.currentAmount || 0) / Number(project.targetAmount)) * 100
     : 0;
+  const coverImage = normalizeProjectImagePath(project.coverImage);
 
   const getProjectTypeLabel = (type: string) => {
     switch (type) {
@@ -82,17 +87,16 @@ export default function ProjectCard({ project }: ProjectCardProps) {
     <Card className="group overflow-hidden hover:shadow-xl transition-all duration-300 border-border">
       {/* Project Image */}
       <div className="relative h-48 overflow-hidden">
-        {project.coverImage ? (
-          <img
-            src={project.coverImage}
-            alt={project.titleAr}
-            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-          />
-        ) : (
-          <div className="w-full h-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
-            <span className="text-6xl font-bold text-primary/30">M</span>
-          </div>
-        )}
+        <img
+          src={coverImage}
+          alt={project.titleAr}
+          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+          onError={event => {
+            const image = event.currentTarget;
+            if (image.src.includes(PROJECT_IMAGE_FALLBACK)) return;
+            image.src = PROJECT_IMAGE_FALLBACK;
+          }}
+        />
 
         {/* Badges */}
         <div className="absolute top-3 left-3 flex gap-2">

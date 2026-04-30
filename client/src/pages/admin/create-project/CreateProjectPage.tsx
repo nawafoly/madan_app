@@ -23,6 +23,7 @@ import {
   newCompletionOutputRow,
   newFaqRow,
   newMilestoneRow,
+  normalizePublicAssetPath,
   normalizeProjectBuilderSectionId,
   parseAttachmentRows,
   parseFaqRows,
@@ -83,9 +84,12 @@ export default function CreateProjectPage() {
   ]);
   const [completionFinalNoteRows, setCompletionFinalNoteRows] = useState<string[]>([""]);
 
-  const galleryUrls = useMemo(() => splitLines(formData.galleryText), [formData.galleryText]);
+  const galleryUrls = useMemo(
+    () => splitLines(formData.galleryText).map(normalizePublicAssetPath),
+    [formData.galleryText]
+  );
   const completionGalleryUrls = useMemo(
-    () => splitLines(formData.completionGalleryText),
+    () => splitLines(formData.completionGalleryText).map(normalizePublicAssetPath),
     [formData.completionGalleryText]
   );
   const filledHighlights = useMemo(
@@ -536,7 +540,7 @@ export default function CreateProjectPage() {
         locationAr: locAr,
         locationEn: locEn,
         location: locEn || locAr,
-        coverImage: cleanStr(formData.coverImage),
+        coverImage: normalizePublicAssetPath(formData.coverImage),
         gallery: galleryUrls,
         images: galleryUrls,
         highlights: highlightRows.map((item) => cleanStr(item)).filter(Boolean),

@@ -58,6 +58,12 @@ import {
 } from "@/lib/auditLog";
 import { getProjectBusinessId } from "@/lib/businessIds";
 import {
+  normalizeProjectImagePath,
+  normalizePublicAssetPath,
+  pickAssetPath,
+  PROJECT_IMAGE_FALLBACK,
+} from "@/lib/publicAssets";
+import {
   formatCurrencyEN,
   formatNumberEN,
   formatPercentEN,
@@ -161,11 +167,7 @@ function pickLabel(v: unknown, lang: "ar" | "en" = "ar", fallback = "") {
 
 // ✅ helper: يجعل صور public تشتغل لو كتبت اسم الملف فقط
 function normalizeCover(src?: string) {
-  const s = (src ?? "").toString().trim();
-  if (!s) return "";
-  if (s.startsWith("http://") || s.startsWith("https://")) return s;
-  if (s.startsWith("/")) return s;
-  return `/${s}`;
+  return normalizeProjectImagePath(src);
 }
 
 function formatProjectDate(value: any) {
@@ -734,8 +736,17 @@ export default function ProjectDetails() {
             raw?.locationAr,
           projectType: raw?.projectType || raw?.category || raw?.type,
           status: raw?.status || raw?.projectStatus,
-          coverImage:
-            pickTextValue(raw?.coverImage, raw?.image) || raw?.coverImage,
+          coverImage: pickAssetPath(
+            raw?.coverImage,
+            raw?.coverImageUrl,
+            raw?.heroImage,
+            raw?.imageUrl,
+            raw?.image,
+            raw?.media,
+            raw?.gallery,
+            raw?.galleryImages,
+            raw?.images
+          ),
           paymentScheduleAr:
             pickTextValue(
               raw?.paymentScheduleAr,
@@ -934,13 +945,37 @@ export default function ProjectDetails() {
 
   // ✅ HERO MEDIA: صورة أولاً، وإذا ما فيه يرجع للفيديو
   const coverImage = useMemo(
-    () => normalizeCover(pickTextValue(project?.coverImage, project?.image)),
-    [project?.coverImage, project?.image]
+    () =>
+      normalizeProjectImagePath(
+        pickAssetPath(
+          project?.coverImage,
+          project?.coverImageUrl,
+          project?.heroImage,
+          project?.imageUrl,
+          project?.image,
+          project?.media,
+          project?.gallery,
+          project?.galleryImages,
+          project?.images
+        )
+      ),
+    [
+      project?.coverImage,
+      project?.coverImageUrl,
+      project?.heroImage,
+      project?.imageUrl,
+      project?.image,
+      project?.media,
+      project?.gallery,
+      project?.galleryImages,
+      project?.images,
+    ]
   );
 
-  const heroVideo =
+  const heroVideo = normalizePublicAssetPath(
     project?.videoUrl ||
-    "https://cdn.coverr.co/videos/coverr-modern-architecture-1604/1080p.mp4";
+      "https://cdn.coverr.co/videos/coverr-modern-architecture-1604/1080p.mp4"
+  );
 
   const projectTypeKey = String(
     project?.projectType || project?.category || project?.type || ""
@@ -2048,6 +2083,11 @@ export default function ProjectDetails() {
               src={coverImage}
               alt={projectTitle === "—" ? "Project" : projectTitle}
               className="h-full w-full object-cover opacity-20 mix-blend-screen"
+              onError={event => {
+                const image = event.currentTarget;
+                if (image.src.includes(PROJECT_IMAGE_FALLBACK)) return;
+                image.src = PROJECT_IMAGE_FALLBACK;
+              }}
             />
           ) : (
             <video
@@ -2489,6 +2529,11 @@ export default function ProjectDetails() {
                           src={src}
                           alt={`gallery-${idx + 1}`}
                           className="w-full h-full object-cover"
+                          onError={event => {
+                            const image = event.currentTarget;
+                            if (image.src.includes(PROJECT_IMAGE_FALLBACK)) return;
+                            image.src = PROJECT_IMAGE_FALLBACK;
+                          }}
                         />
                       </div>
                     ))}

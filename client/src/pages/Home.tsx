@@ -12,6 +12,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useDragScroll } from "@/hooks/useDragScroll";
+import { normalizePublicAssetPath } from "@/lib/publicAssets";
 import {
   collection,
   doc,
@@ -154,11 +155,7 @@ function pickLabel(v: unknown, lang: "ar" | "en" = "ar", fallback = "") {
 }
 
 function normalizePublicImage(src?: string) {
-  const s = (src ?? "").trim();
-  if (!s) return "";
-  if (s.startsWith("http://") || s.startsWith("https://")) return s;
-  if (s.startsWith("/")) return s;
-  return `/${s}`;
+  return normalizePublicAssetPath(src);
 }
 
 function SectionIntro({

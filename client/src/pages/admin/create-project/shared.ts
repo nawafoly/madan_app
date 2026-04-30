@@ -409,6 +409,28 @@ export function splitLines(text: string) {
     .filter(Boolean);
 }
 
+export function normalizePublicAssetPath(src?: unknown) {
+  let value = cleanStr(src);
+  if (!value) return "";
+
+  if (/^[a-z][a-z0-9+.-]*:/i.test(value) || value.startsWith("//")) {
+    return value;
+  }
+
+  value = value
+    .replace(/\\/g, "/")
+    .replace(/^\.\/+/, "")
+    .replace(/^(\.\.\/)+public\//, "")
+    .replace(/^client\/public\//, "")
+    .replace(/^public\//, "");
+
+  if (value.startsWith("/")) return value.replace(/^\/+/, "/");
+  if (/^[^/?#]+\.(png|jpe?g|webp|gif|svg|mp4|webm)([?#].*)?$/i.test(value)) {
+    return `/${value}`;
+  }
+  return value;
+}
+
 export function isCompletionStatus(status: ProjectStatus) {
   return status === "closed" || status === "completed";
 }

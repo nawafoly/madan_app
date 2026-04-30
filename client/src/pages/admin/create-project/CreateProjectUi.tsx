@@ -45,6 +45,7 @@ import {
   inputClassName,
   isCompletionStatus,
   normalizeProjectBuilderSectionId,
+  normalizePublicAssetPath,
   parseAttachmentRows,
   parseFaqRows,
   parseMilestoneRows,
@@ -234,6 +235,7 @@ export function CreateProjectUi({
   const hasVipRequirement =
     formData.isVip === "true" || formData.projectType === "vip_exclusive";
   const hasCoverImage = Boolean(cleanStr(formData.coverImage));
+  const coverImagePreview = normalizePublicAssetPath(formData.coverImage);
   const highlightCopyReady = highlightRows.every((item) => !cleanStr(item) || cleanStr(item).length > 2);
   const highlightContentSufficient = filledHighlights >= 3;
   const hasUploadedAttachmentFile = attachmentRows.some((row) => Boolean(cleanStr(row.url)));
@@ -2010,16 +2012,16 @@ export function CreateProjectUi({
                     <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
                       {coverUploading
                         ? "جارٍ الرفع..."
-                        : cleanStr(formData.coverImage)
+                        : coverImagePreview
                           ? "مرفوع"
                           : "بانتظار"}
                     </Badge>
                   </div>
 
                   <div className="mt-5 overflow-hidden rounded-[24px] border border-slate-200 bg-white">
-                    {cleanStr(formData.coverImage) ? (
+                    {coverImagePreview ? (
                       <img
-                        src={formData.coverImage}
+                        src={coverImagePreview}
                         alt="معاينة صورة الغلاف"
                         className="aspect-[16/9] h-full w-full object-cover"
                       />
@@ -3557,9 +3559,9 @@ export function CreateProjectUi({
           <div className="flex max-h-screen flex-col overflow-hidden rounded-[30px] border border-slate-200/80 bg-white/95 shadow-[0_34px_90px_-42px_rgba(15,23,42,0.38)] backdrop-blur">
             <div className="relative shrink-0">
               <div className="relative h-52 overflow-hidden">
-                {cleanStr(formData.coverImage) ? (
+                {coverImagePreview ? (
                   <img
-                    src={formData.coverImage}
+                    src={coverImagePreview}
                     alt={projectDisplayTitle}
                     className="h-full w-full object-cover"
                   />
