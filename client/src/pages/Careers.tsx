@@ -222,21 +222,27 @@ export default function Careers() {
         />
 
         <section className="relative z-10 h-screen min-h-screen min-h-[100svh] overflow-hidden bg-slate-950">
-          <div className="absolute inset-0">
+          <div className="absolute inset-0 z-0">
             <video
-              className="h-full w-full object-cover object-center"
+              className="pointer-events-none absolute inset-0 h-full w-full object-cover object-center"
               autoPlay
               muted
               loop
               playsInline
               preload="auto"
+              onCanPlay={(event) => {
+                const video = event.currentTarget;
+                if (video.paused) {
+                  void video.play().catch(() => undefined);
+                }
+              }}
             >
               <source src="/about-hero1.mp4" type="video/mp4" />
             </video>
           </div>
 
-          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(7,11,18,0.72)_0%,rgba(7,11,18,0.45)_38%,rgba(7,11,18,0.72)_100%)]" />
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(242,183,5,0.18),transparent_40%)]" />
+          <div className="pointer-events-none absolute inset-0 z-[1] bg-[linear-gradient(180deg,rgba(7,11,18,0.72)_0%,rgba(7,11,18,0.45)_38%,rgba(7,11,18,0.72)_100%)]" />
+          <div className="pointer-events-none absolute inset-0 z-[2] bg-[radial-gradient(circle_at_top,rgba(242,183,5,0.18),transparent_40%)]" />
 
           <div className="container relative z-10 h-full px-4 sm:px-6">
             <div className="flex h-full items-center justify-center pt-[calc(var(--site-header-offset)+1.5rem)]">

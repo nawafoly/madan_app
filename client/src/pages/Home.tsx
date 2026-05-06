@@ -442,20 +442,26 @@ export default function Home() {
         />
 
         <section className="relative h-screen min-h-screen min-h-[100svh] overflow-hidden">
-          <div className="absolute inset-0">
+          <div className="absolute inset-0 z-0">
             <video
               src="/about-hero.mp4"
-              className="h-full w-full object-cover object-top"
+              className="pointer-events-none absolute inset-0 h-full w-full object-cover object-top"
               autoPlay
               muted
               loop
               playsInline
               preload="auto"
+              onCanPlay={(event) => {
+                const video = event.currentTarget;
+                if (video.paused) {
+                  void video.play().catch(() => undefined);
+                }
+              }}
             />
           </div>
 
-          <div className="absolute inset-0 bg-[linear-gradient(112deg,rgba(6,14,24,0.92)_0%,rgba(8,17,28,0.82)_42%,rgba(9,20,33,0.56)_100%)]" />
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(242,174,48,0.22),transparent_34%)]" />
+          <div className="pointer-events-none absolute inset-0 z-[1] bg-[linear-gradient(112deg,rgba(6,14,24,0.92)_0%,rgba(8,17,28,0.82)_42%,rgba(9,20,33,0.56)_100%)]" />
+          <div className="pointer-events-none absolute inset-0 z-[2] bg-[radial-gradient(circle_at_top_right,rgba(242,174,48,0.22),transparent_34%)]" />
 
           <div className="container relative z-10 h-full px-4 sm:px-6">
             <div className="flex h-full items-center justify-center pt-[calc(var(--site-header-offset)+1.5rem)]">
