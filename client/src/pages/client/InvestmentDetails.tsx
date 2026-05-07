@@ -538,7 +538,7 @@ export default function InvestmentDetails() {
         _source: "investment",
         type: "contract_verified",
         title: CLIENT_WORKFLOW_COPY.contractApproved,
-        note: "تم اعتماد العقد، وأصبح الاستثمار جاهزًا للبدء.",
+        note: "تم اعتماد العقد، وبانتظار تفعيل الاستثمار رسميًا.",
         at: contractVerifiedAt,
       });
     }
@@ -1404,7 +1404,7 @@ export default function InvestmentDetails() {
                       </Badge>
                     }
                   />
-                  <InfoRow label="بدء الاستثمار" value="لم يبدأ بعد" />
+                  <InfoRow label="حالة التفعيل" value="لم يبدأ الاستثمار فعليًا بعد" />
                 </>
               )}
               <InfoRow label="تاريخ الإنشاء" value={investment?.createdAt ? formatDateTimeAR(investment.createdAt) : "—"} />
@@ -1414,7 +1414,7 @@ export default function InvestmentDetails() {
               <Separator />
 
               <div className="space-y-3">
-                <div className="text-xs text-muted-foreground">مستندات الاستثمار (Cloudflare R2)</div>
+                <div className="text-xs text-muted-foreground">مستندات الاستثمار</div>
 
                 <div className="flex items-center gap-2 flex-wrap">
                   <div className="text-xs text-muted-foreground">حالة العقد:</div>

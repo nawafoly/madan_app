@@ -131,13 +131,13 @@ export const investmentStageUiMap: Record<InvestmentStage, InvestmentStageUi> =
     contract_verified: {
       title: "تم اعتماد العقد",
       description:
-        "اكتملت مراجعة العقد بنجاح، والاستثمار الآن جاهز لبدء التفعيل الرسمي.",
+        "اكتملت مراجعة العقد بنجاح، وتبقى خطوة تفعيل الاستثمار رسميًا.",
       badge: {
         label: "العقد معتمد",
         className: emeraldBadge,
       },
       investmentStatus: {
-        label: "جاهز لبدء الاستثمار",
+        label: "بانتظار تفعيل الاستثمار",
         className: emeraldBadge,
       },
       contractStatus: {

@@ -31,6 +31,7 @@ import { CreateProjectUi } from "./create-project/CreateProjectUi";
 import {
   FINAL_SETTINGS_SECTION_ID,
   SECTION_DEFINITIONS,
+  buildCoverageAmounts,
   buildFinalSettingsMeta,
   buildSectionStatusMap,
   buildCompletionContentPayload,
@@ -291,6 +292,8 @@ export default function EditProject() {
 
     targetAmount: "",
     currentAmount: "",
+    coverageRate: "0",
+    investmentsAmount: "0",
     minInvestment: "",
     annualReturn: "",
     duration: "",
@@ -735,6 +738,19 @@ export default function EditProject() {
         const completionGalleryArr: string[] = Array.isArray(completionContent?.gallery)
           ? completionContent.gallery
           : [];
+        const targetAmountValue = toNumOrZero(p.targetAmount);
+        const coverageRateValue = toNumOrZero(p.coverageRate);
+        const baseCoveredAmountValue =
+          p.baseCoveredAmount != null
+            ? toNumOrZero(p.baseCoveredAmount)
+            : (targetAmountValue * coverageRateValue) / 100;
+        const investmentsAmountValue =
+          p.investmentsAmount != null
+            ? toNumOrZero(p.investmentsAmount)
+            : p.baseCoveredAmount != null
+              ? Math.max(toNumOrZero(p.currentAmount) - baseCoveredAmountValue, 0)
+              : toNumOrZero(p.currentAmount);
+        const currentAmountValue = baseCoveredAmountValue + investmentsAmountValue;
 
         const nextFormData: FormDataState = {
           titleAr: cleanStr(p.titleAr),
@@ -757,7 +773,9 @@ export default function EditProject() {
           completionGalleryText: completionGalleryArr.join("\n"),
 
           targetAmount: p.targetAmount != null ? String(p.targetAmount) : "",
-          currentAmount: p.currentAmount != null ? String(p.currentAmount) : "",
+          currentAmount: String(currentAmountValue),
+          coverageRate: p.coverageRate != null ? String(p.coverageRate) : "0",
+          investmentsAmount: String(investmentsAmountValue),
           minInvestment: p.minInvestment != null ? String(p.minInvestment) : "",
           annualReturn: p.annualReturn != null ? String(p.annualReturn) : "",
           duration: p.duration != null ? String(p.duration) : "",
@@ -870,6 +888,12 @@ export default function EditProject() {
     try {
       setSaving(true);
       const projectRef = doc(db, "projects", projectId);
+      const coverageAmounts = buildCoverageAmounts({
+        targetAmount: formData.targetAmount,
+        coverageRate: formData.coverageRate,
+        investmentsAmount: formData.investmentsAmount,
+        minInvestment: formData.minInvestment,
+      });
 
       const payload: any = {
         // titles/descriptions
@@ -889,9 +913,14 @@ export default function EditProject() {
         gallery: galleryUrls,
 
         targetAmount: toNumOrZero(formData.targetAmount),
+        coverageRate: toNumOrZero(formData.coverageRate),
+        baseCoveredAmount: coverageAmounts.baseCoveredAmount,
+        investmentsAmount: coverageAmounts.investmentsAmount,
+        currentAmount: coverageAmounts.currentAmount,
         minInvestment: toNumOrZero(formData.minInvestment),
         annualReturn: toNumOrZero(formData.annualReturn),
         duration: toNumOrZero(formData.duration),
+        remainingInvestorsCount: coverageAmounts.remainingInvestorsCount,
 
         featured: formData.featured === "true",
         isVip: formData.isVip === "true",

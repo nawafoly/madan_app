@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,6 +40,7 @@ import {
   FINAL_SETTINGS_SECTION_ID,
   SECTION_DEFINITIONS,
   buildCompletionContentPayload,
+  buildCoverageAmounts,
   cleanStr,
   formatDisplayValue,
   inputClassName,
@@ -137,6 +138,21 @@ export function CreateProjectUi({
   workspaceIdLabel = "معرّف المسودة",
   workspaceIdValue = draftProjectId.slice(0, 8),
 }: CreateProjectUiProps) {
+  const coverageAmounts = useMemo(
+    () =>
+      buildCoverageAmounts({
+        targetAmount: formData.targetAmount,
+        coverageRate: formData.coverageRate,
+        investmentsAmount: formData.investmentsAmount,
+        minInvestment: formData.minInvestment,
+      }),
+    [
+      formData.coverageRate,
+      formData.investmentsAmount,
+      formData.minInvestment,
+      formData.targetAmount,
+    ]
+  );
   const visibleSections = SECTION_DEFINITIONS;
   const sectionNavRef = useRef<HTMLDivElement | null>(null);
   const sectionStripRef = useRef<HTMLDivElement | null>(null);
@@ -507,7 +523,7 @@ export function CreateProjectUi({
         {
           icon: BarChart3,
           label: "المبلغ الحالي",
-          value: formatDisplayValue(formData.currentAmount, "ر.س"),
+          value: formatDisplayValue(String(coverageAmounts.currentAmount), "ر.س"),
         },
         {
           icon: Landmark,
@@ -3177,7 +3193,12 @@ export function CreateProjectUi({
                   <MetricCard
                     icon={BarChart3}
                     label="المبلغ الحالي"
-                    value={formatDisplayValue(formData.currentAmount, "ر.س")}
+                    value={formatDisplayValue(String(coverageAmounts.currentAmount), "ر.س")}
+                  />
+                  <MetricCard
+                    icon={Gauge}
+                    label="نسبة التغطية"
+                    value={formatDisplayValue(formData.coverageRate, "%")}
                   />
                   <MetricCard
                     icon={Landmark}
@@ -3214,15 +3235,24 @@ export function CreateProjectUi({
                       <Input
                         dir="ltr"
                         inputMode="numeric"
+                        readOnly
+                        className={`${inputClassName} bg-slate-50 text-left text-slate-600`}
+                        value={formatNumber(coverageAmounts.currentAmount)}
+                      />
+                    </Field>
+                    <Field label="نسبة التغطية %">
+                      <Input
+                        dir="ltr"
+                        inputMode="decimal"
                         className={`${inputClassName} text-left`}
-                        value={formatNumber(formData.currentAmount)}
+                        value={formData.coverageRate}
                         onChange={(e) => {
                           const raw = e.target.value.replace(/,/g, "");
-                          if (!/^\d*$/.test(raw)) return;
+                          if (!/^\d*(\.\d*)?$/.test(raw)) return;
 
                           setFormData((prev) => ({
                             ...prev,
-                            currentAmount: raw,
+                            coverageRate: raw,
                           }));
                         }}
                       />
@@ -3270,11 +3300,9 @@ export function CreateProjectUi({
                       <Input
                         dir="ltr"
                         inputMode="numeric"
-                        className={`${inputClassName} text-left`}
-                        value={formData.investorsCount}
-                        onChange={(e) =>
-                          setFormData((prev) => ({ ...prev, investorsCount: e.target.value }))
-                        }
+                        readOnly
+                        className={`${inputClassName} bg-slate-50 text-left text-slate-600`}
+                        value={formatNumber(coverageAmounts.remainingInvestorsCount)}
                       />
                     </Field>
                   </div>

@@ -52,6 +52,7 @@ import {
 import { db } from "@/_core/firebase";
 import { getProjectBusinessId } from "@/lib/businessIds";
 import { formatCurrencyEN, formatNumberEN } from "@/lib/formatters";
+import { getProjectComputedAmounts } from "@/lib/projectAmounts";
 import { cn } from "@/lib/utils";
 
 /* =========================
@@ -121,6 +122,9 @@ type ProjectDoc = {
   // finance
   targetAmount?: number;
   currentAmount?: number;
+  coverageRate?: number;
+  baseCoveredAmount?: number;
+  investmentsAmount?: number;
   minInvestment?: number;
   annualReturn?: number;
   duration?: number;
@@ -313,7 +317,7 @@ export default function ProjectsManagement() {
       0
     );
     const totalCurrent = filtered.reduce(
-      (acc, p) => acc + safeNumber(p.currentAmount),
+      (acc, p) => acc + getProjectComputedAmounts(p).currentAmount,
       0
     );
 
@@ -586,11 +590,10 @@ export default function ProjectsManagement() {
         {!loading && !loadError && filtered.length > 0 && (
           <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
             {filtered.map(p => {
-              const target = safeNumber(p.targetAmount);
-              const current = safeNumber(p.currentAmount);
-              const progress = target
-                ? Math.min(100, (current / target) * 100)
-                : 0;
+              const computedAmounts = getProjectComputedAmounts(p);
+              const target = computedAmounts.targetAmount;
+              const current = computedAmounts.currentAmount;
+              const progress = computedAmounts.progressPercent;
 
               return (
                 <Card key={p.id} className={PROJECT_CARD_CLASS}>

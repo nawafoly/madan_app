@@ -68,6 +68,7 @@ import {
   formatNumberEN,
   formatPercentEN,
 } from "@/lib/formatters";
+import { getProjectComputedAmounts } from "@/lib/projectAmounts";
 import { cn } from "@/lib/utils";
 
 type BiLabel = { ar?: string; en?: string };
@@ -336,6 +337,24 @@ function parseOverviewContent(value: unknown) {
     lead: segments[0] || raw,
     bullets: segments.slice(1, 5),
   };
+}
+
+function compactDescription(value: unknown, maxLength = 180) {
+  const text = String(value ?? "")
+    .replace(/\r/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (text.length <= maxLength) return text;
+
+  const sentenceEnd = text.search(/[.!؟]/);
+  if (sentenceEnd > 40 && sentenceEnd <= maxLength) {
+    return text.slice(0, sentenceEnd + 1).trim();
+  }
+
+  const clipped = text.slice(0, maxLength).trim();
+  const lastSpace = clipped.lastIndexOf(" ");
+  return `${(lastSpace > 80 ? clipped.slice(0, lastSpace) : clipped).trim()}...`;
 }
 
 function getAttachmentName(attachment: Attachment) {
@@ -786,6 +805,10 @@ export default function ProjectDetails() {
               raw?.raisedAmount,
               raw?.collectedAmount
             ) || raw?.currentAmount,
+          coverageRate:
+            raw?.coverageRate != null
+              ? pickNumberValue(raw?.coverageRate)
+              : raw?.coverageRate,
           gallery:
             Array.isArray(raw?.gallery) && raw.gallery.length > 0
               ? raw.gallery
@@ -892,18 +915,25 @@ export default function ProjectDetails() {
   /** =========================
    * ✅ NEW Progress Calculation (funding + milestones + hybrid)
    ========================= */
-  const targetAmount = pickNumberValue(project?.targetAmount, project?.goalAmount);
-  const currentAmount = pickNumberValue(
-    project?.currentAmount,
-    project?.raisedAmount,
-    project?.collectedAmount
-  );
+  const computedAmounts = getProjectComputedAmounts({
+    targetAmount: pickNumberValue(project?.targetAmount, project?.goalAmount),
+    currentAmount: pickNumberValue(
+      project?.currentAmount,
+      project?.raisedAmount,
+      project?.collectedAmount
+    ),
+    minInvestment: pickNumberValue(project?.minInvestment, project?.minimumInvestment),
+    coverageRate: project?.coverageRate,
+    baseCoveredAmount: project?.baseCoveredAmount,
+    investmentsAmount: project?.investmentsAmount,
+  });
+  const targetAmount = computedAmounts.targetAmount;
+  const currentAmount = computedAmounts.currentAmount;
 
   const fundingProgress = useMemo(() => {
     if (!targetAmount) return 0;
     return clamp((currentAmount / targetAmount) * 100, 0, 100);
   }, [targetAmount, currentAmount]);
-
   const milestonesProgress = useMemo(() => {
     const total = milestones.length;
     if (!total) return 0;
@@ -1049,11 +1079,57 @@ export default function ProjectDetails() {
       project?.descriptionEn,
     ]
   );
-  const showFullDescription =
-    Boolean(fullDescriptionText) &&
-    (fullDescriptionText !== overviewContent.lead ||
-      fullDescriptionText.includes("\n") ||
-      fullDescriptionText.length > 220);
+  const executiveSummaryText = useMemo(
+    () =>
+      pickTextValue(
+        (project as any)?.executiveSummaryAr,
+        (project as any)?.executiveSummary,
+        project?.summaryAr,
+        fullDescriptionText,
+        overviewSource
+      ),
+    [
+      fullDescriptionText,
+      overviewSource,
+      project?.summaryAr,
+      (project as any)?.executiveSummaryAr,
+      (project as any)?.executiveSummary,
+    ]
+  );
+
+  const explicitExecutiveSummaryText = useMemo(
+    () =>
+      pickTextValue(
+        (project as any)?.executiveSummaryAr,
+        (project as any)?.executiveSummary,
+        project?.summaryAr
+      ),
+    [
+      project?.summaryAr,
+      (project as any)?.executiveSummaryAr,
+      (project as any)?.executiveSummary,
+    ]
+  );
+
+  const shortDescriptionText = useMemo(
+    () => {
+      const dedicatedShortDescription = pickTextValue(
+        (project as any)?.shortDescriptionAr,
+        (project as any)?.shortDescription
+      );
+
+      return compactDescription(
+        dedicatedShortDescription ||
+          (!explicitExecutiveSummaryText ? overviewContent.lead : "")
+      );
+    },
+    [
+      explicitExecutiveSummaryText,
+      overviewContent.lead,
+      (project as any)?.shortDescriptionAr,
+      (project as any)?.shortDescription,
+    ]
+  );
 
   const durationValue = pickNumberValue(
     project?.durationMonths,
@@ -1083,9 +1159,7 @@ export default function ProjectDetails() {
   const minimumInvestmentText = fmtSAR(minimumInvestmentValue);
   const remainingAmountText = fmtSAR(Math.max(targetAmount - currentAmount, 0));
   const progressPercentageText = `${progress.toFixed(1)}%`;
-  const investorsCountText = formatNumberEN(
-    pickNumberValue(project?.investorsCount, project?.investorCount)
-  );
+  const investorsCountText = formatNumberEN(computedAmounts.remainingInvestorsCount);
   const projectEndDate =
     project?.plannedEndAt ||
     project?.plannedEndDate ||
@@ -1095,16 +1169,7 @@ export default function ProjectDetails() {
     project?.endAt ||
     null;
   const remainingTimeText = formatRemainingTime(projectEndDate);
-  const progressHint =
-    progressMode === "funding"
-      ? "يُحتسب التقدم حسب التمويل فقط"
-      : progressMode === "milestones"
-        ? "يُحتسب التقدم حسب المراحل فقط"
-        : `هجين: التمويل ${fundingW}% + المراحل ${milestonesW}%`;
-
-  const overviewBullets = useMemo(() => {
-    if (overviewContent.bullets.length > 0) return overviewContent.bullets;
-
+  const quickOpportunityFacts = useMemo(() => {
     return [
       typeLabel ? `نوع الاستثمار: ${typeLabel}` : "",
       pickTextValue(project?.locationAr, project?.locationEn, project?.location)
@@ -1115,6 +1180,8 @@ export default function ProjectDetails() {
           )}`
         : "",
       durationValue > 0 ? `مدة الاستثمار: ${durationText}` : "",
+      annualReturnValue > 0 ? `العائد المتوقع: ${annualReturnText}` : "",
+      statusLabel ? `حالة المشروع: ${statusLabel}` : "",
       minimumInvestmentValue > 0
         ? `الحد الأدنى للمشاركة: ${minimumInvestmentText}`
         : "",
@@ -1122,12 +1189,14 @@ export default function ProjectDetails() {
   }, [
     durationText,
     durationValue,
+    annualReturnText,
+    annualReturnValue,
     minimumInvestmentText,
     minimumInvestmentValue,
-    overviewContent.bullets,
     project?.locationAr,
     project?.locationEn,
     project?.location,
+    statusLabel,
     typeLabel,
   ]);
 
@@ -2137,7 +2206,7 @@ export default function ProjectDetails() {
             )}
 
             <p className="max-w-3xl text-base leading-8 text-white/72 md:text-lg">
-              {overviewContent.lead ||
+              {shortDescriptionText ||
                 "فرصة استثمارية مصممة بعرض بصري أوضح يبرز العائد، المدة، والحد الأدنى قبل بدء الطلب."}
             </p>
 
@@ -2207,11 +2276,13 @@ export default function ProjectDetails() {
             </div>
 
             <div className="rounded-[30px] border border-slate-200/80 bg-white p-6 shadow-[0_20px_45px_rgba(15,23,42,0.08)]">
-              <div className="text-sm text-slate-500">نسبة التقدم</div>
+              <div className="text-sm text-slate-500">نسبة التغطية المعتمدة</div>
               <div className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">
                 {progressPercentageText}
               </div>
-              <div className="mt-2 text-sm text-slate-500">{progressHint}</div>
+              <div className="mt-2 text-sm text-slate-500">
+                نسبة التغطية المسجلة لهذا المشروع
+              </div>
             </div>
 
             <div className="rounded-[30px] border border-slate-200/80 bg-white p-6 shadow-[0_20px_45px_rgba(15,23,42,0.08)]">
@@ -2242,7 +2313,7 @@ export default function ProjectDetails() {
         <div className="mx-auto grid w-full max-w-[1540px] gap-8 px-4 sm:px-6 lg:grid-cols-[minmax(0,1.55fr)_minmax(360px,0.95fr)] lg:gap-10 lg:px-8 2xl:grid-cols-[minmax(0,1.7fr)_minmax(420px,0.98fr)]">
           {/* LEFT */}
           <div className="min-w-0 space-y-8">
-            {/* Overview */}
+            {/* Executive summary */}
             <Card className="overflow-hidden border-0 bg-white shadow-[0_20px_60px_rgba(15,23,42,0.08)]">
               <CardHeader className="border-b border-slate-100 pb-6">
                 <div className="space-y-3">
@@ -2250,38 +2321,47 @@ export default function ProjectDetails() {
                     variant="outline"
                     className="w-fit border-slate-200 bg-slate-50 text-slate-600"
                   >
-                    نظرة عامة
+                    الخلاصة التنفيذية
+                  </Badge>
+                  <CardTitle className="text-3xl font-semibold tracking-tight">
+                    الخلاصة التنفيذية للمشروع
+                  </CardTitle>
+                  <CardDescription className="max-w-2xl">
+                    الوصف الكامل والرئيسي للمشروع، ويعرض فكرة الفرصة وسياقها للمستثمر.
+                  </CardDescription>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-6">
+                <div className="rounded-[28px] bg-[#0f172a] p-6 text-white">
+                  <div className="text-sm text-white/55">ملخص المشروع</div>
+                  <p className="mt-4 whitespace-pre-line text-lg leading-8 text-white/88">
+                    {executiveSummaryText ||
+                      "لا توجد خلاصة تنفيذية متاحة لهذا المشروع حاليًا."}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="overflow-hidden border border-slate-200/70 bg-white">
+              <CardHeader className="border-b border-slate-100 pb-6">
+                <div className="space-y-3">
+                  <Badge
+                    variant="outline"
+                    className="w-fit border-slate-200 bg-slate-50 text-slate-600"
+                  >
+                    معلومات سريعة
                   </Badge>
                   <CardTitle className="text-3xl font-semibold tracking-tight">
                     قراءة سريعة للفرصة
                   </CardTitle>
                   <CardDescription className="max-w-2xl">
-                    صياغة مختصرة تسهّل على المستثمر فهم الفكرة الرئيسية قبل
-                    الدخول في التفاصيل.
+                    نقاط مختصرة تساعد المستثمر على فهم المؤشرات الأساسية دون إعادة وصف المشروع.
                   </CardDescription>
                 </div>
               </CardHeader>
-              <CardContent className="grid gap-6 pt-6 lg:grid-cols-[1.1fr_0.9fr]">
-                <div className="space-y-4">
-                  <div className="rounded-[28px] bg-[#0f172a] p-6 text-white">
-                  <div className="text-sm text-white/55">الخلاصة التنفيذية</div>
-                  <p className="mt-4 text-lg leading-8 text-white/88">
-                    {overviewContent.lead ||
-                      "لا توجد مقدمة تفصيلية متاحة لهذا المشروع حاليًا."}
-                  </p>
-                  </div>
-
-                  {showFullDescription && (
-                    <div className="rounded-[28px] border border-slate-200 bg-slate-50/70 p-6">
-                      <p className="whitespace-pre-line text-base leading-8 text-slate-700">
-                        {fullDescriptionText}
-                      </p>
-                    </div>
-                  )}
-                </div>
-
+              <CardContent className="pt-6">
                 <div className="grid gap-3">
-                  {overviewBullets.map((item, idx) => (
+                  {quickOpportunityFacts.map((item, idx) => (
                     <div
                       key={`${item}-${idx}`}
                       className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50/80 p-4"

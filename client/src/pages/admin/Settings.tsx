@@ -521,8 +521,8 @@ const DATABASE_OVERVIEW_CARDS: DatabaseOverviewCard[] = [
   {
     key: "d1",
     title: "قاعدة البيانات",
-    value: "Cloudflare D1",
-    subtitle: "maedin-documents",
+    value: "خدمة قاعدة البيانات",
+    subtitle: "مهيأة للوثائق",
     icon: Database,
     valueDir: "ltr",
     status: "not_ready",
@@ -531,8 +531,8 @@ const DATABASE_OVERVIEW_CARDS: DatabaseOverviewCard[] = [
   {
     key: "r2",
     title: "التخزين",
-    value: "Cloudflare R2",
-    subtitle: "maedin-storage",
+    value: "خدمة تخزين الملفات",
+    subtitle: "مهيأة للمستندات",
     icon: HardDrive,
     valueDir: "ltr",
     status: "not_ready",
@@ -541,8 +541,8 @@ const DATABASE_OVERVIEW_CARDS: DatabaseOverviewCard[] = [
   {
     key: "worker",
     title: "خدمة الرفع",
-    value: "Cloudflare Workers",
-    subtitle: "upload.maedin.workers.dev",
+    value: "خدمة معالجة الرفع",
+    subtitle: "مهيأة لاستقبال الملفات",
     icon: ServerCog,
     valueDir: "ltr",
     status: "not_ready",
@@ -586,7 +586,7 @@ const DATABASE_METRIC_CARDS: DatabaseMetricCard[] = [
   },
   {
     key: "d1Records",
-    title: "عدد سجلات D1",
+    title: "عدد سجلات الملفات",
     value: "—",
     helper: "قريبًا",
     icon: Database,
@@ -598,7 +598,7 @@ const DATABASE_ACTION_CARDS: DatabaseActionCard[] = [
   {
     key: "browseFiles",
     title: "عرض الملفات",
-    description: "واجهة لتصفح الملفات الفعلية المخزنة في R2.",
+    description: "واجهة لتصفح الملفات المخزنة فعليًا في المنصة.",
     icon: FolderOpen,
   },
   {
@@ -610,7 +610,7 @@ const DATABASE_ACTION_CARDS: DatabaseActionCard[] = [
   {
     key: "exportData",
     title: "تصدير البيانات",
-    description: "إعداد تصدير إداري لبيانات D1 والملفات المرتبطة.",
+    description: "إعداد تصدير إداري للبيانات والملفات المرتبطة.",
     icon: FileDown,
   },
   {
@@ -622,22 +622,22 @@ const DATABASE_ACTION_CARDS: DatabaseActionCard[] = [
   {
     key: "cleanup",
     title: "تنظيف الملفات اليتيمة",
-    description: "مراجعة الملفات غير المرتبطة بسجلات D1 قبل الحذف.",
+    description: "مراجعة الملفات غير المرتبطة بسجلات موثقة قبل الحذف.",
     icon: Trash2,
   },
 ];
 
 const DATABASE_TECHNICAL_DETAILS: DatabaseDetailRow[] = [
-  { label: "اسم قاعدة البيانات", value: "maedin-documents", valueDir: "ltr" },
-  { label: "اسم الحاوية", value: "maedin-storage", valueDir: "ltr" },
-  { label: "عنوان العامل", value: "upload.maedin.workers.dev", valueDir: "ltr" },
-  { label: "المزوّد", value: "Cloudflare", valueDir: "ltr" },
+  { label: "قاعدة البيانات", value: "خدمة الوثائق", valueDir: "rtl" },
+  { label: "تخزين الملفات", value: "خدمة المستندات", valueDir: "rtl" },
+  { label: "خدمة المعالجة", value: "مفعلة", valueDir: "rtl" },
+  { label: "المزوّد", value: "خدمة التخزين السحابي", valueDir: "rtl" },
   { label: "البيئة", value: "الإنتاج", valueDir: "rtl" },
 ];
 
 const DATABASE_NOTES = [
-  "Firebase لا يستخدم لهذا القسم.",
-  "هذا التبويب يعتمد على Cloudflare فقط.",
+  "هذا القسم مخصص لخدمات الوثائق والملفات فقط.",
+  "تعرض البيانات هنا حالة خدمات التخزين المستخدمة في المنصة.",
   "النسخ الاحتياطي المتقدم سيضاف لاحقًا.",
 ];
 
@@ -733,8 +733,8 @@ function formatDatabaseMetricSource(
   hasValue: boolean
 ) {
   if (!hasValue) return "غير متاح";
-  if (source === "r2") return "من R2";
-  if (source === "d1") return "من D1";
+  if (source === "r2") return "من خدمة الملفات";
+  if (source === "d1") return "من خدمة البيانات";
   return "—";
 }
 
@@ -766,15 +766,15 @@ function formatDatabaseServiceDetail(
 
   switch (normalized) {
     case "stats_endpoint_responded":
-      return "استجابة مباشرة من الـ Worker.";
+      return "استجابة الخدمة بنجاح.";
     case "d1_metadata_aggregated":
-      return "تمت قراءة إحصاءات file_metadata.";
+      return "تمت قراءة إحصاءات الملفات.";
     case "r2_objects_aggregated":
-      return "تم عدّ كائنات R2 الفعلية.";
+      return "تم عدّ الملفات المخزنة فعليًا.";
     case "worker_unavailable":
-      return "يتطلب نجاح الوصول إلى الـ Worker أولًا.";
+      return "يتطلب توفر خدمة المعالجة أولًا.";
     case "Missing VITE_R2_UPLOAD_WORKER_URL":
-      return "رابط Cloudflare Worker غير مهيأ في البيئة.";
+      return "رابط خدمة الرفع غير مهيأ في البيئة.";
     default:
       return normalized.replace(/_/g, " ");
   }
@@ -1541,7 +1541,7 @@ export default function Settings() {
       );
       setDatabaseLoaded(true);
       if (manual) {
-        toast.error("تعذر فحص الخدمات لأن رابط الـ Worker غير مهيأ");
+        toast.error("تعذر فحص الخدمات لأن رابط خدمة الرفع غير مهيأ");
       }
       return;
     }
@@ -1571,7 +1571,7 @@ export default function Settings() {
 
   const handleSyncEmployeeDirectory = async () => {
     if (!databaseWorkerUrl) {
-      toast.error("تعذر تنفيذ المزامنة لأن رابط الـ Worker غير مهيأ");
+      toast.error("تعذر تنفيذ المزامنة لأن رابط خدمة الرفع غير مهيأ");
       return;
     }
 
@@ -2379,7 +2379,7 @@ export default function Settings() {
     const normalizedLinkedUserUid = String(linkedUserUid || "").trim();
     if (!normalizedLinkedUserUid) {
       throw new Error(
-        "ربط بروفايل الموظف يتطلب وجود حساب مستخدم مرتبط حتى نثبت الـ uid الصحيح."
+        "ربط ملف الموظف يتطلب وجود حساب مستخدم مطابق لتأكيد الربط الصحيح."
       );
     }
 
@@ -3426,16 +3426,16 @@ export default function Settings() {
         : service.status;
       const fallbackDetail =
         card.key === "d1"
-          ? "المرجع: maedin-documents"
+          ? "المرجع: خدمة الوثائق"
           : card.key === "r2"
-            ? "المرجع: maedin-storage"
-            : "المرجع: upload.maedin.workers.dev";
+            ? "المرجع: خدمة المستندات"
+            : "المرجع: خدمة معالجة الرفع";
 
       return {
         ...card,
         subtitle:
           card.key === "worker" && databaseWorkerUrl
-            ? databaseWorkerUrl
+            ? "مهيأة لاستقبال الملفات"
             : card.subtitle,
         status,
         statusLabel: getDatabaseStatusLabel(status),
@@ -3537,7 +3537,7 @@ export default function Settings() {
         ? `آخر فحص ناجح/متاح: ${formatDatabaseTimestamp(databaseDashboard.checkedAt)}.`
         : databaseLoaded
           ? "لم يتم الحصول بعد على قراءة ناجحة من خدمات التخزين."
-          : "جارٍ تنفيذ أول فحص لخدمات Cloudflare."
+          : "جارٍ تنفيذ أول فحص لخدمات التخزين."
     );
     return notes;
   }, [databaseDashboard.checkedAt, databaseLoaded]);
@@ -4111,15 +4111,15 @@ export default function Settings() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="staff">موظف (staff)</SelectItem>
+                    <SelectItem value="staff">موظف</SelectItem>
                     <SelectItem value="hr">
-                      الموارد البشرية (hr)
+                      الموارد البشرية
                     </SelectItem>
                     <SelectItem value="accountant">
-                      محاسب (accountant)
+                      محاسب
                     </SelectItem>
-                    <SelectItem value="admin">أدمن (admin)</SelectItem>
-                    <SelectItem value="owner">المالك (owner)</SelectItem>
+                    <SelectItem value="admin">مشرف</SelectItem>
+                    <SelectItem value="owner">المالك</SelectItem>
                   </SelectContent>
                 </Select>
               </SettingsSelectField>
@@ -4491,12 +4491,12 @@ export default function Settings() {
                 panel={
                   <SettingsHeroPanel
                     status={recruitment.isPublished ? "منشور" : "متوقف"}
-                    title="الربط مباشر مع الصفحة العامة"
-                    description="يعتمد هذا القسم على المستند settings/recruitment، لذلك أي حفظ هنا ينعكس مباشرة على صفحة /careers ويغيّر ترتيب الحقول ونوعها كما هو."
+                    title="الربط مع صفحة التوظيف العامة"
+                    description="تنعكس إعدادات نموذج التوظيف مباشرة على صفحة التوظيف العامة، بما يشمل ترتيب الحقول وأنواعها."
                     metrics={[
                       {
-                        label: "مسار الصفحة",
-                        value: "/careers",
+                        label: "صفحة التوظيف",
+                        value: "صفحة التوظيف العامة",
                         helper: "الصفحة العامة الظاهرة للزوار",
                       },
                       {
@@ -4556,8 +4556,8 @@ export default function Settings() {
                         <Globe className="h-4 w-4" />
                         <AlertTitle>آلية الانعكاس المباشر</AlertTitle>
                         <AlertDescription className="leading-7">
-                          يتم حفظ تعريف الحقول في مستند إعدادات واحد، والصفحة
-                          العامة تقرأه مباشرة من Firestore. هذا يجعل الداشبورد
+                          يتم حفظ تعريف الحقول في إعدادات النموذج، والصفحة
+                          العامة تقرأه مباشرة من إعدادات المنصة. هذا يجعل الداشبورد
                           هو محرر النموذج، والصفحة العامة هي مكان التعبئة فقط.
                         </AlertDescription>
                       </Alert>
@@ -4565,7 +4565,7 @@ export default function Settings() {
 
                     <div className="rounded-[26px] border border-slate-200/80 bg-slate-50/70 p-5">
                       <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-                        Snapshot
+                        ملخص الإعدادات
                       </div>
 
                       <div className="mt-5 space-y-3">
@@ -4774,7 +4774,7 @@ export default function Settings() {
 
                                 {field.type !== "date" ? (
                                   <SettingsField
-                                    label="Placeholder"
+                                    label="النص التوضيحي داخل الحقل"
                                     description="نص إرشادي داخل الحقل عند الحاجة."
                                     value={field.placeholder || ""}
                                     onChange={(value) =>
@@ -4787,11 +4787,11 @@ export default function Settings() {
                                 ) : (
                                   <div className="space-y-3">
                                     <Label className="text-[13px] font-semibold text-slate-900">
-                                      Placeholder
+                                      النص التوضيحي داخل الحقل
                                     </Label>
                                     <div className="rounded-[20px] border border-slate-200 bg-slate-50/70 px-4 py-4 text-sm leading-7 text-slate-500">
-                                      حقول التاريخ تستخدم Date Picker مباشر، لذلك
-                                      لا يظهر الـ Placeholder عادة في الواجهة.
+                                      حقول التاريخ تستخدم أداة اختيار التاريخ، لذلك
+                                      لا يظهر النص التوضيحي عادة داخل الواجهة.
                                     </div>
                                   </div>
                                 )}
@@ -4950,7 +4950,7 @@ export default function Settings() {
                   icon={Globe}
                   eyebrow="الوحدة 03"
                   title="معاينة الصفحة العامة"
-                  description="معاينة سريعة لنفس الحقول التي ستظهر للزائر في صفحة /careers، مع الحفاظ على الترتيب الحالي للنموذج."
+                  description="معاينة سريعة لنفس الحقول التي ستظهر للزائر في صفحة التوظيف العامة، مع الحفاظ على الترتيب الحالي للنموذج."
                 >
                   {recruitment.fields.length ? (
                     <div className="rounded-[30px] border border-slate-200/80 bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] p-6 shadow-[0_20px_52px_-40px_rgba(15,23,42,0.25)] sm:p-8">
@@ -5067,46 +5067,46 @@ export default function Settings() {
           getDatabaseStatusTone={getDatabaseStatusTone}
           hero={
             <SettingsTabHero
-              eyebrow="نظرة عامة على البنية"
-              title="حالة نظام التخزين"
-              description="هذه اللوحة تعرض حالة خدمات Cloudflare (Worker, D1, R2)، مع توضيح الجاهزية، الأخطاء، والمؤشرات التشغيلية للنظام."
+              eyebrow="نظرة عامة"
+              title="حالة خدمات التخزين"
+              description="تعرض هذه اللوحة حالة خدمات التخزين والملفات، مع توضيح الجاهزية والأخطاء والمؤشرات التشغيلية."
               stats={[
                 {
                   icon: Database,
-                  label: "Healthy",
+                  label: "الخدمات السليمة",
                   value: formatNumberEN(databaseHealthyServicesCount),
                   helper: "الخدمات السليمة حاليًا",
                 },
                 {
                   icon: Files,
-                  label: "Metrics",
+                  label: "المؤشرات",
                   value: formatNumberEN(databaseActiveMetricCount),
                   helper: "المؤشرات التي لها بيانات",
                 },
                 {
                   icon: ServerCog,
-                  label: "Status",
+                  label: "الحالة",
                   value: databaseRefreshing ? "جارٍ الفحص" : "مباشر",
                   helper: "حالة القراءة الحالية",
                 },
               ]}
               panel={
                 <SettingsHeroPanel
-                  status={databaseRefreshing ? "جارٍ الفحص" : "Cloudflare"}
+                  status={databaseRefreshing ? "جارٍ الفحص" : "خدمات التخزين"}
                   title="مراقبة الخدمات"
                   description="تعرض هذه اللوحة حالة الخدمات المرتبطة بالتخزين، وتساعدك على معرفة إذا كانت البنية جاهزة أو تحتاج تدخل."
                   metrics={[
                     {
-                      label: "Worker",
+                      label: "خدمة المعالجة",
                       value: getDatabaseStatusLabel(
                         databaseRefreshing
                           ? "checking"
                           : databaseDashboard.services.worker.status
                       ),
-                      helper: "حالة خدمة Cloudflare Worker",
+                      helper: "حالة خدمة معالجة الملفات",
                     },
                     {
-                      label: "D1 / R2",
+                      label: "البيانات والملفات",
                       value: `${getDatabaseStatusLabel(
                         databaseRefreshing
                           ? "checking"
@@ -5440,7 +5440,7 @@ export default function Settings() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="create">
-                          إنشاء سجل موظف جديد بنفس uid
+                          إنشاء سجل موظف جديد مرتبط بالحساب
                         </SelectItem>
                         <SelectItem value="existing">
                           ربط بسجل موظف موجود
@@ -5484,9 +5484,7 @@ export default function Settings() {
                     <div className="space-y-1">
                       <Label>طريقة الإنشاء</Label>
                       <div className="rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground">
-                        سيتم إنشاء سجل داخل <code>employees</code> وربطه بنفس{" "}
-                        <code>uid</code> عند الحفظ إذا تم العثور على حساب مستخدم
-                        مطابق لهذا البريد.
+                        سيتم إنشاء سجل موظف وربطه بحساب المستخدم عند الحفظ إذا وُجد حساب مطابق لهذا البريد.
                       </div>
                     </div>
                   )}
@@ -5501,18 +5499,18 @@ export default function Settings() {
 
                   <div className="grid gap-3 md:grid-cols-3">
                     <div className="rounded-[14px] border border-white/80 bg-white px-3 py-3">
-                      <div className="text-[11px] text-slate-500">المصدر التشغيلي</div>
+                      <div className="text-[11px] text-slate-500">مصدر الربط</div>
                       <div className="mt-1 text-sm font-semibold text-slate-900 break-all">
                         {adminEmployeeLinkMode === "existing"
-                          ? String(adminForm.linkedEmployeeId || "employees/{id}")
-                          : "employees/{linkedUid}"}
+                          ? String(adminForm.linkedEmployeeId ? "سجل موظف مرتبط" : "سجل موظف غير محدد")
+                          : "سجل موظف جديد مرتبط بالحساب"}
                       </div>
                     </div>
 
                     <div className="rounded-[14px] border border-white/80 bg-white px-3 py-3">
                       <div className="text-[11px] text-slate-500">الدور الحالي</div>
                       <div className="mt-1 text-sm font-semibold text-slate-900">
-                        {adminForm.roleKey || "staff"}
+                        {getRoleDisplayLabel(adminForm.roleKey) || "موظف"}
                       </div>
                     </div>
 
@@ -5579,18 +5577,18 @@ export default function Settings() {
                 </div>
                 <p className="text-xs text-muted-foreground">
                   يتم العرض هنا بناءً على الصلاحيات الفعلية: صلاحيات الدور
-                  الأساسية مع أي overrides محفوظة للحساب.
+                  الأساسية مع أي استثناءات محفوظة للحساب.
                 </p>
                 <div className="flex flex-wrap gap-2">
                   <Badge variant="secondary">
-                    Defaults:{" "}
+                    الصلاحيات الافتراضية:{" "}
                     {getRoleDefaultPermissionKeys(adminForm.roleKey).length}
                   </Badge>
                   <Badge variant="secondary">
                     الفعلية: {adminFormEffectivePermissions.length}
                   </Badge>
                   <Badge variant="outline">
-                    Overrides: +
+                    الاستثناءات: +
                     {adminFormPermissionOverrides.permissionsAllow.length} / -
                     {adminFormPermissionOverrides.permissionsDeny.length}
                   </Badge>
@@ -5598,7 +5596,7 @@ export default function Settings() {
               </div>
 
               <div className="space-y-2">
-                <Label>ملخص الـ Overrides</Label>
+                <Label>ملخص الاستثناءات</Label>
                 <div className="flex flex-wrap gap-2 rounded-lg border border-dashed p-3 min-h-16">
                   {adminFormPermissionOverrides.permissionsAllow.map(
                     permissionKey => (
@@ -5606,7 +5604,7 @@ export default function Settings() {
                         key={`override-allow-${permissionKey}`}
                         variant="secondary"
                       >
-                        + {getPermissionLabel(permissionKey)} ({permissionKey})
+                        + {getPermissionLabel(permissionKey)}
                       </Badge>
                     )
                   )}
@@ -5616,7 +5614,7 @@ export default function Settings() {
                         key={`override-deny-${permissionKey}`}
                         variant="outline"
                       >
-                        - {getPermissionLabel(permissionKey)} ({permissionKey})
+                        - {getPermissionLabel(permissionKey)}
                       </Badge>
                     )
                   )}
@@ -5639,7 +5637,7 @@ export default function Settings() {
                       adminFormPermissionOverrides.permissionsDeny.length === 0
                     }
                   >
-                    إعادة ضبط الـ Overrides
+                    إعادة ضبط الاستثناءات
                   </Button>
                 </div>
               </div>

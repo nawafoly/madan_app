@@ -153,7 +153,7 @@ export default function SettingsGeneralTab({
                       : "border-amber-400/30 bg-amber-400/10 text-amber-200"
                   )}
                 >
-                  {appValidation.isValid ? "Stable" : "Needs Review"}
+                  {appValidation.isValid ? "مستقر" : "يحتاج مراجعة"}
                 </Badge>
               </div>
 
@@ -175,7 +175,7 @@ export default function SettingsGeneralTab({
                       ? "لا توجد ملاحظات حرجة"
                       : `${formatNumberEN(appIssuesCount)} ملاحظات`
                   }
-                  helper="نفس الحقول ستُحفظ إلى settings/app"
+                  helper="سيتم حفظ هذه الإعدادات ضمن إعدادات المنصة."
                 />
               </div>
             </div>

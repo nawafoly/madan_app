@@ -135,6 +135,9 @@ export interface ProjectDoc {
   // Financials
   targetAmount: number;
   currentAmount: number;
+  coverageRate?: number;
+  baseCoveredAmount?: number;
+  investmentsAmount?: number;
   pendingAmount?: number;
   minInvestment: number;
   annualReturn: number;
@@ -147,6 +150,7 @@ export interface ProjectDoc {
   duration?: number; // legacy (months)
 
   investorsCount: number;
+  remainingInvestorsCount?: number;
 
   // Media
   coverImage: string;
@@ -338,6 +342,13 @@ export interface UserMetaDoc {
 
 export interface Project extends ProjectDoc {
   id: string;
+}
+
+export interface ProjectInput extends Partial<ProjectDoc> {
+  coverageRate?: number;
+  baseCoveredAmount?: number;
+  investmentsAmount?: number;
+  remainingInvestorsCount?: number;
 }
 
 export interface Investment extends InvestmentDoc {

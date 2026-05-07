@@ -24,6 +24,7 @@ import { getUserDisplayName } from "@/lib/investorIdentity";
 import { deriveInvestmentStage } from "@/lib/investmentStage";
 import { getRoleDisplayLabel } from "@/lib/ownerAccounts";
 import { buildProjectsMap, getProjectDisplayTitle } from "@/lib/projectDisplay";
+import { getProjectComputedAmounts } from "@/lib/projectAmounts";
 import { normalizeLinkId } from "@/lib/requestInvestmentLink";
 import { resolveUserAccountStatus } from "@/lib/userAccountStatus";
 import { cn } from "@/lib/utils";
@@ -1100,18 +1101,16 @@ export default function MyInvestmentsRedesign() {
               </div>
 
               <p className="leading-8 text-muted-foreground">
-                الحساب مسجل دخول، لكن الدور الحالي ليس <b>client</b>.
+                الحساب مسجل دخول، لكن صلاحياته الحالية لا تتيح عرض لوحة المستثمر.
                 {isGuest ? (
                   <>
                     <br />
-                    أنت الآن <b>Guest</b> ويمكنك تصفح المشاريع، لكن صفحة الاستثمارات
+                    يمكنك تصفح المشاريع، لكن صفحة الاستثمارات
                     الكاملة مخصصة لحسابات المستثمرين فقط.
                   </>
                 ) : null}
                 <br />
-                إذا كان هذا الحساب يجب أن يكون مستثمرًا، حدّث الدور في:
-                <br />
-                <b>users/{user.uid}.role = "client"</b>
+                إذا كان هذا الحساب مخصصًا للاستثمار، يرجى التواصل مع إدارة المنصة لتحديث الصلاحيات.
               </p>
 
               <div className="grid gap-3">
@@ -2026,10 +2025,10 @@ function ProjectPreview({ project }: { project: Project }) {
   const title =
     getProjectDisplayTitle(project, project?.titleAr, "فرصة استثمارية") ||
     "فرصة استثمارية";
-  const targetAmount = Number(project?.targetAmount || 0);
-  const currentAmount = Number(project?.currentAmount || 0);
-  const progress =
-    targetAmount > 0 ? Math.min(100, (currentAmount / targetAmount) * 100) : 0;
+  const computedAmounts = getProjectComputedAmounts(project);
+  const targetAmount = computedAmounts.targetAmount;
+  const currentAmount = computedAmounts.currentAmount;
+  const progress = computedAmounts.progressPercent;
 
   return (
     <div className="rounded-[24px] border border-slate-200 bg-slate-50/70 p-4">

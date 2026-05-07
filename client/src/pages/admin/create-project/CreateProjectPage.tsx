@@ -16,6 +16,7 @@ import {
   FINAL_SETTINGS_SECTION_ID,
   SECTION_DEFINITIONS,
   buildFinalSettingsMeta,
+  buildCoverageAmounts,
   buildSectionStatusMap,
   buildCompletionContentPayload,
   cleanStr,
@@ -59,6 +60,8 @@ export default function CreateProjectPage() {
     galleryText: "",
     targetAmount: "",
     currentAmount: "0",
+    coverageRate: "0",
+    investmentsAmount: "0",
     minInvestment: "",
     annualReturn: "",
     duration: "",
@@ -281,6 +284,8 @@ export default function CreateProjectPage() {
           galleryText: "",
           targetAmount: "",
           currentAmount: "0",
+          coverageRate: "0",
+          investmentsAmount: "0",
           minInvestment: "",
           annualReturn: "",
           duration: "",
@@ -522,6 +527,12 @@ export default function CreateProjectPage() {
     const locEn = cleanStr(formData.locationEn);
     const issueNumber = cleanStr(formData.issueNumber);
     const isVip = formData.isVip === "true" || formData.projectType === "vip_exclusive";
+    const coverageAmounts = buildCoverageAmounts({
+      targetAmount: formData.targetAmount,
+      coverageRate: formData.coverageRate,
+      investmentsAmount: formData.investmentsAmount,
+      minInvestment: formData.minInvestment,
+    });
 
     try {
       setSaving(true);
@@ -548,12 +559,16 @@ export default function CreateProjectPage() {
         milestones: parsedMilestones.items,
         faq: parsedFaq.items,
         targetAmount: toNumOrZero(formData.targetAmount),
-        currentAmount: toNumOrZero(formData.currentAmount),
+        coverageRate: toNumOrZero(formData.coverageRate),
+        baseCoveredAmount: coverageAmounts.baseCoveredAmount,
+        investmentsAmount: coverageAmounts.investmentsAmount,
+        currentAmount: coverageAmounts.currentAmount,
         minInvestment: toNumOrZero(formData.minInvestment),
         annualReturn: toNumOrZero(formData.annualReturn),
         investmentReturn: toNumOrZero(formData.annualReturn),
         duration: toNumOrZero(formData.duration),
-        investorsCount: toNumOrZero(formData.investorsCount),
+        investorsCount: 0,
+        remainingInvestorsCount: coverageAmounts.remainingInvestorsCount,
         progressMode: formData.progressMode,
         progressFundingWeight: toNumOrZero(formData.progressFundingWeight),
         progressMilestonesWeight: toNumOrZero(formData.progressMilestonesWeight),

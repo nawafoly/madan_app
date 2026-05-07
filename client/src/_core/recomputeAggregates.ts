@@ -5,6 +5,7 @@ import {
   query,
   where,
   getDocs,
+  getDoc,
   doc,
   serverTimestamp,
 } from "firebase/firestore";
@@ -19,7 +20,10 @@ import {
 type Totals = {
   currentAmount: number;
   investorsCount: number;
+  remainingInvestorsCount?: number;
   pendingAmount?: number;
+  baseCoveredAmount?: number;
+  investmentsAmount?: number;
 };
 
 type RecomputeProjectAuditContext = {
@@ -50,9 +54,17 @@ export async function recomputeProjectAggregatesClient(
   if (!pid) throw new Error("projectId missing");
 
   const q = query(collection(db, "investments"), where("projectId", "==", pid));
-  const snap = await getDocs(q);
+  const projectRef = doc(db, "projects", pid);
+  const [snap, projectSnap] = await Promise.all([getDocs(q), getDoc(projectRef)]);
+  const projectData: any = projectSnap.exists() ? projectSnap.data() : {};
+  const targetAmount = toNum(projectData.targetAmount);
+  const coverageRate = toNum(projectData.coverageRate);
+  const minInvestment = toNum(
+    projectData.minInvestment ?? projectData.minInvestmentAmount
+  );
+  const baseCoveredAmount = (targetAmount * coverageRate) / 100;
 
-  let currentAmount = 0;
+  let investmentsAmount = 0;
   let pendingAmount = 0;
   const investors = new Set<string>();
 
@@ -66,18 +78,28 @@ export async function recomputeProjectAggregatesClient(
         : toNum(inv.amount);
 
     if (COUNTED.has(status)) {
-      currentAmount += amountCounted;
+      investmentsAmount += amountCounted;
       if (inv.investorUid) investors.add(String(inv.investorUid));
     } else if (PENDING.has(status)) {
       pendingAmount += amountCounted;
     }
   });
 
+  const currentAmount = baseCoveredAmount + investmentsAmount;
+  const remainingAmount = Math.max(targetAmount - currentAmount, 0);
+  const remainingInvestorsCount =
+    minInvestment > 0 && remainingAmount > 0
+      ? Math.ceil(remainingAmount / minInvestment)
+      : 0;
+
   await auditedUpdateDoc({
-    ref: doc(db, "projects", pid),
+    ref: projectRef,
     data: {
+      baseCoveredAmount,
+      investmentsAmount,
       currentAmount,
       investorsCount: investors.size,
+      remainingInvestorsCount,
       pendingAmount,
       updatedAt: serverTimestamp(),
     },
@@ -102,5 +124,12 @@ export async function recomputeProjectAggregatesClient(
     },
   });
 
-  return { currentAmount, investorsCount: investors.size, pendingAmount };
+  return {
+    currentAmount,
+    investorsCount: investors.size,
+    remainingInvestorsCount,
+    pendingAmount,
+    baseCoveredAmount,
+    investmentsAmount,
+  };
 }

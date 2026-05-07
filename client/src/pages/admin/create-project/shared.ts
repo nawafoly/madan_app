@@ -96,6 +96,8 @@ export type FormDataState = {
   galleryText: string;
   targetAmount: string;
   currentAmount: string;
+  coverageRate: string;
+  investmentsAmount: string;
   minInvestment: string;
   annualReturn: string;
   duration: string;
@@ -400,6 +402,35 @@ export function serializeProjectEditorSnapshot(snapshot: ProjectEditorSnapshot) 
 export function toNumOrZero(v: unknown) {
   const n = Number(cleanStr(v).replace(/,/g, ""));
   return Number.isFinite(n) ? n : 0;
+}
+
+export function buildCoverageAmounts({
+  targetAmount,
+  coverageRate,
+  investmentsAmount,
+  minInvestment,
+}: {
+  targetAmount: unknown;
+  coverageRate: unknown;
+  investmentsAmount: unknown;
+  minInvestment?: unknown;
+}) {
+  const target = toNumOrZero(targetAmount);
+  const rate = toNumOrZero(coverageRate);
+  const investments = toNumOrZero(investmentsAmount);
+  const min = toNumOrZero(minInvestment);
+  const baseCoveredAmount = (target * rate) / 100;
+  const currentAmount = baseCoveredAmount + investments;
+  const remainingAmount = Math.max(target - currentAmount, 0);
+  const remainingInvestorsCount =
+    min > 0 && remainingAmount > 0 ? Math.ceil(remainingAmount / min) : 0;
+
+  return {
+    baseCoveredAmount,
+    investmentsAmount: investments,
+    currentAmount,
+    remainingInvestorsCount,
+  };
 }
 
 export function splitLines(text: string) {

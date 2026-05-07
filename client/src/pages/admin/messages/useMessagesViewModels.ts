@@ -1,5 +1,6 @@
 import { createElement, useMemo, type ReactNode } from "react";
 import { getProjectDisplayTitleById } from "@/lib/projectDisplay";
+import { getProjectComputedAmounts } from "@/lib/projectAmounts";
 import {
   AlertTriangle,
   Building2,
@@ -106,8 +107,8 @@ export function useMessagesViewModels({
     const p = projectsMap[pid];
     if (!p) return null;
 
-    const target = helpers.toNum(p?.targetAmount);
-    const current = helpers.toNum(p?.currentAmount);
+    const { targetAmount: target, currentAmount: current } =
+      getProjectComputedAmounts(p);
     if (!target) return null;
     return Math.max(0, target - current);
   };

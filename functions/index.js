@@ -621,7 +621,13 @@ const recomputeProjectAggregates = async (projectId, auditContext = {}) => {
     .where("projectId", "==", pid)
     .get();
 
-  let currentAmount = 0;
+  const targetAmount = toNumberSafe(beforeProject.targetAmount);
+  const coverageRate = toNumberSafe(beforeProject.coverageRate);
+  const minInvestment = toNumberSafe(
+    beforeProject.minInvestment ?? beforeProject.minInvestmentAmount
+  );
+  const baseCoveredAmount = (targetAmount * coverageRate) / 100;
+  let investmentsAmount = 0;
   let pendingAmount = 0; // optional
   const investors = new Set();
 
@@ -635,17 +641,27 @@ const recomputeProjectAggregates = async (projectId, auditContext = {}) => {
 
     // ✅ vNext: only active/completed are counted
     if (COUNTED_STATUSES.has(status)) {
-      currentAmount += amt;
+      investmentsAmount += amt;
       if (inv.investorUid) investors.add(String(inv.investorUid));
     } else if (PENDING_STATUSES.has(status)) {
       pendingAmount += amt;
     }
   });
 
+  const currentAmount = baseCoveredAmount + investmentsAmount;
+  const remainingAmount = Math.max(targetAmount - currentAmount, 0);
+  const remainingInvestorsCount =
+    minInvestment > 0 && remainingAmount > 0
+      ? Math.ceil(remainingAmount / minInvestment)
+      : 0;
+
   await projectRef.set(
     {
+      baseCoveredAmount,
+      investmentsAmount,
       currentAmount,
       investorsCount: investors.size,
+      remainingInvestorsCount,
       // optional field (safe to keep)
       pendingAmount,
       updatedAt: FieldValue.serverTimestamp(),
@@ -655,15 +671,25 @@ const recomputeProjectAggregates = async (projectId, auditContext = {}) => {
 
   const afterProject = {
     ...beforeProject,
+    baseCoveredAmount,
+    investmentsAmount,
     currentAmount,
     investorsCount: investors.size,
+    remainingInvestorsCount,
     pendingAmount,
   };
 
   const changes = diffAuditSnapshots(beforeProject, afterProject, {
     ignoreFields: ["updatedAt"],
   }).filter(change =>
-    ["currentAmount", "investorsCount", "pendingAmount"].includes(
+    [
+      "baseCoveredAmount",
+      "investmentsAmount",
+      "currentAmount",
+      "investorsCount",
+      "remainingInvestorsCount",
+      "pendingAmount",
+    ].includes(
       String(change.field || "")
     )
   );
@@ -706,9 +732,12 @@ const recomputeProjectAggregates = async (projectId, auditContext = {}) => {
 
   return {
     projectId: pid,
+    baseCoveredAmount,
+    investmentsAmount,
     currentAmount,
     pendingAmount,
     investorsCount: investors.size,
+    remainingInvestorsCount,
   };
 };
 

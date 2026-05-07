@@ -44,6 +44,7 @@ import {
   buildProjectsMap,
   getProjectDisplayTitleById,
 } from "@/lib/projectDisplay";
+import { getProjectComputedAmounts } from "@/lib/projectAmounts";
 import {
   buildUserIdentityIndex,
   getLinkedUserEmail,
@@ -1715,8 +1716,8 @@ export default function MessagesManagement() {
     const p = projectsMap[pid];
     if (!p) return null;
 
-    const target = toNum(p?.targetAmount);
-    const current = toNum(p?.currentAmount);
+    const { targetAmount: target, currentAmount: current } =
+      getProjectComputedAmounts(p);
     if (!target) return null;
     return Math.max(0, target - current);
   };

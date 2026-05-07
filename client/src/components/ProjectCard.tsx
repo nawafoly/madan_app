@@ -15,6 +15,7 @@ import {
   formatPercentEN,
   normalizeEnglishDigits,
 } from "@/lib/formatters";
+import { getProjectComputedAmounts } from "@/lib/projectAmounts";
 
 /**
  * ✅ Client-only Project type (NO DB / NO backend)
@@ -36,6 +37,9 @@ export type ProjectCardModel = {
 
   targetAmount?: number | string | null;
   currentAmount?: number | string | null;
+  coverageRate?: number | string | null;
+  baseCoveredAmount?: number | string | null;
+  investmentsAmount?: number | string | null;
 
   annualReturn?: number | string | null;
   duration?: number | string | null;
@@ -51,9 +55,8 @@ interface ProjectCardProps {
 
 export default function ProjectCard({ project }: ProjectCardProps) {
   const projectReference = getProjectBusinessId(project);
-  const progress = project.targetAmount
-    ? (Number(project.currentAmount || 0) / Number(project.targetAmount)) * 100
-    : 0;
+  const computedAmounts = getProjectComputedAmounts(project);
+  const progress = computedAmounts.progressPercent;
   const coverImage = normalizeProjectImagePath(project.coverImage);
 
   const getProjectTypeLabel = (type: string) => {
@@ -159,7 +162,7 @@ export default function ProjectCard({ project }: ProjectCardProps) {
             <div className="flex items-center justify-center gap-1 text-primary mb-1">
               <Users className="w-4 h-4" />
               <span className="text-lg font-bold">
-                {formatNumberEN(project.investorsCount ?? 0)}
+                {formatNumberEN(computedAmounts.remainingInvestorsCount)}
               </span>
             </div>
             <span className="text-xs text-muted-foreground">مستثمر</span>
@@ -181,8 +184,8 @@ export default function ProjectCard({ project }: ProjectCardProps) {
           <Progress value={Number.isFinite(progress) ? progress : 0} className="h-2" />
 
           <div className="flex justify-between text-xs text-muted-foreground">
-            <span>{formatCurrencyEN(Number(project.currentAmount || 0))}</span>
-            <span>{formatCurrencyEN(Number(project.targetAmount || 0))}</span>
+            <span>{formatCurrencyEN(computedAmounts.currentAmount)}</span>
+            <span>{formatCurrencyEN(computedAmounts.targetAmount)}</span>
           </div>
         </div>
       </CardContent>

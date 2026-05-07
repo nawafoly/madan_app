@@ -66,6 +66,7 @@ import {
   formatNumberEN,
   formatPercentEN,
 } from "@/lib/formatters";
+import { getProjectComputedAmounts } from "@/lib/projectAmounts";
 
 type BiLabel = { ar?: string; en?: string };
 type LabelValue = string | BiLabel;
@@ -130,6 +131,9 @@ type ProjectDoc = {
 
   targetAmount?: number;
   currentAmount?: number;
+  coverageRate?: number;
+  baseCoveredAmount?: number;
+  investmentsAmount?: number;
 
   minInvestment?: number;
   annualReturn?: number;
@@ -457,13 +461,13 @@ function humanizeFirestoreError(err: unknown): string {
   const e = err as Partial<FirestoreError> | undefined;
 
   if (e?.code === "permission-denied") {
-    return "صلاحيات Firestore تمنع تحميل المشاريع (permission-denied). راجع Rules الخاصة بـ projects.";
+    return "تعذر تحميل المشاريع بسبب صلاحيات الوصول. يرجى التواصل مع إدارة المنصة.";
   }
   if (e?.code === "failed-precondition") {
-    return "الاستعلام يحتاج Index في Firestore (failed-precondition). افتح Console وستجد رابط إنشاء الـ Index.";
+    return "تعذر تحميل المشاريع بسبب إعداد غير مكتمل في خدمة البيانات. يرجى التواصل مع إدارة المنصة.";
   }
   if (e?.code === "unauthenticated") {
-    return "غير مسجّل دخول (unauthenticated).";
+    return "يرجى تسجيل الدخول لعرض المشاريع.";
   }
 
   return "تعذر تحميل المشاريع";
@@ -726,9 +730,7 @@ export default function ProjectsPage() {
     project.projectType === "vip_exclusive";
 
   const progressPercent = (p: ProjectDoc) => {
-    const t = safeNumber(p.targetAmount);
-    if (!t) return 0;
-    return Math.min(100, (safeNumber(p.currentAmount) / t) * 100);
+    return getProjectComputedAmounts(p).progressPercent;
   };
 
   const blockedReason = useMemo(() => {
@@ -784,7 +786,7 @@ export default function ProjectsPage() {
   const publishedFundingCurrent = useMemo(
     () =>
       filteredPublished.reduce(
-        (sum, project) => sum + safeNumber(project.currentAmount),
+        (sum, project) => sum + getProjectComputedAmounts(project).currentAmount,
         0
       ),
     [filteredPublished]
@@ -1018,8 +1020,9 @@ export default function ProjectsPage() {
     p: ProjectDoc,
     mode: "published" | "draft" | "done"
   ) => {
-    const target = safeNumber(p.targetAmount);
-    const current = safeNumber(p.currentAmount);
+    const computedAmounts = getProjectComputedAmounts(p);
+    const target = computedAmounts.targetAmount;
+    const current = computedAmounts.currentAmount;
     const displayCurrent =
       mode === "done" && !current && target ? target : current;
     const progress = mode === "done" ? 100 : progressPercent(p);
@@ -1037,7 +1040,7 @@ export default function ProjectsPage() {
       : "";
     const annualReturn = safeNumber(p.annualReturn);
     const duration = safeNumber(p.duration);
-    const investors = safeNumber(p.investorsCount);
+    const investors = computedAmounts.remainingInvestorsCount;
     const minInvestment = safeNumber(p.minInvestment);
     const isVip =
       Boolean(p.vipOnly) ||
@@ -1542,8 +1545,9 @@ export default function ProjectsPage() {
    * The Card itself is now wrapped in Link, or the button is the link.
    */
   const ProjectCard = (p: ProjectDoc, mode: "published" | "draft" | "done") => {
-    const target = safeNumber(p.targetAmount);
-    const current = safeNumber(p.currentAmount);
+    const computedAmounts = getProjectComputedAmounts(p);
+    const target = computedAmounts.targetAmount;
+    const current = computedAmounts.currentAmount;
     const prog = mode === "done" ? 100 : progressPercent(p);
 
     const cover = getProjectImageSource(p);
@@ -1940,9 +1944,7 @@ export default function ProjectsPage() {
                           {published.loadError}
                         </div>
                         <div className="text-sm text-muted-foreground">
-                          ملاحظة: هذه الصفحة تحتاج مشروعات تحتوي على
-                          <span className="px-1 font-semibold">createdAt</span>
-                          بصيغة Timestamp.
+                          ملاحظة: تعذر ترتيب المشاريع بسبب نقص في بيانات تاريخ النشر.
                         </div>
                         <Button
                           variant="outline"
@@ -2342,9 +2344,7 @@ export default function ProjectsPage() {
                       <div className="font-semibold">{published.loadError}</div>
 
                       <div className="text-sm text-muted-foreground">
-                        ملاحظة: هذه الصفحة تحتاج مشاريع بها{" "}
-                        <span className="font-semibold">createdAt</span>{" "}
-                        (Timestamp).
+                        ملاحظة: تعذر ترتيب المشاريع بسبب نقص في بيانات تاريخ النشر.
                       </div>
 
                       <Button
