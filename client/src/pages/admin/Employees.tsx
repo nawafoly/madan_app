@@ -605,14 +605,14 @@ function EmployeeWorkspaceTabButton({
       type="button"
       onClick={onClick}
       className={cn(
-        "flex min-w-[140px] items-center justify-center gap-2 rounded-[18px] border px-4 py-3 text-sm font-semibold transition-all",
+        "relative flex h-9 items-center justify-center gap-1.5 whitespace-nowrap rounded-md border border-transparent border-b-2 px-3 text-xs font-semibold transition-all",
         active
-          ? "border-slate-900 bg-slate-900 text-white shadow-[0_18px_34px_-24px_rgba(15,23,42,0.62)]"
-          : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+          ? "border-b-[#F2B705] bg-[#F2B705]/10 text-[#030640]"
+          : "border-b-transparent bg-transparent text-slate-600 hover:bg-slate-50 hover:text-slate-950"
       )}
     >
       <Icon
-        className={cn("h-4 w-4", active ? "text-white" : "text-slate-500")}
+        className={cn("h-3.5 w-3.5", active ? "text-[#030640]" : "text-slate-500")}
       />
       <span>{label}</span>
     </button>
@@ -3515,29 +3515,29 @@ export default function EmployeesManagementPage() {
         </div>
 
         <div className="grid items-start gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
-          <Card className="self-start gap-0 border-slate-200/80 py-0">
-            <CardHeader className="border-b border-slate-100 bg-white/90 px-5 pb-5 pt-5">
-              <CardTitle className="flex items-center gap-2 text-xl text-slate-950">
-                <BriefcaseBusiness className="h-5 w-5 text-[#030640]" />
+          <Card className="flex max-h-none self-start overflow-hidden border-slate-200/80 py-0 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:flex-col">
+            <CardHeader className="shrink-0 border-b border-slate-100 bg-white/95 px-4 pb-4 pt-4">
+              <CardTitle className="flex items-center gap-2 text-lg text-slate-950">
+                <BriefcaseBusiness className="h-4 w-4 text-[#030640]" />
                 قائمة الموظفين
               </CardTitle>
-              <CardDescription className="text-sm leading-6 text-slate-500">
+              <CardDescription className="text-xs leading-5 text-slate-500">
                 اختر موظفًا لعرض ملفه الوظيفي وإدارة بياناته من نفس الصفحة.
               </CardDescription>
 
-              <div className="relative mt-3">
+              <div className="relative mt-2">
                 <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <Input
                   value={searchQuery}
                   onChange={event => setSearchQuery(event.target.value)}
                   placeholder="ابحث بالاسم أو البريد أو القسم"
-                  className="h-11 pr-9"
+                  className="h-9 pr-9 text-sm"
                 />
               </div>
             </CardHeader>
 
-            <CardContent className="px-5 pb-5 pt-4">
-              <div className="space-y-3">
+            <CardContent className="min-h-0 flex-1 overflow-y-auto px-4 pb-4 pt-3">
+              <div className="space-y-2">
                 {loading ? (
                   <div className="rounded-[24px] border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-500">
                     جاري تحميل الموظفين...
@@ -3559,16 +3559,16 @@ export default function EmployeesManagementPage() {
                         type="button"
                         onClick={() => setSelectedEmployeeId(card.employee.id)}
                         className={cn(
-                          "w-full rounded-[24px] border px-4 py-4 text-right transition-all",
+                          "w-full rounded-[18px] border px-3 py-3 text-right transition-all",
                           isActive
                             ? "border-[#F2B705]/50 bg-[#F2B705]/10 shadow-[0_20px_44px_-34px_rgba(242,183,5,0.55)]"
                             : "border-slate-200/80 bg-white hover:border-slate-300 hover:bg-slate-50/80"
                         )}
                       >
-                        <div className="space-y-3">
+                        <div className="space-y-2.5">
                           <div className="flex items-start justify-between gap-3">
                             <div className="space-y-1">
-                              <div className="text-base font-semibold text-slate-950">
+                              <div className="text-sm font-semibold text-slate-950">
                                 {card.profile.personal.name}
                               </div>
                               <div className="text-xs text-slate-500">
@@ -3592,7 +3592,7 @@ export default function EmployeesManagementPage() {
                             </Badge>
                           </div>
 
-                          <div className="grid gap-2 text-sm text-slate-600">
+                          <div className="grid gap-1.5 text-xs text-slate-600">
                             <div className="flex items-center justify-between gap-3">
                               <span className="text-slate-500">المسمى</span>
                               <span className="font-medium text-slate-900">
@@ -3664,17 +3664,13 @@ export default function EmployeesManagementPage() {
 
             {selectedEmployee && selectedEmployeeProfile ? (
               <div className="flex flex-col gap-6">
-                <Card className="order-0 sticky top-4 z-20 gap-0 overflow-hidden border-slate-200/80 bg-white/95 py-0 shadow-[0_22px_48px_-34px_rgba(15,23,42,0.3)] backdrop-blur">
-                  <CardHeader className="border-b border-slate-100 bg-[linear-gradient(135deg,rgba(255,255,255,0.98)_0%,rgba(244,247,255,0.95)_100%)] px-6 pt-6 pb-4">
-                    <div className="space-y-2">
-                      <CardTitle className="text-xl tracking-tight text-slate-950">
-                        أقسام ملف الموظف
-                      </CardTitle>
+                <Card className="order-0 sticky top-4 z-20 gap-0 overflow-hidden border-slate-200/80 bg-white/95 py-0 shadow-[0_18px_38px_-30px_rgba(15,23,42,0.28)] backdrop-blur">
+                  <CardContent className="px-4 py-3">
+                    <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                      <ShieldCheck className="h-3.5 w-3.5 text-[#030640]" />
+                      أقسام ملف الموظف
                     </div>
-                  </CardHeader>
-
-                  <CardContent className="px-6 pb-5 pt-4">
-                    <div className="mt-4 flex flex-wrap gap-2">
+                    <div className="flex gap-1.5 overflow-x-auto pb-1">
                       {EMPLOYEE_WORKSPACE_SECTIONS.map(section => (
                         <EmployeeWorkspaceTabButton
                           key={section.key}
