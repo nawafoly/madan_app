@@ -14,6 +14,10 @@ import {
 } from "lucide-react";
 import { db } from "@/_core/firebase";
 import { doc, getDoc } from "firebase/firestore";
+import { useSiteContent } from "@/contexts/SiteContentContext";
+import {
+  getSitePageMediaUrl,
+} from "@/lib/siteContent";
 
 type AboutStats = {
   projects: string;
@@ -208,6 +212,7 @@ function SectionIntro({
 }
 
 export default function About() {
+  const { content } = useSiteContent();
   const [statsData, setStatsData] = useState<AboutStats>({
     projects: "15+",
     investors: "500+",
@@ -297,6 +302,18 @@ export default function About() {
       suffix: parsedStats.totalInvestment.suffix,
     },
   ];
+  const aboutHeroImage = getSitePageMediaUrl(
+    content,
+    "about",
+    "aboutHeroImage",
+    "/about-poto1.jpg"
+  );
+  const aboutStoryImage = getSitePageMediaUrl(
+    content,
+    "about",
+    "aboutStoryParallax",
+    "/about-poto1.jpg"
+  );
 
   return (
     <div
@@ -316,9 +333,14 @@ export default function About() {
         <section className="relative min-h-[100svh] overflow-hidden">
           <div className="absolute inset-0">
             <img
-              src="/about-poto1.jpg"
+              src={aboutHeroImage}
               alt="عن معدن"
               className="h-full w-full object-cover object-center"
+              onError={event => {
+                const image = event.currentTarget;
+                if (image.src.endsWith("/about-poto1.jpg")) return;
+                image.src = "/about-poto1.jpg";
+              }}
             />
           </div>
           <div className="absolute inset-0 bg-[linear-gradient(112deg,rgba(6,14,24,0.92)_0%,rgba(8,17,28,0.84)_42%,rgba(9,20,33,0.64)_100%)]" />
@@ -374,9 +396,14 @@ export default function About() {
             <div className="grid gap-6 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)] lg:items-center">
               <div className="relative min-h-[460px] overflow-hidden rounded-[34px] border border-slate-200/70 bg-slate-950 shadow-[0_30px_90px_-50px_rgba(11,23,38,0.52)]">
                 <img
-                  src="/about-poto1.jpg"
+                  src={aboutStoryImage}
                   alt="معدن"
                   className="absolute inset-0 h-full w-full object-cover"
+                  onError={event => {
+                    const image = event.currentTarget;
+                    if (image.src.endsWith("/about-poto1.jpg")) return;
+                    image.src = "/about-poto1.jpg";
+                  }}
                 />
                 <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(6,14,24,0.16)_0%,rgba(6,14,24,0.3)_24%,rgba(6,14,24,0.92)_100%)]" />
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(242,174,48,0.18),transparent_34%)]" />

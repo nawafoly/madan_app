@@ -61,6 +61,8 @@ import {
 import type { FirestoreError } from "firebase/firestore";
 import { db } from "@/_core/firebase";
 import { getProjectBusinessId } from "@/lib/businessIds";
+import { useSiteContent } from "@/contexts/SiteContentContext";
+import { getSitePageMediaUrl } from "@/lib/siteContent";
 import {
   formatCurrencyEN,
   formatNumberEN,
@@ -613,19 +615,26 @@ function usePagedProjects(opts: {
 function CurvedProjectsHero({
   title,
   desc,
+  imageSrc,
   children,
 }: {
   title: ReactNode;
   desc: string;
+  imageSrc: string;
   children: ReactNode;
 }) {
   return (
     <section className="relative z-0 min-h-[100svh] overflow-hidden bg-[#050b14] text-white">
       <div className="pointer-events-none absolute inset-0">
         <img
-          src="/HOOM-HERO7.jpg"
+          src={imageSrc}
           alt="Projects Hero"
           className="h-full w-full object-cover object-center"
+          onError={event => {
+            const image = event.currentTarget;
+            if (image.src.endsWith("/HOOM-HERO7.jpg")) return;
+            image.src = "/HOOM-HERO7.jpg";
+          }}
         />
       </div>
       {/* الغطاء الداكن */}
@@ -671,6 +680,7 @@ function CurvedProjectsHero({
 }
 
 export default function ProjectsPage() {
+  const { content } = useSiteContent();
   const publishedSlider = useDragScroll<HTMLDivElement>();
   const upcomingSlider = useDragScroll<HTMLDivElement>();
 
@@ -693,6 +703,12 @@ export default function ProjectsPage() {
   const [qText, setQText] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [sortBy, setSortBy] = useState("newest");
+  const projectsHeroImage = getSitePageMediaUrl(
+    content,
+    "projects",
+    "projectsHeroImage",
+    "/HOOM-HERO7.jpg"
+  );
 
   useEffect(() => {
     (async () => {
@@ -1760,6 +1776,7 @@ export default function ProjectsPage() {
     <div className="rsg-page w-full bg-[linear-gradient(180deg,#f8fafc_0%,#eef2f7_42%,#ffffff_100%)] text-foreground">
       <div className="pt-0">
         <CurvedProjectsHero
+          imageSrc={projectsHeroImage}
           title={
             <>
               مشاريعنا الاستثمارية
@@ -2223,6 +2240,7 @@ export default function ProjectsPage() {
     <div className="rsg-page w-full bg-transparent text-foreground">
       <div className="pt-0">
         <CurvedProjectsHero
+          imageSrc={projectsHeroImage}
           title={
             <>
               مشاريعنا الاستثمارية

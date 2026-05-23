@@ -1009,7 +1009,7 @@
     width: 64px;
     height: 52px;
 
-    background-image: url("/logo.png");
+    background-image: var(--site-logo-url, url("/logo.png"));
     background-repeat: no-repeat;
     background-position: center;
     background-size: contain;

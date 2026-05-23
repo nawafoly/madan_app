@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { Link, useLocation } from "wouter";
 import { Globe, LogOut, Search } from "lucide-react";
 
@@ -10,11 +10,14 @@ import {
   useAuth,
 } from "@/_core/hooks/useAuth";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useSiteContent } from "@/contexts/SiteContentContext";
+import { getSiteLogoAlt, getSiteLogoUrl } from "@/lib/siteContent";
 
 export default function Header() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { language, toggleLanguage } = useLanguage();
+  const { content } = useSiteContent();
   const { user, logout } = useAuth();
   const [location, setLocation] = useLocation();
 
@@ -90,6 +93,11 @@ export default function Header() {
   };
 
   const navBtnClass = "h-10 px-4 rounded-full text-[14px] font-semibold";
+  const logoUrl = getSiteLogoUrl(content, "light", "/logo.png");
+  const logoAlt = getSiteLogoAlt(content, "light", "MAEDIN logo");
+  const navLogoStyle = {
+    "--site-logo-url": `url(${JSON.stringify(logoUrl)})`,
+  } as CSSProperties;
 
   const activeHref = useMemo(() => {
     const isActive = (href: string) => {
@@ -138,7 +146,11 @@ export default function Header() {
     <>
       <header className={`rsg-nav ${isScrolled ? "is-scrolled" : ""}`}>
         <div className="container">
-          <div ref={innerRef} className="rsg-nav__inner rsg-nav__inner--bulge">
+          <div
+            ref={innerRef}
+            className="rsg-nav__inner rsg-nav__inner--bulge"
+            style={navLogoStyle}
+          >
             <div className="rsg-nav__slot rsg-nav__slot--left flex items-center gap-1">
               <button
                 type="button"
@@ -196,9 +208,14 @@ export default function Header() {
 
                 <Link href="/" className="flex items-center justify-center">
                   <img
-                    src="/logo.png"
-                    alt="MAEDIN logo"
+                    src={logoUrl}
+                    alt={logoAlt}
                     className="rsg-nav__logo"
+                    onError={event => {
+                      const image = event.currentTarget;
+                      if (image.src.endsWith("/logo.png")) return;
+                      image.src = "/logo.png";
+                    }}
                   />
                 </Link>
 

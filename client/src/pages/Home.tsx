@@ -13,6 +13,10 @@ import {
 } from "lucide-react";
 import { useDragScroll } from "@/hooks/useDragScroll";
 import { normalizePublicAssetPath } from "@/lib/publicAssets";
+import { useSiteContent } from "@/contexts/SiteContentContext";
+import {
+  getSitePageMediaUrl,
+} from "@/lib/siteContent";
 import {
   collection,
   doc,
@@ -200,6 +204,7 @@ function SectionIntro({
 
 export default function Home() {
   const [location] = useLocation();
+  const { content } = useSiteContent();
   const [featured, setFeatured] = useState<HomeProject[]>([]);
   const [projects, setProjects] = useState<HomeProject[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -241,6 +246,18 @@ export default function Home() {
       label: "متوسط مدة المشروع",
     },
   ];
+  const homeHeroVideo = getSitePageMediaUrl(
+    content,
+    "home",
+    "homeHeroVideo",
+    "/about-hero.mp4"
+  );
+  const homeStoryImage = getSitePageMediaUrl(
+    content,
+    "home",
+    "homeServicesIllustration",
+    STORY_IMG
+  );
 
   const projectCard = (project: HomeProject | undefined, isFeatured = false) => {
     if (!project) return null;
@@ -444,7 +461,7 @@ export default function Home() {
         <section className="relative h-screen min-h-screen min-h-[100svh] overflow-hidden">
           <div className="absolute inset-0 z-0">
             <video
-              src="/about-hero.mp4"
+              src={homeHeroVideo}
               className="pointer-events-none absolute inset-0 h-full w-full object-cover object-top"
               autoPlay
               muted
@@ -456,6 +473,11 @@ export default function Home() {
                 if (video.paused) {
                   void video.play().catch(() => undefined);
                 }
+              }}
+              onError={event => {
+                const video = event.currentTarget;
+                if (video.src.endsWith("/about-hero.mp4")) return;
+                video.src = "/about-hero.mp4";
               }}
             />
           </div>
@@ -585,11 +607,13 @@ export default function Home() {
               <div className="relative">
                 <div className="relative overflow-hidden rounded-[34px] border border-slate-200/70 bg-[#0b1726] shadow-[0_32px_90px_-48px_rgba(11,23,38,0.35)]">
                   <img
-                    src={STORY_IMG}
+                    src={homeStoryImage}
                     alt="قصتنا"
                     className="absolute inset-0 h-full w-full object-cover"
                     onError={(event) => {
-                      event.currentTarget.src = "/HOOM-HERO1.jpg";
+                      const image = event.currentTarget;
+                      if (image.src.endsWith(STORY_IMG)) return;
+                      image.src = STORY_IMG;
                     }}
                   />
                   <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(11,23,38,0.32)_0%,rgba(11,23,38,0.46)_36%,rgba(11,23,38,0.88)_100%)]" />
