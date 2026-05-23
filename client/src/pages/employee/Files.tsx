@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type DragEvent,
+} from "react";
 import {
   collection,
   doc,
@@ -290,6 +296,7 @@ export default function EmployeeFilesPage() {
   const search = useSearch();
   const searchParams = useMemo(() => new URLSearchParams(search), [search]);
   const initialTab = searchParams.get("tab") === "sent" ? "sent" : "incoming";
+  const sendFileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [legacyFiles, setLegacyFiles] = useState<EmployeeFileRecord[]>([]);
   const [participantFiles, setParticipantFiles] = useState<EmployeeFileRecord[]>([]);
@@ -470,6 +477,26 @@ export default function EmployeeFilesPage() {
       fileType: "general",
       file: null,
     });
+    if (sendFileInputRef.current) {
+      sendFileInputRef.current.value = "";
+    }
+  };
+
+  const handleSendFileDrop = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    if (sendingFile) return;
+
+    const file = event.dataTransfer.files?.[0] || null;
+    if (!file) return;
+
+    setSendForm(current => ({
+      ...current,
+      file,
+    }));
+
+    if (sendFileInputRef.current) {
+      sendFileInputRef.current.value = "";
+    }
   };
 
   const markFileAsReadIfNeeded = async (file: EmployeeFileRecord) => {
@@ -868,7 +895,7 @@ export default function EmployeeFilesPage() {
               }
             />
 
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid items-start gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <div className="text-sm font-semibold text-slate-900">عنوان الملف</div>
                 <Input
@@ -913,7 +940,7 @@ export default function EmployeeFilesPage() {
             </div>
 
             <div className="space-y-2">
-              <div className="text-sm font-semibold text-slate-900">وصف اختياري</div>
+              <div className="text-sm font-semibold text-slate-900">وصف الملف (اختياري)</div>
               <Textarea
                 value={sendForm.description}
                 onChange={event =>
@@ -928,10 +955,13 @@ export default function EmployeeFilesPage() {
               />
             </div>
 
-            <div className="space-y-3">
-              <div className="text-sm font-semibold text-slate-900">رفع ملف من الجهاز</div>
+            <div className="space-y-2">
+              <div className="text-sm font-semibold text-slate-900">ملف الإرسال</div>
               <Input
+                id="employee-send-file-input"
+                ref={sendFileInputRef}
                 type="file"
+                className="sr-only"
                 onChange={event =>
                   setSendForm(current => ({
                     ...current,
@@ -940,8 +970,24 @@ export default function EmployeeFilesPage() {
                 }
                 disabled={sendingFile}
               />
-
-              <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+              <div
+                role="button"
+                tabIndex={sendingFile ? -1 : 0}
+                onClick={() => sendFileInputRef.current?.click()}
+                onKeyDown={event => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    sendFileInputRef.current?.click();
+                  }
+                }}
+                onDragOver={event => event.preventDefault()}
+                onDrop={handleSendFileDrop}
+                className={cn(
+                  "flex cursor-pointer flex-col items-center justify-center gap-3 rounded-[16px] border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-sm text-slate-600 transition hover:border-[#F2B705] hover:bg-[#F2B705]/5",
+                  sendingFile && "pointer-events-none cursor-not-allowed opacity-60"
+                )}
+              >
+                <Upload className="h-6 w-6 text-slate-500" />
                 {sendForm.file ? (
                   <div className="space-y-1">
                     <div className="font-semibold text-slate-900">{sendForm.file.name}</div>
@@ -949,7 +995,12 @@ export default function EmployeeFilesPage() {
                     <div>النوع: {sendForm.file.type || "غير محدد"}</div>
                   </div>
                 ) : (
-                  "لم يتم اختيار ملف بعد."
+                  <div className="space-y-1">
+                    <div className="font-semibold text-slate-900">
+                      اسحب الملف هنا أو انقر للاختيار
+                    </div>
+                    <div>سيتم إرفاق الملف وإرساله إلى الموظف المحدد.</div>
+                  </div>
                 )}
               </div>
             </div>

@@ -4,6 +4,7 @@ import {
   useRef,
   useState,
   type ChangeEvent,
+  type DragEvent,
   type ReactNode,
 } from "react";
 import { useSearch } from "wouter";
@@ -264,6 +265,13 @@ function resolveEmployeeWorkspaceSection(
 const EMPLOYEE_LEAVE_BALANCE_ADJUSTMENTS_COLLECTION =
   "employee_leave_balance_adjustments";
 
+const OFFICIAL_DOCUMENT_TYPE_OPTIONS = [
+  { value: "contract", label: "عقد" },
+  { value: "education_certificate", label: "الشهادات" },
+  { value: "cv", label: "السيرة الذاتية" },
+  { value: "approval", label: "اعتماد" },
+];
+
 const EMPLOYMENT_STATUS_OPTIONS: Array<{
   value: EmployeeEmploymentStatus;
   label: string;
@@ -513,6 +521,15 @@ function buildEmployeeFileFormValues(): EmployeeFileFormValues {
   };
 }
 
+function buildOfficialDocumentFormValues(): EmployeeFileFormValues {
+  return {
+    title: "",
+    description: "",
+    fileType: "contract",
+    file: null,
+  };
+}
+
 function buildEmployeeMessageFormValues(): EmployeeMessageFormValues {
   return {
     type: "message",
@@ -737,6 +754,12 @@ function resolveEmploymentLeaveBalance(
   return 0;
 }
 
+function normalizeEnglishDigits(value: string) {
+  return value
+    .replace(/[٠-٩]/g, digit => String(digit.charCodeAt(0) - 1632))
+    .replace(/[۰-۹]/g, digit => String(digit.charCodeAt(0) - 1776));
+}
+
 function resolveEmployeeAuthUid(employee: EmployeeRecord | null | undefined) {
   return String(employee?.uid || employee?.id || "").trim();
 }
@@ -841,6 +864,8 @@ export default function EmployeesManagementPage() {
   const [leaveRequestsLoading, setLeaveRequestsLoading] = useState(false);
   const [reviewNotes, setReviewNotes] = useState<Record<string, string>>({});
   const [manualLeaveBalance, setManualLeaveBalance] = useState("");
+  const [manualLeaveBalanceOperation, setManualLeaveBalanceOperation] =
+    useState<"add" | "deduct">("add");
   const [manualLeaveAdjustmentReason, setManualLeaveAdjustmentReason] = useState("");
   const [savingManualLeaveBalance, setSavingManualLeaveBalance] = useState(false);
   const [leaveBalanceAdjustments, setLeaveBalanceAdjustments] = useState<
@@ -863,7 +888,7 @@ export default function EmployeesManagementPage() {
     string | null
   >(null);
   const [officialDocumentForm, setOfficialDocumentForm] =
-    useState<EmployeeFileFormValues>(buildEmployeeFileFormValues);
+    useState<EmployeeFileFormValues>(buildOfficialDocumentFormValues);
   const [uploadingOfficialDocument, setUploadingOfficialDocument] =
     useState(false);
   const [employeeMessages, setEmployeeMessages] = useState<
@@ -922,7 +947,7 @@ export default function EmployeesManagementPage() {
   };
 
   const resetOfficialDocumentForm = () => {
-    setOfficialDocumentForm(buildEmployeeFileFormValues());
+    setOfficialDocumentForm(buildOfficialDocumentFormValues());
     if (officialDocumentInputRef.current) {
       officialDocumentInputRef.current.value = "";
     }
@@ -1479,8 +1504,26 @@ export default function EmployeesManagementPage() {
         ? String(currentLeaveBalanceNumber)
         : ""
     );
+    setManualLeaveBalanceOperation("add");
     setManualLeaveAdjustmentReason("");
   }, [selectedEmployeeId, currentLeaveBalanceNumber]);
+
+  const manualLeaveBalanceAmount = useMemo(() => {
+    const parsed = Number(manualLeaveBalance);
+    return Number.isFinite(parsed) ? parsed : null;
+  }, [manualLeaveBalance]);
+
+  const manualLeaveDeductionPreview = useMemo(() => {
+    if (manualLeaveBalanceOperation !== "deduct" || manualLeaveBalanceAmount === null) {
+      return null;
+    }
+
+    return Math.max(currentLeaveBalanceNumber - manualLeaveBalanceAmount, 0);
+  }, [
+    currentLeaveBalanceNumber,
+    manualLeaveBalanceAmount,
+    manualLeaveBalanceOperation,
+  ]);
 
   const previousLeaveBalanceBeforeLastApproval = useMemo(() => {
     if (!latestDeductedLeaveRequest) return currentLeaveBalanceNumber;
@@ -2077,6 +2120,23 @@ export default function EmployeesManagementPage() {
     }));
   };
 
+  const handleEmployeeFileDrop = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    if (!canManageEmployees || uploadingEmployeeFile) return;
+
+    const file = event.dataTransfer.files?.[0] || null;
+    if (!file) return;
+
+    setEmployeeFileForm(current => ({
+      ...current,
+      file,
+    }));
+
+    if (employeeFileInputRef.current) {
+      employeeFileInputRef.current.value = "";
+    }
+  };
+
   const handleOfficialDocumentFormChange = <
     K extends keyof Omit<EmployeeFileFormValues, "file">,
   >(
@@ -2097,6 +2157,23 @@ export default function EmployeesManagementPage() {
       ...current,
       file,
     }));
+  };
+
+  const handleOfficialDocumentDrop = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    if (!canManageEmployees || uploadingOfficialDocument) return;
+
+    const file = event.dataTransfer.files?.[0] || null;
+    if (!file) return;
+
+    setOfficialDocumentForm(current => ({
+      ...current,
+      file,
+    }));
+
+    if (officialDocumentInputRef.current) {
+      officialDocumentInputRef.current.value = "";
+    }
   };
 
   const handleEmployeeMessageFormChange = <
@@ -2304,8 +2381,7 @@ export default function EmployeesManagementPage() {
     const normalizedTitle = officialDocumentForm.title.trim();
     const normalizedDescription = officialDocumentForm.description.trim();
     const normalizedFileType =
-      String(officialDocumentForm.fileType || EMPLOYEE_DEFAULT_FILE_TYPE).trim() ||
-      EMPLOYEE_DEFAULT_FILE_TYPE;
+      String(officialDocumentForm.fileType || "contract").trim() || "contract";
 
     if (!selectedFile) {
       toast.error("اختر ملفًا قبل الرفع.");
@@ -2977,12 +3053,25 @@ export default function EmployeesManagementPage() {
       return;
     }
 
-    const nextBalance = Number(manualLeaveBalance);
+    const manualBalanceValue = Number(manualLeaveBalance);
     const reason = String(manualLeaveAdjustmentReason || "").trim();
+    const operationType = manualLeaveBalanceOperation === "deduct" ? "deduct" : "add";
 
-    if (!Number.isFinite(nextBalance) || nextBalance < 0) {
+    if (!manualLeaveBalance.trim() || !Number.isFinite(manualBalanceValue) || manualBalanceValue < 0) {
       toast.error("أدخل رصيد إجازات صالحًا.");
       return;
+    }
+
+    if (operationType === "deduct") {
+      if (manualBalanceValue <= 0) {
+        toast.error("أدخل عدد أيام صالحًا للخصم.");
+        return;
+      }
+
+      if (manualBalanceValue > currentLeaveBalanceNumber) {
+        toast.error("لا يمكن خصم عدد أيام أكبر من الرصيد الحالي.");
+        return;
+      }
     }
 
     if (!reason) {
@@ -3003,6 +3092,7 @@ export default function EmployeesManagementPage() {
       const adjustmentRef = doc(
         collection(db, EMPLOYEE_LEAVE_BALANCE_ADJUSTMENTS_COLLECTION)
       );
+      let persistedNextBalance = manualBalanceValue;
 
       await runTransaction(db, async tx => {
         const userSnap = await tx.get(userRef);
@@ -3026,10 +3116,22 @@ export default function EmployeesManagementPage() {
           {}) as Record<string, any>;
 
         const previousBalance = resolveEmploymentLeaveBalance(userData, employeeData);
+        const nextBalance =
+          operationType === "deduct"
+            ? previousBalance - manualBalanceValue
+            : manualBalanceValue;
+        const operationLabel = operationType === "deduct" ? "خصم" : "إضافة";
+
+        if (!Number.isFinite(nextBalance) || nextBalance < 0) {
+          throw new Error("leave_balance_invalid_operation");
+        }
+        persistedNextBalance = nextBalance;
 
         const leaveBalanceAdjustmentMeta = {
           previousBalance,
           nextBalance,
+          operationType,
+          operationLabel,
           reason,
           adjustedAt: serverTimestamp(),
           adjustedByUid: user?.uid || null,
@@ -3107,6 +3209,8 @@ export default function EmployeesManagementPage() {
           previousBalance,
           nextBalance,
           difference: nextBalance - previousBalance,
+          operationType,
+          operationLabel,
           reason,
           createdAt: serverTimestamp(),
           createdByUid: user?.uid || null,
@@ -3117,10 +3221,11 @@ export default function EmployeesManagementPage() {
 
       setForm(current => ({
         ...current,
-        leaveBalance: String(nextBalance),
+        leaveBalance: String(persistedNextBalance),
       }));
 
-      setManualLeaveBalance(String(nextBalance));
+      setManualLeaveBalance(String(persistedNextBalance));
+      setManualLeaveBalanceOperation("add");
       setManualLeaveAdjustmentReason("");
 
       toast.success("تم تعديل رصيد الإجازات يدويًا.");
@@ -4294,34 +4399,67 @@ export default function EmployeesManagementPage() {
                               </Select>
                             </Field>
 
-                            <Field label="اختيار الملف">
+                            <Field label="ملف الموظف">
                               <Input
+                                id="employee-file-input"
                                 ref={employeeFileInputRef}
                                 type="file"
+                                className="sr-only"
                                 onChange={handleEmployeeFileSelected}
                                 disabled={
                                   !canManageEmployees || uploadingEmployeeFile
                                 }
                               />
+                              <div
+                                role="button"
+                                tabIndex={
+                                  canManageEmployees && !uploadingEmployeeFile
+                                    ? 0
+                                    : -1
+                                }
+                                onClick={() => employeeFileInputRef.current?.click()}
+                                onKeyDown={event => {
+                                  if (
+                                    event.key === "Enter" ||
+                                    event.key === " "
+                                  ) {
+                                    event.preventDefault();
+                                    employeeFileInputRef.current?.click();
+                                  }
+                                }}
+                                onDragOver={event => event.preventDefault()}
+                                onDrop={handleEmployeeFileDrop}
+                                className={cn(
+                                  "flex cursor-pointer flex-col items-center justify-center gap-3 rounded-[16px] border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-sm text-slate-600 transition hover:border-[#F2B705] hover:bg-[#F2B705]/5",
+                                  (!canManageEmployees || uploadingEmployeeFile) &&
+                                    "pointer-events-none cursor-not-allowed opacity-60"
+                                )}
+                              >
+                                <Upload className="h-6 w-6 text-slate-500" />
+                                {employeeFileForm.file ? (
+                                  <div className="space-y-1">
+                                    <div className="font-semibold text-slate-900">
+                                      {employeeFileForm.file.name}
+                                    </div>
+                                    <div>
+                                      الحجم:{" "}
+                                      {formatFileSizeEN(
+                                        employeeFileForm.file.size
+                                      )}
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="space-y-1">
+                                    <div className="font-semibold text-slate-900">
+                                      اسحب الملف هنا أو انقر للاختيار
+                                    </div>
+                                    <div>
+                                      سيتم إرفاق الملف ضمن ملفات الموظف.
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
                             </Field>
-
-                            <div className="rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
-                              {employeeFileForm.file ? (
-                                <div className="space-y-1">
-                                  <div className="font-semibold text-slate-900">
-                                    {employeeFileForm.file.name}
-                                  </div>
-                                  <div>
-                                    الحجم:{" "}
-                                    {formatFileSizeEN(
-                                      employeeFileForm.file.size
-                                    )}
-                                  </div>
-                                </div>
-                              ) : (
-                                "لم يتم اختيار ملف بعد."
-                              )}
-                            </div>
 
                             <Button
                               type="button"
@@ -4567,13 +4705,18 @@ export default function EmployeesManagementPage() {
                       <Field label="الراتب الأساسي">
                         <Input
                           type="number"
+                          dir="rtl"
                           inputMode="decimal"
                           step="0.01"
                           value={form.baseSalary}
                           onChange={event =>
-                            handleFormChange("baseSalary", event.target.value)
+                            handleFormChange(
+                              "baseSalary",
+                              normalizeEnglishDigits(event.target.value)
+                            )
                           }
                           placeholder="مثال: 4500"
+                          className="text-right tabular-nums"
                           disabled={!canManageEmployees || saving}
                         />
                       </Field>
@@ -4581,13 +4724,18 @@ export default function EmployeesManagementPage() {
                       <Field label="عدد أيام العمل">
                         <Input
                           type="number"
+                          dir="rtl"
                           inputMode="decimal"
                           step="1"
                           value={form.expectedWorkDays}
                           onChange={event =>
-                            handleFormChange("expectedWorkDays", event.target.value)
+                            handleFormChange(
+                              "expectedWorkDays",
+                              normalizeEnglishDigits(event.target.value)
+                            )
                           }
                           placeholder="مثال: 26"
+                          className="text-right tabular-nums"
                           disabled={!canManageEmployees || saving}
                         />
                       </Field>
@@ -4595,13 +4743,18 @@ export default function EmployeesManagementPage() {
                       <Field label="عدد ساعات العمل">
                         <Input
                           type="number"
+                          dir="rtl"
                           inputMode="decimal"
                           step="0.5"
                           value={form.expectedWorkHours}
                           onChange={event =>
-                            handleFormChange("expectedWorkHours", event.target.value)
+                            handleFormChange(
+                              "expectedWorkHours",
+                              normalizeEnglishDigits(event.target.value)
+                            )
                           }
                           placeholder="مثال: 240"
+                          className="text-right tabular-nums"
                           disabled={!canManageEmployees || saving}
                         />
                       </Field>
@@ -4609,13 +4762,18 @@ export default function EmployeesManagementPage() {
                       <Field label="عدد الساعات الفعلية">
                         <Input
                           type="number"
+                          dir="rtl"
                           inputMode="decimal"
                           step="0.5"
                           value={form.actualWorkedHours}
                           onChange={event =>
-                            handleFormChange("actualWorkedHours", event.target.value)
+                            handleFormChange(
+                              "actualWorkedHours",
+                              normalizeEnglishDigits(event.target.value)
+                            )
                           }
                           placeholder="مثال: 228"
+                          className="text-right tabular-nums"
                           disabled={!canManageEmployees || saving}
                         />
                       </Field>
@@ -4623,13 +4781,18 @@ export default function EmployeesManagementPage() {
                       <Field label="سعر ساعة الأوفر تايم">
                         <Input
                           type="number"
+                          dir="rtl"
                           inputMode="decimal"
                           step="0.01"
                           value={form.overtimeHourlyRate}
                           onChange={event =>
-                            handleFormChange("overtimeHourlyRate", event.target.value)
+                            handleFormChange(
+                              "overtimeHourlyRate",
+                              normalizeEnglishDigits(event.target.value)
+                            )
                           }
                           placeholder="إذا تركته فارغًا سيُستخدم سعر الساعة العادي"
+                          className="text-right tabular-nums"
                           disabled={!canManageEmployees || saving}
                         />
                       </Field>
@@ -4637,13 +4800,18 @@ export default function EmployeesManagementPage() {
                       <Field label="خصم التأمينات">
                         <Input
                           type="number"
+                          dir="rtl"
                           inputMode="decimal"
                           step="0.01"
                           value={form.insuranceDeduction}
                           onChange={event =>
-                            handleFormChange("insuranceDeduction", event.target.value)
+                            handleFormChange(
+                              "insuranceDeduction",
+                              normalizeEnglishDigits(event.target.value)
+                            )
                           }
                           placeholder="مثال: 400"
+                          className="text-right tabular-nums"
                           disabled={!canManageEmployees || saving}
                         />
                       </Field>
@@ -4698,6 +4866,7 @@ export default function EmployeesManagementPage() {
 
                               <Input
                                 type="number"
+                                dir="rtl"
                                 inputMode="decimal"
                                 step="0.01"
                                 value={item.amount}
@@ -4705,10 +4874,11 @@ export default function EmployeesManagementPage() {
                                   handleSalaryDeductionChange(
                                     item.id,
                                     "amount",
-                                    event.target.value
+                                    normalizeEnglishDigits(event.target.value)
                                   )
                                 }
                                 placeholder="قيمة الخصم"
+                                className="text-right tabular-nums"
                                 disabled={!canManageEmployees || saving}
                               />
 
@@ -5272,17 +5442,69 @@ export default function EmployeesManagementPage() {
                           </div>
                         </div>
 
-                        <div className="mt-5 grid gap-4 lg:grid-cols-2">
-                          <Field label="الرصيد الجديد">
+                        <div className="mt-5 flex max-w-xl flex-col gap-3">
+                          <Field label="نوع العملية">
+                            <Select
+                              value={manualLeaveBalanceOperation}
+                              onValueChange={value => {
+                                const nextOperation =
+                                  value === "deduct" ? "deduct" : "add";
+                                setManualLeaveBalanceOperation(nextOperation);
+                                setManualLeaveBalance(
+                                  nextOperation === "deduct"
+                                    ? ""
+                                    : String(currentLeaveBalanceNumber)
+                                );
+                              }}
+                              disabled={!canManageEmployees || savingManualLeaveBalance}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="اختر نوع العملية" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="add">إضافة رصيد</SelectItem>
+                                <SelectItem value="deduct">خصم رصيد</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </Field>
+
+                          <Field
+                            label={
+                              manualLeaveBalanceOperation === "deduct"
+                                ? "عدد أيام الخصم"
+                                : "الرصيد الجديد"
+                            }
+                          >
                             <Input
                               type="number"
+                              dir="rtl"
                               inputMode="decimal"
                               step="0.5"
+                              min="0"
                               value={manualLeaveBalance}
-                              onChange={event => setManualLeaveBalance(event.target.value)}
-                              placeholder="مثال: 18"
+                              onChange={event =>
+                                setManualLeaveBalance(
+                                  normalizeEnglishDigits(event.target.value)
+                                )
+                              }
+                              placeholder={
+                                manualLeaveBalanceOperation === "deduct"
+                                  ? "مثال: 2"
+                                  : "مثال: 18"
+                              }
+                              className="w-32 text-right tabular-nums sm:w-36"
                               disabled={!canManageEmployees || savingManualLeaveBalance}
                             />
+                            {manualLeaveBalanceOperation === "deduct" &&
+                            manualLeaveBalanceAmount !== null &&
+                            manualLeaveBalanceAmount > 0 ? (
+                              <p className="mt-2 text-xs leading-6 text-slate-500">
+                                سيتم خصم {formatNumberEN(manualLeaveBalanceAmount)} يوم من الرصيد الحالي
+                                {manualLeaveDeductionPreview !== null
+                                  ? `، وسيصبح الرصيد ${formatNumberEN(manualLeaveDeductionPreview)} يوم`
+                                  : ""}
+                              </p>
+                            ) : null}
                           </Field>
 
                           <Field label="سبب التعديل">
@@ -5290,16 +5512,16 @@ export default function EmployeesManagementPage() {
                               value={manualLeaveAdjustmentReason}
                               onChange={event => setManualLeaveAdjustmentReason(event.target.value)}
                               placeholder="مثال: ترحيل رصيد من السنة الماضية أو تصحيح إداري"
-                              className="min-h-28"
+                              className="min-h-20"
                               disabled={!canManageEmployees || savingManualLeaveBalance}
                             />
                           </Field>
                         </div>
 
-                        <div className="mt-4 flex justify-end">
+                        <div className="mt-3 flex max-w-xl justify-start">
                           <Button
                             type="button"
-                            className="bg-[#F2B705] text-slate-950 hover:bg-[#e0ab00]"
+                            className="w-full bg-[#F2B705] text-slate-950 hover:bg-[#e0ab00] sm:w-auto"
                             onClick={() => void handleSaveManualLeaveBalance()}
                             disabled={!canManageEmployees || savingManualLeaveBalance}
                           >
@@ -5316,6 +5538,16 @@ export default function EmployeesManagementPage() {
                                 ? formatDateTimeEN(latestManualLeaveAdjustmentMeta.adjustedAt)
                                 : "غير متوفر"}
                             </div>
+                            {latestManualLeaveAdjustmentMeta.operationLabel ||
+                            latestManualLeaveAdjustmentMeta.operationType ? (
+                              <div>
+                                <span className="font-semibold text-slate-900">نوع العملية:</span>{" "}
+                                {latestManualLeaveAdjustmentMeta.operationLabel ||
+                                  (latestManualLeaveAdjustmentMeta.operationType === "deduct"
+                                    ? "خصم"
+                                    : "إضافة")}
+                              </div>
+                            ) : null}
                             <div>
                               <span className="font-semibold text-slate-900">من:</span>{" "}
                               {formatNumberEN(Number(latestManualLeaveAdjustmentMeta.previousBalance) || 0)} يوم
@@ -5432,6 +5664,15 @@ export default function EmployeesManagementPage() {
                               >
                                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                                   <div className="space-y-2 text-sm text-slate-700">
+                                    {item.operationLabel || item.operationType ? (
+                                      <div>
+                                        <span className="font-semibold text-slate-900">نوع العملية:</span>{" "}
+                                        {item.operationLabel ||
+                                          (item.operationType === "deduct"
+                                            ? "خصم"
+                                            : "إضافة")}
+                                      </div>
+                                    ) : null}
                                     <div>
                                       <span className="font-semibold text-slate-900">من:</span>{" "}
                                       {formatNumberEN(Number(item.previousBalance) || 0)} يوم
@@ -5896,7 +6137,7 @@ export default function EmployeesManagementPage() {
                             />
                           </Field>
 
-                          <Field label="وصف المستند" description="اختياري">
+                          <Field label="وصف المستند (اختياري)">
                             <Textarea
                               value={officialDocumentForm.description}
                               onChange={event =>
@@ -5920,7 +6161,7 @@ export default function EmployeesManagementPage() {
                                 <SelectValue placeholder="اختر نوع المستند" />
                               </SelectTrigger>
                               <SelectContent>
-                                {EMPLOYEE_FILE_TYPE_OPTIONS.map(option => (
+                                {OFFICIAL_DOCUMENT_TYPE_OPTIONS.map(option => (
                                   <SelectItem key={option.value} value={option.value}>
                                     {option.label}
                                   </SelectItem>
@@ -5929,32 +6170,58 @@ export default function EmployeesManagementPage() {
                             </Select>
                           </Field>
 
-                          <Field label="اختيار الملف">
+                          <Field label="ملف المستند">
                             <Input
+                              id="official-document-file-input"
                               ref={officialDocumentInputRef}
                               type="file"
+                              className="sr-only"
                               onChange={handleOfficialDocumentSelected}
                               disabled={!canManageEmployees || uploadingOfficialDocument}
                             />
-                          </Field>
-
-                          <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                            {officialDocumentForm.file ? (
-                              <div className="space-y-1">
-                                <div className="font-semibold text-slate-900">
-                                  {officialDocumentForm.file.name}
+                            <div
+                              role="button"
+                              tabIndex={canManageEmployees && !uploadingOfficialDocument ? 0 : -1}
+                              onClick={() => officialDocumentInputRef.current?.click()}
+                              onKeyDown={event => {
+                                if (event.key === "Enter" || event.key === " ") {
+                                  event.preventDefault();
+                                  officialDocumentInputRef.current?.click();
+                                }
+                              }}
+                              onDragOver={event => event.preventDefault()}
+                              onDrop={handleOfficialDocumentDrop}
+                              className={cn(
+                                "flex cursor-pointer flex-col items-center justify-center gap-3 rounded-[16px] border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-sm text-slate-600 transition hover:border-[#F2B705] hover:bg-[#F2B705]/5",
+                                (!canManageEmployees || uploadingOfficialDocument) &&
+                                  "pointer-events-none cursor-not-allowed opacity-60"
+                              )}
+                            >
+                              <Upload className="h-6 w-6 text-slate-500" />
+                              {officialDocumentForm.file ? (
+                                <div className="space-y-1">
+                                  <div className="font-semibold text-slate-900">
+                                    {officialDocumentForm.file.name}
+                                  </div>
+                                  <div>
+                                    الحجم: {formatFileSizeEN(officialDocumentForm.file.size)}
+                                  </div>
                                 </div>
-                                <div>الحجم: {formatFileSizeEN(officialDocumentForm.file.size)}</div>
-                              </div>
-                            ) : (
-                              "اختر ملف المستند الرسمي الذي تريد إضافته إلى ملف الموظف."
-                            )}
-                          </div>
+                              ) : (
+                                <div className="space-y-1">
+                                  <div className="font-semibold text-slate-900">
+                                    اسحب الملف هنا أو انقر للاختيار
+                                  </div>
+                                  <div>سيتم إرفاق الملف ضمن المستندات الرسمية للموظف.</div>
+                                </div>
+                              )}
+                            </div>
+                          </Field>
 
                           <div className="flex flex-wrap gap-2">
                             <Button
                               type="button"
-                              className="bg-[#F2B705] text-slate-950 hover:bg-[#e0ab00]"
+                              className="h-10 rounded-lg bg-[#F2B705] px-4 text-slate-950 hover:bg-[#e0ab00]"
                               onClick={() => void handleUploadOfficialDocument()}
                               disabled={!canManageEmployees || uploadingOfficialDocument}
                             >
@@ -5965,6 +6232,7 @@ export default function EmployeesManagementPage() {
                             <Button
                               type="button"
                               variant="outline"
+                              className="h-10 rounded-lg px-4"
                               onClick={resetOfficialDocumentForm}
                               disabled={!canManageEmployees || uploadingOfficialDocument}
                             >

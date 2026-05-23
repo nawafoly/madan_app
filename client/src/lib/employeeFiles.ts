@@ -28,7 +28,7 @@ export const EMPLOYEE_FILE_TYPE_OPTIONS: Array<{
   { value: "warning", label: "إنذار" },
   { value: "letter", label: "خطاب" },
   { value: "cv", label: "السيرة الذاتية" },
-  { value: "education_certificate", label: "الشهادة الدراسية" },
+  { value: "education_certificate", label: "الشهادات" },
 ];
 
 export type EmployeeFileDirection = "incoming" | "outgoing";
@@ -101,6 +101,8 @@ export function getEmployeeFileTypeLabel(value: unknown) {
   const normalized = String(value || EMPLOYEE_DEFAULT_FILE_TYPE)
     .trim()
     .toLowerCase();
+
+  if (normalized === "approval") return "اعتماد";
 
   return (
     EMPLOYEE_FILE_TYPE_OPTIONS.find(option => option.value === normalized)?.label ||
