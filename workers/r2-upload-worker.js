@@ -12,7 +12,9 @@
  */
 
 const ALLOWED_KINDS = new Set(["original", "signed", "attachment"]);
-const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
+const DEFAULT_MAX_FILE_SIZE_MB = 10;
+const IMAGE_MAX_FILE_SIZE_MB = 10;
+const VIDEO_MAX_FILE_SIZE_MB = 50;
 const DEFAULT_STATUS = "uploaded";
 const LIST_LIMIT_DEFAULT = 50;
 const LIST_LIMIT_MAX = 200;
@@ -295,11 +297,21 @@ async function handleUpload(request, bucket, db) {
     });
   }
 
-  if (file.size > MAX_FILE_SIZE_BYTES) {
+  const normalizedType = normalizeContentType(file.type, file.name);
+  const maxFileSizeMb = getUploadFileSizeLimitMb(normalizedType);
+  const maxFileSizeBytes = maxFileSizeMb * 1024 * 1024;
+
+  if (file.size > maxFileSizeBytes) {
     return json(413, {
       ok: false,
       success: false,
-      message: "file_too_large",
+      message: `File is too large. Max allowed size is ${maxFileSizeMb}MB for ${
+        isVideoContentType(normalizedType)
+          ? "videos"
+          : isImageContentType(normalizedType)
+            ? "images"
+            : "this file type"
+      }.`,
     });
   }
 
@@ -316,7 +328,6 @@ async function handleUpload(request, bucket, db) {
     });
   }
 
-  const normalizedType = normalizeContentType(file.type, file.name);
   if (
     (kind === "original" || kind === "signed") &&
     normalizedType !== "application/pdf"
@@ -1985,6 +1996,20 @@ function normalizeContentType(type, fileName) {
   return inferContentTypeFromName(fileName) || "application/octet-stream";
 }
 
+function isVideoContentType(contentType) {
+  return String(contentType || "").toLowerCase().startsWith("video/");
+}
+
+function isImageContentType(contentType) {
+  return String(contentType || "").toLowerCase().startsWith("image/");
+}
+
+function getUploadFileSizeLimitMb(contentType) {
+  if (isVideoContentType(contentType)) return VIDEO_MAX_FILE_SIZE_MB;
+  if (isImageContentType(contentType)) return IMAGE_MAX_FILE_SIZE_MB;
+  return DEFAULT_MAX_FILE_SIZE_MB;
+}
+
 function inferContentTypeFromName(fileName) {
   const lower = String(fileName || "").toLowerCase();
   if (lower.endsWith(".pdf")) return "application/pdf";
@@ -1994,6 +2019,13 @@ function inferContentTypeFromName(fileName) {
   if (lower.endsWith(".gif")) return "image/gif";
   if (lower.endsWith(".svg")) return "image/svg+xml";
   if (lower.endsWith(".avif")) return "image/avif";
+  if (lower.endsWith(".mp4")) return "video/mp4";
+  if (lower.endsWith(".mov")) return "video/quicktime";
+  if (lower.endsWith(".m4v")) return "video/x-m4v";
+  if (lower.endsWith(".webm")) return "video/webm";
+  if (lower.endsWith(".avi")) return "video/x-msvideo";
+  if (lower.endsWith(".mkv")) return "video/x-matroska";
+  if (lower.endsWith(".mpeg") || lower.endsWith(".mpg")) return "video/mpeg";
   if (lower.endsWith(".txt")) return "text/plain";
   if (lower.endsWith(".csv")) return "text/csv";
   if (lower.endsWith(".json")) return "application/json";
@@ -2017,6 +2049,13 @@ function inferExtensionFromType(contentType) {
   if (contentType === "image/gif") return ".gif";
   if (contentType === "image/svg+xml") return ".svg";
   if (contentType === "image/avif") return ".avif";
+  if (contentType === "video/mp4") return ".mp4";
+  if (contentType === "video/quicktime") return ".mov";
+  if (contentType === "video/x-m4v") return ".m4v";
+  if (contentType === "video/webm") return ".webm";
+  if (contentType === "video/x-msvideo") return ".avi";
+  if (contentType === "video/x-matroska") return ".mkv";
+  if (contentType === "video/mpeg") return ".mpeg";
   if (contentType === "text/plain") return ".txt";
   if (contentType === "text/csv") return ".csv";
   if (contentType === "application/json") return ".json";

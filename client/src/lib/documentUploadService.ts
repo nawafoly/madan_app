@@ -104,8 +104,9 @@ export interface DocumentStorageDashboardSnapshot {
   sources: DocumentStorageMetricSources;
 }
 
-const MAX_FILE_SIZE_MB = 10;
-const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
+const DEFAULT_MAX_FILE_SIZE_MB = 10;
+const IMAGE_MAX_FILE_SIZE_MB = 10;
+const VIDEO_MAX_FILE_SIZE_MB = 50;
 
 // ARCHITECTURE NOTE (2026-03-12):
 // Files are stored in Cloudflare R2.
@@ -125,13 +126,46 @@ function isPdfFile(file: File) {
   return mime === "application/pdf" || name.endsWith(".pdf");
 }
 
+function isVideoFile(file: File) {
+  if (!file) return false;
+  const mime = String(file.type || "").trim().toLowerCase();
+  const name = String(file.name || "").trim().toLowerCase();
+  return (
+    mime.startsWith("video/") ||
+    /\.(mp4|mov|m4v|webm|avi|mkv|mpeg|mpg)$/i.test(name)
+  );
+}
+
+function isImageFile(file: File) {
+  if (!file) return false;
+  const mime = String(file.type || "").trim().toLowerCase();
+  const name = String(file.name || "").trim().toLowerCase();
+  return (
+    mime.startsWith("image/") ||
+    /\.(png|jpe?g|webp|gif|svg|avif)$/i.test(name)
+  );
+}
+
+function getUploadFileSizeLimitMb(file: File) {
+  if (isVideoFile(file)) return VIDEO_MAX_FILE_SIZE_MB;
+  if (isImageFile(file)) return IMAGE_MAX_FILE_SIZE_MB;
+  return DEFAULT_MAX_FILE_SIZE_MB;
+}
+
 function validateUploadFile(file: File, kind: InvestmentDocumentKind) {
   if (!file) {
     throw new Error("Please select a file");
   }
 
-  if (file.size > MAX_FILE_SIZE_BYTES) {
-    throw new Error(`File is too large. Max allowed size is ${MAX_FILE_SIZE_MB}MB.`);
+  const maxFileSizeMb = getUploadFileSizeLimitMb(file);
+  const maxFileSizeBytes = maxFileSizeMb * 1024 * 1024;
+
+  if (file.size > maxFileSizeBytes) {
+    throw new Error(
+      `File is too large. Max allowed size is ${maxFileSizeMb}MB for ${
+        isVideoFile(file) ? "videos" : isImageFile(file) ? "images" : "this file type"
+      }.`
+    );
   }
 
   const isContract = kind === "original" || kind === "signed";
