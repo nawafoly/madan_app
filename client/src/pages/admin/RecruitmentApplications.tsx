@@ -200,17 +200,17 @@ export default function RecruitmentApplicationsPage() {
 
   return (
     <DashboardLayout>
-      <div dir="rtl" className="space-y-6">
-        <Card className="overflow-hidden rounded-[28px] border border-slate-200/80 bg-[linear-gradient(135deg,#ffffff_0%,#f8fafc_48%,#eef4ff_100%)] shadow-[0_28px_72px_-52px_rgba(15,23,42,0.28)]">
-          <CardContent className="px-6 py-6 sm:px-8 sm:py-8">
-            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-end">
-              <div className="space-y-5">
-                <div className="inline-flex items-center gap-2 rounded-full border border-[#F2B705]/30 bg-[#F2B705]/12 px-4 py-1.5 text-xs font-semibold text-[#8d6700]">
+      <div dir="rtl" className="min-h-screen space-y-8 bg-[#F8F9FA] px-1 py-2">
+        <Card className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm">
+          <CardContent className="px-6 py-7 sm:px-8 sm:py-9">
+            <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-center">
+              <div className="space-y-6">
+                <div className="inline-flex items-center gap-2 rounded-full border border-[#F2B705]/30 bg-[#F2B705]/10 px-4 py-1.5 text-xs font-semibold text-[#8d6700]">
                   <BriefcaseBusiness className="h-4 w-4" />
                   طلبات التوظيف
                 </div>
                 <div className="space-y-3">
-                  <h1 className="text-2xl font-semibold tracking-tight text-slate-950 sm:text-[2rem]">
+                  <h1 className="text-3xl font-semibold tracking-tight text-slate-950">
                     إدارة طلبات التوظيف
                   </h1>
                   <p className="max-w-3xl text-sm leading-7 text-slate-600">
@@ -220,7 +220,7 @@ export default function RecruitmentApplicationsPage() {
                     للمراجعة اليومية.
                   </p>
                 </div>
-                <div className="grid gap-3 sm:grid-cols-3">
+                <div className="grid gap-4 sm:grid-cols-3">
                   <SummaryPill
                     label="إجمالي الطلبات"
                     value={formatNumberEN(applications.length)}
@@ -243,7 +243,7 @@ export default function RecruitmentApplicationsPage() {
                 </div>
               </div>
 
-              <div className="rounded-[28px] border border-[#1e3358] bg-[linear-gradient(180deg,rgba(8,18,47,0.98),rgba(2,6,23,0.96))] p-6 text-white shadow-[0_28px_60px_-42px_rgba(2,6,23,0.85)]">
+              <div className="rounded-3xl bg-slate-950 p-6 text-white shadow-md">
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <p className="text-[11px] font-semibold tracking-[0.2em] text-white/45">
@@ -270,32 +270,28 @@ export default function RecruitmentApplicationsPage() {
           </CardContent>
         </Card>
 
-        <div className="grid gap-6 xl:grid-cols-[380px_minmax(0,1fr)]">
-          <Card className="overflow-hidden rounded-[28px] border border-slate-200/80 bg-white shadow-[0_24px_54px_-40px_rgba(15,23,42,0.28)] xl:sticky xl:top-6 xl:self-start">
-            <CardHeader className="border-b border-slate-100/80 pb-5">
+        <div className="grid gap-8 xl:grid-cols-[360px_minmax(0,1fr)]">
+          <Card className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm xl:sticky xl:top-6 xl:self-start">
+            <CardHeader className="border-b border-slate-100 bg-white px-6 py-5">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <CardTitle className="text-[1.1rem] font-semibold tracking-tight text-slate-950">
+                  <CardTitle className="text-lg font-semibold tracking-tight text-slate-950">
                     قائمة الطلبات
                   </CardTitle>
-                  <CardDescription className="mt-2 text-sm leading-7 text-slate-600">
-                    بطاقات مضغوطة وواضحة لاسم المتقدم والجوال والتعليم والتاريخ
-                    والمرفقات مع إبراز مباشر للطلب المحدد.
+                  <CardDescription className="mt-2 text-sm leading-6 text-slate-500">
+                    قائمة مختصرة لاختيار الطلب فقط. تظهر التفاصيل الكاملة في لوحة المراجعة.
                   </CardDescription>
                 </div>
-                <Badge variant="outline" className="rounded-full">
+                <Badge variant="outline" className="rounded-full border-slate-200 bg-slate-50">
                   {formatNumberEN(applications.length)}
                 </Badge>
               </div>
             </CardHeader>
-            <CardContent className="p-4 pt-4">
+            <CardContent className="p-4">
               {loading ? (
                 <div className="space-y-3">
                   {Array.from({ length: 5 }).map((_, index) => (
-                    <div
-                      key={index}
-                      className="h-32 rounded-[24px] bg-slate-100"
-                    />
+                    <div key={index} className="h-24 rounded-2xl bg-slate-100" />
                   ))}
                 </div>
               ) : applications.length === 0 ? (
@@ -305,7 +301,7 @@ export default function RecruitmentApplicationsPage() {
                   compact
                 />
               ) : (
-                <div className="space-y-3 xl:max-h-[calc(100vh-15.5rem)] xl:overflow-y-auto xl:pl-1">
+                <div className="space-y-3 xl:max-h-[calc(100vh-14rem)] xl:overflow-y-auto xl:pl-1">
                   {applications.map(application => {
                     const summary = getApplicationSummary(application);
                     const attachmentsCount =
@@ -328,27 +324,28 @@ export default function RecruitmentApplicationsPage() {
             </CardContent>
           </Card>
 
-          <div className="space-y-6">
-            <Card className="overflow-hidden rounded-[28px] border border-slate-200/80 bg-white shadow-[0_24px_54px_-40px_rgba(15,23,42,0.28)]">
-              <CardHeader className="border-b border-slate-100/80 pb-5">
-                <CardTitle className="text-[1.1rem] font-semibold tracking-tight text-slate-950">
+          <div className="space-y-8">
+            <Card className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm">
+              <CardHeader className="border-b border-slate-100 bg-white px-6 py-5">
+                <CardTitle className="text-xl font-semibold tracking-tight text-slate-950">
                   تفاصيل الطلب
                 </CardTitle>
-                <CardDescription className="text-sm leading-7 text-slate-600">
-                  رأس مختصر للطلب المحدد مع حقول المتقدم كاملة، ثم قسم مستقل
-                  وواضح للمرفقات والمعاينة والتحميل.
+                <CardDescription className="mt-2 text-sm leading-6 text-slate-500">
+                  ملخص واضح للمتقدم والحقول الأساسية دون تكرار معلومات القائمة.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="p-6">
+              <CardContent className="p-6 sm:p-7">
                 {!selectedApplication || !selectedSummary ? (
                   <EmptyState
                     title="اختر طلبًا من القائمة"
                     description="عند اختيار أحد الطلبات ستظهر هنا جميع البيانات والمرفقات بشكل منظم وواضح."
                   />
                 ) : (
-                  <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_260px]">
-                    <div className="rounded-[26px] border border-slate-200/80 bg-[linear-gradient(135deg,#ffffff_0%,#f8fafc_58%,#eef2ff_100%)] p-6">
-                      <div className="flex flex-wrap items-center gap-2">
+                  <div className="space-y-6">
+                    <div className="rounded-3xl border border-slate-100 bg-[#F8F9FA] p-6 shadow-sm">
+                      <div className="flex flex-wrap items-center justify-between gap-4">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
                         <Badge className="rounded-full bg-slate-900 text-white hover:bg-slate-900">
                           الطلب المحدد
                         </Badge>
@@ -364,17 +361,20 @@ export default function RecruitmentApplicationsPage() {
                         >
                           {formatNumberEN(selectedAttachments.length)} مرفقات
                         </Badge>
+                          </div>
+                          <h2 className="mt-5 text-2xl font-semibold tracking-tight text-slate-950">
+                            {selectedSummary.fullName}
+                          </h2>
+                        </div>
+                        <InfoTile
+                          label="رقم الطلب"
+                          value={selectedApplication.id}
+                          monospace
+                          compact
+                        />
                       </div>
 
-                      <h2 className="mt-5 text-2xl font-semibold tracking-tight text-slate-950">
-                        {selectedSummary.fullName}
-                      </h2>
-                      <p className="mt-2 text-sm leading-7 text-slate-600">
-                        مساحة مراجعة مريحة تعرض البيانات الأساسية أولًا ثم بقية
-                        الحقول والمرفقات بدون تزاحم.
-                      </p>
-
-                      <div className="mt-6 grid gap-3 md:grid-cols-2">
+                      <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                         <SelectedOverviewRow
                           icon={Phone}
                           label="الجوال"
@@ -401,39 +401,20 @@ export default function RecruitmentApplicationsPage() {
                         />
                       </div>
                     </div>
-
-                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-                      <InfoTile
-                        label="رقم الطلب"
-                        value={selectedApplication.id}
-                        monospace
-                      />
-                      <InfoTile
-                        label="عدد الحقول"
-                        value={formatNumberEN(selectedAnswers.length)}
-                      />
-                      <InfoTile
-                        label="حالة المرفقات"
-                        value={
-                          selectedAttachments.length ? "مرفقة" : "غير مرفقة"
-                        }
-                      />
-                    </div>
                   </div>
                 )}
               </CardContent>
             </Card>
 
-            <Card className="overflow-hidden rounded-[28px] border border-slate-200/80 bg-white shadow-[0_24px_54px_-40px_rgba(15,23,42,0.28)]">
-              <CardHeader className="border-b border-slate-100/80 pb-5">
+            <Card className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm">
+              <CardHeader className="border-b border-slate-100 bg-white px-6 py-5">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <CardTitle className="text-[1.05rem] font-semibold tracking-tight text-slate-950">
+                    <CardTitle className="text-lg font-semibold tracking-tight text-slate-950">
                       بيانات المتقدم
                     </CardTitle>
-                    <CardDescription className="mt-2 text-sm leading-7 text-slate-600">
-                      عرض الحقول على شبكة أوسع ومسافات داخلية أوضح بدل التكدس
-                      العمودي السابق.
+                    <CardDescription className="mt-2 text-sm leading-6 text-slate-500">
+                      شبكة بيانات خفيفة لقراءة كل إجابات النموذج بدون بطاقات ضخمة.
                     </CardDescription>
                   </div>
                   {selectedApplication ? (
@@ -443,7 +424,7 @@ export default function RecruitmentApplicationsPage() {
                   ) : null}
                 </div>
               </CardHeader>
-              <CardContent className="p-6">
+              <CardContent className="p-6 sm:p-7">
                 {!selectedApplication ? (
                   <EmptyState
                     title="بيانات المتقدم ستظهر هنا"
@@ -451,7 +432,7 @@ export default function RecruitmentApplicationsPage() {
                     compact
                   />
                 ) : selectedAnswers.length ? (
-                  <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
+                  <div className="grid overflow-hidden rounded-2xl border border-slate-100 bg-white md:grid-cols-2 2xl:grid-cols-3">
                     {selectedAnswers.map(answer => (
                       <AnswerCard
                         key={`${answer.fieldId}-${answer.order}`}
@@ -469,16 +450,15 @@ export default function RecruitmentApplicationsPage() {
               </CardContent>
             </Card>
 
-            <Card className="overflow-hidden rounded-[28px] border border-slate-200/80 bg-white shadow-[0_24px_54px_-40px_rgba(15,23,42,0.28)]">
-              <CardHeader className="border-b border-slate-100/80 pb-5">
+            <Card className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm">
+              <CardHeader className="border-b border-slate-100 bg-white px-6 py-5">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <CardTitle className="text-[1.05rem] font-semibold tracking-tight text-slate-950">
+                    <CardTitle className="text-lg font-semibold tracking-tight text-slate-950">
                       المرفقات
                     </CardTitle>
-                    <CardDescription className="mt-2 text-sm leading-7 text-slate-600">
-                      اسم الملف ونوعه وحجمه وأزرار المعاينة والتحميل داخل بطاقات
-                      مستقلة ومريحة بصريًا.
+                    <CardDescription className="mt-2 text-sm leading-6 text-slate-500">
+                      ملفات الطلب مع إجراءات المعاينة والتحميل في صفوف واضحة.
                     </CardDescription>
                   </div>
                   {selectedApplication ? (
@@ -488,7 +468,7 @@ export default function RecruitmentApplicationsPage() {
                   ) : null}
                 </div>
               </CardHeader>
-              <CardContent className="p-6">
+              <CardContent className="p-6 sm:p-7">
                 {!selectedApplication ? (
                   <EmptyState
                     title="المرفقات ستظهر هنا"
@@ -539,13 +519,13 @@ function ApplicationListItem({
       onClick={onSelect}
       aria-pressed={isActive}
       className={cn(
-        "w-full rounded-[24px] border p-4 text-right transition-all",
+        "w-full rounded-2xl border p-4 text-right transition-all",
         isActive
-          ? "border-slate-900 bg-[linear-gradient(135deg,#111827_0%,#1e293b_100%)] text-white shadow-[0_20px_42px_-30px_rgba(15,23,42,0.68)]"
-          : "border-slate-200 bg-slate-50/80 text-slate-900 hover:border-slate-300 hover:bg-white"
+          ? "border-slate-900 bg-slate-950 text-white shadow-md"
+          : "border-slate-100 bg-white text-slate-900 shadow-sm hover:border-slate-200 hover:bg-slate-50"
       )}
     >
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <div
@@ -564,15 +544,16 @@ function ApplicationListItem({
           </div>
           <div
             className={cn(
-              "mt-2 text-xs",
+              "mt-3 flex items-center gap-2 text-xs",
               isActive ? "text-white/60" : "text-slate-500"
             )}
           >
-            رقم الطلب
+            <CalendarDays className="h-3.5 w-3.5" />
+            <span>{formatApplicationDate(application.createdAt)}</span>
           </div>
           <div
             className={cn(
-              "mt-1 break-all text-xs font-medium",
+              "mt-2 max-w-[230px] truncate text-xs font-medium",
               isActive ? "text-white/80" : "text-slate-600"
             )}
           >
@@ -616,37 +597,6 @@ function ApplicationListItem({
           </div>
         </div>
       </div>
-
-      <div className="mt-4 grid gap-2 sm:grid-cols-2">
-        <ListMetaItem
-          icon={Phone}
-          label="الجوال"
-          value={summary.phone}
-          active={isActive}
-        />
-        <ListMetaItem
-          icon={ShieldCheck}
-          label="التعليم"
-          value={summary.education}
-          active={isActive}
-        />
-        <ListMetaItem
-          icon={CalendarDays}
-          label="التاريخ"
-          value={formatApplicationDate(application.createdAt)}
-          active={isActive}
-        />
-        <ListMetaItem
-          icon={Paperclip}
-          label="عدد المرفقات"
-          value={
-            attachmentsCount > 0
-              ? `${formatNumberEN(attachmentsCount)} ملف`
-              : "بدون مرفقات"
-          }
-          active={isActive}
-        />
-      </div>
     </button>
   );
 }
@@ -661,54 +611,12 @@ function SummaryPill({
   helper: string;
 }) {
   return (
-    <div className="rounded-[22px] border border-slate-200/80 bg-white/90 p-4 shadow-[0_16px_34px_-30px_rgba(15,23,42,0.3)]">
+    <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
       <div className="text-xs font-semibold text-slate-500">{label}</div>
       <div className="mt-4 text-base font-semibold tracking-tight text-slate-950">
         {value}
       </div>
       <div className="mt-2 text-sm text-slate-500">{helper}</div>
-    </div>
-  );
-}
-
-function ListMetaItem({
-  icon: Icon,
-  label,
-  value,
-  active,
-}: {
-  icon: LucideIcon;
-  label: string;
-  value: string;
-  active: boolean;
-}) {
-  return (
-    <div
-      className={cn(
-        "rounded-2xl border px-3 py-3",
-        active
-          ? "border-white/10 bg-white/[0.06]"
-          : "border-slate-200/80 bg-white/80"
-      )}
-    >
-      <div className="flex items-center gap-2">
-        <Icon
-          className={cn("h-4 w-4", active ? "text-white/70" : "text-slate-500")}
-        />
-        <span
-          className={cn("text-xs", active ? "text-white/60" : "text-slate-500")}
-        >
-          {label}
-        </span>
-      </div>
-      <div
-        className={cn(
-          "mt-2 truncate text-sm font-semibold",
-          active ? "text-white" : "text-slate-900"
-        )}
-      >
-        {value}
-      </div>
     </div>
   );
 }
@@ -723,7 +631,7 @@ function SelectedOverviewRow({
   value: string;
 }) {
   return (
-    <div className="rounded-[22px] border border-slate-200/80 bg-white/[0.85] px-4 py-4">
+    <div className="rounded-2xl border border-slate-100 bg-white px-4 py-4 shadow-sm">
       <div className="flex items-center gap-2 text-slate-500">
         <Icon className="h-4 w-4" />
         <span className="text-xs font-medium">{label}</span>
@@ -737,13 +645,20 @@ function InfoTile({
   label,
   value,
   monospace = false,
+  compact = false,
 }: {
   label: string;
   value: string;
   monospace?: boolean;
+  compact?: boolean;
 }) {
   return (
-    <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/80 p-4">
+    <div
+      className={cn(
+        "rounded-2xl border border-slate-100 bg-white shadow-sm",
+        compact ? "max-w-full px-4 py-3" : "p-4"
+      )}
+    >
       <div className="text-xs font-medium text-slate-500">{label}</div>
       <div
         className={cn(
@@ -759,9 +674,9 @@ function InfoTile({
 
 function AnswerCard({ answer }: { answer: RecruitmentApplicationAnswer }) {
   return (
-    <div className="rounded-[24px] border border-slate-200/80 bg-slate-50/80 p-4">
+    <div className="min-h-28 border-b border-l border-slate-100 bg-white p-4">
       <div className="text-xs font-medium text-slate-500">{answer.label}</div>
-      <div className="mt-3 whitespace-pre-wrap break-words text-sm font-semibold leading-7 text-slate-950">
+      <div className="mt-2 whitespace-pre-wrap break-words text-sm font-semibold leading-7 text-slate-950">
         {getAnswerDisplayValue(answer)}
       </div>
     </div>
@@ -779,12 +694,12 @@ function AttachmentCard({
   const downloadUrl = buildR2DownloadUrl(attachment.filePath, true) || viewUrl;
 
   return (
-    <div className="flex h-full flex-col justify-between rounded-[24px] border border-slate-200/80 bg-slate-50/80 p-5">
+    <div className="flex h-full flex-col justify-between rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
       <div className="space-y-4">
-        <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start justify-between gap-4">
           <div className="min-w-0 space-y-2">
             <div className="flex items-center gap-2 text-slate-950">
-              <div className="rounded-2xl bg-white p-2 text-slate-700 shadow-sm">
+              <div className="rounded-xl bg-slate-50 p-2 text-slate-700">
                 <Paperclip className="h-4 w-4" />
               </div>
               <span className="truncate font-semibold">{attachment.label}</span>
@@ -808,7 +723,7 @@ function AttachmentCard({
 
       <div className="mt-5 flex flex-wrap gap-2">
         {viewUrl ? (
-          <Button asChild variant="outline" size="sm" className="rounded-full">
+          <Button asChild variant="outline" size="sm" className="rounded-full border-slate-200 bg-white">
             <a href={viewUrl} target="_blank" rel="noreferrer">
               <Eye className="ml-2 h-4 w-4" />
               معاينة
