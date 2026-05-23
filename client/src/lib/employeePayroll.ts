@@ -1,4 +1,5 @@
 import { formatDateEN, toDateSafe } from "@/lib/formatters";
+import { buildR2DownloadUrl } from "@/lib/documentUploadService";
 import { getEmployeeAbsenceDaysValue } from "@/lib/employeeAbsence";
 import {
   EMPLOYEE_PAYROLL_RECORDS_COLLECTION,
@@ -37,6 +38,8 @@ export type EmployeePayrollComputation = {
 export type EmployeePayrollRecord = EmployeePayrollRecordDoc & {
   id: string;
   createdAtDate: Date | null;
+  mudadDocumentViewUrl: string;
+  mudadDocumentDownloadUrl: string;
 };
 
 function toFiniteNumber(value: unknown) {
@@ -58,6 +61,29 @@ function normalizeSalaryDeductions(
       amount: toFiniteNumber(item?.amount),
     }))
     .filter(item => item.title && item.amount > 0);
+}
+
+function normalizePayrollDocument(raw: any) {
+  if (!raw || typeof raw !== "object") return null;
+
+  const filePath = String(raw.filePath || raw.path || "").trim();
+  const fileUrl = String(
+    raw.fileUrl || raw.url || (filePath ? buildR2DownloadUrl(filePath, false) : "")
+  ).trim();
+
+  return {
+    id: String(raw.id || raw.fileId || "").trim() || null,
+    fileName: String(raw.fileName || raw.name || "mudad-document").trim(),
+    filePath: filePath || null,
+    fileUrl: fileUrl || null,
+    contentType: String(raw.contentType || raw.mimeType || "").trim() || null,
+    fileSize:
+      raw.fileSize === null || raw.fileSize === undefined
+        ? null
+        : Math.max(0, toFiniteNumber(raw.fileSize)),
+    uploadedAt: raw.uploadedAt ?? null,
+    uploadedBy: String(raw.uploadedBy || "").trim() || null,
+  };
 }
 
 export function buildEmployeePayrollMonthInput(date: Date = new Date()) {
@@ -187,6 +213,14 @@ export function normalizeEmployeePayrollRecord(
       }))
       .filter(item => item.date)
     : null;
+  const mudadDocument = normalizePayrollDocument(raw.mudadDocument);
+  const mudadDocumentViewUrl =
+    mudadDocument?.fileUrl ||
+    (mudadDocument?.filePath ? buildR2DownloadUrl(mudadDocument.filePath, false) : "");
+  const mudadDocumentDownloadUrl =
+    mudadDocument?.filePath
+      ? buildR2DownloadUrl(mudadDocument.filePath, true)
+      : mudadDocumentViewUrl;
 
   return {
     id,
@@ -217,10 +251,13 @@ export function normalizeEmployeePayrollRecord(
         : Math.max(0, toFiniteNumber(raw.totalSalaryDeductions)),
     absenceEntries,
     finalSalary: Math.max(0, toFiniteNumber(raw.finalSalary)),
+    mudadDocument,
     createdAt: raw.createdAt ?? null,
     createdByUid: String(raw.createdByUid || "").trim() || null,
     createdByEmail: String(raw.createdByEmail || "").trim() || null,
     createdAtDate: toDateSafe(raw.createdAt),
+    mudadDocumentViewUrl,
+    mudadDocumentDownloadUrl,
   };
 }
 

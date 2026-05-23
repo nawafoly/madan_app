@@ -249,6 +249,16 @@ export type EmployeePayrollRecordDoc = {
     note?: string | null;
   }> | null;
   finalSalary: number;
+  mudadDocument?: {
+    id?: string | null;
+    fileName?: string | null;
+    filePath?: string | null;
+    fileUrl?: string | null;
+    contentType?: string | null;
+    fileSize?: number | null;
+    uploadedAt?: unknown;
+    uploadedBy?: string | null;
+  } | null;
   createdAt?: unknown;
   createdByUid?: string | null;
   createdByEmail?: string | null;

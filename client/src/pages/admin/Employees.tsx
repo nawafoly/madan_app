@@ -111,7 +111,10 @@ import {
   type EmployeeMessageConversationRecord,
   type EmployeeMessageRecord,
 } from "@/lib/employeeMessages";
-import { uploadDocumentToCloudflare } from "@/lib/documentUploadService";
+import {
+  buildR2DownloadUrl,
+  uploadDocumentToCloudflare,
+} from "@/lib/documentUploadService";
 import { createInAppNotification } from "@/lib/inAppNotifications";
 import {
   EMPLOYEE_EMPTY_VALUE,
@@ -309,6 +312,23 @@ function toNullableNumber(value: string) {
 
   const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function isSupportedMudadPayrollDocument(file: File | null) {
+  if (!file) return false;
+
+  const mime = String(file.type || "").trim().toLowerCase();
+  const name = String(file.name || "").trim().toLowerCase();
+
+  return (
+    mime === "application/pdf" ||
+    mime === "image/png" ||
+    mime === "image/jpeg" ||
+    name.endsWith(".pdf") ||
+    name.endsWith(".png") ||
+    name.endsWith(".jpg") ||
+    name.endsWith(".jpeg")
+  );
 }
 
 function normalizeFingerprintNumber(value: unknown) {
@@ -857,6 +877,9 @@ export default function EmployeesManagementPage() {
   const [payrollMonthInput, setPayrollMonthInput] = useState(
     buildEmployeePayrollMonthInput
   );
+  const [payrollMudadDocument, setPayrollMudadDocument] = useState<File | null>(
+    null
+  );
   const [creatingPayrollRecord, setCreatingPayrollRecord] = useState(false);
   const [saving, setSaving] = useState(false);
   const [leaveRequests, setLeaveRequests] = useState<
@@ -910,6 +933,7 @@ export default function EmployeesManagementPage() {
   const [sendingEmployeeMessage, setSendingEmployeeMessage] = useState(false);
   const employeeFileInputRef = useRef<HTMLInputElement | null>(null);
   const officialDocumentInputRef = useRef<HTMLInputElement | null>(null);
+  const payrollMudadDocumentInputRef = useRef<HTMLInputElement | null>(null);
   const employeeSalarySectionRef = useRef<HTMLDivElement | null>(null);
   const employeeOverviewSectionRef = useRef<HTMLDivElement | null>(null);
   const employeeLeaveSectionRef = useRef<HTMLDivElement | null>(null);
@@ -952,6 +976,13 @@ export default function EmployeesManagementPage() {
     setOfficialDocumentForm(buildOfficialDocumentFormValues());
     if (officialDocumentInputRef.current) {
       officialDocumentInputRef.current.value = "";
+    }
+  };
+
+  const resetPayrollMudadDocument = () => {
+    setPayrollMudadDocument(null);
+    if (payrollMudadDocumentInputRef.current) {
+      payrollMudadDocumentInputRef.current.value = "";
     }
   };
 
@@ -1220,6 +1251,7 @@ export default function EmployeesManagementPage() {
     if (!selectedEmployeeDocumentId) {
       setEmployeePayrollRecords([]);
       setEmployeePayrollRecordsLoading(false);
+      resetPayrollMudadDocument();
       return;
     }
 
@@ -1251,6 +1283,10 @@ export default function EmployeesManagementPage() {
 
     return () => unsubscribe();
   }, [selectedEmployeeDocumentId]);
+
+  useEffect(() => {
+    resetPayrollMudadDocument();
+  }, [payrollMonthInput, selectedEmployeeDocumentId]);
 
   useEffect(() => {
     if (!selectedEmployeeAuthUid) {
@@ -2018,6 +2054,11 @@ export default function EmployeesManagementPage() {
       return;
     }
 
+    if (payrollMudadDocument && !isSupportedMudadPayrollDocument(payrollMudadDocument)) {
+      toast.error("الصيغ المدعومة لمستند مدد هي PDF أو PNG أو JPG فقط.");
+      return;
+    }
+
     setCreatingPayrollRecord(true);
     try {
       const absencesSnapshot = await getDocs(
@@ -2061,6 +2102,31 @@ export default function EmployeesManagementPage() {
           selectedPayrollMonthMeta.payrollMonth
         )
       );
+      const uploadedMudadDocument = payrollMudadDocument
+        ? await uploadDocumentToCloudflare({
+          entityType: "employee_payroll_record",
+          entityId: payrollRef.id,
+          category: "employee_payroll_mudad_document",
+          file: payrollMudadDocument,
+          kind: "attachment",
+          uploadedBy: user?.uid || undefined,
+          storageFolder: "mudad_documents",
+        })
+        : null;
+      const mudadDocumentPayload = uploadedMudadDocument
+        ? {
+          id: uploadedMudadDocument.id,
+          fileName: uploadedMudadDocument.fileName,
+          filePath: uploadedMudadDocument.filePath,
+          fileUrl:
+            uploadedMudadDocument.fileUrl ||
+            buildR2DownloadUrl(uploadedMudadDocument.filePath, false),
+          contentType: uploadedMudadDocument.contentType || null,
+          fileSize: uploadedMudadDocument.fileSize,
+          uploadedAt: uploadedMudadDocument.uploadedAt,
+          uploadedBy: user?.uid || null,
+        }
+        : null;
 
       await runTransaction(db, async tx => {
         const existingRecord = await tx.get(payrollRef);
@@ -2088,6 +2154,7 @@ export default function EmployeesManagementPage() {
             type: absence.type,
           })),
           finalSalary: payrollComputation.finalSalary,
+          mudadDocument: mudadDocumentPayload,
           createdAt: serverTimestamp(),
           createdByUid: user?.uid || null,
           createdByEmail: user?.email || null,
@@ -2119,6 +2186,15 @@ export default function EmployeesManagementPage() {
             overtimeBonus: payrollComputation.overtimeBonus,
             totalSalaryDeductions: payrollComputation.totalSalaryDeductions,
             finalSalary: payrollComputation.finalSalary,
+            mudadDocument: mudadDocumentPayload
+              ? {
+                id: mudadDocumentPayload.id,
+                fileName: mudadDocumentPayload.fileName,
+                filePath: mudadDocumentPayload.filePath,
+                contentType: mudadDocumentPayload.contentType,
+                fileSize: mudadDocumentPayload.fileSize,
+              }
+              : null,
           },
         });
       } catch (auditError) {
@@ -2128,6 +2204,7 @@ export default function EmployeesManagementPage() {
       toast.success(
         `تم إنشاء سجل راتب ${selectedPayrollMonthMeta.label} بنجاح.`
       );
+      resetPayrollMudadDocument();
     } catch (error) {
       console.error("employee_payroll_record_create_failed", error);
 
@@ -2159,6 +2236,37 @@ export default function EmployeesManagementPage() {
       ...current,
       file,
     }));
+  };
+
+  const handlePayrollMudadDocumentSelected = (
+    event: ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0] || null;
+    if (file && !isSupportedMudadPayrollDocument(file)) {
+      toast.error("الصيغ المدعومة لمستند مدد هي PDF أو PNG أو JPG فقط.");
+      resetPayrollMudadDocument();
+      return;
+    }
+
+    setPayrollMudadDocument(file);
+  };
+
+  const handlePayrollMudadDocumentDrop = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    if (!canManageEmployees || creatingPayrollRecord) return;
+
+    const file = event.dataTransfer.files?.[0] || null;
+    if (!file) return;
+
+    if (!isSupportedMudadPayrollDocument(file)) {
+      toast.error("الصيغ المدعومة لمستند مدد هي PDF أو PNG أو JPG فقط.");
+      return;
+    }
+
+    setPayrollMudadDocument(file);
+    if (payrollMudadDocumentInputRef.current) {
+      payrollMudadDocumentInputRef.current.value = "";
+    }
   };
 
   const handleEmployeeFileDrop = (event: DragEvent<HTMLDivElement>) => {
@@ -5161,36 +5269,112 @@ export default function EmployeesManagementPage() {
                         </div>
                       </div>
 
-                      <div className="space-y-4 rounded-[24px] border border-slate-200 bg-slate-50/70 p-5">
-                        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-                          <div className="space-y-1">
+                      <div className="space-y-6 rounded-[24px] border border-slate-200 bg-slate-50/70 p-5 sm:p-6">
+                        <div className="space-y-6">
+                          <div className="max-w-3xl space-y-2">
                             <div className="text-base font-semibold text-slate-950">
                               إضافة راتب نهاية الشهر
                             </div>
-                            <p className="text-sm leading-6 text-slate-500">
+                            <p className="text-sm leading-7 text-slate-500">
                               يتم إنشاء سجل راتب شهري مستقل للموظف، ويشمل ملخص الغياب لذلك الشهر
                               ضمن التقرير فقط دون ربط سجل الرواتب بسجل الغياب نفسه.
                             </p>
                           </div>
 
-                          <div className="grid gap-3 sm:grid-cols-[180px_auto]">
-                            <Field label="الشهر المستهدف">
-                              <Input
-                                type="month"
-                                value={payrollMonthInput}
-                                onChange={event =>
-                                  setPayrollMonthInput(event.target.value)
-                                }
-                                disabled={
-                                  !canManageEmployees || creatingPayrollRecord
-                                }
-                              />
-                            </Field>
+                          <div className="space-y-6">
+                            <div className="max-w-xs">
+                              <Field label="الشهر المستهدف">
+                                <Input
+                                  type="month"
+                                  value={payrollMonthInput}
+                                  onChange={event =>
+                                    setPayrollMonthInput(event.target.value)
+                                  }
+                                  disabled={
+                                    !canManageEmployees || creatingPayrollRecord
+                                  }
+                                />
+                              </Field>
+                            </div>
 
-                            <div className="flex items-end">
+                            <div className="w-full">
+                              <Field
+                                label="إرفاق مستند مدد (اختياري/إجباري)"
+                                description="الصيغ المدعومة: PDF, PNG, JPG."
+                              >
+                                <Input
+                                  id="payroll-mudad-document-input"
+                                  ref={payrollMudadDocumentInputRef}
+                                  type="file"
+                                  accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
+                                  className="sr-only"
+                                  onChange={handlePayrollMudadDocumentSelected}
+                                  disabled={
+                                    !canManageEmployees ||
+                                    creatingPayrollRecord ||
+                                    !!selectedPayrollRecord
+                                  }
+                                />
+                                <div
+                                  role="button"
+                                  tabIndex={
+                                    canManageEmployees &&
+                                      !creatingPayrollRecord &&
+                                      !selectedPayrollRecord
+                                      ? 0
+                                      : -1
+                                  }
+                                  onClick={() =>
+                                    payrollMudadDocumentInputRef.current?.click()
+                                  }
+                                  onKeyDown={event => {
+                                    if (
+                                      event.key === "Enter" ||
+                                      event.key === " "
+                                    ) {
+                                      event.preventDefault();
+                                      payrollMudadDocumentInputRef.current?.click();
+                                    }
+                                  }}
+                                  onDragOver={event => event.preventDefault()}
+                                  onDrop={handlePayrollMudadDocumentDrop}
+                                  className={cn(
+                                    "flex min-h-40 w-full cursor-pointer flex-col items-center justify-center gap-4 rounded-2xl border-2 border-dashed border-[#F2B705] bg-[#F2B705]/10 px-5 py-8 text-center text-sm text-slate-700 transition hover:bg-[#F2B705]/15 sm:px-10",
+                                    (!canManageEmployees ||
+                                      creatingPayrollRecord ||
+                                      !!selectedPayrollRecord) &&
+                                      "pointer-events-none cursor-not-allowed opacity-60"
+                                  )}
+                                >
+                                  <Upload className="h-6 w-6 text-[#030640]" />
+                                  {payrollMudadDocument ? (
+                                    <div className="max-w-full space-y-1">
+                                      <div className="font-semibold text-slate-950">
+                                        {payrollMudadDocument.name}
+                                      </div>
+                                      <div className="text-xs text-slate-600">
+                                        الحجم:{" "}
+                                        {formatFileSizeEN(payrollMudadDocument.size)}
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="max-w-md space-y-2">
+                                      <div className="font-semibold text-slate-950">
+                                        اسحب مستند مدد هنا أو انقر للاختيار
+                                      </div>
+                                      <div className="text-xs leading-6 text-slate-600">
+                                        سيتم حفظ المرفق مع سجل راتب الشهر الحالي.
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              </Field>
+                            </div>
+
+                            <div className="flex justify-end pt-1">
                               <Button
                                 type="button"
-                                className="w-full sm:w-auto"
+                                className="w-full whitespace-nowrap px-6 sm:w-auto"
                                 onClick={handleCreatePayrollRecord}
                                 disabled={
                                   !canManageEmployees ||
@@ -5263,6 +5447,64 @@ export default function EmployeesManagementPage() {
                                     >
                                       {record.payrollMonth}
                                     </Badge>
+                                  </div>
+
+                                  <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50/60 px-4 py-3">
+                                    {record.mudadDocument ? (
+                                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                        <div className="min-w-0 space-y-1">
+                                          <div className="flex items-center gap-2 text-sm font-semibold text-rose-900">
+                                            <FileText className="h-4 w-4 shrink-0" />
+                                            <span>المستند المرفق: مدد</span>
+                                          </div>
+                                          <div className="truncate text-xs text-rose-700">
+                                            {record.mudadDocument.fileName || "مستند مدد"}
+                                          </div>
+                                        </div>
+                                        <div className="flex flex-wrap gap-2">
+                                          {record.mudadDocumentViewUrl ? (
+                                            <Button
+                                              type="button"
+                                              size="sm"
+                                              variant="outline"
+                                              className="h-9 gap-2 border-rose-200 bg-white text-rose-800 hover:bg-rose-50"
+                                              asChild
+                                            >
+                                              <a
+                                                href={record.mudadDocumentViewUrl}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                              >
+                                                <Eye className="h-4 w-4" />
+                                                عرض
+                                              </a>
+                                            </Button>
+                                          ) : null}
+                                          {record.mudadDocumentDownloadUrl ? (
+                                            <Button
+                                              type="button"
+                                              size="sm"
+                                              className="h-9 gap-2 bg-rose-700 text-white hover:bg-rose-800"
+                                              asChild
+                                            >
+                                              <a
+                                                href={record.mudadDocumentDownloadUrl}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                              >
+                                                <Download className="h-4 w-4" />
+                                                تحميل
+                                              </a>
+                                            </Button>
+                                          ) : null}
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <div className="flex items-center gap-2 text-sm font-semibold text-rose-800">
+                                        <FileText className="h-4 w-4" />
+                                        <span>المستند المرفق: لا يوجد مستند مدد محفوظ</span>
+                                      </div>
+                                    )}
                                   </div>
 
                                   <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
