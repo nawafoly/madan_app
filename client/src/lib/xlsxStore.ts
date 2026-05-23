@@ -6,6 +6,7 @@ export type XlsxColumn = {
   key: string;
   header: string;
   width?: number;
+  align?: "right" | "center";
 };
 
 export type XlsxRow = Record<string, XlsxCellValue>;
@@ -15,6 +16,13 @@ export type XlsxSheet = {
   columns: XlsxColumn[];
   rows: XlsxRow[];
   freezeHeader?: boolean;
+  rightToLeft?: boolean;
+  title?: string;
+  subtitle?: string;
+  headerTone?: "navy" | "teal" | "amber" | "emerald" | "slate";
+  tabColor?: string;
+  zoomScale?: number;
+  mergeRanges?: string[];
 };
 
 export type XlsxWorkbookInput = {
@@ -104,7 +112,7 @@ function buildColsXml(columns: XlsxColumn[], rows: XlsxRow[]) {
       (maxWidth, row) => Math.max(maxWidth, displayLength(row[column.key])),
       column.header.length
     );
-    const width = Math.min(Math.max(column.width ?? autoWidth + 2, 10), 48);
+    const width = Math.min(Math.max(autoWidth + 5, column.width ?? 12), 64);
     return `<col min="${index + 1}" max="${index + 1}" width="${width}" customWidth="1"/>`;
   });
 
@@ -135,48 +143,120 @@ function buildCellXml(ref: string, value: XlsxCellValue, styleId: number) {
   return buildInlineStringCell(ref, String(value), styleId);
 }
 
+function normalizeRgb(value: string | undefined, fallback: string) {
+  const normalized = String(value || "")
+    .trim()
+    .replace(/^#/, "")
+    .toUpperCase();
+  return /^[0-9A-F]{6}$/.test(normalized) ? `FF${normalized}` : fallback;
+}
+
+function getHeaderStyleId(tone: XlsxSheet["headerTone"]) {
+  switch (tone) {
+    case "teal":
+      return 3;
+    case "amber":
+      return 4;
+    case "emerald":
+      return 5;
+    case "slate":
+      return 6;
+    case "navy":
+    default:
+      return 1;
+  }
+}
+
+function getRowStyleId(row: XlsxRow, rowIndex: number) {
+  const style = String(row.__style || "").trim();
+  if (style === "total") return 9;
+  if (style === "net") return 10;
+  if (style === "deduction") return 11;
+  return rowIndex % 2 === 1 ? 2 : 0;
+}
+
+function getCellStyleId(row: XlsxRow, rowIndex: number, column: XlsxColumn) {
+  const rowStyleId = getRowStyleId(row, rowIndex);
+  if (column.align !== "center") return rowStyleId;
+  if (rowStyleId === 0) return 12;
+  if (rowStyleId === 2) return 13;
+  return rowStyleId;
+}
+
 function buildSheetXml(sheet: XlsxSheet) {
   if (!sheet.columns.length) {
     throw new Error(`Worksheet "${sheet.name}" must include at least one column.`);
   }
 
   const lastColumn = toExcelColumnName(sheet.columns.length - 1);
-  const lastRowNumber = Math.max(sheet.rows.length + 1, 1);
+  const hasTitle = Boolean(sheet.title || sheet.subtitle);
+  const headerRowNumber = hasTitle ? 4 : 1;
+  const firstDataRowNumber = headerRowNumber + 1;
+  const lastRowNumber = Math.max(sheet.rows.length + headerRowNumber, headerRowNumber);
   const dimension = `A1:${lastColumn}${lastRowNumber}`;
+  const headerStyleId = getHeaderStyleId(sheet.headerTone);
 
   const headerCells = sheet.columns.map((column, index) =>
-    buildCellXml(`${toExcelColumnName(index)}1`, column.header, 1)
+    buildCellXml(`${toExcelColumnName(index)}${headerRowNumber}`, column.header, headerStyleId)
   );
 
   const dataRows = sheet.rows.map((row, rowIndex) => {
     const cells = sheet.columns.map((column, columnIndex) =>
       buildCellXml(
-        `${toExcelColumnName(columnIndex)}${rowIndex + 2}`,
+        `${toExcelColumnName(columnIndex)}${rowIndex + firstDataRowNumber}`,
         row[column.key],
-        0
+        getCellStyleId(row, rowIndex, column)
       )
     );
 
-    return `<row r="${rowIndex + 2}">${cells.join("")}</row>`;
+    return `<row r="${rowIndex + firstDataRowNumber}" ht="28" customHeight="1">${cells.join("")}</row>`;
   });
 
+  const zoomScale = Math.min(
+    Math.max(Math.round(Number(sheet.zoomScale || 120)), 80),
+    140
+  );
+  const sheetViewAttributes = `workbookViewId="0" zoomScale="${zoomScale}" zoomScaleNormal="${zoomScale}"${
+    sheet.rightToLeft ? ' rightToLeft="1"' : ""
+  }`;
   const freezeHeader =
     sheet.freezeHeader !== false
-      ? `<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="A2" sqref="A2"/></sheetView></sheetViews>`
-      : `<sheetViews><sheetView workbookViewId="0"/></sheetViews>`;
+      ? `<sheetViews><sheetView ${sheetViewAttributes}><pane ySplit="${headerRowNumber}" topLeftCell="A${firstDataRowNumber}" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="A${firstDataRowNumber}" sqref="A${firstDataRowNumber}"/></sheetView></sheetViews>`
+      : `<sheetViews><sheetView ${sheetViewAttributes}/></sheetViews>`;
+  const titleRows = hasTitle
+    ? [
+        `<row r="1" ht="36" customHeight="1">${buildCellXml("A1", sheet.title || sheet.name, 7)}</row>`,
+        `<row r="2" ht="28" customHeight="1">${buildCellXml("A2", sheet.subtitle || "", 8)}</row>`,
+        '<row r="3" ht="22" customHeight="1"/>',
+      ].join("")
+    : "";
+  const mergeRanges = [
+    ...(hasTitle ? [`A1:${lastColumn}1`, `A2:${lastColumn}2`] : []),
+    ...(sheet.mergeRanges || []),
+  ];
+  const sheetPr = sheet.tabColor
+    ? `<sheetPr><tabColor rgb="${normalizeRgb(sheet.tabColor, "FF030640")}"/></sheetPr>`
+    : "";
 
   return [
     XML_HEADER,
     '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">',
+    sheetPr,
     `<dimension ref="${dimension}"/>`,
     freezeHeader,
-    '<sheetFormatPr defaultRowHeight="18"/>',
+    '<sheetFormatPr defaultRowHeight="26"/>',
     buildColsXml(sheet.columns, sheet.rows),
     "<sheetData>",
-    `<row r="1">${headerCells.join("")}</row>`,
+    titleRows,
+    `<row r="${headerRowNumber}" ht="30" customHeight="1">${headerCells.join("")}</row>`,
     dataRows.join(""),
     "</sheetData>",
-    `<autoFilter ref="${dimension}"/>`,
+    `<autoFilter ref="A${headerRowNumber}:${lastColumn}${lastRowNumber}"/>`,
+    mergeRanges.length
+      ? `<mergeCells count="${mergeRanges.length}">${mergeRanges
+          .map(range => `<mergeCell ref="${escapeXml(range)}"/>`)
+          .join("")}</mergeCells>`
+      : "",
     '<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/>',
     "</worksheet>",
   ].join("");
@@ -252,19 +332,44 @@ function buildStylesXml() {
   return [
     XML_HEADER,
     '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">',
-    "<fonts count=\"2\">",
+    "<fonts count=\"5\">",
     '<font><sz val="11"/><name val="Calibri"/><family val="2"/></font>',
     '<font><b/><sz val="11"/><name val="Calibri"/><family val="2"/></font>',
+    '<font><b/><color rgb="FFFFFFFF"/><sz val="12"/><name val="Calibri"/><family val="2"/></font>',
+    '<font><b/><color rgb="FFFFFFFF"/><sz val="18"/><name val="Calibri"/><family val="2"/></font>',
+    '<font><color rgb="FF475569"/><sz val="12"/><name val="Calibri"/><family val="2"/></font>',
     "</fonts>",
-    "<fills count=\"2\">",
+    "<fills count=\"12\">",
     '<fill><patternFill patternType="none"/></fill>',
-    '<fill><patternFill patternType="solid"><fgColor rgb="FFF4F1E8"/><bgColor indexed="64"/></patternFill></fill>',
+    '<fill><patternFill patternType="gray125"/></fill>',
+    '<fill><patternFill patternType="solid"><fgColor rgb="FF030640"/><bgColor indexed="64"/></patternFill></fill>',
+    '<fill><patternFill patternType="solid"><fgColor rgb="FFF8FAFC"/><bgColor indexed="64"/></patternFill></fill>',
+    '<fill><patternFill patternType="solid"><fgColor rgb="FF0F766E"/><bgColor indexed="64"/></patternFill></fill>',
+    '<fill><patternFill patternType="solid"><fgColor rgb="FFB45309"/><bgColor indexed="64"/></patternFill></fill>',
+    '<fill><patternFill patternType="solid"><fgColor rgb="FF047857"/><bgColor indexed="64"/></patternFill></fill>',
+    '<fill><patternFill patternType="solid"><fgColor rgb="FF334155"/><bgColor indexed="64"/></patternFill></fill>',
+    '<fill><patternFill patternType="solid"><fgColor rgb="FFEEF2FF"/><bgColor indexed="64"/></patternFill></fill>',
+    '<fill><patternFill patternType="solid"><fgColor rgb="FFFFF7ED"/><bgColor indexed="64"/></patternFill></fill>',
+    '<fill><patternFill patternType="solid"><fgColor rgb="FFECFDF5"/><bgColor indexed="64"/></patternFill></fill>',
+    '<fill><patternFill patternType="solid"><fgColor rgb="FFFEF2F2"/><bgColor indexed="64"/></patternFill></fill>',
     "</fills>",
-    '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>',
+    '<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color rgb="FFE2E8F0"/></left><right style="thin"><color rgb="FFE2E8F0"/></right><top style="thin"><color rgb="FFE2E8F0"/></top><bottom style="thin"><color rgb="FFE2E8F0"/></bottom><diagonal/></border></borders>',
     '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>',
-    '<cellXfs count="2">',
-    '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>',
-    '<xf numFmtId="0" fontId="1" fillId="1" borderId="0" xfId="0" applyFont="1" applyFill="1"/>',
+    '<cellXfs count="14">',
+    '<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyAlignment="1" applyBorder="1"><alignment horizontal="right" vertical="center" readingOrder="2" wrapText="1"/></xf>',
+    '<xf numFmtId="0" fontId="2" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyAlignment="1" applyBorder="1"><alignment horizontal="center" vertical="center" readingOrder="2" wrapText="1"/></xf>',
+    '<xf numFmtId="0" fontId="0" fillId="3" borderId="1" xfId="0" applyFill="1" applyAlignment="1" applyBorder="1"><alignment horizontal="right" vertical="center" readingOrder="2" wrapText="1"/></xf>',
+    '<xf numFmtId="0" fontId="2" fillId="4" borderId="1" xfId="0" applyFont="1" applyFill="1" applyAlignment="1" applyBorder="1"><alignment horizontal="center" vertical="center" readingOrder="2" wrapText="1"/></xf>',
+    '<xf numFmtId="0" fontId="2" fillId="5" borderId="1" xfId="0" applyFont="1" applyFill="1" applyAlignment="1" applyBorder="1"><alignment horizontal="center" vertical="center" readingOrder="2" wrapText="1"/></xf>',
+    '<xf numFmtId="0" fontId="2" fillId="6" borderId="1" xfId="0" applyFont="1" applyFill="1" applyAlignment="1" applyBorder="1"><alignment horizontal="center" vertical="center" readingOrder="2" wrapText="1"/></xf>',
+    '<xf numFmtId="0" fontId="2" fillId="7" borderId="1" xfId="0" applyFont="1" applyFill="1" applyAlignment="1" applyBorder="1"><alignment horizontal="center" vertical="center" readingOrder="2" wrapText="1"/></xf>',
+    '<xf numFmtId="0" fontId="3" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyAlignment="1" applyBorder="1"><alignment horizontal="center" vertical="center" readingOrder="2"/></xf>',
+    '<xf numFmtId="0" fontId="4" fillId="8" borderId="1" xfId="0" applyFont="1" applyFill="1" applyAlignment="1" applyBorder="1"><alignment horizontal="center" vertical="center" readingOrder="2" wrapText="1"/></xf>',
+    '<xf numFmtId="0" fontId="1" fillId="9" borderId="1" xfId="0" applyFont="1" applyFill="1" applyAlignment="1" applyBorder="1"><alignment horizontal="right" vertical="center" readingOrder="2" wrapText="1"/></xf>',
+    '<xf numFmtId="0" fontId="1" fillId="10" borderId="1" xfId="0" applyFont="1" applyFill="1" applyAlignment="1" applyBorder="1"><alignment horizontal="right" vertical="center" readingOrder="2" wrapText="1"/></xf>',
+    '<xf numFmtId="0" fontId="1" fillId="11" borderId="1" xfId="0" applyFont="1" applyFill="1" applyAlignment="1" applyBorder="1"><alignment horizontal="right" vertical="center" readingOrder="2" wrapText="1"/></xf>',
+    '<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyAlignment="1" applyBorder="1"><alignment horizontal="center" vertical="center" readingOrder="2" wrapText="1"/></xf>',
+    '<xf numFmtId="0" fontId="0" fillId="3" borderId="1" xfId="0" applyFill="1" applyAlignment="1" applyBorder="1"><alignment horizontal="center" vertical="center" readingOrder="2" wrapText="1"/></xf>',
     "</cellXfs>",
     '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>',
     "</styleSheet>",

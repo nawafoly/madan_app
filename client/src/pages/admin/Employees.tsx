@@ -140,6 +140,7 @@ import {
   sortEmployeePayrollRecords,
   type EmployeePayrollRecord,
 } from "@/lib/employeePayroll";
+import { generateEmployeeExcelReport } from "@/lib/employeeExcelReport";
 import {
   formatDateEN,
   formatDateTimeEN,
@@ -873,6 +874,7 @@ export default function EmployeesManagementPage() {
   >([]);
   const [leaveBalanceAdjustmentsLoading, setLeaveBalanceAdjustmentsLoading] =
     useState(false);
+  const [employeeReportExporting, setEmployeeReportExporting] = useState(false);
   const [reviewingLeaveRequestId, setReviewingLeaveRequestId] = useState<
     string | null
   >(null);
@@ -1497,6 +1499,45 @@ export default function EmployeesManagementPage() {
     const parsed = Number(form.leaveBalance || 0);
     return Number.isFinite(parsed) ? parsed : 0;
   }, [form.leaveBalance]);
+
+  const downloadBlob = (blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportEmployeeExcelReport = async () => {
+    if (!selectedEmployee || !selectedEmployeeProfile) return;
+
+    setEmployeeReportExporting(true);
+
+    try {
+      const result = await generateEmployeeExcelReport({
+        employee: selectedEmployee,
+        profile: selectedEmployeeProfile,
+        payrollRecords: employeePayrollRecords,
+        absences: employeeAbsences,
+        leaveRequests,
+        files: employeeFiles,
+        reportMonth: payrollMonthInput,
+      });
+
+      downloadBlob(result.blob, result.fileName);
+      toast.success("تم إنشاء تقرير Excel للموظف.");
+    } catch (error) {
+      console.error("employee_excel_report_failed", error);
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "تعذر إنشاء تقرير Excel للموظف."
+      );
+    } finally {
+      setEmployeeReportExporting(false);
+    }
+  };
 
   useEffect(() => {
     setManualLeaveBalance(
@@ -3738,6 +3779,19 @@ export default function EmployeesManagementPage() {
                           ) : null}
                         </div>
                       </div>
+
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="w-full shrink-0 gap-2 rounded-full border-slate-200 bg-white text-slate-700 hover:bg-slate-50 sm:w-auto"
+                        onClick={handleExportEmployeeExcelReport}
+                        disabled={employeeReportExporting}
+                      >
+                        <Download className="h-4 w-4" />
+                        {employeeReportExporting
+                          ? "جارٍ إنشاء Excel..."
+                          : "تصدير Excel"}
+                      </Button>
                     </div>
                   </CardHeader>
 

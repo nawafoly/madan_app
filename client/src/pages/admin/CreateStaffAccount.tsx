@@ -148,6 +148,45 @@ export default function CreateStaffAccount() {
       method,
     });
 
+  const buildDefaultEmployeePayload = ({
+    uid,
+    email,
+    displayName,
+    phone = "",
+    title = "",
+    isActive = true,
+  }: {
+    uid: string;
+    email: string;
+    displayName: string;
+    phone?: string;
+    title?: string;
+    isActive?: boolean;
+  }) => ({
+    uid,
+    linkedUserUid: uid,
+    email,
+    displayName,
+    name: displayName,
+    phone,
+    title: title || null,
+    includeInEmployeeManagement: true,
+    active: isActive,
+    isActive,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+    employeeProfile: {
+      personal: {},
+      employment: {
+        employmentStatus: isActive ? "active" : "inactive",
+        status: isActive ? "active" : "inactive",
+        title: title || null,
+        jobTitle: title || null,
+        updatedAt: serverTimestamp(),
+      },
+    },
+  });
+
   const isKnownPermission = (
     permissionKey: unknown
   ): permissionKey is Permission => {
@@ -302,13 +341,24 @@ export default function CreateStaffAccount() {
         );
 
         await setDoc(doc(db, "users", cred.user.uid), {
+          uid: cred.user.uid,
           email: normalizedEmail,
           displayName: name,
           name,
           phone: phoneValue,
-          role: "guest",
+          role: "staff",
+          roleKey: "staff",
+          title: "",
           active: true,
+          isActive: true,
+          employeeProfileEnabled: true,
+          includeInEmployeeManagement: true,
+          linkedEmployeeId: cred.user.uid,
+          permissionsAllow: [],
+          permissionsDeny: [],
           createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+          source: "create_staff_account_default_employee",
         });
 
         createdUid = cred.user.uid;
@@ -328,10 +378,41 @@ export default function CreateStaffAccount() {
         throw new Error("auth_user_not_created");
       }
 
-      setCreatedEmailForPromote(normalizedEmail);
-      setCreatedNameForPromote(name);
-      setPromoteRoleKey("staff");
-      setPromoteDialogOpen(true);
+      await setDoc(
+        doc(db, "admin_users", normalizedEmail),
+        {
+          displayName: name,
+          email: normalizedEmail,
+          role: "staff",
+          roleKey: "staff",
+          title: "",
+          active: true,
+          isActive: true,
+          linkedUserUid: createdUid,
+          employeeProfileEnabled: true,
+          includeInEmployeeManagement: true,
+          linkedEmployeeId: createdUid,
+          notes: "",
+          permissionsAllow: [],
+          permissionsDeny: [],
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+          source: "create_staff_account_default_employee",
+        },
+        { merge: true }
+      );
+
+      await setDoc(
+        doc(db, "employees", createdUid),
+        buildDefaultEmployeePayload({
+          uid: createdUid,
+          email: normalizedEmail,
+          displayName: name,
+          phone: phoneValue,
+          isActive: true,
+        }),
+        { merge: true }
+      );
 
       setFullName("");
       setPhone("");
@@ -341,7 +422,7 @@ export default function CreateStaffAccount() {
       setShowPassword(false);
       setShowConfirmPassword(false);
 
-      setLocalInfo("تم إنشاء الحساب بنجاح. أكمل الآن خطوة الترقية من النافذة الظاهرة.");
+      setLocalInfo("تم إنشاء الحساب كموظف وإنشاء سجل الموظف وربطه تلقائياً.");
       toast.success("تم إنشاء الحساب بنجاح.");
     } catch (submitError: any) {
       console.error("create account error:", submitError);
@@ -438,10 +519,15 @@ export default function CreateStaffAccount() {
 
       await updateDoc(doc(db, "users", userDoc.id), {
         role: roleKey,
+        roleKey,
         active: isActive,
+        isActive,
         displayName: displayName || null,
         name: displayName || null,
         title: title || null,
+        employeeProfileEnabled: true,
+        includeInEmployeeManagement: true,
+        linkedEmployeeId: userDoc.id,
         permissionsAllow,
         permissionsDeny,
         updatedAt: serverTimestamp(),
@@ -456,12 +542,28 @@ export default function CreateStaffAccount() {
           title,
           isActive,
           linkedUserUid: userDoc.id,
+          employeeProfileEnabled: true,
+          includeInEmployeeManagement: true,
+          linkedEmployeeId: userDoc.id,
           notes,
           permissionsAllow,
           permissionsDeny,
           updatedAt: serverTimestamp(),
           createdAt: userData?.createdAt ?? serverTimestamp(),
         },
+        { merge: true }
+      );
+
+      await setDoc(
+        doc(db, "employees", userDoc.id),
+        buildDefaultEmployeePayload({
+          uid: userDoc.id,
+          email: normalizedTargetEmail,
+          displayName,
+          phone: String(userData?.phone || "").trim(),
+          title,
+          isActive,
+        }),
         { merge: true }
       );
 
