@@ -1,4 +1,5 @@
-import { type ComponentProps, type ReactNode } from "react";
+import { useState, type ComponentProps, type ReactNode } from "react";
+import MediaBrandingSettings from "@/pages/admin/MediaBrandingSettings";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -24,6 +25,7 @@ import {
   CheckCircle2,
   Globe,
   Mail,
+  Image as ImageIcon,
   Sparkles,
   Type,
   type LucideIcon,
@@ -53,6 +55,10 @@ export default function SettingsContentTab({
   contentCompletedCount,
   onContentFieldChange,
 }: SettingsContentTabProps) {
+  const [activeContentView, setActiveContentView] = useState<
+    "text" | "media"
+  >("text");
+
   return (
     <TabsContent value="content" className="space-y-6">
       <SettingsTabHero
@@ -114,6 +120,26 @@ export default function SettingsContentTab({
         }
       />
 
+      <div className="rounded-[26px] border border-slate-200/80 bg-white p-2 shadow-[0_18px_42px_-34px_rgba(15,23,42,0.3)]">
+        <div className="grid gap-2 md:grid-cols-2">
+          <ContentSubTabButton
+            active={activeContentView === "text"}
+            icon={Type}
+            title="النصوص العامة وبيانات التواصل"
+            description="العناوين، الوصف، التذييل، وبيانات التواصل."
+            onClick={() => setActiveContentView("text")}
+          />
+          <ContentSubTabButton
+            active={activeContentView === "media"}
+            icon={ImageIcon}
+            title="الوسائط والهوية"
+            description="الشعار، الصور، الفيديوهات، ووسائط الصفحات."
+            onClick={() => setActiveContentView("media")}
+          />
+        </div>
+      </div>
+
+      {activeContentView === "text" ? (
       <div className="space-y-6">
         <div className="space-y-6">
           <SettingsSectionCard
@@ -239,7 +265,66 @@ export default function SettingsContentTab({
           </SettingsSectionCard>
         </div>
       </div>
+      ) : (
+        <MediaBrandingSettings />
+      )}
     </TabsContent>
+  );
+}
+
+function ContentSubTabButton({
+  active,
+  icon: Icon,
+  title,
+  description,
+  onClick,
+}: {
+  active: boolean;
+  icon: LucideIcon;
+  title: string;
+  description: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "flex items-start gap-4 rounded-[22px] border p-4 text-right transition-all",
+        active
+          ? "border-slate-900 bg-slate-950 text-white shadow-md"
+          : "border-transparent bg-slate-50 text-slate-700 hover:border-slate-200 hover:bg-white"
+      )}
+    >
+      <span
+        className={cn(
+          "flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border",
+          active
+            ? "border-white/10 bg-white/10 text-white"
+            : "border-slate-200 bg-white text-slate-600"
+        )}
+      >
+        <Icon className="h-5 w-5" />
+      </span>
+      <span className="min-w-0 space-y-1">
+        <span
+          className={cn(
+            "block text-sm font-semibold",
+            active ? "text-white" : "text-slate-950"
+          )}
+        >
+          {title}
+        </span>
+        <span
+          className={cn(
+            "block text-xs leading-6",
+            active ? "text-white/60" : "text-slate-500"
+          )}
+        >
+          {description}
+        </span>
+      </span>
+    </button>
   );
 }
 
