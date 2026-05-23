@@ -136,6 +136,11 @@ import {
   type DocumentStorageServiceHealth,
 } from "@/lib/documentUploadService";
 import {
+  createDefaultSiteMediaSettings,
+  normalizeSiteMediaSettings,
+  type SiteMediaSettings,
+} from "@/lib/siteContentMedia";
+import {
   syncEmployeeDirectoryFromWorker,
   type EmployeeDirectorySyncResult,
 } from "@/lib/employeeDirectoryWorker";
@@ -348,6 +353,7 @@ type ContentSettings = {
 
   contactEmail: string;
   contactPhone: string;
+  media: SiteMediaSettings;
 };
 
 function createDefaultNotificationSettings(): NotificationSettings {
@@ -466,6 +472,7 @@ function createDefaultContentSettings(): ContentSettings {
       "MAEDIN is a platform for curated investment opportunities.",
     contactEmail: "",
     contactPhone: "",
+    media: createDefaultSiteMediaSettings(),
   };
 }
 
@@ -1105,6 +1112,7 @@ export default function Settings() {
     footerAboutEn: "MAEDIN is a platform for curated investment opportunities.",
     contactEmail: "",
     contactPhone: "",
+    media: createDefaultSiteMediaSettings(),
   });
   const [savedContent, setSavedContent] = useState<ContentSettings>(
     createDefaultContentSettings
@@ -1389,9 +1397,22 @@ export default function Settings() {
     () => JSON.stringify(flags) !== JSON.stringify(savedFlags),
     [flags, savedFlags]
   );
-  const contentCompletedCount = Object.values(content).filter(value =>
-    String(value || "").trim()
-  ).length;
+  const contentCompletedCount = useMemo(() => {
+    const textCount = Object.entries(content).filter(([key, value]) =>
+      key === "media" ? false : String(value || "").trim()
+    ).length;
+    const logoCount = Object.values(content.media.logos).filter(
+      asset => asset.url.trim() && asset.alt.trim()
+    ).length;
+    const pageMediaCount = Object.values(content.media.pages).reduce(
+      (sum, page) =>
+        sum +
+        Object.values(page).filter(asset => asset.url.trim() && asset.alt.trim())
+          .length,
+      0
+    );
+    return textCount + logoCount + pageMediaCount;
+  }, [content]);
   const contentDirty = useMemo(
     () => JSON.stringify(content) !== JSON.stringify(savedContent),
     [content, savedContent]
@@ -1513,10 +1534,14 @@ export default function Settings() {
       setSavedFlags(nextFlags);
 
       const nextContent = contentSnap.exists()
-        ? ({
-          ...createDefaultContentSettings(),
-          ...((contentSnap.data() as any) || {}),
-        } as ContentSettings)
+        ? (() => {
+          const data = (contentSnap.data() as any) || {};
+          return {
+            ...createDefaultContentSettings(),
+            ...data,
+            media: normalizeSiteMediaSettings(data.media),
+          } satisfies ContentSettings;
+        })()
         : createDefaultContentSettings();
       setContent(nextContent);
       setSavedContent(nextContent);
@@ -4429,6 +4454,9 @@ export default function Settings() {
           onContentFieldChange={(key, value) =>
             setContent(previous => ({ ...previous, [key]: value }))
           }
+          onContentChange={setContent}
+          onSaveContent={saveContent}
+          savingContent={savingContent}
         />
 
         {/* =========================

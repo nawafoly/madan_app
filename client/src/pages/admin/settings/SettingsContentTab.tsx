@@ -1,4 +1,10 @@
-import { useState, type ComponentProps, type ReactNode } from "react";
+import {
+  useState,
+  type ComponentProps,
+  type Dispatch,
+  type ReactNode,
+  type SetStateAction,
+} from "react";
 import MediaBrandingSettings from "@/pages/admin/MediaBrandingSettings";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -30,6 +36,7 @@ import {
   Type,
   type LucideIcon,
 } from "lucide-react";
+import type { SiteMediaSettings } from "@/lib/siteContentMedia";
 
 type ContentSettings = {
   heroTitleAr: string;
@@ -40,20 +47,27 @@ type ContentSettings = {
   footerAboutEn: string;
   contactEmail: string;
   contactPhone: string;
+  media: SiteMediaSettings;
 };
 
-type ContentFieldKey = keyof ContentSettings;
+type ContentFieldKey = Exclude<keyof ContentSettings, "media">;
 
 type SettingsContentTabProps = {
   content: ContentSettings;
   contentCompletedCount: number;
   onContentFieldChange: (key: ContentFieldKey, value: string) => void;
+  onContentChange: Dispatch<SetStateAction<ContentSettings>>;
+  onSaveContent: () => Promise<void>;
+  savingContent: boolean;
 };
 
 export default function SettingsContentTab({
   content,
   contentCompletedCount,
   onContentFieldChange,
+  onContentChange,
+  onSaveContent,
+  savingContent,
 }: SettingsContentTabProps) {
   const [activeContentView, setActiveContentView] = useState<
     "text" | "media"
@@ -266,7 +280,20 @@ export default function SettingsContentTab({
         </div>
       </div>
       ) : (
-        <MediaBrandingSettings />
+        <MediaBrandingSettings
+          media={content.media}
+          onMediaChange={mediaUpdate =>
+            onContentChange(previous => ({
+              ...previous,
+              media:
+                typeof mediaUpdate === "function"
+                  ? mediaUpdate(previous.media)
+                  : mediaUpdate,
+            }))
+          }
+          onSave={onSaveContent}
+          saving={savingContent}
+        />
       )}
     </TabsContent>
   );
