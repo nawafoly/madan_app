@@ -1,5 +1,10 @@
 export type SiteMediaType = "image" | "video";
-export type SiteContentPageKey = "home" | "about" | "services" | "projects";
+export type SiteContentPageKey =
+  | "home"
+  | "about"
+  | "services"
+  | "projects"
+  | "careers";
 export type SiteLogoKey = "light" | "dark" | "footer" | "mark";
 
 export type SiteMediaAsset = {
@@ -57,6 +62,11 @@ export const SITE_CONTENT_PAGES: Array<{
     label: "Projects",
     description: "Portfolio hero, project cards, filters, banners, testimonials, and footer media.",
   },
+  {
+    key: "careers",
+    label: "Careers",
+    description: "Recruitment page hero video, image fallbacks, and supporting media.",
+  },
 ];
 
 export const SITE_MEDIA_FIELD_DEFINITIONS: Record<
@@ -110,6 +120,14 @@ export const SITE_MEDIA_FIELD_DEFINITIONS: Record<
     mediaField("projectsFilterBanner", "Filter banner", "Backgrounds & Banners", "image", "/og.png", "Projects filter banner"),
     mediaField("projectsTestimonialLogo", "Testimonial logo", "Testimonials & Footer", "image", "/logo.png", "Projects testimonial logo"),
     mediaField("projectsFooterSecondaryMark", "Footer secondary mark", "Testimonials & Footer", "image", "/logo.png", "Projects footer secondary mark"),
+  ],
+  careers: [
+    mediaField("careersHeroVideo", "Hero video", "Hero Section", "video", "/about-hero1.mp4", "Careers page hero video"),
+    mediaField("careersHeroImage", "Hero image", "Hero Section", "image", "/HOOM-HERO.png", "Careers page hero image"),
+    mediaField("careersHeroMobileImage", "Mobile hero image", "Hero Section", "image", "/HOOM-HERO.png", "Mobile careers hero image"),
+    mediaField("careersFormIllustration", "Form illustration", "Recruitment Form", "image", "/og.png", "Careers form illustration"),
+    mediaField("careersCultureBanner", "Culture banner", "Backgrounds & Banners", "image", "/about-poto1.jpg", "Careers culture banner"),
+    mediaField("careersFooterBrandMark", "Footer brand mark", "Testimonials & Footer", "image", "/logo.png", "Careers footer brand mark"),
   ],
 };
 

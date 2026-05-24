@@ -152,7 +152,7 @@ export default {
           env
         );
       }
-      return withCors(await handleDownload(url, bucket), request, env);
+      return withCors(await handleDownload(request, url, bucket), request, env);
     }
 
     if (request.method === "GET" && url.pathname === "/files") {
@@ -933,7 +933,7 @@ async function collectR2Stats(bucket) {
   }
 }
 
-async function handleDownload(url, bucket) {
+async function handleDownload(request, url, bucket) {
   const path = normalizeObjectPath(url.searchParams.get("path"));
   const isProbe =
     String(url.searchParams.get("probe") || "").trim() === "1" ||
@@ -948,7 +948,8 @@ async function handleDownload(url, bucket) {
     });
   }
 
-  const object = await bucket.get(path);
+  const rangeHeader = String(request.headers.get("range") || "").trim();
+  let object = await bucket.get(path);
   if (!object) {
     if (isProbe) {
       return json(200, {
@@ -991,17 +992,39 @@ async function handleDownload(url, bucket) {
     headers.get("Content-Type") ||
     inferContentTypeFromName(path) ||
     "application/octet-stream";
+  const range = parseHttpRangeHeader(rangeHeader, Number(object.size || 0));
+  if (range) {
+    const rangedObject = await bucket.get(path, {
+      range: {
+        offset: range.start,
+        length: range.end - range.start + 1,
+      },
+    });
+    if (rangedObject) {
+      object = rangedObject;
+      headers.delete("Content-Encoding");
+    }
+  }
+
   const fileName = getFileNameFromPath(path);
   const forceDownloadRaw = String(url.searchParams.get("download") || "")
     .trim()
     .toLowerCase();
   const forceDownload = forceDownloadRaw === "1" || forceDownloadRaw === "true";
   const disposition =
-    forceDownload || contentType !== "application/pdf"
+    forceDownload || !isInlinePreviewContentType(contentType)
       ? "attachment"
       : "inline";
 
   headers.set("Content-Type", contentType);
+  headers.set("Accept-Ranges", "bytes");
+  headers.set("Content-Length", String(range ? range.end - range.start + 1 : object.size || 0));
+  if (range) {
+    headers.set(
+      "Content-Range",
+      `bytes ${range.start}-${range.end}/${range.size}`
+    );
+  }
   headers.set(
     "Content-Disposition",
     `${disposition}; filename="${toHeaderSafeFileName(fileName)}"`
@@ -1010,9 +1033,57 @@ async function handleDownload(url, bucket) {
   headers.set("X-Content-Type-Options", "nosniff");
 
   return new Response(object.body, {
-    status: 200,
+    status: range ? 206 : 200,
     headers,
   });
+}
+
+function parseHttpRangeHeader(rangeHeader, size) {
+  if (!rangeHeader || !Number.isFinite(size) || size <= 0) return null;
+  const match = /^bytes=(\d*)-(\d*)$/i.exec(rangeHeader);
+  if (!match) return null;
+
+  const startRaw = match[1];
+  const endRaw = match[2];
+  if (!startRaw && !endRaw) return null;
+
+  let start;
+  let end;
+
+  if (!startRaw) {
+    const suffixLength = Number(endRaw);
+    if (!Number.isFinite(suffixLength) || suffixLength <= 0) return null;
+    start = Math.max(size - suffixLength, 0);
+    end = size - 1;
+  } else {
+    start = Number(startRaw);
+    end = endRaw ? Number(endRaw) : size - 1;
+  }
+
+  if (
+    !Number.isFinite(start) ||
+    !Number.isFinite(end) ||
+    start < 0 ||
+    end < start ||
+    start >= size
+  ) {
+    return null;
+  }
+
+  return {
+    start,
+    end: Math.min(end, size - 1),
+    size,
+  };
+}
+
+function isInlinePreviewContentType(contentType) {
+  const normalized = String(contentType || "").toLowerCase();
+  return (
+    normalized === "application/pdf" ||
+    normalized.startsWith("image/") ||
+    normalized.startsWith("video/")
+  );
 }
 
 async function insertFileMetadata(db, record) {

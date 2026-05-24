@@ -18,7 +18,9 @@ import { db } from "@/_core/firebase";
 import RecruitmentFormFields from "@/components/recruitment/RecruitmentFormFields";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useSiteContent } from "@/contexts/SiteContentContext";
 import { uploadDocumentToCloudflare, type UploadDocumentResult } from "@/lib/documentUploadService";
+import { getSitePageMediaUrl } from "@/lib/siteContent";
 import {
   buildRecruitmentApplicationAttachments,
   buildRecruitmentApplicationAnswers,
@@ -42,6 +44,7 @@ import {
 } from "@shared/recruitment";
 
 export default function Careers() {
+  const { content } = useSiteContent();
   const [settings, setSettings] = useState<RecruitmentSettingsDoc>(
     DEFAULT_RECRUITMENT_SETTINGS
   );
@@ -98,6 +101,12 @@ export default function Careers() {
   const hasFileFields = useMemo(
     () => settings.fields.some((field) => hasRecruitmentFieldType(field, "file")),
     [settings.fields]
+  );
+  const careersHeroVideo = getSitePageMediaUrl(
+    content,
+    "careers",
+    "careersHeroVideo",
+    "/about-hero1.mp4"
   );
 
   const handleValueChange = (fieldId: string, value: string) => {
@@ -224,6 +233,7 @@ export default function Careers() {
         <section className="relative z-10 h-screen min-h-screen min-h-[100svh] overflow-hidden bg-slate-950">
           <div className="absolute inset-0 z-0">
             <video
+              src={careersHeroVideo}
               className="pointer-events-none absolute inset-0 h-full w-full object-cover object-center"
               autoPlay
               muted
@@ -236,9 +246,12 @@ export default function Careers() {
                   void video.play().catch(() => undefined);
                 }
               }}
-            >
-              <source src="/about-hero1.mp4" type="video/mp4" />
-            </video>
+              onError={event => {
+                const video = event.currentTarget;
+                if (video.src.endsWith("/about-hero1.mp4")) return;
+                video.src = "/about-hero1.mp4";
+              }}
+            />
           </div>
 
           <div className="pointer-events-none absolute inset-0 z-[1] bg-[linear-gradient(180deg,rgba(7,11,18,0.72)_0%,rgba(7,11,18,0.45)_38%,rgba(7,11,18,0.72)_100%)]" />
