@@ -917,14 +917,12 @@
     min-width: 44px !important;
     height: 44px !important;
     border-radius: 999px !important;
-    border: 1px solid rgba(255, 255, 255, 0.62) !important;
-    background: rgba(255, 255, 255, 0.3) !important;
+    border: 1px solid transparent !important;
+    background: transparent !important;
     color: rgba(15, 23, 42, 0.86) !important;
-    box-shadow:
-      0 10px 22px rgba(15, 23, 42, 0.07),
-      0 1px 0 rgba(255, 255, 255, 0.76) inset;
-    backdrop-filter: blur(10px) saturate(1.12);
-    -webkit-backdrop-filter: blur(10px) saturate(1.12);
+    box-shadow: none !important;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
     transition:
       background 180ms ease,
       border-color 180ms ease,
@@ -933,10 +931,10 @@
   }
 
   .rsg-nav__icon-btn:hover {
-    background: rgba(255, 255, 255, 0.54) !important;
-    border-color: rgba(255, 255, 255, 0.82) !important;
+    background: rgba(15, 23, 42, 0.06) !important;
+    border-color: transparent !important;
     color: rgba(15, 23, 42, 0.98) !important;
-    transform: translateY(-1px);
+    transform: none;
   }
 
   .rsg-nav__lang-toggle {
@@ -1052,7 +1050,7 @@
 .rsg-nav__action {
   min-height: 48px !important;
   height: 48px !important;
-  padding-inline: 22px !important;
+  padding-inline: 14px !important;
   border-radius: 999px !important;
   letter-spacing: 0 !important;
   font-family:
@@ -1064,8 +1062,8 @@
     "Segoe UI",
     sans-serif !important;
   font-weight: 700 !important;
-  backdrop-filter: blur(12px) saturate(1.12);
-  -webkit-backdrop-filter: blur(12px) saturate(1.12);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   transition:
     background 180ms ease,
     border-color 180ms ease,
@@ -1075,33 +1073,30 @@
 }
 
 .rsg-nav__action--primary {
-  background: rgba(15, 23, 42, 0.78) !important;
-  color: #fff !important;
-  border: 1px solid rgba(255, 255, 255, 0.28) !important;
-  box-shadow:
-    0 16px 34px rgba(15, 23, 42, 0.24),
-    0 1px 0 rgba(255, 255, 255, 0.2) inset;
+  background: transparent !important;
+  color: rgba(15, 23, 42, 0.88) !important;
+  border: 1px solid transparent !important;
+  box-shadow: none !important;
 }
 
 .rsg-nav__action--primary:hover {
-  background: rgba(15, 23, 42, 0.88) !important;
-  border-color: rgba(255, 255, 255, 0.38) !important;
-  transform: translateY(-1px);
+  background: rgba(15, 23, 42, 0.06) !important;
+  border-color: transparent !important;
+  color: rgba(15, 23, 42, 0.98) !important;
+  transform: none;
 }
 
 .rsg-nav__action--secondary {
-  background: rgba(255, 255, 255, 0.3) !important;
-  color: rgba(15, 23, 42, 0.9) !important;
-  border: 1px solid rgba(255, 255, 255, 0.7) !important;
-  box-shadow:
-    0 12px 24px rgba(15, 23, 42, 0.08),
-    0 1px 0 rgba(255, 255, 255, 0.78) inset;
+  background: transparent !important;
+  color: rgba(15, 23, 42, 0.88) !important;
+  border: 1px solid transparent !important;
+  box-shadow: none !important;
 }
 
 .rsg-nav__action--secondary:hover {
-  background: rgba(255, 255, 255, 0.56) !important;
+  background: rgba(15, 23, 42, 0.06) !important;
   color: rgba(15, 23, 42, 0.98) !important;
-  transform: translateY(-1px);
+  transform: none;
 }
 
 /* Mobile only (iPhone / small tablets) */
