@@ -646,13 +646,13 @@ function CurvedProjectsHero({
       {/*  270 px + env ( safe - area - inset - top)  كود ثابت ما يتغير  */}
       <div className="pointer-events-none absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-black/35 to-transparent" />
       <div className="container relative z-10 flex min-h-[100svh] flex-col justify-center pt-[calc(var(--site-header-offset)+1.25rem)] pb-6 sm:pb-8 md:pt-[calc(var(--site-header-offset)+1.75rem)] md:pb-10">
-        <div className="mx-auto w-full max-w-5xl space-y-7 md:space-y-8">
-          <div className="flex flex-col gap-4 text-center md:text-right">
-            <div className="space-y-2.5">
-              <h1 className="flex items-center justify-center gap-2 text-4xl font-bold text-white md:justify-start md:text-5xl">
+        <div className="mx-auto w-full max-w-6xl space-y-7 text-center md:space-y-8">
+          <div className="flex flex-col items-center justify-center gap-4 text-center">
+            <div className="space-y-3">
+              <h1 className="mx-auto flex max-w-5xl items-center justify-center gap-2 text-5xl font-bold leading-tight text-white sm:text-6xl lg:text-7xl">
                 {title}
               </h1>
-              <p className="mx-auto max-w-3xl text-lg text-white/75 md:mx-0">
+              <p className="mx-auto max-w-3xl text-lg text-white/75">
                 {desc}
               </p>
             </div>
@@ -1819,7 +1819,7 @@ export default function ProjectsPage() {
               </Card>
             )}
 
-            <Card className="mx-auto w-full max-w-[56rem] overflow-hidden border border-white/10 bg-[linear-gradient(145deg,rgba(8,18,31,0.78),rgba(11,24,40,0.68))] text-white shadow-[0_28px_72px_-40px_rgba(2,8,18,0.78)] backdrop-blur-[20px]">
+            <Card className="hidden">
               <CardContent className="p-4 sm:p-[18px]">
                 <div className="flex flex-col gap-4">
                   <div className="flex flex-col gap-3.5">
