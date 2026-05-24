@@ -35,7 +35,11 @@ function getNotificationIcon(type: EmployeeNotificationType | null | undefined) 
   return ShieldCheck;
 }
 
-export function NotificationBell() {
+type NotificationBellProps = {
+  triggerClassName?: string;
+};
+
+export function NotificationBell({ triggerClassName = "" }: NotificationBellProps) {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
   const [open, setOpen] = useState(false);
@@ -111,12 +115,12 @@ export function NotificationBell() {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative">
+        <Button variant="ghost" size="icon" className={`relative ${triggerClassName}`}>
           <Bell className="h-5 w-5" />
           {unreadCount > 0 ? (
             <Badge
               variant="destructive"
-              className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center p-0 text-xs"
+              className="rsg-notification-badge absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center p-0 text-xs"
             >
               {unreadCount}
             </Badge>

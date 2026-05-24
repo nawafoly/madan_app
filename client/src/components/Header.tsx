@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { Link, useLocation } from "wouter";
-import { Globe, LogOut, Search } from "lucide-react";
+import { Globe, LayoutGrid, LogOut } from "lucide-react";
 
 import { NotificationBell } from "@/components/NotificationBell";
 import { Button } from "@/components/ui/button";
@@ -92,7 +92,8 @@ export default function Header() {
     }
   };
 
-  const navBtnClass = "h-10 px-4 rounded-full text-[14px] font-semibold";
+  const navBtnClass =
+    "rsg-nav__action h-10 px-4 rounded-full text-[14px] font-semibold";
   const logoUrl = getSiteLogoUrl(content, "light", "/logo.png");
   const logoAlt = getSiteLogoAlt(content, "light", "MAEDIN logo");
   const navLogoStyle = {
@@ -166,25 +167,18 @@ export default function Header() {
 
               <Button
                 variant="ghost"
-                size="icon"
-                className="hidden md:inline-flex"
-                aria-label="Search"
-              >
-                <Search className="h-5 w-5" />
-              </Button>
-
-              <Button
-                variant="ghost"
-                size="icon"
                 onClick={toggleLanguage}
-                className="hidden md:inline-flex"
+                className="rsg-nav__icon-btn rsg-nav__lang-toggle hidden md:inline-flex"
                 aria-label="Toggle language"
                 title={language === "ar" ? "English" : "العربية"}
               >
                 <Globe className="h-5 w-5" />
+                <span>{language === "ar" ? "AR" : "EN"}</span>
               </Button>
 
-              {isAuthenticated ? <NotificationBell /> : null}
+              {isAuthenticated ? (
+                <NotificationBell triggerClassName="rsg-nav__icon-btn rsg-nav__notif" />
+              ) : null}
             </div>
 
             <nav className="rsg-nav__links rsg-nav__slot rsg-nav__slot--center">
@@ -242,7 +236,10 @@ export default function Header() {
               {!isAuthenticated ? (
                 !isLoginRoute ? (
                   <Link href="/login">
-                    <Button className={`hidden md:inline-flex rsg-cta ${navBtnClass}`}>
+                    <Button
+                      className={`hidden md:inline-flex rsg-cta ${navBtnClass} rsg-nav__action--primary`}
+                    >
+                      <LayoutGrid className="h-4 w-4" />
                       {language === "ar" ? "تسجيل الدخول" : "Login"}
                     </Button>
                   </Link>
@@ -250,7 +247,8 @@ export default function Header() {
               ) : (
                 <div className="hidden items-center gap-2 md:flex">
                   <Link href={homeHref}>
-                    <Button className={`rsg-cta ${navBtnClass}`}>
+                    <Button className={`rsg-cta ${navBtnClass} rsg-nav__action--primary`}>
+                      <LayoutGrid className="h-4 w-4" />
                       {accountCtaLabel}
                     </Button>
                   </Link>
@@ -258,7 +256,7 @@ export default function Header() {
                   <Button
                     variant="outline"
                     onClick={handleLogout}
-                    className={navBtnClass}
+                    className={`${navBtnClass} rsg-nav__action--secondary`}
                   >
                     <LogOut className="ml-2 h-4 w-4" />
                     {language === "ar" ? "خروج" : "Logout"}
