@@ -90,6 +90,7 @@ type UserDoc = {
   contact?: Record<string, any>;
 
   role?: string;
+  roleKey?: string;
   active?: boolean | string | number | null;
   isActive?: boolean | string | number | null;
   status?: string | boolean | number | null;
@@ -155,6 +156,23 @@ function formatDateAR(value: any) {
   if (!date || Number.isNaN(date.getTime())) return "—";
 
   return formatDateEN(date);
+}
+
+const EMPLOYEE_ACCOUNT_ROLES = new Set([
+  "owner",
+  "admin",
+  "accountant",
+  "hr",
+  "staff",
+  "employee",
+]);
+
+function isEmployeeAccount(user: Pick<UserDoc, "role" | "roleKey">) {
+  const role = String(user.role || user.roleKey || "")
+    .trim()
+    .toLowerCase();
+
+  return EMPLOYEE_ACCOUNT_ROLES.has(role);
 }
 
 function getRoleBadge(role?: string, email?: string) {
@@ -396,15 +414,20 @@ export default function ClientsManagement() {
 
   const projectsMap = useMemo(() => buildProjectsMap(projects), [projects]);
 
-  const userIdentityIndex = useMemo(
-    () => buildUserIdentityIndex(users),
+  const clientUsers = useMemo(
+    () => users.filter(user => !isEmployeeAccount(user)),
     [users]
+  );
+
+  const userIdentityIndex = useMemo(
+    () => buildUserIdentityIndex(clientUsers),
+    [clientUsers]
   );
 
   const linkedInvestmentsByUserId = useMemo(() => {
     const grouped: Record<string, InvestmentDoc[]> = {};
 
-    for (const user of users) {
+    for (const user of clientUsers) {
       grouped[user.id] = [];
     }
 
@@ -419,10 +442,10 @@ export default function ClientsManagement() {
     }
 
     return grouped;
-  }, [investments, userIdentityIndex, users]);
+  }, [clientUsers, investments, userIdentityIndex]);
 
   const clientCards = useMemo(() => {
-    return users.map(user => {
+    return clientUsers.map(user => {
       const linkedInvestments = linkedInvestmentsByUserId[user.id] ?? [];
       const linkedNameFallbacks = linkedInvestments.flatMap(investment => [
         pickText(
@@ -523,7 +546,7 @@ export default function ClientsManagement() {
         searchText,
       };
     });
-  }, [investments, linkedInvestmentsByUserId, now, projectsMap, users]);
+  }, [clientUsers, linkedInvestmentsByUserId, now, projectsMap]);
 
   const filteredUsers = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -531,8 +554,8 @@ export default function ClientsManagement() {
     return clientCards.filter(card => card.searchText.includes(q));
   }, [clientCards, searchQuery]);
 
-  const vipUsers = users.filter(u => u.vipStatus === "vip").length;
-  const regularUsers = users.filter(u => u.vipStatus !== "vip").length;
+  const vipUsers = clientUsers.filter(u => u.vipStatus === "vip").length;
+  const regularUsers = clientUsers.filter(u => u.vipStatus !== "vip").length;
 
   const openClientProfile = (userId: string) => {
     setLocation(`/admin/client-profile?id=${userId}`);
@@ -627,7 +650,7 @@ export default function ClientsManagement() {
         <div className="grid gap-4 md:grid-cols-3">
           <AdminPanelStatCard
             title="إجمالي العملاء"
-            value={users.length}
+            value={clientUsers.length}
             description="إجمالي الحسابات المعروضة في صفحة إدارة العملاء ضمن هذا العرض الحالي."
             helper={`${formatNumberEN(filteredUsers.length)} حساب مطابق للبحث الحالي`}
             icon={<Users className="h-5 w-5" />}

@@ -141,6 +141,11 @@ import {
   type SiteMediaSettings,
 } from "@/lib/siteContentMedia";
 import {
+  createDefaultNextStepSliderSettings,
+  normalizeNextStepSliderSettings,
+  type NextStepSliderSettings,
+} from "@/lib/siteContent";
+import {
   syncEmployeeDirectoryFromWorker,
   type EmployeeDirectorySyncResult,
 } from "@/lib/employeeDirectoryWorker";
@@ -354,6 +359,7 @@ type ContentSettings = {
   contactEmail: string;
   contactPhone: string;
   media: SiteMediaSettings;
+  nextStepSlider: NextStepSliderSettings;
 };
 
 function createDefaultNotificationSettings(): NotificationSettings {
@@ -473,6 +479,7 @@ function createDefaultContentSettings(): ContentSettings {
     contactEmail: "",
     contactPhone: "",
     media: createDefaultSiteMediaSettings(),
+    nextStepSlider: createDefaultNextStepSliderSettings(),
   };
 }
 
@@ -1540,6 +1547,9 @@ export default function Settings() {
             ...createDefaultContentSettings(),
             ...data,
             media: normalizeSiteMediaSettings(data.media),
+            nextStepSlider: normalizeNextStepSliderSettings(
+              data.nextStepSlider
+            ),
           } satisfies ContentSettings;
         })()
         : createDefaultContentSettings();

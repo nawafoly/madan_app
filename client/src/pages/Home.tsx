@@ -889,49 +889,6 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="pb-8 sm:pb-10 lg:pb-12">
-          <div className="container px-4 sm:px-6">
-            <div className="relative overflow-hidden rounded-[34px] border border-slate-200/80 bg-[linear-gradient(135deg,rgba(255,255,255,0.96)_0%,rgba(247,248,250,0.98)_65%,rgba(242,174,48,0.12)_100%)] px-6 py-10 shadow-[0_28px_85px_-56px_rgba(11,23,38,0.3)] sm:px-8 lg:px-10">
-              <div
-                aria-hidden
-                className="pointer-events-none absolute left-0 top-0 h-28 w-28 rounded-full bg-[#f2ae30]/18 blur-3xl"
-              />
-
-              <div className="relative z-10 flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-                <div className="max-w-2xl text-right">
-                  <p className="text-sm font-semibold text-primary/70">
-                    الخطوة التالية
-                  </p>
-                  <h2 className="mt-3 text-3xl font-semibold leading-tight text-foreground sm:text-4xl">
-                    واجهة أوضح اليوم، وانتقال أسلس إلى قسم التواصل أسفل الصفحة.
-                  </h2>
-                  <p className="mt-4 text-base leading-8 text-muted-foreground sm:text-lg">
-                    ابدأ من المشاريع المنشورة أو تعرّف أكثر على معدن، ثم أكمل
-                    رحلتك مباشرة إلى قسم التواصل والفوتر بتسلسل بصري أكثر اتزانًا.
-                  </p>
-                </div>
-
-                <div className="flex flex-col gap-3 sm:flex-row">
-                  <Link href="/projects">
-                    <Button className="h-12 rounded-full px-7 text-sm font-semibold">
-                      استعرض المشاريع
-                      <ArrowRight className="mr-2 h-4 w-4" />
-                    </Button>
-                  </Link>
-
-                  <Link href="/about">
-                    <Button
-                      variant="outline"
-                      className="h-12 rounded-full px-7 text-sm font-semibold"
-                    >
-                      تعرّف على معدن
-                    </Button>
-                  </Link>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
       </main>
     </div>
   );

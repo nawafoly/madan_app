@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
+import NextStepSliderBanner from "@/components/NextStepSliderBanner";
 import {
   ArrowRight,
   Award,
@@ -570,34 +571,10 @@ export default function About() {
 
         <section className="pb-8 sm:pb-10 lg:pb-12">
           <div className="container px-4 sm:px-6">
-            <div className="relative overflow-hidden rounded-[34px] border border-slate-200/80 bg-[linear-gradient(135deg,#0b1726_0%,#13253b_55%,#1a2f48_100%)] px-6 py-10 text-white shadow-[0_32px_100px_-56px_rgba(11,23,38,0.88)] sm:px-8 lg:px-10 lg:py-12">
-              <div
-                aria-hidden
-                className="pointer-events-none absolute left-0 top-0 h-28 w-28 rounded-full bg-[#f2ae30]/18 blur-3xl"
-              />
-
-              <div className="relative z-10 max-w-3xl text-right">
-                <p className="text-sm font-semibold text-[#f2ae30]/88">
-                  الخطوة التالية
-                </p>
-                <h2 className="mt-3 text-3xl font-semibold leading-tight text-white sm:text-4xl">
-                  ابدأ الاطلاع على الفرص من واجهة موحدة وواضحة
-                </h2>
-                <p className="mt-4 text-base leading-8 text-white/72 sm:text-lg">
-                  إذا كنت تبحث عن فرص استثمارية معروضة بوضوح وضمن منطق مهني منظم،
-                  فابدأ من صفحة المشاريع وتابع الفرص المفتوحة من واجهة واحدة.
-                </p>
-
-                <div className="mt-8">
-                  <Link href="/projects">
-                    <Button className="h-12 rounded-full px-7 text-sm font-semibold">
-                      استعرض الفرص المفتوحة
-                      <ArrowRight className="mr-2 h-4 w-4" />
-                    </Button>
-                  </Link>
-                </div>
-              </div>
-            </div>
+            <NextStepSliderBanner
+              slider={content.nextStepSlider}
+              className="min-h-[260px] p-0 sm:min-h-[360px] lg:min-h-[440px]"
+            />
           </div>
         </section>
       </main>

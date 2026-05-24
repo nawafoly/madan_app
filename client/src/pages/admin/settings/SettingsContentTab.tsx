@@ -1,5 +1,8 @@
 import {
+  useEffect,
+  useRef,
   useState,
+  type ChangeEvent,
   type ComponentProps,
   type Dispatch,
   type ReactNode,
@@ -7,6 +10,7 @@ import {
 } from "react";
 import MediaBrandingSettings from "@/pages/admin/MediaBrandingSettings";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -32,11 +36,24 @@ import {
   Globe,
   Mail,
   Image as ImageIcon,
+  ArrowDown,
+  ArrowUp,
+  Loader2,
+  Plus,
+  Save,
   Sparkles,
+  Trash2,
   Type,
+  UploadCloud,
   type LucideIcon,
 } from "lucide-react";
 import type { SiteMediaSettings } from "@/lib/siteContentMedia";
+import type {
+  NextStepSliderSettings,
+  NextStepSliderSlide,
+} from "@/lib/siteContent";
+import { uploadDocumentToCloudflare } from "@/lib/documentUploadService";
+import { toast } from "sonner";
 
 type ContentSettings = {
   heroTitleAr: string;
@@ -48,9 +65,10 @@ type ContentSettings = {
   contactEmail: string;
   contactPhone: string;
   media: SiteMediaSettings;
+  nextStepSlider: NextStepSliderSettings;
 };
 
-type ContentFieldKey = Exclude<keyof ContentSettings, "media">;
+type ContentFieldKey = Exclude<keyof ContentSettings, "media" | "nextStepSlider">;
 
 type SettingsContentTabProps = {
   content: ContentSettings;
@@ -70,7 +88,7 @@ export default function SettingsContentTab({
   savingContent,
 }: SettingsContentTabProps) {
   const [activeContentView, setActiveContentView] = useState<
-    "text" | "media"
+    "text" | "media" | "slider"
   >("text");
 
   return (
@@ -135,7 +153,7 @@ export default function SettingsContentTab({
       />
 
       <div className="rounded-[26px] border border-slate-200/80 bg-white p-2 shadow-[0_18px_42px_-34px_rgba(15,23,42,0.3)]">
-        <div className="grid gap-2 md:grid-cols-2">
+        <div className="grid gap-2 md:grid-cols-3">
           <ContentSubTabButton
             active={activeContentView === "text"}
             icon={Type}
@@ -149,6 +167,13 @@ export default function SettingsContentTab({
             title="الوسائط والهوية"
             description="الشعار، الصور، الفيديوهات، ووسائط الصفحات."
             onClick={() => setActiveContentView("media")}
+          />
+          <ContentSubTabButton
+            active={activeContentView === "slider"}
+            icon={Sparkles}
+            title="سلايدر الخطوة التالية"
+            description="صور السلايدر، الروابط، والترتيب ووقت الحركة التلقائية."
+            onClick={() => setActiveContentView("slider")}
           />
         </div>
       </div>
@@ -279,7 +304,7 @@ export default function SettingsContentTab({
           </SettingsSectionCard>
         </div>
       </div>
-      ) : (
+      ) : activeContentView === "media" ? (
         <MediaBrandingSettings
           media={content.media}
           onMediaChange={mediaUpdate =>
@@ -294,8 +319,353 @@ export default function SettingsContentTab({
           onSave={onSaveContent}
           saving={savingContent}
         />
+      ) : (
+        <NextStepSliderSettingsPanel
+          slider={content.nextStepSlider}
+          onSliderChange={sliderUpdate =>
+            onContentChange(previous => ({
+              ...previous,
+              nextStepSlider:
+                typeof sliderUpdate === "function"
+                  ? sliderUpdate(previous.nextStepSlider)
+                  : sliderUpdate,
+            }))
+          }
+          onSave={onSaveContent}
+          saving={savingContent}
+        />
       )}
     </TabsContent>
+  );
+}
+
+function NextStepSliderSettingsPanel({
+  slider,
+  onSliderChange,
+  onSave,
+  saving,
+}: {
+  slider: NextStepSliderSettings;
+  onSliderChange: Dispatch<SetStateAction<NextStepSliderSettings>>;
+  onSave: () => Promise<void>;
+  saving: boolean;
+}) {
+  const [uploadingSlideId, setUploadingSlideId] = useState<string | null>(null);
+  const [localPreviewById, setLocalPreviewById] = useState<Record<string, string>>(
+    {}
+  );
+  const previewUrlsRef = useRef<Record<string, string>>({});
+
+  useEffect(() => {
+    return () => {
+      Object.values(previewUrlsRef.current).forEach(url => URL.revokeObjectURL(url));
+      previewUrlsRef.current = {};
+    };
+  }, []);
+
+  const updateSlide = (slideId: string, patch: Partial<NextStepSliderSlide>) => {
+    onSliderChange(current => ({
+      ...current,
+      slides: current.slides.map(slide =>
+        slide.id === slideId ? { ...slide, ...patch } : slide
+      ),
+    }));
+  };
+
+  const addSlide = () => {
+    const id = `next-step-${Date.now()}`;
+    onSliderChange(current => ({
+      ...current,
+      slides: [
+        ...current.slides,
+        {
+          id,
+          imageUrl: "",
+          alt: "Next step slide",
+          linkUrl: "",
+        },
+      ],
+    }));
+  };
+
+  const removeSlide = (slideId: string) => {
+    onSliderChange(current => ({
+      ...current,
+      slides: current.slides.filter(slide => slide.id !== slideId),
+    }));
+  };
+
+  const moveSlide = (slideId: string, direction: -1 | 1) => {
+    onSliderChange(current => {
+      const index = current.slides.findIndex(slide => slide.id === slideId);
+      const nextIndex = index + direction;
+      if (index < 0 || nextIndex < 0 || nextIndex >= current.slides.length) {
+        return current;
+      }
+
+      const slides = [...current.slides];
+      const [slide] = slides.splice(index, 1);
+      slides.splice(nextIndex, 0, slide);
+      return { ...current, slides };
+    });
+  };
+
+  const setLocalPreview = (slideId: string, file: File) => {
+    const previous = previewUrlsRef.current[slideId];
+    if (previous) URL.revokeObjectURL(previous);
+    const objectUrl = URL.createObjectURL(file);
+    previewUrlsRef.current[slideId] = objectUrl;
+    setLocalPreviewById(current => ({ ...current, [slideId]: objectUrl }));
+  };
+
+  const clearLocalPreview = (slideId: string) => {
+    const objectUrl = previewUrlsRef.current[slideId];
+    if (objectUrl) URL.revokeObjectURL(objectUrl);
+    delete previewUrlsRef.current[slideId];
+    setLocalPreviewById(current => {
+      const next = { ...current };
+      delete next[slideId];
+      return next;
+    });
+  };
+
+  const handleSlideUpload = async (
+    slide: NextStepSliderSlide,
+    event: ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0] || null;
+    event.target.value = "";
+    if (!file) return;
+
+    setLocalPreview(slide.id, file);
+    setUploadingSlideId(slide.id);
+
+    try {
+      const uploaded = await uploadDocumentToCloudflare({
+        entityType: "site_content",
+        entityId: slide.id,
+        category: "site_media",
+        kind: "attachment",
+        file,
+        storageFolder: "next-step-slider",
+      });
+
+      updateSlide(slide.id, {
+        imageUrl: uploaded.fileUrl,
+        fileName: uploaded.fileName,
+        filePath: uploaded.filePath,
+        contentType: uploaded.contentType,
+        uploadedAt: uploaded.uploadedAt,
+      });
+      clearLocalPreview(slide.id);
+      toast.success("تم رفع صورة السلايدر. احفظ المحتوى لنشر التعديل.");
+    } catch (error) {
+      clearLocalPreview(slide.id);
+      toast.error(
+        error instanceof Error ? error.message : "فشل رفع صورة السلايدر"
+      );
+    } finally {
+      setUploadingSlideId(null);
+    }
+  };
+
+  const delaySeconds = Math.round((slider.autoplayDelayMs || 5000) / 1000);
+  const uploadInProgress = Boolean(uploadingSlideId);
+
+  return (
+    <div className="space-y-6">
+      <SettingsSectionCard
+        icon={Sparkles}
+        eyebrow="الوحدة 04"
+        title="سلايدر الخطوة التالية"
+        description="إدارة الصور المتحركة التي تظهر داخل قسم الخطوة التالية، مع ترتيب الصور والروابط وسرعة التنقل التلقائي."
+        action={
+          <Button
+            type="button"
+            className="h-10 rounded-xl"
+            onClick={onSave}
+            disabled={saving || uploadInProgress}
+          >
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            حفظ
+          </Button>
+        }
+      >
+        <div className="grid gap-5 lg:grid-cols-[280px_minmax(0,1fr)]">
+          <SettingsField
+            label="وقت التنقل التلقائي"
+            description="المدة بين كل صورة والتي تليها."
+            value={String(delaySeconds)}
+            onChange={value => {
+              const seconds = Number(value);
+              onSliderChange(current => ({
+                ...current,
+                autoplayDelayMs: Number.isFinite(seconds)
+                  ? Math.min(Math.max(Math.round(seconds * 1000), 1500), 60000)
+                  : current.autoplayDelayMs,
+              }));
+            }}
+            type="number"
+            inputMode="numeric"
+            suffix="ثانية"
+            helper="القيمة تحفظ بالميلي ثانية داخل الإعدادات وتعرض هنا بالثواني."
+          />
+
+          <div className="rounded-[22px] border border-slate-200 bg-slate-50/70 p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="text-sm font-semibold text-slate-950">
+                  الصور الحالية
+                </div>
+                <p className="mt-1 text-xs leading-6 text-slate-500">
+                  {formatNumberEN(slider.slides.length)} صورة مرتبة حسب الظهور.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-10 rounded-xl"
+                onClick={addSlide}
+              >
+                <Plus className="h-4 w-4" />
+                إضافة صورة
+              </Button>
+            </div>
+          </div>
+        </div>
+      </SettingsSectionCard>
+
+      <div className="grid gap-4">
+        {slider.slides.map((slide, index) => {
+          const previewUrl = localPreviewById[slide.id] || slide.imageUrl;
+          const uploading = uploadingSlideId === slide.id;
+
+          return (
+            <Card
+              key={slide.id}
+              className="overflow-hidden rounded-[24px] border-slate-200/80 bg-white shadow-[0_18px_42px_-34px_rgba(15,23,42,0.28)]"
+            >
+              <CardContent className="grid gap-5 p-5 lg:grid-cols-[260px_minmax(0,1fr)]">
+                <div className="overflow-hidden rounded-[20px] border border-slate-200 bg-slate-100">
+                  {previewUrl ? (
+                    <img
+                      src={previewUrl}
+                      alt={slide.alt || `slide ${index + 1}`}
+                      className="h-44 w-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-44 items-center justify-center text-sm text-slate-500">
+                      لا توجد صورة
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <Badge
+                        variant="outline"
+                        className="rounded-full border-slate-200 bg-slate-50 text-slate-600"
+                      >
+                        صورة {formatNumberEN(index + 1)}
+                      </Badge>
+                      <p className="mt-2 text-xs text-slate-500">
+                        {slide.fileName || slide.imageUrl || "صورة غير محفوظة بعد"}
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        className="h-9 w-9 rounded-xl"
+                        onClick={() => moveSlide(slide.id, -1)}
+                        disabled={index === 0}
+                        aria-label="رفع الصورة في الترتيب"
+                      >
+                        <ArrowUp className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        className="h-9 w-9 rounded-xl"
+                        onClick={() => moveSlide(slide.id, 1)}
+                        disabled={index === slider.slides.length - 1}
+                        aria-label="خفض الصورة في الترتيب"
+                      >
+                        <ArrowDown className="h-4 w-4" />
+                      </Button>
+                      <label
+                        className={cn(
+                          "inline-flex h-9 cursor-pointer items-center justify-center gap-2 rounded-xl border border-input px-4 text-sm font-medium shadow-xs transition-all hover:bg-muted",
+                          uploading && "pointer-events-none opacity-50"
+                        )}
+                      >
+                        {uploading ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <UploadCloud className="h-4 w-4" />
+                        )}
+                        رفع
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="sr-only"
+                          disabled={uploading}
+                          onChange={event => handleSlideUpload(slide, event)}
+                        />
+                      </label>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        className="h-9 w-9 rounded-xl text-rose-600 hover:text-rose-700"
+                        onClick={() => removeSlide(slide.id)}
+                        disabled={slider.slides.length <= 1}
+                        aria-label="حذف الصورة"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <SettingsField
+                      label="رابط الصورة"
+                      description="يمكن إدخال الرابط يدوياً أو استخدام الرفع."
+                      value={slide.imageUrl}
+                      onChange={value => updateSlide(slide.id, { imageUrl: value })}
+                      placeholder="/image.jpg أو https://..."
+                      dir="ltr"
+                      inputClassName="text-left"
+                    />
+                    <SettingsField
+                      label="رابط الضغط"
+                      description="وجه المستخدم لهذا الرابط عند الضغط على الصورة."
+                      value={slide.linkUrl || ""}
+                      onChange={value => updateSlide(slide.id, { linkUrl: value })}
+                      placeholder="/projects أو https://..."
+                      dir="ltr"
+                      inputClassName="text-left"
+                    />
+                    <SettingsField
+                      label="النص البديل"
+                      description="وصف مختصر للصورة."
+                      value={slide.alt || ""}
+                      onChange={value => updateSlide(slide.id, { alt: value })}
+                      placeholder="وصف الصورة"
+                      containerClassName="md:col-span-2"
+                    />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
