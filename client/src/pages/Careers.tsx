@@ -233,6 +233,7 @@ export default function Careers() {
         <section className="relative z-10 h-screen min-h-screen min-h-[100svh] overflow-hidden bg-slate-950">
           <div className="absolute inset-0 z-0">
             <video
+              key={careersHeroVideo}
               src={careersHeroVideo}
               className="pointer-events-none absolute inset-0 h-full w-full object-cover object-center"
               autoPlay
@@ -246,10 +247,14 @@ export default function Careers() {
                   void video.play().catch(() => undefined);
                 }
               }}
+              onLoadedData={(event) => {
+                void event.currentTarget.play().catch(() => undefined);
+              }}
               onError={event => {
                 const video = event.currentTarget;
                 if (video.src.endsWith("/about-hero1.mp4")) return;
                 video.src = "/about-hero1.mp4";
+                video.load();
               }}
             />
           </div>

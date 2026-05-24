@@ -461,6 +461,7 @@ export default function Home() {
         <section className="relative h-screen min-h-screen min-h-[100svh] overflow-hidden">
           <div className="absolute inset-0 z-0">
             <video
+              key={homeHeroVideo}
               src={homeHeroVideo}
               className="pointer-events-none absolute inset-0 h-full w-full object-cover object-top"
               autoPlay
@@ -474,10 +475,14 @@ export default function Home() {
                   void video.play().catch(() => undefined);
                 }
               }}
+              onLoadedData={(event) => {
+                void event.currentTarget.play().catch(() => undefined);
+              }}
               onError={event => {
                 const video = event.currentTarget;
                 if (video.src.endsWith("/about-hero.mp4")) return;
                 video.src = "/about-hero.mp4";
+                video.load();
               }}
             />
           </div>
