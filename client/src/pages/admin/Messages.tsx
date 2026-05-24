@@ -1393,6 +1393,17 @@ function isNewRequestRecord(request: any) {
   return !isArchivedRequestRecord(request);
 }
 
+function isContactMessageRecord(record: any) {
+  const type = String(record?.type || "").trim().toLowerCase();
+  const requestType = String(record?.requestType || "").trim().toLowerCase();
+  const source = String(record?.source || "").trim().toLowerCase();
+  return (
+    requestType === "contact_message" ||
+    type === "contact_message" ||
+    source === "site_contact_form"
+  );
+}
+
 const LIST_VIEW_MODEL_HELPERS = {
   resolveRequestClient,
   pick,
@@ -1855,10 +1866,12 @@ export default function MessagesManagement() {
       );
       const snap = await getDocs(q);
 
-      const list = snap.docs.map(d => ({
-        id: d.id,
-        ...d.data(),
-      }));
+      const list = snap.docs
+        .map(d => ({
+          id: d.id,
+          ...d.data(),
+        }))
+        .filter(item => !isContactMessageRecord(item));
 
       setMessages(list);
     } catch (e) {
@@ -1874,10 +1887,12 @@ export default function MessagesManagement() {
     const unsub = onSnapshot(
       q,
       snap => {
-        const list = snap.docs.map(d => ({
-          id: d.id,
-          ...d.data(),
-        }));
+        const list = snap.docs
+          .map(d => ({
+            id: d.id,
+            ...d.data(),
+          }))
+          .filter(item => !isContactMessageRecord(item));
         setMessages(list);
         setLoading(false);
       },

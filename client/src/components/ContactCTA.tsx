@@ -1,8 +1,18 @@
-import { useMemo } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { Link } from "wouter";
 import { Mail, Phone, MapPin, Clock } from "lucide-react";
+import { collection, doc, serverTimestamp, setDoc } from "firebase/firestore";
+import { toast } from "sonner";
+
+import { db } from "@/_core/firebase";
 
 export default function ContactCTA() {
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState("");
+  const [message, setMessage] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   const contactInfo = useMemo(
     () => [
       {
@@ -32,6 +42,80 @@ export default function ContactCTA() {
     ],
     []
   );
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    const normalizedFirstName = firstName.trim();
+    const normalizedLastName = lastName.trim();
+    const normalizedEmail = email.trim();
+    const normalizedMessage = message.trim();
+    const fullName = [normalizedFirstName, normalizedLastName]
+      .filter(Boolean)
+      .join(" ");
+
+    if (!normalizedFirstName || !normalizedEmail || !normalizedMessage) {
+      toast.error("اكتب الاسم والبريد والرسالة قبل الإرسال.");
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      const requestRef = doc(collection(db, "interest_requests"));
+      const requestBusinessId = `REQ-${requestRef.id.slice(0, 8).toUpperCase()}`;
+
+      await setDoc(requestRef, {
+        requestId: requestRef.id,
+        businessId: requestBusinessId,
+        requestNumber: requestBusinessId,
+        type: "interest_request",
+        requestType: "contact_message",
+        source: "site_contact_form",
+        status: "pending",
+        stageRole: "review",
+        stage: "review",
+        contactName: fullName || normalizedFirstName,
+        contactEmail: normalizedEmail,
+        email: normalizedEmail,
+        name: fullName || normalizedFirstName,
+        firstName: normalizedFirstName,
+        lastName: normalizedLastName || null,
+        message: normalizedMessage,
+        note: normalizedMessage,
+        adminSeenAt: null,
+        adminHandledAt: null,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        meta: {
+          from: "contact_cta",
+          path:
+            typeof window !== "undefined"
+              ? window.location.pathname
+              : "/contact",
+        },
+        events: [
+          {
+            type: "contact_message_created",
+            message: "تم إرسال رسالة من نموذج تواصل معنا",
+            at: new Date().toISOString(),
+            byRole: "visitor",
+            byEmail: normalizedEmail,
+          },
+        ],
+      });
+
+      toast.success("تم إرسال رسالتك بنجاح.");
+      setFirstName("");
+      setLastName("");
+      setEmail("");
+      setMessage("");
+    } catch (error) {
+      console.error("contact_message_submit_failed", error);
+      toast.error("تعذر إرسال الرسالة الآن. حاول مرة أخرى.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <section className="bg-transparent">
@@ -90,23 +174,33 @@ export default function ContactCTA() {
               </div>
 
               {/* ✅ النموذج (يسار) */}
-              <div className="lg:col-span-2 p-8 md:p-10">
+              <form className="lg:col-span-2 p-8 md:p-10" onSubmit={handleSubmit}>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <input
                     className="h-12 rounded-full bg-white border border-black/10 px-5 outline-none focus:border-black/20"
                     placeholder="الاسم الأول"
+                    value={firstName}
+                    onChange={event => setFirstName(event.target.value)}
+                    disabled={isSubmitting}
                   />
                   <input
                     className="h-12 rounded-full bg-white border border-black/10 px-5 outline-none focus:border-black/20"
                     placeholder="اسم العائلة"
+                    value={lastName}
+                    onChange={event => setLastName(event.target.value)}
+                    disabled={isSubmitting}
                   />
                 </div>
 
                 <div className="mt-4">
                   <input
+                    type="email"
                     className="h-12 w-full rounded-full bg-white border border-black/10 px-5 outline-none focus:border-black/20"
                     placeholder="البريد الإلكتروني"
                     dir="ltr"
+                    value={email}
+                    onChange={event => setEmail(event.target.value)}
+                    disabled={isSubmitting}
                   />
                 </div>
 
@@ -115,15 +209,19 @@ export default function ContactCTA() {
                     className="w-full rounded-[22px] bg-white border border-black/10 px-5 py-4 outline-none focus:border-black/20"
                     rows={4}
                     placeholder="رسالتك..."
+                    value={message}
+                    onChange={event => setMessage(event.target.value)}
+                    disabled={isSubmitting}
                   />
                 </div>
 
                 <div className="mt-5 flex justify-center">
                   <button
-                    type="button"
-                    className="h-11 px-14 rounded-full bg-primary text-white font-semibold hover:bg-primary/90 transition-colors"
+                    type="submit"
+                    className="h-11 px-14 rounded-full bg-primary text-white font-semibold hover:bg-primary/90 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={isSubmitting}
                   >
-                    إرسال الرسالة
+                    {isSubmitting ? "جارٍ الإرسال..." : "إرسال الرسالة"}
                   </button>
                 </div>
 
@@ -142,7 +240,7 @@ export default function ContactCTA() {
                   </Link>
                   .
                 </p>
-              </div>
+              </form>
             </div>
           </div>
         </div>

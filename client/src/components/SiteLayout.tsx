@@ -9,7 +9,7 @@ import { SiteContentProvider } from "@/contexts/SiteContentContext";
 export default function SiteLayout({ children }: { children: ReactNode }) {
   const [location] = useLocation();
   const currentPath = (location || "/").split("?")[0];
-  const shouldShowContactCTA = currentPath !== "/login";
+  const shouldShowContactCTA = currentPath !== "/login" && currentPath !== "/contact";
 
   return (
     <SiteContentProvider>

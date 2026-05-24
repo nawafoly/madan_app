@@ -36,6 +36,7 @@ import {
   Users,
   Building2,
   DollarSign,
+  Mail,
   MessageSquare,
   FileText,
   Settings,
@@ -111,6 +112,14 @@ const menuItems: MenuItem[] = [
     icon: MessageSquare,
     label: "طلبات الاستثمار",
     path: "/admin/messages",
+    allow: ["owner", "admin"],
+    permission: "messages.view",
+  },
+
+  {
+    icon: Mail,
+    label: "رسائل التواصل",
+    path: "/admin/contact-messages",
     allow: ["owner", "admin"],
     permission: "messages.view",
   },

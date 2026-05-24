@@ -349,11 +349,7 @@ export default function About() {
 
           <div className="container relative z-10 flex min-h-[100svh] items-center px-4 sm:px-6">
             <div className="mx-auto max-w-5xl text-center text-white">
-              <span className="inline-flex items-center rounded-full border border-white/12 bg-white/10 px-4 py-1.5 text-sm font-semibold text-white/78 backdrop-blur-sm">
-                عن معدن
-              </span>
-
-              <h1 className="mt-6 text-4xl font-bold leading-[1.35] tracking-tight sm:text-5xl lg:text-6xl lg:leading-[1.22]">
+              <h1 className="text-4xl font-bold leading-[1.35] tracking-tight sm:text-5xl lg:text-6xl lg:leading-[1.22]">
                 شركة ومنصة استثمارية تنظّم القرار العقاري بوضوح أعلى
               </h1>
 

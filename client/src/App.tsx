@@ -33,6 +33,7 @@ import FinancialManagement from "./pages/admin/Financial";
 import ClientsManagement from "./pages/admin/Clients";
 import ClientProfile from "@/pages/admin/ClientProfile";
 import MessagesManagement from "./pages/admin/Messages";
+import ContactMessages from "./pages/admin/ContactMessages";
 import RecruitmentApplicationsPage from "./pages/admin/RecruitmentApplications";
 import EmployeesManagementPage from "./pages/admin/Employees";
 import AuditLogPage from "./pages/admin/AuditLog";
@@ -164,6 +165,16 @@ function Router() {
         </Route>
 
         {/* ===== Admin: Messages ===== */}
+        <Route path="/admin/interest_requests">
+          <Redirect to="/admin/messages" />
+        </Route>
+
+        <Route path="/admin/contact-messages">
+          <RequireAdminPermission permission="messages.view">
+            <ContactMessages />
+          </RequireAdminPermission>
+        </Route>
+
         <Route path="/admin/messages/:requestId">
           <RequireAdminPermission permission="messages.view">
             <MessagesManagement />
