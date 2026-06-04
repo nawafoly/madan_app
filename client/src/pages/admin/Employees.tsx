@@ -13,6 +13,7 @@ import {
   doc,
   getDocs,
   onSnapshot,
+  orderBy,
   or,
   query,
   runTransaction,
@@ -27,12 +28,18 @@ import {
   CalendarDays,
   CheckCircle2,
   Clock3,
+  ChevronLeft,
   Download,
   Eye,
   FileText,
+  ArrowRight,
+  Camera,
   Inbox,
+  Loader2,
   Mail,
+  Minus,
   Phone,
+  Plus,
   Save,
   Search,
   ShieldCheck,
@@ -44,8 +51,16 @@ import {
 import { toast } from "sonner";
 
 import DashboardLayout from "@/components/DashboardLayout";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Card,
   CardContent,
@@ -62,7 +77,6 @@ import {
 } from "@/components/ui/empty";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
@@ -70,6 +84,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Slider } from "@/components/ui/slider";
 import { Textarea } from "@/components/ui/textarea";
 import { auth, db } from "@/_core/firebase";
 import { hasPermission, useAuth } from "@/_core/hooks/useAuth";
@@ -115,10 +130,19 @@ import {
   buildR2DownloadUrl,
   uploadDocumentToCloudflare,
 } from "@/lib/documentUploadService";
-import { createInAppNotification } from "@/lib/inAppNotifications";
+import { updateProfile } from "firebase/auth";
 import {
+  createInAppNotification,
+  markInAppNotificationsRead,
+  normalizeInAppNotificationRecord,
+  type InAppNotificationRecord,
+} from "@/lib/inAppNotifications";
+import {
+  EMPLOYEE_AVATAR_CATEGORY,
   EMPLOYEE_EMPTY_VALUE,
+  buildEmployeeAvatarPatch,
   normalizeEmployeeProfile,
+  type EmployeeAvatarDoc,
   type EmployeeProfileUserDoc,
 } from "@/lib/employeeProfile";
 import {
@@ -162,7 +186,10 @@ import type {
   EmployeeMessageDoc,
   EmployeeMessageType,
 } from "@shared/employee";
-import { EMPLOYEE_MESSAGES_COLLECTION } from "@shared/employee";
+import {
+  EMPLOYEE_MESSAGES_COLLECTION,
+  EMPLOYEE_NOTIFICATIONS_COLLECTION,
+} from "@shared/employee";
 
 type EmployeeRecord = EmployeeProfileUserDoc & {
   id: string;
@@ -264,6 +291,70 @@ function resolveEmployeeWorkspaceSection(
     default:
       return null;
   }
+}
+
+type EmployeeWorkspaceNotificationBucket = Record<
+  EmployeeWorkspaceSectionKey,
+  string[]
+> & {
+  all: string[];
+};
+
+function readWorkspaceNotificationQueryValue(
+  path: string | null | undefined,
+  key: string
+) {
+  const normalizedPath = String(path || "").trim();
+  if (!normalizedPath) return "";
+
+  const queryIndex = normalizedPath.indexOf("?");
+  if (queryIndex < 0) return "";
+
+  try {
+    return String(
+      new URLSearchParams(normalizedPath.slice(queryIndex + 1)).get(key) || ""
+    ).trim();
+  } catch {
+    return "";
+  }
+}
+
+function resolveEmployeeWorkspaceNotificationEmployeeId(
+  notification: Pick<InAppNotificationRecord, "relatedPath">
+) {
+  return readWorkspaceNotificationQueryValue(
+    notification.relatedPath,
+    "employeeId"
+  );
+}
+
+function resolveEmployeeWorkspaceNotificationSection(
+  notification: Pick<InAppNotificationRecord, "relatedPath" | "relatedTo">
+) {
+  const panel = readWorkspaceNotificationQueryValue(
+    notification.relatedPath,
+    "panel"
+  );
+  const resolvedPanel = resolveEmployeeWorkspaceSection(panel);
+  if (resolvedPanel) return resolvedPanel;
+
+  const relatedTo = String(notification.relatedTo || "").trim().toLowerCase();
+  if (relatedTo === "leave_request") return "leave";
+  if (relatedTo === "employee_message") return "messages";
+  if (relatedTo === "employee_file") return "files";
+
+  return null;
+}
+
+function createEmptyEmployeeWorkspaceNotificationBucket(): EmployeeWorkspaceNotificationBucket {
+  return {
+    profile: [],
+    salary: [],
+    leave: [],
+    messages: [],
+    files: [],
+    all: [],
+  };
 }
 
 const EMPLOYEE_LEAVE_BALANCE_ADJUSTMENTS_COLLECTION =
@@ -566,6 +657,230 @@ function buildEmployeeAbsenceFormValues(): EmployeeAbsenceFormValues {
   };
 }
 
+function getEmployeeInitials(name: string, email?: string | null) {
+  const source = String(name || email || "").trim();
+  if (!source) return "م";
+
+  const parts = source
+    .split(/\s+/)
+    .map(part => part.trim())
+    .filter(Boolean)
+    .slice(0, 2);
+
+  if (!parts.length) {
+    return source.slice(0, 2).toUpperCase();
+  }
+
+  return parts
+    .map(part => part.charAt(0))
+    .join("")
+    .toUpperCase();
+}
+
+type EmployeeAvatarVariant = "male" | "female";
+
+const COMMON_FEMALE_FIRST_NAMES = new Set([
+  "سارة",
+  "ساره",
+  "نورة",
+  "نوره",
+  "نورا",
+  "مها",
+  "شهد",
+  "ريم",
+  "رغد",
+  "رهف",
+  "لينا",
+  "ليان",
+  "ندى",
+  "جود",
+  "دانا",
+  "دانه",
+  "دلال",
+  "غادة",
+  "غاده",
+  "عبير",
+  "امل",
+  "أمل",
+  "آمال",
+  "امال",
+  "يارا",
+  "هند",
+  "روان",
+  "ريما",
+  "جواهر",
+  "رنا",
+  "رزان",
+  "بسمة",
+  "بسمه",
+  "شوق",
+  "وفاء",
+  "وفا",
+  "هيا",
+  "هالة",
+  "هاله",
+  "لمياء",
+]);
+
+function normalizeAvatarGender(value: unknown): EmployeeAvatarVariant | null {
+  const normalized = String(value ?? "")
+    .trim()
+    .toLowerCase();
+
+  if (!normalized) return null;
+
+  if (
+    normalized === "female" ||
+    normalized === "f" ||
+    normalized === "woman" ||
+    normalized === "girl" ||
+    normalized === "أنثى" ||
+    normalized === "انثى" ||
+    normalized === "بنت" ||
+    normalized === "امرأة" ||
+    normalized === "امراة"
+  ) {
+    return "female";
+  }
+
+  if (
+    normalized === "male" ||
+    normalized === "m" ||
+    normalized === "man" ||
+    normalized === "boy" ||
+    normalized === "ذكر" ||
+    normalized === "رجل" ||
+    normalized === "ولد"
+  ) {
+    return "male";
+  }
+
+  return null;
+}
+
+function normalizeNameKey(value: string) {
+  return String(value || "")
+    .trim()
+    .replace(/[ًٌٍَُِّْـ]/g, "")
+    .replace(/[أإآ]/g, "ا")
+    .replace(/ى/g, "ي")
+    .replace(/ؤ/g, "و")
+    .replace(/ئ/g, "ي")
+    .toLowerCase();
+}
+
+function getEmployeeAvatarVariant(employee: EmployeeRecord): EmployeeAvatarVariant {
+  const raw = employee as Record<string, any>;
+  const personal =
+    (raw.employeeProfile?.personal ||
+      raw.personal ||
+      raw.profile ||
+      {}) as Record<string, any>;
+
+  const explicitGender =
+    normalizeAvatarGender(personal.gender) ||
+    normalizeAvatarGender(personal.sex) ||
+    normalizeAvatarGender(raw.gender) ||
+    normalizeAvatarGender(raw.sex) ||
+    normalizeAvatarGender(raw.profile?.gender) ||
+    normalizeAvatarGender(raw.profile?.sex) ||
+    normalizeAvatarGender(raw.employeeProfile?.gender);
+
+  if (explicitGender) return explicitGender;
+
+  const nameSource = String(
+    employee.displayName ||
+      employee.name ||
+      personal.name ||
+      employee.email ||
+      ""
+  ).trim();
+  const firstName = normalizeNameKey(nameSource.split(/\s+/)[0] || "");
+
+  if (COMMON_FEMALE_FIRST_NAMES.has(firstName)) {
+    return "female";
+  }
+
+  return "male";
+}
+
+function buildEmployeeAvatarDataUrl(variant: EmployeeAvatarVariant) {
+  const isFemale = variant === "female";
+  const suit = "#efefef";
+  const suitShadow = "#dddddd";
+  const shirt = "#f7f7f7";
+  const tie = "#b5b5b5";
+  const maleHair = "#666666";
+  const femaleHair = "#7a7a7a";
+  const femaleBlazer = "#ececec";
+  const femaleBlazerShadow = "#dcdcdc";
+  const femaleDress = "#f7f7f7";
+  const femaleFace = "#f3f3f3";
+
+  const svg = isFemale
+    ? `
+      <svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" fill="none">
+        <rect width="256" height="256" fill="#ffffff" />
+
+        <path d="M58 248c4.8-35.8 20.5-68 38-80 11.6-8 51.4-8 63 0 17.5 12 33.2 44.2 38 80H58Z" fill="${femaleBlazer}" />
+        <path d="M78 248c4.5-27.8 14.2-52.6 25-61 7.8-6.1 41.2-6.1 49 0 10.8 8.4 20.5 33.2 25 61H78Z" fill="${femaleBlazerShadow}" opacity=".45" />
+        <path d="M94 140c8.7-8.3 18.9-12.4 34-12.4s25.3 4.1 34 12.4l13 25H81l13-25Z" fill="${femaleDress}" />
+        <path d="M112 147h32l7 18-23 30-23-30 7-18Z" fill="#c7c7c7" />
+        <path d="M121 164h14l5 21-12 17-12-17 5-21Z" fill="#a9a9a9" opacity=".78" />
+
+        <path d="M82 102c0-29.7 20.4-52 46-52s46 22.3 46 52v11c0 10.5-8.5 19-19 19H101c-10.5 0-19-8.5-19-19v-11Z" fill="${femaleHair}" />
+        <path d="M88 103c0-22.8 16.8-41 40-41s40 18.2 40 41v8c0 8.6-6.9 15.5-15.5 15.5h-49c-8.6 0-15.5-6.9-15.5-15.5v-8Z" fill="${femaleHair}" />
+        <path d="M95 96c0-18.8 15.2-34 33-34s33 15.2 33 34v8c0 8.3-6.7 15-15 15h-36c-8.3 0-15-6.7-15-15v-8Z" fill="${femaleFace}" />
+        <path d="M76 108c7.9-22 21.9-36 32-42 8.6-5.1 33.4-5.1 42 0 10.1 6 24.1 20 32 42l-8 7c-8.2-17.4-19.1-28.7-33-34.5-4.1 5.8-10.2 8.7-18 8.7s-13.9-2.9-18-8.7c-13.9 5.8-24.8 17.1-33 34.5l-8-7Z" fill="${femaleHair}" />
+
+        <circle cx="128" cy="109" r="4" fill="#d9d9d9" />
+        <circle cx="108" cy="78" r="3.5" fill="#efefef" opacity=".5" />
+      </svg>
+    `
+    : `
+      <svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" fill="none">
+        <rect width="256" height="256" fill="#ffffff" />
+
+        <path d="M73 246c3.8-45.2 22.8-83 55-83s51.2 37.8 55 83H73Z" fill="${suit}" />
+        <path d="M95 164c7.5-9.2 19.6-15 33-15s25.5 5.8 33 15l14 36H81l14-36Z" fill="${suitShadow}" opacity=".65" />
+        <path d="M97 205c9.5-23.9 18.9-40 31-40s21.5 16.1 31 40H97Z" fill="${shirt}" />
+        <path d="M118 168h20l6 19-16 23-16-23 6-19Z" fill="${tie}" />
+        <path d="M126 183h4l5 28h-14l5-28Z" fill="#a3a3a3" opacity=".72" />
+
+        <path d="M86 78c0-28.2 18.8-48 42-48s42 19.8 42 48v12c0 10.5-8.5 19-19 19h-46c-10.5 0-19-8.5-19-19V78Z" fill="${maleHair}" />
+        <path d="M92 79c0-20.2 14.2-36 36-36s36 15.8 36 36v9c0 8.3-6.7 15-15 15h-42c-8.3 0-15-6.7-15-15v-9Z" fill="${maleHair}" />
+        <path d="M94 88c0-20.3 15.3-34 34-34s34 13.7 34 34v5c0 9.4-7.6 17-17 17h-34c-9.4 0-17-7.6-17-17v-5Z" fill="#f5f5f5" />
+        <path d="M102 99c0-12.3 11.7-23 26-23s26 10.7 26 23v9c0 5.5-4.5 10-10 10h-32c-5.5 0-10-4.5-10-10v-9Z" fill="#f1f1f1" />
+        <path d="M92 77c4.8-18.3 17.1-28 36-28s31.2 9.7 36 28l-6 5c-8.2-12.4-17.3-18-30-18s-21.8 5.6-30 18l-6-5Z" fill="${maleHair}" />
+
+        <path d="M68 124c9.6-17.3 25.3-26 44-26h32c18.7 0 34.4 8.7 44 26l16 54H52l16-54Z" fill="${suit}" />
+        <path d="M67 126c9.4-15.1 24.8-23 42-23h38c17.2 0 32.6 7.9 42 23l14 50H53l14-50Z" fill="${suitShadow}" opacity=".35" />
+        <path d="M101 118l27 22 27-22v18l-27 26-27-26v-18Z" fill="#ffffff" opacity=".85" />
+
+        <circle cx="128" cy="105" r="4" fill="#d9d9d9" />
+      </svg>
+    `;
+
+  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+}
+
+function getEmployeeDisplayAvatarUrl(
+  employee: EmployeeRecord,
+  avatarUrl: string | null | undefined
+) {
+  const resolvedAvatarUrl = String(avatarUrl || "").trim();
+  if (resolvedAvatarUrl) return resolvedAvatarUrl;
+
+  return buildEmployeeAvatarDataUrl(getEmployeeAvatarVariant(employee));
+}
+
+function getLatestTimestamp(...dates: Array<Date | null | undefined>) {
+  return dates.reduce((latest, date) => {
+    const time = date?.getTime() || 0;
+    return time > latest ? time : latest;
+  }, 0);
+}
+
 function Field({
   label,
   description,
@@ -614,11 +929,13 @@ function EmployeeWorkspaceTabButton({
   active,
   icon: Icon,
   label,
+  showIndicator = false,
   onClick,
 }: {
   active: boolean;
   icon: typeof ShieldCheck;
   label: string;
+  showIndicator?: boolean;
   onClick: () => void;
 }) {
   return (
@@ -626,16 +943,22 @@ function EmployeeWorkspaceTabButton({
       type="button"
       onClick={onClick}
       className={cn(
-        "relative flex h-9 items-center justify-center gap-1.5 whitespace-nowrap rounded-md border border-transparent border-b-2 px-3 text-xs font-semibold transition-all",
+        "relative inline-flex h-10 min-w-[112px] shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-full border border-slate-200/90 bg-white px-5 text-sm font-semibold leading-none text-slate-600 shadow-[0_1px_0_rgba(255,255,255,0.95)] transition-all duration-200 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F2B705]/35",
         active
-          ? "border-b-[#F2B705] bg-[#F2B705]/10 text-[#030640]"
-          : "border-b-transparent bg-transparent text-slate-600 hover:bg-slate-50 hover:text-slate-950"
+          ? "border-[#F2B705]/45 bg-[#F2B705]/12 text-[#030640] shadow-[0_12px_28px_-20px_rgba(242,183,5,0.8)]"
+          : ""
       )}
     >
       <Icon
-        className={cn("h-3.5 w-3.5", active ? "text-[#030640]" : "text-slate-500")}
+        className={cn("h-4 w-4", active ? "text-[#030640]" : "text-slate-500")}
       />
       <span>{label}</span>
+      {showIndicator ? (
+        <span
+          aria-hidden="true"
+          className="absolute right-1 top-1 z-20 h-2 w-2 rounded-full bg-rose-500 shadow-[0_0_0_2px_rgba(255,255,255,0.98)]"
+        />
+      ) : null}
     </button>
   );
 }
@@ -781,6 +1104,193 @@ function normalizeEnglishDigits(value: string) {
     .replace(/[۰-۹]/g, digit => String(digit.charCodeAt(0) - 1776));
 }
 
+const EMPLOYEE_AVATAR_MAX_SIZE_BYTES = 5 * 1024 * 1024;
+const EMPLOYEE_AVATAR_CROP_OUTPUT_SIZE = 512;
+const EMPLOYEE_AVATAR_CROP_MIN_ZOOM = 1;
+const EMPLOYEE_AVATAR_CROP_MAX_ZOOM = 3;
+
+function clampNumber(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function validateEmployeeAvatarFile(file: File) {
+  if (!file.type.startsWith("image/")) {
+    throw new Error("يرجى اختيار صورة فقط.");
+  }
+
+  if (file.size > EMPLOYEE_AVATAR_MAX_SIZE_BYTES) {
+    throw new Error("حجم الصورة كبير. الحد الأعلى 5MB.");
+  }
+}
+
+type EmployeeAvatarCropDraft = {
+  objectUrl: string;
+  fileName: string;
+  fileType: string;
+  fileSize: number;
+  naturalWidth: number;
+  naturalHeight: number;
+};
+
+type EmployeeAvatarCropPosition = {
+  x: number;
+  y: number;
+};
+
+type EmployeeAvatarCropMetrics = {
+  width: number;
+  height: number;
+  maxOffsetX: number;
+  maxOffsetY: number;
+};
+
+function getEmployeeAvatarCropMetrics(input: {
+  naturalWidth: number;
+  naturalHeight: number;
+  viewportSize: number;
+  zoom: number;
+}): EmployeeAvatarCropMetrics {
+  const viewportSize = Math.max(1, input.viewportSize);
+  const naturalWidth = Math.max(1, input.naturalWidth);
+  const naturalHeight = Math.max(1, input.naturalHeight);
+  const zoom = clampNumber(
+    input.zoom,
+    EMPLOYEE_AVATAR_CROP_MIN_ZOOM,
+    EMPLOYEE_AVATAR_CROP_MAX_ZOOM
+  );
+  const coverScale = Math.max(
+    viewportSize / naturalWidth,
+    viewportSize / naturalHeight
+  );
+  const width = naturalWidth * coverScale * zoom;
+  const height = naturalHeight * coverScale * zoom;
+
+  return {
+    width,
+    height,
+    maxOffsetX: Math.max(0, (width - viewportSize) / 2),
+    maxOffsetY: Math.max(0, (height - viewportSize) / 2),
+  };
+}
+
+function clampEmployeeAvatarCropPosition(
+  position: EmployeeAvatarCropPosition,
+  metrics: EmployeeAvatarCropMetrics
+): EmployeeAvatarCropPosition {
+  return {
+    x: clampNumber(position.x, -metrics.maxOffsetX, metrics.maxOffsetX),
+    y: clampNumber(position.y, -metrics.maxOffsetY, metrics.maxOffsetY),
+  };
+}
+
+function loadEmployeeAvatarImageElement(src: string) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () =>
+      reject(new Error("تعذر تحميل الصورة المختارة للمعاينة."));
+    image.src = src;
+  });
+}
+
+async function createEmployeeAvatarCropDraft(
+  file: File
+): Promise<EmployeeAvatarCropDraft> {
+  const objectUrl = URL.createObjectURL(file);
+
+  try {
+    const image = await loadEmployeeAvatarImageElement(objectUrl);
+    return {
+      objectUrl,
+      fileName: file.name,
+      fileType: file.type,
+      fileSize: file.size,
+      naturalWidth: image.naturalWidth || image.width || 1,
+      naturalHeight: image.naturalHeight || image.height || 1,
+    };
+  } catch (error) {
+    URL.revokeObjectURL(objectUrl);
+    throw error;
+  }
+}
+
+function resolveEmployeeAvatarOutputType(fileType: string) {
+  switch (
+    String(fileType || "")
+      .trim()
+      .toLowerCase()
+  ) {
+    case "image/png":
+      return "image/png";
+    case "image/webp":
+      return "image/webp";
+    default:
+      return "image/jpeg";
+  }
+}
+
+async function buildEmployeeCroppedAvatarFile(input: {
+  draft: EmployeeAvatarCropDraft;
+  viewportSize: number;
+  zoom: number;
+  position: EmployeeAvatarCropPosition;
+}) {
+  const viewportSize = Math.max(1, input.viewportSize);
+  const image = await loadEmployeeAvatarImageElement(input.draft.objectUrl);
+  const metrics = getEmployeeAvatarCropMetrics({
+    naturalWidth: input.draft.naturalWidth,
+    naturalHeight: input.draft.naturalHeight,
+    viewportSize,
+    zoom: input.zoom,
+  });
+  const position = clampEmployeeAvatarCropPosition(input.position, metrics);
+  const outputType = resolveEmployeeAvatarOutputType(input.draft.fileType);
+  const canvas = document.createElement("canvas");
+  const context = canvas.getContext("2d");
+
+  if (!context) {
+    throw new Error("تعذر تجهيز الصورة المقصوصة.");
+  }
+
+  canvas.width = EMPLOYEE_AVATAR_CROP_OUTPUT_SIZE;
+  canvas.height = EMPLOYEE_AVATAR_CROP_OUTPUT_SIZE;
+
+  const scale = EMPLOYEE_AVATAR_CROP_OUTPUT_SIZE / viewportSize;
+  const drawX = ((viewportSize - metrics.width) / 2 + position.x) * scale;
+  const drawY = ((viewportSize - metrics.height) / 2 + position.y) * scale;
+
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = "high";
+  context.drawImage(image, drawX, drawY, metrics.width * scale, metrics.height * scale);
+
+  const blob = await new Promise<Blob | null>(resolve => {
+    canvas.toBlob(
+      resolve,
+      outputType,
+      outputType === "image/jpeg" ? 0.92 : undefined
+    );
+  });
+
+  if (!blob) {
+    throw new Error("تعذر إنشاء الصورة المقصوصة.");
+  }
+
+  const extension =
+    outputType === "image/png"
+      ? "png"
+      : outputType === "image/webp"
+        ? "webp"
+        : "jpg";
+  const fileNameBase =
+    input.draft.fileName.replace(/\.[^.]+$/, "").trim() || "employee-avatar";
+
+  return new File([blob], `${fileNameBase}.${extension}`, {
+    type: outputType,
+    lastModified: Date.now(),
+  });
+}
+
 function resolveEmployeeAuthUid(employee: EmployeeRecord | null | undefined) {
   return String(employee?.uid || employee?.id || "").trim();
 }
@@ -849,7 +1359,6 @@ export default function EmployeesManagementPage() {
   const { user } = useAuth();
   const search = useSearch();
   const canManageEmployees = hasPermission(user, "employees.manage");
-
   const [employees, setEmployees] = useState<EmployeeRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -916,14 +1425,34 @@ export default function EmployeesManagementPage() {
     useState<EmployeeFileFormValues>(buildOfficialDocumentFormValues);
   const [uploadingOfficialDocument, setUploadingOfficialDocument] =
     useState(false);
+  const [employeeAvatarCropOpen, setEmployeeAvatarCropOpen] = useState(false);
+  const [employeeAvatarCropDraft, setEmployeeAvatarCropDraft] =
+    useState<EmployeeAvatarCropDraft | null>(null);
+  const [employeeAvatarCropZoom, setEmployeeAvatarCropZoom] = useState(1);
+  const [employeeAvatarCropPosition, setEmployeeAvatarCropPosition] =
+    useState<EmployeeAvatarCropPosition>({
+      x: 0,
+      y: 0,
+    });
+  const [employeeAvatarCropViewportSize, setEmployeeAvatarCropViewportSize] =
+    useState(320);
+  const [employeeAvatarCropDragging, setEmployeeAvatarCropDragging] =
+    useState(false);
+  const [uploadingEmployeeAvatar, setUploadingEmployeeAvatar] = useState(false);
   const [employeeMessages, setEmployeeMessages] = useState<
     EmployeeMessageRecord[]
   >([]);
   const [employeeMessagesLoading, setEmployeeMessagesLoading] = useState(false);
+  const [adminNotifications, setAdminNotifications] = useState<
+    InAppNotificationRecord[]
+  >([]);
   const [employeeMessageForm, setEmployeeMessageForm] =
     useState<EmployeeMessageFormValues>(buildEmployeeMessageFormValues);
   const [activeEmployeeWorkspaceSection, setActiveEmployeeWorkspaceSection] =
     useState<EmployeeWorkspaceSectionKey>("profile");
+  const [employeeWorkspaceViewedAt, setEmployeeWorkspaceViewedAt] = useState<
+    Partial<Record<EmployeeWorkspaceSectionKey, number>>
+  >({});
   const [activeEmployeeConversationId, setActiveEmployeeConversationId] =
     useState<string | null>(null);
   const [openingEmployeeConversationId, setOpeningEmployeeConversationId] =
@@ -933,15 +1462,34 @@ export default function EmployeesManagementPage() {
   const [sendingEmployeeMessage, setSendingEmployeeMessage] = useState(false);
   const employeeFileInputRef = useRef<HTMLInputElement | null>(null);
   const officialDocumentInputRef = useRef<HTMLInputElement | null>(null);
+  const employeeAvatarInputRef = useRef<HTMLInputElement | null>(null);
+  const employeeAvatarCropViewportRef = useRef<HTMLDivElement | null>(null);
+  const employeeAvatarCropDragRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    originX: number;
+    originY: number;
+  } | null>(null);
   const payrollMudadDocumentInputRef = useRef<HTMLInputElement | null>(null);
   const employeeSalarySectionRef = useRef<HTMLDivElement | null>(null);
   const employeeOverviewSectionRef = useRef<HTMLDivElement | null>(null);
   const employeeLeaveSectionRef = useRef<HTMLDivElement | null>(null);
   const employeeMessagesSectionRef = useRef<HTMLDivElement | null>(null);
   const employeeFilesSectionRef = useRef<HTMLDivElement | null>(null);
+  const employeeWorkspaceScrollTargetRef =
+    useRef<EmployeeWorkspaceSectionKey | null>(null);
   const handledEmployeeSearchRef = useRef("");
   const handledMessageSearchRef = useRef("");
   const handledSectionNavigationRef = useRef("");
+
+  const employeeWorkspaceSectionRefs = {
+    profile: employeeOverviewSectionRef,
+    salary: employeeSalarySectionRef,
+    leave: employeeLeaveSectionRef,
+    messages: employeeMessagesSectionRef,
+    files: employeeFilesSectionRef,
+  } as const;
 
   const searchParams = useMemo(() => new URLSearchParams(search), [search]);
   const requestedEmployeeId = useMemo(
@@ -976,6 +1524,22 @@ export default function EmployeesManagementPage() {
     setOfficialDocumentForm(buildOfficialDocumentFormValues());
     if (officialDocumentInputRef.current) {
       officialDocumentInputRef.current.value = "";
+    }
+  };
+
+  const resetEmployeeAvatarCropState = () => {
+    setEmployeeAvatarCropOpen(false);
+    setEmployeeAvatarCropDraft(null);
+    setEmployeeAvatarCropZoom(1);
+    setEmployeeAvatarCropPosition({ x: 0, y: 0 });
+    setEmployeeAvatarCropDragging(false);
+    employeeAvatarCropDragRef.current = null;
+  };
+
+  const resetEmployeeAvatarForm = () => {
+    resetEmployeeAvatarCropState();
+    if (employeeAvatarInputRef.current) {
+      employeeAvatarInputRef.current.value = "";
     }
   };
 
@@ -1126,6 +1690,7 @@ export default function EmployeesManagementPage() {
       employees.some(employee => employee.id === requestedEmployeeId)
     ) {
       handledEmployeeSearchRef.current = search;
+      employeeWorkspaceScrollTargetRef.current = "profile";
       if (selectedEmployeeId !== requestedEmployeeId) {
         setSelectedEmployeeId(requestedEmployeeId);
       }
@@ -1135,8 +1700,8 @@ export default function EmployeesManagementPage() {
     const selectedExists = employees.some(
       employee => employee.id === selectedEmployeeId
     );
-    if (!selectedEmployeeId || !selectedExists) {
-      setSelectedEmployeeId(employees[0].id);
+    if (selectedEmployeeId && !selectedExists) {
+      setSelectedEmployeeId("");
     }
   }, [employees, requestedEmployeeId, search, selectedEmployeeId]);
 
@@ -1146,15 +1711,17 @@ export default function EmployeesManagementPage() {
         const profile = normalizeEmployeeProfile(employee, {
           displayName: employee.displayName,
           email: employee.email,
-          photoURL:
-            employee.photoURL ||
-            employee.firebaseUser?.photoURL ||
-            auth.currentUser?.photoURL,
+          photoURL: employee.photoURL || employee.firebaseUser?.photoURL || null,
         });
+        const displayAvatarUrl = getEmployeeDisplayAvatarUrl(
+          employee,
+          profile.personal.avatarUrl
+        );
 
         return {
           employee,
           profile,
+          displayAvatarUrl,
           searchText: [
             profile.personal.name,
             profile.personal.email,
@@ -1193,16 +1760,16 @@ export default function EmployeesManagementPage() {
           photoURL:
             selectedEmployee.photoURL ||
             selectedEmployee.firebaseUser?.photoURL ||
-            auth.currentUser?.photoURL,
+            null,
         })
         : null,
     [selectedEmployee]
   );
   const selectedEmployeeLabel = useMemo(
     () =>
-      selectedEmployeeProfile?.personal.name &&
-        selectedEmployeeProfile.personal.name !== EMPLOYEE_EMPTY_VALUE
-        ? selectedEmployeeProfile.personal.name
+      selectedEmployeeProfile?.personal?.name &&
+        selectedEmployeeProfile?.personal?.name !== EMPLOYEE_EMPTY_VALUE
+        ? selectedEmployeeProfile?.personal?.name
         : pickText(
           selectedEmployee?.displayName,
           selectedEmployee?.name,
@@ -1210,6 +1777,166 @@ export default function EmployeesManagementPage() {
         ) || "الموظف",
     [selectedEmployee, selectedEmployeeProfile]
   );
+  const selectedEmployeeDisplayAvatarUrl = useMemo(
+    () =>
+      selectedEmployee
+        ? getEmployeeDisplayAvatarUrl(
+          selectedEmployee,
+          selectedEmployeeProfile?.personal?.avatarUrl
+        )
+        : null,
+    [selectedEmployee, selectedEmployeeProfile]
+  );
+  const selectedEmployeeEmployment = useMemo(
+    () =>
+      (selectedEmployeeProfile?.employment ||
+        ({
+          title: selectedEmployee?.title || EMPLOYEE_EMPTY_VALUE,
+          department: selectedEmployee?.department || EMPLOYEE_EMPTY_VALUE,
+          statusTone: "muted",
+          statusLabel: EMPLOYEE_EMPTY_VALUE,
+          employeeCode: EMPLOYEE_EMPTY_VALUE,
+          startDate: null,
+          fingerprintNumber: EMPLOYEE_EMPTY_VALUE,
+        } as Record<string, any>)) as Record<string, any>,
+    [selectedEmployee, selectedEmployeeProfile]
+  );
+
+  const employeeAvatarCropMetrics = useMemo(
+    () =>
+      employeeAvatarCropDraft
+        ? getEmployeeAvatarCropMetrics({
+            naturalWidth: employeeAvatarCropDraft.naturalWidth,
+            naturalHeight: employeeAvatarCropDraft.naturalHeight,
+            viewportSize: employeeAvatarCropViewportSize,
+            zoom: employeeAvatarCropZoom,
+          })
+        : null,
+    [employeeAvatarCropDraft, employeeAvatarCropViewportSize, employeeAvatarCropZoom]
+  );
+  const employeeAvatarCropImageStyle = useMemo(() => {
+    if (!employeeAvatarCropMetrics) return undefined;
+
+    const position = clampEmployeeAvatarCropPosition(
+      employeeAvatarCropPosition,
+      employeeAvatarCropMetrics
+    );
+
+    return {
+      width: `${employeeAvatarCropMetrics.width}px`,
+      height: `${employeeAvatarCropMetrics.height}px`,
+      left: `${(employeeAvatarCropViewportSize - employeeAvatarCropMetrics.width) / 2 +
+        position.x
+        }px`,
+      top: `${(employeeAvatarCropViewportSize - employeeAvatarCropMetrics.height) / 2 +
+        position.y
+        }px`,
+    };
+  }, [
+    employeeAvatarCropMetrics,
+    employeeAvatarCropPosition,
+    employeeAvatarCropViewportSize,
+  ]);
+  const employeeAvatarCropMiniPreviewStyle = useMemo(() => {
+    if (!employeeAvatarCropMetrics) return undefined;
+
+    const previewSize = 112;
+    const scale = previewSize / Math.max(1, employeeAvatarCropViewportSize);
+    const position = clampEmployeeAvatarCropPosition(
+      employeeAvatarCropPosition,
+      employeeAvatarCropMetrics
+    );
+
+    return {
+      width: `${employeeAvatarCropMetrics.width * scale}px`,
+      height: `${employeeAvatarCropMetrics.height * scale}px`,
+      left: `${(previewSize - employeeAvatarCropMetrics.width * scale) / 2 +
+        position.x * scale
+        }px`,
+      top: `${(previewSize - employeeAvatarCropMetrics.height * scale) / 2 +
+        position.y * scale
+        }px`,
+    };
+  }, [
+    employeeAvatarCropMetrics,
+    employeeAvatarCropPosition,
+    employeeAvatarCropViewportSize,
+  ]);
+  const employeeAvatarCropZoomLabel = `${Math.round(employeeAvatarCropZoom * 100)}%`;
+
+  useEffect(() => {
+    return () => {
+      if (employeeAvatarCropDraft?.objectUrl) {
+        URL.revokeObjectURL(employeeAvatarCropDraft.objectUrl);
+      }
+    };
+  }, [employeeAvatarCropDraft?.objectUrl]);
+
+  useEffect(() => {
+    if (!employeeAvatarCropOpen) return;
+
+    const element = employeeAvatarCropViewportRef.current;
+    if (!element) return;
+
+    const updateViewportSize = () => {
+      const nextSize = Math.max(
+        240,
+        Math.round(element.getBoundingClientRect().width)
+      );
+      setEmployeeAvatarCropViewportSize(nextSize);
+    };
+
+    updateViewportSize();
+
+    if (typeof ResizeObserver === "undefined") return;
+
+    const observer = new ResizeObserver(() => {
+      updateViewportSize();
+    });
+    observer.observe(element);
+
+    return () => observer.disconnect();
+  }, [employeeAvatarCropOpen, employeeAvatarCropDraft]);
+
+  useEffect(() => {
+    if (!employeeAvatarCropMetrics) return;
+    setEmployeeAvatarCropPosition(current =>
+      clampEmployeeAvatarCropPosition(current, employeeAvatarCropMetrics)
+    );
+  }, [employeeAvatarCropMetrics]);
+
+  useEffect(() => {
+    if (!user?.uid) {
+      setAdminNotifications([]);
+      return;
+    }
+
+    const notificationsQuery = query(
+      collection(db, EMPLOYEE_NOTIFICATIONS_COLLECTION),
+      where("targetUid", "==", user.uid),
+      orderBy("createdAt", "desc")
+    );
+
+    const unsubscribe = onSnapshot(
+      notificationsQuery,
+      snapshot => {
+        setAdminNotifications(
+          snapshot.docs.map(docSnapshot =>
+            normalizeInAppNotificationRecord(
+              docSnapshot.id,
+              (docSnapshot.data() as Record<string, any>) || {}
+            )
+          )
+        );
+      },
+      error => {
+        console.error("employee_admin_notifications_snapshot_error", error);
+        setAdminNotifications([]);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [user?.uid]);
 
   useEffect(() => {
     if (!selectedEmployeeDocumentId) {
@@ -1377,10 +2104,12 @@ export default function EmployeesManagementPage() {
 
   useEffect(() => {
     resetEmployeeFileForm();
+    resetEmployeeAvatarForm();
     resetEmployeeMessageForm();
     setAbsenceForm(buildEmployeeAbsenceFormValues());
     setPayrollMonthInput(buildEmployeePayrollMonthInput());
     setActiveEmployeeWorkspaceSection("profile");
+    setEmployeeWorkspaceViewedAt({});
     setActiveEmployeeConversationId(null);
     setComposeEmployeeMessageAsNew(false);
     handledSectionNavigationRef.current = "";
@@ -1678,6 +2407,15 @@ export default function EmployeesManagementPage() {
     () => visibleEmployeeFiles.filter(file => !file.isRead).length,
     [visibleEmployeeFiles]
   );
+  const latestEmployeeFileUpdateAt = useMemo(
+    () =>
+      getLatestTimestamp(
+        ...employeeFiles
+          .filter(file => !file.isRead)
+          .map(file => file.createdAtDate || file.uploadedAtDate)
+      ),
+    [employeeFiles]
+  );
   const archivedEmployeeFilesCount =
     employeeFiles.length - visibleEmployeeFiles.length;
   const replacingEmployeeFile = useMemo(
@@ -1714,8 +2452,121 @@ export default function EmployeesManagementPage() {
     () => employeeMessages.filter(message => !message.isRead).length,
     [employeeMessages]
   );
+  const latestEmployeeMessageUpdateAt = useMemo(
+    () =>
+      getLatestTimestamp(
+        ...employeeMessages
+          .filter(message => !message.isRead)
+          .map(message => message.createdAtDate)
+      ),
+    [employeeMessages]
+  );
   const readEmployeeMessagesCount =
     employeeMessages.length - unreadEmployeeMessagesCount;
+  const latestEmployeeLeaveUpdateAt = useMemo(
+    () =>
+      getLatestTimestamp(
+        ...leaveRequests.map(request =>
+          toDateSafe(
+            request.updatedAt ||
+              request.reviewedAt ||
+              request.decidedAt ||
+              request.createdAt
+          )
+        )
+      ),
+    [leaveRequests]
+  );
+  const latestEmployeePayrollUpdateAt = useMemo(
+    () => employeePayrollRecords[0]?.createdAtDate?.getTime() || 0,
+    [employeePayrollRecords]
+  );
+
+  const unreadAdminNotifications = useMemo(
+    () => adminNotifications.filter(notification => !notification.isRead),
+    [adminNotifications]
+  );
+
+  const employeeWorkspaceUnreadNotificationIndex = useMemo(() => {
+    const index = new Map<string, EmployeeWorkspaceNotificationBucket>();
+
+    unreadAdminNotifications.forEach(notification => {
+      const employeeId = resolveEmployeeWorkspaceNotificationEmployeeId(
+        notification
+      );
+      if (!employeeId) return;
+
+      const section = resolveEmployeeWorkspaceNotificationSection(notification);
+      if (!section) return;
+
+      let bucket = index.get(employeeId);
+      if (!bucket) {
+        bucket = createEmptyEmployeeWorkspaceNotificationBucket();
+        index.set(employeeId, bucket);
+      }
+
+      bucket[section].push(notification.id);
+      bucket.all.push(notification.id);
+    });
+
+    return index;
+  }, [unreadAdminNotifications]);
+
+  const selectedEmployeeWorkspaceUnreadNotificationBucket = selectedEmployeeId
+    ? employeeWorkspaceUnreadNotificationIndex.get(selectedEmployeeId) ?? null
+    : null;
+
+  const employeeWorkspaceAlertState = useMemo(
+    () => ({
+      salary: {
+        latestUpdateAt: latestEmployeePayrollUpdateAt,
+        viewedAt: employeeWorkspaceViewedAt.salary || 0,
+      },
+      leave: {
+        latestUpdateAt: latestEmployeeLeaveUpdateAt,
+        viewedAt: employeeWorkspaceViewedAt.leave || 0,
+      },
+      messages: {
+        latestUpdateAt: latestEmployeeMessageUpdateAt,
+        viewedAt: employeeWorkspaceViewedAt.messages || 0,
+      },
+      files: {
+        latestUpdateAt: latestEmployeeFileUpdateAt,
+        viewedAt: employeeWorkspaceViewedAt.files || 0,
+      },
+    }),
+    [
+      employeeWorkspaceViewedAt.files,
+      employeeWorkspaceViewedAt.leave,
+      employeeWorkspaceViewedAt.messages,
+      employeeWorkspaceViewedAt.salary,
+      latestEmployeeFileUpdateAt,
+      latestEmployeeLeaveUpdateAt,
+      latestEmployeeMessageUpdateAt,
+      latestEmployeePayrollUpdateAt,
+    ]
+  );
+  const employeeWorkspaceSectionHasAlert = {
+    profile: Boolean(selectedEmployeeWorkspaceUnreadNotificationBucket?.profile.length),
+    salary:
+      Boolean(selectedEmployeeWorkspaceUnreadNotificationBucket?.salary.length) ||
+      employeeWorkspaceAlertState.salary.latestUpdateAt >
+        employeeWorkspaceAlertState.salary.viewedAt,
+    leave: Boolean(selectedEmployeeWorkspaceUnreadNotificationBucket?.leave.length),
+    messages: Boolean(
+      selectedEmployeeWorkspaceUnreadNotificationBucket?.messages.length
+    ),
+    files:
+      Boolean(selectedEmployeeWorkspaceUnreadNotificationBucket?.files.length) ||
+      employeeWorkspaceAlertState.files.latestUpdateAt >
+        employeeWorkspaceAlertState.files.viewedAt,
+  } as const;
+  const hasEmployeeWorkspaceAlerts =
+    employeeWorkspaceSectionHasAlert.salary ||
+    employeeWorkspaceSectionHasAlert.leave ||
+    employeeWorkspaceSectionHasAlert.messages ||
+    employeeWorkspaceSectionHasAlert.files ||
+    employeeWorkspaceSectionHasAlert.profile;
 
   useEffect(() => {
     if (
@@ -1749,28 +2600,77 @@ export default function EmployeesManagementPage() {
     search,
   ]);
 
+  const markEmployeeWorkspaceNotificationsRead = (
+    section: EmployeeWorkspaceSectionKey
+  ) => {
+    if (!selectedEmployeeId) return;
+
+    const unreadIds =
+      selectedEmployeeWorkspaceUnreadNotificationBucket?.[section] || [];
+    if (!unreadIds.length) return;
+
+    const unreadIdSet = new Set(unreadIds);
+    setAdminNotifications(current =>
+      current.map(notification =>
+        unreadIdSet.has(notification.id)
+          ? { ...notification, isRead: true }
+          : notification
+      )
+    );
+    void markInAppNotificationsRead(unreadIds).catch(error => {
+      console.error("employee_workspace_notification_mark_read_failed", error);
+    });
+  };
+
+  const activateEmployeeWorkspaceSection = (
+    section: EmployeeWorkspaceSectionKey
+  ) => {
+    markEmployeeWorkspaceNotificationsRead(section);
+    setEmployeeWorkspaceViewedAt(current => ({
+      ...current,
+      [section]: Date.now(),
+    }));
+    employeeWorkspaceScrollTargetRef.current = null;
+    setActiveEmployeeWorkspaceSection(section);
+  };
+
   const scrollToEmployeeWorkspaceSection = (
     section: EmployeeWorkspaceSectionKey,
     behavior: ScrollBehavior = "smooth"
   ) => {
+    markEmployeeWorkspaceNotificationsRead(section);
+    setEmployeeWorkspaceViewedAt(current => ({
+      ...current,
+      [section]: Date.now(),
+    }));
+
+    const targetRef = employeeWorkspaceSectionRefs[section];
+    if (activeEmployeeWorkspaceSection === section) {
+      targetRef.current?.scrollIntoView({
+        behavior,
+        block: "start",
+      });
+      return;
+    }
+
+    employeeWorkspaceScrollTargetRef.current = section;
     setActiveEmployeeWorkspaceSection(section);
+  };
 
-    const target =
-      section === "profile"
-        ? employeeOverviewSectionRef.current
-        : section === "salary"
-          ? employeeSalarySectionRef.current
-          : section === "leave"
-            ? employeeLeaveSectionRef.current
-            : section === "messages"
-              ? employeeMessagesSectionRef.current
-              : employeeFilesSectionRef.current;
+  useEffect(() => {
+    const targetSection = employeeWorkspaceScrollTargetRef.current;
+    if (!targetSection) return;
+    if (targetSection !== activeEmployeeWorkspaceSection) return;
 
-    target?.scrollIntoView({
-      behavior,
+    const target = employeeWorkspaceSectionRefs[targetSection].current;
+    if (!target) return;
+
+    employeeWorkspaceScrollTargetRef.current = null;
+    target.scrollIntoView({
+      behavior: "smooth",
       block: "start",
     });
-  };
+  }, [activeEmployeeWorkspaceSection, selectedEmployeeId]);
 
   useEffect(() => {
     if (!requestedPanel) {
@@ -1800,6 +2700,15 @@ export default function EmployeesManagementPage() {
     selectedEmployeeId,
     selectedEmployeeProfile,
   ]);
+
+  const handleSelectEmployee = (employeeId: string) => {
+    setSelectedEmployeeId(employeeId);
+  };
+
+  const handleCloseEmployeeDetails = () => {
+    employeeWorkspaceScrollTargetRef.current = null;
+    setSelectedEmployeeId("");
+  };
 
   const activeEmployeesCount = employeeCards.filter(
     card => card.profile.employment.statusKey === "active"
@@ -2325,6 +3234,219 @@ export default function EmployeesManagementPage() {
     }
   };
 
+  const handleEmployeeAvatarSelected = async (
+    event: ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0] || null;
+    event.target.value = "";
+
+    if (!file) return;
+
+    try {
+      validateEmployeeAvatarFile(file);
+      const draft = await createEmployeeAvatarCropDraft(file);
+      setEmployeeAvatarCropDraft(draft);
+      setEmployeeAvatarCropZoom(1);
+      setEmployeeAvatarCropPosition({ x: 0, y: 0 });
+      setEmployeeAvatarCropOpen(true);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "ملف الصورة غير صالح."
+      );
+    }
+  };
+
+  const handleEmployeeAvatarDrop = async (
+    event: DragEvent<HTMLDivElement>
+  ) => {
+    event.preventDefault();
+    if (!canManageEmployees || uploadingEmployeeAvatar) return;
+
+    const file = event.dataTransfer.files?.[0] || null;
+    if (!file) return;
+
+    try {
+      validateEmployeeAvatarFile(file);
+      const draft = await createEmployeeAvatarCropDraft(file);
+      setEmployeeAvatarCropDraft(draft);
+      setEmployeeAvatarCropZoom(1);
+      setEmployeeAvatarCropPosition({ x: 0, y: 0 });
+      setEmployeeAvatarCropOpen(true);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "ملف الصورة غير صالح."
+      );
+    }
+  };
+
+  const handleEmployeeAvatarCropPointerDown = (
+    event: ReactPointerEvent<HTMLDivElement>
+  ) => {
+    if (!employeeAvatarCropMetrics) return;
+
+    event.preventDefault();
+    employeeAvatarCropDragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      originX: employeeAvatarCropPosition.x,
+      originY: employeeAvatarCropPosition.y,
+    };
+    setEmployeeAvatarCropDragging(true);
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const handleEmployeeAvatarCropPointerMove = (
+    event: ReactPointerEvent<HTMLDivElement>
+  ) => {
+    const activeDrag = employeeAvatarCropDragRef.current;
+    if (
+      !activeDrag ||
+      activeDrag.pointerId !== event.pointerId ||
+      !employeeAvatarCropMetrics
+    ) {
+      return;
+    }
+
+    setEmployeeAvatarCropPosition(
+      clampEmployeeAvatarCropPosition(
+        {
+          x: activeDrag.originX + (event.clientX - activeDrag.startX),
+          y: activeDrag.originY + (event.clientY - activeDrag.startY),
+        },
+        employeeAvatarCropMetrics
+      )
+    );
+  };
+
+  const handleEmployeeAvatarCropPointerEnd = (
+    event: ReactPointerEvent<HTMLDivElement>
+  ) => {
+    if (employeeAvatarCropDragRef.current?.pointerId !== event.pointerId) return;
+
+    employeeAvatarCropDragRef.current = null;
+    setEmployeeAvatarCropDragging(false);
+
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  };
+
+  const handleEmployeeAvatarCropZoomStep = (direction: "in" | "out") => {
+    setEmployeeAvatarCropZoom(current =>
+      clampNumber(
+        current + (direction === "in" ? 0.15 : -0.15),
+        EMPLOYEE_AVATAR_CROP_MIN_ZOOM,
+        EMPLOYEE_AVATAR_CROP_MAX_ZOOM
+      )
+    );
+  };
+
+  const handleConfirmEmployeeAvatarCrop = async () => {
+    if (
+      !employeeAvatarCropDraft ||
+      !selectedEmployee ||
+      !selectedEmployeeProfile ||
+      !user?.uid
+    ) {
+      return;
+    }
+
+    if (!canManageEmployees) {
+      toast.error("لا تملك صلاحية رفع صورة الموظف.");
+      return;
+    }
+
+    const employeeUid = selectedEmployeeAuthUid || selectedEmployee.id;
+    const employeeId =
+      String(selectedEmployee.linkedEmployeeId || "").trim() ||
+      selectedEmployee.id;
+
+    if (!employeeUid) {
+      toast.error("تعذر تحديد الموظف المستهدف.");
+      return;
+    }
+
+    setUploadingEmployeeAvatar(true);
+    try {
+      const croppedFile = await buildEmployeeCroppedAvatarFile({
+        draft: employeeAvatarCropDraft,
+        viewportSize: employeeAvatarCropViewportSize,
+        zoom: employeeAvatarCropZoom,
+        position: employeeAvatarCropPosition,
+      });
+
+      const uploaded = await uploadDocumentToCloudflare({
+        entityType: "employee",
+        entityId: employeeId,
+        category: EMPLOYEE_AVATAR_CATEGORY,
+        file: croppedFile,
+        kind: "attachment",
+        uploadedBy: user.uid,
+        storageFolder: "profile_avatar",
+      });
+
+      const avatarPayload: EmployeeAvatarDoc = {
+        id: uploaded.id,
+        fileName: uploaded.fileName,
+        filePath: uploaded.filePath,
+        fileUrl:
+          uploaded.fileUrl || buildR2DownloadUrl(uploaded.filePath, false),
+        contentType: uploaded.contentType || null,
+        fileSize: uploaded.fileSize,
+        uploadedAt: uploaded.uploadedAt,
+      };
+
+      const userRef = doc(db, "users", selectedEmployee.id);
+      const employeeRef = selectedEmployee.linkedEmployeeId
+        ? doc(db, "employees", selectedEmployee.linkedEmployeeId)
+        : null;
+
+      await setDoc(
+        userRef,
+        {
+          ...buildEmployeeAvatarPatch(avatarPayload),
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      if (employeeRef) {
+        await setDoc(
+          employeeRef,
+          {
+            ...buildEmployeeAvatarPatch(avatarPayload),
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
+      }
+
+      const currentAuthUser = auth.currentUser;
+      if (
+        currentAuthUser &&
+        (currentAuthUser.uid === selectedEmployee.id ||
+          currentAuthUser.uid === selectedEmployeeAuthUid)
+      ) {
+        try {
+          await updateProfile(currentAuthUser, {
+            photoURL: avatarPayload.fileUrl || null,
+          });
+        } catch (profileUpdateError) {
+          console.error("employee_avatar_auth_profile_update_failed", profileUpdateError);
+        }
+      }
+
+      toast.success("تم تحديث صورة الموظف.");
+      resetEmployeeAvatarForm();
+    } catch (error) {
+      console.error("employee_avatar_admin_upload_failed", error);
+      toast.error("تعذر رفع صورة الموظف.");
+    } finally {
+      setUploadingEmployeeAvatar(false);
+    }
+  };
+
   const handleEmployeeMessageFormChange = <
     K extends keyof EmployeeMessageFormValues,
   >(
@@ -2428,8 +3550,8 @@ export default function EmployeesManagementPage() {
         ? activeEmployeeConversation?.conversationId || messageRef.id
         : messageRef.id;
       const employeeDisplayName =
-        selectedEmployeeProfile.personal.name !== EMPLOYEE_EMPTY_VALUE
-          ? selectedEmployeeProfile.personal.name
+        selectedEmployeeLabel !== EMPLOYEE_EMPTY_VALUE
+          ? selectedEmployeeLabel
           : selectedEmployee.displayName ||
           selectedEmployee.name ||
           selectedEmployee.email ||
@@ -2581,8 +3703,8 @@ export default function EmployeesManagementPage() {
         employeeUid,
         userId: selectedEmployee.id,
         employeeName:
-          selectedEmployeeProfile.personal.name !== EMPLOYEE_EMPTY_VALUE
-            ? selectedEmployeeProfile.personal.name
+          selectedEmployeeLabel !== EMPLOYEE_EMPTY_VALUE
+            ? selectedEmployeeLabel
             : selectedEmployee.displayName ||
             selectedEmployee.name ||
             selectedEmployee.email ||
@@ -2649,8 +3771,8 @@ export default function EmployeesManagementPage() {
           userId: selectedEmployee.id,
         },
         message: replacedCandidates.length
-          ? `Replaced official employee document for ${selectedEmployeeProfile.personal.name}`
-          : `Uploaded official employee document for ${selectedEmployeeProfile.personal.name}`,
+          ? `Replaced official employee document for ${selectedEmployeeLabel}`
+          : `Uploaded official employee document for ${selectedEmployeeLabel}`,
         meta: {
           employeeId,
           employeeUid,
@@ -2731,7 +3853,7 @@ export default function EmployeesManagementPage() {
         relatedIds: {
           userId: selectedEmployee.id,
         },
-        message: `Deleted employee file for ${selectedEmployeeProfile.personal.name}`,
+        message: `Deleted employee file for ${selectedEmployeeLabel}`,
         meta: {
           employeeId: file.employeeId,
           employeeUid: file.employeeUid,
@@ -2821,8 +3943,8 @@ export default function EmployeesManagementPage() {
         employeeUid,
         userId: selectedEmployee.id,
         employeeName:
-          selectedEmployeeProfile.personal.name !== EMPLOYEE_EMPTY_VALUE
-            ? selectedEmployeeProfile.personal.name
+          selectedEmployeeLabel !== EMPLOYEE_EMPTY_VALUE
+            ? selectedEmployeeLabel
             : selectedEmployee.displayName ||
             selectedEmployee.name ||
             selectedEmployee.email ||
@@ -2886,8 +4008,8 @@ export default function EmployeesManagementPage() {
           userId: selectedEmployee.id,
         },
         message: replacedCandidates.length
-          ? `Replaced employee file for ${selectedEmployeeProfile.personal.name}`
-          : `Uploaded employee file for ${selectedEmployeeProfile.personal.name}`,
+          ? `Replaced employee file for ${selectedEmployeeLabel}`
+          : `Uploaded employee file for ${selectedEmployeeLabel}`,
         meta: {
           employeeId,
           employeeUid,
@@ -3111,7 +4233,7 @@ export default function EmployeesManagementPage() {
             method: "update_employment_profile",
           }),
           relatedIds: { userId: selectedEmployee.id },
-          message: `Updated employee employment profile for ${selectedEmployeeProfile.personal.name}`,
+          message: `Updated employee employment profile for ${selectedEmployeeLabel}`,
           meta: {
             targetUserEmail: normalizedEmail,
             targetUserName: normalizedFullName,
@@ -3348,9 +4470,9 @@ export default function EmployeesManagementPage() {
             selectedEmployee.id,
           employeeUid: selectedEmployeeAuthUid || selectedEmployee.id,
           userId: selectedEmployee.id,
-          employeeName:
-            selectedEmployeeProfile.personal.name !== EMPLOYEE_EMPTY_VALUE
-              ? selectedEmployeeProfile.personal.name
+        employeeName:
+            selectedEmployeeLabel !== EMPLOYEE_EMPTY_VALUE
+              ? selectedEmployeeLabel
               : selectedEmployee.displayName ||
               selectedEmployee.name ||
               selectedEmployee.email ||
@@ -3606,65 +4728,70 @@ export default function EmployeesManagementPage() {
   return (
     <DashboardLayout>
       <div dir="rtl" className="space-y-6 text-right">
-        <div className="space-y-2">
-          <h1 className="text-4xl font-bold tracking-tight text-slate-950">
-            إدارة الموظفين
-          </h1>
-          <p className="max-w-3xl text-lg text-slate-500">
-            صفحة مخصصة لإدارة البيانات الوظيفية للموظفين من جهة الإدارة والموارد
-            البشرية، مع فصل واضح بين ما يشاهده الموظف في بروفايله وما يتم تعديله
-            من داخل اللوحة.
-          </p>
-        </div>
+        {!selectedEmployee ? (
+          <div className="space-y-2">
+            <h1 className="text-4xl font-bold tracking-tight text-slate-950">
+              إدارة الموظفين
+            </h1>
+            <p className="max-w-3xl text-lg text-slate-500">
+              صفحة مخصصة لإدارة البيانات الوظيفية للموظفين من جهة الإدارة
+              والموارد البشرية، مع فصل واضح بين ما يشاهده الموظف في بروفايله
+              وما يتم تعديله من داخل اللوحة.
+            </p>
+          </div>
+        ) : null}
 
-        <div className="grid gap-4 md:grid-cols-3">
-          <Card className="border-slate-200/80">
-            <CardContent className="p-5">
-              <div className="text-xs font-semibold tracking-[0.16em] text-slate-500">
-                الموظفون
-              </div>
-              <div className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">
-                {formatNumberEN(employeeCards.length)}
-              </div>
-              <div className="mt-2 text-sm text-slate-500">
-                إجمالي السجلات الظاهرة ضمن صفحة إدارة الموظفين.
-              </div>
-            </CardContent>
-          </Card>
+        {!selectedEmployee ? (
+          <div className="grid gap-4 md:grid-cols-3">
+            <Card className="border-slate-200/80">
+              <CardContent className="p-5">
+                <div className="text-xs font-semibold tracking-[0.16em] text-slate-500">
+                  الموظفون
+                </div>
+                <div className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">
+                  {formatNumberEN(employeeCards.length)}
+                </div>
+                <div className="mt-2 text-sm text-slate-500">
+                  إجمالي السجلات الظاهرة ضمن صفحة إدارة الموظفين.
+                </div>
+              </CardContent>
+            </Card>
 
-          <Card className="border-slate-200/80">
-            <CardContent className="p-5">
-              <div className="text-xs font-semibold tracking-[0.16em] text-slate-500">
-                على رأس العمل
-              </div>
-              <div className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">
-                {formatNumberEN(activeEmployeesCount)}
-              </div>
-              <div className="mt-2 text-sm text-slate-500">
-                موظفون بحالة وظيفية نشطة حاليًا.
-              </div>
-            </CardContent>
-          </Card>
+            <Card className="border-slate-200/80">
+              <CardContent className="p-5">
+                <div className="text-xs font-semibold tracking-[0.16em] text-slate-500">
+                  على رأس العمل
+                </div>
+                <div className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">
+                  {formatNumberEN(activeEmployeesCount)}
+                </div>
+                <div className="mt-2 text-sm text-slate-500">
+                  موظفون بحالة وظيفية نشطة حاليًا.
+                </div>
+              </CardContent>
+            </Card>
 
-          <Card className="border-slate-200/80">
-            <CardContent className="p-5">
-              <div className="text-xs font-semibold tracking-[0.16em] text-slate-500">
-                متابعة الحالة
-              </div>
-              <div className="mt-2 flex items-center gap-3 text-sm font-semibold text-slate-950">
-                <span>إجازة: {formatNumberEN(onLeaveEmployeesCount)}</span>
-                <span className="text-slate-300">|</span>
-                <span>تجربة: {formatNumberEN(probationEmployeesCount)}</span>
-              </div>
-              <div className="mt-2 text-sm text-slate-500">
-                قراءة سريعة لحالات الموظفين التشغيلية.
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+            <Card className="border-slate-200/80">
+              <CardContent className="p-5">
+                <div className="text-xs font-semibold tracking-[0.16em] text-slate-500">
+                  متابعة الحالة
+                </div>
+                <div className="mt-2 flex items-center gap-3 text-sm font-semibold text-slate-950">
+                  <span>إجازة: {formatNumberEN(onLeaveEmployeesCount)}</span>
+                  <span className="text-slate-300">|</span>
+                  <span>تجربة: {formatNumberEN(probationEmployeesCount)}</span>
+                </div>
+                <div className="mt-2 text-sm text-slate-500">
+                  قراءة سريعة لحالات الموظفين التشغيلية.
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        ) : null}
 
-        <div className="grid items-start gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
-          <Card className="flex max-h-none self-start overflow-hidden border-slate-200/80 py-0 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:flex-col">
+        <div className="space-y-6">
+          {!selectedEmployee ? (
+            <Card className="overflow-hidden border-slate-200/80 py-0">
             <CardHeader className="shrink-0 border-b border-slate-100 bg-white/95 px-4 pb-4 pt-4">
               <CardTitle className="flex items-center gap-2 text-lg text-slate-950">
                 <BriefcaseBusiness className="h-4 w-4 text-[#030640]" />
@@ -3685,99 +4812,81 @@ export default function EmployeesManagementPage() {
               </div>
             </CardHeader>
 
-            <CardContent className="min-h-0 flex-1 overflow-y-auto px-4 pb-4 pt-3">
-              <div className="space-y-2">
+            <CardContent className="px-4 pb-4 pt-3">
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
                 {loading ? (
-                  <div className="rounded-[24px] border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-500">
+                  <div className="col-span-full rounded-[24px] border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-500">
                     جاري تحميل الموظفين...
                   </div>
                 ) : error ? (
-                  <div className="rounded-[24px] border border-rose-200 bg-rose-50 px-4 py-10 text-center text-sm text-rose-700">
+                  <div className="col-span-full rounded-[24px] border border-rose-200 bg-rose-50 px-4 py-10 text-center text-sm text-rose-700">
                     {error}
                   </div>
                 ) : filteredEmployeeCards.length ? (
                   filteredEmployeeCards.map(card => {
                     const isActive = card.employee.id === selectedEmployeeId;
-                    const startDateLabel = card.profile.employment.startDate
-                      ? formatDateEN(card.profile.employment.startDate)
-                      : EMPLOYEE_EMPTY_VALUE;
+                    const employeeCardUnreadBucket =
+                      employeeWorkspaceUnreadNotificationIndex.get(
+                        card.employee.id
+                      );
+                    const showEmployeeCardIndicator =
+                      Boolean(employeeCardUnreadBucket?.all.length) ||
+                      (isActive && hasEmployeeWorkspaceAlerts);
+                    const employeeName = card.profile.personal.name;
+                    const employeeTitle = card.profile.employment.title;
 
                     return (
                       <button
                         key={card.employee.id}
                         type="button"
-                        onClick={() => setSelectedEmployeeId(card.employee.id)}
+                        onClick={() => handleSelectEmployee(card.employee.id)}
+                        aria-label={`فتح تفاصيل ${employeeName}`}
                         className={cn(
-                          "w-full rounded-[18px] border px-3 py-3 text-right transition-all",
+                          "group relative flex min-h-[96px] w-full items-center gap-3 overflow-hidden rounded-[20px] border px-3 py-3 text-right transition-all",
                           isActive
-                            ? "border-[#F2B705]/50 bg-[#F2B705]/10 shadow-[0_20px_44px_-34px_rgba(242,183,5,0.55)]"
+                            ? "border-[#F2B705]/55 bg-[linear-gradient(135deg,rgba(242,183,5,0.14)_0%,rgba(255,255,255,0.98)_70%)] shadow-[0_20px_44px_-34px_rgba(242,183,5,0.55)]"
                             : "border-slate-200/80 bg-white hover:border-slate-300 hover:bg-slate-50/80"
                         )}
                       >
-                        <div className="space-y-2.5">
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="space-y-1">
-                              <div className="text-sm font-semibold text-slate-950">
-                                {card.profile.personal.name}
-                              </div>
-                              <div className="text-xs text-slate-500">
-                                {card.profile.personal.email}
-                              </div>
-                            </div>
-
-                            <Badge
-                              variant="outline"
-                              className={cn(
-                                "rounded-full",
-                                card.profile.employment.statusTone === "success"
-                                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                                  : card.profile.employment.statusTone ===
-                                    "warning"
-                                    ? "border-amber-200 bg-amber-50 text-amber-700"
-                                    : "border-slate-200 bg-slate-100 text-slate-700"
+                        {showEmployeeCardIndicator ? (
+                          <span
+                            aria-hidden="true"
+                            className="absolute right-3 top-3 z-20 h-2.5 w-2.5 rounded-full bg-rose-500 shadow-[0_0_0_3px_rgba(255,255,255,0.98)] pointer-events-none"
+                          />
+                        ) : null}
+                        <div className="relative z-10 shrink-0">
+                          <Avatar className="h-12 w-12 rounded-[16px] border border-slate-200 bg-slate-100 shadow-sm">
+                            <AvatarImage
+                              src={card.displayAvatarUrl || undefined}
+                              alt={employeeName}
+                              className="object-cover"
+                            />
+                            <AvatarFallback className="rounded-[16px] bg-slate-900 text-xs font-semibold text-white">
+                              {getEmployeeInitials(
+                                employeeName,
+                                card.profile.personal.email
                               )}
-                            >
-                              {card.profile.employment.statusLabel}
-                            </Badge>
-                          </div>
+                            </AvatarFallback>
+                          </Avatar>
+                        </div>
 
-                          <div className="grid gap-1.5 text-xs text-slate-600">
-                            <div className="flex items-center justify-between gap-3">
-                              <span className="text-slate-500">المسمى</span>
-                              <span className="font-medium text-slate-900">
-                                {card.profile.employment.title}
-                              </span>
-                            </div>
-                            <div className="flex items-center justify-between gap-3">
-                              <span className="text-slate-500">القسم</span>
-                              <span className="font-medium text-slate-900">
-                                {card.profile.employment.department}
-                              </span>
-                            </div>
-                            <div className="flex items-center justify-between gap-3">
-                              <span className="text-slate-500">رقم البصمة</span>
-                              <span
-                                dir="ltr"
-                                className="font-medium text-slate-900"
-                              >
-                                {card.profile.employment.fingerprintNumber}
-                              </span>
-                            </div>
-                            <div className="flex items-center justify-between gap-3">
-                              <span className="text-slate-500">
-                                بداية العمل
-                              </span>
-                              <span className="font-medium text-slate-900">
-                                {startDateLabel}
-                              </span>
-                            </div>
+                        <div className="min-w-0 flex-1 space-y-1">
+                          <div className="truncate text-sm font-semibold text-slate-950">
+                            {employeeName}
                           </div>
+                          <div className="truncate text-xs text-slate-500">
+                            {employeeTitle}
+                          </div>
+                        </div>
+
+                        <div className="shrink-0 rounded-full border border-slate-200 bg-white/90 p-2 text-slate-500 shadow-sm transition group-hover:text-slate-900">
+                          <ChevronLeft className="h-4 w-4" />
                         </div>
                       </button>
                     );
                   })
                 ) : (
-                  <Empty className="min-h-[360px] rounded-[24px] border border-dashed border-slate-200 bg-slate-50/70">
+                  <Empty className="col-span-full min-h-[360px] rounded-[24px] border border-dashed border-slate-200 bg-slate-50/70">
                     <EmptyHeader>
                       <EmptyMedia
                         variant="icon"
@@ -3795,31 +4904,98 @@ export default function EmployeesManagementPage() {
                 )}
               </div>
             </CardContent>
-          </Card>
+            </Card>
+          ) : null}
 
           <div className="flex min-w-0 flex-col gap-6">
-            <Card className="gap-0 overflow-hidden border-slate-200/80 bg-white/95 py-0 shadow-sm">
+            <Card
+              className={cn(
+                "gap-0 overflow-hidden border-slate-200/80 bg-white/95 py-0 shadow-sm",
+                !selectedEmployee && "hidden"
+              )}
+            >
               <CardHeader className="border-b border-slate-100 bg-white/90 px-6 pt-6 pb-4">
-                <CardTitle className="flex items-center gap-2 text-xl text-slate-950">
-                  <ShieldCheck className="h-5 w-5 text-[#030640]" />
-                  بيانات الموظف الوظيفية
-                </CardTitle>
-                <CardDescription className="text-sm leading-6 text-slate-500">
-                  هذا القسم مخصص للإدارة والموارد البشرية فقط. الموظف يرى هذه
-                  البيانات في بروفايله بشكل للعرض فقط ولا يحررها بنفسه.
-                </CardDescription>
+                <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
+                  <div className="flex min-w-0 items-center gap-4 text-right">
+                    <Avatar className="h-16 w-16 shrink-0 rounded-[22px] border border-slate-200 bg-slate-100 shadow-sm sm:h-20 sm:w-20">
+                      <AvatarImage
+                        src={selectedEmployeeDisplayAvatarUrl || undefined}
+                        alt={selectedEmployeeLabel}
+                        className="object-cover"
+                      />
+                      <AvatarFallback className="rounded-[22px] bg-slate-900 text-xl font-semibold text-white">
+                        {getEmployeeInitials(
+                          selectedEmployeeLabel,
+                          selectedEmployeeProfile?.personal?.email ||
+                          selectedEmployee?.email ||
+                          ""
+                        )}
+                      </AvatarFallback>
+                    </Avatar>
+
+                    <div className="min-w-0 space-y-2">
+                      <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                        <UserRound className="h-3.5 w-3.5 text-[#030640]" />
+                        الملف الحالي
+                      </div>
+                      <CardTitle className="truncate text-2xl tracking-tight text-slate-950 sm:text-3xl">
+                        {selectedEmployeeLabel}
+                      </CardTitle>
+                      <div className="flex flex-wrap gap-2">
+                        <Badge variant="outline" className="rounded-full">
+                          {selectedEmployeeEmployment.title}
+                        </Badge>
+                        <Badge variant="outline" className="rounded-full">
+                          {selectedEmployeeEmployment.department}
+                        </Badge>
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "rounded-full",
+                            selectedEmployeeEmployment.statusTone ===
+                              "success"
+                              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                              : selectedEmployeeEmployment.statusTone ===
+                                  "warning"
+                                ? "border-amber-200 bg-amber-50 text-amber-700"
+                                : "border-slate-200 bg-slate-100 text-slate-700"
+                          )}
+                        >
+                          {selectedEmployeeEmployment.statusLabel}
+                        </Badge>
+                      </div>
+                      <CardDescription className="text-sm leading-6 text-slate-500">
+                        جاري تعديل: {selectedEmployeeLabel}
+                      </CardDescription>
+                    </div>
+                  </div>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-full border border-[#F2B705]/40 bg-[#F2B705]/12 px-5 text-sm font-semibold text-[#030640] shadow-[0_14px_30px_-18px_rgba(242,183,5,0.9)] transition hover:border-[#F2B705]/65 hover:bg-[#F2B705]/20 hover:text-[#030640] focus-visible:ring-2 focus-visible:ring-[#F2B705]/40 xl:w-auto"
+                    onClick={handleCloseEmployeeDetails}
+                  >
+                    <ArrowRight className="h-4 w-4 shrink-0" />
+                    العودة إلى بطاقات الموظفين
+                  </Button>
+                </div>
               </CardHeader>
             </Card>
 
             {selectedEmployee && selectedEmployeeProfile ? (
               <div className="flex flex-col gap-6">
-                <Card className="order-0 sticky top-4 z-20 gap-0 overflow-hidden border-slate-200/80 bg-white/95 py-0 shadow-[0_18px_38px_-30px_rgba(15,23,42,0.28)] backdrop-blur">
+                <Card
+                  className={cn(
+                    "order-0 sticky top-4 z-20 gap-0 overflow-hidden border-slate-200/80 bg-white/95 py-0 shadow-[0_18px_38px_-30px_rgba(15,23,42,0.28)] backdrop-blur"
+                  )}
+                >
                   <CardContent className="px-4 py-3">
                     <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
                       <ShieldCheck className="h-3.5 w-3.5 text-[#030640]" />
                       أقسام ملف الموظف
                     </div>
-                    <div className="flex gap-1.5 overflow-x-auto pb-1">
+                    <div className="flex justify-start gap-3 overflow-x-auto pb-1 pt-0.5 sm:gap-3.5">
                       {EMPLOYEE_WORKSPACE_SECTIONS.map(section => (
                         <EmployeeWorkspaceTabButton
                           key={section.key}
@@ -3828,9 +5004,8 @@ export default function EmployeesManagementPage() {
                           }
                           icon={section.icon}
                           label={section.label}
-                          onClick={() =>
-                            scrollToEmployeeWorkspaceSection(section.key)
-                          }
+                          showIndicator={employeeWorkspaceSectionHasAlert[section.key]}
+                          onClick={() => activateEmployeeWorkspaceSection(section.key)}
                         />
                       ))}
                     </div>
@@ -3841,7 +5016,10 @@ export default function EmployeesManagementPage() {
                 <Card
                   id="employee-section-profile"
                   ref={employeeOverviewSectionRef}
-                  className="order-10 scroll-mt-36 gap-0 overflow-hidden border-slate-200/80 bg-[linear-gradient(135deg,rgba(255,255,255,0.98)_0%,rgba(248,250,252,0.95)_100%)] py-0 shadow-sm lg:scroll-mt-44"
+                  className={cn(
+                    "order-10 scroll-mt-36 gap-0 overflow-hidden border-slate-200/80 bg-[linear-gradient(135deg,rgba(255,255,255,0.98)_0%,rgba(248,250,252,0.95)_100%)] py-0 shadow-sm lg:scroll-mt-44",
+                    activeEmployeeWorkspaceSection !== "profile" && "hidden"
+                  )}
                 >
                   <CardHeader className="border-b border-white/70 bg-white/70 px-6 pt-6 pb-4 backdrop-blur">
                     <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
@@ -3852,37 +5030,36 @@ export default function EmployeesManagementPage() {
                             ملخص الموظف
                           </div>
                           <CardTitle className="text-2xl tracking-tight text-slate-950">
-                            {selectedEmployeeProfile.personal.name}
+                            {selectedEmployeeLabel}
                           </CardTitle>
                           <CardDescription className="text-sm text-slate-500">
-                            {selectedEmployeeProfile.employment.title}
+                            {selectedEmployeeEmployment.title}
                           </CardDescription>
                         </div>
 
                         <div className="flex flex-wrap gap-2">
-                          <Badge variant="outline" className="rounded-full">
-                            {selectedEmployeeProfile.employment.department}
+                        <Badge variant="outline" className="rounded-full">
+                            {selectedEmployeeEmployment.department}
                           </Badge>
                           <Badge
                             variant="outline"
                             className={cn(
                               "rounded-full",
-                              selectedEmployeeProfile.employment.statusTone ===
+                              selectedEmployeeEmployment.statusTone ===
                                 "success"
                                 ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                                : selectedEmployeeProfile.employment
-                                  .statusTone === "warning"
+                                : selectedEmployeeEmployment.statusTone === "warning"
                                   ? "border-amber-200 bg-amber-50 text-amber-700"
                                   : "border-slate-200 bg-slate-100 text-slate-700"
                             )}
                           >
-                            {selectedEmployeeProfile.employment.statusLabel}
+                            {selectedEmployeeEmployment.statusLabel}
                           </Badge>
-                          {selectedEmployeeProfile.employment.employeeCode !==
+                          {selectedEmployeeEmployment.employeeCode !==
                             EMPLOYEE_EMPTY_VALUE ? (
                             <Badge variant="outline" className="rounded-full">
                               رقم الموظف:{" "}
-                              {selectedEmployeeProfile.employment.employeeCode}
+                              {selectedEmployeeEmployment.employeeCode}
                             </Badge>
                           ) : null}
                         </div>
@@ -3908,14 +5085,19 @@ export default function EmployeesManagementPage() {
                       <ReadonlyMeta
                         icon={Mail}
                         label="البريد"
-                        value={selectedEmployeeProfile.personal.email}
+                        value={
+                          selectedEmployeeProfile?.personal?.email ||
+                          selectedEmployee?.email ||
+                          EMPLOYEE_EMPTY_VALUE
+                        }
                         dir="ltr"
                       />
                       <ReadonlyMeta
                         icon={Phone}
                         label="الجوال"
                         value={
-                          selectedEmployeeProfile.personal.phone ||
+                          selectedEmployeeProfile?.personal?.phone ||
+                          selectedEmployee?.phone ||
                           EMPLOYEE_EMPTY_VALUE
                         }
                         dir="ltr"
@@ -3924,9 +5106,9 @@ export default function EmployeesManagementPage() {
                         icon={CalendarDays}
                         label="بداية العمل"
                         value={
-                          selectedEmployeeProfile.employment.startDate
+                          selectedEmployeeEmployment.startDate
                             ? formatDateEN(
-                              selectedEmployeeProfile.employment.startDate
+                              selectedEmployeeEmployment.startDate
                             )
                             : EMPLOYEE_EMPTY_VALUE
                         }
@@ -3935,7 +5117,7 @@ export default function EmployeesManagementPage() {
                         icon={ShieldCheck}
                         label="رقم البصمة"
                         value={
-                          selectedEmployeeProfile.employment.fingerprintNumber
+                          selectedEmployeeEmployment.fingerprintNumber
                         }
                         dir="ltr"
                       />
@@ -3946,7 +5128,10 @@ export default function EmployeesManagementPage() {
                 <Card
                   id="employee-section-messages"
                   ref={employeeMessagesSectionRef}
-                  className="order-40 scroll-mt-36 gap-0 overflow-hidden border-slate-200/80 bg-white/95 py-0 shadow-sm lg:scroll-mt-44"
+                  className={cn(
+                    "order-40 scroll-mt-36 gap-0 overflow-hidden border-slate-200/80 bg-white/95 py-0 shadow-sm lg:scroll-mt-44",
+                    activeEmployeeWorkspaceSection !== "messages" && "hidden"
+                  )}
                 >
                   <CardHeader className="border-b border-slate-100 bg-white/90 px-6 pt-6 pb-4">
                     <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
@@ -3993,9 +5178,8 @@ export default function EmployeesManagementPage() {
                               جارٍ تحميل الرسائل...
                             </div>
                           ) : employeeConversations.length ? (
-                            <ScrollArea className="h-[420px] pr-1">
-                              <div className="space-y-2">
-                                {employeeConversations.map(conversation => {
+                            <div className="space-y-2">
+                              {employeeConversations.map(conversation => {
                                   const latestMessage =
                                     conversation.latestMessage;
                                   const isActive =
@@ -4126,9 +5310,8 @@ export default function EmployeesManagementPage() {
                                       ) : null}
                                     </button>
                                   );
-                                })}
-                              </div>
-                            </ScrollArea>
+                              })}
+                            </div>
                           ) : (
                             <div className="rounded-[18px] border border-dashed border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-500">
                               لا توجد رسائل داخلية لهذا الموظف بعد.
@@ -4423,7 +5606,10 @@ export default function EmployeesManagementPage() {
                 <Card
                   id="employee-section-files"
                   ref={employeeFilesSectionRef}
-                  className="order-50 scroll-mt-36 gap-0 overflow-hidden border-slate-200/80 bg-white/95 py-0 shadow-sm lg:scroll-mt-44"
+                  className={cn(
+                    "order-50 scroll-mt-36 gap-0 overflow-hidden border-slate-200/80 bg-white/95 py-0 shadow-sm lg:scroll-mt-44",
+                    activeEmployeeWorkspaceSection !== "files" && "hidden"
+                  )}
                 >
                   <CardHeader className="border-b border-slate-100 bg-white/90 px-6 pt-6 pb-4">
                     <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
@@ -4814,7 +6000,10 @@ export default function EmployeesManagementPage() {
                 <Card
                   id="employee-section-salary"
                   ref={employeeSalarySectionRef}
-                  className="order-25 scroll-mt-36 gap-0 overflow-hidden border-slate-200/80 bg-white/95 py-0 shadow-sm lg:scroll-mt-44"
+                  className={cn(
+                    "order-25 scroll-mt-36 gap-0 overflow-hidden border-slate-200/80 bg-white/95 py-0 shadow-sm lg:scroll-mt-44",
+                    activeEmployeeWorkspaceSection !== "salary" && "hidden"
+                  )}
                 >
                   <CardHeader className="border-b border-white/70 bg-white/70 px-6 pt-6 pb-4 backdrop-blur">
                     <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
@@ -5594,7 +6783,10 @@ export default function EmployeesManagementPage() {
                 <Card
                   id="employee-section-leave"
                   ref={employeeLeaveSectionRef}
-                  className="order-30 scroll-mt-36 gap-0 overflow-hidden border-slate-200/80 bg-white/95 py-0 shadow-sm lg:scroll-mt-44"
+                  className={cn(
+                    "order-30 scroll-mt-36 gap-0 overflow-hidden border-slate-200/80 bg-white/95 py-0 shadow-sm lg:scroll-mt-44",
+                    activeEmployeeWorkspaceSection !== "leave" && "hidden"
+                  )}
                 >
                   <CardHeader className="border-b border-white/70 bg-white/70 px-6 pt-6 pb-4 backdrop-blur">
                     <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
@@ -6235,7 +7427,12 @@ export default function EmployeesManagementPage() {
                   </CardContent>
                 </Card>
 
-                <Card className="order-20 gap-0 overflow-hidden border-slate-200/80 bg-white/95 py-0 shadow-sm">
+                <Card
+                  className={cn(
+                    "order-20 gap-0 overflow-hidden border-slate-200/80 bg-white/95 py-0 shadow-sm",
+                    activeEmployeeWorkspaceSection !== "profile" && "hidden"
+                  )}
+                >
                   <CardHeader className="border-b border-slate-100 bg-white/90 px-6 pt-6 pb-4">
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                       <div className="space-y-1">
@@ -6406,15 +7603,308 @@ export default function EmployeesManagementPage() {
                       />
                     </Field>
 
-                    <div className="space-y-4 rounded-[24px] border border-slate-200 bg-slate-50/70 p-5">
+                    <div className="space-y-3 rounded-[20px] border border-slate-200 bg-slate-50/70 p-4">
                       <div className="space-y-1">
-                        <div className="text-base font-semibold text-slate-950">
+                        <div className="text-sm font-semibold text-slate-950">
                           المستندات الرسمية
                         </div>
-                        <p className="text-sm leading-6 text-slate-500">
+                        <p className="text-xs leading-5 text-slate-500">
                           ارفع أي مستند رسمي يخص الموظف، وسيظهر داخل بياناته الوظيفية.
                         </p>
                       </div>
+
+                      <div className="rounded-[18px] border border-slate-200 bg-white p-3.5 sm:p-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                          <div className="flex min-w-0 items-center gap-3">
+                            <Avatar className="h-12 w-12 shrink-0 rounded-[18px] border border-slate-200 bg-slate-100 shadow-sm">
+                              <AvatarImage
+                                src={selectedEmployeeDisplayAvatarUrl || undefined}
+                                alt={selectedEmployeeLabel}
+                                className="object-cover"
+                              />
+                              <AvatarFallback className="rounded-[18px] bg-slate-900 text-base font-semibold text-white">
+                                {getEmployeeInitials(
+                                  selectedEmployeeLabel,
+                                  selectedEmployeeProfile?.personal?.email ||
+                                    selectedEmployee?.email ||
+                                    ""
+                                )}
+                              </AvatarFallback>
+                            </Avatar>
+
+                            <div className="min-w-0 space-y-0.5">
+                              <div className="text-sm font-semibold text-slate-950">
+                                صورة الموظف
+                              </div>
+                              <p className="text-xs leading-5 text-slate-500">
+                                ارفع صورة رسمية للموظف لتظهر في بطاقته وفي ملفه
+                                داخل اللوحة.
+                              </p>
+                            </div>
+                          </div>
+
+                          <Badge
+                            variant="outline"
+                            className="w-fit rounded-full border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] text-slate-600 shadow-none"
+                          >
+                            اختياري
+                          </Badge>
+                        </div>
+
+                        <div className="mt-3 space-y-2">
+                          <Input
+                            id="employee-avatar-upload-input"
+                            ref={employeeAvatarInputRef}
+                            type="file"
+                            accept="image/*"
+                            className="sr-only"
+                            onChange={handleEmployeeAvatarSelected}
+                            disabled={!canManageEmployees || uploadingEmployeeAvatar}
+                          />
+
+                          <div
+                            role="button"
+                            tabIndex={
+                              canManageEmployees && !uploadingEmployeeAvatar ? 0 : -1
+                            }
+                            onClick={() => employeeAvatarInputRef.current?.click()}
+                            onKeyDown={event => {
+                              if (event.key === "Enter" || event.key === " ") {
+                                event.preventDefault();
+                                employeeAvatarInputRef.current?.click();
+                              }
+                            }}
+                            onDragOver={event => event.preventDefault()}
+                            onDrop={handleEmployeeAvatarDrop}
+                            className={cn(
+                              "flex min-h-[92px] cursor-pointer flex-col items-center justify-center gap-2 rounded-[16px] border border-dashed border-slate-300 bg-slate-50 px-3 py-4 text-center text-xs text-slate-600 transition hover:border-[#F2B705] hover:bg-[#F2B705]/5",
+                              (!canManageEmployees || uploadingEmployeeAvatar) &&
+                                "pointer-events-none cursor-not-allowed opacity-60"
+                            )}
+                          >
+                            <Camera className="h-5 w-5 text-slate-500" />
+                            {employeeAvatarCropDraft ? (
+                              <div className="space-y-0.5">
+                                <div className="text-sm font-semibold text-slate-900">
+                                  {employeeAvatarCropDraft.fileName}
+                                </div>
+                                <div className="text-xs">
+                                  الحجم: {formatFileSizeEN(employeeAvatarCropDraft.fileSize)}
+                                </div>
+                                <div className="text-xs text-slate-500">
+                                  بعد الاختيار ستفتح نافذة القص والمعاينة.
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="space-y-0.5">
+                                <div className="text-sm font-semibold text-slate-900">
+                                  اسحب الصورة هنا أو انقر للاختيار
+                                </div>
+                                <div className="text-xs">
+                                  سيتم فتح القص والمعاينة قبل الاعتماد النهائي.
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              type="button"
+                              className="h-9 rounded-lg bg-[#F2B705] px-3 text-sm text-slate-950 hover:bg-[#e0ab00]"
+                              onClick={() => employeeAvatarInputRef.current?.click()}
+                              disabled={!canManageEmployees || uploadingEmployeeAvatar}
+                            >
+                              <Camera className="ml-1.5 h-4 w-4" />
+                              {employeeAvatarCropDraft
+                                ? "تغيير الصورة"
+                                : "اختيار الصورة"}
+                            </Button>
+
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="h-9 rounded-lg px-3 text-sm"
+                              onClick={resetEmployeeAvatarForm}
+                              disabled={!canManageEmployees || uploadingEmployeeAvatar}
+                            >
+                              إعادة ضبط
+                            </Button>
+                          </div>
+                        </div>
+
+                      <p className="mt-2 text-[11px] leading-5 text-slate-500">
+                        بعد اختيار الصورة ستظهر نافذة المعاينة والقص مثل التي في البروفايل،
+                        ثم تعتمد الصورة داخل البطاقة والملف.
+                      </p>
+                    </div>
+
+                    <Dialog
+                      open={employeeAvatarCropOpen}
+                      onOpenChange={open => {
+                        if (uploadingEmployeeAvatar) return;
+                        if (!open) {
+                          resetEmployeeAvatarCropState();
+                          return;
+                        }
+                        setEmployeeAvatarCropOpen(true);
+                      }}
+                    >
+                      <DialogContent
+                        showCloseButton={!uploadingEmployeeAvatar}
+                        className="w-[min(94vw,46rem)] max-w-[46rem] overflow-hidden rounded-[30px] border border-slate-200 bg-white p-0 shadow-[0_28px_80px_-36px_rgba(15,23,42,0.4)]"
+                        onPointerDownOutside={event => {
+                          if (uploadingEmployeeAvatar) {
+                            event.preventDefault();
+                          }
+                        }}
+                      >
+                        <DialogHeader className="border-b border-slate-100 bg-white px-6 pt-6 pb-4 text-right sm:text-right">
+                          <DialogTitle className="text-xl font-semibold text-slate-950">
+                            معاينة وقص الصورة
+                          </DialogTitle>
+                        </DialogHeader>
+
+                        <div className="grid gap-6 px-6 pb-6 pt-5 lg:grid-cols-[minmax(0,1fr)_220px]">
+                          <div className="space-y-4">
+                            <div
+                              ref={employeeAvatarCropViewportRef}
+                              className={cn(
+                                "relative mx-auto aspect-square w-full max-w-[360px] overflow-hidden rounded-[32px] bg-slate-950 touch-none select-none",
+                                employeeAvatarCropDragging
+                                  ? "cursor-grabbing"
+                                  : "cursor-grab"
+                              )}
+                              onPointerDown={handleEmployeeAvatarCropPointerDown}
+                              onPointerMove={handleEmployeeAvatarCropPointerMove}
+                              onPointerUp={handleEmployeeAvatarCropPointerEnd}
+                              onPointerCancel={handleEmployeeAvatarCropPointerEnd}
+                            >
+                              {employeeAvatarCropDraft ? (
+                                <img
+                                  src={employeeAvatarCropDraft.objectUrl}
+                                  alt="معاينة الصورة الشخصية"
+                                  draggable={false}
+                                  className="pointer-events-none absolute max-w-none select-none object-cover"
+                                  style={employeeAvatarCropImageStyle}
+                                />
+                              ) : null}
+                              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0,transparent_58%,rgba(15,23,42,0.5)_59%,rgba(15,23,42,0.75)_100%)]" />
+                              <div className="pointer-events-none absolute inset-[9%] rounded-full border-[3px] border-white/95 shadow-[0_0_0_1px_rgba(255,255,255,0.12)]" />
+                            </div>
+
+                            <div className="rounded-[24px] border border-slate-200 bg-slate-50/85 p-4">
+                              <div className="flex items-center justify-between gap-3 text-sm">
+                                <Label className="font-semibold text-slate-800">
+                                  مستوى التكبير
+                                </Label>
+                                <span className="font-semibold text-slate-600">
+                                  {employeeAvatarCropZoomLabel}
+                                </span>
+                              </div>
+
+                              <div className="mt-4 flex items-center gap-3">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="h-10 w-10 rounded-full border-slate-200 bg-white p-0"
+                                  onClick={() => handleEmployeeAvatarCropZoomStep("out")}
+                                  disabled={
+                                    uploadingEmployeeAvatar ||
+                                    employeeAvatarCropZoom <= EMPLOYEE_AVATAR_CROP_MIN_ZOOM
+                                  }
+                                >
+                                  <Minus className="h-4 w-4" />
+                                </Button>
+                                <Slider
+                                  value={[employeeAvatarCropZoom]}
+                                  onValueChange={values => {
+                                    const nextZoom = values[0] ?? EMPLOYEE_AVATAR_CROP_MIN_ZOOM;
+                                    setEmployeeAvatarCropZoom(
+                                      clampNumber(
+                                        nextZoom,
+                                        EMPLOYEE_AVATAR_CROP_MIN_ZOOM,
+                                        EMPLOYEE_AVATAR_CROP_MAX_ZOOM
+                                      )
+                                    );
+                                  }}
+                                  min={EMPLOYEE_AVATAR_CROP_MIN_ZOOM}
+                                  max={EMPLOYEE_AVATAR_CROP_MAX_ZOOM}
+                                  step={0.01}
+                                  className="flex-1"
+                                  disabled={uploadingEmployeeAvatar}
+                                />
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="h-10 w-10 rounded-full border-slate-200 bg-white p-0"
+                                  onClick={() => handleEmployeeAvatarCropZoomStep("in")}
+                                  disabled={
+                                    uploadingEmployeeAvatar ||
+                                    employeeAvatarCropZoom >= EMPLOYEE_AVATAR_CROP_MAX_ZOOM
+                                  }
+                                >
+                                  <Plus className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="space-y-4">
+                            <div className="rounded-[24px] border border-slate-200 bg-slate-50/85 p-5 text-center">
+                              <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                                المعاينة النهائية
+                              </div>
+                              <div className="mt-4 flex justify-center">
+                                <div className="relative size-28 overflow-hidden rounded-full border-4 border-white bg-slate-200 shadow-[0_18px_38px_-26px_rgba(15,23,42,0.42)]">
+                                  {employeeAvatarCropDraft ? (
+                                    <img
+                                      src={employeeAvatarCropDraft.objectUrl}
+                                      alt="المعاينة النهائية للصورة"
+                                      draggable={false}
+                                      className="pointer-events-none absolute max-w-none select-none object-cover"
+                                      style={employeeAvatarCropMiniPreviewStyle}
+                                    />
+                                  ) : null}
+                                </div>
+                              </div>
+                              <p className="mt-4 text-sm leading-6 text-slate-600">
+                                هذه المعاينة تحاكي شكل الصورة داخل الـ Avatar بعد الحفظ.
+                              </p>
+                            </div>
+
+                            <div className="rounded-[24px] border border-dashed border-slate-200 bg-white px-4 py-4 text-sm leading-6 text-slate-600">
+                              اسحب الصورة يمينًا أو يسارًا أو للأعلى والأسفل لتحديد أفضل موضع،
+                              ثم استخدم شريط التكبير لضبط مقاس الوجه داخل الدائرة.
+                            </div>
+                          </div>
+                        </div>
+
+                        <DialogFooter className="border-t border-slate-100 bg-white px-6 py-4 sm:justify-between">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="rounded-2xl border-slate-200 bg-white"
+                            onClick={resetEmployeeAvatarCropState}
+                            disabled={uploadingEmployeeAvatar}
+                          >
+                            إلغاء
+                          </Button>
+                          <Button
+                            type="button"
+                            className="rounded-2xl bg-slate-950 text-white hover:bg-[#15233c]"
+                            onClick={() => void handleConfirmEmployeeAvatarCrop()}
+                            disabled={
+                              !employeeAvatarCropDraft || uploadingEmployeeAvatar
+                            }
+                          >
+                            {uploadingEmployeeAvatar ? (
+                              <Loader2 className="ml-2 h-4 w-4 animate-spin" />
+                            ) : null}
+                            اعتماد الصورة
+                          </Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
 
                       <div className="grid gap-5 xl:grid-cols-[minmax(0,360px)_minmax(0,1fr)]">
                         <div className="space-y-4 rounded-[20px] border border-slate-200 bg-white p-4">
@@ -6671,26 +8161,7 @@ export default function EmployeesManagementPage() {
                   </div>
                 ) : null}
               </div>
-            ) : (
-              <Card className="gap-0 overflow-hidden border-slate-200/80 bg-white/95 py-0 shadow-sm">
-                <CardContent className="p-6">
-                  <Empty className="min-h-[560px] rounded-[24px] border border-dashed border-slate-200 bg-slate-50/70">
-                    <EmptyHeader>
-                      <EmptyMedia
-                        variant="icon"
-                        className="bg-[#F2B705]/12 text-[#030640]"
-                      >
-                        <BriefcaseBusiness className="size-5" />
-                      </EmptyMedia>
-                      <EmptyTitle>لا يوجد موظف محدد</EmptyTitle>
-                      <EmptyDescription>
-                        اختر موظفًا من القائمة لعرض ملفه الوظيفي وإدارة بياناته.
-                      </EmptyDescription>
-                    </EmptyHeader>
-                  </Empty>
-                </CardContent>
-              </Card>
-            )}
+            ) : null}
           </div>
         </div>
       </div>

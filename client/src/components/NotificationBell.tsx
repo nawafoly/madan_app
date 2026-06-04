@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { Bell, CalendarDays, FileText, Mail, ShieldCheck } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
@@ -80,10 +80,7 @@ export function NotificationBell({ triggerClassName = "" }: NotificationBellProp
     return () => unsubscribe();
   }, [user?.uid]);
 
-  const unreadCount = useMemo(
-    () => items.filter(notification => !notification.isRead).length,
-    [items]
-  );
+  const unreadCount = items.filter(notification => !notification.isRead).length;
 
   const handleOpenNotification = async (notification: InAppNotificationRecord) => {
     try {

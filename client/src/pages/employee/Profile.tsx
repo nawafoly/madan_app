@@ -73,7 +73,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { auth, db } from "@/_core/firebase";
-import { useAuth } from "@/_core/hooks/useAuth";
+import { hasPermission, useAuth } from "@/_core/hooks/useAuth";
 import {
   EMPLOYEE_AVATAR_CATEGORY,
   EMPLOYEE_EMPTY_VALUE,
@@ -185,6 +185,33 @@ function validateAvatarFile(file: File) {
   if (file.size > AVATAR_MAX_SIZE_BYTES) {
     throw new Error("حجم الصورة كبير. الحد الأعلى 5MB.");
   }
+}
+
+function shouldReceiveLeaveNotification(userDoc: Record<string, any>) {
+  if (userDoc?.active === false || userDoc?.isActive === false) return false;
+
+  const role = String(userDoc?.role || userDoc?.roleKey || "")
+    .trim()
+    .toLowerCase();
+  if (!role) return false;
+  if (role === "owner" || role === "hr") return true;
+  if (role !== "admin") return false;
+
+  const subject = {
+    role: "admin" as const,
+    permissionsAllow: Array.isArray(userDoc?.permissionsAllow)
+      ? userDoc.permissionsAllow
+      : [],
+    permissionsDeny: Array.isArray(userDoc?.permissionsDeny)
+      ? userDoc.permissionsDeny
+      : [],
+    isActive: userDoc?.active ?? userDoc?.isActive ?? true,
+  };
+
+  return (
+    hasPermission(subject, "employees.view") ||
+    hasPermission(subject, "employees.manage")
+  );
 }
 
 function clampNumber(value: number, min: number, max: number) {
@@ -1140,8 +1167,13 @@ export default function EmployeeProfilePage() {
         )
       );
 
+      const leaveNotificationRecipients = hrUsers.docs.filter(docSnap =>
+        docSnap.id !== user.uid &&
+        shouldReceiveLeaveNotification(docSnap.data() as Record<string, any>)
+      );
+
       await Promise.all(
-        hrUsers.docs.map(docSnap => {
+        leaveNotificationRecipients.map(docSnap => {
           return createInAppNotification({
             userId: docSnap.id,
             title: "طلب إجازة جديد",
