@@ -1,12 +1,13 @@
 import type { ReactNode } from "react";
 import {
+  ClipboardList,
   FileText,
   BriefcaseBusiness,
   Mail,
   ShieldCheck,
   UserRound,
 } from "lucide-react";
-import { Link, useLocation } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
 
 import Footer from "@/components/Footer";
 import Header from "@/components/Header";
@@ -27,7 +28,15 @@ export default function EmployeeLayout({
 }: EmployeeLayoutProps) {
   const { language } = useLanguage();
   const [location] = useLocation();
+  const [search] = useSearch();
   const layoutDir: "rtl" | "ltr" = language === "ar" ? "rtl" : "ltr";
+  const currentPath = location.split("?")[0];
+  const safeSearch = typeof search === "string" ? search : "";
+  const currentSearchParams = new URLSearchParams(
+    safeSearch.startsWith("?") ? safeSearch.slice(1) : safeSearch
+  );
+  const currentMessageTab =
+    currentSearchParams.get("tab")?.trim().toLowerCase() || "";
   const navItems = [
     {
       label: "الملف الشخصي",
@@ -41,8 +50,13 @@ export default function EmployeeLayout({
     },
     {
       label: "الرسائل",
-      path: "/employee/messages",
+      path: "/employee/messages?tab=hr",
       icon: Mail,
+    },
+    {
+      label: "تقرير العمل الأسبوعي",
+      path: "/employee/messages?tab=weekly_report",
+      icon: ClipboardList,
     },
   ];
 
@@ -84,7 +98,15 @@ export default function EmployeeLayout({
                 <div className="flex flex-wrap gap-2">
                   {navItems.map(item => {
                     const Icon = item.icon;
-                    const isActive = location === item.path;
+                    const itemPath = item.path.split("?")[0];
+                    const isMessagesSection = itemPath === "/employee/messages";
+                    const isWeeklyReportItem = item.path.includes("tab=weekly_report");
+                    const isActive = isMessagesSection
+                      ? currentPath === "/employee/messages" &&
+                        (isWeeklyReportItem
+                          ? currentMessageTab === "weekly_report"
+                          : currentMessageTab !== "weekly_report")
+                      : currentPath === itemPath;
                     return (
                       <Link
                         key={item.path}
