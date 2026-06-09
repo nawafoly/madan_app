@@ -125,7 +125,7 @@ export default function StaffPortalPage() {
         {
           title: "بروفايل الموظف",
           description: "ملفك الشخصي، الملفات، والرسائل الداخلية.",
-          href: "/employee/profile",
+          href: "/hr/profile",
           icon: UserRound,
           enabled: !!user,
         },
@@ -208,15 +208,9 @@ export default function StaffPortalPage() {
                   </div>
                 </div>
 
-                <Link href="/">
-                  <Button
-                    variant="outline"
-                    className="h-10 rounded-full border-white/10 bg-white/[0.04] text-white hover:bg-white/[0.08] hover:text-white"
-                  >
-                    الموقع العام
-                    <ArrowLeft className="h-4 w-4" />
-                  </Button>
-                </Link>
+                <Badge className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-white/70 shadow-none hover:bg-white/[0.04]">
+                  بوابة داخلية
+                </Badge>
               </div>
 
               <div className="max-w-2xl space-y-5">
@@ -281,8 +275,8 @@ export default function StaffPortalPage() {
             </div>
 
             <div className="mt-8 rounded-3xl border border-white/10 bg-white/[0.04] p-4 text-sm leading-7 text-white/58">
-              هذه البوابة منفصلة عن منصة الاستثمار. حسابات العملاء والمستثمرين
-              تبقى في الموقع العام، بينما حسابات الموظفين والإدارة الداخلية هنا.
+              هذه البوابة منفصلة عن منصة الاستثمار. حسابات الموظفين والإدارة
+              الداخلية تبدأ من هنا وتبقى داخل مسارات منصة الموارد البشرية.
             </div>
           </section>
 
@@ -344,9 +338,9 @@ export default function StaffPortalPage() {
                     هذا الحساب غير مخصص لمنصة الموظفين. استخدم حساب موظف أو
                     حساب إداري داخلي.
                   </PortalAlert>
-                  <Link href="/">
+                  <Link href="/hr">
                     <Button className="h-12 w-full rounded-2xl">
-                      العودة إلى منصة الاستثمار
+                      العودة إلى بوابة الموظفين
                     </Button>
                   </Link>
                 </div>
@@ -449,11 +443,9 @@ export default function StaffPortalPage() {
                     >
                       نسيت كلمة المرور؟
                     </button>
-                    <Link href="/">
-                      <span className="text-sm font-semibold text-slate-500 transition hover:text-slate-950">
-                        العودة للموقع العام
-                      </span>
-                    </Link>
+                    <span className="text-sm text-slate-400">
+                      الدخول مخصص لحسابات الموظفين والإدارة فقط.
+                    </span>
                   </div>
                 </div>
               )}

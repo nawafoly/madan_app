@@ -67,9 +67,9 @@ export function resolveNotificationTargetPath(
   if (explicitPath) return explicitPath;
 
   const normalizedType = normalizeNotificationType(notification?.type);
-  if (normalizedType === "message") return "/employee/messages";
-  if (normalizedType === "file") return "/employee/files";
-  return "/employee/profile";
+  if (normalizedType === "message") return "/hr/messages";
+  if (normalizedType === "file") return "/hr/files";
+  return "/hr/profile";
 }
 
 export function normalizeInAppNotificationRecord(

@@ -673,7 +673,7 @@ export default function EmployeeFilesPage() {
         type: "file",
         relatedId: fileRef.id,
         relatedTo: "employee_file",
-        relatedPath: "/employee/files?tab=incoming",
+        relatedPath: "/hr/files?tab=incoming",
       }).catch(error => {
         console.error("employee_file_notification_failed", error);
       });

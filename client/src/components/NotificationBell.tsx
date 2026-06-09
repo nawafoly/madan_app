@@ -91,7 +91,7 @@ export function NotificationBell({ triggerClassName = "" }: NotificationBellProp
       console.error("mark_notification_read_failed", error);
     } finally {
       setOpen(false);
-      setLocation(notification.targetPath || "/employee/profile");
+      setLocation(notification.targetPath || "/hr/profile");
     }
   };
 

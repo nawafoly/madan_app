@@ -516,7 +516,7 @@ export function getHomePathForRole(role: AppRole | null | undefined) {
     return "/dashboard";
   }
   if (role === "hr") return "/hr/recruitment";
-  if (role === "staff") return "/employee/profile";
+  if (role === "staff") return "/hr/profile";
   if (role === "client" || role === "guest") return "/client/dashboard";
   return "/projects";
 }
@@ -531,7 +531,7 @@ export function getStaffHomePathForUser(
   if (!user) return "/login";
 
   if (user.role === "staff" || canAccessEmployeeProfile(user)) {
-    return "/employee/profile";
+    return "/hr/profile";
   }
 
   if (
@@ -565,7 +565,7 @@ export function getHomePathForUser(
     return getStaffHomePathForUser(user);
   }
 
-  if (user.role === "staff") return "/employee/profile";
+  if (user.role === "staff") return "/hr";
   if (user.role === "client" || user.role === "guest") return "/client/dashboard";
 
   if (user.role === "hr") {

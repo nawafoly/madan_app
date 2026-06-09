@@ -913,12 +913,15 @@ function ReadonlyMeta({
   dir?: "rtl" | "ltr";
 }) {
   return (
-    <div className="rounded-[20px] border border-slate-200/80 bg-slate-50/80 px-4 py-3">
+    <div className="min-w-0 rounded-[20px] border border-slate-200/80 bg-slate-50/80 px-4 py-3">
       <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
         <Icon className="h-3.5 w-3.5" />
         {label}
       </div>
-      <div dir={dir} className="mt-2 text-sm font-semibold text-slate-950">
+      <div
+        dir={dir}
+        className="mt-2 min-w-0 break-words text-sm font-semibold text-slate-950 [overflow-wrap:anywhere]"
+      >
         {value || EMPLOYEE_EMPTY_VALUE}
       </div>
     </div>
@@ -943,7 +946,7 @@ function EmployeeWorkspaceTabButton({
       type="button"
       onClick={onClick}
       className={cn(
-        "relative inline-flex h-10 min-w-[112px] shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-full border border-slate-200/90 bg-white px-5 text-sm font-semibold leading-none text-slate-600 shadow-[0_1px_0_rgba(255,255,255,0.95)] transition-all duration-200 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F2B705]/35",
+        "relative inline-flex h-10 min-w-[104px] shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-full border border-slate-200/90 bg-white px-4 text-sm font-semibold leading-none text-slate-600 shadow-[0_1px_0_rgba(255,255,255,0.95)] transition-all duration-200 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F2B705]/35 sm:min-w-[112px] sm:px-5",
         active
           ? "border-[#F2B705]/45 bg-[#F2B705]/12 text-[#030640] shadow-[0_12px_28px_-20px_rgba(242,183,5,0.8)]"
           : ""
@@ -3597,7 +3600,7 @@ export default function EmployeesManagementPage() {
           type: "message",
           relatedId: messageRef.id,
           relatedTo: "employee_message",
-          relatedPath: `/employee/messages?messageId=${messageRef.id}`,
+          relatedPath: `/hr/messages?messageId=${messageRef.id}`,
         });
       } catch (notificationError) {
         notificationFailed = true;
@@ -3800,7 +3803,7 @@ export default function EmployeesManagementPage() {
           type: "file",
           relatedId: fileRef.id,
           relatedTo: "employee_file",
-          relatedPath: "/employee/profile",
+          relatedPath: "/hr/profile",
         });
       } catch (notificationError) {
         console.error(
@@ -4036,7 +4039,7 @@ export default function EmployeesManagementPage() {
           type: "file",
           relatedId: fileRef.id,
           relatedTo: "employee_file",
-          relatedPath: "/employee/files",
+          relatedPath: "/hr/files",
         });
       } catch (notificationError) {
         console.error("employee_file_notification_failed", notificationError);
@@ -4682,7 +4685,7 @@ export default function EmployeesManagementPage() {
           type: "leave",
           relatedId: request.id,
           relatedTo: "employee_leave_request",
-          relatedPath: "/employee/profile",
+          relatedPath: "/hr/profile",
         });
       } catch (notificationError) {
         console.error("employee_leave_notification_failed", notificationError);
@@ -4727,7 +4730,7 @@ export default function EmployeesManagementPage() {
 
   return (
     <DashboardLayout area="hr">
-      <div dir="rtl" className="space-y-6 text-right">
+      <div dir="rtl" className="min-w-0 max-w-full space-y-6 overflow-x-hidden text-right">
         {!selectedEmployee ? (
           <div className="space-y-2">
             <h1 className="text-4xl font-bold tracking-tight text-slate-950">
@@ -4789,7 +4792,7 @@ export default function EmployeesManagementPage() {
           </div>
         ) : null}
 
-        <div className="space-y-6">
+        <div className="min-w-0 max-w-full space-y-6 overflow-x-hidden">
           {!selectedEmployee ? (
             <Card className="overflow-hidden border-slate-200/80 py-0">
             <CardHeader className="shrink-0 border-b border-slate-100 bg-white/95 px-4 pb-4 pt-4">
@@ -4907,16 +4910,16 @@ export default function EmployeesManagementPage() {
             </Card>
           ) : null}
 
-          <div className="flex min-w-0 flex-col gap-6">
+          <div className="flex min-w-0 max-w-full flex-col gap-6 overflow-x-hidden">
             <Card
               className={cn(
-                "gap-0 overflow-hidden border-slate-200/80 bg-white/95 py-0 shadow-sm",
+                "w-full max-w-full gap-0 overflow-hidden border-slate-200/80 bg-white/95 py-0 shadow-sm",
                 !selectedEmployee && "hidden"
               )}
             >
-              <CardHeader className="border-b border-slate-100 bg-white/90 px-6 pt-6 pb-4">
+              <CardHeader className="min-w-0 border-b border-slate-100 bg-white/90 px-4 pt-5 pb-4 sm:px-6 sm:pt-6">
                 <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
-                  <div className="flex min-w-0 items-center gap-4 text-right">
+                  <div className="flex min-w-0 items-center gap-3 text-right sm:gap-4">
                     <Avatar className="h-16 w-16 shrink-0 rounded-[22px] border border-slate-200 bg-slate-100 shadow-sm sm:h-20 sm:w-20">
                       <AvatarImage
                         src={selectedEmployeeDisplayAvatarUrl || undefined}
@@ -4933,7 +4936,7 @@ export default function EmployeesManagementPage() {
                       </AvatarFallback>
                     </Avatar>
 
-                    <div className="min-w-0 space-y-2">
+                    <div className="min-w-0 flex-1 space-y-2">
                       <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
                         <UserRound className="h-3.5 w-3.5 text-[#030640]" />
                         الملف الحالي
@@ -4941,11 +4944,11 @@ export default function EmployeesManagementPage() {
                       <CardTitle className="truncate text-2xl tracking-tight text-slate-950 sm:text-3xl">
                         {selectedEmployeeLabel}
                       </CardTitle>
-                      <div className="flex flex-wrap gap-2">
-                        <Badge variant="outline" className="rounded-full">
+                      <div className="flex min-w-0 flex-wrap gap-2">
+                        <Badge variant="outline" className="max-w-full truncate rounded-full">
                           {selectedEmployeeEmployment.title}
                         </Badge>
-                        <Badge variant="outline" className="rounded-full">
+                        <Badge variant="outline" className="max-w-full truncate rounded-full">
                           {selectedEmployeeEmployment.department}
                         </Badge>
                         <Badge
@@ -4973,7 +4976,7 @@ export default function EmployeesManagementPage() {
                   <Button
                     type="button"
                     variant="outline"
-                    className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-full border border-[#F2B705]/40 bg-[#F2B705]/12 px-5 text-sm font-semibold text-[#030640] shadow-[0_14px_30px_-18px_rgba(242,183,5,0.9)] transition hover:border-[#F2B705]/65 hover:bg-[#F2B705]/20 hover:text-[#030640] focus-visible:ring-2 focus-visible:ring-[#F2B705]/40 xl:w-auto"
+                    className="inline-flex h-auto min-h-11 w-full items-center justify-center gap-2 rounded-full border border-[#F2B705]/40 bg-[#F2B705]/12 px-4 py-2 text-sm font-semibold leading-6 text-[#030640] shadow-[0_14px_30px_-18px_rgba(242,183,5,0.9)] transition hover:border-[#F2B705]/65 hover:bg-[#F2B705]/20 hover:text-[#030640] focus-visible:ring-2 focus-visible:ring-[#F2B705]/40 xl:w-auto"
                     onClick={handleCloseEmployeeDetails}
                   >
                     <ArrowRight className="h-4 w-4 shrink-0" />
@@ -4984,18 +4987,19 @@ export default function EmployeesManagementPage() {
             </Card>
 
             {selectedEmployee && selectedEmployeeProfile ? (
-              <div className="flex flex-col gap-6">
+              <div className="flex min-w-0 max-w-full flex-col gap-6 overflow-x-hidden">
                 <Card
                   className={cn(
-                    "order-0 sticky top-4 z-20 gap-0 overflow-hidden border-slate-200/80 bg-white/95 py-0 shadow-[0_18px_38px_-30px_rgba(15,23,42,0.28)] backdrop-blur"
+                    "order-0 sticky top-4 z-20 w-full max-w-full gap-0 overflow-hidden border-slate-200/80 bg-white/95 py-0 shadow-[0_18px_38px_-30px_rgba(15,23,42,0.28)] backdrop-blur"
                   )}
                 >
-                  <CardContent className="px-4 py-3">
+                  <CardContent className="min-w-0 px-3 py-3 sm:px-4">
                     <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
                       <ShieldCheck className="h-3.5 w-3.5 text-[#030640]" />
                       أقسام ملف الموظف
                     </div>
-                    <div className="flex justify-start gap-3 overflow-x-auto pb-1 pt-0.5 sm:gap-3.5">
+                    <div className="max-w-full overflow-x-auto overscroll-x-contain pb-1 pt-0.5">
+                      <div className="flex w-max min-w-full justify-start gap-2 sm:gap-3.5">
                       {EMPLOYEE_WORKSPACE_SECTIONS.map(section => (
                         <EmployeeWorkspaceTabButton
                           key={section.key}
@@ -5008,6 +5012,7 @@ export default function EmployeesManagementPage() {
                           onClick={() => activateEmployeeWorkspaceSection(section.key)}
                         />
                       ))}
+                      </div>
                     </div>
 
                   </CardContent>

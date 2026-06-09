@@ -75,8 +75,8 @@ export default function Header() {
       : "Dashboard"
     : isStaffUser
       ? language === "ar"
-        ? "بروفايل الموظف"
-        : "Employee Profile"
+        ? "بوابة الموظفين"
+        : "Staff Portal"
       : language === "ar"
         ? "حسابي"
         : "My Account";

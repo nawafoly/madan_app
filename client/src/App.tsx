@@ -314,45 +314,60 @@ function Router() {
           </RequireAdminPermission>
         </Route>
 
-        {/* ================= Client Area ================= */}
+        {/* ================= Employee Self-Service ================= */}
 
-        <Route path="/employee/profile">
+        <Route path="/hr/profile">
           <RequireEmployeeProfileAccess>
             <EmployeeProfilePage />
           </RequireEmployeeProfileAccess>
         </Route>
 
-        <Route path="/employee/files">
+        <Route path="/hr/files">
           <RequireEmployeeProfileAccess>
             <EmployeeFilesPage />
           </RequireEmployeeProfileAccess>
         </Route>
 
-        <Route path="/employee/messages">
+        <Route path="/hr/messages">
           <RequireEmployeeProfileAccess>
             <EmployeeMessagesPage />
           </RequireEmployeeProfileAccess>
         </Route>
 
+        {/* ===== Legacy employee self-service links ===== */}
+        <Route path="/employee/profile">
+          <Redirect to="/hr/profile" />
+        </Route>
+
+        <Route path="/employee/files">
+          <Redirect to="/hr/files" />
+        </Route>
+
+        <Route path="/employee/messages">
+          <Redirect to="/hr/messages" />
+        </Route>
+
         <Route path="/employee">
-          <Redirect to="/employee/profile" />
+          <Redirect to="/hr/profile" />
         </Route>
 
         <Route path="/staff/profile">
-          <Redirect to="/employee/profile" />
+          <Redirect to="/hr/profile" />
         </Route>
 
         <Route path="/staff/files">
-          <Redirect to="/employee/files" />
+          <Redirect to="/hr/files" />
         </Route>
 
         <Route path="/staff/messages">
-          <Redirect to="/employee/messages" />
+          <Redirect to="/hr/messages" />
         </Route>
 
         <Route path="/staff">
-          <Redirect to="/employee/profile" />
+          <Redirect to="/hr/profile" />
         </Route>
+
+        {/* ================= Client Area ================= */}
 
         {/* ✅ deep link لازم يسبق أي redirects عامة */}
         <Route path="/client/contracts/:id">

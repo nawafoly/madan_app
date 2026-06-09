@@ -159,7 +159,7 @@ const hrMenuItems: MenuItem[] = [
     permission: "recruitment.view",
   },
   {
-    icon: BriefcaseBusiness,
+    icon: Users,
     label: "إدارة الموظفين",
     path: "/hr/employees",
     allow: ["owner", "admin", "hr"],
@@ -188,7 +188,7 @@ const MIN_WIDTH = 200;
 const MAX_WIDTH = 480;
 type DashboardArea = "admin" | "hr";
 
-const EMPLOYEE_PROFILE_PATH = "/employee/profile";
+const EMPLOYEE_PROFILE_PATH = "/hr/profile";
 const EMPLOYEE_PROFILE_LABEL = "بروفايل الموظف";
 
 function readStoredSidebarOpen() {
@@ -404,7 +404,7 @@ export default function DashboardLayout({
       open={isSidebarOpen}
       onOpenChange={setIsSidebarOpen}
       dir={layoutDir}
-      className="min-h-screen flex-row items-stretch"
+      className="min-h-screen max-w-full flex-row items-stretch overflow-x-hidden"
       style={
         {
           "--sidebar-width": `${sidebarWidth}px`,
@@ -474,15 +474,17 @@ function DashboardLayoutContent({
 
   // العنصر النشط
   const isEmployeeProfileActive =
-    location === EMPLOYEE_PROFILE_PATH ||
-    location === "/employee/files" ||
-    location === "/employee/messages";
+    area === "hr" &&
+    (location === EMPLOYEE_PROFILE_PATH ||
+      location === "/hr/files" ||
+      location === "/hr/messages");
   const activeMenuLabel = isEmployeeProfileActive
     ? EMPLOYEE_PROFILE_LABEL
     : (visibleMenuItems.find(item => item.path === location)?.label ??
       (area === "hr" ? "منصة الموارد البشرية" : "لوحة التحكم"));
   const layoutBrandLabel =
     area === "hr" ? "منصة الموارد البشرية" : "معدن";
+  const homeTargetPath = area === "hr" ? "/hr" : "/";
 
   // اسم العرض: يفضل displayName ثم name ثم الإيميل
   const displayName = useMemo(() => {
@@ -642,8 +644,7 @@ function DashboardLayoutContent({
     <>
       <div
         className={cn(
-          "relative shrink-0",
-          !isMobile && "sticky top-0 h-screen self-start"
+          isMobile ? "contents" : "relative sticky top-0 h-screen shrink-0 self-start"
         )}
         ref={sidebarRef}
       >
@@ -656,49 +657,65 @@ function DashboardLayoutContent({
           )}
           disableTransition={isResizing}
         >
-          <SidebarHeader className="h-16 justify-center border-b border-white/10 bg-slate-950/90">
-            <div className="flex items-center gap-2 px-2 transition-all w-full">
+          <SidebarHeader
+            className={cn(
+              "h-16 justify-center border-b border-white/10 bg-slate-950/90",
+              isCollapsed ? "px-0" : "px-3"
+            )}
+          >
+            <div
+              className={cn(
+                "flex w-full min-w-0 items-center transition-all",
+                isCollapsed ? "justify-center gap-0" : "gap-2"
+              )}
+            >
               <button
                 onClick={handleSidebarToggle}
-                className="h-8 w-8 shrink-0 rounded-lg text-[#F2B705] transition-colors hover:bg-white/8 hover:text-[#FFD24A] focus:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+                className={cn(
+                  "shrink-0 text-[#F2B705] transition-colors hover:bg-white/8 hover:text-[#FFD24A] focus:outline-none focus-visible:ring-2 focus-visible:ring-white/20",
+                  isCollapsed
+                    ? "flex h-9 w-9 items-center justify-center rounded-2xl bg-white/[0.04]"
+                    : "h-8 w-8 rounded-lg"
+                )}
                 aria-label="Toggle navigation"
               >
                 <PanelLeft className="h-4 w-4 rtl:rotate-180" />
               </button>
 
-              <div
-                className={cn(
-                  "flex min-w-0 items-center gap-2 overflow-hidden transition-[max-width,opacity,transform] duration-200",
-                  isCollapsed
-                    ? "max-w-0 -translate-x-2 opacity-0 pointer-events-none"
-                    : "max-w-48 translate-x-0 opacity-100"
-                )}
-              >
-                <span className="font-semibold tracking-tight truncate whitespace-nowrap text-[#F2B705]">
-                  {layoutBrandLabel}
-                </span>
-              </div>
+              {!isCollapsed ? (
+                <div
+                  className={cn(
+                    "flex min-w-0 items-center gap-2 overflow-hidden transition-[max-width,opacity,transform] duration-200",
+                    area === "hr"
+                      ? "max-w-36 translate-x-0 opacity-100"
+                      : "max-w-48 translate-x-0 opacity-100"
+                  )}
+                >
+                  <span className="font-semibold tracking-tight truncate whitespace-nowrap text-[#F2B705]">
+                    {layoutBrandLabel}
+                  </span>
+                </div>
+              ) : null}
 
               {/* زر الرئيسية */}
-              <div
-                className={cn(
-                  isRight ? "mr-auto" : "ml-auto",
-                  "flex min-w-0 items-center gap-2 overflow-hidden whitespace-nowrap transition-[max-width,opacity,transform] duration-200",
-                  isCollapsed
-                    ? "max-w-0 translate-x-2 opacity-0 pointer-events-none"
-                    : "max-w-40 translate-x-0 opacity-100"
-                )}
-              >
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-2 border-white/10 bg-white/[0.04] text-slate-100 hover:bg-white/[0.08] hover:text-white"
-                  onClick={() => setLocation("/")}
+              {!isCollapsed ? (
+                <div
+                  className={cn(
+                    isRight ? "mr-auto" : "ml-auto",
+                    "flex max-w-32 shrink-0 translate-x-0 items-center gap-2 overflow-hidden whitespace-nowrap opacity-100 transition-[max-width,opacity,transform] duration-200"
+                  )}
                 >
-                  <Home className="h-4 w-4 text-[#F2B705]" />
-                  الرئيسية
-                </Button>
-              </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-9 shrink-0 gap-1.5 rounded-full border-white/10 bg-white/[0.04] px-3 text-xs text-slate-100 hover:bg-white/[0.08] hover:text-white"
+                    onClick={() => setLocation(homeTargetPath)}
+                  >
+                    <Home className="h-4 w-4 text-[#F2B705]" />
+                    الرئيسية
+                  </Button>
+                </div>
+              ) : null}
             </div>
           </SidebarHeader>
 
@@ -736,52 +753,75 @@ function DashboardLayoutContent({
               })}
             </SidebarMenu>
 
-            <div className="mx-4 my-3 h-px bg-white/10" />
+            {area === "hr" ? (
+              <>
+                <div className="mx-4 my-3 h-px bg-white/10" />
 
-            <div className="px-2 pb-3">
-              <SidebarMenu>
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={isEmployeeProfileActive}
-                    tooltip={EMPLOYEE_PROFILE_LABEL}
-                    className="h-10 rounded-xl font-normal text-slate-300 transition-all hover:text-white data-[active=true]:bg-white/10 data-[active=true]:text-white [&>svg]:text-[#F2B705]"
-                  >
-                    <Link href={EMPLOYEE_PROFILE_PATH}>
-                      <User
-                        className={cn(
-                          "h-4 w-4 text-[#F2B705]",
-                          isEmployeeProfileActive && "text-[#FFD24A]"
-                        )}
-                      />
-                      <span
-                        className={cn(
-                          "whitespace-nowrap transition-[max-width,opacity] duration-200",
-                          isCollapsed
-                            ? "max-w-0 opacity-0 pointer-events-none"
-                            : "max-w-40 opacity-100"
-                        )}
+                <div className="px-2 pb-3">
+                  <SidebarMenu>
+                    <SidebarMenuItem>
+                      <SidebarMenuButton
+                        asChild
+                        isActive={isEmployeeProfileActive}
+                        tooltip={EMPLOYEE_PROFILE_LABEL}
+                        className="h-10 rounded-xl font-normal text-slate-300 transition-all hover:text-white data-[active=true]:bg-white/10 data-[active=true]:text-white [&>svg]:text-[#F2B705]"
                       >
-                        {EMPLOYEE_PROFILE_LABEL}
-                      </span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              </SidebarMenu>
-            </div>
+                        <Link href={EMPLOYEE_PROFILE_PATH}>
+                          <User
+                            className={cn(
+                              "h-4 w-4 text-[#F2B705]",
+                              isEmployeeProfileActive && "text-[#FFD24A]"
+                            )}
+                          />
+                          <span
+                            className={cn(
+                              "whitespace-nowrap transition-[max-width,opacity] duration-200",
+                              isCollapsed
+                                ? "max-w-0 opacity-0 pointer-events-none"
+                                : "max-w-40 opacity-100"
+                            )}
+                          >
+                            {EMPLOYEE_PROFILE_LABEL}
+                          </span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  </SidebarMenu>
+                </div>
+              </>
+            ) : null}
           </SidebarContent>
 
-          <SidebarFooter className="border-t border-white/10 bg-slate-950/90 p-3">
-              <DropdownMenu>
+          <SidebarFooter
+            className={cn(
+              "border-t border-white/10 bg-slate-950/90",
+              isCollapsed ? "items-center p-2.5 pb-3" : "p-3"
+            )}
+          >
+            <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button className="group flex w-full items-center gap-3.5 rounded-2xl border border-white/10 bg-gradient-to-r from-white/[0.06] to-white/[0.03] px-3 py-2.5 text-start shadow-[0_18px_40px_-28px_rgba(15,23,42,0.95)] transition-all hover:border-white/15 hover:from-white/[0.08] hover:to-white/[0.05] hover:shadow-[0_22px_46px_-28px_rgba(15,23,42,0.98)] group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-2.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/20">
-                  <Avatar className="h-11 w-11 shrink-0 border border-white/15 ring-2 ring-white/6 shadow-[0_12px_24px_-14px_rgba(15,23,42,0.95)]">
+                <button
+                  className={cn(
+                    "group flex w-full items-center gap-3.5 text-start transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-white/20",
+                    isCollapsed
+                      ? "h-14 w-14 justify-center rounded-full border-0 bg-transparent p-0 hover:bg-white/[0.04]"
+                      : "rounded-2xl border border-white/10 bg-gradient-to-r from-white/[0.06] to-white/[0.03] px-3 py-2.5 shadow-[0_18px_40px_-28px_rgba(15,23,42,0.95)] hover:border-white/15 hover:from-white/[0.08] hover:to-white/[0.05] hover:shadow-[0_22px_46px_-28px_rgba(15,23,42,0.98)]"
+                  )}
+                >
+                  <Avatar
+                    className={cn(
+                      "shrink-0 overflow-hidden border border-white/15 shadow-[0_12px_24px_-14px_rgba(15,23,42,0.95)]",
+                      isCollapsed
+                        ? "h-12 w-12 rounded-full ring-1 ring-white/20"
+                        : "h-11 w-11 ring-2 ring-white/6"
+                    )}
+                  >
                     <AvatarImage
                       src={sidebarAvatarUrl || undefined}
                       alt={displayName}
-                      className="object-cover"
+                      className="h-full w-full rounded-full object-cover"
                     />
-                    <AvatarFallback className="bg-gradient-to-br from-slate-700 via-slate-800 to-slate-950 text-sm font-semibold text-slate-50">
+                    <AvatarFallback className="rounded-full bg-gradient-to-br from-slate-700 via-slate-800 to-slate-950 text-sm font-semibold text-slate-50">
                       {String(displayName ?? "م")
                         .trim()
                         .charAt(0)}
@@ -818,23 +858,25 @@ function DashboardLayoutContent({
           </SidebarFooter>
         </Sidebar>
 
-        <div
-          className={cn(
-            "absolute top-0 h-full w-1 cursor-col-resize transition-[opacity,background-color] duration-200 hover:bg-primary/20",
-            isRight ? "left-0" : "right-0",
-            isCollapsed
-              ? "pointer-events-none opacity-0"
-              : "pointer-events-auto opacity-100"
-          )}
-          onMouseDown={() => {
-            if (isCollapsed) return;
-            setIsResizing(true);
-          }}
-          style={{ zIndex: 50 }}
-        />
+        {!isMobile ? (
+          <div
+            className={cn(
+              "absolute top-0 h-full w-1 cursor-col-resize transition-[opacity,background-color] duration-200 hover:bg-primary/20",
+              isRight ? "left-0" : "right-0",
+              isCollapsed
+                ? "pointer-events-none opacity-0"
+                : "pointer-events-auto opacity-100"
+            )}
+            onMouseDown={() => {
+              if (isCollapsed) return;
+              setIsResizing(true);
+            }}
+            style={{ zIndex: 50 }}
+          />
+        ) : null}
       </div>
 
-      <SidebarInset>
+      <SidebarInset className="max-w-full overflow-x-hidden">
         {isMobile && (
           <div className="flex border-b h-14 items-center justify-between bg-transparent px-2 backdrop-blur supports-[backdrop-filter]:backdrop-blur sticky top-0 z-40">
             <div className="flex items-center gap-2">
@@ -853,7 +895,7 @@ function DashboardLayoutContent({
               variant="outline"
               size="sm"
               className="gap-2"
-              onClick={() => setLocation("/")}
+              onClick={() => setLocation(homeTargetPath)}
             >
               <Home className="h-4 w-4" />
               الرئيسية
@@ -865,7 +907,7 @@ function DashboardLayoutContent({
 
         <main
           ref={mainRef}
-          className="flex-1 w-full px-4 md:px-6 lg:px-8 py-4 md:py-6"
+          className="min-w-0 max-w-full flex-1 overflow-x-hidden px-3 py-4 sm:px-4 md:px-6 md:py-6 lg:px-8"
         >
           {!isMobile ? (
             <div className="mb-5 flex items-center justify-end">

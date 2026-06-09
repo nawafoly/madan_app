@@ -760,7 +760,7 @@ export default function EmployeeMessagesScreen() {
         type: "message",
         relatedId: messageRef.id,
         relatedTo: "employee_message",
-        relatedPath: `/employee/messages?messageId=${messageRef.id}`,
+        relatedPath: `/hr/messages?messageId=${messageRef.id}`,
       }).catch(error => {
         console.error("employee_internal_notification_failed", error);
       });

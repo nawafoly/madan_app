@@ -3,7 +3,6 @@ import {
   FileText,
   BriefcaseBusiness,
   Home,
-  LayoutDashboard,
   LogOut,
   Mail,
   ShieldCheck,
@@ -14,7 +13,7 @@ import { Link, useLocation } from "wouter";
 import { NotificationBell } from "@/components/NotificationBell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { getHomePathForUser, useAuth } from "@/_core/hooks/useAuth";
+import { useAuth } from "@/_core/hooks/useAuth";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { cn } from "@/lib/utils";
 
@@ -33,31 +32,26 @@ export default function EmployeeLayout({
   const { user, logout } = useAuth();
   const [location, setLocation] = useLocation();
   const layoutDir: "rtl" | "ltr" = language === "ar" ? "rtl" : "ltr";
-  const workspacePath = user ? getHomePathForUser(user) : "/login";
-  const showWorkspaceLink =
-    !!user &&
-    workspacePath !== "/employee/profile" &&
-    workspacePath !== location;
 
   const handleLogout = async () => {
     await logout();
-    setLocation("/");
+    setLocation("/hr");
   };
 
   const navItems = [
     {
       label: "الملف الشخصي",
-      path: "/employee/profile",
+      path: "/hr/profile",
       icon: UserRound,
     },
     {
       label: "الملفات",
-      path: "/employee/files",
+      path: "/hr/files",
       icon: FileText,
     },
     {
       label: "الرسائل",
-      path: "/employee/messages",
+      path: "/hr/messages",
       icon: Mail,
     },
   ];
@@ -70,7 +64,7 @@ export default function EmployeeLayout({
       <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/90 shadow-sm shadow-slate-950/[0.03] backdrop-blur-xl">
         <div className="container flex min-h-16 flex-wrap items-center justify-between gap-3 py-3">
           <Link
-            href="/employee/profile"
+            href="/hr"
             className="flex min-w-0 items-center gap-3 text-slate-950"
           >
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-950 text-[#F2B705]">
@@ -91,21 +85,7 @@ export default function EmployeeLayout({
               <NotificationBell triggerClassName="rounded-xl text-slate-700 hover:bg-slate-100" />
             ) : null}
 
-            {showWorkspaceLink ? (
-              <Link href={workspacePath}>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-10 rounded-xl border-slate-200 bg-white"
-                >
-                  <LayoutDashboard className="h-4 w-4" />
-                  مساحة العمل
-                </Button>
-              </Link>
-            ) : null}
-
-            <Link href="/">
+            <Link href="/hr">
               <Button
                 type="button"
                 variant="outline"
@@ -113,7 +93,7 @@ export default function EmployeeLayout({
                 className="h-10 rounded-xl border-slate-200 bg-white"
               >
                 <Home className="h-4 w-4" />
-                الموقع
+                بوابة الموظفين
               </Button>
             </Link>
 

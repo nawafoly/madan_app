@@ -372,7 +372,7 @@ export function WeeklyReportTab({ user }: { user: AppUser }) {
           type: "message",
           relatedId: reportRef.id,
           relatedTo: "weekly_report",
-          relatedPath: "/employee/messages",
+          relatedPath: "/hr/messages",
         }).catch(error => {
           console.error("weekly_report_notification_failed", error);
         });
