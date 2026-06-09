@@ -78,7 +78,13 @@ export type AuditCategory =
   | "system";
 export type AuditSeverity = "info" | "warning" | "critical";
 export type AuditStatus = "success" | "failed";
-export type AuditArea = "admin" | "client" | "public" | "function" | "script";
+export type AuditArea =
+  | "admin"
+  | "hr"
+  | "client"
+  | "public"
+  | "function"
+  | "script";
 
 export type AuditRelatedIds = Partial<{
   projectId: string;

@@ -14,6 +14,7 @@ import {
 } from "firebase/firestore";
 import { auth, db } from "@/_core/firebase";
 import { resolveUserAccountStatus } from "@/lib/userAccountStatus";
+import { getCurrentAppSurface, type AppSurface } from "@/lib/appSurface";
 
 export type AppRole =
   | "owner"
@@ -514,14 +515,55 @@ export function getHomePathForRole(role: AppRole | null | undefined) {
   if (role === "owner" || role === "admin" || role === "accountant") {
     return "/dashboard";
   }
-  if (role === "hr") return "/admin/recruitment-applications";
+  if (role === "hr") return "/hr/recruitment";
   if (role === "staff") return "/employee/profile";
   if (role === "client" || role === "guest") return "/client/dashboard";
   return "/projects";
 }
 
-export function getHomePathForUser(user: PermissionSubject | null | undefined) {
+export function getStaffHomePathForUser(
+  user:
+    | (PermissionSubject &
+        Partial<Pick<AppUser, "employeeProfileEnabled" | "linkedEmployeeId">>)
+    | null
+    | undefined
+) {
   if (!user) return "/login";
+
+  if (user.role === "staff" || canAccessEmployeeProfile(user)) {
+    return "/employee/profile";
+  }
+
+  if (
+    hasPermission(user, "recruitment.view") ||
+    hasPermission(user, "recruitment.manage")
+  ) {
+    return "/hr/recruitment";
+  }
+
+  if (
+    hasPermission(user, "employees.view") ||
+    hasPermission(user, "employees.manage")
+  ) {
+    return "/hr/employees";
+  }
+
+  return "/login";
+}
+
+export function getHomePathForUser(
+  user:
+    | (PermissionSubject &
+        Partial<Pick<AppUser, "employeeProfileEnabled" | "linkedEmployeeId">>)
+    | null
+    | undefined,
+  surface: AppSurface = getCurrentAppSurface()
+) {
+  if (!user) return "/login";
+
+  if (surface === "staff") {
+    return getStaffHomePathForUser(user);
+  }
 
   if (user.role === "staff") return "/employee/profile";
   if (user.role === "client" || user.role === "guest") return "/client/dashboard";
@@ -531,13 +573,13 @@ export function getHomePathForUser(user: PermissionSubject | null | undefined) {
       hasPermission(user, "recruitment.view") ||
       hasPermission(user, "recruitment.manage")
     ) {
-      return "/admin/recruitment-applications";
+      return "/hr/recruitment";
     }
     if (
       hasPermission(user, "employees.view") ||
       hasPermission(user, "employees.manage")
     ) {
-      return "/admin/employees";
+      return "/hr/employees";
     }
   }
 
@@ -547,13 +589,13 @@ export function getHomePathForUser(user: PermissionSubject | null | undefined) {
       hasPermission(user, "recruitment.view") ||
       hasPermission(user, "recruitment.manage")
     ) {
-      return "/admin/recruitment-applications";
+      return "/hr/recruitment";
     }
     if (
       hasPermission(user, "employees.view") ||
       hasPermission(user, "employees.manage")
     ) {
-      return "/admin/employees";
+      return "/hr/employees";
     }
     if (hasPermission(user, "messages.view")) return "/admin/messages";
     if (hasPermission(user, "users.view")) return "/admin/clients";

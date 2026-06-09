@@ -853,8 +853,15 @@ type AppRoleKey =
   | "client"
   | "guest";
 
-const ADMIN_ROLE_KEYS = ["owner", "admin", "accountant", "hr", "staff"] as const;
-type AdminRoleKey = (typeof ADMIN_ROLE_KEYS)[number];
+const INVESTMENT_ADMIN_ROLE_KEYS = ["owner", "admin", "accountant"] as const;
+const STAFF_ADMIN_ROLE_KEYS = [
+  "owner",
+  "admin",
+  "accountant",
+  "hr",
+  "staff",
+] as const;
+type AdminRoleKey = (typeof STAFF_ADMIN_ROLE_KEYS)[number];
 
 const ADMIN_ROLE_LABELS: Record<AdminRoleKey, string> = {
   owner: "المالك",
@@ -868,16 +875,35 @@ const ALL_PERMISSION_KEYS = DEFAULT_PERMISSIONS.map(
   ({ key }) => key as Permission
 );
 
+const STAFF_PERMISSION_KEYS = new Set<Permission>([
+  "recruitment.view",
+  "recruitment.manage",
+  "employees.view",
+  "employees.manage",
+]);
+
+const INVESTMENT_PERMISSION_DEFINITIONS =
+  CENTRAL_PERMISSION_DEFINITIONS.filter(
+    permission => !STAFF_PERMISSION_KEYS.has(permission.key)
+  );
+
 function isSystemRoleKey(roleKey: string): roleKey is AppRoleKey {
   return SYSTEM_ROLE_KEYS.includes(roleKey);
 }
 
 function isAdminRoleKey(roleKey: unknown): roleKey is AdminRoleKey {
-  return ADMIN_ROLE_KEYS.includes(String(roleKey || "") as AdminRoleKey);
+  return STAFF_ADMIN_ROLE_KEYS.includes(String(roleKey || "") as AdminRoleKey);
 }
 
 function normalizeAdminRoleKey(roleKey: unknown): AdminRoleKey {
-  return isAdminRoleKey(roleKey) ? roleKey : "staff";
+  return isAdminRoleKey(roleKey) ? roleKey : "admin";
+}
+
+function isRoleVisibleInSettingsArea(roleKey: unknown, area: SettingsArea) {
+  const normalizedRoleKey = normalizeAdminRoleKey(roleKey);
+  const allowedRoleKeys =
+    area === "staff" ? STAFF_ADMIN_ROLE_KEYS : INVESTMENT_ADMIN_ROLE_KEYS;
+  return (allowedRoleKeys as readonly string[]).includes(normalizedRoleKey);
 }
 
 function isKnownPermission(
@@ -1022,9 +1048,34 @@ type SettingsExport = {
   };
 };
 
-export default function Settings() {
+type SettingsArea = "investment" | "staff";
+
+const INVESTMENT_SETTINGS_TABS: ReadonlySet<string> = new Set([
+  "general",
+  "content",
+  "backup",
+  "database",
+]);
+
+const STAFF_SETTINGS_TABS: ReadonlySet<string> = new Set([
+  "notifications",
+  "security",
+  "roles",
+  "admins",
+  "labels",
+  "flags",
+  "recruitment",
+  "database",
+]);
+
+export default function Settings({
+  area = "investment",
+}: {
+  area?: SettingsArea;
+}) {
+  const initialActiveTab = area === "staff" ? "notifications" : "general";
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("general");
+  const [activeTab, setActiveTab] = useState(initialActiveTab);
 
   // Existing docs
   const [app, setApp] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
@@ -1061,7 +1112,7 @@ export default function Settings() {
   const [roleInvites, setRoleInvites] = useState<RoleInviteDoc[]>([]);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRoleKey, setInviteRoleKey] =
-    useState<AdminRoleKey>("staff");
+    useState<AdminRoleKey>("admin");
   const [inviteNotes, setInviteNotes] = useState("");
 
   const [labels, setLabels] = useState<LabelsSettings>({
@@ -1182,7 +1233,7 @@ export default function Settings() {
   const [adminForm, setAdminForm] = useState<Omit<AdminUserDoc, "id">>({
     displayName: "",
     email: "",
-    roleKey: "staff",
+    roleKey: "admin",
     title: "",
     isActive: true,
     linkedUserUid: "",
@@ -1384,8 +1435,20 @@ export default function Settings() {
     () => JSON.stringify(security) !== JSON.stringify(savedSecurity),
     [savedSecurity, security]
   );
-  const activeRolesCount = roles.filter(role => role.isActive).length;
-  const systemRolesCount = roles.filter(role => role.isSystem).length;
+  const visibleRoleKeys =
+    area === "staff" ? STAFF_ADMIN_ROLE_KEYS : INVESTMENT_ADMIN_ROLE_KEYS;
+  const visibleSystemRoleKeys = SYSTEM_ROLE_KEYS.filter(roleKey =>
+    (visibleRoleKeys as readonly string[]).includes(roleKey)
+  );
+  const visiblePermissionDefinitions =
+    area === "staff"
+      ? CENTRAL_PERMISSION_DEFINITIONS
+      : INVESTMENT_PERMISSION_DEFINITIONS;
+  const visibleRoles = roles.filter(role =>
+    area === "staff" || !["hr", "staff"].includes(role.key)
+  );
+  const activeRolesCount = visibleRoles.filter(role => role.isActive).length;
+  const systemRolesCount = visibleRoles.filter(role => role.isSystem).length;
   const activeAdminsCount = adminUsers.filter(user => user.isActive).length;
   const activeInvitesCount = roleInvites.filter(
     invite => invite.isActive
@@ -1700,10 +1763,12 @@ export default function Settings() {
     const unsubAdmins = onSnapshot(
       collection(db, "admin_users"),
       snap => {
-        const rows = snap.docs.map(d => ({
-          id: d.id,
-          ...(d.data() as any),
-        })) as AdminUserDoc[];
+        const rows = snap.docs
+          .map(d => ({
+            id: d.id,
+            ...(d.data() as any),
+          }))
+          .filter(row => isRoleVisibleInSettingsArea(row.roleKey, area)) as AdminUserDoc[];
         setAdminUsers(rows);
       },
       err => {
@@ -1743,10 +1808,12 @@ export default function Settings() {
     const unsubInvites = onSnapshot(
       collection(db, "role_invites"),
       snap => {
-        const rows = snap.docs.map(d => ({
-          id: d.id,
-          ...(d.data() as any),
-        })) as RoleInviteDoc[];
+        const rows = snap.docs
+          .map(d => ({
+            id: d.id,
+            ...(d.data() as any),
+          }))
+          .filter(row => isRoleVisibleInSettingsArea(row.roleKey, area)) as RoleInviteDoc[];
         rows.sort((a, b) =>
           String(a.email || "").localeCompare(String(b.email || ""))
         );
@@ -1762,7 +1829,7 @@ export default function Settings() {
       unsubEmployees();
       unsubInvites();
     };
-  }, [databaseWorkerUrl]);
+  }, [area, databaseWorkerUrl]);
 
   /* =========================
      Save handlers
@@ -2257,7 +2324,7 @@ export default function Settings() {
      Admin Users (Firestore only)
   ========================= */
 
-  const roleOptions = ADMIN_ROLE_KEYS.map(key => ({
+  const roleOptions = visibleRoleKeys.map(key => ({
     key,
     nameAr: ADMIN_ROLE_LABELS[key],
   }));
@@ -2622,15 +2689,16 @@ export default function Settings() {
   const openCreateAdmin = () => {
     setEditingAdminId(null);
     setAdminEmployeeLinkMode("create");
+    const isStaffSettings = area === "staff";
     setAdminForm({
-      includeInEmployeeManagement: true,
+      includeInEmployeeManagement: isStaffSettings,
       displayName: "",
       email: "",
-      roleKey: "staff",
+      roleKey: isStaffSettings ? "staff" : "admin",
       title: "",
       isActive: true,
       linkedUserUid: "",
-      employeeProfileEnabled: true,
+      employeeProfileEnabled: isStaffSettings,
       linkedEmployeeId: null,
       notes: "",
       permissionsAllow: [],
@@ -2995,7 +3063,7 @@ export default function Settings() {
 
       toast.success("تم حفظ الدعوة — سيتم تطبيق الدور عند أول تسجيل دخول");
       setInviteEmail("");
-      setInviteRoleKey("staff");
+      setInviteRoleKey("admin");
       setInviteNotes("");
     } catch (e) {
       console.error(e);
@@ -3619,7 +3687,7 @@ export default function Settings() {
     },
   ];
 
-  const settingsTabs = [
+  const allSettingsTabs = [
     {
       value: "general",
       label: "عام",
@@ -3687,6 +3755,19 @@ export default function Settings() {
       icon: Database,
     },
   ] as const;
+
+  const allowedSettingsTabs =
+    area === "staff" ? STAFF_SETTINGS_TABS : INVESTMENT_SETTINGS_TABS;
+  const settingsTabs = allSettingsTabs.filter(tab =>
+    allowedSettingsTabs.has(tab.value)
+  );
+  const visibleTabValues = new Set<string>(settingsTabs.map(tab => tab.value));
+
+  useEffect(() => {
+    if (!visibleTabValues.has(activeTab)) {
+      setActiveTab(settingsTabs[0]?.value || "general");
+    }
+  }, [activeTab, settingsTabs, visibleTabValues]);
 
   const activeTabMeta =
     settingsTabs.find(tab => tab.value === activeTab) ?? settingsTabs[0];
@@ -3975,7 +4056,7 @@ export default function Settings() {
   };
 
   const dirtyActionKeys = Object.entries(tabActionConfigs)
-    .filter(([, config]) => config?.dirty)
+    .filter(([key, config]) => visibleTabValues.has(key) && config?.dirty)
     .map(([key]) => key);
 
   const prioritizedActionKey =
@@ -3993,14 +4074,14 @@ export default function Settings() {
 
   if (loading) {
     return (
-      <DashboardLayout>
+      <DashboardLayout area={area === "staff" ? "hr" : "admin"}>
         <div className="p-10 text-center">جاري التحميل...</div>
       </DashboardLayout>
     );
   }
 
   return (
-    <DashboardLayout>
+    <DashboardLayout area={area === "staff" ? "hr" : "admin"}>
       <SettingsLayout
         activeTab={activeTab}
         onActiveTabChange={setActiveTab}
@@ -4064,9 +4145,9 @@ export default function Settings() {
           onDeleteRole={handleDeleteRole}
           onEditRole={openEditRole}
           onToggleRoleActive={handleToggleRoleActive}
-          permissionDefinitions={CENTRAL_PERMISSION_DEFINITIONS}
-          roles={roles}
-          systemRoleKeys={SYSTEM_ROLE_KEYS}
+          permissionDefinitions={visiblePermissionDefinitions}
+          roles={visibleRoles}
+          systemRoleKeys={visibleSystemRoleKeys}
           systemRolesCount={systemRolesCount}
         />
 
@@ -4146,15 +4227,11 @@ export default function Settings() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="staff">موظف</SelectItem>
-                    <SelectItem value="hr">
-                      الموارد البشرية
-                    </SelectItem>
-                    <SelectItem value="accountant">
-                      محاسب
-                    </SelectItem>
-                    <SelectItem value="admin">مشرف</SelectItem>
-                    <SelectItem value="owner">المالك</SelectItem>
+                    {roleOptions.map(role => (
+                      <SelectItem key={role.key} value={role.key}>
+                        {role.nameAr}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </SettingsSelectField>
@@ -5194,6 +5271,7 @@ export default function Settings() {
               : databaseDashboard.services.worker.status
           )}
           workerUrl={databaseWorkerUrl}
+          showEmployeeDirectorySync={area === "staff"}
         />
 
       </SettingsLayout>
@@ -5281,7 +5359,7 @@ export default function Settings() {
             <div className="space-y-2">
               <Label>الصلاحيات</Label>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                {CENTRAL_PERMISSION_DEFINITIONS.map(perm => {
+                {visiblePermissionDefinitions.map(perm => {
                   const checked = roleForm.permissions.includes(perm.key);
                   return (
                     <div
@@ -5406,7 +5484,12 @@ export default function Settings() {
               </div>
             </div>
 
-            <div className="space-y-3 rounded-xl border border-slate-200 p-4">
+            <div
+              className={cn(
+                "space-y-3 rounded-xl border border-slate-200 p-4",
+                area !== "staff" && "hidden"
+              )}
+            >
               <div className="flex items-center justify-between gap-4">
                 <div className="space-y-1">
                   <Label>لديه بروفايل موظف</Label>
@@ -5437,7 +5520,12 @@ export default function Settings() {
               ) : null}
             </div>
 
-            <div className="space-y-3 rounded-xl border border-slate-200 p-4">
+            <div
+              className={cn(
+                "space-y-3 rounded-xl border border-slate-200 p-4",
+                area !== "staff" && "hidden"
+              )}
+            >
               <div className="flex items-center justify-between gap-4">
                 <div className="space-y-1">
                   <Label>يعامل كموظف</Label>
@@ -5587,7 +5675,7 @@ export default function Settings() {
               <div className="space-y-2">
                 <Label>الصلاحيات الفعلية</Label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {CENTRAL_PERMISSION_DEFINITIONS.map(perm => {
+                  {visiblePermissionDefinitions.map(perm => {
                     const checked = adminFormEffectivePermissions.includes(
                       perm.key as Permission
                     );

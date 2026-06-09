@@ -143,7 +143,7 @@ export default function CreateStaffAccount() {
   };
   const settingsSource = (method: string) =>
     buildAuditSource({
-      area: "admin",
+      area: "hr",
       page: "CreateStaffAccount",
       method,
     });
@@ -665,7 +665,7 @@ export default function CreateStaffAccount() {
   };
 
   return (
-    <DashboardLayout>
+    <DashboardLayout area="hr">
       <div
         dir="rtl"
         className="bg-[linear-gradient(180deg,#f6f6f7_0%,#ffffff_32%,#f7f7f8_100%)] text-foreground"

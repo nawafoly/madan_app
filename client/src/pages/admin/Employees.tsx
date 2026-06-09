@@ -1993,7 +1993,7 @@ export default function EmployeesManagementPage() {
           entityPath: absenceRef.path,
           relatedIds: { userId: selectedEmployee.id },
           source: buildAuditSource({
-            area: "admin",
+            area: "hr",
             page: "Employees",
             method: "create_employee_absence",
           }),
@@ -2170,7 +2170,7 @@ export default function EmployeesManagementPage() {
           entityPath: payrollRef.path,
           relatedIds: { userId: selectedEmployee.id },
           source: buildAuditSource({
-            area: "admin",
+            area: "hr",
             page: "Employees",
             method: "create_employee_payroll_record",
           }),
@@ -2641,7 +2641,7 @@ export default function EmployeesManagementPage() {
         entityId: fileRef.id,
         entityPath: fileRef.path,
         source: buildAuditSource({
-          area: "admin",
+          area: "hr",
           page: "Employees",
           method: "upload_official_employee_document",
         }),
@@ -2724,7 +2724,7 @@ export default function EmployeesManagementPage() {
         category: "user",
         entityType: "employee_file",
         source: buildAuditSource({
-          area: "admin",
+          area: "hr",
           page: "Employees",
           method: "delete_employee_file",
         }),
@@ -2878,7 +2878,7 @@ export default function EmployeesManagementPage() {
         entityId: fileRef.id,
         entityPath: fileRef.path,
         source: buildAuditSource({
-          area: "admin",
+          area: "hr",
           page: "Employees",
           method: "upload_employee_file",
         }),
@@ -3106,7 +3106,7 @@ export default function EmployeesManagementPage() {
           category: "user",
           entityType: "user",
           source: buildAuditSource({
-            area: "admin",
+            area: "hr",
             page: "Employees",
             method: "update_employment_profile",
           }),
@@ -3604,7 +3604,7 @@ export default function EmployeesManagementPage() {
   };
 
   return (
-    <DashboardLayout>
+    <DashboardLayout area="hr">
       <div dir="rtl" className="space-y-6 text-right">
         <div className="space-y-2">
           <h1 className="text-4xl font-bold tracking-tight text-slate-950">

@@ -2,15 +2,19 @@ import type { ReactNode } from "react";
 import {
   FileText,
   BriefcaseBusiness,
+  Home,
+  LayoutDashboard,
+  LogOut,
   Mail,
   ShieldCheck,
   UserRound,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 
-import Footer from "@/components/Footer";
-import Header from "@/components/Header";
+import { NotificationBell } from "@/components/NotificationBell";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { getHomePathForUser, useAuth } from "@/_core/hooks/useAuth";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { cn } from "@/lib/utils";
 
@@ -26,8 +30,20 @@ export default function EmployeeLayout({
   children,
 }: EmployeeLayoutProps) {
   const { language } = useLanguage();
-  const [location] = useLocation();
+  const { user, logout } = useAuth();
+  const [location, setLocation] = useLocation();
   const layoutDir: "rtl" | "ltr" = language === "ar" ? "rtl" : "ltr";
+  const workspacePath = user ? getHomePathForUser(user) : "/login";
+  const showWorkspaceLink =
+    !!user &&
+    workspacePath !== "/employee/profile" &&
+    workspacePath !== location;
+
+  const handleLogout = async () => {
+    await logout();
+    setLocation("/");
+  };
+
   const navItems = [
     {
       label: "الملف الشخصي",
@@ -51,9 +67,73 @@ export default function EmployeeLayout({
       dir={layoutDir}
       className="min-h-screen bg-[linear-gradient(180deg,#f8f4ea_0%,#ffffff_20%,#f8fafc_100%)] text-slate-950"
     >
-      <Header />
+      <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/90 shadow-sm shadow-slate-950/[0.03] backdrop-blur-xl">
+        <div className="container flex min-h-16 flex-wrap items-center justify-between gap-3 py-3">
+          <Link
+            href="/employee/profile"
+            className="flex min-w-0 items-center gap-3 text-slate-950"
+          >
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-950 text-[#F2B705]">
+              <BriefcaseBusiness className="h-5 w-5" />
+            </span>
+            <span className="min-w-0">
+              <span className="block truncate text-sm font-semibold">
+                بوابة الموظف
+              </span>
+              <span className="block truncate text-xs text-slate-500">
+                الدوام، الإجازات، الملفات والرسائل
+              </span>
+            </span>
+          </Link>
 
-      <main className="pb-16 pt-24">
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {user ? (
+              <NotificationBell triggerClassName="rounded-xl text-slate-700 hover:bg-slate-100" />
+            ) : null}
+
+            {showWorkspaceLink ? (
+              <Link href={workspacePath}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-10 rounded-xl border-slate-200 bg-white"
+                >
+                  <LayoutDashboard className="h-4 w-4" />
+                  مساحة العمل
+                </Button>
+              </Link>
+            ) : null}
+
+            <Link href="/">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-10 rounded-xl border-slate-200 bg-white"
+              >
+                <Home className="h-4 w-4" />
+                الموقع
+              </Button>
+            </Link>
+
+            {user ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => void handleLogout()}
+                className="h-10 rounded-xl text-slate-600 hover:bg-slate-100 hover:text-slate-950"
+              >
+                <LogOut className="h-4 w-4" />
+                خروج
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      </header>
+
+      <main className="pb-16 pt-8">
         <div className="container space-y-8">
           <section className="overflow-hidden rounded-[32px] border border-slate-200/80 bg-[linear-gradient(135deg,rgba(255,255,255,0.98)_0%,rgba(248,250,252,0.95)_52%,rgba(245,235,214,0.45)_100%)] px-6 py-7 shadow-[0_30px_90px_-48px_rgba(15,23,42,0.24)] sm:px-8 sm:py-8">
             <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
@@ -109,8 +189,6 @@ export default function EmployeeLayout({
           {children}
         </div>
       </main>
-
-      <Footer />
     </div>
   );
 }

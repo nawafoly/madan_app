@@ -1149,7 +1149,7 @@ export default function EmployeeProfilePage() {
             type: "leave_request_submitted",
             relatedId: docRef.id,
             relatedTo: "leave_request",
-            relatedPath: `/admin/employees?employeeId=${user.uid}&panel=leave`,
+            relatedPath: `/hr/employees?employeeId=${user.uid}&panel=leave`,
           });
         })
       );

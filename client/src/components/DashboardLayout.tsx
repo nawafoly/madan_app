@@ -44,6 +44,7 @@ import {
   BarChart3,
   Home,
   BriefcaseBusiness,
+  UserPlus,
 } from "lucide-react";
 import { CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
@@ -67,7 +68,7 @@ type MenuItem = {
   permission: Permission;
 };
 
-const menuItems: MenuItem[] = [
+const adminMenuItems: MenuItem[] = [
   {
     icon: LayoutDashboard,
     label: "لوحة التحكم",
@@ -125,22 +126,6 @@ const menuItems: MenuItem[] = [
   },
 
   {
-    icon: BriefcaseBusiness,
-    label: "طلبات التوظيف",
-    path: "/admin/recruitment-applications",
-    allow: ["owner", "admin", "hr"],
-    permission: "recruitment.view",
-  },
-
-  {
-    icon: BriefcaseBusiness,
-    label: "إدارة الموظفين",
-    path: "/admin/employees",
-    allow: ["owner", "admin", "hr"],
-    permission: "employees.view",
-  },
-
-  {
     icon: FileText,
     label: "سجل التعديلات",
     path: "/admin/audit-log",
@@ -157,18 +142,41 @@ const menuItems: MenuItem[] = [
   },
 
   {
-    icon: User,
-    label: "إنشاء حساب",
-    path: "/admin/create-staff",
-    allow: ["hr"], // 🔥 فقط HR
-    permission: "employees.view", // أو أي صلاحية عندك للـ HR
-  },
-
-  {
     icon: Settings,
-    label: "الإعدادات",
+    label: "إعدادات الاستثمار",
     path: "/admin/settings",
     allow: ["owner"],
+    permission: "settings.manage",
+  },
+];
+
+const hrMenuItems: MenuItem[] = [
+  {
+    icon: BriefcaseBusiness,
+    label: "طلبات التوظيف",
+    path: "/hr/recruitment",
+    allow: ["owner", "admin", "hr"],
+    permission: "recruitment.view",
+  },
+  {
+    icon: BriefcaseBusiness,
+    label: "إدارة الموظفين",
+    path: "/hr/employees",
+    allow: ["owner", "admin", "hr"],
+    permission: "employees.view",
+  },
+  {
+    icon: UserPlus,
+    label: "إنشاء حساب موظف",
+    path: "/hr/create-staff",
+    allow: ["owner", "admin", "hr"],
+    permission: "employees.view",
+  },
+  {
+    icon: Settings,
+    label: "إعدادات الإدارة",
+    path: "/hr/settings",
+    allow: ["owner", "admin"],
     permission: "settings.manage",
   },
 ];
@@ -178,6 +186,8 @@ const SIDEBAR_OPEN_KEY = "dashboard_sidebar_open";
 const DEFAULT_WIDTH = 280;
 const MIN_WIDTH = 200;
 const MAX_WIDTH = 480;
+type DashboardArea = "admin" | "hr";
+
 const EMPLOYEE_PROFILE_PATH = "/employee/profile";
 const EMPLOYEE_PROFILE_LABEL = "بروفايل الموظف";
 
@@ -326,11 +336,15 @@ function nameFromEmail(email?: string) {
   return arName;
 }
 
+type DashboardLayoutProps = {
+  children: React.ReactNode;
+  area?: DashboardArea;
+};
+
 export default function DashboardLayout({
   children,
-}: {
-  children: React.ReactNode;
-}) {
+  area = "admin",
+}: DashboardLayoutProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(readStoredSidebarOpen);
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     const saved = localStorage.getItem(SIDEBAR_WIDTH_KEY);
@@ -398,6 +412,7 @@ export default function DashboardLayout({
       }
     >
       <DashboardLayoutContent
+        area={area}
         setSidebarWidth={setSidebarWidth}
         sidebarSide={sidebarSide}
       >
@@ -408,12 +423,14 @@ export default function DashboardLayout({
 }
 
 type DashboardLayoutContentProps = {
+  area: DashboardArea;
   children: React.ReactNode;
   setSidebarWidth: (width: number) => void;
   sidebarSide: "left" | "right";
 };
 
 function DashboardLayoutContent({
+  area,
   children,
   setSidebarWidth,
   sidebarSide,
@@ -451,8 +468,9 @@ function DashboardLayoutContent({
   // عناصر القائمة المسموحة
   const visibleMenuItems = useMemo(() => {
     if (!role || !isOpsRole(role)) return [];
+    const menuItems = area === "hr" ? hrMenuItems : adminMenuItems;
     return menuItems.filter(item => hasPermission(user, item.permission));
-  }, [role, user]);
+  }, [area, role, user]);
 
   // العنصر النشط
   const isEmployeeProfileActive =
@@ -461,7 +479,10 @@ function DashboardLayoutContent({
     location === "/employee/messages";
   const activeMenuLabel = isEmployeeProfileActive
     ? EMPLOYEE_PROFILE_LABEL
-    : (visibleMenuItems.find(item => item.path === location)?.label ?? "Menu");
+    : (visibleMenuItems.find(item => item.path === location)?.label ??
+      (area === "hr" ? "منصة الموارد البشرية" : "لوحة التحكم"));
+  const layoutBrandLabel =
+    area === "hr" ? "منصة الموارد البشرية" : "معدن";
 
   // اسم العرض: يفضل displayName ثم name ثم الإيميل
   const displayName = useMemo(() => {
@@ -650,11 +671,11 @@ function DashboardLayoutContent({
                   "flex min-w-0 items-center gap-2 overflow-hidden transition-[max-width,opacity,transform] duration-200",
                   isCollapsed
                     ? "max-w-0 -translate-x-2 opacity-0 pointer-events-none"
-                    : "max-w-32 translate-x-0 opacity-100"
+                    : "max-w-48 translate-x-0 opacity-100"
                 )}
               >
                 <span className="font-semibold tracking-tight truncate whitespace-nowrap text-[#F2B705]">
-                  معدن
+                  {layoutBrandLabel}
                 </span>
               </div>
 

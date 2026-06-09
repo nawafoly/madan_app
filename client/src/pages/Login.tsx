@@ -336,6 +336,7 @@ export default function LoginPage() {
                 <div className="space-y-3">
                   <span className="inline-flex items-center rounded-full bg-[#f7f3ea] px-4 py-1.5 text-xs font-semibold tracking-[0.18em] text-primary/75 ring-1 ring-[#eadfbe]">
                     {modeCopy.badge}
+                    
                   </span>
 
                   <h1 className="text-3xl font-semibold tracking-tight text-slate-950 sm:text-[2rem]">
@@ -531,3 +532,4 @@ export default function LoginPage() {
     </div>
   );
 }
+

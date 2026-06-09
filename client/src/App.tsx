@@ -1,8 +1,9 @@
 // client/src/App.tsx
+import { useEffect, type ReactNode } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
-import { Redirect, Route, Switch } from "wouter";
+import { Redirect, Route, Switch, useLocation } from "wouter";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { LanguageProvider } from "./contexts/LanguageContext";
 import { ThemeProvider } from "./contexts/ThemeContext";
@@ -48,10 +49,74 @@ import CreateStaffAccount from "@/pages/admin/CreateStaffAccount";
 import ClientDashboard from "@/pages/client/MyInvestments";
 import ClientContractDetails from "@/pages/client/ContractDetails";
 import InvestmentDetails from "@/pages/client/InvestmentDetails";
+import { getHomePathForUser, useAuth } from "@/_core/hooks/useAuth";
+import {
+  buildStaffPlatformTarget,
+  getCurrentAppSurface,
+  isStaffPlatformPath,
+  isStaffSurfaceAllowedPath,
+  normalizePathname,
+} from "@/lib/appSurface";
+
+function PlatformBoundary({ children }: { children: ReactNode }) {
+  const { loading, user } = useAuth();
+  const [location, setLocation] = useLocation();
+  const currentPath = normalizePathname(location);
+  const surface = getCurrentAppSurface(currentPath);
+  const isStaffPath = isStaffPlatformPath(currentPath);
+  const staffPathAllowed = isStaffSurfaceAllowedPath(currentPath);
+
+  useEffect(() => {
+    if (surface === "investment" && isStaffPath) {
+      const target = buildStaffPlatformTarget(location);
+
+      if (/^https?:\/\//i.test(target)) {
+        window.location.assign(target);
+        return;
+      }
+
+      if (location !== target) setLocation(target);
+      return;
+    }
+
+    if (surface === "staff" && !staffPathAllowed) {
+      if (loading) return;
+
+      const target = user ? getHomePathForUser(user, "staff") : "/login";
+      if (location !== target) setLocation(target);
+    }
+  }, [
+    isStaffPath,
+    loading,
+    location,
+    setLocation,
+    staffPathAllowed,
+    surface,
+    user,
+  ]);
+
+  if (surface === "investment" && isStaffPath) return null;
+  if (surface === "staff" && !staffPathAllowed) return null;
+
+  return <>{children}</>;
+}
+
+function LoginRoute() {
+  const [location] = useLocation();
+  const isStaffSurface = getCurrentAppSurface(normalizePathname(location)) === "staff";
+
+  if (isStaffSurface) return <LoginPage />;
+
+  return (
+    <SiteLayout>
+      <LoginPage />
+    </SiteLayout>
+  );
+}
 
 function Router() {
   return (
-    <>
+    <PlatformBoundary>
       {/* ✅ Global scroll to top on route change */}
       <ScrollToTop />
 
@@ -95,9 +160,7 @@ function Router() {
 
         {/* ================= Auth (برضو نبي الثابت) ================= */}
         <Route path="/login">
-          <SiteLayout>
-            <LoginPage />
-          </SiteLayout>
+          <LoginRoute />
         </Route>
 
         <Route path="/404" component={NotFound} />
@@ -187,29 +250,53 @@ function Router() {
           </RequireAdminPermission>
         </Route>
 
-        <Route path="/admin/recruitment-applications">
+        {/* ================= HR Workspace ================= */}
+        <Route path="/hr/recruitment">
           <RequireAdminPermission permission="recruitment.view">
             <RecruitmentApplicationsPage />
           </RequireAdminPermission>
         </Route>
 
-        <Route path="/admin/employees">
+        <Route path="/hr/employees">
           <RequireAdminPermission permission="employees.view">
             <EmployeesManagementPage />
           </RequireAdminPermission>
         </Route>
 
-        {/* ===== Admin: Settings ===== */}
-        <Route path="/admin/settings">
-          <RequireAdminPermission permission="settings.manage">
-            <Settings />
-          </RequireAdminPermission>
-        </Route>
-
-        <Route path="/admin/create-staff">
+        <Route path="/hr/create-staff">
           <RequireRole allow={["owner", "admin", "hr"]}>
             <CreateStaffAccount />
           </RequireRole>
+        </Route>
+
+        <Route path="/hr/settings">
+          <RequireAdminPermission permission="settings.manage">
+            <Settings area="staff" />
+          </RequireAdminPermission>
+        </Route>
+
+        <Route path="/hr">
+          <Redirect to="/hr/recruitment" />
+        </Route>
+
+        {/* ===== Legacy HR links ===== */}
+        <Route path="/admin/recruitment-applications">
+          <Redirect to="/hr/recruitment" />
+        </Route>
+
+        <Route path="/admin/employees">
+          <Redirect to="/hr/employees" />
+        </Route>
+
+        <Route path="/admin/create-staff">
+          <Redirect to="/hr/create-staff" />
+        </Route>
+
+        {/* ===== Admin: Settings ===== */}
+        <Route path="/admin/settings">
+          <RequireAdminPermission permission="settings.manage">
+            <Settings area="investment" />
+          </RequireAdminPermission>
         </Route>
 
         {/* ===== Admin: Audit Log ===== */}
@@ -307,7 +394,7 @@ function Router() {
           </SiteLayout>
         </Route>
       </Switch>
-    </>
+    </PlatformBoundary>
   );
 }
 

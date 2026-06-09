@@ -75,6 +75,7 @@ type SettingsDatabaseTabProps = {
   overviewCards: DatabaseOverviewCard[];
   r2Status: DatabaseUiStatus;
   r2StatusLabel: string;
+  showEmployeeDirectorySync?: boolean;
   technicalDetails: DatabaseDetailRow[];
   workerStatus: DatabaseUiStatus;
   workerStatusLabel: string;
@@ -99,6 +100,7 @@ export default function SettingsDatabaseTab({
   overviewCards,
   r2Status,
   r2StatusLabel,
+  showEmployeeDirectorySync = true,
   technicalDetails,
   workerStatus,
   workerStatusLabel,
@@ -445,6 +447,7 @@ export default function SettingsDatabaseTab({
         </CardContent>
       </Card>
 
+      {showEmployeeDirectorySync ? (
       <Card className="overflow-hidden rounded-[26px] border border-slate-200/80 bg-white shadow-[0_24px_54px_-40px_rgba(15,23,42,0.28)]">
         <CardHeader className="border-b border-slate-100/80 pb-6">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -540,6 +543,7 @@ export default function SettingsDatabaseTab({
           </div>
         </CardContent>
       </Card>
+      ) : null}
 
       <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
         <Card className="overflow-hidden rounded-[26px] border border-slate-200/80 bg-white shadow-[0_24px_54px_-40px_rgba(15,23,42,0.28)]">

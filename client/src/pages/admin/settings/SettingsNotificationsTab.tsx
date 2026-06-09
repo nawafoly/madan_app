@@ -23,6 +23,7 @@ type NotificationSettings = {
 type NotificationFieldKey = keyof NotificationSettings;
 
 type NotificationSectionConfig = {
+  
   key: "delivery_channels" | "notification_triggers";
   icon: LucideIcon;
   eyebrow: string;

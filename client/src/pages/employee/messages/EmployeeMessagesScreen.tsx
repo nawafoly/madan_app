@@ -661,8 +661,8 @@ export default function EmployeeMessagesScreen() {
         relatedId: messageRef.id,
         relatedTo: "employee_message",
         relatedPath: activeHrConversation.employeeId
-          ? `/admin/employees?employeeId=${encodeURIComponent(activeHrConversation.employeeId)}&panel=messages&messageId=${messageRef.id}`
-          : `/admin/employees?panel=messages&messageId=${messageRef.id}`,
+          ? `/hr/employees?employeeId=${encodeURIComponent(activeHrConversation.employeeId)}&panel=messages&messageId=${messageRef.id}`
+          : `/hr/employees?panel=messages&messageId=${messageRef.id}`,
       }).catch(error => {
         console.error("employee_reply_notification_failed", error);
       });

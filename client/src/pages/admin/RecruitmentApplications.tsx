@@ -199,7 +199,7 @@ export default function RecruitmentApplicationsPage() {
   );
 
   return (
-    <DashboardLayout>
+    <DashboardLayout area="hr">
       <div dir="rtl" className="min-h-screen space-y-8 bg-[#F8F9FA] px-1 py-2">
         <Card className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm">
           <CardContent className="px-6 py-7 sm:px-8 sm:py-9">
