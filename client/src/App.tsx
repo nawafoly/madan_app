@@ -44,6 +44,7 @@ import EmployeeProfilePage from "@/pages/employee/Profile";
 import EmployeeFilesPage from "@/pages/employee/Files";
 import EmployeeMessagesPage from "@/pages/employee/Messages";
 import CreateStaffAccount from "@/pages/admin/CreateStaffAccount";
+import StaffPortalPage from "@/pages/hr/StaffPortal";
 
 // ✅ Client pages
 import ClientDashboard from "@/pages/client/MyInvestments";
@@ -276,7 +277,7 @@ function Router() {
         </Route>
 
         <Route path="/hr">
-          <Redirect to="/hr/recruitment" />
+          <StaffPortalPage />
         </Route>
 
         {/* ===== Legacy HR links ===== */}
