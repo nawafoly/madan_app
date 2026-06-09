@@ -127,6 +127,17 @@ export default function EmployeeMessagesScreen() {
   const handledMessageSearchRef = useRef("");
 
   const searchParams = useMemo(() => new URLSearchParams(search), [search]);
+  const requestedWorkspaceSection = useMemo(() => {
+    const requestedTab = String(searchParams.get("tab") || "").trim().toLowerCase();
+    if (
+      requestedTab === "hr" ||
+      requestedTab === "internal" ||
+      requestedTab === "weekly_report"
+    ) {
+      return requestedTab as ConversationSectionKey;
+    }
+    return null;
+  }, [searchParams]);
   const requestedMessageId = useMemo(
     () => String(searchParams.get("messageId") || "").trim(),
     [searchParams]
@@ -264,6 +275,11 @@ export default function EmployeeMessagesScreen() {
   );
 
   useEffect(() => {
+    if (requestedWorkspaceSection) {
+      setActiveSection(requestedWorkspaceSection);
+      return;
+    }
+
     if (
       requestedConversationId &&
       search &&
@@ -290,7 +306,13 @@ export default function EmployeeMessagesScreen() {
     if (!requestedMessageId) {
       handledMessageSearchRef.current = "";
     }
-  }, [conversations, requestedConversationId, requestedMessageId, search]);
+  }, [
+    conversations,
+    requestedConversationId,
+    requestedMessageId,
+    requestedWorkspaceSection,
+    search,
+  ]);
 
   const activeHrConversation = useMemo(
     () =>
