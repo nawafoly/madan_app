@@ -2,6 +2,7 @@ export type AppSurface = "investment" | "staff";
 
 const STAFF_HOSTS = new Set(["staff.maedin.com"]);
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
+const SHARED_DEPLOYMENT_HOSTS = new Set(["madan-app.vercel.app"]);
 
 function getRuntimeHostname() {
   if (typeof window === "undefined") return "";
@@ -21,6 +22,10 @@ export function isLocalHost(hostname = getRuntimeHostname()) {
 
 export function isStaffHost(hostname = getRuntimeHostname()) {
   return STAFF_HOSTS.has(normalizeHostname(hostname));
+}
+
+export function isSharedDeploymentHost(hostname = getRuntimeHostname()) {
+  return SHARED_DEPLOYMENT_HOSTS.has(normalizeHostname(hostname));
 }
 
 export function normalizePathname(pathname: string) {
@@ -94,7 +99,12 @@ export function getCurrentAppSurface(
   hostname = getRuntimeHostname()
 ): AppSurface {
   if (isStaffHost(hostname)) return "staff";
-  if (isLocalHost(hostname) && isStaffPlatformPath(pathname)) return "staff";
+  if (
+    (isLocalHost(hostname) || isSharedDeploymentHost(hostname)) &&
+    isStaffPlatformPath(pathname)
+  ) {
+    return "staff";
+  }
   return "investment";
 }
 
@@ -103,7 +113,7 @@ export function buildStaffPlatformTarget(pathWithSearch: string) {
 
   if (typeof window === "undefined") return normalizedPath;
 
-  if (isStaffHost() || isLocalHost()) {
+  if (isStaffHost() || isLocalHost() || isSharedDeploymentHost()) {
     return normalizedPath;
   }
 
