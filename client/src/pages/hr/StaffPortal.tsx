@@ -1,13 +1,14 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   ArrowLeft,
   BriefcaseBusiness,
   CalendarDays,
+  ClipboardList,
   Eye,
   EyeOff,
-  FileText,
   Globe,
   LockKeyhole,
+  LogOut,
   Mail,
   Settings,
   ShieldCheck,
@@ -18,9 +19,11 @@ import { Link } from "wouter";
 import {
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
+  signOut,
 } from "firebase/auth";
+import { collection, onSnapshot, query, where } from "firebase/firestore";
 
-import { auth } from "@/_core/firebase";
+import { auth, db } from "@/_core/firebase";
 import {
   getHomePathForUser,
   hasPermission,
@@ -33,6 +36,8 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { languageDir, tr } from "@/lib/i18n";
+import { WEEKLY_REPORT_MANAGER_NOTES_PERMISSION } from "@/lib/weeklyReportConfig";
+import { EMPLOYEE_NOTIFICATIONS_COLLECTION } from "@shared/employee";
 
 function PortalAlert({
   tone,
@@ -57,6 +62,55 @@ function PortalAlert({
 
 function normalizeEmail(value: string) {
   return value.trim().toLowerCase();
+}
+
+type PortalNotificationCounts = {
+  leave: number;
+  reports: number;
+  messages: number;
+  files: number;
+};
+
+const EMPTY_PORTAL_NOTIFICATION_COUNTS: PortalNotificationCounts = {
+  leave: 0,
+  reports: 0,
+  messages: 0,
+  files: 0,
+};
+
+function createEmptyPortalNotificationCounts(): PortalNotificationCounts {
+  return { ...EMPTY_PORTAL_NOTIFICATION_COUNTS };
+}
+
+function resolvePortalNotificationBucket(data: Record<string, unknown>) {
+  const relatedTo = String(data.relatedTo ?? "").trim().toLowerCase();
+  const type = String(data.type ?? "").trim().toLowerCase();
+
+  if (relatedTo === "weekly_report") return "reports";
+  if (relatedTo === "employee_message" || type === "message") return "messages";
+  if (relatedTo === "employee_file" || type === "file") return "files";
+  if (relatedTo.includes("leave") || type.includes("leave")) return "leave";
+  return null;
+}
+
+function formatPortalBadgeCount(count: number) {
+  if (count > 99) return "99+";
+  return String(count);
+}
+
+function getAccountInitials(value: string) {
+  const parts = value
+    .replace(/@.*/, "")
+    .split(/\s+/)
+    .map(part => part.trim())
+    .filter(Boolean);
+
+  const initials = parts
+    .slice(0, 2)
+    .map(part => part[0])
+    .join("");
+
+  return initials || "HR";
 }
 
 function friendlyAuthError(code: string | undefined, language: "ar" | "en") {
@@ -91,6 +145,9 @@ export default function StaffPortalPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+  const [weeklyReportBadgeCount, setWeeklyReportBadgeCount] = useState(0);
+  const [portalNotificationCounts, setPortalNotificationCounts] =
+    useState<PortalNotificationCounts>(EMPTY_PORTAL_NOTIFICATION_COUNTS);
 
   const firebaseConfigured = useMemo(() => {
     const projectId = (import.meta.env.VITE_FB_PROJECT_ID ?? "").trim();
@@ -100,6 +157,69 @@ export default function StaffPortalPage() {
 
   const homePath = user ? getHomePathForUser(user, "staff") : "/login";
   const hasInternalAccess = user && homePath !== "/login";
+  const canWriteWeeklyReportNotes =
+    !!user && hasPermission(user, WEEKLY_REPORT_MANAGER_NOTES_PERMISSION);
+
+  useEffect(() => {
+    if (!user?.uid) {
+      setPortalNotificationCounts(createEmptyPortalNotificationCounts());
+      setWeeklyReportBadgeCount(0);
+      return;
+    }
+
+    const unsubscribe = onSnapshot(
+      query(
+        collection(db, EMPLOYEE_NOTIFICATIONS_COLLECTION),
+        where("targetUid", "==", user.uid)
+      ),
+      snapshot => {
+        const counts = createEmptyPortalNotificationCounts();
+        snapshot.docs.forEach(docSnapshot => {
+          const data = docSnapshot.data() as Record<string, unknown>;
+          if (data.isRead === true) return;
+
+          const bucket = resolvePortalNotificationBucket(data);
+          if (bucket) counts[bucket] += 1;
+        });
+
+        setPortalNotificationCounts(counts);
+        if (!canWriteWeeklyReportNotes) {
+          setWeeklyReportBadgeCount(counts.reports);
+        }
+      },
+      error => {
+        console.error("staff_portal_notifications_badge_failed", error);
+        setPortalNotificationCounts(createEmptyPortalNotificationCounts());
+        if (!canWriteWeeklyReportNotes) {
+          setWeeklyReportBadgeCount(0);
+        }
+      }
+    );
+
+    return () => unsubscribe();
+  }, [canWriteWeeklyReportNotes, user?.uid]);
+
+  useEffect(() => {
+    if (!user?.uid || !canWriteWeeklyReportNotes) return;
+
+    const unsubscribe = onSnapshot(
+      query(collection(db, "weekly_reports"), where("status", "==", "sent")),
+      snapshot => {
+        setWeeklyReportBadgeCount(
+          snapshot.docs.filter(docSnapshot => {
+            const data = docSnapshot.data() as Record<string, unknown>;
+            return !String(data.managerNotes ?? "").trim();
+          }).length
+        );
+      },
+      error => {
+        console.error("weekly_report_pending_badge_failed", error);
+        setWeeklyReportBadgeCount(0);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [canWriteWeeklyReportNotes, user?.uid]);
 
   const portalLinks = useMemo(
     () =>
@@ -133,6 +253,23 @@ export default function StaffPortalPage() {
               hasPermission(user, "employees.manage")),
         },
         {
+          title: tr(language, "التقارير الأسبوعية", "Weekly Reports"),
+          description: canWriteWeeklyReportNotes
+            ? tr(
+                language,
+                "مراجعة تقارير الموظفين وكتابة ملاحظات المدير.",
+                "Review staff reports and add manager notes."
+              )
+            : tr(
+                language,
+                "إرسال تقرير العمل ومراجعة ملاحظات المدير.",
+                "Submit work reports and review manager notes."
+          ),
+          href: "/hr/weekly-reports",
+          icon: ClipboardList,
+          enabled: !!user,
+        },
+        {
           title: tr(language, "إعدادات الإدارة", "Administration Settings"),
           description: tr(
             language,
@@ -155,7 +292,132 @@ export default function StaffPortalPage() {
           enabled: !!user,
         },
       ].filter(item => item.enabled),
-    [language, user]
+    [canWriteWeeklyReportNotes, language, user]
+  );
+
+  const accountDisplayName =
+    user?.displayName ||
+    user?.firebaseUser?.displayName ||
+    auth.currentUser?.displayName ||
+    user?.email ||
+    tr(language, "حساب الموارد البشرية", "HR Account");
+  const accountEmail =
+    user?.email || user?.firebaseUser?.email || auth.currentUser?.email || "";
+  const accountPhotoUrl =
+    user?.firebaseUser?.photoURL || auth.currentUser?.photoURL || "";
+  const accountRoleLabel = useMemo(() => {
+    if (!user?.role) {
+      return tr(language, "بوابة الموظفين", "Staff Portal");
+    }
+
+    const labels: Record<string, string> = {
+      owner: tr(language, "مالك النظام", "System Owner"),
+      admin: tr(language, "إدارة", "Admin"),
+      accountant: tr(language, "محاسبة", "Accounting"),
+      hr: tr(language, "موارد بشرية", "Human Resources"),
+      staff: tr(language, "موظف", "Employee"),
+      client: tr(language, "حساب موقع", "Website Account"),
+      guest: tr(language, "ضيف", "Guest"),
+    };
+
+    return labels[user.role] || tr(language, "حساب داخلي", "Internal Account");
+  }, [language, user?.role]);
+  const accountInitials = useMemo(
+    () => getAccountInitials(accountDisplayName),
+    [accountDisplayName]
+  );
+
+  const portalFeatureCards = useMemo(
+    () => [
+      {
+        icon: CalendarDays,
+        label: tr(language, "الدوام والإجازات", "Attendance And Leave"),
+        helper:
+          portalNotificationCounts.leave > 0
+            ? tr(
+                language,
+                `${portalNotificationCounts.leave} تنبيه جديد على الإجازات`,
+                `${portalNotificationCounts.leave} new leave alert${
+                  portalNotificationCounts.leave > 1 ? "s" : ""
+                }`
+              )
+            : tr(
+                language,
+                "متابعة الطلبات والحضور",
+                "Track requests and attendance"
+              ),
+        count: portalNotificationCounts.leave,
+      },
+      {
+        icon: ClipboardList,
+        label: tr(language, "التقارير الأسبوعية", "Weekly Reports"),
+        helper:
+          weeklyReportBadgeCount > 0
+            ? canWriteWeeklyReportNotes
+              ? tr(
+                  language,
+                  `${weeklyReportBadgeCount} تقرير يحتاج ملاحظة`,
+                  `${weeklyReportBadgeCount} report${
+                    weeklyReportBadgeCount > 1 ? "s" : ""
+                  } need manager notes`
+                )
+              : tr(
+                  language,
+                  `${weeklyReportBadgeCount} ملاحظة جديدة من المدير`,
+                  `${weeklyReportBadgeCount} new manager note${
+                    weeklyReportBadgeCount > 1 ? "s" : ""
+                  }`
+                )
+            : canWriteWeeklyReportNotes
+              ? tr(
+                  language,
+                  "لا توجد تقارير جديدة تحتاج ملاحظة",
+                  "No reports need notes now"
+                )
+              : tr(
+                  language,
+                  "متابعة تقاريرك وملاحظات المدير",
+                  "Track your reports and manager notes"
+                ),
+        count: weeklyReportBadgeCount,
+      },
+      {
+        icon: Mail,
+        label: tr(language, "الرسائل الداخلية", "Internal Messages"),
+        helper:
+          portalNotificationCounts.messages > 0
+            ? tr(
+                language,
+                `${portalNotificationCounts.messages} رسالة جديدة`,
+                `${portalNotificationCounts.messages} new message${
+                  portalNotificationCounts.messages > 1 ? "s" : ""
+                }`
+              )
+            : tr(
+                language,
+                "تواصل مباشر مع الإدارة",
+                "Direct communication with management"
+              ),
+        count: portalNotificationCounts.messages,
+      },
+      {
+        icon: ShieldCheck,
+        label: tr(language, "صلاحيات مؤسسية", "Role-Based Permissions"),
+        helper: tr(
+          language,
+          "وصول حسب الدور والمسؤولية",
+          "Access by role and responsibility"
+        ),
+        count: 0,
+      },
+    ],
+    [
+      canWriteWeeklyReportNotes,
+      language,
+      portalNotificationCounts.leave,
+      portalNotificationCounts.messages,
+      weeklyReportBadgeCount,
+    ]
   );
 
   const handleSubmit = async () => {
@@ -223,6 +485,29 @@ export default function StaffPortalPage() {
     }
   };
 
+  const handleSignOut = async () => {
+    if (busy) return;
+
+    setBusy(true);
+    setError(null);
+    setInfo(null);
+
+    try {
+      await signOut(auth);
+    } catch (submitError) {
+      console.error("staff_portal_sign_out_failed", submitError);
+      setError(
+        tr(
+          language,
+          "تعذر تسجيل الخروج الآن. حاول مرة أخرى.",
+          "Could not sign out now. Try again."
+        )
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div
       dir={languageDir(language)}
@@ -270,54 +555,44 @@ export default function StaffPortalPage() {
                 <Badge className="rounded-full border border-[#F2B705]/30 bg-[#F2B705]/10 px-4 py-1.5 text-[#F2B705] shadow-none hover:bg-[#F2B705]/10">
                   {tr(language, "نظام داخلي مستقل", "Independent Internal System")}
                 </Badge>
-                <h1 className="text-4xl font-semibold leading-tight tracking-tight sm:text-5xl">
+                <h1 className="text-3xl font-semibold leading-tight tracking-tight sm:text-4xl">
                   {tr(
                     language,
-                    "دخول الموظفين وإدارة الموارد البشرية من مكان واحد.",
-                    "Staff access and HR management in one place."
+                    "بوابة الموارد البشرية للموظفين.",
+                    "Human Resources Staff Portal."
                   )}
                 </h1>
-                <p className="max-w-xl text-sm leading-8 text-white/62 sm:text-base">
+                <p className="max-w-lg text-sm leading-7 text-white/62">
                   {tr(
                     language,
-                    "بوابة مخصصة للموظفين والإدارة الداخلية: الدوام، الإجازات، الرواتب، الملفات، الرسائل، طلبات التوظيف، وصلاحيات النظام.",
-                    "A dedicated portal for staff and internal administration: attendance, leave, payroll, files, messages, recruitment, and system permissions."
+                    "مساحة داخلية لمتابعة العمل اليومي والتنبيهات المهمة.",
+                    "An internal space for daily work and important alerts."
                   )}
                 </p>
               </div>
 
               <div className="grid gap-3 sm:grid-cols-2">
-                {[
-                  {
-                    icon: CalendarDays,
-                    label: tr(language, "الدوام والإجازات", "Attendance And Leave"),
-                    helper: tr(language, "متابعة الطلبات والحضور", "Track requests and attendance"),
-                  },
-                  {
-                    icon: FileText,
-                    label: tr(language, "الملفات والرواتب", "Files And Payroll"),
-                    helper: tr(language, "مستندات وسجلات الموظف", "Employee documents and records"),
-                  },
-                  {
-                    icon: Mail,
-                    label: tr(language, "الرسائل الداخلية", "Internal Messages"),
-                    helper: tr(language, "تواصل مباشر مع الإدارة", "Direct communication with management"),
-                  },
-                  {
-                    icon: ShieldCheck,
-                    label: tr(language, "صلاحيات مؤسسية", "Role-Based Permissions"),
-                    helper: tr(language, "وصول حسب الدور والمسؤولية", "Access by role and responsibility"),
-                  },
-                ].map(item => {
+                {portalFeatureCards.map(item => {
                   const Icon = item.icon;
+                  const count = Number(item.count || 0);
                   return (
                     <div
                       key={item.label}
-                      className="rounded-3xl border border-white/10 bg-white/[0.04] p-4"
+                      className={cn(
+                        "rounded-3xl border p-4 transition",
+                        count > 0
+                          ? "border-[#F2B705]/35 bg-[#F2B705]/10"
+                          : "border-white/10 bg-white/[0.04]"
+                      )}
                     >
                       <div className="flex items-start gap-3">
-                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white/[0.06] text-[#F2B705]">
+                        <span className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white/[0.06] text-[#F2B705]">
                           <Icon className="h-5 w-5" />
+                          {count > 0 ? (
+                            <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-[11px] font-bold leading-none text-white shadow-lg shadow-red-600/25 ring-2 ring-slate-950/80">
+                              {formatPortalBadgeCount(count)}
+                            </span>
+                          ) : null}
                         </span>
                         <span>
                           <span className="block text-sm font-semibold">
@@ -334,12 +609,54 @@ export default function StaffPortalPage() {
               </div>
             </div>
 
-            <div className="mt-8 rounded-3xl border border-white/10 bg-white/[0.04] p-4 text-sm leading-7 text-white/58">
-              {tr(
-                language,
-                "هذه البوابة منفصلة عن منصة الاستثمار. حسابات الموظفين والإدارة الداخلية تبدأ من هنا وتبقى داخل مسارات منصة الموارد البشرية.",
-                "This portal is separate from the investment platform. Staff and internal admin accounts start here and stay within HR platform routes."
-              )}
+            <div className="mt-8 rounded-[28px] border border-white/10 bg-white/[0.055] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex min-w-0 items-center gap-4">
+                  <div className="relative flex h-16 w-16 shrink-0 items-center justify-center">
+                    <span className="motion-safe:animate-[spin_18s_linear_infinite] absolute inset-0 rounded-full border border-[#F2B705]/35 border-t-white/75" />
+                    <span className="relative flex h-14 w-14 items-center justify-center overflow-hidden rounded-full bg-slate-900 text-base font-bold text-[#F2B705] shadow-lg shadow-black/20 ring-2 ring-white/15">
+                    {accountPhotoUrl ? (
+                      <img
+                        src={accountPhotoUrl}
+                        alt={tr(language, "صورة الحساب", "Account photo")}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      accountInitials
+                    )}
+                  </span>
+                </div>
+                <div className="min-w-0">
+                  <div className="mb-2 flex flex-wrap items-center gap-2">
+                    <span className="rounded-full border border-[#F2B705]/25 bg-[#F2B705]/10 px-3 py-1 text-[11px] font-semibold text-[#F2B705]">
+                      {accountRoleLabel}
+                    </span>
+                    <span className="text-[11px] text-white/40">
+                      {tr(language, "الحساب الحالي", "Current Account")}
+                    </span>
+                  </div>
+                  <div className="truncate text-base font-semibold text-white">
+                    {accountDisplayName}
+                  </div>
+                  <div className="mt-1 truncate text-xs text-white/48" dir="ltr">
+                    {accountEmail || "MAEDIN Staff Portal"}
+                  </div>
+                </div>
+              </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void handleSignOut()}
+                  disabled={busy}
+                  className="h-10 shrink-0 rounded-full border-white/10 bg-white/[0.06] px-4 text-white/78 shadow-none hover:bg-white/[0.1] hover:text-white disabled:opacity-60"
+                >
+                  <LogOut className="h-4 w-4" />
+                  {busy
+                    ? tr(language, "جاري الخروج", "Signing Out")
+                    : tr(language, "تسجيل خروج", "Sign Out")}
+                </Button>
+              </div>
             </div>
           </section>
 
@@ -366,6 +683,8 @@ export default function StaffPortalPage() {
                       )}
                     </p>
                   </div>
+
+                  {error ? <PortalAlert tone="error">{error}</PortalAlert> : null}
 
                   <div className="grid gap-3">
                     {portalLinks.map(item => {

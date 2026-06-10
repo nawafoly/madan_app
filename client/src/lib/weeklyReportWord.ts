@@ -1,3 +1,5 @@
+import { WEEKLY_REPORT_DIRECT_MANAGER_NAME } from "@/lib/weeklyReportConfig";
+
 export type WeeklyReportTask = {
   index: number;
   title: string;
@@ -72,7 +74,15 @@ export async function downloadWeeklyReportWord(report: WeeklyReportWordData) {
     });
   const tasks = report.tasks.length
     ? report.tasks
-    : [{ index: 1, title: "", description: "", managerName: "", progress: "" }];
+    : [
+        {
+          index: 1,
+          title: "",
+          description: "",
+          managerName: WEEKLY_REPORT_DIRECT_MANAGER_NAME,
+          progress: "",
+        },
+      ];
 
   const doc = new Document({
     sections: [
@@ -127,7 +137,7 @@ export async function downloadWeeklyReportWord(report: WeeklyReportWordData) {
                     cell(String(taskIndex + 1), { width: 8 }),
                     cell(text(task.title), { width: 22 }),
                     cell(text(task.description), { width: 36 }),
-                    cell(text(task.managerName), { width: 22 }),
+                    cell(WEEKLY_REPORT_DIRECT_MANAGER_NAME, { width: 22 }),
                     cell(text(task.progress), { width: 12 }),
                   ],
                 })

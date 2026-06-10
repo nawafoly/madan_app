@@ -67,6 +67,9 @@ export function resolveNotificationTargetPath(
   if (explicitPath) return explicitPath;
 
   const normalizedType = normalizeNotificationType(notification?.type);
+  if (pickText(notification?.relatedTo) === "weekly_report") {
+    return "/hr/weekly-reports";
+  }
   if (normalizedType === "message") return "/hr/messages";
   if (normalizedType === "file") return "/hr/files";
   return "/hr/profile";

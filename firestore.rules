@@ -275,6 +275,14 @@ service cloud.firestore {
         );
     }
 
+    function hasAdminUserExplicitPermission(permission) {
+      return signedIn()
+        && adminUserDocExists()
+        && adminUserIsActive()
+        && !(permission in adminUserDenyPermissions())
+        && (permission in adminUserAllowPermissions());
+    }
+
     function isBootstrapOwnerEmail() {
       return signedIn()
         && (
@@ -670,6 +678,11 @@ service cloud.firestore {
         : "";
     }
 
+    function canWriteWeeklyReportManagerNotes() {
+      return hasEffectivePermission("weekly_reports.manager_notes")
+        || hasAdminUserExplicitPermission("weekly_reports.manager_notes");
+    }
+
     function isValidWeeklyReportWrite() {
       return signedIn()
         && request.resource.data.createdByUid is string
@@ -707,6 +720,26 @@ service cloud.firestore {
           "status",
           "updatedAt",
           "sentAt"
+        ]);
+    }
+
+    function isValidWeeklyReportManagerNotesUpdate() {
+      let keys = request.resource.data.diff(resource.data).affectedKeys();
+      return signedIn()
+        && canWriteWeeklyReportManagerNotes()
+        && weeklyReportStatusValue(resource.data) == "sent"
+        && weeklyReportStatusValue(request.resource.data) == weeklyReportStatusValue(resource.data)
+        && weeklyReportOwnerUid(request.resource.data) == weeklyReportOwnerUid(resource.data)
+        && weeklyReportReceiverUid(request.resource.data) == weeklyReportReceiverUid(resource.data)
+        && request.resource.data.managerNotes is string
+        && (!keys.hasAny(["managerNotesUpdatedByUid"]) || request.resource.data.managerNotesUpdatedByUid == request.auth.uid)
+        && keys.hasOnly([
+          "managerNotes",
+          "managerNotesUpdatedAt",
+          "managerNotesUpdatedByUid",
+          "managerNotesUpdatedByEmail",
+          "managerNotesUpdatedByName",
+          "updatedAt"
         ]);
     }
 
@@ -924,6 +957,30 @@ service cloud.firestore {
         && employeeMessageHasParticipant(messageData, request.auth.uid)
         && messageData.fromUserId == request.auth.uid
         && notificationOwnerUid(request.resource.data) == messageData.toUserId;
+    }
+
+    function isValidWeeklyReportNotificationCreate() {
+      let reportPath = /databases/$(database)/documents/weekly_reports/$(request.resource.data.relatedId);
+      let reportData = get(reportPath).data;
+      return signedIn()
+        && request.resource.data.relatedId is string
+        && request.resource.data.relatedId.size() > 0
+        && request.resource.data.relatedTo is string
+        && request.resource.data.relatedTo == "weekly_report"
+        && request.resource.data.type is string
+        && lower(request.resource.data.type) == "message"
+        && exists(reportPath)
+        && weeklyReportStatusValue(reportData) == "sent"
+        && (
+          (
+            weeklyReportOwnerUid(reportData) == request.auth.uid
+            && notificationOwnerUid(request.resource.data) == weeklyReportReceiverUid(reportData)
+          )
+          || (
+            canWriteWeeklyReportManagerNotes()
+            && notificationOwnerUid(request.resource.data) == weeklyReportOwnerUid(reportData)
+          )
+        );
     }
 
     function isValidNotificationReadUpdate() {
@@ -1332,10 +1389,15 @@ service cloud.firestore {
             weeklyReportReceiverUid(resource.data) == request.auth.uid
             && weeklyReportStatusValue(resource.data) == "sent"
           )
+          || (
+            canWriteWeeklyReportManagerNotes()
+            && weeklyReportStatusValue(resource.data) == "sent"
+          )
         );
 
       allow create: if isValidWeeklyReportWrite();
-      allow update: if isValidWeeklyReportUpdate();
+      allow update: if isValidWeeklyReportUpdate()
+        || isValidWeeklyReportManagerNotesUpdate();
       allow delete: if false;
     }
 
@@ -1405,7 +1467,8 @@ service cloud.firestore {
         || canManageUsersAdmin()
         || hasAdminPermission("settings.manage")
         || canManageEmployeesAdmin()
-        || isValidEmployeeMessageNotificationCreate());
+        || isValidEmployeeMessageNotificationCreate()
+        || isValidWeeklyReportNotificationCreate());
       allow update: if isValidNotificationReadUpdate()
         || canManageMessagesAdmin()
         || canManageInvestmentsAdmin()

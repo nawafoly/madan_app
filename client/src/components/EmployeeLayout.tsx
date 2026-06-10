@@ -10,7 +10,7 @@ import {
   ShieldCheck,
   UserRound,
 } from "lucide-react";
-import { Link, useLocation, useSearch } from "wouter";
+import { Link, useLocation } from "wouter";
 
 import { NotificationBell } from "@/components/NotificationBell";
 import { HrBrandMark } from "@/components/HrBrandMark";
@@ -35,12 +35,10 @@ export default function EmployeeLayout({
   const { language, toggleLanguage } = useLanguage();
   const { user, logout } = useAuth();
   const [location, setLocation] = useLocation();
-  const search = useSearch();
   const [isNavFloating, setIsNavFloating] = useState(false);
   const layoutDir: "rtl" | "ltr" = language === "ar" ? "rtl" : "ltr";
   const languageToggleLabel = language === "ar" ? "English" : "Arabic";
   const currentPath = location.split("?")[0];
-  const currentTab = new URLSearchParams(search).get("tab");
 
   const handleLogout = async () => {
     await logout();
@@ -74,17 +72,13 @@ export default function EmployeeLayout({
       label: tr(language, "الرسائل", "Messages"),
       href: "/hr/messages?tab=hr",
       icon: Mail,
-      active:
-        currentPath === "/hr/messages" &&
-        currentTab !== "weekly_report",
+      active: currentPath === "/hr/messages",
     },
     {
       label: tr(language, "تقرير العمل الأسبوعي", "Weekly Report"),
-      href: "/hr/messages?tab=weekly_report",
+      href: "/hr/weekly-reports",
       icon: ClipboardList,
-      active:
-        currentPath === "/hr/messages" &&
-        currentTab === "weekly_report",
+      active: currentPath === "/hr/weekly-reports",
     },
   ];
   const displayTitle =

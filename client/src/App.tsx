@@ -43,6 +43,7 @@ import Vip from "./pages/admin/Vip";
 import EmployeeProfilePage from "@/pages/employee/Profile";
 import EmployeeFilesPage from "@/pages/employee/Files";
 import EmployeeMessagesPage from "@/pages/employee/Messages";
+import EmployeeWeeklyReportsPage from "@/pages/employee/WeeklyReports";
 import CreateStaffAccount from "@/pages/admin/CreateStaffAccount";
 import StaffPortalPage from "@/pages/hr/StaffPortal";
 
@@ -334,6 +335,12 @@ function Router() {
           </RequireEmployeeProfileAccess>
         </Route>
 
+        <Route path="/hr/weekly-reports">
+          <RequireEmployeeProfileAccess>
+            <EmployeeWeeklyReportsPage />
+          </RequireEmployeeProfileAccess>
+        </Route>
+
         {/* ===== Legacy employee self-service links ===== */}
         <Route path="/employee/profile">
           <Redirect to="/hr/profile" />
@@ -345,6 +352,10 @@ function Router() {
 
         <Route path="/employee/messages">
           <Redirect to="/hr/messages" />
+        </Route>
+
+        <Route path="/employee/weekly-reports">
+          <Redirect to="/hr/weekly-reports" />
         </Route>
 
         <Route path="/employee">
@@ -361,6 +372,10 @@ function Router() {
 
         <Route path="/staff/messages">
           <Redirect to="/hr/messages" />
+        </Route>
+
+        <Route path="/staff/weekly-reports">
+          <Redirect to="/hr/weekly-reports" />
         </Route>
 
         <Route path="/staff">

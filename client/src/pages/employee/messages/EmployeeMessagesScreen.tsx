@@ -12,14 +12,13 @@ import {
 } from "firebase/firestore";
 import {
   CheckCircle2,
-  ClipboardList,
   Clock3,
   Mail,
   MessageSquare,
   Users,
 } from "lucide-react";
 import { toast } from "sonner";
-import { useSearch } from "wouter";
+import { useLocation, useSearch } from "wouter";
 
 import { db } from "@/_core/firebase";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -62,9 +61,8 @@ import {
   EMPLOYEE_MESSAGES_COLLECTION,
   type EmployeeMessageDoc,
 } from "@shared/employee";
-import { WeeklyReportTab } from "@/pages/employee/messages/WeeklyReportTab";
 
-type ConversationSectionKey = "hr" | "internal" | "weekly_report";
+type ConversationSectionKey = "hr" | "internal";
 
 function mergeMessageCollections(collections: EmployeeMessageRecord[][]) {
   const byId = new Map<string, EmployeeMessageRecord>();
@@ -91,6 +89,7 @@ function buildRecipientFromConversation(
 
 export default function EmployeeMessagesScreen() {
   const { user } = useAuth();
+  const [, setLocation] = useLocation();
   const search = useSearch();
 
   const [legacyMessages, setLegacyMessages] = useState<EmployeeMessageRecord[]>(
@@ -129,15 +128,18 @@ export default function EmployeeMessagesScreen() {
   const searchParams = useMemo(() => new URLSearchParams(search), [search]);
   const requestedWorkspaceSection = useMemo(() => {
     const requestedTab = String(searchParams.get("tab") || "").trim().toLowerCase();
-    if (
-      requestedTab === "hr" ||
-      requestedTab === "internal" ||
-      requestedTab === "weekly_report"
-    ) {
+    if (requestedTab === "hr" || requestedTab === "internal") {
       return requestedTab as ConversationSectionKey;
     }
     return null;
   }, [searchParams]);
+  const requestedWeeklyReport = useMemo(
+    () =>
+      String(searchParams.get("tab") || "")
+        .trim()
+        .toLowerCase() === "weekly_report",
+    [searchParams]
+  );
   const requestedMessageId = useMemo(
     () => String(searchParams.get("messageId") || "").trim(),
     [searchParams]
@@ -273,6 +275,12 @@ export default function EmployeeMessagesScreen() {
         ?.conversationId || null,
     [messages, requestedMessageId]
   );
+
+  useEffect(() => {
+    if (requestedWeeklyReport) {
+      setLocation("/hr/weekly-reports");
+    }
+  }, [requestedWeeklyReport, setLocation]);
 
   useEffect(() => {
     if (requestedWorkspaceSection) {
@@ -827,17 +835,10 @@ export default function EmployeeMessagesScreen() {
         <Card className="rounded-[28px] border-slate-200/80 bg-white/95 shadow-[0_28px_80px_-52px_rgba(15,23,42,0.28)]">
           <CardHeader className="space-y-4">
             <CardTitle className="text-xl font-semibold text-slate-950">
-              {activeSection === "weekly_report" ? (
-                <span className="flex items-center gap-2">
-                  <ClipboardList className="h-4 w-4" />
-                  تقرير العمل الأسبوعي
-                </span>
-              ) : (
-                <span className="flex items-center gap-2">
-                  <MessageSquare className="h-4 w-4" />
-                  رسائل HR والمحادثات الداخلية
-                </span>
-              )}
+              <span className="flex items-center gap-2">
+                <MessageSquare className="h-4 w-4" />
+                رسائل HR والمحادثات الداخلية
+              </span>
             </CardTitle>
           </CardHeader>
 
@@ -850,39 +851,37 @@ export default function EmployeeMessagesScreen() {
               dir="rtl"
               className="space-y-6"
             >
-              {activeSection !== "weekly_report" ? (
-                <TabsList className="grid h-auto w-full grid-cols-1 rounded-[22px] bg-slate-100 p-1 md:grid-cols-2">
-                  <TabsTrigger
-                    value="hr"
-                    className="rounded-[18px] px-4 py-3 text-sm data-[state=active]:bg-white data-[state=active]:shadow-sm"
-                  >
-                    <span className="flex items-center gap-2">
-                      <Mail className="h-4 w-4" />
-                      رسائل HR
-                      {hrUnreadCount > 0 ? (
-                        <Badge className="rounded-full bg-[#F2B705] text-slate-950 hover:bg-[#F2B705]">
-                          {hrUnreadCount}
-                        </Badge>
-                      ) : null}
-                    </span>
-                  </TabsTrigger>
+              <TabsList className="grid h-auto w-full grid-cols-1 rounded-[22px] bg-slate-100 p-1 md:grid-cols-2">
+                <TabsTrigger
+                  value="hr"
+                  className="rounded-[18px] px-4 py-3 text-sm data-[state=active]:bg-white data-[state=active]:shadow-sm"
+                >
+                  <span className="flex items-center gap-2">
+                    <Mail className="h-4 w-4" />
+                    رسائل HR
+                    {hrUnreadCount > 0 ? (
+                      <Badge className="rounded-full bg-[#F2B705] text-slate-950 hover:bg-[#F2B705]">
+                        {hrUnreadCount}
+                      </Badge>
+                    ) : null}
+                  </span>
+                </TabsTrigger>
 
-                  <TabsTrigger
-                    value="internal"
-                    className="rounded-[18px] px-4 py-3 text-sm data-[state=active]:bg-white data-[state=active]:shadow-sm"
-                  >
-                    <span className="flex items-center gap-2">
-                      <Users className="h-4 w-4" />
-                      محادثة داخلية
-                      {internalUnreadCount > 0 ? (
-                        <Badge className="rounded-full bg-sky-600 text-white hover:bg-sky-600">
-                          {internalUnreadCount}
-                        </Badge>
-                      ) : null}
-                    </span>
-                  </TabsTrigger>
-                </TabsList>
-              ) : null}
+                <TabsTrigger
+                  value="internal"
+                  className="rounded-[18px] px-4 py-3 text-sm data-[state=active]:bg-white data-[state=active]:shadow-sm"
+                >
+                  <span className="flex items-center gap-2">
+                    <Users className="h-4 w-4" />
+                    محادثة داخلية
+                    {internalUnreadCount > 0 ? (
+                      <Badge className="rounded-full bg-sky-600 text-white hover:bg-sky-600">
+                        {internalUnreadCount}
+                      </Badge>
+                    ) : null}
+                  </span>
+                </TabsTrigger>
+              </TabsList>
 
               <TabsContent value="hr" className="mt-0">
                 <ConversationWorkspace
@@ -1100,9 +1099,6 @@ export default function EmployeeMessagesScreen() {
                 />
               </TabsContent>
 
-              <TabsContent value="weekly_report" className="mt-0">
-                <WeeklyReportTab user={user} />
-              </TabsContent>
             </Tabs>
           </CardContent>
         </Card>

@@ -827,6 +827,10 @@ const DEFAULT_PERMISSIONS: Array<{ key: string; label: string }> = [
   { key: "recruitment.manage", label: "إدارة طلبات التوظيف" },
   { key: "employees.view", label: "عرض الموظفين" },
   { key: "employees.manage", label: "إدارة الموظفين" },
+  {
+    key: "weekly_reports.manager_notes",
+    label: "كتابة ملاحظات المدير في التقرير الأسبوعي",
+  },
   { key: "reports.view", label: "عرض التقارير" },
   { key: "financial.view", label: "عرض المالية" },
   { key: "financial.edit", label: "تعديل المالية" },
@@ -880,6 +884,7 @@ const STAFF_PERMISSION_KEYS = new Set<Permission>([
   "recruitment.manage",
   "employees.view",
   "employees.manage",
+  "weekly_reports.manager_notes",
 ]);
 
 const INVESTMENT_PERMISSION_DEFINITIONS =

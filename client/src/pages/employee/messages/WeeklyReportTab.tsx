@@ -9,16 +9,29 @@ import {
   setDoc,
   where,
 } from "firebase/firestore";
-import { Download, FileText, Plus, Save, Send, Trash2 } from "lucide-react";
+import {
+  Download,
+  FileSpreadsheet,
+  FileText,
+  Plus,
+  Save,
+  Send,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { db } from "@/_core/firebase";
-import type { AppUser } from "@/_core/hooks/useAuth";
+import { hasPermission, type AppUser } from "@/_core/hooks/useAuth";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { createInAppNotification } from "@/lib/inAppNotifications";
+import {
+  WEEKLY_REPORT_DIRECT_MANAGER_NAME,
+  WEEKLY_REPORT_MANAGER_NOTES_PERMISSION,
+} from "@/lib/weeklyReportConfig";
+import { downloadWeeklyReportExcel } from "@/lib/weeklyReportExcel";
 import {
   downloadWeeklyReportWord,
   type WeeklyReportTask,
@@ -36,7 +49,7 @@ const EMPTY_TASK: WeeklyReportTask = {
   index: 1,
   title: "",
   description: "",
-  managerName: "",
+  managerName: WEEKLY_REPORT_DIRECT_MANAGER_NAME,
   progress: "",
 };
 
@@ -101,7 +114,7 @@ function normalizeTasks(tasks: unknown): WeeklyReportTask[] {
       index: index + 1,
       title: cleanText(row.title),
       description: cleanText(row.description),
-      managerName: cleanText(row.managerName),
+      managerName: WEEKLY_REPORT_DIRECT_MANAGER_NAME,
       progress: cleanText(row.progress),
     };
   });
@@ -158,11 +171,17 @@ export function WeeklyReportTab({ user }: { user: AppUser }) {
   const [loadingOwn, setLoadingOwn] = useState(true);
   const [loadingReceived, setLoadingReceived] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingManagerNotes, setSavingManagerNotes] = useState(false);
   const [form, setForm] = useState<WeeklyReportFormState>(() =>
     buildInitialForm(user)
   );
 
   const isReceiver = user.uid === WEEKLY_REPORT_RECEIVER.uid;
+  const canWriteManagerNotes = hasPermission(
+    user,
+    WEEKLY_REPORT_MANAGER_NOTES_PERMISSION
+  );
+  const canReviewWeeklyReports = isReceiver || canWriteManagerNotes;
   const selectedReport = useMemo(
     () =>
       [...ownReports, ...receivedReports].find(report => report.id === form.id) ||
@@ -172,6 +191,10 @@ export function WeeklyReportTab({ user }: { user: AppUser }) {
   const isReadOnly = selectedReport
     ? selectedReport.createdByUid !== user.uid || selectedReport.status === "sent"
     : false;
+  const canEditSelectedManagerNotes =
+    Boolean(selectedReport?.id) &&
+    selectedReport?.status === "sent" &&
+    canWriteManagerNotes;
   const sentReceivedReports = useMemo(
     () =>
       receivedReports
@@ -254,7 +277,7 @@ export function WeeklyReportTab({ user }: { user: AppUser }) {
   }, [user.uid]);
 
   useEffect(() => {
-    if (!isReceiver) {
+    if (!canReviewWeeklyReports) {
       setReceivedReports([]);
       setLoadingReceived(false);
       return;
@@ -264,7 +287,6 @@ export function WeeklyReportTab({ user }: { user: AppUser }) {
     const unsubscribe = onSnapshot(
       query(
         collection(db, WEEKLY_REPORTS_COLLECTION),
-        where("receiverUid", "==", user.uid),
         where("status", "==", "sent")
       ),
       snapshot => {
@@ -282,7 +304,7 @@ export function WeeklyReportTab({ user }: { user: AppUser }) {
       }
     );
     return unsubscribe;
-  }, [isReceiver, user.uid]);
+  }, [canReviewWeeklyReports]);
 
   const resetForm = () => {
     setForm(buildInitialForm(user, profileDefaults));
@@ -339,7 +361,7 @@ export function WeeklyReportTab({ user }: { user: AppUser }) {
         index: index + 1,
         title: cleanText(task.title),
         description: cleanText(task.description),
-        managerName: cleanText(task.managerName),
+        managerName: WEEKLY_REPORT_DIRECT_MANAGER_NAME,
         progress: cleanText(task.progress),
       }));
 
@@ -372,7 +394,7 @@ export function WeeklyReportTab({ user }: { user: AppUser }) {
           type: "message",
           relatedId: reportRef.id,
           relatedTo: "weekly_report",
-          relatedPath: "/hr/messages",
+          relatedPath: "/hr/weekly-reports",
         }).catch(error => {
           console.error("weekly_report_notification_failed", error);
         });
@@ -387,6 +409,48 @@ export function WeeklyReportTab({ user }: { user: AppUser }) {
     }
   };
 
+  const saveManagerNotes = async () => {
+    if (!selectedReport?.id || !canEditSelectedManagerNotes) return;
+
+    setSavingManagerNotes(true);
+    try {
+      await setDoc(
+        doc(db, WEEKLY_REPORTS_COLLECTION, selectedReport.id),
+        {
+          managerNotes: cleanText(form.managerNotes),
+          managerNotesUpdatedAt: serverTimestamp(),
+          managerNotesUpdatedByUid: user.uid,
+          managerNotesUpdatedByEmail: cleanText(user.email),
+          managerNotesUpdatedByName:
+            cleanText(user.displayName) || cleanText(user.email),
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      if (selectedReport.createdByUid && selectedReport.createdByUid !== user.uid) {
+        await createInAppNotification({
+          userId: selectedReport.createdByUid,
+          title: "ملاحظة جديدة على تقريرك الأسبوعي",
+          body: `تمت إضافة ملاحظة المدير على تقرير ${cleanText(selectedReport.reportDate) || "العمل الأسبوعي"}.`,
+          type: "message",
+          relatedId: selectedReport.id,
+          relatedTo: "weekly_report",
+          relatedPath: "/hr/weekly-reports",
+        }).catch(error => {
+          console.error("weekly_report_manager_note_notification_failed", error);
+        });
+      }
+
+      toast.success("تم حفظ ملاحظات المدير المباشر.");
+    } catch (error) {
+      console.error("weekly_report_manager_notes_save_failed", error);
+      toast.error("تعذر حفظ ملاحظات المدير المباشر.");
+    } finally {
+      setSavingManagerNotes(false);
+    }
+  };
+
   const downloadCurrentReport = async (report: WeeklyReportWordData) => {
     try {
       await downloadWeeklyReportWord(report);
@@ -396,16 +460,25 @@ export function WeeklyReportTab({ user }: { user: AppUser }) {
     }
   };
 
+  const downloadCurrentReportExcel = async (report: WeeklyReportWordData) => {
+    try {
+      await downloadWeeklyReportExcel(report);
+    } catch (error) {
+      console.error("weekly_report_excel_download_failed", error);
+      toast.error("تعذر تحميل ملف Excel.");
+    }
+  };
+
   const renderReportList = (
     title: string,
     reports: WeeklyReportRecord[],
     loading: boolean,
     emptyText: string
   ) => (
-    <div className="rounded-[22px] border border-slate-200 bg-slate-50/70 p-4">
+    <div className="rounded-[22px] border border-slate-200/80 bg-white/90 p-4 shadow-sm shadow-slate-200/60">
       <div className="mb-3 flex items-center justify-between gap-3">
         <h3 className="text-sm font-semibold text-slate-950">{title}</h3>
-        <Badge variant="outline" className="bg-white text-slate-600">
+        <Badge variant="outline" className="rounded-full bg-slate-50 px-3 text-slate-600">
           {reports.length}
         </Badge>
       </div>
@@ -417,7 +490,7 @@ export function WeeklyReportTab({ user }: { user: AppUser }) {
           reports.map(report => (
             <div
               key={report.id}
-              className="rounded-[16px] border border-slate-200 bg-white p-3 text-right"
+              className="rounded-[18px] border border-slate-200 bg-white p-3 text-right shadow-sm transition hover:-translate-y-0.5 hover:border-[#F2B705]/50 hover:shadow-md"
             >
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
@@ -443,20 +516,32 @@ export function WeeklyReportTab({ user }: { user: AppUser }) {
                   type="button"
                   variant="outline"
                   size="sm"
+                  className="rounded-full border-slate-200 bg-white px-4"
                   onClick={() => setForm(toForm(report))}
                 >
                   عرض التقرير
                 </Button>
-                {isReceiver && report.receiverUid === user.uid && report.status === "sent" ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="bg-slate-950 text-white hover:bg-slate-800"
-                    onClick={() => void downloadCurrentReport(report)}
-                  >
-                    <Download className="h-4 w-4" />
-                    تحميل Word
-                  </Button>
+                {canReviewWeeklyReports && report.status === "sent" ? (
+                  <>
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="rounded-full bg-slate-950 px-4 text-white hover:bg-slate-800"
+                      onClick={() => void downloadCurrentReport(report)}
+                    >
+                      <Download className="h-4 w-4" />
+                      Word
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="rounded-full bg-emerald-600 px-4 text-white hover:bg-emerald-700"
+                      onClick={() => void downloadCurrentReportExcel(report)}
+                    >
+                      <FileSpreadsheet className="h-4 w-4" />
+                      Excel
+                    </Button>
+                  </>
                 ) : null}
               </div>
             </div>
@@ -469,23 +554,25 @@ export function WeeklyReportTab({ user }: { user: AppUser }) {
   );
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]" dir="rtl">
-      <aside className="space-y-4">
+    <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]" dir="rtl">
+      <aside className="space-y-4 xl:sticky xl:top-24 xl:self-start">
         <Button
           type="button"
-          className="h-11 w-full rounded-xl bg-slate-950 text-white hover:bg-slate-800"
+          className="h-12 w-full rounded-2xl bg-slate-950 text-white shadow-lg shadow-slate-900/15 hover:bg-slate-800"
           onClick={resetForm}
         >
           <Plus className="h-4 w-4" />
           تقرير جديد
         </Button>
 
-        {isReceiver
+        {canReviewWeeklyReports
           ? renderReportList(
-              "التقارير المستلمة",
+              canWriteManagerNotes
+                ? "تقارير بانتظار ملاحظات المدير"
+                : "التقارير المستلمة",
               sentReceivedReports,
               loadingReceived,
-              "لا توجد تقارير مرسلة إلى شهد زيني حاليًا."
+              "لا توجد تقارير أسبوعية مرسلة حاليًا."
             )
           : null}
 
@@ -497,16 +584,19 @@ export function WeeklyReportTab({ user }: { user: AppUser }) {
         )}
       </aside>
 
-      <div className="overflow-hidden rounded-[2px] border border-slate-300 bg-white shadow-sm">
-        <div className="border-b border-slate-300 px-5 py-4 text-center">
-          <h2 className="text-2xl font-bold text-slate-950">
+      <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-xl shadow-slate-200/60">
+        <div className="border-b border-slate-200 bg-gradient-to-l from-slate-950 via-slate-900 to-slate-800 px-6 py-6 text-center">
+          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/10 text-[#F2B705]">
+            <FileText className="h-6 w-6" />
+          </div>
+          <h2 className="text-2xl font-bold text-white md:text-3xl">
             نموذج تقرير عمل اسبوعي
           </h2>
         </div>
 
-        <div className="space-y-5 p-5">
-          <div className="grid border border-slate-300 md:grid-cols-3">
-            <label className="border-b border-slate-300 p-3 md:border-b-0 md:border-l">
+        <div className="space-y-6 bg-slate-50/40 p-5 md:p-6">
+          <div className="grid overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm md:grid-cols-3">
+            <label className="border-b border-slate-200 p-4 md:border-b-0 md:border-l">
               <span className="mb-2 block text-sm font-semibold text-slate-900">
                 اسم الموظف
               </span>
@@ -519,10 +609,10 @@ export function WeeklyReportTab({ user }: { user: AppUser }) {
                   }))
                 }
                 disabled={isReadOnly}
-                className="h-11 rounded-none border-slate-300 bg-white text-right"
+                className="h-11 rounded-xl border-slate-200 bg-slate-50/80 text-right shadow-inner shadow-slate-100/70 focus-visible:ring-[#F2B705]/35"
               />
             </label>
-            <label className="border-b border-slate-300 p-3 md:border-b-0 md:border-l">
+            <label className="border-b border-slate-200 p-4 md:border-b-0 md:border-l">
               <span className="mb-2 block text-sm font-semibold text-slate-900">
                 المسمى الوظيفي
               </span>
@@ -532,10 +622,10 @@ export function WeeklyReportTab({ user }: { user: AppUser }) {
                   setForm(current => ({ ...current, jobTitle: event.target.value }))
                 }
                 disabled={isReadOnly}
-                className="h-11 rounded-none border-slate-300 bg-white text-right"
+                className="h-11 rounded-xl border-slate-200 bg-slate-50/80 text-right shadow-inner shadow-slate-100/70 focus-visible:ring-[#F2B705]/35"
               />
             </label>
-            <label className="p-3">
+            <label className="p-4">
               <span className="mb-2 block text-sm font-semibold text-slate-900">
                 التاريخ
               </span>
@@ -549,106 +639,106 @@ export function WeeklyReportTab({ user }: { user: AppUser }) {
                   }))
                 }
                 disabled={isReadOnly}
-                className="h-11 rounded-none border-slate-300 bg-white text-right"
+                className="h-11 rounded-xl border-slate-200 bg-slate-50/80 text-right shadow-inner shadow-slate-100/70 focus-visible:ring-[#F2B705]/35"
               />
             </label>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="min-w-[920px] w-full border-collapse text-right">
-              <thead>
-                <tr className="bg-slate-100 text-sm text-slate-950">
-                  <th className="w-14 border border-slate-300 p-3 text-center">
-                    رقم
-                  </th>
-                  <th className="w-48 border border-slate-300 p-3">
-                    المهام اليومية
-                  </th>
-                  <th className="border border-slate-300 p-3">الوصف</th>
-                  <th className="w-56 border border-slate-300 p-3">
-                    الموظف المسؤول/المدير المباشر
-                  </th>
-                  <th className="w-36 border border-slate-300 p-3">
-                    معدل الإنجاز
-                  </th>
-                  {!isReadOnly ? (
-                    <th className="w-20 border border-slate-300 p-3 text-center">
-                      حذف
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[920px] border-collapse text-right">
+                <thead>
+                  <tr className="bg-slate-950 text-sm text-white">
+                    <th className="w-14 border border-slate-800 p-3 text-center">
+                      رقم
                     </th>
-                  ) : null}
-                </tr>
-              </thead>
-              <tbody>
-                {form.tasks.map((task, index) => (
-                  <tr key={index} className="align-top">
-                    <td className="border border-slate-300 p-3 text-center font-semibold">
-                      {index + 1}
-                    </td>
-                    <td className="border border-slate-300 p-2">
-                      <Input
-                        value={task.title}
-                        onChange={event =>
-                          updateTask(index, "title", event.target.value)
-                        }
-                        disabled={isReadOnly}
-                        className="h-11 rounded-none border-slate-300 text-right"
-                      />
-                    </td>
-                    <td className="border border-slate-300 p-2">
-                      <Textarea
-                        value={task.description}
-                        onChange={event =>
-                          updateTask(index, "description", event.target.value)
-                        }
-                        disabled={isReadOnly}
-                        className="min-h-[112px] resize-y rounded-none border-slate-300 text-right leading-7"
-                      />
-                    </td>
-                    <td className="border border-slate-300 p-2">
-                      <Input
-                        value={task.managerName}
-                        onChange={event =>
-                          updateTask(index, "managerName", event.target.value)
-                        }
-                        disabled={isReadOnly}
-                        className="h-11 rounded-none border-slate-300 text-right"
-                      />
-                    </td>
-                    <td className="border border-slate-300 p-2">
-                      <Input
-                        value={task.progress}
-                        onChange={event =>
-                          updateTask(index, "progress", event.target.value)
-                        }
-                        placeholder="85٪"
-                        disabled={isReadOnly}
-                        className="h-11 rounded-none border-slate-300 text-right"
-                      />
-                    </td>
+                    <th className="w-48 border border-slate-800 p-3">
+                      المهام اليومية
+                    </th>
+                    <th className="border border-slate-800 p-3">الوصف</th>
+                    <th className="w-56 border border-slate-800 p-3">
+                      الموظف المسؤول/المدير المباشر
+                    </th>
+                    <th className="w-36 border border-slate-800 p-3">
+                      معدل الإنجاز
+                    </th>
                     {!isReadOnly ? (
-                      <td className="border border-slate-300 p-2 text-center">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="icon"
-                          className="h-10 w-10 border-rose-200 text-rose-600 hover:bg-rose-50"
-                          onClick={() => removeTask(index)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </td>
+                      <th className="w-20 border border-slate-800 p-3 text-center">
+                        حذف
+                      </th>
                     ) : null}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {form.tasks.map((task, index) => (
+                    <tr
+                      key={index}
+                      className="align-top transition hover:bg-slate-50"
+                    >
+                      <td className="border border-slate-200 bg-slate-50/70 p-3 text-center font-semibold text-slate-700">
+                        {index + 1}
+                      </td>
+                      <td className="border border-slate-200 p-2">
+                        <Input
+                          value={task.title}
+                          onChange={event =>
+                            updateTask(index, "title", event.target.value)
+                          }
+                          disabled={isReadOnly}
+                          className="h-11 rounded-xl border-slate-200 bg-slate-50/70 text-right focus-visible:ring-[#F2B705]/35"
+                        />
+                      </td>
+                      <td className="border border-slate-200 p-2">
+                        <Textarea
+                          value={task.description}
+                          onChange={event =>
+                            updateTask(index, "description", event.target.value)
+                          }
+                          disabled={isReadOnly}
+                          className="min-h-[112px] resize-y rounded-xl border-slate-200 bg-slate-50/70 text-right leading-7 focus-visible:ring-[#F2B705]/35"
+                        />
+                      </td>
+                      <td className="border border-slate-200 p-2">
+                        <div className="flex min-h-11 items-center justify-center rounded-xl border border-slate-200 bg-slate-50/80 px-3 text-center text-sm font-semibold text-slate-800">
+                          {WEEKLY_REPORT_DIRECT_MANAGER_NAME}
+                        </div>
+                      </td>
+                      <td className="border border-slate-200 p-2">
+                        <Input
+                          value={task.progress}
+                          onChange={event =>
+                            updateTask(index, "progress", event.target.value)
+                          }
+                          placeholder="85٪"
+                          disabled={isReadOnly}
+                          className="h-11 rounded-xl border-slate-200 bg-slate-50/70 text-center focus-visible:ring-[#F2B705]/35"
+                        />
+                      </td>
+                      {!isReadOnly ? (
+                        <td className="border border-slate-200 p-2 text-center">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            className="h-10 w-10 rounded-full border-rose-200 bg-white text-rose-600 shadow-sm hover:bg-rose-50"
+                            onClick={() => removeTask(index)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </td>
+                      ) : null}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
 
           {!isReadOnly ? (
             <Button
               type="button"
               variant="outline"
-              className="rounded-xl border-slate-300 bg-white"
+              className="rounded-full border-slate-200 bg-white px-5 shadow-sm hover:border-[#F2B705]/70 hover:bg-amber-50/60"
               onClick={addTask}
             >
               <Plus className="h-4 w-4" />
@@ -656,9 +746,10 @@ export function WeeklyReportTab({ user }: { user: AppUser }) {
             </Button>
           ) : null}
 
-          <label className="block">
-            <span className="mb-2 block border border-slate-300 bg-slate-100 p-3 text-sm font-semibold text-slate-950">
+          <label className="block overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <span className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-950">
               ملاحظات المدير المباشر
+              <FileText className="h-4 w-4 text-slate-500" />
             </span>
             <Textarea
               value={form.managerNotes}
@@ -668,25 +759,74 @@ export function WeeklyReportTab({ user }: { user: AppUser }) {
                   managerNotes: event.target.value,
                 }))
               }
-              disabled={isReadOnly}
-              className="min-h-[150px] rounded-none border-slate-300 text-right leading-8"
+              disabled={!canEditSelectedManagerNotes}
+              placeholder={
+                canWriteManagerNotes
+                  ? "اكتب ملاحظة المدير المباشر على التقرير المحدد."
+                  : "هذه الخانة مخصصة للمدير المباشر فقط."
+              }
+              className="min-h-[160px] resize-y rounded-none border-0 bg-white text-right leading-8 focus-visible:ring-0"
             />
+            {!canWriteManagerNotes ? (
+              <div className="border-t border-slate-100 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+                ملاحظات المدير لا يمكن تعديلها إلا من حساب يملك صلاحية كتابة
+                ملاحظات التقرير الأسبوعي.
+              </div>
+            ) : !selectedReport?.id ? (
+              <div className="border-t border-slate-100 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+                اختر تقريرًا مرسلًا من القائمة حتى تتمكن من كتابة ملاحظة المدير.
+              </div>
+            ) : null}
           </label>
 
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4">
-            <div className="flex items-center gap-2 text-sm text-slate-500">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+            <div className="flex items-center gap-2 rounded-full bg-slate-50 px-3 py-2 text-sm text-slate-600">
               <FileText className="h-4 w-4" />
               المستلم الثابت: {WEEKLY_REPORT_RECEIVER.displayName}
             </div>
             <div className="flex flex-wrap justify-end gap-2">
-              {isReceiver && selectedReport?.receiverUid === user.uid ? (
+              {canReviewWeeklyReports && selectedReport?.status === "sent" ? (
+                <>
+                  <Button
+                    type="button"
+                    className="rounded-full bg-slate-950 px-5 text-white hover:bg-slate-800"
+                    onClick={() => void downloadCurrentReport(form)}
+                  >
+                    <Download className="h-4 w-4" />
+                    تحميل Word
+                  </Button>
+                  <Button
+                    type="button"
+                    className="rounded-full bg-emerald-600 px-5 text-white hover:bg-emerald-700"
+                    onClick={() => void downloadCurrentReportExcel(form)}
+                  >
+                    <FileSpreadsheet className="h-4 w-4" />
+                    تحميل Excel
+                  </Button>
+                </>
+              ) : null}
+              {canEditSelectedManagerNotes ? (
                 <Button
                   type="button"
-                  className="rounded-xl bg-slate-950 text-white hover:bg-slate-800"
-                  onClick={() => void downloadCurrentReport(form)}
+                  className="rounded-full bg-slate-950 px-5 text-white hover:bg-slate-800"
+                  disabled={savingManagerNotes}
+                  onClick={() => void saveManagerNotes()}
                 >
-                  <Download className="h-4 w-4" />
-                  تحميل Word
+                  <Save className="h-4 w-4" />
+                  {savingManagerNotes
+                    ? "جارٍ حفظ الملاحظة..."
+                    : "حفظ ملاحظة المدير"}
+                </Button>
+              ) : null}
+              {!(canReviewWeeklyReports && selectedReport?.status === "sent") ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="rounded-full border-emerald-200 bg-emerald-50 px-5 text-emerald-700 shadow-sm hover:bg-emerald-100"
+                  onClick={() => void downloadCurrentReportExcel(form)}
+                >
+                  <FileSpreadsheet className="h-4 w-4" />
+                  تصدير Excel
                 </Button>
               ) : null}
 
@@ -695,7 +835,7 @@ export function WeeklyReportTab({ user }: { user: AppUser }) {
                   <Button
                     type="button"
                     variant="outline"
-                    className="rounded-xl border-slate-300 bg-white"
+                    className="rounded-full border-slate-200 bg-white px-5 shadow-sm hover:bg-slate-50"
                     disabled={saving}
                     onClick={() => void saveReport("draft")}
                   >
@@ -704,7 +844,7 @@ export function WeeklyReportTab({ user }: { user: AppUser }) {
                   </Button>
                   <Button
                     type="button"
-                    className="rounded-xl bg-[#F2B705] text-slate-950 hover:bg-[#e0ab00]"
+                    className="rounded-full bg-[#F2B705] px-5 text-slate-950 shadow-sm hover:bg-[#e0ab00]"
                     disabled={saving}
                     onClick={() => void saveReport("sent")}
                   >
