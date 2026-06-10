@@ -10,9 +10,12 @@ import {
   where,
 } from "firebase/firestore";
 import {
+  CheckCircle2,
+  Clock3,
   Download,
   FileSpreadsheet,
   FileText,
+  MessageSquare,
   Plus,
   Save,
   Send,
@@ -210,6 +213,43 @@ export function WeeklyReportTab({ user }: { user: AppUser }) {
         .sort((left, right) => timestampMillis(right.updatedAt) - timestampMillis(left.updatedAt)),
     [ownReports]
   );
+  const managerPendingReports = useMemo(
+    () =>
+      sentReceivedReports.filter(report => !cleanText(report.managerNotes)),
+    [sentReceivedReports]
+  );
+  const managerReviewedReports = useMemo(
+    () =>
+      sentReceivedReports.filter(report => cleanText(report.managerNotes)),
+    [sentReceivedReports]
+  );
+  const managerActiveReport = useMemo(
+    () =>
+      selectedReport &&
+      sentReceivedReports.some(report => report.id === selectedReport.id)
+        ? selectedReport
+        : sentReceivedReports[0] || null,
+    [selectedReport, sentReceivedReports]
+  );
+
+  useEffect(() => {
+    if (!canWriteManagerNotes) return;
+
+    const currentReportStillVisible =
+      Boolean(form.id) &&
+      sentReceivedReports.some(report => report.id === form.id);
+    if (currentReportStillVisible) return;
+
+    const nextReport = managerPendingReports[0] || sentReceivedReports[0] || null;
+    if (nextReport) {
+      setForm(toForm(nextReport));
+    }
+  }, [
+    canWriteManagerNotes,
+    form.id,
+    managerPendingReports,
+    sentReceivedReports,
+  ]);
 
   useEffect(() => {
     let cancelled = false;
@@ -552,6 +592,350 @@ export function WeeklyReportTab({ user }: { user: AppUser }) {
       </div>
     </div>
   );
+
+  if (canWriteManagerNotes) {
+    const exportData: WeeklyReportWordData = {
+      createdByName: form.createdByName,
+      jobTitle: form.jobTitle,
+      reportDate: form.reportDate,
+      tasks: form.tasks,
+      managerNotes: form.managerNotes,
+    };
+    const activeTasks = managerActiveReport
+      ? normalizeTasks(managerActiveReport.tasks)
+      : [];
+
+    const renderManagerReportCards = (
+      reports: WeeklyReportRecord[],
+      emptyText: string
+    ) => (
+      <div className="space-y-3">
+        {loadingReceived ? (
+          <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50/80 px-4 py-8 text-center text-sm text-slate-500">
+            جاري تحميل التقارير...
+          </div>
+        ) : reports.length ? (
+          reports.map(report => {
+            const isActive = managerActiveReport?.id === report.id;
+            return (
+              <button
+                key={report.id}
+                type="button"
+                onClick={() => setForm(toForm(report))}
+                className={[
+                  "w-full rounded-[22px] border p-4 text-right transition-all",
+                  isActive
+                    ? "border-[#F2B705]/80 bg-amber-50/60 shadow-[0_20px_45px_-34px_rgba(15,23,42,0.38)]"
+                    : "border-slate-200/80 bg-white hover:border-slate-300 hover:bg-slate-50/80",
+                ].join(" ")}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold text-slate-950">
+                      {report.createdByName || "موظف"}
+                    </div>
+                    <div className="mt-1 text-xs text-slate-500">
+                      {report.jobTitle || "المسمى غير محدد"}
+                    </div>
+                  </div>
+                  <Badge
+                    className={
+                      cleanText(report.managerNotes)
+                        ? "shrink-0 rounded-full bg-emerald-100 text-emerald-700 hover:bg-emerald-100"
+                        : "shrink-0 rounded-full bg-[#F2B705] text-slate-950 hover:bg-[#F2B705]"
+                    }
+                  >
+                    {cleanText(report.managerNotes) ? "تمت المراجعة" : "بانتظار ملاحظة"}
+                  </Badge>
+                </div>
+                <div className="mt-4 grid grid-cols-2 gap-2 text-xs text-slate-500">
+                  <div className="rounded-2xl bg-slate-50 px-3 py-2">
+                    التاريخ: {formatDateLabel(report.reportDate)}
+                  </div>
+                  <div className="rounded-2xl bg-slate-50 px-3 py-2">
+                    المهام: {normalizeTasks(report.tasks).length}
+                  </div>
+                </div>
+              </button>
+            );
+          })
+        ) : (
+          <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50/80 px-4 py-8 text-center text-sm leading-7 text-slate-500">
+            {emptyText}
+          </div>
+        )}
+      </div>
+    );
+
+    return (
+      <div className="space-y-6" dir="rtl">
+        <div className="grid gap-4 md:grid-cols-3">
+          <div className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-xs font-semibold text-slate-500">
+                  إجمالي التقارير المستلمة
+                </div>
+                <div className="mt-3 text-3xl font-semibold text-slate-950">
+                  {sentReceivedReports.length}
+                </div>
+              </div>
+              <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-950 text-[#F2B705]">
+                <FileText className="h-5 w-5" />
+              </span>
+            </div>
+          </div>
+
+          <div className="rounded-[24px] border border-amber-200 bg-amber-50/80 p-5 shadow-sm">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-xs font-semibold text-amber-700">
+                  بانتظار ملاحظتك
+                </div>
+                <div className="mt-3 text-3xl font-semibold text-slate-950">
+                  {managerPendingReports.length}
+                </div>
+              </div>
+              <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-amber-700 shadow-sm">
+                <Clock3 className="h-5 w-5" />
+              </span>
+            </div>
+          </div>
+
+          <div className="rounded-[24px] border border-emerald-200 bg-emerald-50/80 p-5 shadow-sm">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-xs font-semibold text-emerald-700">
+                  تمت مراجعتها
+                </div>
+                <div className="mt-3 text-3xl font-semibold text-slate-950">
+                  {managerReviewedReports.length}
+                </div>
+              </div>
+              <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-emerald-700 shadow-sm">
+                <CheckCircle2 className="h-5 w-5" />
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid gap-6 xl:grid-cols-[410px_minmax(0,1fr)]">
+          <aside className="space-y-4 xl:sticky xl:top-24 xl:self-start">
+            <div className="rounded-[28px] border border-slate-200/80 bg-white p-5 shadow-[0_24px_70px_-54px_rgba(15,23,42,0.32)]">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-base font-semibold text-slate-950">
+                    تقارير تحتاج ملاحظة
+                  </h3>
+                  <p className="mt-1 text-xs leading-6 text-slate-500">
+                    تظهر هنا التقارير المرسلة ولم تضف عليها ملاحظة المدير بعد.
+                  </p>
+                </div>
+                <Badge className="rounded-full bg-[#F2B705] text-slate-950 hover:bg-[#F2B705]">
+                  {managerPendingReports.length}
+                </Badge>
+              </div>
+              {renderManagerReportCards(
+                managerPendingReports,
+                "لا توجد تقارير بانتظار الملاحظة الآن."
+              )}
+            </div>
+
+            <div className="rounded-[28px] border border-slate-200/80 bg-white p-5 shadow-sm">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-base font-semibold text-slate-950">
+                    تقارير تمت مراجعتها
+                  </h3>
+                  <p className="mt-1 text-xs leading-6 text-slate-500">
+                    تقارير أضفت عليها ملاحظة ويمكن الرجوع لها أو تعديلها.
+                  </p>
+                </div>
+                <Badge
+                  variant="outline"
+                  className="rounded-full bg-slate-50 text-slate-600"
+                >
+                  {managerReviewedReports.length}
+                </Badge>
+              </div>
+              {renderManagerReportCards(
+                managerReviewedReports,
+                "لا توجد تقارير مراجعة محفوظة بعد."
+              )}
+            </div>
+          </aside>
+
+          <section className="overflow-hidden rounded-[30px] border border-slate-200 bg-white shadow-[0_28px_80px_-58px_rgba(15,23,42,0.34)]">
+            {managerActiveReport ? (
+              <>
+                <div className="border-b border-slate-200 bg-gradient-to-l from-slate-950 via-slate-900 to-slate-800 px-6 py-6 text-white">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div>
+                      <Badge className="mb-3 rounded-full bg-white/10 text-white shadow-none hover:bg-white/10">
+                        تقرير مرسل للمراجعة
+                      </Badge>
+                      <h2 className="text-2xl font-semibold tracking-tight">
+                        {managerActiveReport.createdByName || "تقرير موظف"}
+                      </h2>
+                      <p className="mt-2 text-sm leading-7 text-white/62">
+                        {managerActiveReport.jobTitle || "المسمى غير محدد"} -{" "}
+                        {formatDateLabel(managerActiveReport.reportDate)}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        className="rounded-full bg-white text-slate-950 hover:bg-slate-100"
+                        onClick={() => void downloadCurrentReport(exportData)}
+                      >
+                        <Download className="h-4 w-4" />
+                        Word
+                      </Button>
+                      <Button
+                        type="button"
+                        className="rounded-full bg-emerald-600 text-white hover:bg-emerald-700"
+                        onClick={() => void downloadCurrentReportExcel(exportData)}
+                      >
+                        <FileSpreadsheet className="h-4 w-4" />
+                        Excel
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-6 bg-slate-50/50 p-5 md:p-6">
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <div className="rounded-[22px] border border-slate-200 bg-white p-4">
+                      <div className="text-xs font-semibold text-slate-500">
+                        الموظف
+                      </div>
+                      <div className="mt-2 text-sm font-semibold text-slate-950">
+                        {managerActiveReport.createdByName || "غير محدد"}
+                      </div>
+                    </div>
+                    <div className="rounded-[22px] border border-slate-200 bg-white p-4">
+                      <div className="text-xs font-semibold text-slate-500">
+                        المسمى الوظيفي
+                      </div>
+                      <div className="mt-2 text-sm font-semibold text-slate-950">
+                        {managerActiveReport.jobTitle || "غير محدد"}
+                      </div>
+                    </div>
+                    <div className="rounded-[22px] border border-slate-200 bg-white p-4">
+                      <div className="text-xs font-semibold text-slate-500">
+                        تاريخ التقرير
+                      </div>
+                      <div className="mt-2 text-sm font-semibold text-slate-950">
+                        {formatDateLabel(managerActiveReport.reportDate)}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-[26px] border border-slate-200 bg-white p-5 shadow-sm">
+                    <div className="mb-4 flex items-center justify-between gap-3">
+                      <div>
+                        <h3 className="text-lg font-semibold text-slate-950">
+                          مهام التقرير
+                        </h3>
+                        <p className="mt-1 text-sm leading-6 text-slate-500">
+                          قراءة مرتبة للمهام والوصف ونسبة الإنجاز.
+                        </p>
+                      </div>
+                      <Badge variant="outline" className="rounded-full bg-slate-50">
+                        {activeTasks.length} مهمة
+                      </Badge>
+                    </div>
+
+                    <div className="grid gap-3">
+                      {activeTasks.map(task => (
+                        <div
+                          key={task.index}
+                          className="rounded-[22px] border border-slate-200 bg-slate-50/60 p-4"
+                        >
+                          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-950 text-xs font-semibold text-white">
+                                  {task.index}
+                                </span>
+                                <div className="font-semibold text-slate-950">
+                                  {task.title || "مهمة بدون عنوان"}
+                                </div>
+                              </div>
+                              <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-7 text-slate-600">
+                                {task.description || "لا يوجد وصف مرفق لهذه المهمة."}
+                              </p>
+                            </div>
+                            <Badge className="w-fit shrink-0 rounded-full bg-white px-3 py-1.5 text-slate-700 shadow-none ring-1 ring-slate-200 hover:bg-white">
+                              الإنجاز: {task.progress || "-"}
+                            </Badge>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="overflow-hidden rounded-[26px] border border-slate-200 bg-white shadow-sm">
+                    <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-5 py-4">
+                      <div>
+                        <h3 className="text-lg font-semibold text-slate-950">
+                          ملاحظات المدير
+                        </h3>
+                        <p className="mt-1 text-sm leading-6 text-slate-500">
+                          عند الحفظ سيصل تنبيه للموظف بوجود ملاحظة جديدة.
+                        </p>
+                      </div>
+                      <MessageSquare className="h-5 w-5 text-slate-400" />
+                    </div>
+                    <div className="p-5">
+                      <Textarea
+                        value={form.managerNotes}
+                        onChange={event =>
+                          setForm(current => ({
+                            ...current,
+                            managerNotes: event.target.value,
+                          }))
+                        }
+                        className="min-h-[180px] resize-y rounded-[20px] border-slate-200 bg-slate-50/70 text-right leading-8 focus-visible:ring-[#F2B705]/30"
+                        placeholder="اكتب ملاحظة المدير على التقرير المحدد..."
+                      />
+                      <div className="mt-4 flex justify-end">
+                        <Button
+                          type="button"
+                          className="rounded-full bg-slate-950 px-5 text-white hover:bg-slate-800"
+                          disabled={savingManagerNotes}
+                          onClick={() => void saveManagerNotes()}
+                        >
+                          <Save className="h-4 w-4" />
+                          {savingManagerNotes
+                            ? "جاري حفظ الملاحظة..."
+                            : "حفظ ملاحظة المدير"}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="flex min-h-[520px] items-center justify-center bg-slate-50/70 p-6">
+                <div className="max-w-md rounded-[28px] border border-dashed border-slate-200 bg-white px-6 py-10 text-center shadow-sm">
+                  <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-950 text-[#F2B705]">
+                    <FileText className="h-6 w-6" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-slate-950">
+                    لا توجد تقارير مرسلة حاليًا
+                  </h3>
+                  <p className="mt-2 text-sm leading-7 text-slate-500">
+                    عند إرسال الموظفين تقاريرهم الأسبوعية ستظهر هنا للمراجعة وكتابة ملاحظات المدير.
+                  </p>
+                </div>
+              </div>
+            )}
+          </section>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]" dir="rtl">

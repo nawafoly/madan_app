@@ -893,7 +893,10 @@ export default function EmployeeFilesPage() {
           resetSendForm();
         }
       }}>
-        <DialogContent className="max-w-3xl" dir="rtl">
+        <DialogContent
+          className="w-[min(96vw,48rem)] max-w-3xl overflow-hidden"
+          dir="rtl"
+        >
           <DialogHeader>
             <DialogTitle>إرسال ملف</DialogTitle>
             <DialogDescription>
@@ -901,7 +904,7 @@ export default function EmployeeFilesPage() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-5">
+          <div className="min-w-0 space-y-5 overflow-hidden">
             <RecipientPicker
               options={coworkers}
               selectedRecipient={selectedRecipient}

@@ -7,6 +7,7 @@ import {
   type ComponentProps,
   type ReactNode,
 } from "react";
+import { useLocation, useSearch } from "wouter";
 import DashboardLayout from "@/components/DashboardLayout";
 import RecruitmentFormFields from "@/components/recruitment/RecruitmentFormFields";
 import RecruitmentSettingsEditor from "@/components/recruitment/RecruitmentSettingsEditor";
@@ -1079,6 +1080,8 @@ export default function Settings({
   area?: SettingsArea;
 }) {
   const initialActiveTab = area === "staff" ? "notifications" : "general";
+  const search = useSearch();
+  const [, setLocation] = useLocation();
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(initialActiveTab);
 
@@ -3767,12 +3770,32 @@ export default function Settings({
     allowedSettingsTabs.has(tab.value)
   );
   const visibleTabValues = new Set<string>(settingsTabs.map(tab => tab.value));
+  const settingsSearchParams = useMemo(
+    () => new URLSearchParams(search),
+    [search]
+  );
+  const requestedTab = settingsSearchParams.get("tab")?.trim() || "";
+  const settingsBasePath = area === "staff" ? "/hr/settings" : "/admin/settings";
 
   useEffect(() => {
+    if (requestedTab && visibleTabValues.has(requestedTab)) {
+      if (activeTab !== requestedTab) {
+        setActiveTab(requestedTab);
+      }
+      return;
+    }
+
     if (!visibleTabValues.has(activeTab)) {
       setActiveTab(settingsTabs[0]?.value || "general");
     }
-  }, [activeTab, settingsTabs, visibleTabValues]);
+  }, [activeTab, requestedTab, settingsTabs, visibleTabValues]);
+
+  const handleActiveTabChange = (value: string) => {
+    if (!visibleTabValues.has(value)) return;
+
+    setActiveTab(value);
+    setLocation(`${settingsBasePath}?tab=${encodeURIComponent(value)}`);
+  };
 
   const activeTabMeta =
     settingsTabs.find(tab => tab.value === activeTab) ?? settingsTabs[0];
@@ -4089,7 +4112,7 @@ export default function Settings({
     <DashboardLayout area={area === "staff" ? "hr" : "admin"}>
       <SettingsLayout
         activeTab={activeTab}
-        onActiveTabChange={setActiveTab}
+        onActiveTabChange={handleActiveTabChange}
         settingsTabs={settingsTabs}
         activeTabMeta={activeTabMeta}
         activeTabDescription={activeTabDescription}
@@ -4098,6 +4121,7 @@ export default function Settings({
         activeBottomBarAction={activeBottomBarAction}
         dirtyTabsCount={dirtyTabsCount}
         prioritizedActionKey={prioritizedActionKey}
+        showInternalNavigation={area !== "staff"}
       >
 
         {/* =========================

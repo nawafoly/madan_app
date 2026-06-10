@@ -16,7 +16,10 @@ export function HrBrandMark({
   imageClassName,
   compact = false,
 }: HrBrandMarkProps) {
-  const [failed, setFailed] = useState(false);
+  const logoSources = ["/logo.png", hrLogoUrl];
+  const [sourceIndex, setSourceIndex] = useState(0);
+  const logoSrc = logoSources[sourceIndex];
+  const failed = !logoSrc;
 
   return (
     <span
@@ -32,10 +35,10 @@ export function HrBrandMark({
         </span>
       ) : (
         <img
-          src={hrLogoUrl}
+          src={logoSrc}
           alt=""
           className={cn("h-[82%] w-[82%] object-contain", imageClassName)}
-          onError={() => setFailed(true)}
+          onError={() => setSourceIndex(index => index + 1)}
         />
       )}
     </span>

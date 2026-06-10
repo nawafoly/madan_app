@@ -1,4 +1,5 @@
 import { WEEKLY_REPORT_DIRECT_MANAGER_NAME } from "@/lib/weeklyReportConfig";
+import { loadWeeklyReportLetterhead } from "@/lib/weeklyReportLetterhead";
 
 export type WeeklyReportTask = {
   index: number;
@@ -25,14 +26,65 @@ export async function downloadWeeklyReportWord(report: WeeklyReportWordData) {
     AlignmentType,
     BorderStyle,
     Document,
+    Header,
+    HorizontalPositionRelativeFrom,
+    ImageRun,
     Packer,
     Paragraph,
     Table,
     TableCell,
     TableRow,
     TextRun,
+    TextWrappingType,
+    VerticalPositionRelativeFrom,
     WidthType,
   } = await import("docx");
+  const letterheadImage = await loadWeeklyReportLetterhead();
+  const letterheadHeader = letterheadImage
+    ? new Header({
+        children: [
+          new Paragraph({
+            children: [
+              new ImageRun({
+                type: "png",
+                data: letterheadImage,
+                transformation: {
+                  width: 794,
+                  height: 1123,
+                },
+                floating: {
+                  horizontalPosition: {
+                    relative: HorizontalPositionRelativeFrom.PAGE,
+                    offset: 0,
+                  },
+                  verticalPosition: {
+                    relative: VerticalPositionRelativeFrom.PAGE,
+                    offset: 0,
+                  },
+                  allowOverlap: true,
+                  behindDocument: true,
+                  layoutInCell: true,
+                  lockAnchor: true,
+                  margins: {
+                    top: 0,
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                  },
+                  wrap: {
+                    type: TextWrappingType.NONE,
+                  },
+                },
+                altText: {
+                  title: "MAEDIN weekly report letterhead",
+                  description: "MAEDIN report background",
+                },
+              }),
+            ],
+          }),
+        ],
+      })
+    : null;
   const tableBorder = {
     style: BorderStyle.SINGLE,
     size: 8,
@@ -87,9 +139,11 @@ export async function downloadWeeklyReportWord(report: WeeklyReportWordData) {
   const doc = new Document({
     sections: [
       {
+        headers: letterheadHeader ? { default: letterheadHeader } : undefined,
         properties: {
           page: {
-            margin: { top: 900, bottom: 900, left: 720, right: 720 },
+            size: { width: 11906, height: 16838 },
+            margin: { top: 1900, bottom: 1250, left: 720, right: 720 },
           },
         },
         children: [

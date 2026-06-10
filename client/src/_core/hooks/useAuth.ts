@@ -343,15 +343,31 @@ function mergeRuntimeData(
   const shouldUseAdminPermissions =
     adminHasPrivilegedRole &&
     (shouldUseAdminRole || adminRuntime.role === base.role);
+  const mergedPermissionsAllow = adminHasPrivilegedRole
+    ? Array.from(
+        new Set<Permission>([
+          ...base.permissionsAllow,
+          ...adminRuntime.permissionsAllow,
+        ])
+      )
+    : base.permissionsAllow;
+  const mergedPermissionsDeny = adminHasPrivilegedRole
+    ? Array.from(
+        new Set<Permission>([
+          ...base.permissionsDeny,
+          ...adminRuntime.permissionsDeny,
+        ])
+      )
+    : base.permissionsDeny;
 
   return {
     role: shouldUseAdminRole ? adminRuntime.role : base.role,
     permissionsAllow: shouldUseAdminPermissions
       ? adminRuntime.permissionsAllow
-      : base.permissionsAllow,
+      : mergedPermissionsAllow,
     permissionsDeny: shouldUseAdminPermissions
       ? adminRuntime.permissionsDeny
-      : base.permissionsDeny,
+      : mergedPermissionsDeny,
     isActive: base.isActive && adminRuntime.isActive,
     title: base.title || adminRuntime.title,
     displayName: base.displayName || adminRuntime.displayName,

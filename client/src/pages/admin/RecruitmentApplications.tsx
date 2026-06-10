@@ -23,6 +23,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { db } from "@/_core/firebase";
+import { useLanguage, type Language } from "@/contexts/LanguageContext";
 import { buildR2DownloadUrl } from "@/lib/documentUploadService";
 import {
   formatDateTimeEN,
@@ -30,6 +31,7 @@ import {
   formatNumberEN,
   toDateSafe,
 } from "@/lib/formatters";
+import { languageDir, safeEnglishText, textAlignClass, tr } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import {
   JOB_APPLICATIONS_COLLECTION,
@@ -114,7 +116,58 @@ function getAttachmentTypeLabel(attachment: RecruitmentApplicationAttachment) {
   return extension ? extension.toUpperCase() : "FILE";
 }
 
+const ANSWER_LABEL_FALLBACKS: Record<string, string> = {
+  full_name: "Full Name",
+  name: "Full Name",
+  phone_number: "Mobile",
+  phone: "Mobile",
+  mobile: "Mobile",
+  education_type: "Education",
+  education: "Education",
+  education_level: "Education",
+  email: "Email",
+  city: "City",
+  nationality: "Nationality",
+  experience: "Experience",
+  job_title: "Job Title",
+  position: "Position",
+  cv: "CV",
+  resume: "Resume",
+};
+
+function displayDataValue(
+  language: Language,
+  value: unknown,
+  fallback: string
+) {
+  const raw = String(value ?? "").trim();
+  if (language === "ar") return raw || fallback;
+  return safeEnglishText(raw, fallback);
+}
+
+function displayAnswerLabel(
+  language: Language,
+  answer: RecruitmentApplicationAnswer
+) {
+  if (language === "ar") return String(answer.label || "").trim() || "حقل";
+  return (
+    ANSWER_LABEL_FALLBACKS[answer.fieldId] ||
+    safeEnglishText(answer.label, "Field")
+  );
+}
+
+function displayAttachmentLabel(
+  language: Language,
+  attachment: RecruitmentApplicationAttachment
+) {
+  if (language === "ar") return String(attachment.label || "").trim() || "مرفق";
+  return safeEnglishText(attachment.label, "Attachment");
+}
+
 export default function RecruitmentApplicationsPage() {
+  const { language } = useLanguage();
+  const pageDir = languageDir(language);
+  const pageTextAlignClass = textAlignClass(language);
   const [applications, setApplications] = useState<
     RecruitmentApplicationRecord[]
   >([]);
@@ -200,45 +253,58 @@ export default function RecruitmentApplicationsPage() {
 
   return (
     <DashboardLayout area="hr">
-      <div dir="rtl" className="min-h-screen space-y-8 bg-[#F8F9FA] px-1 py-2">
+      <div
+        dir={pageDir}
+        className={cn(
+          "min-h-screen space-y-8 bg-[#F8F9FA] px-1 py-2",
+          pageTextAlignClass
+        )}
+      >
         <Card className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm">
           <CardContent className="px-6 py-7 sm:px-8 sm:py-9">
             <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-center">
               <div className="space-y-6">
                 <div className="inline-flex items-center gap-2 rounded-full border border-[#F2B705]/30 bg-[#F2B705]/10 px-4 py-1.5 text-xs font-semibold text-[#8d6700]">
                   <BriefcaseBusiness className="h-4 w-4" />
-                  طلبات التوظيف
+                  {tr(language, "طلبات التوظيف", "Recruitment Applications")}
                 </div>
                 <div className="space-y-3">
                   <h1 className="text-3xl font-semibold tracking-tight text-slate-950">
-                    إدارة طلبات التوظيف
+                    {tr(language, "إدارة طلبات التوظيف", "Recruitment Management")}
                   </h1>
                   <p className="max-w-3xl text-sm leading-7 text-slate-600">
-                    صفحة مستقلة لطلبات التوظيف القادمة من صفحة{" "}
-                    <span dir="ltr">/careers</span>، مع عرض أوضح للقائمة،
-                    وبيانات المتقدم، والمرفقات داخل مساحة أكثر توازنًا وراحة
-                    للمراجعة اليومية.
+                    {tr(
+                      language,
+                      "صفحة مستقلة لطلبات التوظيف القادمة من صفحة",
+                      "A dedicated page for job applications submitted through"
+                    )}{" "}
+                    <span dir="ltr">/careers</span>
+                    {tr(
+                      language,
+                      "، مع عرض أوضح للقائمة، وبيانات المتقدم، والمرفقات داخل مساحة أكثر توازنًا وراحة للمراجعة اليومية.",
+                      ", with a clearer list, applicant details, and attachments in a balanced review workspace."
+                    )}
                   </p>
                 </div>
                 <div className="grid gap-4 sm:grid-cols-3">
                   <SummaryPill
-                    label="إجمالي الطلبات"
+                    label={tr(language, "إجمالي الطلبات", "Total Applications")}
                     value={formatNumberEN(applications.length)}
-                    helper="كل الطلبات المستلمة"
+                    helper={tr(language, "كل الطلبات المستلمة", "All received applications")}
                   />
                   <SummaryPill
-                    label="بمرفقات"
+                    label={tr(language, "بمرفقات", "With Attachments")}
                     value={formatNumberEN(withAttachmentsCount)}
-                    helper="طلبات تحتوي على ملفات"
+                    helper={tr(language, "طلبات تحتوي على ملفات", "Applications that include files")}
                   />
                   <SummaryPill
-                    label="آخر طلب"
+                    label={tr(language, "آخر طلب", "Latest Application")}
                     value={
                       latestSubmissionAt
                         ? formatDateTimeEN(latestSubmissionAt)
-                        : "—"
+                        : "-"
                     }
-                    helper="أحدث تاريخ تقديم"
+                    helper={tr(language, "أحدث تاريخ تقديم", "Most recent submission date")}
                   />
                 </div>
               </div>
@@ -247,10 +313,10 @@ export default function RecruitmentApplicationsPage() {
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <p className="text-[11px] font-semibold tracking-[0.2em] text-white/45">
-                      الحالة
+                      {tr(language, "الحالة", "Status")}
                     </p>
                     <h3 className="mt-3 text-xl font-semibold tracking-tight">
-                      لوحة مراجعة مستقلة
+                      {tr(language, "لوحة مراجعة مستقلة", "Independent Review Board")}
                     </h3>
                   </div>
                   <Badge
@@ -261,8 +327,13 @@ export default function RecruitmentApplicationsPage() {
                   </Badge>
                 </div>
                 <p className="mt-4 text-sm leading-7 text-white/60">
-                  القراءة من <span dir="ltr">job_applications</span>، والملفات
-                  المرفوعة محفوظة بمسار مستقل تحت{" "}
+                  {tr(language, "القراءة من", "Reads from")}{" "}
+                  <span dir="ltr">job_applications</span>
+                  {tr(
+                    language,
+                    "، والملفات المرفوعة محفوظة بمسار مستقل تحت",
+                    ", and uploaded files are stored under"
+                  )}{" "}
                   <span dir="ltr">careers/</span>.
                 </p>
               </div>
@@ -271,15 +342,19 @@ export default function RecruitmentApplicationsPage() {
         </Card>
 
         <div className="grid gap-8 xl:grid-cols-[360px_minmax(0,1fr)]">
-          <Card className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm xl:sticky xl:top-6 xl:self-start">
+          <Card className="min-h-[420px] overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm xl:sticky xl:top-6 xl:self-start">
             <CardHeader className="border-b border-slate-100 bg-white px-6 py-5">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <CardTitle className="text-lg font-semibold tracking-tight text-slate-950">
-                    قائمة الطلبات
+                    {tr(language, "قائمة الطلبات", "Application List")}
                   </CardTitle>
                   <CardDescription className="mt-2 text-sm leading-6 text-slate-500">
-                    قائمة مختصرة لاختيار الطلب فقط. تظهر التفاصيل الكاملة في لوحة المراجعة.
+                    {tr(
+                      language,
+                      "قائمة مختصرة لاختيار الطلب فقط. تظهر التفاصيل الكاملة في لوحة المراجعة.",
+                      "A compact list for selecting an application. Full details appear in the review panel."
+                    )}
                   </CardDescription>
                 </div>
                 <Badge variant="outline" className="rounded-full border-slate-200 bg-slate-50">
@@ -296,8 +371,12 @@ export default function RecruitmentApplicationsPage() {
                 </div>
               ) : applications.length === 0 ? (
                 <EmptyState
-                  title="لا توجد طلبات توظيف حتى الآن"
-                  description="ستظهر هنا الطلبات الجديدة فور إرسالها من صفحة التوظيف العامة."
+                  title={tr(language, "لا توجد طلبات توظيف حتى الآن", "No Job Applications Yet")}
+                  description={tr(
+                    language,
+                    "ستظهر هنا الطلبات الجديدة فور إرسالها من صفحة التوظيف العامة.",
+                    "New applications will appear here as soon as they are submitted from the public careers page."
+                  )}
                   compact
                 />
               ) : (
@@ -315,6 +394,7 @@ export default function RecruitmentApplicationsPage() {
                         summary={summary}
                         attachmentsCount={attachmentsCount}
                         isActive={isActive}
+                        language={language}
                         onSelect={() => setSelectedId(application.id)}
                       />
                     );
@@ -328,17 +408,25 @@ export default function RecruitmentApplicationsPage() {
             <Card className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm">
               <CardHeader className="border-b border-slate-100 bg-white px-6 py-5">
                 <CardTitle className="text-xl font-semibold tracking-tight text-slate-950">
-                  تفاصيل الطلب
+                  {tr(language, "تفاصيل الطلب", "Application Details")}
                 </CardTitle>
                 <CardDescription className="mt-2 text-sm leading-6 text-slate-500">
-                  ملخص واضح للمتقدم والحقول الأساسية دون تكرار معلومات القائمة.
+                  {tr(
+                    language,
+                    "ملخص واضح للمتقدم والحقول الأساسية دون تكرار معلومات القائمة.",
+                    "A clear summary of the applicant and core fields without repeating list details."
+                  )}
                 </CardDescription>
               </CardHeader>
               <CardContent className="p-6 sm:p-7">
                 {!selectedApplication || !selectedSummary ? (
                   <EmptyState
-                    title="اختر طلبًا من القائمة"
-                    description="عند اختيار أحد الطلبات ستظهر هنا جميع البيانات والمرفقات بشكل منظم وواضح."
+                    title={tr(language, "اختر طلبًا من القائمة", "Select an Application")}
+                    description={tr(
+                      language,
+                      "عند اختيار أحد الطلبات ستظهر هنا جميع البيانات والمرفقات بشكل منظم وواضح.",
+                      "When you select an application, its details and attachments will appear here in an organized view."
+                    )}
                   />
                 ) : (
                   <div className="space-y-6">
@@ -347,27 +435,29 @@ export default function RecruitmentApplicationsPage() {
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-2">
                         <Badge className="rounded-full bg-slate-900 text-white hover:bg-slate-900">
-                          الطلب المحدد
+                          {tr(language, "الطلب المحدد", "Selected Application")}
                         </Badge>
                         <Badge
                           variant="outline"
                           className="rounded-full border-slate-200 bg-white/80"
                         >
-                          {formatNumberEN(selectedAnswers.length)} حقل
+                          {formatNumberEN(selectedAnswers.length)}{" "}
+                          {tr(language, "حقل", "fields")}
                         </Badge>
                         <Badge
                           variant="outline"
                           className="rounded-full border-slate-200 bg-white/80"
                         >
-                          {formatNumberEN(selectedAttachments.length)} مرفقات
+                          {formatNumberEN(selectedAttachments.length)}{" "}
+                          {tr(language, "مرفقات", "attachments")}
                         </Badge>
                           </div>
                           <h2 className="mt-5 text-2xl font-semibold tracking-tight text-slate-950">
-                            {selectedSummary.fullName}
+                            {displayDataValue(language, selectedSummary.fullName, "Applicant")}
                           </h2>
                         </div>
                         <InfoTile
-                          label="رقم الطلب"
+                          label={tr(language, "رقم الطلب", "Application ID")}
                           value={selectedApplication.id}
                           monospace
                           compact
@@ -377,26 +467,26 @@ export default function RecruitmentApplicationsPage() {
                       <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                         <SelectedOverviewRow
                           icon={Phone}
-                          label="الجوال"
-                          value={selectedSummary.phone}
+                          label={tr(language, "الجوال", "Mobile")}
+                          value={displayDataValue(language, selectedSummary.phone, "Not provided")}
                         />
                         <SelectedOverviewRow
                           icon={ShieldCheck}
-                          label="التعليم"
-                          value={selectedSummary.education}
+                          label={tr(language, "التعليم", "Education")}
+                          value={displayDataValue(language, selectedSummary.education, "Not specified")}
                         />
                         <SelectedOverviewRow
                           icon={CalendarDays}
-                          label="تاريخ التقديم"
+                          label={tr(language, "تاريخ التقديم", "Submission Date")}
                           value={selectedCreatedAtLabel}
                         />
                         <SelectedOverviewRow
                           icon={Paperclip}
-                          label="المرفقات"
+                          label={tr(language, "المرفقات", "Attachments")}
                           value={
                             selectedAttachments.length
-                              ? `${formatNumberEN(selectedAttachments.length)} ملف`
-                              : "بدون مرفقات"
+                              ? `${formatNumberEN(selectedAttachments.length)} ${tr(language, "ملف", "files")}`
+                              : tr(language, "بدون مرفقات", "No attachments")
                           }
                         />
                       </div>
@@ -411,15 +501,20 @@ export default function RecruitmentApplicationsPage() {
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <CardTitle className="text-lg font-semibold tracking-tight text-slate-950">
-                      بيانات المتقدم
+                      {tr(language, "بيانات المتقدم", "Applicant Data")}
                     </CardTitle>
                     <CardDescription className="mt-2 text-sm leading-6 text-slate-500">
-                      شبكة بيانات خفيفة لقراءة كل إجابات النموذج بدون بطاقات ضخمة.
+                      {tr(
+                        language,
+                        "شبكة بيانات خفيفة لقراءة كل إجابات النموذج بدون بطاقات ضخمة.",
+                        "A compact data grid for reading all form answers without oversized cards."
+                      )}
                     </CardDescription>
                   </div>
                   {selectedApplication ? (
                     <Badge variant="outline" className="rounded-full">
-                      {formatNumberEN(selectedAnswers.length)} حقل
+                      {formatNumberEN(selectedAnswers.length)}{" "}
+                      {tr(language, "حقل", "fields")}
                     </Badge>
                   ) : null}
                 </div>
@@ -427,8 +522,12 @@ export default function RecruitmentApplicationsPage() {
               <CardContent className="p-6 sm:p-7">
                 {!selectedApplication ? (
                   <EmptyState
-                    title="بيانات المتقدم ستظهر هنا"
-                    description="اختر طلبًا من القائمة لعرض جميع الإجابات المرتبطة به."
+                    title={tr(language, "بيانات المتقدم ستظهر هنا", "Applicant Data Will Appear Here")}
+                    description={tr(
+                      language,
+                      "اختر طلبًا من القائمة لعرض جميع الإجابات المرتبطة به.",
+                      "Select an application from the list to view all related answers."
+                    )}
                     compact
                   />
                 ) : selectedAnswers.length ? (
@@ -437,13 +536,18 @@ export default function RecruitmentApplicationsPage() {
                       <AnswerCard
                         key={`${answer.fieldId}-${answer.order}`}
                         answer={answer}
+                        language={language}
                       />
                     ))}
                   </div>
                 ) : (
                   <EmptyState
-                    title="لا توجد بيانات محفوظة داخل هذا الطلب"
-                    description="لم يتم العثور على إجابات محفوظة لهذا المتقدم."
+                    title={tr(language, "لا توجد بيانات محفوظة داخل هذا الطلب", "No Saved Data in This Application")}
+                    description={tr(
+                      language,
+                      "لم يتم العثور على إجابات محفوظة لهذا المتقدم.",
+                      "No saved answers were found for this applicant."
+                    )}
                     compact
                   />
                 )}
@@ -455,10 +559,14 @@ export default function RecruitmentApplicationsPage() {
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <CardTitle className="text-lg font-semibold tracking-tight text-slate-950">
-                      المرفقات
+                      {tr(language, "المرفقات", "Attachments")}
                     </CardTitle>
                     <CardDescription className="mt-2 text-sm leading-6 text-slate-500">
-                      ملفات الطلب مع إجراءات المعاينة والتحميل في صفوف واضحة.
+                      {tr(
+                        language,
+                        "ملفات الطلب مع إجراءات المعاينة والتحميل في صفوف واضحة.",
+                        "Application files with clear preview and download actions."
+                      )}
                     </CardDescription>
                   </div>
                   {selectedApplication ? (
@@ -471,8 +579,12 @@ export default function RecruitmentApplicationsPage() {
               <CardContent className="p-6 sm:p-7">
                 {!selectedApplication ? (
                   <EmptyState
-                    title="المرفقات ستظهر هنا"
-                    description="اختر طلبًا من القائمة لعرض الملفات المرتبطة به."
+                    title={tr(language, "المرفقات ستظهر هنا", "Attachments Will Appear Here")}
+                    description={tr(
+                      language,
+                      "اختر طلبًا من القائمة لعرض الملفات المرتبطة به.",
+                      "Select an application from the list to view its files."
+                    )}
                     compact
                   />
                 ) : selectedAttachments.length ? (
@@ -481,13 +593,18 @@ export default function RecruitmentApplicationsPage() {
                       <AttachmentCard
                         key={`${attachment.fieldId}-${attachment.fileId}`}
                         attachment={attachment}
+                        language={language}
                       />
                     ))}
                   </div>
                 ) : (
                   <EmptyState
-                    title="لا توجد مرفقات مرفوعة مع هذا الطلب"
-                    description="تم إرسال هذا الطلب بدون ملفات مرفقة."
+                    title={tr(language, "لا توجد مرفقات مرفوعة مع هذا الطلب", "No Attachments for This Application")}
+                    description={tr(
+                      language,
+                      "تم إرسال هذا الطلب بدون ملفات مرفقة.",
+                      "This application was submitted without attached files."
+                    )}
                     compact
                   />
                 )}
@@ -505,12 +622,14 @@ function ApplicationListItem({
   summary,
   attachmentsCount,
   isActive,
+  language,
   onSelect,
 }: {
   application: RecruitmentApplicationRecord;
   summary: ReturnType<typeof getApplicationSummary>;
   attachmentsCount: number;
   isActive: boolean;
+  language: Language;
   onSelect: () => void;
 }) {
   return (
@@ -519,7 +638,8 @@ function ApplicationListItem({
       onClick={onSelect}
       aria-pressed={isActive}
       className={cn(
-        "w-full rounded-2xl border p-4 text-right transition-all",
+        "w-full rounded-2xl border p-4 transition-all",
+        language === "ar" ? "text-right" : "text-left",
         isActive
           ? "border-slate-900 bg-slate-950 text-white shadow-md"
           : "border-slate-100 bg-white text-slate-900 shadow-sm hover:border-slate-200 hover:bg-slate-50"
@@ -534,11 +654,11 @@ function ApplicationListItem({
                 isActive ? "text-white" : "text-slate-950"
               )}
             >
-              {summary.fullName}
+              {displayDataValue(language, summary.fullName, "Applicant")}
             </div>
             {isActive ? (
               <Badge className="rounded-full border border-white/15 bg-white/10 text-white hover:bg-white/10">
-                المحدد
+                {tr(language, "المحدد", "Selected")}
               </Badge>
             ) : null}
           </div>
@@ -581,7 +701,7 @@ function ApplicationListItem({
                   : "text-slate-500"
             )}
           >
-            المرفقات
+            {tr(language, "المرفقات", "Attachments")}
           </div>
           <div
             className={cn(
@@ -672,12 +792,20 @@ function InfoTile({
   );
 }
 
-function AnswerCard({ answer }: { answer: RecruitmentApplicationAnswer }) {
+function AnswerCard({
+  answer,
+  language,
+}: {
+  answer: RecruitmentApplicationAnswer;
+  language: Language;
+}) {
   return (
     <div className="min-h-28 border-b border-l border-slate-100 bg-white p-4">
-      <div className="text-xs font-medium text-slate-500">{answer.label}</div>
+      <div className="text-xs font-medium text-slate-500">
+        {displayAnswerLabel(language, answer)}
+      </div>
       <div className="mt-2 whitespace-pre-wrap break-words text-sm font-semibold leading-7 text-slate-950">
-        {getAnswerDisplayValue(answer)}
+        {displayDataValue(language, getAnswerDisplayValue(answer), "Not provided")}
       </div>
     </div>
   );
@@ -685,8 +813,10 @@ function AnswerCard({ answer }: { answer: RecruitmentApplicationAnswer }) {
 
 function AttachmentCard({
   attachment,
+  language,
 }: {
   attachment: RecruitmentApplicationAttachment;
+  language: Language;
 }) {
   const viewUrl =
     String(attachment.fileUrl || "").trim() ||
@@ -702,7 +832,9 @@ function AttachmentCard({
               <div className="rounded-xl bg-slate-50 p-2 text-slate-700">
                 <Paperclip className="h-4 w-4" />
               </div>
-              <span className="truncate font-semibold">{attachment.label}</span>
+              <span className="truncate font-semibold">
+                {displayAttachmentLabel(language, attachment)}
+              </span>
             </div>
             <div className="break-all text-sm text-slate-600">
               {attachment.fileName}
@@ -716,7 +848,9 @@ function AttachmentCard({
 
         <div className="flex flex-wrap gap-2 text-xs">
           <AttachmentMetaBadge label={formatFileSizeEN(attachment.fileSize)} />
-          <AttachmentMetaBadge label={attachment.contentType || "بدون نوع"} />
+          <AttachmentMetaBadge
+            label={attachment.contentType || tr(language, "بدون نوع", "No type")}
+          />
           <AttachmentMetaBadge label={attachment.storageFolder} ltr />
         </div>
       </div>
@@ -725,8 +859,8 @@ function AttachmentCard({
         {viewUrl ? (
           <Button asChild variant="outline" size="sm" className="rounded-full border-slate-200 bg-white">
             <a href={viewUrl} target="_blank" rel="noreferrer">
-              <Eye className="ml-2 h-4 w-4" />
-              معاينة
+              <Eye className={cn("h-4 w-4", language === "ar" ? "ml-2" : "mr-2")} />
+              {tr(language, "معاينة", "Preview")}
             </a>
           </Button>
         ) : null}
@@ -738,8 +872,8 @@ function AttachmentCard({
               rel="noreferrer"
               download={attachment.fileName || true}
             >
-              <Download className="ml-2 h-4 w-4" />
-              تحميل
+              <Download className={cn("h-4 w-4", language === "ar" ? "ml-2" : "mr-2")} />
+              {tr(language, "تحميل", "Download")}
             </a>
           </Button>
         ) : null}

@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import {
+  ArrowLeft,
   ClipboardList,
   FileText,
   BriefcaseBusiness,
@@ -16,7 +17,7 @@ import { NotificationBell } from "@/components/NotificationBell";
 import { HrBrandMark } from "@/components/HrBrandMark";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { useAuth } from "@/_core/hooks/useAuth";
+import { hasPermission, useAuth } from "@/_core/hooks/useAuth";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { safeEnglishText, tr } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -39,6 +40,21 @@ export default function EmployeeLayout({
   const layoutDir: "rtl" | "ltr" = language === "ar" ? "rtl" : "ltr";
   const languageToggleLabel = language === "ar" ? "English" : "Arabic";
   const currentPath = location.split("?")[0];
+  const employeeReturnPath = user
+    ? hasPermission(user, "recruitment.view") ||
+      hasPermission(user, "recruitment.manage")
+      ? "/hr/recruitment"
+      : hasPermission(user, "employees.view") ||
+          hasPermission(user, "employees.manage")
+        ? "/hr/employees"
+        : hasPermission(user, "settings.manage")
+          ? "/hr/settings"
+          : "/hr"
+    : "/hr";
+  const employeeReturnLabel =
+    employeeReturnPath === "/hr"
+      ? tr(language, "بوابة الموظفين", "Staff Portal")
+      : tr(language, "لوحة HR", "HR Dashboard");
 
   const handleLogout = async () => {
     await logout();
@@ -129,7 +145,7 @@ export default function EmployeeLayout({
       <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/90 shadow-sm shadow-slate-950/[0.03] backdrop-blur-xl">
         <div className="container flex min-h-16 flex-wrap items-center justify-between gap-3 py-3">
           <Link
-            href="/hr"
+            href={employeeReturnPath}
             className="flex min-w-0 items-center gap-3 text-slate-950"
           >
             <HrBrandMark
@@ -169,7 +185,7 @@ export default function EmployeeLayout({
               {languageToggleLabel}
             </Button>
 
-            <Link href="/hr">
+            <Link href={employeeReturnPath}>
               <Button
                 type="button"
                 variant="outline"
@@ -177,19 +193,23 @@ export default function EmployeeLayout({
                 className="h-10 rounded-xl border-slate-200 bg-white"
               >
                 <Home className="h-4 w-4" />
-                {tr(language, "بوابة الموظفين", "Staff Portal")}
+                {employeeReturnLabel}
               </Button>
             </Link>
 
             {user ? (
               <Button
                 type="button"
-                variant="ghost"
+                variant="outline"
                 size="sm"
                 onClick={() => void handleLogout()}
-                className="h-10 rounded-xl text-slate-600 hover:bg-slate-100 hover:text-slate-950"
+                className="h-10 rounded-xl border-red-200 bg-red-50/80 px-3.5 font-semibold text-red-600 shadow-sm shadow-red-100/40 hover:border-red-300 hover:bg-red-100/80 hover:text-red-700"
               >
-                <LogOut className="h-4 w-4" />
+                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/70 text-red-600 ring-1 ring-red-200">
+                  <LogOut
+                    className={cn("h-4 w-4", language === "ar" && "rotate-180")}
+                  />
+                </span>
                 {tr(language, "خروج", "Logout")}
               </Button>
             ) : null}
@@ -202,6 +222,25 @@ export default function EmployeeLayout({
           <section className="overflow-hidden rounded-[32px] border border-slate-200/80 bg-[linear-gradient(135deg,rgba(255,255,255,0.98)_0%,rgba(248,250,252,0.95)_52%,rgba(245,235,214,0.45)_100%)] px-6 py-7 shadow-[0_30px_90px_-48px_rgba(15,23,42,0.24)] sm:px-8 sm:py-8">
             <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
               <div className="space-y-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Link href={employeeReturnPath}>
+                    <Button
+                      type="button"
+                      variant="default"
+                      size="sm"
+                      className="h-10 rounded-full bg-slate-950 px-4 text-sm font-semibold text-white shadow-[0_18px_34px_-24px_rgba(15,23,42,0.5)] hover:bg-slate-900"
+                    >
+                      <ArrowLeft
+                        className={cn(
+                          "h-4 w-4",
+                          language === "en" && "rotate-180"
+                        )}
+                      />
+                      {tr(language, "العودة للوحة HR", "Back To HR")}
+                    </Button>
+                  </Link>
+                </div>
+
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge className="rounded-full border border-[#F2B705]/35 bg-[#F2B705]/12 px-4 py-1.5 text-[#8b6700] shadow-none">
                     <BriefcaseBusiness className="ml-2 h-4 w-4" />

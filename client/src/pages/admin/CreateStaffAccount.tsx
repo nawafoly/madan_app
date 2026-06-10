@@ -59,6 +59,8 @@ import {
   type Permission,
   useAuth,
 } from "@/_core/hooks/useAuth";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { languageDir, textAlignClass, tr } from "@/lib/i18n";
 
 function FieldLabel({ children }: { children: ReactNode }) {
   return (
@@ -93,6 +95,9 @@ function SurfaceAlert({
 
 export default function CreateStaffAccount() {
   const { user } = useAuth();
+  const { language } = useLanguage();
+  const pageDir = languageDir(language);
+  const pageTextAlignClass = textAlignClass(language);
 
   const currentRole = String(user?.role ?? "").toLowerCase();
 
@@ -664,11 +669,18 @@ export default function CreateStaffAccount() {
     }
   };
 
+  const employeeDirectorySyncLabel =
+    language === "ar"
+      ? formatSyncDateTime(employeeDirectorySyncSummary?.syncedAt)
+      : employeeDirectorySyncSummary?.syncedAt
+        ? `Last sync: ${new Date(employeeDirectorySyncSummary.syncedAt).toLocaleString("en-GB")}`
+        : "No sync has been run from the system yet.";
+
   return (
     <DashboardLayout area="hr">
       <div
-        dir="rtl"
-        className="bg-[linear-gradient(180deg,#f6f6f7_0%,#ffffff_32%,#f7f7f8_100%)] text-foreground"
+        dir={pageDir}
+        className={`bg-[linear-gradient(180deg,#f6f6f7_0%,#ffffff_32%,#f7f7f8_100%)] text-foreground ${pageTextAlignClass}`}
       >
         <main className="relative overflow-hidden">
           <div
@@ -678,51 +690,58 @@ export default function CreateStaffAccount() {
 
           <section className="px-4 py-10 sm:px-6 sm:py-14 lg:py-16">
             <div className="mx-auto max-w-[36rem]">
-              <div className="w-full rounded-[32px] border border-slate-200/80 bg-white/96 p-6 text-right shadow-[0_30px_90px_-48px_rgba(11,23,38,0.24)] backdrop-blur-sm sm:p-8 md:p-10">
+              <div
+                className={`w-full rounded-[32px] border border-slate-200/80 bg-white/96 p-6 shadow-[0_30px_90px_-48px_rgba(11,23,38,0.24)] backdrop-blur-sm sm:p-8 md:p-10 ${pageTextAlignClass}`}
+              >
                 <div className="space-y-3">
                   <span className="inline-flex items-center rounded-full bg-[#f7f3ea] px-4 py-1.5 text-xs font-semibold tracking-[0.18em] text-primary/75 ring-1 ring-[#eadfbe]">
-                    إنشاء حساب
+                    {tr(language, "إنشاء حساب", "Create Account")}
                   </span>
 
                   <h1 className="text-3xl font-semibold tracking-tight text-slate-950 sm:text-[2rem]">
-                    إنشاء حساب جديد
+                    {tr(language, "إنشاء حساب جديد", "Create a New Account")}
                   </h1>
 
                   <p className="text-sm leading-7 text-slate-600 sm:text-[15px]">
-                    هذه الصفحة مخصصة للموارد البشرية والإدارة. يتم منها إنشاء الحساب
-                    أولًا، ثم تنفيذ الترقية الفعلية مباشرة من نفس الصفحة دون الحاجة
-                    للانتقال إلى Settings.
+                    {tr(
+                      language,
+                      "هذه الصفحة مخصصة للموارد البشرية والإدارة. يتم منها إنشاء الحساب أولًا، ثم تنفيذ الترقية الفعلية مباشرة من نفس الصفحة دون الحاجة للانتقال إلى Settings.",
+                      "This page is dedicated to HR and administration. Create the account first, then apply the role upgrade directly from the same page without moving to Settings."
+                    )}
                   </p>
                   <div className="mt-5 rounded-[22px] border border-slate-200 bg-slate-50/70 p-4">
                     <div className="space-y-3">
                       <div className="flex items-center justify-between gap-3">
                         <div className="text-sm font-medium text-slate-900">
-                          مزامنة دليل الموظفين
+                          {tr(language, "مزامنة دليل الموظفين", "Employee Directory Sync")}
                         </div>
 
                         <Badge variant="outline" className="rounded-full">
                           {employeeDirectorySyncing
-                            ? "جارٍ التنفيذ"
+                            ? tr(language, "جارٍ التنفيذ", "Running")
                             : employeeDirectorySyncSummary?.syncedAt
-                              ? "تمت آخر مزامنة"
-                              : "مزامنة يدوية"}
+                              ? tr(language, "تمت آخر مزامنة", "Last Sync Complete")
+                              : tr(language, "مزامنة يدوية", "Manual Sync")}
                         </Badge>
                       </div>
 
                       <div className="text-sm text-slate-500">
-                        {formatSyncDateTime(employeeDirectorySyncSummary?.syncedAt)}
+                        {employeeDirectorySyncLabel}
                       </div>
 
                       {employeeDirectorySyncSummary ? (
                         <div className="flex flex-wrap gap-2">
                           <Badge variant="secondary">
-                            {formatNumberEN(employeeDirectorySyncSummary.employeesSynced)} سجل
+                            {formatNumberEN(employeeDirectorySyncSummary.employeesSynced)}{" "}
+                            {tr(language, "سجل", "records")}
                           </Badge>
                           <Badge variant="outline">
-                            حذف {formatNumberEN(employeeDirectorySyncSummary.employeesDeleted)}
+                            {tr(language, "حذف", "Deleted")}{" "}
+                            {formatNumberEN(employeeDirectorySyncSummary.employeesDeleted)}
                           </Badge>
                           <Badge variant="outline">
-                            المصدر {formatNumberEN(employeeDirectorySyncSummary.sourceCount)}
+                            {tr(language, "المصدر", "Source")}{" "}
+                            {formatNumberEN(employeeDirectorySyncSummary.sourceCount)}
                           </Badge>
                         </div>
                       ) : null}
@@ -734,8 +753,8 @@ export default function CreateStaffAccount() {
                         onClick={handleSyncEmployeeDirectory}
                       >
                         {employeeDirectorySyncing
-                          ? "جارٍ مزامنة دليل الموظفين..."
-                          : "مزامنة دليل الموظفين"}
+                          ? tr(language, "جارٍ مزامنة دليل الموظفين...", "Syncing employee directory...")
+                          : tr(language, "مزامنة دليل الموظفين", "Sync Employee Directory")}
                       </Button>
                     </div>
                   </div>
@@ -744,18 +763,22 @@ export default function CreateStaffAccount() {
                 <div className="mt-6 space-y-4">
                   {!firebaseConfigured ? (
                     <SurfaceAlert tone="warning">
-                      <strong>تنبيه:</strong> إعدادات Firebase غير مكتملة.
+                      <strong>{tr(language, "تنبيه:", "Warning:")}</strong>{" "}
+                      {tr(language, "إعدادات Firebase غير مكتملة.", "Firebase settings are incomplete.")}
                     </SurfaceAlert>
                   ) : null}
 
                   {localError ? (
                     <SurfaceAlert tone="error">
-                      <strong>خطأ:</strong> {localError}
+                      <strong>{tr(language, "خطأ:", "Error:")}</strong>{" "}
+                      {language === "ar" ? localError : "Please review the highlighted issue."}
                     </SurfaceAlert>
                   ) : null}
 
                   {localInfo ? (
-                    <SurfaceAlert tone="info">{localInfo}</SurfaceAlert>
+                    <SurfaceAlert tone="info">
+                      {language === "ar" ? localInfo : "Account action completed. Continue with the next step if required."}
+                    </SurfaceAlert>
                   ) : null}
                 </div>
 
@@ -768,11 +791,11 @@ export default function CreateStaffAccount() {
                 >
                   <div className="grid gap-5 sm:grid-cols-2">
                     <div>
-                      <FieldLabel>الاسم الكامل</FieldLabel>
+                      <FieldLabel>{tr(language, "الاسم الكامل", "Full Name")}</FieldLabel>
                       <Input
                         value={fullName}
                         onChange={event => setFullName(event.target.value)}
-                        placeholder="مثال: محمد أحمد"
+                        placeholder={tr(language, "مثال: محمد أحمد", "Example: Mohammed Ahmed")}
                         autoComplete="name"
                         disabled={busy}
                         className="h-12 rounded-2xl border-slate-200/80 bg-slate-50/80 px-4 text-base shadow-none"
@@ -780,7 +803,7 @@ export default function CreateStaffAccount() {
                     </div>
 
                     <div>
-                      <FieldLabel>رقم الجوال</FieldLabel>
+                      <FieldLabel>{tr(language, "رقم الجوال", "Mobile Number")}</FieldLabel>
                       <Input
                         value={phone}
                         onChange={event => setPhone(event.target.value)}
@@ -795,7 +818,7 @@ export default function CreateStaffAccount() {
                   </div>
 
                   <div>
-                    <FieldLabel>البريد الإلكتروني</FieldLabel>
+                    <FieldLabel>{tr(language, "البريد الإلكتروني", "Email Address")}</FieldLabel>
                     <Input
                       value={email}
                       onChange={event => setEmail(event.target.value)}
@@ -809,7 +832,7 @@ export default function CreateStaffAccount() {
                   </div>
 
                   <div>
-                    <FieldLabel>كلمة المرور</FieldLabel>
+                    <FieldLabel>{tr(language, "كلمة المرور", "Password")}</FieldLabel>
                     <div className="relative">
                       <Input
                         value={password}
@@ -826,8 +849,8 @@ export default function CreateStaffAccount() {
                         className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-slate-600"
                         aria-label={
                           showPassword
-                            ? "إخفاء كلمة المرور"
-                            : "إظهار كلمة المرور"
+                            ? tr(language, "إخفاء كلمة المرور", "Hide password")
+                            : tr(language, "إظهار كلمة المرور", "Show password")
                         }
                       >
                         {showPassword ? (
@@ -840,7 +863,7 @@ export default function CreateStaffAccount() {
                   </div>
 
                   <div>
-                    <FieldLabel>تأكيد كلمة المرور</FieldLabel>
+                    <FieldLabel>{tr(language, "تأكيد كلمة المرور", "Confirm Password")}</FieldLabel>
                     <div className="relative">
                       <Input
                         value={confirmPassword}
@@ -861,8 +884,8 @@ export default function CreateStaffAccount() {
                         className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-slate-600"
                         aria-label={
                           showConfirmPassword
-                            ? "إخفاء تأكيد كلمة المرور"
-                            : "إظهار تأكيد كلمة المرور"
+                            ? tr(language, "إخفاء تأكيد كلمة المرور", "Hide confirm password")
+                            : tr(language, "إظهار تأكيد كلمة المرور", "Show confirm password")
                         }
                       >
                         {showConfirmPassword ? (
@@ -880,14 +903,19 @@ export default function CreateStaffAccount() {
                     disabled={!firebaseConfigured || busy}
                     className="h-12 w-full rounded-full text-sm font-semibold"
                   >
-                    {busy ? "جارٍ التنفيذ..." : "إنشاء الحساب"}
+                    {busy
+                      ? tr(language, "جارٍ التنفيذ...", "Processing...")
+                      : tr(language, "إنشاء الحساب", "Create Account")}
                   </Button>
                 </form>
 
                 <div className="mt-5 border-t border-slate-200/80 pt-5">
                   <span className="text-sm text-slate-500">
-                    بعد إنشاء الحساب، ستظهر لك نافذة الترقية مباشرة بنفس البريد
-                    الذي تم إنشاؤه أو العثور عليه.
+                    {tr(
+                      language,
+                      "بعد إنشاء الحساب، ستظهر لك نافذة الترقية مباشرة بنفس البريد الذي تم إنشاؤه أو العثور عليه.",
+                      "After creating the account, the upgrade dialog will open using the same email that was created or found."
+                    )}
                   </span>
                 </div>
               </div>
@@ -898,7 +926,7 @@ export default function CreateStaffAccount() {
 
       <Dialog open={promoteDialogOpen} onOpenChange={setPromoteDialogOpen}>
         <DialogContent
-          dir="rtl"
+          dir={pageDir}
           className="max-w-[980px] overflow-hidden rounded-[28px] border border-slate-200 bg-white p-0 shadow-[0_30px_80px_-40px_rgba(15,23,42,0.35)]"
         >
           <div className="relative">
@@ -906,7 +934,7 @@ export default function CreateStaffAccount() {
               type="button"
               onClick={() => setPromoteDialogOpen(false)}
               className="absolute left-5 top-5 z-10 rounded-full border border-slate-200 bg-white p-2 text-slate-500 transition hover:bg-slate-50 hover:text-slate-700"
-              aria-label="إغلاق"
+              aria-label={tr(language, "إغلاق", "Close")}
             >
               <X className="h-4 w-4" />
             </button>
@@ -914,15 +942,18 @@ export default function CreateStaffAccount() {
             <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-6 py-6 sm:px-8">
               <div className="space-y-2">
                 <div className="text-xs font-semibold tracking-[0.18em] text-slate-500">
-                  الوحدة 01
+                  {tr(language, "الوحدة 01", "Module 01")}
                 </div>
-                <DialogHeader className="space-y-2 text-right">
+                <DialogHeader className={`space-y-2 ${pageTextAlignClass}`}>
                   <DialogTitle className="text-3xl font-semibold text-slate-950">
-                    ترقية مباشرة
+                    {tr(language, "ترقية مباشرة", "Direct Upgrade")}
                   </DialogTitle>
                   <DialogDescription className="text-sm leading-7 text-slate-600">
-                    ترقية مستخدم موجود داخل users مباشرة عبر البريد الإلكتروني،
-                    من دون إنشاء حساب جديد.
+                    {tr(
+                      language,
+                      "ترقية مستخدم موجود داخل users مباشرة عبر البريد الإلكتروني، من دون إنشاء حساب جديد.",
+                      "Upgrade an existing user directly by email without creating a new account."
+                    )}
                   </DialogDescription>
                 </DialogHeader>
               </div>
@@ -936,7 +967,7 @@ export default function CreateStaffAccount() {
               <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">
                 <div className="space-y-2">
                   <div className="flex items-center gap-2 text-xs font-semibold tracking-[0.16em] text-slate-500">
-                    الإيميل
+                    {tr(language, "الإيميل", "Email")}
                   </div>
                   <Input
                     value={createdEmailForPromote}
@@ -945,18 +976,22 @@ export default function CreateStaffAccount() {
                     className="h-14 rounded-2xl border-slate-200 bg-slate-50/80 px-4 text-base"
                   />
                   <p className="text-sm leading-7 text-slate-500">
-                    البريد المرتبط بالحساب الذي تم إنشاؤه أو العثور عليه.
+                    {tr(
+                      language,
+                      "البريد المرتبط بالحساب الذي تم إنشاؤه أو العثور عليه.",
+                      "The email connected to the account that was created or found."
+                    )}
                     {createdNameForPromote ? ` (${createdNameForPromote})` : ""}
                   </p>
                 </div>
 
                 <div className="space-y-2">
                   <div className="flex items-center gap-2 text-xs font-semibold tracking-[0.16em] text-slate-500">
-                    الدور
+                    {tr(language, "الدور", "Role")}
                     <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-semibold text-slate-500">
                       {canChooseAnyPromoteRole
-                        ? "قابل للتغيير"
-                        : "ثابت للموارد البشرية"}
+                        ? tr(language, "قابل للتغيير", "Editable")
+                        : tr(language, "ثابت للموارد البشرية", "Fixed for HR")}
                     </span>
                   </div>
 
@@ -971,28 +1006,38 @@ export default function CreateStaffAccount() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="staff">موظف (staff)</SelectItem>
-                        <SelectItem value="hr">الموارد البشرية (hr)</SelectItem>
-                        <SelectItem value="accountant">
-                          محاسب (accountant)
+                        <SelectItem value="staff">
+                          {tr(language, "موظف", "Staff")} (staff)
                         </SelectItem>
-                        <SelectItem value="admin">أدمن (admin)</SelectItem>
-                        <SelectItem value="owner">المالك (owner)</SelectItem>
+                        <SelectItem value="hr">
+                          {tr(language, "الموارد البشرية", "Human Resources")} (hr)
+                        </SelectItem>
+                        <SelectItem value="accountant">
+                          {tr(language, "محاسب", "Accountant")} (accountant)
+                        </SelectItem>
+                        <SelectItem value="admin">
+                          {tr(language, "أدمن", "Admin")} (admin)
+                        </SelectItem>
+                        <SelectItem value="owner">
+                          {tr(language, "المالك", "Owner")} (owner)
+                        </SelectItem>
                       </SelectContent>
                     </Select>
                   ) : (
                     <div className="flex h-14 items-center justify-between rounded-2xl border border-slate-200 bg-white px-4">
                       <span className="text-base font-medium text-slate-900">
-                        موظف (staff)
+                        {tr(language, "موظف", "Staff")} (staff)
                       </span>
-                      <span className="text-sm text-slate-400">ثابت</span>
+                      <span className="text-sm text-slate-400">
+                        {tr(language, "ثابت", "Fixed")}
+                      </span>
                     </div>
                   )}
 
                   <p className="text-sm leading-7 text-slate-500">
                     {canChooseAnyPromoteRole
-                      ? "يمكن للمالك والأدمن اختيار أي دور مباشرة."
-                      : "الموارد البشرية يمكنها الترقية إلى staff فقط."}
+                      ? tr(language, "يمكن للمالك والأدمن اختيار أي دور مباشرة.", "Owner and admin accounts can choose any role directly.")
+                      : tr(language, "الموارد البشرية يمكنها الترقية إلى staff فقط.", "HR can upgrade accounts to staff only.")}
                   </p>
                 </div>
               </div>
@@ -1004,7 +1049,9 @@ export default function CreateStaffAccount() {
                   disabled={promoting}
                   className="h-11 rounded-full bg-[#F2B705] px-6 text-sm font-semibold text-slate-950 hover:bg-[#e7ae04] disabled:opacity-60"
                 >
-                  {promoting ? "جاري الترقية..." : "ترقية الآن"}
+                  {promoting
+                    ? tr(language, "جاري الترقية...", "Upgrading...")
+                    : tr(language, "ترقية الآن", "Upgrade Now")}
                 </Button>
               </div>
             </div>

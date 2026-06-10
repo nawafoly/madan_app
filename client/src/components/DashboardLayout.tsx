@@ -8,12 +8,6 @@ import { auth, db } from "@/_core/firebase";
 import { doc, getDoc, onSnapshot } from "firebase/firestore";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
@@ -46,9 +40,18 @@ import {
   Home,
   BriefcaseBusiness,
   UserPlus,
+  Bell,
+  Shield,
+  KeyRound,
+  Tags,
+  SlidersHorizontal,
+  Database,
+  ChevronDown,
+  LockKeyhole,
+  ClipboardList,
 } from "lucide-react";
 import { CSSProperties, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useLocation } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
 import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
 import { HrBrandMark } from "@/components/HrBrandMark";
 import { Button } from "./ui/button";
@@ -68,7 +71,8 @@ type MenuItem = {
   label: string;
   path: string;
   allow: RoleKey[]; // الأدوار المسموح بها
-  permission: Permission;
+  permission?: Permission;
+  authOnly?: boolean;
 };
 
 const adminMenuItems: MenuItem[] = [
@@ -176,6 +180,13 @@ const hrMenuItems: MenuItem[] = [
     permission: "employees.view",
   },
   {
+    icon: ClipboardList,
+    label: "التقارير الأسبوعية",
+    path: "/hr/weekly-reports",
+    allow: ["owner", "admin", "hr"],
+    authOnly: true,
+  },
+  {
     icon: Settings,
     label: "إعدادات الإدارة",
     path: "/hr/settings",
@@ -197,8 +208,84 @@ const HR_MENU_LABELS: Record<string, { ar: string; en: string }> = {
   "/hr/recruitment": { ar: "طلبات التوظيف", en: "Recruitment" },
   "/hr/employees": { ar: "إدارة الموظفين", en: "Employees" },
   "/hr/create-staff": { ar: "إنشاء حساب موظف", en: "Create Staff" },
+  "/hr/weekly-reports": { ar: "التقارير الأسبوعية", en: "Weekly Reports" },
   "/hr/settings": { ar: "إعدادات الإدارة", en: "Settings" },
 };
+
+const HR_SETTINGS_SUB_ITEMS = [
+  {
+    value: "notifications",
+    icon: Bell,
+    label: { ar: "الإشعارات", en: "Notifications" },
+    helper: {
+      ar: "القنوات والتنبيهات التشغيلية",
+      en: "Channels and operational alerts",
+    },
+  },
+  {
+    value: "security",
+    icon: Shield,
+    label: { ar: "الأمان", en: "Security" },
+    helper: {
+      ar: "المصادقة والسياسات الوقائية",
+      en: "Authentication and protection policies",
+    },
+  },
+  {
+    value: "roles",
+    icon: KeyRound,
+    label: { ar: "الأدوار والصلاحيات", en: "Roles and Permissions" },
+    helper: {
+      ar: "إدارة الوصول والصلاحيات",
+      en: "Access and permission management",
+    },
+  },
+  {
+    value: "admins",
+    icon: Users,
+    label: { ar: "حسابات الإدارة", en: "Admin Accounts" },
+    helper: {
+      ar: "الترقيات والدعوات والحسابات",
+      en: "Upgrades, invites, and accounts",
+    },
+  },
+  {
+    value: "labels",
+    icon: Tags,
+    label: { ar: "المسميات", en: "Labels" },
+    helper: {
+      ar: "قاموس النصوص المركزية",
+      en: "Central text dictionary",
+    },
+  },
+  {
+    value: "flags",
+    icon: SlidersHorizontal,
+    label: { ar: "الميزات التجريبية", en: "Feature Flags" },
+    helper: {
+      ar: "مفاتيح التحكم التشغيلي",
+      en: "Operational control switches",
+    },
+  },
+  {
+    value: "recruitment",
+    icon: BriefcaseBusiness,
+    label: { ar: "التوظيف", en: "Recruitment" },
+    helper: {
+      ar: "محرر الحقول ونموذج التقديم العام",
+      en: "Fields editor and public application form",
+    },
+  },
+  {
+    value: "database",
+    icon: Database,
+    label: { ar: "قاعدة البيانات", en: "Database" },
+    helper: {
+      ar: "التخزين والمؤشرات الفنية",
+      en: "Storage and technical indexes",
+    },
+  },
+] as const;
 
 function readStoredSidebarOpen() {
   try {
@@ -408,7 +495,7 @@ export default function DashboardLayout({
       open={isSidebarOpen}
       onOpenChange={setIsSidebarOpen}
       dir={layoutDir}
-      className="min-h-screen max-w-full flex-row items-stretch overflow-x-hidden"
+      className="min-h-screen max-w-full flex-row items-stretch overflow-x-hidden bg-[#F8F9FA]"
       style={
         {
           "--sidebar-width": `${sidebarWidth}px`,
@@ -442,10 +529,12 @@ function DashboardLayoutContent({
   const { user, logout } = useAuth();
   const { language, toggleLanguage } = useLanguage();
   const [location, setLocation] = useLocation();
+  const search = useSearch();
   const { state, setOpen, setOpenMobile } = useSidebar();
 
   const isCollapsed = state === "collapsed";
   const [isResizing, setIsResizing] = useState(false);
+  const [isSettingsMenuOpen, setIsSettingsMenuOpen] = useState(false);
   const [sidebarProfileSource, setSidebarProfileSource] = useState<{
     collectionName: "employees" | "users";
     docId: string;
@@ -472,10 +561,22 @@ function DashboardLayoutContent({
 
   // عناصر القائمة المسموحة
   const visibleMenuItems = useMemo(() => {
-    if (!role || !isOpsRole(role)) return [];
-    const menuItems = area === "hr" ? hrMenuItems : adminMenuItems;
-    return menuItems.filter(item => hasPermission(user, item.permission));
+    if (!role) return [];
+    if (area === "hr") return hrMenuItems;
+    if (!isOpsRole(role)) return [];
+    return adminMenuItems.filter(
+      item => !!item.permission && hasPermission(user, item.permission)
+    );
   }, [area, role, user]);
+
+  const settingsSearchParams = useMemo(
+    () => new URLSearchParams(search),
+    [search]
+  );
+  const isHrSettingsRoute = area === "hr" && location === "/hr/settings";
+  const activeHrSettingsTab = isHrSettingsRoute
+    ? settingsSearchParams.get("tab") || HR_SETTINGS_SUB_ITEMS[0].value
+    : "";
 
   const getMenuLabel = (item: MenuItem) => {
     if (area === "hr") {
@@ -679,16 +780,61 @@ function DashboardLayoutContent({
   }, [isResizing, isRight, setSidebarWidth]);
 
   useEffect(() => {
+    if (isHrSettingsRoute) {
+      setIsSettingsMenuOpen(true);
+    }
+  }, [isHrSettingsRoute]);
+
+  useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
     mainRef.current?.scrollTo({ top: 0, left: 0, behavior: "auto" });
   }, [location]);
 
   return (
     <>
+      {!isMobile ? (
+        <div
+          aria-hidden="true"
+          className={cn(
+            "pointer-events-none fixed inset-y-0 z-0 bg-slate-950",
+            isRight ? "right-0" : "left-0"
+          )}
+          style={{
+            width: isCollapsed
+              ? "var(--sidebar-width-icon)"
+              : "var(--sidebar-width)",
+          }}
+        />
+      ) : null}
+
+      {!isMobile ? (
+        <div
+          aria-hidden="true"
+          className="hidden h-screen shrink-0 md:block"
+          style={{
+            width: isCollapsed
+              ? "var(--sidebar-width-icon)"
+              : "var(--sidebar-width)",
+          }}
+        />
+      ) : null}
+
       <div
         className={cn(
-          isMobile ? "contents" : "relative sticky top-0 h-screen shrink-0 self-start"
+          isMobile
+            ? "contents"
+            : "fixed inset-y-0 z-30 h-screen shrink-0",
+          !isMobile && (isRight ? "right-0" : "left-0")
         )}
+        style={
+          !isMobile
+            ? {
+                width: isCollapsed
+                  ? "var(--sidebar-width-icon)"
+                  : "var(--sidebar-width)",
+              }
+            : undefined
+        }
         ref={sidebarRef}
       >
         <Sidebar
@@ -783,15 +929,141 @@ function DashboardLayoutContent({
           <SidebarContent className="gap-0 bg-transparent">
             <SidebarMenu className="px-2 py-1">
               {visibleMenuItems.map(item => {
+                const isSettingsItem = area === "hr" && item.path === "/hr/settings";
+                const canAccessItem =
+                  item.authOnly || (!!item.permission && hasPermission(user, item.permission));
                 const isActive = location === item.path;
                 const itemLabel = getMenuLabel(item);
+
+                if (isSettingsItem) {
+                  return (
+                    <SidebarMenuItem key={item.path} className="space-y-1">
+                      <SidebarMenuButton
+                        isActive={isActive && canAccessItem}
+                        onClick={() => {
+                          if (!canAccessItem) return;
+                          if (isCollapsed) {
+                            setLocation(
+                              `${item.path}?tab=${HR_SETTINGS_SUB_ITEMS[0].value}`
+                            );
+                            return;
+                          }
+
+                          setIsSettingsMenuOpen(open => !open);
+                        }}
+                        tooltip={itemLabel}
+                        aria-disabled={!canAccessItem}
+                        aria-expanded={canAccessItem ? isSettingsMenuOpen : false}
+                        className={cn(
+                          "h-10 rounded-xl font-normal text-slate-300 transition-all hover:text-white data-[active=true]:bg-white/10 data-[active=true]:text-white [&>svg]:text-[#F2B705]",
+                          !canAccessItem &&
+                            "cursor-not-allowed opacity-55 hover:bg-transparent hover:text-slate-300"
+                        )}
+                      >
+                        <item.icon
+                          className={cn(
+                            "h-4 w-4 text-[#F2B705]",
+                            isActive && "text-[#FFD24A]"
+                          )}
+                        />
+                        <span
+                          className={cn(
+                            "min-w-0 flex-1 whitespace-nowrap transition-[max-width,opacity] duration-200",
+                            isCollapsed
+                              ? "max-w-0 opacity-0 pointer-events-none"
+                              : "max-w-40 opacity-100"
+                          )}
+                        >
+                          {itemLabel}
+                        </span>
+                        {canAccessItem ? (
+                          <ChevronDown
+                            className={cn(
+                              "h-3.5 w-3.5 shrink-0 text-slate-500 transition-transform duration-200",
+                              isSettingsMenuOpen && "rotate-180",
+                              isCollapsed && "hidden"
+                            )}
+                          />
+                        ) : (
+                          <LockKeyhole
+                            className={cn(
+                              "h-3.5 w-3.5 shrink-0 text-slate-500",
+                              isCollapsed && "hidden"
+                            )}
+                          />
+                        )}
+                      </SidebarMenuButton>
+
+                      {!isCollapsed && canAccessItem && isSettingsMenuOpen ? (
+                        <div className="space-y-1 py-1 ltr:pl-7 rtl:pr-7">
+                          {HR_SETTINGS_SUB_ITEMS.map(subItem => {
+                            const SubIcon = subItem.icon;
+                            const isSubActive =
+                              isHrSettingsRoute &&
+                              activeHrSettingsTab === subItem.value;
+
+                            return (
+                              <button
+                                key={subItem.value}
+                                type="button"
+                                onClick={() =>
+                                  setLocation(
+                                    `/hr/settings?tab=${subItem.value}`
+                                  )
+                                }
+                                className={cn(
+                                  "group flex w-full items-start gap-2 rounded-xl border px-2.5 py-2 text-start transition-all",
+                                  isSubActive
+                                    ? "border-[#F2B705]/25 bg-[#F2B705]/10 text-white shadow-[0_12px_24px_-20px_rgba(242,183,5,0.8)]"
+                                    : "border-transparent text-slate-400 hover:bg-white/[0.05] hover:text-white"
+                                )}
+                              >
+                                <SubIcon
+                                  className={cn(
+                                    "mt-0.5 h-3.5 w-3.5 shrink-0 text-[#F2B705]",
+                                    isSubActive
+                                      ? "text-[#FFD24A]"
+                                      : "opacity-80 group-hover:opacity-100"
+                                  )}
+                                />
+                                <span className="min-w-0 flex-1">
+                                  <span className="block truncate text-xs font-semibold leading-5">
+                                    {subItem.label[language]}
+                                  </span>
+                                  <span
+                                    className={cn(
+                                      "block truncate text-[10px] leading-4",
+                                      isSubActive
+                                        ? "text-slate-300"
+                                        : "text-slate-500 group-hover:text-slate-400"
+                                    )}
+                                  >
+                                    {subItem.helper[language]}
+                                  </span>
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : null}
+                    </SidebarMenuItem>
+                  );
+                }
+
                 return (
                   <SidebarMenuItem key={item.path}>
                     <SidebarMenuButton
-                      isActive={isActive}
-                      onClick={() => setLocation(item.path)}
+                      isActive={isActive && canAccessItem}
+                      onClick={() => {
+                        if (canAccessItem) setLocation(item.path);
+                      }}
                       tooltip={itemLabel}
-                      className="h-10 rounded-xl font-normal text-slate-300 transition-all hover:text-white data-[active=true]:bg-white/10 data-[active=true]:text-white [&>svg]:text-[#F2B705]"
+                      aria-disabled={!canAccessItem}
+                      className={cn(
+                        "h-10 rounded-xl font-normal text-slate-300 transition-all hover:text-white data-[active=true]:bg-white/10 data-[active=true]:text-white [&>svg]:text-[#F2B705]",
+                        !canAccessItem &&
+                          "cursor-not-allowed opacity-55 hover:bg-transparent hover:text-slate-300"
+                      )}
                     >
                       <item.icon
                         className={cn(
@@ -807,8 +1079,11 @@ function DashboardLayoutContent({
                             : "max-w-40 opacity-100"
                         )}
                       >
-                        {itemLabel}
-                      </span>
+                          {itemLabel}
+                        </span>
+                        {!canAccessItem && !isCollapsed ? (
+                          <LockKeyhole className="h-3.5 w-3.5 shrink-0 text-slate-500" />
+                        ) : null}
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 );
@@ -856,67 +1131,70 @@ function DashboardLayoutContent({
 
           <SidebarFooter
             className={cn(
-              "border-t border-white/10 bg-slate-950/90",
+              "gap-2 border-t border-white/10 bg-slate-950/90",
               isCollapsed ? "items-center p-2.5 pb-3" : "p-3"
             )}
           >
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  className={cn(
-                    "group flex w-full items-center gap-3.5 text-start transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-white/20",
-                    isCollapsed
-                      ? "h-14 w-14 justify-center rounded-full border-0 bg-transparent p-0 hover:bg-white/[0.04]"
-                      : "rounded-2xl border border-white/10 bg-gradient-to-r from-white/[0.06] to-white/[0.03] px-3 py-2.5 shadow-[0_18px_40px_-28px_rgba(15,23,42,0.95)] hover:border-white/15 hover:from-white/[0.08] hover:to-white/[0.05] hover:shadow-[0_22px_46px_-28px_rgba(15,23,42,0.98)]"
-                  )}
-                >
-                  <Avatar
-                    className={cn(
-                      "shrink-0 overflow-hidden border border-white/15 shadow-[0_12px_24px_-14px_rgba(15,23,42,0.95)]",
-                      isCollapsed
-                        ? "h-12 w-12 rounded-full ring-1 ring-white/20"
-                        : "h-11 w-11 ring-2 ring-white/6"
-                    )}
-                  >
-                    <AvatarImage
-                      src={sidebarAvatarUrl || undefined}
-                      alt={displayName}
-                      className="h-full w-full rounded-full object-cover"
-                    />
-                    <AvatarFallback className="rounded-full bg-gradient-to-br from-slate-700 via-slate-800 to-slate-950 text-sm font-semibold text-slate-50">
-                      {String(displayName ?? "م")
-                        .trim()
-                        .charAt(0)}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div
-                    className={cn(
-                      "min-w-0 flex-1 overflow-hidden transition-[max-width,opacity] duration-200",
-                      isCollapsed
-                        ? "max-w-0 opacity-0 pointer-events-none"
-                        : "max-w-52 opacity-100"
-                    )}
-                  >
-                    <p className="truncate text-sm font-semibold leading-5 tracking-tight text-slate-50">
-                      {displayName}
-                    </p>
-                    <p className="mt-0.5 truncate text-[11px] font-medium leading-5 text-slate-400/90">
-                      {sidebarJobTitle}
-                    </p>
-                  </div>
-                </button>
-              </DropdownMenuTrigger>
-
-              <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuItem
+            <div
+              className={cn(
+                "group flex w-full items-center gap-3 text-start transition-all",
+                isCollapsed
+                  ? "h-14 w-14 justify-center rounded-full border-0 bg-transparent p-0"
+                  : "rounded-2xl border border-white/10 bg-gradient-to-r from-white/[0.06] to-white/[0.03] px-3 py-2.5 shadow-[0_18px_40px_-28px_rgba(15,23,42,0.95)]"
+              )}
+            >
+              <Avatar
+                className={cn(
+                  "shrink-0 overflow-hidden border border-white/15 shadow-[0_12px_24px_-14px_rgba(15,23,42,0.95)]",
+                  isCollapsed
+                    ? "h-12 w-12 rounded-full ring-1 ring-white/20"
+                    : "h-11 w-11 ring-2 ring-white/6"
+                )}
+              >
+                <AvatarImage
+                  src={sidebarAvatarUrl || undefined}
+                  alt={displayName}
+                  className="h-full w-full rounded-full object-cover"
+                />
+                <AvatarFallback className="rounded-full bg-gradient-to-br from-slate-700 via-slate-800 to-slate-950 text-sm font-semibold text-slate-50">
+                  {String(displayName ?? "م")
+                    .trim()
+                    .charAt(0)}
+                </AvatarFallback>
+              </Avatar>
+              <div
+                className={cn(
+                  "min-w-0 flex-1 overflow-hidden transition-[max-width,opacity] duration-200",
+                  isCollapsed
+                    ? "max-w-0 opacity-0 pointer-events-none"
+                    : "max-w-52 opacity-100"
+                )}
+              >
+                <p className="truncate text-sm font-semibold leading-5 tracking-tight text-slate-50">
+                  {displayName}
+                </p>
+                <p className="mt-0.5 truncate text-[11px] font-medium leading-5 text-slate-400/90">
+                  {sidebarJobTitle}
+                </p>
+              </div>
+              {!isCollapsed ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
                   onClick={logout}
-                  className="cursor-pointer text-destructive focus:text-destructive"
+                  aria-label={tr(language, "تسجيل الخروج", "Logout")}
+                  className="h-9 w-9 shrink-0 rounded-xl border-red-300/25 bg-red-500/10 text-red-200 shadow-none hover:border-red-300/40 hover:bg-red-500/16 hover:text-red-100"
                 >
-                  <LogOut className="mr-2 h-4 w-4" />
-                  <span>{tr(language, "تسجيل الخروج", "Logout")}</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                  <LogOut
+                    className={cn(
+                      "h-4 w-4",
+                      language === "ar" && "rotate-180"
+                    )}
+                  />
+                </Button>
+              ) : null}
+            </div>
           </SidebarFooter>
         </Sidebar>
 
@@ -938,7 +1216,7 @@ function DashboardLayoutContent({
         ) : null}
       </div>
 
-      <SidebarInset className="max-w-full overflow-x-hidden">
+      <SidebarInset className="relative z-10 max-w-full overflow-x-hidden bg-[#F8F9FA]">
         {isMobile && (
           <div className="flex border-b h-14 items-center justify-between bg-transparent px-2 backdrop-blur supports-[backdrop-filter]:backdrop-blur sticky top-0 z-40">
             <div className="flex items-center gap-2">
@@ -985,7 +1263,7 @@ function DashboardLayoutContent({
 
         <main
           ref={mainRef}
-          className="min-w-0 max-w-full flex-1 overflow-x-hidden px-3 py-4 sm:px-4 md:px-6 md:py-6 lg:px-8"
+          className="min-h-screen min-w-0 max-w-full flex-1 overflow-x-hidden bg-[#F8F9FA] px-3 py-4 sm:px-4 md:px-6 md:py-6 lg:px-8"
         >
           {!isMobile ? (
             <div className="mb-5 flex items-center justify-end gap-2">

@@ -205,10 +205,10 @@ export function RecipientPicker({
 
   return (
     <div
-      className="space-y-4 rounded-[24px] border border-slate-200/90 bg-white p-4 shadow-sm"
+      className="min-w-0 max-w-full space-y-4 overflow-hidden rounded-[24px] border border-slate-200/90 bg-white p-4 shadow-sm"
       dir="rtl"
     >
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
         <div className="space-y-1 text-right">
           <div className="text-sm font-semibold text-slate-950">
             اختر الموظف
@@ -225,7 +225,7 @@ export function RecipientPicker({
         </Badge>
       </div>
 
-      <div className="relative">
+      <div className="relative min-w-0">
         <Search className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
         <Input
           value={searchQuery}
@@ -238,7 +238,8 @@ export function RecipientPicker({
       </div>
 
       {loading ? (
-        <div className="flex items-start gap-3 overflow-x-auto pb-1">
+        <div className="max-w-full overflow-x-auto pb-1">
+          <div className="flex w-max items-start gap-3">
           {Array.from({ length: 6 }).map((_, index) => (
             <div
               key={index}
@@ -248,10 +249,11 @@ export function RecipientPicker({
               <div className="h-3 w-16 animate-pulse rounded-full bg-slate-200" />
             </div>
           ))}
+          </div>
         </div>
       ) : filteredOptions.length ? (
-        <div className="overflow-x-auto pt-2 pb-2">
-          <div className="flex min-w-max items-start gap-3 pr-1">
+        <div className="max-w-full overflow-x-auto overscroll-x-contain pb-2 pt-2">
+          <div className="flex w-max items-start gap-3 pr-1">
             {filteredOptions.map(option => (
               <RecipientOptionCard
                 key={option.uid}

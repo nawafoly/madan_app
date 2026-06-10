@@ -37,6 +37,7 @@ type SettingsLayoutProps = {
   activeBottomBarAction: SettingsBottomBarAction | null;
   dirtyTabsCount: number;
   prioritizedActionKey: string | null;
+  showInternalNavigation?: boolean;
   children: ReactNode;
 };
 
@@ -58,6 +59,7 @@ export default function SettingsLayout({
   activeBottomBarAction,
   dirtyTabsCount,
   prioritizedActionKey,
+  showInternalNavigation = true,
   children,
 }: SettingsLayoutProps) {
   return (
@@ -68,7 +70,13 @@ export default function SettingsLayout({
         onValueChange={onActiveTabChange}
         className="space-y-0"
       >
-        <div className="flex flex-col gap-6 xl:flex-row xl:items-start">
+        <div
+          className={cn(
+            "flex flex-col gap-6",
+            showInternalNavigation && "xl:flex-row xl:items-start"
+          )}
+        >
+          {showInternalNavigation ? (
           <aside className="w-full xl:sticky xl:top-0 xl:h-screen xl:w-[320px] xl:shrink-0">
             <div className="flex h-full flex-col overflow-hidden rounded-[30px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(8,18,47,0.98),rgba(2,6,23,0.97))] text-white shadow-[0_30px_80px_-46px_rgba(2,6,23,0.82)]">
               <div className="border-b border-white/10 px-5 py-6">
@@ -133,6 +141,7 @@ export default function SettingsLayout({
               </TabsList>
             </div>
           </aside>
+          ) : null}
 
           <div className="min-w-0 flex-1 space-y-8 pb-28 xl:pb-32">
             <div className="space-y-5 pt-1 xl:pt-4">
@@ -175,6 +184,7 @@ export default function SettingsLayout({
 
             {activeBottomBarAction ? (
               <SettingsBottomSaveBar
+                reserveNavigationRail={showInternalNavigation}
                 badgeLabel={activeBottomBarAction.tabLabel}
                 title={
                   dirtyTabsCount > 1
@@ -218,6 +228,7 @@ export default function SettingsLayout({
 }
 
 function SettingsBottomSaveBar({
+  reserveNavigationRail = true,
   badgeLabel,
   title,
   description,
@@ -228,6 +239,7 @@ function SettingsBottomSaveBar({
   secondaryLabel,
   onSecondary,
 }: {
+  reserveNavigationRail?: boolean;
   badgeLabel: string;
   title: string;
   description: string;
@@ -239,7 +251,14 @@ function SettingsBottomSaveBar({
   onSecondary?: () => void;
 }) {
   return (
-    <div className="pointer-events-none fixed inset-x-3 bottom-4 z-40 sm:inset-x-4 sm:bottom-5 xl:left-8 xl:right-[calc(320px+2rem)]">
+    <div
+      className={cn(
+        "pointer-events-none fixed inset-x-3 bottom-4 z-40 sm:inset-x-4 sm:bottom-5",
+        reserveNavigationRail
+          ? "xl:left-8 xl:right-[calc(320px+2rem)]"
+          : "xl:inset-x-8"
+      )}
+    >
       <div className="pointer-events-auto mx-auto w-full max-w-5xl rounded-[24px] border border-slate-200/90 bg-white/96 px-4 py-3.5 shadow-[0_22px_42px_-24px_rgba(15,23,42,0.3)] backdrop-blur sm:px-5">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="min-w-0 space-y-2">

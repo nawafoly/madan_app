@@ -1,5 +1,6 @@
 import { buildWorkbookXlsx, type XlsxColumn, type XlsxRow } from "@/lib/xlsxStore";
 import { WEEKLY_REPORT_DIRECT_MANAGER_NAME } from "@/lib/weeklyReportConfig";
+import { loadWeeklyReportLetterhead } from "@/lib/weeklyReportLetterhead";
 import type { WeeklyReportWordData } from "@/lib/weeklyReportWord";
 
 function text(value: unknown) {
@@ -26,6 +27,7 @@ function downloadBlob(blob: Blob, fileName: string) {
 }
 
 export async function downloadWeeklyReportExcel(report: WeeklyReportWordData) {
+  const letterheadImage = await loadWeeklyReportLetterhead();
   const employeeName = text(report.createdByName) || "موظف";
   const reportDate = text(report.reportDate) || "بدون تاريخ";
   const tasks = report.tasks.length
@@ -77,6 +79,7 @@ export async function downloadWeeklyReportExcel(report: WeeklyReportWordData) {
   const blob = await buildWorkbookXlsx({
     title: `تقرير العمل الأسبوعي - ${employeeName}`,
     creator: "MAEDIN",
+    backgroundImage: letterheadImage ? { data: letterheadImage } : null,
     description: `تقرير العمل الأسبوعي للموظف ${employeeName} بتاريخ ${reportDate}`,
     sheets: [
       {

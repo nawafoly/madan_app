@@ -25,10 +25,15 @@ export type XlsxSheet = {
   mergeRanges?: string[];
 };
 
+export type XlsxWorkbookImage = {
+  data: string | Uint8Array | ArrayBuffer | Blob;
+};
+
 export type XlsxWorkbookInput = {
   title: string;
   creator?: string;
   description?: string;
+  backgroundImage?: XlsxWorkbookImage | null;
   sheets: XlsxSheet[];
 };
 
@@ -183,7 +188,7 @@ function getCellStyleId(row: XlsxRow, rowIndex: number, column: XlsxColumn) {
   return rowStyleId;
 }
 
-function buildSheetXml(sheet: XlsxSheet) {
+function buildSheetXml(sheet: XlsxSheet, hasBackgroundImage = false) {
   if (!sheet.columns.length) {
     throw new Error(`Worksheet "${sheet.name}" must include at least one column.`);
   }
@@ -240,7 +245,11 @@ function buildSheetXml(sheet: XlsxSheet) {
 
   return [
     XML_HEADER,
-    '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">',
+    `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"${
+      hasBackgroundImage
+        ? ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"'
+        : ""
+    }>`,
     sheetPr,
     `<dimension ref="${dimension}"/>`,
     freezeHeader,
@@ -258,6 +267,7 @@ function buildSheetXml(sheet: XlsxSheet) {
           .join("")}</mergeCells>`
       : "",
     '<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/>',
+    hasBackgroundImage ? '<picture r:id="rId1"/>' : "",
     "</worksheet>",
   ].join("");
 }
@@ -295,7 +305,18 @@ function buildWorkbookRelsXml(sheets: XlsxSheet[]) {
   ].join("");
 }
 
-function buildContentTypesXml(sheets: XlsxSheet[]) {
+function buildSheetRelsXml(backgroundImageFileName: string) {
+  return [
+    XML_HEADER,
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">',
+    `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/${escapeXml(
+      backgroundImageFileName
+    )}"/>`,
+    "</Relationships>",
+  ].join("");
+}
+
+function buildContentTypesXml(sheets: XlsxSheet[], hasBackgroundImage = false) {
   const sheetOverrides = sheets.map(
     (_, index) =>
       `<Override PartName="/xl/worksheets/sheet${
@@ -308,6 +329,9 @@ function buildContentTypesXml(sheets: XlsxSheet[]) {
     '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">',
     '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>',
     '<Default Extension="xml" ContentType="application/xml"/>',
+    hasBackgroundImage
+      ? '<Default Extension="png" ContentType="image/png"/>'
+      : "",
     '<Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>',
     '<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>',
     '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>',
@@ -425,6 +449,8 @@ export async function buildWorkbookXlsx(input: XlsxWorkbookInput) {
     String(input.description || "Generated workbook export").trim() ||
     "Generated workbook export";
   const sheets = uniqueSheetNames(input.sheets || []);
+  const hasBackgroundImage = Boolean(input.backgroundImage?.data);
+  const backgroundImageFileName = "background22.png";
 
   if (!sheets.length) {
     throw new Error("Workbook must include at least one worksheet.");
@@ -433,7 +459,7 @@ export async function buildWorkbookXlsx(input: XlsxWorkbookInput) {
   const entries: ZipEntryInput[] = [
     {
       path: "[Content_Types].xml",
-      data: buildContentTypesXml(sheets),
+      data: buildContentTypesXml(sheets, hasBackgroundImage),
     },
     {
       path: "_rels/.rels",
@@ -464,9 +490,23 @@ export async function buildWorkbookXlsx(input: XlsxWorkbookInput) {
   sheets.forEach((sheet, index) => {
     entries.push({
       path: `xl/worksheets/sheet${index + 1}.xml`,
-      data: buildSheetXml(sheet),
+      data: buildSheetXml(sheet, hasBackgroundImage),
     });
+
+    if (hasBackgroundImage) {
+      entries.push({
+        path: `xl/worksheets/_rels/sheet${index + 1}.xml.rels`,
+        data: buildSheetRelsXml(backgroundImageFileName),
+      });
+    }
   });
+
+  if (input.backgroundImage?.data) {
+    entries.push({
+      path: `xl/media/${backgroundImageFileName}`,
+      data: input.backgroundImage.data,
+    });
+  }
 
   const zipBlob = await buildStoredZip(entries);
   return new Blob([await zipBlob.arrayBuffer()], {
