@@ -1,5 +1,6 @@
 import { useState } from "react";
 
+import hrLogoUrl from "@/assets/maedin-logo.png";
 import { cn } from "@/lib/utils";
 
 type HrBrandMarkProps = {
@@ -31,7 +32,7 @@ export function HrBrandMark({
         </span>
       ) : (
         <img
-          src="/logo.png"
+          src={hrLogoUrl}
           alt=""
           className={cn("h-[82%] w-[82%] object-contain", imageClassName)}
           onError={() => setFailed(true)}
