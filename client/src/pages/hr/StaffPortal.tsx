@@ -6,12 +6,12 @@ import {
   ClipboardList,
   Eye,
   EyeOff,
+  FileText,
   Globe,
   LockKeyhole,
   LogOut,
   Mail,
   Settings,
-  ShieldCheck,
   UserRound,
   Users,
 } from "lucide-react";
@@ -401,19 +401,29 @@ export default function StaffPortalPage() {
         count: portalNotificationCounts.messages,
       },
       {
-        icon: ShieldCheck,
-        label: tr(language, "صلاحيات مؤسسية", "Role-Based Permissions"),
-        helper: tr(
-          language,
-          "وصول حسب الدور والمسؤولية",
-          "Access by role and responsibility"
-        ),
-        count: 0,
+        icon: FileText,
+        label: tr(language, "الملفات والرواتب", "Files And Payroll"),
+        helper:
+          portalNotificationCounts.files > 0
+            ? tr(
+                language,
+                `${portalNotificationCounts.files} ملف جديد يحتاج مراجعة`,
+                `${portalNotificationCounts.files} new file${
+                  portalNotificationCounts.files > 1 ? "s" : ""
+                } to review`
+              )
+            : tr(
+                language,
+                "مستندات وسجلات ورواتب الموظف",
+                "Employee documents, records, and payroll"
+              ),
+        count: portalNotificationCounts.files,
       },
     ],
     [
       canWriteWeeklyReportNotes,
       language,
+      portalNotificationCounts.files,
       portalNotificationCounts.leave,
       portalNotificationCounts.messages,
       weeklyReportBadgeCount,

@@ -851,16 +851,27 @@ export default function EmployeeMessagesScreen() {
               dir="rtl"
               className="space-y-6"
             >
-              <TabsList className="grid h-auto w-full grid-cols-1 rounded-[22px] bg-slate-100 p-1 md:grid-cols-2">
+              <TabsList className="grid h-auto w-full grid-cols-1 gap-3 rounded-none bg-transparent p-0 md:grid-cols-2">
                 <TabsTrigger
                   value="hr"
-                  className="rounded-[18px] px-4 py-3 text-sm data-[state=active]:bg-white data-[state=active]:shadow-sm"
+                  className="group h-auto justify-start rounded-[24px] border border-slate-200/80 bg-slate-50/70 px-4 py-4 text-start shadow-none transition-all data-[state=active]:border-[#F2B705]/70 data-[state=active]:bg-white data-[state=active]:shadow-[0_18px_45px_-34px_rgba(15,23,42,0.34)]"
                 >
-                  <span className="flex items-center gap-2">
-                    <Mail className="h-4 w-4" />
-                    رسائل HR
+                  <span className="flex w-full items-center justify-between gap-4">
+                    <span className="flex min-w-0 items-center gap-3">
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white text-slate-700 shadow-sm ring-1 ring-slate-200 transition group-data-[state=active]:bg-[#030640] group-data-[state=active]:text-[#F2B705] group-data-[state=active]:ring-[#030640]">
+                        <Mail className="h-4 w-4" />
+                      </span>
+                      <span className="min-w-0 text-start">
+                        <span className="block text-sm font-semibold text-slate-950">
+                          رسائل HR
+                        </span>
+                        <span className="mt-1 block text-xs leading-5 text-slate-500">
+                          رسائل الإدارة والتنبيهات الرسمية
+                        </span>
+                      </span>
+                    </span>
                     {hrUnreadCount > 0 ? (
-                      <Badge className="rounded-full bg-[#F2B705] text-slate-950 hover:bg-[#F2B705]">
+                      <Badge className="shrink-0 rounded-full bg-[#F2B705] px-2.5 text-slate-950 hover:bg-[#F2B705]">
                         {hrUnreadCount}
                       </Badge>
                     ) : null}
@@ -869,13 +880,24 @@ export default function EmployeeMessagesScreen() {
 
                 <TabsTrigger
                   value="internal"
-                  className="rounded-[18px] px-4 py-3 text-sm data-[state=active]:bg-white data-[state=active]:shadow-sm"
+                  className="group h-auto justify-start rounded-[24px] border border-slate-200/80 bg-slate-50/70 px-4 py-4 text-start shadow-none transition-all data-[state=active]:border-sky-200 data-[state=active]:bg-white data-[state=active]:shadow-[0_18px_45px_-34px_rgba(15,23,42,0.34)]"
                 >
-                  <span className="flex items-center gap-2">
-                    <Users className="h-4 w-4" />
-                    محادثة داخلية
+                  <span className="flex w-full items-center justify-between gap-4">
+                    <span className="flex min-w-0 items-center gap-3">
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white text-slate-700 shadow-sm ring-1 ring-slate-200 transition group-data-[state=active]:bg-sky-700 group-data-[state=active]:text-white group-data-[state=active]:ring-sky-700">
+                        <Users className="h-4 w-4" />
+                      </span>
+                      <span className="min-w-0 text-start">
+                        <span className="block text-sm font-semibold text-slate-950">
+                          محادثة داخلية
+                        </span>
+                        <span className="mt-1 block text-xs leading-5 text-slate-500">
+                          تواصل مباشر بين الموظفين
+                        </span>
+                      </span>
+                    </span>
                     {internalUnreadCount > 0 ? (
-                      <Badge className="rounded-full bg-sky-600 text-white hover:bg-sky-600">
+                      <Badge className="shrink-0 rounded-full bg-sky-600 px-2.5 text-white hover:bg-sky-600">
                         {internalUnreadCount}
                       </Badge>
                     ) : null}
