@@ -1,16 +1,19 @@
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
+  ClipboardList,
   FileText,
   BriefcaseBusiness,
+  Globe,
   Home,
   LogOut,
   Mail,
   ShieldCheck,
   UserRound,
 } from "lucide-react";
-import { Link, useLocation } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
 
 import { NotificationBell } from "@/components/NotificationBell";
+import { HrBrandMark } from "@/components/HrBrandMark";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -29,31 +32,59 @@ export default function EmployeeLayout({
   description,
   children,
 }: EmployeeLayoutProps) {
-  const { language } = useLanguage();
+  const { language, toggleLanguage } = useLanguage();
   const { user, logout } = useAuth();
   const [location, setLocation] = useLocation();
+  const search = useSearch();
+  const [isNavFloating, setIsNavFloating] = useState(false);
   const layoutDir: "rtl" | "ltr" = language === "ar" ? "rtl" : "ltr";
+  const languageToggleLabel = language === "ar" ? "English" : "Arabic";
+  const currentPath = location.split("?")[0];
+  const currentTab = new URLSearchParams(search).get("tab");
 
   const handleLogout = async () => {
     await logout();
     setLocation("/hr");
   };
 
+  useEffect(() => {
+    const updateFloatingState = () => {
+      setIsNavFloating(window.scrollY > 180);
+    };
+
+    updateFloatingState();
+    window.addEventListener("scroll", updateFloatingState, { passive: true });
+    return () => window.removeEventListener("scroll", updateFloatingState);
+  }, []);
+
   const navItems = [
     {
       label: tr(language, "الملف الشخصي", "Profile"),
-      path: "/hr/profile",
+      href: "/hr/profile",
       icon: UserRound,
+      active: currentPath === "/hr/profile",
     },
     {
       label: tr(language, "الملفات", "Files"),
-      path: "/hr/files",
+      href: "/hr/files",
       icon: FileText,
+      active: currentPath === "/hr/files",
     },
     {
       label: tr(language, "الرسائل", "Messages"),
-      path: "/hr/messages",
+      href: "/hr/messages?tab=hr",
       icon: Mail,
+      active:
+        currentPath === "/hr/messages" &&
+        currentTab !== "weekly_report",
+    },
+    {
+      label: tr(language, "تقرير العمل الأسبوعي", "Weekly Report"),
+      href: "/hr/messages?tab=weekly_report",
+      icon: ClipboardList,
+      active:
+        currentPath === "/hr/messages" &&
+        currentTab === "weekly_report",
     },
   ];
   const displayTitle =
@@ -65,6 +96,36 @@ export default function EmployeeLayout({
           description,
           "Review your personal profile, files, and internal messages."
         );
+  const navLinks = (
+    <nav
+      aria-label={tr(language, "روابط بوابة الموظف", "Employee portal links")}
+      className={cn(
+        "pointer-events-auto inline-flex max-w-full flex-wrap items-center gap-1 rounded-2xl border border-slate-200/80 p-1 backdrop-blur-xl transition-[background-color,box-shadow,transform] duration-300 ease-out will-change-transform",
+        isNavFloating
+          ? "bg-white/90 shadow-[0_20px_54px_-34px_rgba(15,23,42,0.42)] supports-[backdrop-filter]:bg-white/75"
+          : "bg-white/80 shadow-[0_18px_50px_-36px_rgba(15,23,42,0.28)] supports-[backdrop-filter]:bg-white/70"
+      )}
+    >
+      {navItems.map(item => {
+        const Icon = item.icon;
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            className={cn(
+              "inline-flex h-10 items-center gap-2 rounded-xl px-3.5 text-sm font-semibold transition-all duration-200 ease-out sm:px-4",
+              item.active
+                ? "bg-slate-950 text-white shadow-sm"
+                : "text-slate-600 hover:bg-white hover:text-slate-950"
+            )}
+          >
+            <Icon className="h-4 w-4" />
+            <span className="whitespace-nowrap">{item.label}</span>
+          </Link>
+        );
+      })}
+    </nav>
+  );
 
   return (
     <div
@@ -77,13 +138,12 @@ export default function EmployeeLayout({
             href="/hr"
             className="flex min-w-0 items-center gap-3 text-slate-950"
           >
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-950 text-[#F2B705]">
-              <img
-                src="/logo.png"
-                alt={tr(language, "شعار معدن", "MAEDIN logo")}
-                className="h-7 w-7 object-contain"
-              />
-            </span>
+            <HrBrandMark
+              alt={tr(language, "شعار معدن", "MAEDIN logo")}
+              compact
+              className="h-10 w-10"
+              imageClassName="h-9 w-9"
+            />
             <span className="min-w-0">
               <span className="block truncate text-sm font-semibold">
                 {tr(language, "بوابة الموظف", "Employee Portal")}
@@ -102,6 +162,18 @@ export default function EmployeeLayout({
             {user ? (
               <NotificationBell triggerClassName="rounded-xl text-slate-700 hover:bg-slate-100" />
             ) : null}
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={toggleLanguage}
+              className="h-10 rounded-xl border-slate-200 bg-white"
+              aria-label={tr(language, "تبديل اللغة", "Toggle language")}
+            >
+              <Globe className="h-4 w-4" />
+              {languageToggleLabel}
+            </Button>
 
             <Link href="/hr">
               <Button
@@ -159,30 +231,21 @@ export default function EmployeeLayout({
                   </p>
                 </div>
 
-                <div className="flex flex-wrap gap-2">
-                  {navItems.map(item => {
-                    const Icon = item.icon;
-                    const isActive = location === item.path;
-                    return (
-                      <Link
-                        key={item.path}
-                        href={item.path}
-                        className={cn(
-                          "inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition-all",
-                          isActive
-                            ? "border-slate-950 bg-slate-950 text-white shadow-sm"
-                            : "border-slate-200 bg-white/80 text-slate-700 hover:border-slate-300 hover:bg-white"
-                        )}
-                      >
-                        <Icon className="h-4 w-4" />
-                        {item.label}
-                      </Link>
-                    );
-                  })}
-                </div>
               </div>
             </div>
           </section>
+
+          <div className="-mt-5 h-14">
+            {isNavFloating ? (
+              <div className="fixed inset-x-0 top-3 z-[70] pointer-events-none">
+                <div className="container flex justify-start">{navLinks}</div>
+              </div>
+            ) : (
+              <div className="relative z-30 flex justify-start py-1">
+                {navLinks}
+              </div>
+            )}
+          </div>
 
           {children}
         </div>

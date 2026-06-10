@@ -1,4 +1,11 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 
 export type Language = "ar" | "en";
 
@@ -60,14 +67,23 @@ export function LanguageProvider({
     writeStoredLanguage(language);
   }, [language]);
 
+  const updateLanguage = useCallback((nextLanguage: Language) => {
+    applyDocumentLanguage(nextLanguage);
+    writeStoredLanguage(nextLanguage);
+    setLanguage(nextLanguage);
+  }, []);
+
+  const toggleLanguage = useCallback(() => {
+    updateLanguage(language === "ar" ? "en" : "ar");
+  }, [language, updateLanguage]);
+
   const value = useMemo(
     () => ({
       language,
-      setLanguage,
-      toggleLanguage: () =>
-        setLanguage((prev) => (prev === "ar" ? "en" : "ar")),
+      setLanguage: updateLanguage,
+      toggleLanguage,
     }),
-    [language]
+    [language, toggleLanguage, updateLanguage]
   );
 
   return (

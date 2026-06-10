@@ -28,6 +28,7 @@ import {
 } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { HrBrandMark } from "@/components/HrBrandMark";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -233,13 +234,11 @@ export default function StaffPortalPage() {
             <div className="space-y-9">
               <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
-                  <span className="flex h-12 w-12 items-center justify-center rounded-2xl border border-[#F2B705]/25 bg-[#F2B705]/10 text-[#F2B705]">
-                    <img
-                      src="/logo.png"
-                      alt={tr(language, "شعار معدن", "MAEDIN logo")}
-                      className="h-8 w-8 object-contain"
-                    />
-                  </span>
+                  <HrBrandMark
+                    alt={tr(language, "شعار معدن", "MAEDIN logo")}
+                    className="h-12 w-12"
+                    imageClassName="h-10 w-10"
+                  />
                   <div>
                     <div className="text-lg font-semibold tracking-tight">
                       {tr(language, "منصة الموارد البشرية", "Human Resources Platform")}
@@ -409,13 +408,13 @@ export default function StaffPortalPage() {
                   <PortalAlert tone="error">
                     {tr(
                       language,
-                      "هذا الحساب غير مخصص لمنصة الموظفين. استخدم حساب موظف أو حساب إداري داخلي.",
-                      "This account is not assigned to the staff platform. Use a staff or internal admin account."
+                      "يبدو أنك دخلت بحساب تابع للموقع الرئيسي وليس لمنصة الموارد البشرية. يمكنك الرجوع للموقع أو تسجيل الدخول بحساب موظف/إداري داخلي.",
+                      "It looks like you signed in with a main website account, not an HR platform account. Return to the website or sign in with a staff/internal admin account."
                     )}
                   </PortalAlert>
-                  <Link href="/hr">
+                  <Link href="/">
                     <Button className="h-12 w-full rounded-2xl">
-                      {tr(language, "العودة إلى بوابة الموظفين", "Back To Staff Portal")}
+                      {tr(language, "العودة إلى الموقع الرئيسي", "Back To Main Website")}
                     </Button>
                   </Link>
                 </div>

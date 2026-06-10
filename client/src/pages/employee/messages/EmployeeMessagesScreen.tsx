@@ -827,7 +827,17 @@ export default function EmployeeMessagesScreen() {
         <Card className="rounded-[28px] border-slate-200/80 bg-white/95 shadow-[0_28px_80px_-52px_rgba(15,23,42,0.28)]">
           <CardHeader className="space-y-4">
             <CardTitle className="text-xl font-semibold text-slate-950">
-            <MessageSquare className="h-4 w-4" /> رسائل HR والمحادثات الداخلية
+              {activeSection === "weekly_report" ? (
+                <span className="flex items-center gap-2">
+                  <ClipboardList className="h-4 w-4" />
+                  تقرير العمل الأسبوعي
+                </span>
+              ) : (
+                <span className="flex items-center gap-2">
+                  <MessageSquare className="h-4 w-4" />
+                  رسائل HR والمحادثات الداخلية
+                </span>
+              )}
             </CardTitle>
           </CardHeader>
 
@@ -840,47 +850,39 @@ export default function EmployeeMessagesScreen() {
               dir="rtl"
               className="space-y-6"
             >
-              <TabsList className="grid h-auto w-full grid-cols-1 rounded-[22px] bg-slate-100 p-1 md:grid-cols-3">
-                <TabsTrigger
-                  value="hr"
-                  className="rounded-[18px] px-4 py-3 text-sm data-[state=active]:bg-white data-[state=active]:shadow-sm"
-                >
-                  <span className="flex items-center gap-2">
-                    <Mail className="h-4 w-4" />
-                    رسائل HR
-                    {hrUnreadCount > 0 ? (
-                      <Badge className="rounded-full bg-[#F2B705] text-slate-950 hover:bg-[#F2B705]">
-                        {hrUnreadCount}
-                      </Badge>
-                    ) : null}
-                  </span>
-                </TabsTrigger>
+              {activeSection !== "weekly_report" ? (
+                <TabsList className="grid h-auto w-full grid-cols-1 rounded-[22px] bg-slate-100 p-1 md:grid-cols-2">
+                  <TabsTrigger
+                    value="hr"
+                    className="rounded-[18px] px-4 py-3 text-sm data-[state=active]:bg-white data-[state=active]:shadow-sm"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Mail className="h-4 w-4" />
+                      رسائل HR
+                      {hrUnreadCount > 0 ? (
+                        <Badge className="rounded-full bg-[#F2B705] text-slate-950 hover:bg-[#F2B705]">
+                          {hrUnreadCount}
+                        </Badge>
+                      ) : null}
+                    </span>
+                  </TabsTrigger>
 
-                <TabsTrigger
-                  value="internal"
-                  className="rounded-[18px] px-4 py-3 text-sm data-[state=active]:bg-white data-[state=active]:shadow-sm"
-                >
-                  <span className="flex items-center gap-2">
-                    <Users className="h-4 w-4" />
-                    محادثة داخلية
-                    {internalUnreadCount > 0 ? (
-                      <Badge className="rounded-full bg-sky-600 text-white hover:bg-sky-600">
-                        {internalUnreadCount}
-                      </Badge>
-                    ) : null}
-                  </span>
-                </TabsTrigger>
-
-                <TabsTrigger
-                  value="weekly_report"
-                  className="rounded-[18px] px-4 py-3 text-sm data-[state=active]:bg-white data-[state=active]:shadow-sm"
-                >
-                  <span className="flex items-center gap-2">
-                    <ClipboardList className="h-4 w-4" />
-                    تقرير العمل الأسبوعي
-                  </span>
-                </TabsTrigger>
-              </TabsList>
+                  <TabsTrigger
+                    value="internal"
+                    className="rounded-[18px] px-4 py-3 text-sm data-[state=active]:bg-white data-[state=active]:shadow-sm"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Users className="h-4 w-4" />
+                      محادثة داخلية
+                      {internalUnreadCount > 0 ? (
+                        <Badge className="rounded-full bg-sky-600 text-white hover:bg-sky-600">
+                          {internalUnreadCount}
+                        </Badge>
+                      ) : null}
+                    </span>
+                  </TabsTrigger>
+                </TabsList>
+              ) : null}
 
               <TabsContent value="hr" className="mt-0">
                 <ConversationWorkspace

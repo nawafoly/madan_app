@@ -175,6 +175,8 @@ import {
   formatNumberEN,
   toDateSafe,
 } from "@/lib/formatters";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { languageDir, safeEnglishText, tr } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import type {
   EmployeeAbsenceType,
@@ -675,6 +677,63 @@ function getEmployeeInitials(name: string, email?: string | null) {
     .map(part => part.charAt(0))
     .join("")
     .toUpperCase();
+}
+
+const EMPLOYEE_ENGLISH_TEXT_FALLBACKS: Record<string, string> = {
+  "غير محدد": "Unassigned",
+  "الموارد البشرية": "Human Resources",
+  "تقنية المعلومات": "Information Technology",
+  "مدير إداري": "Administrative Manager",
+  "مدير العمليات": "Operations Manager",
+  "مدير المبيعات": "Sales Manager",
+  "محلل": "Analyst",
+  "أخصائي": "Specialist",
+  "أخصائي موارد بشرية": "HR Specialist",
+  "المبيعات": "Sales",
+  "التسويق": "Marketing",
+  "الإدارة": "Administration",
+  "المالية": "Finance",
+  "على رأس العمل": "Active",
+  "فترة تجربة": "Probation",
+  "في إجازة": "On Leave",
+  "غير نشط": "Inactive",
+  "موقوف": "Suspended",
+  "منتهي الارتباط الوظيفي": "Terminated",
+};
+
+function titleCaseEnglishText(value: string) {
+  return value
+    .split(" ")
+    .map(part => {
+      if (!part) return part;
+      return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
+    })
+    .join(" ");
+}
+
+function employeeNameFallbackFromEmail(email?: string | null) {
+  const localPart = String(email || "")
+    .split("@")[0]
+    .replace(/\+/g, " ")
+    .replace(/[._-]+/g, " ")
+    .replace(/\d+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return localPart ? titleCaseEnglishText(localPart) : "Employee";
+}
+
+function displayEmployeeText(
+  language: "ar" | "en",
+  value: unknown,
+  fallbackEn: string
+) {
+  const text = String(value ?? "").trim();
+  if (language === "ar") return text || EMPLOYEE_EMPTY_VALUE;
+  if (EMPLOYEE_ENGLISH_TEXT_FALLBACKS[text]) {
+    return EMPLOYEE_ENGLISH_TEXT_FALLBACKS[text];
+  }
+  return safeEnglishText(text, fallbackEn);
 }
 
 type EmployeeAvatarVariant = "male" | "female";
@@ -1360,8 +1419,11 @@ function matchesEmployeeFileVersion(
 
 export default function EmployeesManagementPage() {
   const { user } = useAuth();
+  const { language } = useLanguage();
   const search = useSearch();
   const canManageEmployees = hasPermission(user, "employees.manage");
+  const pageDir = languageDir(language);
+  const pageTextAlignClass = language === "ar" ? "text-right" : "text-left";
   const [employees, setEmployees] = useState<EmployeeRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -1720,16 +1782,33 @@ export default function EmployeesManagementPage() {
           employee,
           profile.personal.avatarUrl
         );
+        const displayName =
+          language === "ar"
+            ? profile.personal.name
+            : displayEmployeeText(
+                language,
+                profile.personal.name,
+                employeeNameFallbackFromEmail(profile.personal.email)
+              );
+        const displayTitle = displayEmployeeText(
+          language,
+          profile.employment.title,
+          "Unassigned"
+        );
 
         return {
           employee,
           profile,
           displayAvatarUrl,
+          displayName,
+          displayTitle,
           searchText: [
             profile.personal.name,
+            displayName,
             profile.personal.email,
             profile.personal.phone,
             profile.employment.title,
+            displayTitle,
             profile.employment.department,
             profile.employment.employeeCode,
             profile.employment.fingerprintNumber,
@@ -1738,7 +1817,7 @@ export default function EmployeesManagementPage() {
             .toLowerCase(),
         };
       }),
-    [employees]
+    [employees, language]
   );
 
   const filteredEmployeeCards = useMemo(() => {
@@ -1769,16 +1848,27 @@ export default function EmployeesManagementPage() {
     [selectedEmployee]
   );
   const selectedEmployeeLabel = useMemo(
-    () =>
-      selectedEmployeeProfile?.personal?.name &&
+    () => {
+      const rawName =
+        selectedEmployeeProfile?.personal?.name &&
         selectedEmployeeProfile?.personal?.name !== EMPLOYEE_EMPTY_VALUE
-        ? selectedEmployeeProfile?.personal?.name
-        : pickText(
-          selectedEmployee?.displayName,
-          selectedEmployee?.name,
-          selectedEmployee?.email
-        ) || "الموظف",
-    [selectedEmployee, selectedEmployeeProfile]
+          ? selectedEmployeeProfile?.personal?.name
+          : pickText(
+              selectedEmployee?.displayName,
+              selectedEmployee?.name,
+              selectedEmployee?.email
+            ) || "الموظف";
+
+      if (language === "ar") return rawName;
+      return displayEmployeeText(
+        language,
+        rawName,
+        employeeNameFallbackFromEmail(
+          selectedEmployeeProfile?.personal?.email || selectedEmployee?.email
+        )
+      );
+    },
+    [language, selectedEmployee, selectedEmployeeProfile]
   );
   const selectedEmployeeDisplayAvatarUrl = useMemo(
     () =>
@@ -1791,8 +1881,8 @@ export default function EmployeesManagementPage() {
     [selectedEmployee, selectedEmployeeProfile]
   );
   const selectedEmployeeEmployment = useMemo(
-    () =>
-      (selectedEmployeeProfile?.employment ||
+    () => {
+      const employment = (selectedEmployeeProfile?.employment ||
         ({
           title: selectedEmployee?.title || EMPLOYEE_EMPTY_VALUE,
           department: selectedEmployee?.department || EMPLOYEE_EMPTY_VALUE,
@@ -1801,8 +1891,24 @@ export default function EmployeesManagementPage() {
           employeeCode: EMPLOYEE_EMPTY_VALUE,
           startDate: null,
           fingerprintNumber: EMPLOYEE_EMPTY_VALUE,
-        } as Record<string, any>)) as Record<string, any>,
-    [selectedEmployee, selectedEmployeeProfile]
+        } as Record<string, any>)) as Record<string, any>;
+
+      return {
+        ...employment,
+        title: displayEmployeeText(language, employment.title, "Unassigned"),
+        department: displayEmployeeText(
+          language,
+          employment.department,
+          "Unassigned"
+        ),
+        statusLabel: displayEmployeeText(
+          language,
+          employment.statusLabel,
+          "Unassigned"
+        ),
+      };
+    },
+    [language, selectedEmployee, selectedEmployeeProfile]
   );
 
   const employeeAvatarCropMetrics = useMemo(
@@ -4502,10 +4608,22 @@ export default function EmployeesManagementPage() {
       setManualLeaveBalanceOperation("add");
       setManualLeaveAdjustmentReason("");
 
-      toast.success("تم تعديل رصيد الإجازات يدويًا.");
+      toast.success(
+        tr(
+          language,
+          "تم تعديل رصيد الإجازات يدويًا.",
+          "Leave balance was adjusted manually."
+        )
+      );
     } catch (error) {
       console.error("manual_leave_balance_update_failed", error);
-      toast.error("تعذر تعديل رصيد الإجازات.");
+      toast.error(
+        tr(
+          language,
+          "تعذر تعديل رصيد الإجازات.",
+          "Could not adjust leave balance."
+        )
+      );
     } finally {
       setSavingManualLeaveBalance(false);
     }
@@ -4524,7 +4642,13 @@ export default function EmployeesManagementPage() {
   ) => {
     if (!selectedEmployee || !selectedEmployeeProfile) return;
     if (!canManageEmployees) {
-      toast.error("لا تملك صلاحية مراجعة طلبات الإجازة.");
+      toast.error(
+        tr(
+          language,
+          "لا تملك صلاحية مراجعة طلبات الإجازة.",
+          "You do not have permission to review leave requests."
+        )
+      );
       return;
     }
 
@@ -4676,12 +4800,20 @@ export default function EmployeesManagementPage() {
           userId: request.employeeUid,
           title:
             nextStatus === "approved"
-              ? "تم اعتماد طلب الإجازة"
-              : "تم رفض طلب الإجازة",
+              ? tr(language, "تم اعتماد طلب الإجازة", "Leave Request Approved")
+              : tr(language, "تم رفض طلب الإجازة", "Leave Request Rejected"),
           body:
             nextStatus === "approved"
-              ? "تم اعتماد طلب الإجازة الخاص بك وتحديث الرصيد وفقًا لذلك."
-              : "تم رفض طلب الإجازة الخاص بك. يمكنك مراجعة الملاحظة الإدارية داخل الطلب.",
+              ? tr(
+                  language,
+                  "تم اعتماد طلب الإجازة الخاص بك وتحديث الرصيد وفقًا لذلك.",
+                  "Your leave request was approved and the balance was updated."
+                )
+              : tr(
+                  language,
+                  "تم رفض طلب الإجازة الخاص بك. يمكنك مراجعة الملاحظة الإدارية داخل الطلب.",
+                  "Your leave request was rejected. You can review the admin note inside the request."
+                ),
           type: "leave",
           relatedId: request.id,
           relatedTo: "employee_leave_request",
@@ -4699,8 +4831,12 @@ export default function EmployeesManagementPage() {
 
       toast.success(
         nextStatus === "approved"
-          ? "تم اعتماد طلب الإجازة وخصم الرصيد."
-          : "تم رفض طلب الإجازة."
+          ? tr(
+              language,
+              "تم اعتماد طلب الإجازة وخصم الرصيد.",
+              "Leave request approved and balance deducted."
+            )
+          : tr(language, "تم رفض طلب الإجازة.", "Leave request rejected.")
       );
     } catch (reviewError) {
       console.error("review_leave_request_error", reviewError);
@@ -4709,19 +4845,43 @@ export default function EmployeesManagementPage() {
         reviewError instanceof Error &&
         reviewError.message === "leave_balance_insufficient"
       ) {
-        toast.error("رصيد الإجازات الحالي لا يكفي لاعتماد هذا الطلب.");
+        toast.error(
+          tr(
+            language,
+            "رصيد الإجازات الحالي لا يكفي لاعتماد هذا الطلب.",
+            "The current leave balance is not enough to approve this request."
+          )
+        );
       } else if (
         reviewError instanceof Error &&
         reviewError.message === "leave_request_already_reviewed"
       ) {
-        toast.error("تمت مراجعة هذا الطلب مسبقًا.");
+        toast.error(
+          tr(
+            language,
+            "تمت مراجعة هذا الطلب مسبقًا.",
+            "This request has already been reviewed."
+          )
+        );
       } else if (
         reviewError instanceof Error &&
         reviewError.message === "leave_rejection_note_required"
       ) {
-        toast.error("يجب كتابة ملاحظة عند رفض طلب الإجازة.");
+        toast.error(
+          tr(
+            language,
+            "يجب كتابة ملاحظة عند رفض طلب الإجازة.",
+            "A note is required when rejecting a leave request."
+          )
+        );
       } else {
-        toast.error("تعذر تحديث حالة طلب الإجازة.");
+        toast.error(
+          tr(
+            language,
+            "تعذر تحديث حالة طلب الإجازة.",
+            "Could not update leave request status."
+          )
+        );
       }
     } finally {
       setReviewingLeaveRequestId(null);
@@ -4730,16 +4890,24 @@ export default function EmployeesManagementPage() {
 
   return (
     <DashboardLayout area="hr">
-      <div dir="rtl" className="min-w-0 max-w-full space-y-6 overflow-x-hidden text-right">
+      <div
+        dir={pageDir}
+        className={cn(
+          "min-w-0 max-w-full space-y-6 overflow-x-hidden",
+          pageTextAlignClass
+        )}
+      >
         {!selectedEmployee ? (
           <div className="space-y-2">
             <h1 className="text-4xl font-bold tracking-tight text-slate-950">
-              إدارة الموظفين
+              {tr(language, "إدارة الموظفين", "Employee Management")}
             </h1>
             <p className="max-w-3xl text-lg text-slate-500">
-              صفحة مخصصة لإدارة البيانات الوظيفية للموظفين من جهة الإدارة
-              والموارد البشرية، مع فصل واضح بين ما يشاهده الموظف في بروفايله
-              وما يتم تعديله من داخل اللوحة.
+              {tr(
+                language,
+                "صفحة مخصصة لإدارة البيانات الوظيفية للموظفين من جهة الإدارة والموارد البشرية، مع فصل واضح بين ما يشاهده الموظف في بروفايله وما يتم تعديله من داخل اللوحة.",
+                "A dedicated page for managing employee work records from HR and administration, with a clear split between what employees see in their profiles and what is edited inside the dashboard."
+              )}
             </p>
           </div>
         ) : null}
@@ -4749,13 +4917,17 @@ export default function EmployeesManagementPage() {
             <Card className="border-slate-200/80">
               <CardContent className="p-5">
                 <div className="text-xs font-semibold tracking-[0.16em] text-slate-500">
-                  الموظفون
+                  {tr(language, "الموظفون", "Employees")}
                 </div>
                 <div className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">
                   {formatNumberEN(employeeCards.length)}
                 </div>
                 <div className="mt-2 text-sm text-slate-500">
-                  إجمالي السجلات الظاهرة ضمن صفحة إدارة الموظفين.
+                  {tr(
+                    language,
+                    "إجمالي السجلات الظاهرة ضمن صفحة إدارة الموظفين.",
+                    "Total records shown in employee management."
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -4763,13 +4935,17 @@ export default function EmployeesManagementPage() {
             <Card className="border-slate-200/80">
               <CardContent className="p-5">
                 <div className="text-xs font-semibold tracking-[0.16em] text-slate-500">
-                  على رأس العمل
+                  {tr(language, "على رأس العمل", "Active Employees")}
                 </div>
                 <div className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">
                   {formatNumberEN(activeEmployeesCount)}
                 </div>
                 <div className="mt-2 text-sm text-slate-500">
-                  موظفون بحالة وظيفية نشطة حاليًا.
+                  {tr(
+                    language,
+                    "موظفون بحالة وظيفية نشطة حاليًا.",
+                    "Employees currently marked as active."
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -4777,15 +4953,25 @@ export default function EmployeesManagementPage() {
             <Card className="border-slate-200/80">
               <CardContent className="p-5">
                 <div className="text-xs font-semibold tracking-[0.16em] text-slate-500">
-                  متابعة الحالة
+                  {tr(language, "متابعة الحالة", "Status Overview")}
                 </div>
                 <div className="mt-2 flex items-center gap-3 text-sm font-semibold text-slate-950">
-                  <span>إجازة: {formatNumberEN(onLeaveEmployeesCount)}</span>
+                  <span>
+                    {tr(language, "إجازة", "Leave")}:{" "}
+                    {formatNumberEN(onLeaveEmployeesCount)}
+                  </span>
                   <span className="text-slate-300">|</span>
-                  <span>تجربة: {formatNumberEN(probationEmployeesCount)}</span>
+                  <span>
+                    {tr(language, "تجربة", "Probation")}:{" "}
+                    {formatNumberEN(probationEmployeesCount)}
+                  </span>
                 </div>
                 <div className="mt-2 text-sm text-slate-500">
-                  قراءة سريعة لحالات الموظفين التشغيلية.
+                  {tr(
+                    language,
+                    "قراءة سريعة لحالات الموظفين التشغيلية.",
+                    "A quick read of employee operating statuses."
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -4798,19 +4984,35 @@ export default function EmployeesManagementPage() {
             <CardHeader className="shrink-0 border-b border-slate-100 bg-white/95 px-4 pb-4 pt-4">
               <CardTitle className="flex items-center gap-2 text-lg text-slate-950">
                 <BriefcaseBusiness className="h-4 w-4 text-[#030640]" />
-                قائمة الموظفين
+                {tr(language, "قائمة الموظفين", "Employee List")}
               </CardTitle>
               <CardDescription className="text-xs leading-5 text-slate-500">
-                اختر موظفًا لعرض ملفه الوظيفي وإدارة بياناته من نفس الصفحة.
+                {tr(
+                  language,
+                  "اختر موظفًا لعرض ملفه الوظيفي وإدارة بياناته من نفس الصفحة.",
+                  "Select an employee to review and manage their work profile on this page."
+                )}
               </CardDescription>
 
               <div className="relative mt-2">
-                <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <Search
+                  className={cn(
+                    "pointer-events-none absolute top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400",
+                    language === "ar" ? "right-3" : "left-3"
+                  )}
+                />
                 <Input
                   value={searchQuery}
                   onChange={event => setSearchQuery(event.target.value)}
-                  placeholder="ابحث بالاسم أو البريد أو القسم"
-                  className="h-9 pr-9 text-sm"
+                  placeholder={tr(
+                    language,
+                    "ابحث بالاسم أو البريد أو القسم",
+                    "Search by name, email, or department"
+                  )}
+                  className={cn(
+                    "h-9 text-sm",
+                    language === "ar" ? "pr-9 text-right" : "pl-9 text-left"
+                  )}
                 />
               </div>
             </CardHeader>
@@ -4819,11 +5021,13 @@ export default function EmployeesManagementPage() {
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
                 {loading ? (
                   <div className="col-span-full rounded-[24px] border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-500">
-                    جاري تحميل الموظفين...
+                    {tr(language, "جاري تحميل الموظفين...", "Loading employees...")}
                   </div>
                 ) : error ? (
                   <div className="col-span-full rounded-[24px] border border-rose-200 bg-rose-50 px-4 py-10 text-center text-sm text-rose-700">
-                    {error}
+                    {language === "ar"
+                      ? error
+                      : safeEnglishText(error, "Could not load employee list.")}
                   </div>
                 ) : filteredEmployeeCards.length ? (
                   filteredEmployeeCards.map(card => {
@@ -4835,17 +5039,22 @@ export default function EmployeesManagementPage() {
                     const showEmployeeCardIndicator =
                       Boolean(employeeCardUnreadBucket?.all.length) ||
                       (isActive && hasEmployeeWorkspaceAlerts);
-                    const employeeName = card.profile.personal.name;
-                    const employeeTitle = card.profile.employment.title;
+                    const employeeName = card.displayName;
+                    const employeeTitle = card.displayTitle;
 
                     return (
                       <button
                         key={card.employee.id}
                         type="button"
                         onClick={() => handleSelectEmployee(card.employee.id)}
-                        aria-label={`فتح تفاصيل ${employeeName}`}
+                        aria-label={tr(
+                          language,
+                          `فتح تفاصيل ${employeeName}`,
+                          `Open details for ${employeeName}`
+                        )}
                         className={cn(
-                          "group relative flex min-h-[96px] w-full items-center gap-3 overflow-hidden rounded-[20px] border px-3 py-3 text-right transition-all",
+                          "group relative flex min-h-[96px] w-full items-center gap-3 overflow-hidden rounded-[20px] border px-3 py-3 transition-all",
+                          pageTextAlignClass,
                           isActive
                             ? "border-[#F2B705]/55 bg-[linear-gradient(135deg,rgba(242,183,5,0.14)_0%,rgba(255,255,255,0.98)_70%)] shadow-[0_20px_44px_-34px_rgba(242,183,5,0.55)]"
                             : "border-slate-200/80 bg-white hover:border-slate-300 hover:bg-slate-50/80"
@@ -4854,7 +5063,10 @@ export default function EmployeesManagementPage() {
                         {showEmployeeCardIndicator ? (
                           <span
                             aria-hidden="true"
-                            className="absolute right-3 top-3 z-20 h-2.5 w-2.5 rounded-full bg-rose-500 shadow-[0_0_0_3px_rgba(255,255,255,0.98)] pointer-events-none"
+                            className={cn(
+                              "absolute top-3 z-20 h-2.5 w-2.5 rounded-full bg-rose-500 shadow-[0_0_0_3px_rgba(255,255,255,0.98)] pointer-events-none",
+                              language === "ar" ? "right-3" : "left-3"
+                            )}
                           />
                         ) : null}
                         <div className="relative z-10 shrink-0">
@@ -4883,7 +5095,12 @@ export default function EmployeesManagementPage() {
                         </div>
 
                         <div className="shrink-0 rounded-full border border-slate-200 bg-white/90 p-2 text-slate-500 shadow-sm transition group-hover:text-slate-900">
-                          <ChevronLeft className="h-4 w-4" />
+                          <ChevronLeft
+                            className={cn(
+                              "h-4 w-4",
+                              language === "en" && "rotate-180"
+                            )}
+                          />
                         </div>
                       </button>
                     );
@@ -4897,10 +5114,15 @@ export default function EmployeesManagementPage() {
                       >
                         <UserRound className="size-5" />
                       </EmptyMedia>
-                      <EmptyTitle>لا توجد نتائج مطابقة</EmptyTitle>
+                      <EmptyTitle>
+                        {tr(language, "لا توجد نتائج مطابقة", "No Matching Results")}
+                      </EmptyTitle>
                       <EmptyDescription>
-                        جرّب تغيير عبارة البحث أو أزل الفلتر لعرض الموظفين
-                        الحاليين.
+                        {tr(
+                          language,
+                          "جرّب تغيير عبارة البحث أو أزل الفلتر لعرض الموظفين الحاليين.",
+                          "Try changing the search term or clearing the filter to show current employees."
+                        )}
                       </EmptyDescription>
                     </EmptyHeader>
                   </Empty>
@@ -4919,7 +5141,12 @@ export default function EmployeesManagementPage() {
             >
               <CardHeader className="min-w-0 border-b border-slate-100 bg-white/90 px-4 pt-5 pb-4 sm:px-6 sm:pt-6">
                 <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
-                  <div className="flex min-w-0 items-center gap-3 text-right sm:gap-4">
+                  <div
+                    className={cn(
+                      "flex min-w-0 items-center gap-3 sm:gap-4",
+                      pageTextAlignClass
+                    )}
+                  >
                     <Avatar className="h-16 w-16 shrink-0 rounded-[22px] border border-slate-200 bg-slate-100 shadow-sm sm:h-20 sm:w-20">
                       <AvatarImage
                         src={selectedEmployeeDisplayAvatarUrl || undefined}
@@ -4939,7 +5166,7 @@ export default function EmployeesManagementPage() {
                     <div className="min-w-0 flex-1 space-y-2">
                       <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
                         <UserRound className="h-3.5 w-3.5 text-[#030640]" />
-                        الملف الحالي
+                        {tr(language, "الملف الحالي", "Current Profile")}
                       </div>
                       <CardTitle className="truncate text-2xl tracking-tight text-slate-950 sm:text-3xl">
                         {selectedEmployeeLabel}
@@ -4968,7 +5195,8 @@ export default function EmployeesManagementPage() {
                         </Badge>
                       </div>
                       <CardDescription className="text-sm leading-6 text-slate-500">
-                        جاري تعديل: {selectedEmployeeLabel}
+                        {tr(language, "جاري تعديل", "Editing")}:{" "}
+                        {selectedEmployeeLabel}
                       </CardDescription>
                     </div>
                   </div>

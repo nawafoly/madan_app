@@ -39,6 +39,7 @@ import {
   Mail,
   MessageSquare,
   FileText,
+  Globe,
   Settings,
   Crown,
   BarChart3,
@@ -49,9 +50,10 @@ import {
 import { CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
+import { HrBrandMark } from "@/components/HrBrandMark";
 import { Button } from "./ui/button";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { safeEnglishText, tr } from "@/lib/i18n";
+import { languageDir, safeEnglishText, tr } from "@/lib/i18n";
 import {
   normalizeEmployeeProfile,
   type EmployeeProfileUserDoc,
@@ -360,12 +362,7 @@ export default function DashboardLayout({
 
   const { loading, user } = useAuth();
   const { language } = useLanguage();
-  const layoutDir: "rtl" | "ltr" =
-    typeof document !== "undefined" && document.documentElement.dir === "rtl"
-      ? "rtl"
-      : language === "ar"
-        ? "rtl"
-        : "ltr";
+  const layoutDir = languageDir(language);
 
   const sidebarSide = layoutDir === "rtl" ? "right" : "left";
 
@@ -443,7 +440,7 @@ function DashboardLayoutContent({
   sidebarSide,
 }: DashboardLayoutContentProps) {
   const { user, logout } = useAuth();
-  const { language } = useLanguage();
+  const { language, toggleLanguage } = useLanguage();
   const [location, setLocation] = useLocation();
   const { state, setOpen, setOpenMobile } = useSidebar();
 
@@ -519,6 +516,7 @@ function DashboardLayoutContent({
       ? tr(language, "منصة الموارد البشرية", "Human Resources")
       : tr(language, "معدن", "MAEDIN");
   const homeTargetPath = area === "hr" ? "/hr" : "/";
+  const languageToggleLabel = language === "ar" ? "English" : "Arabic";
 
   // اسم العرض: يفضل displayName ثم name ثم الإيميل
   const displayName = useMemo(() => {
@@ -730,20 +728,26 @@ function DashboardLayoutContent({
               {!isCollapsed ? (
                 <div
                   className={cn(
-                    "flex min-w-0 items-center gap-2 overflow-hidden transition-[max-width,opacity,transform] duration-200",
+                    "flex min-w-0 flex-1 items-center gap-2 overflow-hidden transition-[max-width,opacity,transform] duration-200",
                     area === "hr"
-                      ? "max-w-36 translate-x-0 opacity-100"
+                      ? "translate-x-0 opacity-100"
                       : "max-w-48 translate-x-0 opacity-100"
                   )}
                 >
                   {area === "hr" ? (
-                    <img
-                      src="/logo.png"
+                    <HrBrandMark
                       alt={tr(language, "شعار معدن", "MAEDIN logo")}
-                      className="h-7 w-7 shrink-0 object-contain"
+                      compact
+                      className="h-9 w-9 rounded-xl"
+                      imageClassName="h-8 w-8"
                     />
                   ) : null}
-                  <span className="font-semibold tracking-tight truncate whitespace-nowrap text-[#F2B705]">
+                  <span
+                    className={cn(
+                      "min-w-0 font-semibold tracking-tight whitespace-nowrap text-[#F2B705]",
+                      area === "hr" ? "text-[13px]" : "truncate"
+                    )}
+                  >
                     {layoutBrandLabel}
                   </span>
                 </div>
@@ -754,17 +758,22 @@ function DashboardLayoutContent({
                 <div
                   className={cn(
                     isRight ? "mr-auto" : "ml-auto",
-                    "flex max-w-32 shrink-0 translate-x-0 items-center gap-2 overflow-hidden whitespace-nowrap opacity-100 transition-[max-width,opacity,transform] duration-200"
+                    "flex shrink-0 translate-x-0 items-center gap-2 overflow-hidden whitespace-nowrap opacity-100 transition-[max-width,opacity,transform] duration-200",
+                    area === "hr" ? "max-w-10" : "max-w-32"
                   )}
                 >
                   <Button
                     variant="outline"
                     size="sm"
-                    className="h-9 shrink-0 gap-1.5 rounded-full border-white/10 bg-white/[0.04] px-3 text-xs text-slate-100 hover:bg-white/[0.08] hover:text-white"
+                    className={cn(
+                      "h-9 shrink-0 gap-1.5 rounded-full border-white/10 bg-white/[0.04] text-xs text-slate-100 hover:bg-white/[0.08] hover:text-white",
+                      area === "hr" ? "w-9 px-0" : "px-3"
+                    )}
                     onClick={() => setLocation(homeTargetPath)}
+                    aria-label={tr(language, "الرئيسية", "Home")}
                   >
                     <Home className="h-4 w-4 text-[#F2B705]" />
-                    {tr(language, "الرئيسية", "Home")}
+                    {area === "hr" ? null : tr(language, "الرئيسية", "Home")}
                   </Button>
                 </div>
               ) : null}
@@ -943,18 +952,34 @@ function DashboardLayoutContent({
               </div>
             </div>
 
-            {/* زر الرئيسية في الموبايل */}
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-2"
-              onClick={() => setLocation(homeTargetPath)}
-            >
-              <Home className="h-4 w-4" />
-              {tr(language, "الرئيسية", "Home")}
-            </Button>
+            <div className="flex items-center gap-2">
+              {area === "hr" ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={toggleLanguage}
+                  className="h-9 gap-1.5 rounded-full px-2.5 text-xs"
+                  aria-label={tr(language, "تبديل اللغة", "Toggle language")}
+                >
+                  <Globe className="h-4 w-4" />
+                  {languageToggleLabel}
+                </Button>
+              ) : null}
 
-            <NotificationBell />
+              {/* زر الرئيسية في الموبايل */}
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                onClick={() => setLocation(homeTargetPath)}
+              >
+                <Home className="h-4 w-4" />
+                {tr(language, "الرئيسية", "Home")}
+              </Button>
+
+              <NotificationBell />
+            </div>
           </div>
         )}
 
@@ -963,7 +988,20 @@ function DashboardLayoutContent({
           className="min-w-0 max-w-full flex-1 overflow-x-hidden px-3 py-4 sm:px-4 md:px-6 md:py-6 lg:px-8"
         >
           {!isMobile ? (
-            <div className="mb-5 flex items-center justify-end">
+            <div className="mb-5 flex items-center justify-end gap-2">
+              {area === "hr" ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={toggleLanguage}
+                  className="h-10 gap-2 rounded-full border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 hover:text-slate-950"
+                  aria-label={tr(language, "تبديل اللغة", "Toggle language")}
+                >
+                  <Globe className="h-4 w-4" />
+                  {languageToggleLabel}
+                </Button>
+              ) : null}
               <NotificationBell />
             </div>
           ) : null}
