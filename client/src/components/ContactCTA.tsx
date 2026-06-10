@@ -5,8 +5,11 @@ import { collection, doc, serverTimestamp, setDoc } from "firebase/firestore";
 import { toast } from "sonner";
 
 import { db } from "@/_core/firebase";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { languageDir, tr } from "@/lib/i18n";
 
 export default function ContactCTA() {
+  const { language } = useLanguage();
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
@@ -17,30 +20,38 @@ export default function ContactCTA() {
     () => [
       {
         icon: Mail,
-        title: "البريد الإلكتروني",
+        title: tr(language, "البريد الإلكتروني", "Email"),
         value: "info@maedin.sa",
         link: "mailto:info@maedin.sa",
       },
       {
         icon: Phone,
-        title: "الهاتف",
+        title: tr(language, "الهاتف", "Phone"),
         value: "0549010366",
         link: "tel:+966549010366",
       },
       {
         icon: MapPin,
-        title: "العنوان",
-        value: "المدينة المنورة , المملكة العربية السعودية",
+        title: tr(language, "العنوان", "Address"),
+        value: tr(
+          language,
+          "المدينة المنورة , المملكة العربية السعودية",
+          "Madinah, Saudi Arabia"
+        ),
         link: null,
       },
       {
         icon: Clock,
-        title: "ساعات العمل",
-        value: "الأحد - الخميس: 9 صباحاً - 5 مساءً\nالسبت: 12 ظهراً - 5 مساءً",
+        title: tr(language, "ساعات العمل", "Working Hours"),
+        value: tr(
+          language,
+          "الأحد - الخميس: 9 صباحاً - 5 مساءً\nالسبت: 12 ظهراً - 5 مساءً",
+          "Sunday - Thursday: 9 AM - 5 PM\nSaturday: 12 PM - 5 PM"
+        ),
         link: null,
       },
     ],
-    []
+    [language]
   );
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -55,7 +66,13 @@ export default function ContactCTA() {
       .join(" ");
 
     if (!normalizedFirstName || !normalizedEmail || !normalizedMessage) {
-      toast.error("اكتب الاسم والبريد والرسالة قبل الإرسال.");
+      toast.error(
+        tr(
+          language,
+          "اكتب الاسم والبريد والرسالة قبل الإرسال.",
+          "Enter your name, email, and message before sending."
+        )
+      );
       return;
     }
 
@@ -96,7 +113,11 @@ export default function ContactCTA() {
         events: [
           {
             type: "contact_message_created",
-            message: "تم إرسال رسالة من نموذج تواصل معنا",
+            message: tr(
+              language,
+              "تم إرسال رسالة من نموذج تواصل معنا",
+              "A contact form message was submitted"
+            ),
             at: new Date().toISOString(),
             byRole: "visitor",
             byEmail: normalizedEmail,
@@ -104,28 +125,40 @@ export default function ContactCTA() {
         ],
       });
 
-      toast.success("تم إرسال رسالتك بنجاح.");
+      toast.success(
+        tr(language, "تم إرسال رسالتك بنجاح.", "Your message was sent.")
+      );
       setFirstName("");
       setLastName("");
       setEmail("");
       setMessage("");
     } catch (error) {
       console.error("contact_message_submit_failed", error);
-      toast.error("تعذر إرسال الرسالة الآن. حاول مرة أخرى.");
+      toast.error(
+        tr(
+          language,
+          "تعذر إرسال الرسالة الآن. حاول مرة أخرى.",
+          "We could not send the message now. Please try again."
+        )
+      );
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <section className="bg-transparent">
+    <section className="bg-transparent" dir={languageDir(language)}>
       {/* الشريط الأبيض */}
       <div className="container pt-16 md:pt-20 pb-24 md:pb-28 text-center">
         <h2 className="text-5xl md:text-6xl font-bold text-primary">
-          تواصل معنا
+          {tr(language, "تواصل معنا", "Contact Us")}
         </h2>
         <p className="mt-4 text-muted-foreground">
-          للاستفسارات، الفرص الاستثمارية، أو أي معلومات إضافية… يسعدنا تواصلك
+          {tr(
+            language,
+            "للاستفسارات، الفرص الاستثمارية، أو أي معلومات إضافية… يسعدنا تواصلك",
+            "For inquiries, investment opportunities, or any additional information, we are ready to help."
+          )}
         </p>
       </div>
 
@@ -137,7 +170,7 @@ export default function ContactCTA() {
               {/* ✅ بيانات التواصل (يمين) */}
               <div className="p-8 md:p-10 lg:border-l lg:border-black/10">
                 <h3 className="text-2xl font-bold text-foreground">
-                  يسعدنا تواصلك
+                  {tr(language, "يسعدنا تواصلك", "We Are Ready To Help")}
                 </h3>
 
 
@@ -178,14 +211,14 @@ export default function ContactCTA() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <input
                     className="h-12 rounded-full bg-white border border-black/10 px-5 outline-none focus:border-black/20"
-                    placeholder="الاسم الأول"
+                    placeholder={tr(language, "الاسم الأول", "First Name")}
                     value={firstName}
                     onChange={event => setFirstName(event.target.value)}
                     disabled={isSubmitting}
                   />
                   <input
                     className="h-12 rounded-full bg-white border border-black/10 px-5 outline-none focus:border-black/20"
-                    placeholder="اسم العائلة"
+                    placeholder={tr(language, "اسم العائلة", "Last Name")}
                     value={lastName}
                     onChange={event => setLastName(event.target.value)}
                     disabled={isSubmitting}
@@ -196,7 +229,7 @@ export default function ContactCTA() {
                   <input
                     type="email"
                     className="h-12 w-full rounded-full bg-white border border-black/10 px-5 outline-none focus:border-black/20"
-                    placeholder="البريد الإلكتروني"
+                    placeholder={tr(language, "البريد الإلكتروني", "Email")}
                     dir="ltr"
                     value={email}
                     onChange={event => setEmail(event.target.value)}
@@ -208,7 +241,7 @@ export default function ContactCTA() {
                   <textarea
                     className="w-full rounded-[22px] bg-white border border-black/10 px-5 py-4 outline-none focus:border-black/20"
                     rows={4}
-                    placeholder="رسالتك..."
+                    placeholder={tr(language, "رسالتك...", "Your message...")}
                     value={message}
                     onChange={event => setMessage(event.target.value)}
                     disabled={isSubmitting}
@@ -221,21 +254,27 @@ export default function ContactCTA() {
                     className="h-11 px-14 rounded-full bg-primary text-white font-semibold hover:bg-primary/90 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
                     disabled={isSubmitting}
                   >
-                    {isSubmitting ? "جارٍ الإرسال..." : "إرسال الرسالة"}
+                    {isSubmitting
+                      ? tr(language, "جارٍ الإرسال...", "Sending...")
+                      : tr(language, "إرسال الرسالة", "Send Message")}
                   </button>
                 </div>
 
-                <p className="mt-4 text-xs text-muted-foreground text-center">
-                  بإرسالك الرسالة، فأنت توافق على{" "}
+                <p className="mt-4 text-center text-xs text-muted-foreground">
+                  {tr(
+                    language,
+                    "بإرسالك الرسالة، فأنت توافق على",
+                    "By sending this message, you agree to"
+                  )}{" "}
                   <Link href="/terms">
                     <span className="underline cursor-pointer">
-                      الشروط والأحكام
+                      {tr(language, "الشروط والأحكام", "Terms and Conditions")}
                     </span>
                   </Link>{" "}
-                  و{" "}
+                  {tr(language, "و", "and")}{" "}
                   <Link href="/privacy">
                     <span className="underline cursor-pointer">
-                      سياسة الخصوصية
+                      {tr(language, "سياسة الخصوصية", "Privacy Policy")}
                     </span>
                   </Link>
                   .

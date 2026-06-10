@@ -70,6 +70,15 @@ import {
 } from "@/lib/formatters";
 import { getProjectComputedAmounts } from "@/lib/projectAmounts";
 import { cn } from "@/lib/utils";
+import { useLanguage } from "@/contexts/LanguageContext";
+import {
+  hasArabicText,
+  languageDir,
+  pickLabelValue,
+  pickLocalizedText,
+  safeEnglishText,
+  tr,
+} from "@/lib/i18n";
 
 type BiLabel = { ar?: string; en?: string };
 type LabelValue = string | BiLabel;
@@ -87,15 +96,15 @@ type FlagsDoc = {
 
 const DEFAULT_LABELS: Required<LabelsDoc> = {
   projectTypes: {
-    sukuk: "استثمار بالصكوك",
-    land_development: "تطوير أراضي",
-    vip_exclusive: "VIP حصري",
+    sukuk: { ar: "استثمار بالصكوك", en: "Sukuk Investment" },
+    land_development: { ar: "تطوير أراضي", en: "Land Development" },
+    vip_exclusive: { ar: "VIP حصري", en: "VIP Exclusive" },
   },
   projectStatuses: {
-    draft: "قريبا",
-    published: "منشور",
-    closed: "مغلق",
-    completed: "مكتمل",
+    draft: { ar: "قريبا", en: "Coming Soon" },
+    published: { ar: "منشور", en: "Published" },
+    closed: { ar: "مغلق", en: "Closed" },
+    completed: { ar: "مكتمل", en: "Completed" },
   },
 };
 
@@ -609,6 +618,7 @@ function normalizeFaqList(...sources: unknown[]): Faq[] {
 }
 
 export default function ProjectDetails() {
+  const { language } = useLanguage();
   const [, params] = useRoute("/projects/:id");
   const projectId = params?.id ? String(params.id) : "";
 
@@ -666,9 +676,16 @@ export default function ProjectDetails() {
         const snap = await getDoc(doc(db, "users", user.uid));
         if (!snap.exists()) {
           setUserProfile(null);
+          const authDisplayName =
+            language === "en"
+              ? safeEnglishText(user.displayName, "")
+              : user.displayName || "";
           setFormData(p => ({
             ...p,
-            name: p.name || user.displayName || "",
+            name:
+              language === "en"
+                ? safeEnglishText(p.name, "") || authDisplayName
+                : p.name || authDisplayName,
             email: p.email || user.email || "",
             phone: p.phone || "",
           }));
@@ -677,10 +694,21 @@ export default function ProjectDetails() {
 
         const p = snap.data() as any;
         setUserProfile(p);
+        const profileDisplayName = pickTextValue(
+          p.displayName,
+          user.displayName
+        );
+        const formDisplayName =
+          language === "en"
+            ? safeEnglishText(profileDisplayName, "")
+            : profileDisplayName;
 
         setFormData(prev => ({
           ...prev,
-          name: prev.name || p.displayName || user.displayName || "",
+          name:
+            language === "en"
+              ? safeEnglishText(prev.name, "") || formDisplayName
+              : prev.name || formDisplayName,
           email: prev.email || p.email || user.email || "",
           phone: prev.phone || p.phone || "",
         }));
@@ -688,7 +716,7 @@ export default function ProjectDetails() {
         console.error(e);
       }
     })();
-  }, [user?.uid]);
+  }, [language, user?.uid]);
 
   /* =========================
      Load settings (labels + flags)
@@ -845,13 +873,13 @@ export default function ProjectDetails() {
         });
       } catch (e) {
         console.error(e);
-        toast.error("فشل تحميل المشروع");
+        toast.error(tr(language, "فشل تحميل المشروع", "Failed to load project"));
         setProject(null);
       } finally {
         setLoading(false);
       }
     })();
-  }, [projectId]);
+  }, [language, projectId]);
 
   /* =========================
      Guards by flags
@@ -1019,19 +1047,17 @@ export default function ProjectDetails() {
 
   // ✅ FIX: labels ممكن تكون {ar,en} فلازم نحولها لنص
   const typeLabel = projectTypeKey
-    ? pickLabel(
-        labels.projectTypes[projectTypeKey],
-        "ar",
-        projectTypeKey
-      )
+    ? pickLabelValue(language, labels.projectTypes[projectTypeKey], {
+        ar: projectTypeKey,
+        en: projectTypeKey.replace(/_/g, " "),
+      })
     : "";
 
   const statusLabel = projectStatusValue
-    ? pickLabel(
-        labels.projectStatuses[projectStatusValue],
-        "ar",
-        projectStatusValue
-      )
+    ? pickLabelValue(language, labels.projectStatuses[projectStatusValue], {
+        ar: projectStatusValue,
+        en: projectStatusValue.replace(/_/g, " "),
+      })
     : "";
 
   const overviewSource = useMemo(
@@ -1137,7 +1163,9 @@ export default function ProjectDetails() {
     project?.durationInMonths
   );
   const durationText =
-    durationValue > 0 ? `${formatNumberEN(durationValue)} شهر` : "يحدد لاحقًا";
+    durationValue > 0
+      ? `${formatNumberEN(durationValue)} ${tr(language, "شهر", "months")}`
+      : tr(language, "يحدد لاحقًا", "To be confirmed");
   const annualReturnValue = pickNumberValue(
     project?.annualReturn,
     project?.investmentReturn,
@@ -1250,18 +1278,25 @@ export default function ProjectDetails() {
   const isClosedProject =
     projectStatusKey === "closed" || projectStatusKey === "completed";
   const projectTitle =
-    pickTextValue(
-      project?.titleAr,
-      project?.titleEn,
-      project?.title,
-      project?.name
+    pickLocalizedText(
+      language,
+      {
+        ar: project?.titleAr,
+        en: project?.titleEn,
+        neutral: project?.title || project?.name,
+      },
+      { ar: "—", en: "Project" }
     ) || "—";
-  const projectLocation = pickTextValue(
-    project?.locationAr,
-    project?.locationEn,
-    project?.location
+  const projectLocation = pickLocalizedText(
+    language,
+    {
+      ar: project?.locationAr,
+      en: project?.locationEn,
+      neutral: project?.location,
+    },
+    { ar: "", en: "Location unavailable" }
   );
-  const completedStatusLabel = "مكتمل";
+  const completedStatusLabel = tr(language, "مكتمل", "Completed");
   const paymentScheduleText = pickTextValue(
     project?.paymentScheduleAr,
     project?.paymentSchedule,
@@ -1552,14 +1587,22 @@ export default function ProjectDetails() {
   const successContent =
     successMode === "investment"
       ? {
-          title: "تم إرسال طلب الاستثمار",
+          title: tr(language, "تم إرسال طلب الاستثمار", "Investment Request Submitted"),
           description:
-            "وصل طلبك إلى فريق الاستثمار، وسيتم التواصل معك بعد المراجعة لاستكمال الخطوات النظامية.",
+            tr(
+              language,
+              "وصل طلبك إلى فريق الاستثمار، وسيتم التواصل معك بعد المراجعة لاستكمال الخطوات النظامية.",
+              "Your request reached the investment team. They will contact you after review to complete the required steps."
+            ),
         }
       : {
-          title: "تم تسجيل اهتمامك",
+          title: tr(language, "تم تسجيل اهتمامك", "Interest Registered"),
           description:
-            "سجّلنا اهتمامك بهذه الفرصة، وسنرسل لك إشعارًا فور فتح باب الاستثمار أو تحديث حالة الإطلاق.",
+            tr(
+              language,
+              "سجّلنا اهتمامك بهذه الفرصة، وسنرسل لك إشعارًا فور فتح باب الاستثمار أو تحديث حالة الإطلاق.",
+              "Your interest was registered. We will notify you when investment opens or the launch status changes."
+            ),
         };
 
   const submitProjectRequest = async ({
@@ -1588,7 +1631,7 @@ export default function ProjectDetails() {
       setFormMessage({ type: null, text: "" });
 
       if (!user?.uid) {
-        toast.error("الرجاء تسجيل الدخول أولاً");
+        toast.error(tr(language, "الرجاء تسجيل الدخول أولاً", "Please sign in first"));
         return;
       }
 
@@ -1597,22 +1640,28 @@ export default function ProjectDetails() {
       const phone = formData.phone.trim();
 
       if (requireName && !name) {
-        toast.error("الاسم مطلوب");
+        toast.error(tr(language, "الاسم مطلوب", "Name is required"));
         return;
       }
 
       if (!email) {
-        toast.error("البريد الإلكتروني مطلوب");
+        toast.error(tr(language, "البريد الإلكتروني مطلوب", "Email is required"));
         return;
       }
 
       if (!phone) {
-        toast.error("رقم الجوال مطلوب");
+        toast.error(tr(language, "رقم الجوال مطلوب", "Mobile number is required"));
         return;
       }
 
       if (requireAmount && (!Number.isFinite(amount) || Number(amount) <= 0)) {
-        toast.error("المبلغ مطلوب ويجب أن يكون أكبر من صفر");
+        toast.error(
+          tr(
+            language,
+            "المبلغ مطلوب ويجب أن يكون أكبر من صفر",
+            "Amount is required and must be greater than zero"
+          )
+        );
         return;
       }
 
@@ -1697,8 +1746,16 @@ export default function ProjectDetails() {
         type: "success",
         text:
           nextSuccessMode === "investment"
-            ? `تم إرسال الطلب تحت الرقم ${requestBusinessId}.`
-            : `تم تسجيل الاهتمام تحت الرقم ${requestBusinessId}.`,
+            ? tr(
+                language,
+                `تم إرسال الطلب تحت الرقم ${requestBusinessId}.`,
+                `Request submitted under number ${requestBusinessId}.`
+              )
+            : tr(
+                language,
+                `تم تسجيل الاهتمام تحت الرقم ${requestBusinessId}.`,
+                `Interest registered under number ${requestBusinessId}.`
+              ),
       });
 
       setSuccessMode(nextSuccessMode);
@@ -1709,7 +1766,11 @@ export default function ProjectDetails() {
       console.error(err);
       setFormMessage({
         type: "error",
-        text: "حدث خطأ أثناء الإرسال. حاول مرة أخرى.",
+        text: tr(
+          language,
+          "حدث خطأ أثناء الإرسال. حاول مرة أخرى.",
+          "An error occurred while submitting. Try again."
+        ),
       });
     } finally {
       setSending(false);
@@ -1719,7 +1780,13 @@ export default function ProjectDetails() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isActiveProject) {
-      toast.error("الاستثمار غير متاح لهذه الحالة");
+      toast.error(
+        tr(
+          language,
+          "الاستثمار غير متاح لهذه الحالة",
+          "Investment is not available for this status"
+        )
+      );
       return;
     }
 
@@ -1739,7 +1806,13 @@ export default function ProjectDetails() {
   const handleLaunchInterestSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isUpcomingProject) {
-      toast.error("تسجيل الاهتمام متاح فقط للمشاريع القادمة");
+      toast.error(
+        tr(
+          language,
+          "تسجيل الاهتمام متاح فقط للمشاريع القادمة",
+          "Interest registration is available only for upcoming projects"
+        )
+      );
       return;
     }
 
@@ -1760,7 +1833,7 @@ export default function ProjectDetails() {
   ========================= */
   if (loading) {
     return (
-      <div className="w-full">
+      <div dir={languageDir(language)} className="w-full">
         <div className="flex-1 flex items-center justify-center">
           <div className="animate-spin rounded-full h-24 w-24 border-b-2 border-primary" />
         </div>
@@ -1770,24 +1843,36 @@ export default function ProjectDetails() {
 
   if (blockedReason) {
     return (
-      <div className="w-full">
+      <div dir={languageDir(language)} className="w-full">
         <div className="flex-1 flex items-center justify-center">
           <Card className="p-10 text-center max-w-xl">
             <AlertTriangle className="w-14 h-14 mx-auto mb-4 text-muted-foreground" />
             <h2 className="text-2xl font-bold mb-2">
               {blockedReason === "maintenance"
-                ? "الموقع تحت الصيانة"
-                : "غير متاح"}
+                ? tr(language, "الموقع تحت الصيانة", "Site Under Maintenance")
+                : tr(language, "غير متاح", "Unavailable")}
             </h2>
             <p className="text-muted-foreground mb-6">
               {blockedReason === "maintenance"
-                ? "نعتذر، سيتم إعادة تفعيل المشاريع قريبًا."
+                ? tr(
+                    language,
+                    "نعتذر، سيتم إعادة تفعيل المشاريع قريبًا.",
+                    "Projects will be reactivated soon."
+                  )
                 : blockedReason === "vip_hidden"
-                  ? "هذا المشروع غير متاح حاليًا."
-                  : "هذا المشروع غير متاح في الوضع الحالي."}
+                  ? tr(
+                      language,
+                      "هذا المشروع غير متاح حاليًا.",
+                      "This project is not available right now."
+                    )
+                  : tr(
+                      language,
+                      "هذا المشروع غير متاح في الوضع الحالي.",
+                      "This project is not available in the current mode."
+                    )}
             </p>
             <Link href="/projects">
-              <Button>العودة للمشاريع</Button>
+              <Button>{tr(language, "العودة للمشاريع", "Back To Projects")}</Button>
             </Link>
           </Card>
         </div>
@@ -1797,16 +1882,452 @@ export default function ProjectDetails() {
 
   if (!project) {
     return (
-      <div className="w-full">
+      <div dir={languageDir(language)} className="w-full">
         <div className="flex-1 flex items-center justify-center">
           <Card className="p-12 text-center">
             <AlertCircle className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
-            <h2 className="text-2xl font-bold mb-2">المشروع غير موجود</h2>
+            <h2 className="text-2xl font-bold mb-2">
+              {tr(language, "المشروع غير موجود", "Project Not Found")}
+            </h2>
             <Link href="/projects">
-              <Button>العودة للمشاريع</Button>
+              <Button>{tr(language, "العودة للمشاريع", "Back To Projects")}</Button>
             </Link>
           </Card>
         </div>
+      </div>
+    );
+  }
+
+  if (language === "en") {
+    const englishOverview = safeEnglishText(
+      pickTextValue(
+        (project as any)?.executiveSummaryEn,
+        (project as any)?.summaryEn,
+        (project as any)?.overviewEn,
+        project?.descriptionEn,
+        project?.description,
+        project?.overview
+      ),
+      "This project is presented with clear financial indicators, project context, and supporting information for investor review."
+    );
+    const englishHighlights = highlights
+      .map(item => safeEnglishText(item, ""))
+      .filter(Boolean)
+      .slice(0, 4);
+    const englishAttachments = attachments.slice(0, 4);
+    const englishGallery: string[] = (
+      isClosedProject ? completionMediaData : [coverImage, ...gallery]
+    )
+      .filter(Boolean)
+      .slice(0, 6);
+    const requestDialogTitle = isActiveProject
+      ? "Start Investment Request"
+      : "Register Launch Interest";
+    const requestDialogDescription = isActiveProject
+      ? "Enter your contact details and estimated amount. The investment team will review your request and follow up."
+      : "This opportunity is not open for investment yet. Leave your details to receive updates at launch.";
+
+    return (
+      <div dir="ltr" className="w-full bg-[#f4f7fb] text-slate-950">
+        <section className="relative min-h-[72vh] overflow-hidden bg-[#07111f] text-white">
+          <div className="absolute inset-0">
+            {coverImage ? (
+              <img
+                src={coverImage}
+                alt={projectTitle}
+                className="h-full w-full object-cover opacity-34"
+              />
+            ) : (
+              <video
+                autoPlay
+                muted
+                loop
+                playsInline
+                className="h-full w-full object-cover opacity-24"
+                src={heroVideo}
+              />
+            )}
+          </div>
+          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(7,17,31,0.52)_0%,rgba(7,17,31,0.72)_58%,rgba(7,17,31,0.96)_100%)]" />
+
+          <div className="container relative flex min-h-[72vh] items-end pb-16 pt-28">
+            <div className="max-w-5xl space-y-7">
+              <div className="flex flex-wrap gap-2">
+                {statusLabel ? (
+                  <Badge className="rounded-full border border-white/15 bg-white/10 px-4 py-2 text-white">
+                    {statusLabel}
+                  </Badge>
+                ) : null}
+                {typeLabel ? (
+                  <Badge className="rounded-full border border-amber-300/25 bg-amber-300/14 px-4 py-2 text-amber-100">
+                    {typeLabel}
+                  </Badge>
+                ) : null}
+                {projectBusinessId ? (
+                  <Badge className="rounded-full border border-white/15 bg-black/20 px-4 py-2 text-white/90">
+                    {projectBusinessId}
+                  </Badge>
+                ) : null}
+              </div>
+
+              <div className="space-y-5">
+                <h1 className="max-w-5xl text-4xl font-semibold leading-tight tracking-tight sm:text-5xl lg:text-6xl">
+                  {projectTitle}
+                </h1>
+                <p className="max-w-3xl text-base leading-8 text-white/76 sm:text-lg">
+                  {englishOverview}
+                </p>
+                <div className="flex flex-wrap gap-3 text-sm text-white/78">
+                  <span className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/8 px-4 py-2">
+                    <MapPin className="h-4 w-4" />
+                    {projectLocation}
+                  </span>
+                  <span className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/8 px-4 py-2">
+                    <TrendingUp className="h-4 w-4" />
+                    {annualReturnText} expected annual return
+                  </span>
+                  <span className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/8 px-4 py-2">
+                    <Calendar className="h-4 w-4" />
+                    {durationText}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <main className="container grid gap-8 py-12 lg:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="space-y-8">
+            <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-[0_24px_70px_-48px_rgba(15,23,42,0.28)] sm:p-8">
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                {[
+                  { label: "Minimum Investment", value: minimumInvestmentText, icon: Wallet },
+                  { label: "Annual Return", value: annualReturnText, icon: TrendingUp },
+                  { label: "Duration", value: durationText, icon: Calendar },
+                  { label: "Project Status", value: statusLabel || "Unavailable", icon: CheckCircle2 },
+                ].map(item => {
+                  const Icon = item.icon;
+                  return (
+                    <div
+                      key={item.label}
+                      className="rounded-[24px] border border-slate-200 bg-slate-50/80 p-4"
+                    >
+                      <Icon className="h-5 w-5 text-slate-500" />
+                      <div className="mt-4 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                        {item.label}
+                      </div>
+                      <div className="mt-2 text-xl font-semibold text-slate-950">
+                        {item.value}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+
+            <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-[0_24px_70px_-48px_rgba(15,23,42,0.24)] sm:p-8">
+              <h2 className="text-2xl font-semibold tracking-tight">
+                Executive Summary
+              </h2>
+              <p className="mt-4 text-sm leading-8 text-slate-600 sm:text-base">
+                {englishOverview}
+              </p>
+
+              {englishHighlights.length ? (
+                <div className="mt-6 grid gap-3 sm:grid-cols-2">
+                  {englishHighlights.map((item, index) => (
+                    <div
+                      key={`${item}-${index}`}
+                      className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50/80 p-4"
+                    >
+                      <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
+                      <span className="text-sm leading-7 text-slate-700">
+                        {item}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </section>
+
+            <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-[0_24px_70px_-48px_rgba(15,23,42,0.24)] sm:p-8">
+              <h2 className="text-2xl font-semibold tracking-tight">
+                Financial Details
+              </h2>
+              <div className="mt-6 space-y-5">
+                <div className="flex flex-wrap items-end justify-between gap-3">
+                  <div>
+                    <div className="text-sm text-slate-500">Current Amount</div>
+                    <div className="mt-1 text-2xl font-semibold">
+                      {currentAmountText}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-sm text-slate-500">Target Amount</div>
+                    <div className="mt-1 text-2xl font-semibold">
+                      {targetAmountText}
+                    </div>
+                  </div>
+                </div>
+                <div className="h-4 overflow-hidden rounded-full bg-slate-100">
+                  <div
+                    className="h-full rounded-full bg-[linear-gradient(90deg,#f2ae30_0%,#0f172a_100%)]"
+                    style={{ width: `${Math.max(progress, progress > 0 ? 6 : 0)}%` }}
+                  />
+                </div>
+                <div className="flex justify-between text-sm text-slate-500">
+                  <span>{progressPercentageText} funded</span>
+                  <span>{remainingAmountText} remaining</span>
+                </div>
+              </div>
+            </section>
+
+            {englishGallery.length ? (
+              <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-[0_24px_70px_-48px_rgba(15,23,42,0.24)] sm:p-8">
+                <h2 className="text-2xl font-semibold tracking-tight">
+                  Project Media
+                </h2>
+                <div className="mt-6 grid gap-4 sm:grid-cols-2">
+                  {englishGallery.map((image, index) => (
+                    <img
+                      key={`${image}-${index}`}
+                      src={image}
+                      alt={`Project media ${index + 1}`}
+                      className="h-64 w-full rounded-[24px] object-cover"
+                    />
+                  ))}
+                </div>
+              </section>
+            ) : null}
+
+            {englishAttachments.length ? (
+              <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-[0_24px_70px_-48px_rgba(15,23,42,0.24)] sm:p-8">
+                <h2 className="text-2xl font-semibold tracking-tight">
+                  Documents And Attachments
+                </h2>
+                <div className="mt-6 grid gap-3">
+                  {englishAttachments.map((attachment, index) => {
+                    const url = attachment.url || attachment.externalUrl || "";
+                    return (
+                      <a
+                        key={`${url}-${index}`}
+                        href={url || undefined}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50/80 p-4 text-sm font-semibold text-slate-700 transition hover:bg-white"
+                      >
+                        <span>
+                          {safeEnglishText(
+                            getAttachmentName(attachment),
+                            `Document ${index + 1}`
+                          )}
+                        </span>
+                        <FileText className="h-4 w-4 text-slate-500" />
+                      </a>
+                    );
+                  })}
+                </div>
+              </section>
+            ) : null}
+          </div>
+
+          <aside className="space-y-5 lg:sticky lg:top-24 lg:self-start">
+            <Card className="overflow-hidden rounded-[32px] border-slate-200 bg-white shadow-[0_26px_80px_-48px_rgba(15,23,42,0.32)]">
+              <CardContent className="space-y-6 p-6">
+                <div>
+                  <div className="text-sm font-semibold text-slate-500">
+                    Investment Summary
+                  </div>
+                  <h2 className="mt-2 text-2xl font-semibold text-slate-950">
+                    Key Decision Data
+                  </h2>
+                  <p className="mt-3 text-sm leading-7 text-slate-500">
+                    Review the essentials, then continue with the request flow
+                    when the project status allows it.
+                  </p>
+                </div>
+
+                <div className="grid gap-3">
+                  {[
+                    ["Minimum", minimumInvestmentText],
+                    ["Expected Return", annualReturnText],
+                    ["Duration", durationText],
+                    ["Investors", investorsCountText],
+                  ].map(([label, value]) => (
+                    <div
+                      key={label}
+                      className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3"
+                    >
+                      <span className="text-sm text-slate-500">{label}</span>
+                      <span className="text-sm font-semibold text-slate-950">
+                        {value}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                {(isActiveProject || isUpcomingProject) ? (
+                  <Dialog
+                    open={isInterestFormOpen}
+                    onOpenChange={open => {
+                      setIsInterestFormOpen(open);
+                      if (open) setFormMessage({ type: null, text: "" });
+                    }}
+                  >
+                    <DialogTrigger asChild>
+                      <Button className="h-12 w-full rounded-2xl bg-slate-950 text-white hover:bg-slate-900">
+                        {isActiveProject
+                          ? "Start Investment Request"
+                          : "Register Launch Interest"}
+                      </Button>
+                    </DialogTrigger>
+
+                    <DialogContent className="max-w-[720px] rounded-[28px]">
+                      <DialogHeader>
+                        <DialogTitle>{requestDialogTitle}</DialogTitle>
+                        <DialogDescription>
+                          {requestDialogDescription}
+                        </DialogDescription>
+                      </DialogHeader>
+
+                      <form
+                        onSubmit={
+                          isActiveProject
+                            ? handleSubmit
+                            : handleLaunchInterestSubmit
+                        }
+                        className="space-y-5"
+                      >
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <div className="space-y-2">
+                            <Label>Full Name</Label>
+                            <Input
+                              value={formData.name}
+                              onChange={event =>
+                                setFormData({ ...formData, name: event.target.value })
+                              }
+                              required={isUpcomingProject}
+                              placeholder="Your full name"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Email</Label>
+                            <Input
+                              type="email"
+                              value={formData.email}
+                              onChange={event =>
+                                setFormData({ ...formData, email: event.target.value })
+                              }
+                              required
+                              placeholder="name@example.com"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Mobile Number</Label>
+                            <Input
+                              value={formData.phone}
+                              onChange={event =>
+                                setFormData({ ...formData, phone: event.target.value })
+                              }
+                              required
+                              placeholder="+966..."
+                            />
+                          </div>
+                          {isActiveProject ? (
+                            <div className="space-y-2">
+                              <Label>Estimated Amount</Label>
+                              <Input
+                                type="number"
+                                value={formData.estimatedAmount}
+                                onChange={event =>
+                                  setFormData({
+                                    ...formData,
+                                    estimatedAmount: event.target.value,
+                                  })
+                                }
+                                required
+                              />
+                            </div>
+                          ) : null}
+                        </div>
+
+                        {isActiveProject ? (
+                          <div className="space-y-2">
+                            <Label>Additional Notes</Label>
+                            <Textarea
+                              rows={4}
+                              value={formData.message}
+                              onChange={event =>
+                                setFormData({ ...formData, message: event.target.value })
+                              }
+                              placeholder="Any additional details for the investment team"
+                            />
+                          </div>
+                        ) : null}
+
+                        {formMessage.text ? (
+                          <div
+                            className={cn(
+                              "rounded-2xl border px-4 py-3 text-sm",
+                              formMessage.type === "success"
+                                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                                : "border-red-200 bg-red-50 text-red-700"
+                            )}
+                          >
+                            {formMessage.text}
+                          </div>
+                        ) : null}
+
+                        <Button
+                          type="submit"
+                          disabled={sending}
+                          className="h-12 w-full rounded-2xl bg-slate-950 text-white hover:bg-slate-900"
+                        >
+                          {sending
+                            ? "Submitting..."
+                            : isActiveProject
+                              ? "Submit Investment Request"
+                              : "Register Interest"}
+                        </Button>
+                      </form>
+                    </DialogContent>
+                  </Dialog>
+                ) : (
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm leading-7 text-slate-600">
+                    This project is currently informational only.
+                  </div>
+                )}
+
+                <Link href="/projects">
+                  <Button variant="outline" className="h-12 w-full rounded-2xl">
+                    Back To Projects
+                  </Button>
+                </Link>
+              </CardContent>
+            </Card>
+          </aside>
+        </main>
+
+        <Dialog
+          open={isSuccessOpen}
+          onOpenChange={open => {
+            setIsSuccessOpen(open);
+            if (!open) setFormMessage({ type: null, text: "" });
+          }}
+        >
+          <DialogContent className="max-w-[560px] rounded-[28px]">
+            <DialogHeader>
+              <DialogTitle>{successContent.title}</DialogTitle>
+              <DialogDescription>{successContent.description}</DialogDescription>
+            </DialogHeader>
+            <Button
+              className="h-12 w-full rounded-2xl bg-slate-950 text-white"
+              onClick={() => setIsSuccessOpen(false)}
+            >
+              Done
+            </Button>
+          </DialogContent>
+        </Dialog>
       </div>
     );
   }

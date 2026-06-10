@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { safeEnglishText, tr } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 type EmployeeLayoutProps = {
@@ -40,21 +41,30 @@ export default function EmployeeLayout({
 
   const navItems = [
     {
-      label: "الملف الشخصي",
+      label: tr(language, "الملف الشخصي", "Profile"),
       path: "/hr/profile",
       icon: UserRound,
     },
     {
-      label: "الملفات",
+      label: tr(language, "الملفات", "Files"),
       path: "/hr/files",
       icon: FileText,
     },
     {
-      label: "الرسائل",
+      label: tr(language, "الرسائل", "Messages"),
       path: "/hr/messages",
       icon: Mail,
     },
   ];
+  const displayTitle =
+    language === "ar" ? title : safeEnglishText(title, "Employee Portal");
+  const displayDescription =
+    language === "ar"
+      ? description
+      : safeEnglishText(
+          description,
+          "Review your personal profile, files, and internal messages."
+        );
 
   return (
     <div
@@ -68,14 +78,22 @@ export default function EmployeeLayout({
             className="flex min-w-0 items-center gap-3 text-slate-950"
           >
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-950 text-[#F2B705]">
-              <BriefcaseBusiness className="h-5 w-5" />
+              <img
+                src="/logo.png"
+                alt={tr(language, "شعار معدن", "MAEDIN logo")}
+                className="h-7 w-7 object-contain"
+              />
             </span>
             <span className="min-w-0">
               <span className="block truncate text-sm font-semibold">
-                بوابة الموظف
+                {tr(language, "بوابة الموظف", "Employee Portal")}
               </span>
               <span className="block truncate text-xs text-slate-500">
-                الدوام، الإجازات، الملفات والرسائل
+                {tr(
+                  language,
+                  "الدوام، الإجازات، الملفات والرسائل",
+                  "Attendance, leave, files, and messages"
+                )}
               </span>
             </span>
           </Link>
@@ -93,7 +111,7 @@ export default function EmployeeLayout({
                 className="h-10 rounded-xl border-slate-200 bg-white"
               >
                 <Home className="h-4 w-4" />
-                بوابة الموظفين
+                {tr(language, "بوابة الموظفين", "Staff Portal")}
               </Button>
             </Link>
 
@@ -106,7 +124,7 @@ export default function EmployeeLayout({
                 className="h-10 rounded-xl text-slate-600 hover:bg-slate-100 hover:text-slate-950"
               >
                 <LogOut className="h-4 w-4" />
-                خروج
+                {tr(language, "خروج", "Logout")}
               </Button>
             ) : null}
           </div>
@@ -121,23 +139,23 @@ export default function EmployeeLayout({
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge className="rounded-full border border-[#F2B705]/35 bg-[#F2B705]/12 px-4 py-1.5 text-[#8b6700] shadow-none">
                     <BriefcaseBusiness className="ml-2 h-4 w-4" />
-                    بوابة الموظف
+                    {tr(language, "بوابة الموظف", "Employee Portal")}
                   </Badge>
                   <Badge
                     variant="outline"
                     className="rounded-full border-slate-200 bg-white/80 px-4 py-1.5 text-slate-600 shadow-none"
                   >
                     <ShieldCheck className="ml-2 h-4 w-4" />
-                    وصول شخصي فقط
+                    {tr(language, "وصول شخصي فقط", "Personal Access Only")}
                   </Badge>
                 </div>
 
                 <div className="space-y-3">
                   <h1 className="text-3xl font-semibold tracking-tight text-slate-950 sm:text-[2.3rem]">
-                    {title}
+                    {displayTitle}
                   </h1>
                   <p className="max-w-3xl text-sm leading-8 text-slate-600 sm:text-[15px]">
-                    {description}
+                    {displayDescription}
                   </p>
                 </div>
 

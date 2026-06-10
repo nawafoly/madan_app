@@ -21,6 +21,8 @@ import { Button } from "@/components/ui/button";
 import { useSiteContent } from "@/contexts/SiteContentContext";
 import { uploadDocumentToCloudflare, type UploadDocumentResult } from "@/lib/documentUploadService";
 import { getSitePageMediaUrl } from "@/lib/siteContent";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { languageDir, tr } from "@/lib/i18n";
 import {
   buildRecruitmentApplicationAttachments,
   buildRecruitmentApplicationAnswers,
@@ -44,6 +46,7 @@ import {
 } from "@shared/recruitment";
 
 export default function Careers() {
+  const { language } = useLanguage();
   const { content } = useSiteContent();
   const [settings, setSettings] = useState<RecruitmentSettingsDoc>(
     DEFAULT_RECRUITMENT_SETTINGS
@@ -141,14 +144,26 @@ export default function Careers() {
     event.preventDefault();
 
     if (!settings.isPublished) {
-      toast.error("استقبال طلبات التوظيف غير متاح حاليًا.");
+      toast.error(
+        tr(
+          language,
+          "استقبال طلبات التوظيف غير متاح حاليًا.",
+          "Job applications are not available right now."
+        )
+      );
       return;
     }
 
     const nextErrors = validateRecruitmentForm(settings.fields, values, files);
     if (Object.keys(nextErrors).length > 0) {
       setErrors(nextErrors);
-      toast.error("يرجى استكمال الحقول المطلوبة قبل إرسال الطلب.");
+      toast.error(
+        tr(
+          language,
+          "يرجى استكمال الحقول المطلوبة قبل إرسال الطلب.",
+          "Complete the required fields before submitting."
+        )
+      );
       return;
     }
 
@@ -199,7 +214,13 @@ export default function Careers() {
       setValues(syncRecruitmentValuesWithFields(settings.fields));
       setFiles(syncRecruitmentFilesWithFields(settings.fields));
       setErrors({});
-      toast.success("تم استلام طلبك بنجاح، وسنراجعه في أقرب وقت.");
+      toast.success(
+        tr(
+          language,
+          "تم استلام طلبك بنجاح، وسنراجعه في أقرب وقت.",
+          "Your application was received and will be reviewed soon."
+        )
+      );
     } catch (error) {
       console.error("job application submit failed:", {
         stage: submitStage,
@@ -207,8 +228,16 @@ export default function Careers() {
       });
       toast.error(
         submitStage === "save_application"
-          ? "تم رفع الملفات لكن تعذر حفظ طلب التوظيف حاليًا."
-          : "تعذر إرسال الطلب حاليًا. حاول مرة أخرى بعد قليل."
+          ? tr(
+              language,
+              "تم رفع الملفات لكن تعذر حفظ طلب التوظيف حاليًا.",
+              "Files were uploaded, but the application could not be saved right now."
+            )
+          : tr(
+              language,
+              "تعذر إرسال الطلب حاليًا. حاول مرة أخرى بعد قليل.",
+              "The application could not be submitted right now. Try again shortly."
+            )
       );
     } finally {
       setSubmitting(false);
@@ -217,7 +246,7 @@ export default function Careers() {
 
   return (
     <div
-      dir="rtl"
+      dir={languageDir(language)}
       className="min-h-screen bg-[linear-gradient(180deg,#f5f6f8_0%,#ffffff_20%,#f7f8fa_100%)] text-slate-950"
     >
       <main className="relative overflow-hidden">
@@ -266,7 +295,7 @@ export default function Careers() {
             <div className="flex h-full items-center justify-center pt-[calc(var(--site-header-offset)+1.5rem)]">
               <div className="mx-auto max-w-4xl text-center text-white">
                 <h1 className="text-4xl font-semibold leading-tight tracking-tight sm:text-5xl lg:text-[4.25rem]">
-                  انضم إلى فريق معدن
+                  {tr(language, "انضم إلى فريق معدن", "Join The MAEDIN Team")}
                 </h1>
               </div>
             </div>
@@ -287,29 +316,42 @@ export default function Careers() {
                 <div className="flex flex-col gap-3 border-b border-slate-100 pb-6 text-right">
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge variant="outline" className="rounded-full">
-                      {loading ? "جاري التحميل" : `${totalFieldsCount} حقول`}
+                      {loading
+                        ? tr(language, "جاري التحميل", "Loading")
+                        : tr(
+                            language,
+                            `${totalFieldsCount} حقول`,
+                            `${totalFieldsCount} fields`
+                          )}
                     </Badge>
                     <Badge
                       variant="outline"
                       className="rounded-full border-emerald-200 bg-emerald-50 text-emerald-700"
                     >
-                      {requiredFieldsCount} حقول مطلوبة
+                      {tr(
+                        language,
+                        `${requiredFieldsCount} حقول مطلوبة`,
+                        `${requiredFieldsCount} required fields`
+                      )}
                     </Badge>
                     {hasFileFields ? (
                       <Badge
                         variant="outline"
                         className="rounded-full border-sky-200 bg-sky-50 text-sky-700"
                       >
-                        يدعم المرفقات
+                        {tr(language, "يدعم المرفقات", "Supports attachments")}
                       </Badge>
                     ) : null}
                   </div>
                   <h2 className="text-2xl font-semibold tracking-tight text-slate-950">
-                    نموذج التقديم
+                    {tr(language, "نموذج التقديم", "Application Form")}
                   </h2>
                   <p className="text-sm leading-7 text-slate-500">
-                    املأ البيانات المطلوبة بدقة. الحقول الإلزامية موضحة بعلامة
-                    النجمة، والملفات المطلوبة سترفع مع إرسال الطلب.
+                    {tr(
+                      language,
+                      "املأ البيانات المطلوبة بدقة. الحقول الإلزامية موضحة بعلامة النجمة، والملفات المطلوبة سترفع مع إرسال الطلب.",
+                      "Fill in the required information accurately. Required fields are marked, and required files will be uploaded with your application."
+                    )}
                   </p>
                 </div>
 
@@ -326,10 +368,14 @@ export default function Careers() {
                       <BriefcaseBusiness className="h-6 w-6" />
                     </div>
                     <h3 className="mt-5 text-xl font-semibold text-slate-950">
-                      التوظيف غير متاح حاليًا
+                      {tr(language, "التوظيف غير متاح حاليًا", "Careers Are Currently Closed")}
                     </h3>
                     <p className="mt-3 text-sm leading-7 text-slate-500">
-                      تم إيقاف استقبال الطلبات مؤقتًا من لوحة التحكم.
+                      {tr(
+                        language,
+                        "تم إيقاف استقبال الطلبات مؤقتًا من لوحة التحكم.",
+                        "Application intake has been temporarily disabled from the dashboard."
+                      )}
                     </p>
                   </div>
                 ) : !settings.fields.length ? (
@@ -338,11 +384,14 @@ export default function Careers() {
                       <ClipboardCheck className="h-6 w-6" />
                     </div>
                     <h3 className="mt-5 text-xl font-semibold text-slate-950">
-                      لا توجد حقول متاحة حاليًا
+                      {tr(language, "لا توجد حقول متاحة حاليًا", "No Fields Are Available")}
                     </h3>
                     <p className="mt-3 text-sm leading-7 text-slate-500">
-                      سيظهر النموذج هنا فور إضافة الحقول من إعدادات التوظيف داخل
-                      الداشبورد.
+                      {tr(
+                        language,
+                        "سيظهر النموذج هنا فور إضافة الحقول من إعدادات التوظيف داخل الداشبورد.",
+                        "The form will appear here once fields are added from recruitment settings."
+                      )}
                     </p>
                   </div>
                 ) : (
@@ -359,8 +408,11 @@ export default function Careers() {
 
                     <div className="flex flex-col gap-4 border-t border-slate-100 pt-6 sm:flex-row sm:items-center sm:justify-between">
                       <p className="text-sm leading-7 text-slate-500">
-                        بإرسال الطلب فأنت توافق على تزويدنا بالبيانات والمرفقات
-                        المدخلة لغرض مراجعة طلب التوظيف.
+                        {tr(
+                          language,
+                          "بإرسال الطلب فأنت توافق على تزويدنا بالبيانات والمرفقات المدخلة لغرض مراجعة طلب التوظيف.",
+                          "By submitting, you agree to provide the entered information and attachments for application review."
+                        )}
                       </p>
                       <Button
                         type="submit"
@@ -369,9 +421,13 @@ export default function Careers() {
                       >
                         {submitting
                           ? hasFileFields
-                            ? "جارٍ رفع الملفات وإرسال الطلب..."
-                            : "جارٍ الإرسال..."
-                          : "إرسال الطلب"}
+                            ? tr(
+                                language,
+                                "جارٍ رفع الملفات وإرسال الطلب...",
+                                "Uploading files and submitting..."
+                              )
+                            : tr(language, "جارٍ الإرسال...", "Submitting...")
+                          : tr(language, "إرسال الطلب", "Submit Application")}
                       </Button>
                     </div>
                   </form>
@@ -386,18 +442,20 @@ export default function Careers() {
                     </div>
                     <div>
                       <div className="text-sm font-semibold text-white/75">
-                        تدفق واضح
+                        {tr(language, "تدفق واضح", "Clear Flow")}
                       </div>
                       <div className="mt-1 text-xl font-semibold">
-                        نموذج ديناميكي مباشر
+                        {tr(language, "نموذج ديناميكي مباشر", "Live Dynamic Form")}
                       </div>
                     </div>
                   </div>
 
                   <p className="mt-5 text-sm leading-7 text-white/70">
-                    الصفحة تقرأ تعريف الحقول مباشرة من Firestore، بينما تحفظ
-                    الملفات عبر Cloudflare Worker وR2 وD1 تحت مسار منفصل خاص
-                    بالتوظيف.
+                    {tr(
+                      language,
+                      "الصفحة تقرأ تعريف الحقول مباشرة من Firestore، بينما تحفظ الملفات عبر Cloudflare Worker وR2 وD1 تحت مسار منفصل خاص بالتوظيف.",
+                      "This page reads field definitions directly from Firestore, while files are stored through Cloudflare Worker, R2, and D1 under a dedicated careers path."
+                    )}
                   </p>
                 </div>
 
@@ -408,19 +466,31 @@ export default function Careers() {
                     </div>
                     <div className="text-right">
                       <div className="text-lg font-semibold text-slate-950">
-                        كيف يتم التقديم؟
+                        {tr(language, "كيف يتم التقديم؟", "How To Apply")}
                       </div>
                       <div className="text-sm text-slate-500">
-                        ثلاث خطوات بسيطة وواضحة
+                        {tr(language, "ثلاث خطوات بسيطة وواضحة", "Three simple steps")}
                       </div>
                     </div>
                   </div>
 
                   <div className="mt-6 space-y-4 text-right">
                     {[
-                      "راجع الحقول المطلوبة والمرفقات كما تم تحديدها من الإدارة.",
-                      "أكمل البيانات بالترتيب وبصيغة صحيحة، وارفع ملفاتك المطلوبة إن وجدت.",
-                      "أرسل الطلب وسيتم حفظه ومراجعته من الفريق الإداري.",
+                      tr(
+                        language,
+                        "راجع الحقول المطلوبة والمرفقات كما تم تحديدها من الإدارة.",
+                        "Review the required fields and attachments defined by the team."
+                      ),
+                      tr(
+                        language,
+                        "أكمل البيانات بالترتيب وبصيغة صحيحة، وارفع ملفاتك المطلوبة إن وجدت.",
+                        "Complete the information correctly and upload any required files."
+                      ),
+                      tr(
+                        language,
+                        "أرسل الطلب وسيتم حفظه ومراجعته من الفريق الإداري.",
+                        "Submit the application so the administrative team can review it."
+                      ),
                     ].map((item, index) => (
                       <div
                         key={item}
@@ -442,10 +512,10 @@ export default function Careers() {
                     </div>
                     <div className="text-right">
                       <div className="text-lg font-semibold text-slate-950">
-                        ملخص النموذج الحالي
+                        {tr(language, "ملخص النموذج الحالي", "Current Form Summary")}
                       </div>
                       <div className="text-sm text-slate-500">
-                        مبني على الإعدادات الحية
+                        {tr(language, "مبني على الإعدادات الحية", "Based on live settings")}
                       </div>
                     </div>
                   </div>
@@ -453,7 +523,7 @@ export default function Careers() {
                   <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
                     <div className="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-4">
                       <div className="text-xs font-medium text-slate-500">
-                        إجمالي الحقول
+                        {tr(language, "إجمالي الحقول", "Total Fields")}
                       </div>
                       <div className="mt-2 text-2xl font-semibold text-slate-950">
                         {totalFieldsCount}
@@ -462,7 +532,7 @@ export default function Careers() {
 
                     <div className="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-4">
                       <div className="text-xs font-medium text-slate-500">
-                        الحقول المطلوبة
+                        {tr(language, "الحقول المطلوبة", "Required Fields")}
                       </div>
                       <div className="mt-2 text-2xl font-semibold text-slate-950">
                         {requiredFieldsCount}
@@ -471,10 +541,12 @@ export default function Careers() {
 
                     <div className="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-4">
                       <div className="text-xs font-medium text-slate-500">
-                        المرفقات
+                        {tr(language, "المرفقات", "Attachments")}
                       </div>
                       <div className="mt-2 text-2xl font-semibold text-slate-950">
-                        {hasFileFields ? "مدعومة" : "غير مطلوبة"}
+                        {hasFileFields
+                          ? tr(language, "مدعومة", "Supported")
+                          : tr(language, "غير مطلوبة", "Not Required")}
                       </div>
                     </div>
                   </div>

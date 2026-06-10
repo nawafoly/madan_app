@@ -17,6 +17,16 @@ import { useSiteContent } from "@/contexts/SiteContentContext";
 import {
   getSitePageMediaUrl,
 } from "@/lib/siteContent";
+import { useLanguage } from "@/contexts/LanguageContext";
+import {
+  languageDir,
+  pickLabelValue,
+  pickLocalizedText,
+  safeEnglishText,
+  textAlignClass,
+  tr,
+  type LocalizedText,
+} from "@/lib/i18n";
 import {
   collection,
   doc,
@@ -58,8 +68,8 @@ type StatsDoc = {
 };
 
 type IconFeature = {
-  title: string;
-  description: string;
+  title: LocalizedText;
+  description: LocalizedText;
   icon: LucideIcon;
 };
 
@@ -73,15 +83,15 @@ type SectionIntroProps = {
 
 const DEFAULT_LABELS: Required<LabelsDoc> = {
   projectTypes: {
-    sukuk: "استثمار بالصكوك",
-    land_development: "تطوير أراضٍ",
-    vip_exclusive: "VIP حصري",
+    sukuk: { ar: "استثمار بالصكوك", en: "Sukuk Investment" },
+    land_development: { ar: "تطوير أراضٍ", en: "Land Development" },
+    vip_exclusive: { ar: "VIP حصري", en: "VIP Exclusive" },
   },
   projectStatuses: {
-    draft: "قريبًا",
-    published: "منشور",
-    closed: "مغلق",
-    completed: "مكتمل",
+    draft: { ar: "قريبًا", en: "Coming Soon" },
+    published: { ar: "منشور", en: "Published" },
+    closed: { ar: "مغلق", en: "Closed" },
+    completed: { ar: "مكتمل", en: "Completed" },
   },
 };
 
@@ -91,30 +101,47 @@ const DEFAULT_FLAGS: FlagsDoc = {
   maintenanceMode: false,
 };
 
-const DEFAULT_STATS: StatsDoc = {
-  totalInvestment: "120M+",
-  projectsCount: "15+",
-  avgReturn: "12%+",
-  avgDuration: "18 شهر",
+const DEFAULT_STATS = {
+  ar: {
+    totalInvestment: "120M+",
+    projectsCount: "15+",
+    avgReturn: "12%+",
+    avgDuration: "18 شهر",
+  },
+  en: {
+    totalInvestment: "120M+",
+    projectsCount: "15+",
+    avgReturn: "12%+",
+    avgDuration: "18 months",
+  },
 };
 
 const OVERVIEW_PILLARS: IconFeature[] = [
   {
-    title: "اختيار مدروس للفرص",
-    description:
-      "نختار فرصًا عقارية مدروسة بعناية، مع عرض واضح يساعدك على تقييمها بسرعة.",
+    title: {
+      ar: "اختيار مدروس للفرص",
+      en: "Curated Opportunity Selection",
+    },
+    description: {
+      ar: "نختار فرصًا عقارية مدروسة بعناية، مع عرض واضح يساعدك على تقييمها بسرعة.",
+      en: "We select carefully studied real estate opportunities and present them clearly so you can evaluate them quickly.",
+    },
     icon: Sparkles,
   },
   {
-    title: "حوكمة وشفافية",
-    description:
-      "معلومات موحدة ومنظمة تمنحك وضوحًا كاملًا وثقة أعلى في كل قرار.",
+    title: { ar: "حوكمة وشفافية", en: "Governance And Transparency" },
+    description: {
+      ar: "معلومات موحدة ومنظمة تمنحك وضوحًا كاملًا وثقة أعلى في كل قرار.",
+      en: "Structured information gives you better clarity and confidence before every decision.",
+    },
     icon: Shield,
   },
   {
-    title: "نمو قائم على التنفيذ",
-    description:
-      "نركز على تنفيذ فعلي يحقق قيمة مستدامة ونتائج ملموسة للاستثمار.",
+    title: { ar: "نمو قائم على التنفيذ", en: "Execution-Led Growth" },
+    description: {
+      ar: "نركز على تنفيذ فعلي يحقق قيمة مستدامة ونتائج ملموسة للاستثمار.",
+      en: "We focus on real execution that creates lasting value and measurable investment outcomes.",
+    },
     icon: TrendingUp,
   },
 ];
@@ -122,41 +149,181 @@ const OVERVIEW_PILLARS: IconFeature[] = [
 const INVESTMENT_FLOW = [
   {
     step: "01",
-    title: "استكشاف الفرص",
-    description:
-      "نقدم لك مجموعة مختارة من الفرص الاستثمارية بعناية، مع رؤية واضحة لأهداف كل مشروع وقيمته المستقبلية.",
+    title: { ar: "استكشاف الفرص", en: "Explore Opportunities" },
+    description: {
+      ar: "نقدم لك مجموعة مختارة من الفرص الاستثمارية بعناية، مع رؤية واضحة لأهداف كل مشروع وقيمته المستقبلية.",
+      en: "Review selected investment opportunities with clear visibility into each project's goals and future value.",
+    },
   },
   {
     step: "02",
-    title: "فهم التفاصيل",
-    description:
-      "نضع بين يديك جميع المعلومات الجوهرية، من البيانات المالية إلى عناصر المشروع التشغيلية، لضمان رؤية شاملة قبل اتخاذ القرار.",
+    title: { ar: "فهم التفاصيل", en: "Understand The Details" },
+    description: {
+      ar: "نضع بين يديك جميع المعلومات الجوهرية، من البيانات المالية إلى عناصر المشروع التشغيلية، لضمان رؤية شاملة قبل اتخاذ القرار.",
+      en: "Access essential financial and operational details to form a complete view before deciding.",
+    },
   },
   {
     step: "03",
-    title: "قرار بثقة",
-    description:
-      "نرافقك في رحلتك الاستثمارية بخطوات واضحة، من البداية وحتى تحقيق العائد، مع متابعة مستمرة لكل استثمار.",
+    title: { ar: "قرار بثقة", en: "Decide With Confidence" },
+    description: {
+      ar: "نرافقك في رحلتك الاستثمارية بخطوات واضحة، من البداية وحتى تحقيق العائد، مع متابعة مستمرة لكل استثمار.",
+      en: "Move through a clear investment journey with ongoing follow-up from the first step to the return.",
+    },
   },
 ];
 
 const HERO_TRUST_POINTS = [
-  "رؤية مؤسسية أوضح للمشاريع",
-  "عرض موحد للمعلومات الأساسية",
-  "تجربة أكثر ترتيبًا عبر جميع الأجهزة",
+  {
+    ar: "رؤية مؤسسية أوضح للمشاريع",
+    en: "Clearer institutional view of projects",
+  },
+  {
+    ar: "عرض موحد للمعلومات الأساسية",
+    en: "Unified presentation of core information",
+  },
+  {
+    ar: "تجربة أكثر ترتيبًا عبر جميع الأجهزة",
+    en: "A more organized experience across devices",
+  },
 ];
+
+const HOME_COPY = {
+  heroTitle: {
+    ar: "بناء وجهات الغد الاستثمارية",
+    en: "Building Tomorrow's Investment Destinations",
+  },
+  heroSubtitle: {
+    ar: "مع معدن، نحو مستقبل أكثر وضوحًا في الاستثمار العقاري عبر واجهة مرتبة، موثوقة، ومصممة لتقديم الفرص بصورة احترافية.",
+    en: "With MAEDIN, real estate investment becomes clearer through a refined, trusted, and professionally structured experience.",
+  },
+  quickEyebrow: { ar: "نظرة سريعة", en: "Quick View" },
+  quickTitle: {
+    ar: "مدخل مختصر إلى المنصة وتجربة التصفح",
+    en: "A concise entry into the platform experience",
+  },
+  quickDescription: {
+    ar: "نقلنا العناصر الداعمة إلى هذا السكشن ليبقى الهيرو نظيفًا ورسميًا، بينما تبقى المؤشرات وأزرار الانتقال ونقاط الثقة في مساحة مستقلة وواضحة بصريًا.",
+    en: "Key indicators, navigation actions, and trust points sit in a dedicated section so the hero remains focused and formal.",
+  },
+  viewProjects: { ar: "استعرض المشاريع", en: "View Projects" },
+  aboutMore: { ar: "المزيد عنا", en: "More About Us" },
+  keyMetrics: { ar: "مؤشرات أساسية", en: "Key Metrics" },
+  platformSnapshot: { ar: "صورة سريعة عن المنصة", en: "Platform Snapshot" },
+  operationalRecord: { ar: "سجل تشغيلي ممتد", en: "Extended Operating Record" },
+  operationalRecordText: {
+    ar: "أكثر من 15 عامًا من الخبرة في تطوير وإدارة المشاريع العقارية الفاخرة، مع تركيز واضح على الجودة والاستدامة.",
+    en: "More than 15 years of experience in developing and managing premium real estate projects with a clear focus on quality and sustainability.",
+  },
+  storyAlt: { ar: "قصتنا", en: "Our story" },
+  whoWeAre: { ar: "من نحن", en: "Who We Are" },
+  storyOverlay: {
+    ar: "نبني بيئات سكنية وتجارية تلهم قاطنيها وتمنح شركاءنا وضوحًا أكبر في تقييم الفرص الاستثمارية.",
+    en: "We build residential and commercial environments that inspire their communities and give partners clearer investment insight.",
+  },
+  yearsExperience: { ar: "عامًا من الخبرة", en: "years of experience" },
+  experienceText: {
+    ar: "سجل حافل بالإنجازات في تطوير وإدارة المشاريع العقارية الفاخرة وبناء قيمة مستدامة على المدى الطويل.",
+    en: "A strong record in premium real estate development and long-term value creation.",
+  },
+  storySection: {
+    eyebrow: { ar: "قصتنا", en: "Our Story" },
+    title: {
+      ar: "حضور مؤسسي يجمع بين الأصالة، الخبرة، والطموح",
+      en: "An institutional presence shaped by heritage, expertise, and ambition",
+    },
+    description: {
+      ar: "نعيد صياغة الصفحة الرئيسية بأسلوب يعبّر عن شركة استثمار عقاري احترافية، واضحة في رسالتها، ومنظمة في عرض محتواها.",
+      en: "We present MAEDIN as a professional real estate investment company with a clear message and structured content.",
+    },
+  },
+  storyParagraphs: [
+    {
+      ar: "بجذور راسخة وطموح لا يحده أفق، انطلقت معدن لتكون منارة في عالم الاستثمار العقاري.",
+      en: "With deep roots and broad ambition, MAEDIN was built to be a clear reference in real estate investment.",
+    },
+    {
+      ar: "نحن نؤمن بأن العقار ليس مجرد بناء، بل هو مساحة للحياة والنمو، ورؤيتنا تتجاوز المألوف لخلق بيئات سكنية وتجارية تلهم قاطنيها وتوفر عوائد استثمارية مستدامة لشركائنا.",
+      en: "We believe real estate is more than construction; it is a place for life, growth, and sustainable partner value.",
+    },
+    {
+      ar: "من خلال دمج التصميم العصري مع الأصالة والابتكار مع الخبرة، نسعى لبناء إرث يدوم للأجيال القادمة.",
+      en: "By combining modern design, authenticity, innovation, and experience, we aim to build a legacy that lasts.",
+    },
+  ],
+  numbersSection: {
+    eyebrow: { ar: "الأرقام", en: "Numbers" },
+    title: {
+      ar: "مؤشرات تعكس الثقة والاتساق",
+      en: "Indicators that reflect confidence and consistency",
+    },
+    description: {
+      ar: "مؤشرات مختصرة تساعد المستثمر على تكوين صورة أولية سريعة عن حجم الحضور وفرص النمو داخل المنصة.",
+      en: "Concise indicators help investors form a quick view of scale, presence, and growth opportunities.",
+    },
+  },
+  featuredSection: {
+    eyebrow: { ar: "المشاريع المميزة", en: "Featured Projects" },
+    title: {
+      ar: "فرص مختارة تعكس أسلوب العرض المؤسسي",
+      en: "Selected opportunities with institutional presentation",
+    },
+    description: {
+      ar: "مشاريع بارزة تظهر في الصفحة الرئيسية بهيكل بصري أوضح، وكروت موحدة، ومسافات أكثر انضباطًا.",
+      en: "Highlighted projects presented through clearer layouts, unified cards, and disciplined spacing.",
+    },
+  },
+  viewAllProjects: { ar: "عرض كل المشاريع", en: "View All Projects" },
+  noFeatured: { ar: "لا توجد مشاريع مميزة حاليًا.", en: "No featured projects are available now." },
+  whySection: {
+    eyebrow: { ar: "لماذا معدن", en: "Why MAEDIN" },
+    title: {
+      ar: "مسار استثماري أوضح… من الفرصة إلى القرار",
+      en: "A clearer investment path from opportunity to decision",
+    },
+    description: {
+      ar: "نعمل في «معدن» على تقديم فرص استثمارية مدروسة بوضوح، تساعدك على فهم المشروع من جميع جوانبه، وتقليل عدم اليقين، لاتخاذ قرارات استثمارية مبنية على أسس قوية وثقة عالية.",
+      en: "MAEDIN presents carefully studied opportunities so you can understand every project, reduce uncertainty, and make stronger investment decisions.",
+    },
+  },
+  pillarsSection: {
+    eyebrow: { ar: "ما الذي يميز معدن", en: "What Sets MAEDIN Apart" },
+    title: { ar: "مرتكزات العمل في معدن", en: "MAEDIN Operating Pillars" },
+    description: {
+      ar: "ثلاثة مرتكزات واضحة تنظم طريقة اختيار الفرص وعرضها وتنفيذها، بما يعزز وضوح التجربة وثقة المستثمر.",
+      en: "Three clear pillars guide how we select, present, and execute opportunities to increase clarity and investor confidence.",
+    },
+  },
+  projectsSection: {
+    eyebrow: { ar: "مشاريعنا", en: "Our Projects" },
+    title: {
+      ar: "فرص منشورة بواجهة أوضح وتسلسل أبسط",
+      en: "Published opportunities with a clearer interface",
+    },
+    description: {
+      ar: "استعراض أحدث المشاريع ضمن شبكة موحدة من الكروت والعناوين والمسافات، مع تجربة مناسبة للجوال والتابلت والديسكتوب.",
+      en: "Browse the latest projects in a unified grid designed for mobile, tablet, and desktop.",
+    },
+  },
+  loadingProjects: { ar: "جاري تحميل المشاريع...", en: "Loading projects..." },
+  noProjects: { ar: "لا توجد مشاريع حاليًا.", en: "No projects are available now." },
+  cardFeatured: { ar: "مشروع مميز", en: "Featured Project" },
+  cardPublished: { ar: "فرصة منشورة", en: "Published Opportunity" },
+  cardDescription: {
+    ar: "عرض استثماري مرتب يوضح الفكرة العامة للمشروع بسرعة قبل الانتقال إلى التفاصيل الكاملة.",
+    en: "A structured investment view that explains the project quickly before opening the full details.",
+  },
+  details: { ar: "عرض التفاصيل", en: "View Details" },
+  metrics: {
+    totalInvestment: { ar: "إجمالي الاستثمارات", en: "Total Investments" },
+    projectsCount: { ar: "عدد المشاريع", en: "Projects" },
+    avgReturn: { ar: "متوسط العائد", en: "Average Return" },
+    avgDuration: { ar: "متوسط مدة المشروع", en: "Average Project Duration" },
+  },
+};
 
 const FALLBACK_IMG = "/HOOM-HERO.png";
 const STORY_IMG = "/about-poto1.jpg";
-
-function pickLabel(v: unknown, lang: "ar" | "en" = "ar", fallback = "") {
-  if (typeof v === "string") return v;
-  if (v && typeof v === "object") {
-    const o = v as BiLabel;
-    return (lang === "ar" ? o.ar : o.en) || o.ar || o.en || fallback;
-  }
-  return fallback;
-}
 
 function normalizePublicImage(src?: string) {
   return normalizePublicAssetPath(src);
@@ -169,10 +336,11 @@ function SectionIntro({
   centered = false,
   invert = false,
 }: SectionIntroProps) {
+  const { language } = useLanguage();
   return (
     <div
       className={`max-w-3xl space-y-4 ${
-        centered ? "mx-auto text-center" : "text-right"
+        centered ? "mx-auto text-center" : textAlignClass(language)
       }`}
     >
       <span
@@ -204,13 +372,15 @@ function SectionIntro({
 
 export default function Home() {
   const [location] = useLocation();
+  const { language } = useLanguage();
   const { content } = useSiteContent();
   const [featured, setFeatured] = useState<HomeProject[]>([]);
   const [projects, setProjects] = useState<HomeProject[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [labels, setLabels] = useState<Required<LabelsDoc>>(DEFAULT_LABELS);
   const [flags, setFlags] = useState<FlagsDoc>(DEFAULT_FLAGS);
-  const [stats, setStats] = useState<StatsDoc>(DEFAULT_STATS);
+  const [stats, setStats] = useState<StatsDoc>(DEFAULT_STATS.ar);
+  const defaultStats = DEFAULT_STATS[language];
 
   const { ref: homeSliderRef, bind: homeSliderBind } =
     useDragScroll<HTMLDivElement>();
@@ -226,24 +396,39 @@ export default function Home() {
   }, [location]);
 
   const categoryLabel = (key: string) =>
-    pickLabel(labels.projectTypes[key], "ar", key || "مشروع");
+    pickLabelValue(language, labels.projectTypes[key], {
+      ar: key || "مشروع",
+      en: key ? key.replace(/_/g, " ") : "Project",
+    });
 
   const metrics = [
     {
-      value: stats.totalInvestment || DEFAULT_STATS.totalInvestment,
-      label: "إجمالي الاستثمارات",
+      value:
+        language === "en"
+          ? safeEnglishText(stats.totalInvestment, defaultStats.totalInvestment)
+          : stats.totalInvestment || defaultStats.totalInvestment,
+      label: HOME_COPY.metrics.totalInvestment[language],
     },
     {
-      value: stats.projectsCount || DEFAULT_STATS.projectsCount,
-      label: "عدد المشاريع",
+      value:
+        language === "en"
+          ? safeEnglishText(stats.projectsCount, defaultStats.projectsCount)
+          : stats.projectsCount || defaultStats.projectsCount,
+      label: HOME_COPY.metrics.projectsCount[language],
     },
     {
-      value: stats.avgReturn || DEFAULT_STATS.avgReturn,
-      label: "متوسط العائد",
+      value:
+        language === "en"
+          ? safeEnglishText(stats.avgReturn, defaultStats.avgReturn)
+          : stats.avgReturn || defaultStats.avgReturn,
+      label: HOME_COPY.metrics.avgReturn[language],
     },
     {
-      value: stats.avgDuration || DEFAULT_STATS.avgDuration,
-      label: "متوسط مدة المشروع",
+      value:
+        language === "en"
+          ? safeEnglishText(stats.avgDuration, defaultStats.avgDuration)
+          : stats.avgDuration || defaultStats.avgDuration,
+      label: HOME_COPY.metrics.avgDuration[language],
     },
   ];
   const homeHeroVideo = getSitePageMediaUrl(
@@ -289,7 +474,9 @@ export default function Home() {
               <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(6,14,24,0.16)_0%,rgba(6,14,24,0.22)_24%,rgba(6,14,24,0.88)_100%)]" />
               <div className="absolute inset-x-0 top-0 flex items-center justify-between p-5 md:p-6">
                 <span className="inline-flex items-center rounded-full border border-white/18 bg-white/12 px-3 py-1 text-[11px] font-semibold text-white backdrop-blur-md md:text-xs">
-                  {isFeatured ? "مشروع مميز" : categoryLabel(project.categoryKey)}
+                  {isFeatured
+                    ? HOME_COPY.cardFeatured[language]
+                    : categoryLabel(project.categoryKey)}
                 </span>
                 <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/16 bg-white/10 text-white backdrop-blur-md transition-transform duration-300 group-hover:translate-x-[-4px]">
                   <ArrowRight className="h-4 w-4" />
@@ -297,7 +484,7 @@ export default function Home() {
               </div>
               <div className="absolute inset-x-0 bottom-0 p-6 text-white md:p-7">
                 <p className="text-xs font-medium tracking-[0.24em] text-white/65">
-                  فرصة منشورة
+                  {HOME_COPY.cardPublished[language]}
                 </p>
                 <h3 className="mt-3 text-2xl font-semibold leading-snug md:text-3xl">
                   {project.title}
@@ -312,17 +499,18 @@ export default function Home() {
               <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(7,14,24,0.96)_0%,rgba(15,32,52,0.96)_100%)]" />
               <div className="absolute inset-0 flex flex-col justify-end p-6 text-white md:p-7">
                 <span className="inline-flex w-fit items-center rounded-full border border-white/14 bg-white/8 px-3 py-1 text-[11px] font-semibold text-white/90 backdrop-blur md:text-xs">
-                  {isFeatured ? "مشروع مميز" : categoryLabel(project.categoryKey)}
+                  {isFeatured
+                    ? HOME_COPY.cardFeatured[language]
+                    : categoryLabel(project.categoryKey)}
                 </span>
                 <h3 className="mt-4 text-2xl font-semibold leading-snug md:text-3xl">
                   {project.title}
                 </h3>
                 <p className="mt-3 text-sm leading-7 text-white/72 md:text-base">
-                  عرض استثماري مرتب يوضح الفكرة العامة للمشروع بسرعة قبل الانتقال
-                  إلى التفاصيل الكاملة.
+                  {HOME_COPY.cardDescription[language]}
                 </p>
                 <div className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-[#f2ae30]">
-                  عرض التفاصيل
+                  {HOME_COPY.details[language]}
                   <ArrowRight className="h-4 w-4" />
                 </div>
               </div>
@@ -364,9 +552,9 @@ export default function Home() {
 
     const unsubStats = onSnapshot(doc(db, "settings", "homeStats"), (snap) => {
       if (snap.exists()) {
-        setStats({ ...DEFAULT_STATS, ...(snap.data() as StatsDoc) });
+        setStats({ ...DEFAULT_STATS.ar, ...(snap.data() as StatsDoc) });
       } else {
-        setStats(DEFAULT_STATS);
+        setStats(DEFAULT_STATS.ar);
       }
     });
 
@@ -411,12 +599,23 @@ export default function Home() {
           const image = rawImg ? normalizePublicImage(rawImg) : FALLBACK_IMG;
           return {
             id: String(project.id),
-            title: String(project.titleAr || project.titleEn || project.title || "مشروع"),
-            location: String(
-              project.locationAr ||
-                project.locationEn ||
-                project.location ||
-                "المملكة العربية السعودية"
+            title: pickLocalizedText(
+              language,
+              {
+                ar: project.titleAr,
+                en: project.titleEn,
+                neutral: project.title,
+              },
+              { ar: "مشروع", en: "Project" }
+            ),
+            location: pickLocalizedText(
+              language,
+              {
+                ar: project.locationAr,
+                en: project.locationEn,
+                neutral: project.location,
+              },
+              { ar: "المملكة العربية السعودية", en: "Saudi Arabia" }
             ),
             categoryKey: typeKey || "unknown",
             image,
@@ -441,11 +640,11 @@ export default function Home() {
       unsubStats();
       unsubProjects();
     };
-  }, []);
+  }, [language]);
 
   return (
     <div
-      dir="rtl"
+      dir={languageDir(language)}
       className="min-h-screen bg-[linear-gradient(180deg,#f5f6f8_0%,#ffffff_18%,#f8f8f9_100%)] text-foreground"
     >
       <main className="relative overflow-hidden">
@@ -494,12 +693,11 @@ export default function Home() {
             <div className="flex h-full items-center justify-center pt-[calc(var(--site-header-offset)+1.5rem)]">
               <div className="mx-auto max-w-4xl text-center text-white">
                 <h1 className="text-4xl font-bold leading-[1.35] tracking-tight sm:text-5xl lg:text-6xl lg:leading-[1.25]">
-                  بناء وجهات الغد الاستثمارية
+                  {HOME_COPY.heroTitle[language]}
                 </h1>
 
                 <p className="mx-auto mt-6 max-w-3xl text-lg leading-8 text-white/78 sm:text-xl">
-                  مع معدن، نحو مستقبل أكثر وضوحًا في الاستثمار العقاري عبر
-                  واجهة مرتبة، موثوقة، ومصممة لتقديم الفرص بصورة احترافية.
+                  {HOME_COPY.heroSubtitle[language]}
                 </p>
               </div>
             </div>
@@ -512,22 +710,20 @@ export default function Home() {
               <div className="rounded-[34px] border border-slate-200/80 bg-white p-8 shadow-[0_28px_85px_-56px_rgba(11,23,38,0.32)] sm:p-10">
                 <div className="max-w-2xl text-right">
                   <p className="text-sm font-semibold text-primary/70">
-                    نظرة سريعة
+                    {HOME_COPY.quickEyebrow[language]}
                   </p>
                   <h2 className="mt-3 text-3xl font-semibold leading-tight text-foreground sm:text-4xl">
-                    مدخل مختصر إلى المنصة وتجربة التصفح
+                    {HOME_COPY.quickTitle[language]}
                   </h2>
                   <p className="mt-4 text-base leading-8 text-muted-foreground sm:text-lg">
-                    نقلنا العناصر الداعمة إلى هذا السكشن ليبقى الهيرو نظيفًا
-                    ورسميًا، بينما تبقى المؤشرات وأزرار الانتقال ونقاط الثقة في
-                    مساحة مستقلة وواضحة بصريًا.
+                    {HOME_COPY.quickDescription[language]}
                   </p>
                 </div>
 
                 <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-start">
                   <Link href="/projects">
                     <Button className="h-12 rounded-full bg-[#f2ae30] px-7 text-sm font-semibold text-primary hover:bg-[#f6b63f]">
-                      استعرض المشاريع
+                      {HOME_COPY.viewProjects[language]}
                       <ArrowRight className="mr-2 h-4 w-4" />
                     </Button>
                   </Link>
@@ -537,7 +733,7 @@ export default function Home() {
                       variant="outline"
                       className="h-12 rounded-full px-7 text-sm font-semibold"
                     >
-                      المزيد عنا
+                      {HOME_COPY.aboutMore[language]}
                     </Button>
                   </Link>
                 </div>
@@ -545,10 +741,10 @@ export default function Home() {
                 <div className="mt-8 grid gap-3 sm:grid-cols-3">
                   {HERO_TRUST_POINTS.map((point) => (
                     <div
-                      key={point}
+                      key={point.en}
                       className="rounded-[24px] border border-slate-200/80 bg-slate-50/85 px-4 py-4 text-sm leading-7 text-muted-foreground"
                     >
-                      {point}
+                      {point[language]}
                     </div>
                   ))}
                 </div>
@@ -557,11 +753,11 @@ export default function Home() {
               <div className="overflow-hidden rounded-[34px] bg-[linear-gradient(135deg,#0b1726_0%,#13253b_55%,#1a2f48_100%)] p-6 text-white shadow-[0_36px_100px_-46px_rgba(0,0,0,0.75)] sm:p-7">
                 <div className="flex items-start justify-between gap-4">
                   <div className="text-right">
-                    <p className="text-sm font-medium text-white/70">
-                      مؤشرات أساسية
+                      <p className="text-sm font-medium text-white/70">
+                      {HOME_COPY.keyMetrics[language]}
                     </p>
                     <h2 className="mt-2 text-2xl font-semibold leading-tight">
-                      صورة سريعة عن المنصة
+                      {HOME_COPY.platformSnapshot[language]}
                     </h2>
                   </div>
                   <div className="rounded-2xl border border-white/12 bg-white/8 p-3">
@@ -592,11 +788,10 @@ export default function Home() {
                     </div>
                     <div className="text-right">
                       <h3 className="text-base font-semibold">
-                        سجل تشغيلي ممتد
+                        {HOME_COPY.operationalRecord[language]}
                       </h3>
                       <p className="mt-2 text-sm leading-7 text-white/72">
-                        أكثر من 15 عامًا من الخبرة في تطوير وإدارة المشاريع
-                        العقارية الفاخرة، مع تركيز واضح على الجودة والاستدامة.
+                        {HOME_COPY.operationalRecordText[language]}
                       </p>
                     </div>
                   </div>
@@ -613,7 +808,7 @@ export default function Home() {
                 <div className="relative overflow-hidden rounded-[34px] border border-slate-200/70 bg-[#0b1726] shadow-[0_32px_90px_-48px_rgba(11,23,38,0.35)]">
                   <img
                     src={homeStoryImage}
-                    alt="قصتنا"
+                    alt={HOME_COPY.storyAlt[language]}
                     className="absolute inset-0 h-full w-full object-cover"
                     onError={(event) => {
                       const image = event.currentTarget;
@@ -627,11 +822,10 @@ export default function Home() {
                   <div className="relative z-10 flex min-h-[560px] flex-col justify-between items-end p-6 md:min-h-[640px] md:p-8">
                     <div className="w-full max-w-[28rem] text-right text-white">
                       <p className="text-xs font-medium tracking-[0.24em] text-white/65">
-                        من نحن
+                        {HOME_COPY.whoWeAre[language]}
                       </p>
                       <p className="mt-3 text-lg leading-8 text-white/88 md:text-[1.375rem] md:leading-9">
-                        نبني بيئات سكنية وتجارية تلهم قاطنيها وتمنح شركاءنا وضوحًا
-                        أكبر في تقييم الفرص الاستثمارية.
+                        {HOME_COPY.storyOverlay[language]}
                       </p>
                     </div>
 
@@ -645,11 +839,10 @@ export default function Home() {
                             15+
                           </div>
                           <div className="mt-1 text-sm text-muted-foreground">
-                            عامًا من الخبرة
+                            {HOME_COPY.yearsExperience[language]}
                           </div>
                           <p className="mt-4 text-sm leading-7 text-muted-foreground">
-                            سجل حافل بالإنجازات في تطوير وإدارة المشاريع العقارية
-                            الفاخرة وبناء قيمة مستدامة على المدى الطويل.
+                            {HOME_COPY.experienceText[language]}
                           </p>
                         </div>
                       </div>
@@ -660,31 +853,21 @@ export default function Home() {
 
               <div className="text-right">
                 <SectionIntro
-                  eyebrow="قصتنا"
-                  title="حضور مؤسسي يجمع بين الأصالة، الخبرة، والطموح"
-                  description="نعيد صياغة الصفحة الرئيسية بأسلوب يعبّر عن شركة استثمار عقاري احترافية، واضحة في رسالتها، ومنظمة في عرض محتواها."
+                  eyebrow={HOME_COPY.storySection.eyebrow[language]}
+                  title={HOME_COPY.storySection.title[language]}
+                  description={HOME_COPY.storySection.description[language]}
                 />
 
                 <div className="mt-6 space-y-4 text-base leading-8 text-muted-foreground sm:text-lg">
-                  <p>
-                    بجذور راسخة وطموح لا يحده أفق، انطلقت معدن لتكون منارة في عالم
-                    الاستثمار العقاري.
-                  </p>
-                  <p>
-                    نحن نؤمن بأن العقار ليس مجرد بناء، بل هو مساحة للحياة والنمو،
-                    ورؤيتنا تتجاوز المألوف لخلق بيئات سكنية وتجارية تلهم قاطنيها
-                    وتوفر عوائد استثمارية مستدامة لشركائنا.
-                  </p>
-                  <p>
-                    من خلال دمج التصميم العصري مع الأصالة والابتكار مع الخبرة،
-                    نسعى لبناء إرث يدوم للأجيال القادمة.
-                  </p>
+                  {HOME_COPY.storyParagraphs.map((paragraph) => (
+                    <p key={paragraph.en}>{paragraph[language]}</p>
+                  ))}
                 </div>
 
                 <div className="mt-8">
                   <Link href="/about">
                     <Button className="h-12 rounded-full px-7 text-sm font-semibold">
-                      المزيد عنا
+                      {HOME_COPY.aboutMore[language]}
                       <ArrowRight className="mr-2 h-4 w-4" />
                     </Button>
                   </Link>
@@ -698,9 +881,9 @@ export default function Home() {
           <div className="container px-4 sm:px-6">
             <div className="overflow-hidden rounded-[36px] bg-[linear-gradient(135deg,#0b1726_0%,#13253b_55%,#1a2f48_100%)] px-6 py-10 text-white shadow-[0_36px_110px_-56px_rgba(11,23,38,0.95)] sm:px-8 lg:px-12 lg:py-12">
               <SectionIntro
-                eyebrow="الأرقام"
-                title="مؤشرات تعكس الثقة والاتساق"
-                description="مؤشرات مختصرة تساعد المستثمر على تكوين صورة أولية سريعة عن حجم الحضور وفرص النمو داخل المنصة."
+                eyebrow={HOME_COPY.numbersSection.eyebrow[language]}
+                title={HOME_COPY.numbersSection.title[language]}
+                description={HOME_COPY.numbersSection.description[language]}
                 invert
               />
 
@@ -727,9 +910,9 @@ export default function Home() {
           <div className="container px-4 sm:px-6">
             <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
               <SectionIntro
-                eyebrow="المشاريع المميزة"
-                title="فرص مختارة تعكس أسلوب العرض المؤسسي"
-                description="مشاريع بارزة تظهر في الصفحة الرئيسية بهيكل بصري أوضح، وكروت موحدة، ومسافات أكثر انضباطًا."
+                eyebrow={HOME_COPY.featuredSection.eyebrow[language]}
+                title={HOME_COPY.featuredSection.title[language]}
+                description={HOME_COPY.featuredSection.description[language]}
               />
 
               <Link href="/projects">
@@ -737,7 +920,7 @@ export default function Home() {
                   variant="outline"
                   className="h-12 rounded-full px-6 text-sm font-semibold"
                 >
-                  عرض كل المشاريع
+                  {HOME_COPY.viewAllProjects[language]}
                 </Button>
               </Link>
             </div>
@@ -749,7 +932,7 @@ export default function Home() {
                 ))
               ) : (
                 <div className="col-span-full rounded-[30px] border border-dashed border-slate-300 bg-white/75 px-6 py-16 text-center text-muted-foreground shadow-[0_24px_80px_-60px_rgba(11,23,38,0.25)]">
-                  لا توجد مشاريع مميزة حاليًا.
+                  {HOME_COPY.noFeatured[language]}
                 </div>
               )}
             </div>
@@ -761,9 +944,9 @@ export default function Home() {
             <div className="mx-auto max-w-4xl rounded-[34px] border border-slate-200/70 bg-white p-8 shadow-[0_28px_80px_-52px_rgba(11,23,38,0.28)] sm:p-10 lg:p-12">
               <div className="max-w-3xl text-right">
                 <SectionIntro
-                  eyebrow="لماذا معدن"
-                  title="مسار استثماري أوضح… من الفرصة إلى القرار"
-                  description="نعمل في «معدن» على تقديم فرص استثمارية مدروسة بوضوح، تساعدك على فهم المشروع من جميع جوانبه، وتقليل عدم اليقين، لاتخاذ قرارات استثمارية مبنية على أسس قوية وثقة عالية."
+                  eyebrow={HOME_COPY.whySection.eyebrow[language]}
+                  title={HOME_COPY.whySection.title[language]}
+                  description={HOME_COPY.whySection.description[language]}
                 />
               </div>
 
@@ -779,10 +962,10 @@ export default function Home() {
                       </div>
                       <div className="text-right">
                         <h3 className="text-lg font-semibold text-foreground">
-                          {item.title}
+                          {item.title[language]}
                         </h3>
                         <p className="mt-2 text-sm leading-7 text-muted-foreground">
-                          {item.description}
+                          {item.description[language]}
                         </p>
                       </div>
                     </div>
@@ -798,9 +981,9 @@ export default function Home() {
             <div className="rounded-[34px] border border-slate-200/70 bg-white/85 p-8 shadow-[0_24px_80px_-56px_rgba(11,23,38,0.24)] sm:p-10">
               <div className="max-w-3xl text-right">
                 <SectionIntro
-                  eyebrow="ما الذي يميز معدن"
-                  title="مرتكزات العمل في معدن"
-                  description="ثلاثة مرتكزات واضحة تنظم طريقة اختيار الفرص وعرضها وتنفيذها، بما يعزز وضوح التجربة وثقة المستثمر."
+                  eyebrow={HOME_COPY.pillarsSection.eyebrow[language]}
+                  title={HOME_COPY.pillarsSection.title[language]}
+                  description={HOME_COPY.pillarsSection.description[language]}
                 />
               </div>
 
@@ -809,7 +992,7 @@ export default function Home() {
                   const Icon = pillar.icon;
                   return (
                     <article
-                      key={`${pillar.title}-support`}
+                      key={`${pillar.title.en}-support`}
                       className="flex min-h-[180px] flex-col justify-between rounded-[30px] border border-slate-200/80 bg-[linear-gradient(180deg,#ffffff_0%,#f7f8fa_100%)] p-6 text-right shadow-[0_24px_80px_-56px_rgba(11,23,38,0.22)]"
                     >
                       <div className="flex items-center gap-4">
@@ -821,10 +1004,10 @@ export default function Home() {
 
                       <div className="mt-6 flex flex-1 flex-col gap-3">
                         <h3 className="line-clamp-1 text-lg font-semibold text-foreground">
-                          {pillar.title}
+                          {pillar.title[language]}
                         </h3>
                         <p className="line-clamp-2 overflow-hidden text-sm leading-7 text-muted-foreground">
-                          {pillar.description}
+                          {pillar.description[language]}
                         </p>
                       </div>
                     </article>
@@ -840,14 +1023,14 @@ export default function Home() {
             <div className="rounded-[36px] border border-slate-200/70 bg-white px-6 py-8 shadow-[0_30px_90px_-54px_rgba(11,23,38,0.32)] sm:px-8 sm:py-10 lg:px-10 lg:py-12">
               <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
                 <SectionIntro
-                  eyebrow="مشاريعنا"
-                  title="فرص منشورة بواجهة أوضح وتسلسل أبسط"
-                  description="استعراض أحدث المشاريع ضمن شبكة موحدة من الكروت والعناوين والمسافات، مع تجربة مناسبة للجوال والتابلت والديسكتوب."
+                  eyebrow={HOME_COPY.projectsSection.eyebrow[language]}
+                  title={HOME_COPY.projectsSection.title[language]}
+                  description={HOME_COPY.projectsSection.description[language]}
                 />
 
                 <Link href="/projects">
                   <Button className="h-12 rounded-full px-7 text-sm font-semibold">
-                    عرض جميع المشاريع
+                    {HOME_COPY.viewAllProjects[language]}
                     <ArrowRight className="mr-2 h-4 w-4" />
                   </Button>
                 </Link>
@@ -856,7 +1039,7 @@ export default function Home() {
               <div className="mt-10">
                 {isLoading ? (
                   <div className="rounded-[28px] border border-dashed border-slate-300 bg-slate-50/80 px-6 py-16 text-center text-muted-foreground">
-                    جاري تحميل المشاريع...
+                    {HOME_COPY.loadingProjects[language]}
                   </div>
                 ) : projects.length ? (
                   <>
@@ -870,7 +1053,7 @@ export default function Home() {
                       {projects.map((project) => (
                         <div
                           key={project.id}
-                          dir="rtl"
+                          dir={languageDir(language)}
                           className="w-[86%] shrink-0 snap-start sm:w-[420px]"
                         >
                           {projectCard(project)}
@@ -886,7 +1069,7 @@ export default function Home() {
                   </>
                 ) : (
                   <div className="rounded-[28px] border border-dashed border-slate-300 bg-slate-50/80 px-6 py-16 text-center text-muted-foreground">
-                    لا توجد مشاريع حاليًا.
+                    {HOME_COPY.noProjects[language]}
                   </div>
                 )}
               </div>

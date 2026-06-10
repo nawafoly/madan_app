@@ -19,6 +19,8 @@ import {
   buildAuditSource,
   logAuditEvent,
 } from "@/lib/auditLog";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { languageDir, textAlignClass, tr } from "@/lib/i18n";
 type AuthMode = "login" | "register";
 
 function FieldLabel({ children }: { children: ReactNode }) {
@@ -54,6 +56,7 @@ function SurfaceAlert({
 
 export default function LoginPage() {
   const { user, loading, error } = useAuth();
+  const { language } = useLanguage();
   const [location, setLocation] = useLocation();
 
   const [busy, setBusy] = useState(false);
@@ -93,25 +96,37 @@ export default function LoginPage() {
   const friendlyAuthError = (code?: string) => {
     switch (code) {
       case "auth/invalid-email":
-        return "البريد الإلكتروني غير صحيح.";
+        return tr(language, "البريد الإلكتروني غير صحيح.", "Invalid email address.");
       case "auth/missing-password":
-        return "فضلًا اكتب كلمة المرور.";
+        return tr(language, "فضلًا اكتب كلمة المرور.", "Enter your password.");
       case "auth/weak-password":
-        return "كلمة المرور ضعيفة. استخدم 6 أحرف على الأقل.";
+        return tr(
+          language,
+          "كلمة المرور ضعيفة. استخدم 6 أحرف على الأقل.",
+          "Password is too weak. Use at least 6 characters."
+        );
       case "auth/user-not-found":
-        return "لا يوجد حساب بهذا البريد.";
+        return tr(language, "لا يوجد حساب بهذا البريد.", "No account uses this email.");
       case "auth/wrong-password":
-        return "كلمة المرور غير صحيحة.";
+        return tr(language, "كلمة المرور غير صحيحة.", "Incorrect password.");
       case "auth/invalid-credential":
-        return "بيانات الدخول غير صحيحة.";
+        return tr(language, "بيانات الدخول غير صحيحة.", "Invalid sign-in details.");
       case "auth/email-already-in-use":
-        return "هذا البريد مستخدم بالفعل.";
+        return tr(language, "هذا البريد مستخدم بالفعل.", "This email is already in use.");
       case "auth/too-many-requests":
-        return "محاولات كثيرة. انتظر قليلًا ثم أعد المحاولة.";
+        return tr(
+          language,
+          "محاولات كثيرة. انتظر قليلًا ثم أعد المحاولة.",
+          "Too many attempts. Wait a moment and try again."
+        );
       case "auth/network-request-failed":
-        return "مشكلة اتصال بالإنترنت. حاول مرة أخرى.";
+        return tr(language, "مشكلة اتصال بالإنترنت. حاول مرة أخرى.", "Network issue. Try again.");
       default:
-        return "تعذر تنفيذ العملية. تحقق من إعدادات Firebase.";
+        return tr(
+          language,
+          "تعذر تنفيذ العملية. تحقق من إعدادات Firebase.",
+          "Could not complete the request. Check Firebase settings."
+        );
     }
   };
 
@@ -119,30 +134,36 @@ export default function LoginPage() {
     () =>
       mode === "login"
         ? {
-            badge: "دخول المنصة",
-            title: "تسجيل الدخول",
+            badge: tr(language, "دخول المنصة", "Platform Access"),
+            title: tr(language, "تسجيل الدخول", "Sign In"),
             description:
               "",
-            submitLabel: "تسجيل الدخول",
-            toggleLabel: "إنشاء حساب جديد",
+            submitLabel: tr(language, "تسجيل الدخول", "Sign In"),
+            toggleLabel: tr(language, "إنشاء حساب جديد", "Create Account"),
           }
         : {
-            badge: "إنشاء حساب",
-            title: "إنشاء حساب جديد",
+            badge: tr(language, "إنشاء حساب", "Create Account"),
+            title: tr(language, "إنشاء حساب جديد", "Create A New Account"),
             description:
               "",
-            submitLabel: "إنشاء الحساب",
-            toggleLabel: "لدي حساب بالفعل",
+            submitLabel: tr(language, "إنشاء الحساب", "Create Account"),
+            toggleLabel: tr(language, "لدي حساب بالفعل", "I Already Have An Account"),
           },
-    [mode]
+    [language, mode]
   );
 
   const effectiveError = useMemo(() => {
     if (localError) return localError;
     if (typeof error === "string" && error.trim()) return error;
-    if (error) return "تعذر التحقق من حالة الجلسة الحالية. حاول مرة أخرى.";
+    if (error) {
+      return tr(
+        language,
+        "تعذر التحقق من حالة الجلسة الحالية. حاول مرة أخرى.",
+        "Could not verify the current session. Try again."
+      );
+    }
     return null;
-  }, [error, localError]);
+  }, [error, language, localError]);
 
   const resetTransientState = () => {
     setLocalError(null);
@@ -171,13 +192,13 @@ export default function LoginPage() {
 
     if (!normalizedEmail) {
       setBusy(false);
-      setLocalError("فضلًا اكتب البريد الإلكتروني.");
+      setLocalError(tr(language, "فضلًا اكتب البريد الإلكتروني.", "Enter your email."));
       return;
     }
 
     if (!trimmedPassword) {
       setBusy(false);
-      setLocalError("فضلًا اكتب كلمة المرور.");
+      setLocalError(tr(language, "فضلًا اكتب كلمة المرور.", "Enter your password."));
       return;
     }
 
@@ -217,31 +238,43 @@ export default function LoginPage() {
 
       if (!name) {
         setBusy(false);
-        setLocalError("فضلًا اكتب الاسم الكامل.");
+        setLocalError(tr(language, "فضلًا اكتب الاسم الكامل.", "Enter your full name."));
         return;
       }
 
       if (!phoneValue) {
         setBusy(false);
-        setLocalError("فضلًا اكتب رقم الجوال.");
+        setLocalError(tr(language, "فضلًا اكتب رقم الجوال.", "Enter your mobile number."));
         return;
       }
 
       if (trimmedPassword.length < 6) {
         setBusy(false);
-        setLocalError("كلمة المرور يجب أن تكون 6 أحرف على الأقل.");
+        setLocalError(
+          tr(
+            language,
+            "كلمة المرور يجب أن تكون 6 أحرف على الأقل.",
+            "Password must be at least 6 characters."
+          )
+        );
         return;
       }
 
       if (!confirmPassword.trim()) {
         setBusy(false);
-        setLocalError("فضلًا أكد كلمة المرور.");
+        setLocalError(tr(language, "فضلًا أكد كلمة المرور.", "Confirm your password."));
         return;
       }
 
       if (confirmPassword !== trimmedPassword) {
         setBusy(false);
-        setLocalError("كلمة المرور وتأكيدها غير متطابقين.");
+        setLocalError(
+          tr(
+            language,
+            "كلمة المرور وتأكيدها غير متطابقين.",
+            "Password and confirmation do not match."
+          )
+        );
         return;
       }
 
@@ -302,7 +335,11 @@ export default function LoginPage() {
 
     if (!normalizedEmail) {
       setLocalError(
-        "اكتب بريدك الإلكتروني أولًا ثم اضغط على خيار استعادة كلمة المرور."
+        tr(
+          language,
+          "اكتب بريدك الإلكتروني أولًا ثم اضغط على خيار استعادة كلمة المرور.",
+          "Enter your email first, then choose password recovery."
+        )
       );
       return;
     }
@@ -310,7 +347,13 @@ export default function LoginPage() {
     setBusy(true);
     try {
       await sendPasswordResetEmail(auth, normalizedEmail);
-      setLocalInfo("تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني.");
+      setLocalInfo(
+        tr(
+          language,
+          "تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني.",
+          "A password reset link was sent to your email."
+        )
+      );
     } catch (submitError: any) {
       setLocalError(friendlyAuthError(submitError?.code));
     } finally {
@@ -320,7 +363,7 @@ export default function LoginPage() {
 
   return (
     <div
-      dir="rtl"
+      dir={languageDir(language)}
       className="bg-[linear-gradient(180deg,#f6f6f7_0%,#ffffff_32%,#f7f7f8_100%)] text-foreground"
     >
       <main className="relative overflow-hidden">
@@ -332,7 +375,7 @@ export default function LoginPage() {
         <section className="px-4 py-10 sm:px-6 sm:py-14 lg:py-16">
           <div className="container">
             <div className="mx-auto flex min-h-[calc(100svh-var(--site-header-offset)-11rem)] max-w-[36rem] items-center justify-center">
-              <div className="w-full rounded-[32px] border border-slate-200/80 bg-white/96 p-6 text-right shadow-[0_30px_90px_-48px_rgba(11,23,38,0.24)] backdrop-blur-sm sm:p-8 md:p-10">
+              <div className={`w-full rounded-[32px] border border-slate-200/80 bg-white/96 p-6 shadow-[0_30px_90px_-48px_rgba(11,23,38,0.24)] backdrop-blur-sm sm:p-8 md:p-10 ${textAlignClass(language)}`}>
                 <div className="space-y-3">
                   <span className="inline-flex items-center rounded-full bg-[#f7f3ea] px-4 py-1.5 text-xs font-semibold tracking-[0.18em] text-primary/75 ring-1 ring-[#eadfbe]">
                     {modeCopy.badge}
@@ -351,13 +394,19 @@ export default function LoginPage() {
                 <div className="mt-6 space-y-4">
                   {!firebaseConfigured ? (
                     <SurfaceAlert tone="warning">
-                      <strong>تنبيه:</strong> إعدادات Firebase غير مكتملة.
+                      <strong>{tr(language, "تنبيه:", "Notice:")}</strong>{" "}
+                      {tr(
+                        language,
+                        "إعدادات Firebase غير مكتملة.",
+                        "Firebase settings are incomplete."
+                      )}
                     </SurfaceAlert>
                   ) : null}
 
                   {effectiveError ? (
                     <SurfaceAlert tone="error">
-                      <strong>خطأ:</strong> {effectiveError}
+                      <strong>{tr(language, "خطأ:", "Error:")}</strong>{" "}
+                      {effectiveError}
                     </SurfaceAlert>
                   ) : null}
 
@@ -376,11 +425,11 @@ export default function LoginPage() {
                   {mode === "register" ? (
                     <div className="grid gap-5 sm:grid-cols-2">
                       <div>
-                        <FieldLabel>الاسم الكامل</FieldLabel>
+                        <FieldLabel>{tr(language, "الاسم الكامل", "Full Name")}</FieldLabel>
                         <Input
                           value={fullName}
                           onChange={event => setFullName(event.target.value)}
-                          placeholder="مثال: محمد أحمد"
+                          placeholder={tr(language, "مثال: محمد أحمد", "Example: Mohammed Ahmed")}
                           autoComplete="name"
                           disabled={busy}
                           className="h-12 rounded-2xl border-slate-200/80 bg-slate-50/80 px-4 text-base shadow-none"
@@ -388,7 +437,7 @@ export default function LoginPage() {
                       </div>
 
                       <div>
-                        <FieldLabel>رقم الجوال</FieldLabel>
+                        <FieldLabel>{tr(language, "رقم الجوال", "Mobile Number")}</FieldLabel>
                         <Input
                           value={phone}
                           onChange={event => setPhone(event.target.value)}
@@ -404,7 +453,7 @@ export default function LoginPage() {
                   ) : null}
 
                   <div>
-                    <FieldLabel>البريد الإلكتروني</FieldLabel>
+                    <FieldLabel>{tr(language, "البريد الإلكتروني", "Email")}</FieldLabel>
                     <Input
                       value={email}
                       onChange={event => setEmail(event.target.value)}
@@ -418,7 +467,7 @@ export default function LoginPage() {
                   </div>
 
                   <div>
-                    <FieldLabel>كلمة المرور</FieldLabel>
+                    <FieldLabel>{tr(language, "كلمة المرور", "Password")}</FieldLabel>
                     <div className="relative">
                       <Input
                         value={password}
@@ -437,8 +486,8 @@ export default function LoginPage() {
                         className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-slate-600"
                         aria-label={
                           showPassword
-                            ? "إخفاء كلمة المرور"
-                            : "إظهار كلمة المرور"
+                            ? tr(language, "إخفاء كلمة المرور", "Hide password")
+                            : tr(language, "إظهار كلمة المرور", "Show password")
                         }
                       >
                         {showPassword ? (
@@ -452,7 +501,7 @@ export default function LoginPage() {
 
                   {mode === "register" ? (
                     <div>
-                      <FieldLabel>تأكيد كلمة المرور</FieldLabel>
+                      <FieldLabel>{tr(language, "تأكيد كلمة المرور", "Confirm Password")}</FieldLabel>
                       <div className="relative">
                         <Input
                           value={confirmPassword}
@@ -473,8 +522,8 @@ export default function LoginPage() {
                           className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-slate-600"
                           aria-label={
                             showConfirmPassword
-                              ? "إخفاء تأكيد كلمة المرور"
-                              : "إظهار تأكيد كلمة المرور"
+                              ? tr(language, "إخفاء تأكيد كلمة المرور", "Hide password confirmation")
+                              : tr(language, "إظهار تأكيد كلمة المرور", "Show password confirmation")
                           }
                         >
                           {showConfirmPassword ? (
@@ -493,7 +542,7 @@ export default function LoginPage() {
                     disabled={!firebaseConfigured || busy}
                     className="h-12 w-full rounded-full text-sm font-semibold"
                   >
-                    {busy ? "جارٍ التنفيذ..." : modeCopy.submitLabel}
+                    {busy ? tr(language, "جارٍ التنفيذ...", "Processing...") : modeCopy.submitLabel}
                   </Button>
                 </form>
 
@@ -505,11 +554,15 @@ export default function LoginPage() {
                       disabled={!firebaseConfigured || busy}
                       className="text-sm font-semibold text-primary/82 transition hover:text-primary disabled:cursor-not-allowed disabled:opacity-45"
                     >
-                      نسيت كلمة المرور؟
+                      {tr(language, "نسيت كلمة المرور؟", "Forgot password?")}
                     </button>
                   ) : (
                     <span className="text-sm text-slate-500">
-                      كلمة المرور يجب أن تكون 6 أحرف على الأقل.
+                      {tr(
+                        language,
+                        "كلمة المرور يجب أن تكون 6 أحرف على الأقل.",
+                        "Password must be at least 6 characters."
+                      )}
                     </span>
                   )}
 
@@ -532,4 +585,3 @@ export default function LoginPage() {
     </div>
   );
 }
-

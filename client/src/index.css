@@ -1000,6 +1000,14 @@
   color: rgba(15, 23, 42, 0.96);
 }
 
+html[dir="ltr"] .text-right {
+  text-align: left !important;
+}
+
+html[dir="rtl"] .text-left {
+  text-align: right !important;
+}
+
 /* ✅ Active = Capsule clean (no circle) */
 .rsg-nav__link.is-active {
   position: relative;

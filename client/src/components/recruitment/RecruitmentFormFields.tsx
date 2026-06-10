@@ -15,6 +15,13 @@ import {
   sanitizeRecruitmentFieldValue,
   type RecruitmentFormFileMap,
 } from "@/lib/recruitment";
+import { useLanguage } from "@/contexts/LanguageContext";
+import {
+  hasArabicText,
+  languageDir,
+  safeEnglishText,
+  tr,
+} from "@/lib/i18n";
 import type {
   RecruitmentFieldDefinition,
   RecruitmentFormValues,
@@ -42,6 +49,36 @@ function isWideField(field: RecruitmentFieldDefinition) {
   return field.type === "file";
 }
 
+function fallbackPlaceholder(field: RecruitmentFieldDefinition, index: number) {
+  switch (field.type) {
+    case "number":
+      return `Enter number ${index + 1}`;
+    case "date":
+      return "Select a date";
+    case "select":
+      return "Choose from the list";
+    case "file":
+      return "Upload a file";
+    default:
+      return `Enter field ${index + 1}`;
+  }
+}
+
+function fallbackHint(field: RecruitmentFieldDefinition) {
+  switch (field.type) {
+    case "number":
+      return "This field accepts numbers only.";
+    case "date":
+      return "Use a valid date.";
+    case "select":
+      return "Choose one of the available options.";
+    case "file":
+      return "Upload a supported document or image file.";
+    default:
+      return "Complete this field before submitting.";
+  }
+}
+
 export function RecruitmentFormFields({
   fields,
   values,
@@ -52,13 +89,19 @@ export function RecruitmentFormFields({
   disabled = false,
   idPrefix = "recruitment-field",
 }: RecruitmentFormFieldsProps) {
-  const renderControl = (field: RecruitmentFieldDefinition) => {
+  const { language } = useLanguage();
+
+  const renderControl = (field: RecruitmentFieldDefinition, index: number) => {
     const valueKey = field.id;
     const controlId = `${idPrefix}-${valueKey}`;
     const error = errors[valueKey];
     const fieldValue = values[valueKey] ?? "";
     const selectedFile = files[valueKey] ?? null;
-    const dir = isLtrField(field) ? "ltr" : "rtl";
+    const dir = isLtrField(field) ? "ltr" : languageDir(language);
+    const placeholder =
+      language === "ar"
+        ? field.placeholder || "اختر من القائمة"
+        : safeEnglishText(field.placeholder, fallbackPlaceholder(field, index));
 
     if (field.type === "select") {
       return (
@@ -72,12 +115,14 @@ export function RecruitmentFormFields({
             dir={dir}
             className="h-12 rounded-2xl border-slate-200 bg-white px-4 text-sm shadow-none focus:ring-slate-300"
           >
-            <SelectValue placeholder={field.placeholder || "اختر من القائمة"} />
+            <SelectValue placeholder={placeholder} />
           </SelectTrigger>
           <SelectContent>
-            {(field.options || []).map(option => (
+            {(field.options || []).map((option, optionIndex) => (
               <SelectItem key={option.id} value={option.value}>
-                {option.label}
+                {language === "ar"
+                  ? option.label
+                  : safeEnglishText(option.label, `Option ${optionIndex + 1}`)}
               </SelectItem>
             ))}
           </SelectContent>
@@ -116,13 +161,21 @@ export function RecruitmentFormFields({
                   {selectedFile
                     ? selectedFile.name
                     : onFileChange
-                      ? "لم يتم اختيار ملف بعد"
-                      : "معاينة لحقل رفع ملف"}
+                      ? tr(language, "لم يتم اختيار ملف بعد", "No file selected yet")
+                      : tr(language, "معاينة لحقل رفع ملف", "File upload preview")}
                 </div>
                 <div className="text-xs text-slate-500">
                   {selectedFile
-                    ? "سيتم رفع الملف مع إرسال الطلب."
-                    : "يدعم المستندات والصور الشائعة حتى 10MB."}
+                    ? tr(
+                        language,
+                        "سيتم رفع الملف مع إرسال الطلب.",
+                        "The file will be uploaded with your application."
+                      )
+                    : tr(
+                        language,
+                        "يدعم المستندات والصور الشائعة حتى 10MB.",
+                        "Supports common documents and images up to 10MB."
+                      )}
                 </div>
               </div>
             </div>
@@ -135,7 +188,7 @@ export function RecruitmentFormFields({
                 onClick={() => onFileChange(valueKey, null)}
               >
                 <X className="ml-2 h-4 w-4" />
-                إزالة الملف
+                {tr(language, "إزالة الملف", "Remove File")}
               </Button>
             ) : null}
           </div>
@@ -151,7 +204,7 @@ export function RecruitmentFormFields({
         value={fieldValue}
         type={field.type === "date" ? "date" : "text"}
         inputMode={field.type === "number" ? "numeric" : undefined}
-        placeholder={field.placeholder || undefined}
+        placeholder={placeholder}
         aria-invalid={Boolean(error)}
         onChange={event =>
           onValueChange(
@@ -166,11 +219,23 @@ export function RecruitmentFormFields({
 
   return (
     <div className="grid gap-5 md:grid-cols-2">
-      {fields.map(field => {
+      {fields.map((field, index) => {
         const valueKey = field.id;
-        const error = errors[valueKey];
-        const helperText = error || getRecruitmentFieldHint(field);
+        const rawError = errors[valueKey];
+        const error =
+          language === "en" && hasArabicText(rawError)
+            ? fallbackHint(field)
+            : rawError;
+        const rawHelperText = error || getRecruitmentFieldHint(field);
+        const helperText =
+          language === "ar"
+            ? rawHelperText
+            : safeEnglishText(rawHelperText, fallbackHint(field));
         const isFullWidth = isWideField(field);
+        const fieldLabel =
+          language === "ar"
+            ? field.label
+            : safeEnglishText(field.label, `Field ${index + 1}`);
 
         return (
           <div
@@ -179,17 +244,19 @@ export function RecruitmentFormFields({
           >
             <div className="flex items-center justify-between gap-3">
               <Label className="text-sm font-semibold text-slate-900">
-                {field.label}
+                {fieldLabel}
                 {field.required ? (
                   <span className="mr-1 text-rose-500">*</span>
                 ) : null}
               </Label>
               <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-500">
-                {field.required ? "مطلوب" : "اختياري"}
+                {field.required
+                  ? tr(language, "مطلوب", "Required")
+                  : tr(language, "اختياري", "Optional")}
               </span>
             </div>
 
-            {renderControl(field)}
+            {renderControl(field, index)}
 
             <p
               className={`text-xs leading-6 ${

@@ -51,6 +51,7 @@ import { Link, useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
 import { Button } from "./ui/button";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { safeEnglishText, tr } from "@/lib/i18n";
 import {
   normalizeEmployeeProfile,
   type EmployeeProfileUserDoc,
@@ -190,6 +191,12 @@ type DashboardArea = "admin" | "hr";
 
 const EMPLOYEE_PROFILE_PATH = "/hr/profile";
 const EMPLOYEE_PROFILE_LABEL = "بروفايل الموظف";
+const HR_MENU_LABELS: Record<string, { ar: string; en: string }> = {
+  "/hr/recruitment": { ar: "طلبات التوظيف", en: "Recruitment" },
+  "/hr/employees": { ar: "إدارة الموظفين", en: "Employees" },
+  "/hr/create-staff": { ar: "إنشاء حساب موظف", en: "Create Staff" },
+  "/hr/settings": { ar: "إعدادات الإدارة", en: "Settings" },
+};
 
 function readStoredSidebarOpen() {
   try {
@@ -436,6 +443,7 @@ function DashboardLayoutContent({
   sidebarSide,
 }: DashboardLayoutContentProps) {
   const { user, logout } = useAuth();
+  const { language } = useLanguage();
   const [location, setLocation] = useLocation();
   const { state, setOpen, setOpenMobile } = useSidebar();
 
@@ -472,30 +480,66 @@ function DashboardLayoutContent({
     return menuItems.filter(item => hasPermission(user, item.permission));
   }, [area, role, user]);
 
+  const getMenuLabel = (item: MenuItem) => {
+    if (area === "hr") {
+      const localized = HR_MENU_LABELS[item.path];
+      if (localized) return localized[language];
+    }
+
+    return language === "ar"
+      ? item.label
+      : safeEnglishText(
+          item.label,
+          item.path.replace(/^\/+/, "").replace(/\//g, " / ")
+        );
+  };
+
+  const employeeProfileLabel = tr(
+    language,
+    EMPLOYEE_PROFILE_LABEL,
+    "Employee Profile"
+  );
+
   // العنصر النشط
   const isEmployeeProfileActive =
     area === "hr" &&
     (location === EMPLOYEE_PROFILE_PATH ||
       location === "/hr/files" ||
       location === "/hr/messages");
+  const activeMenuItem = visibleMenuItems.find(item => item.path === location);
   const activeMenuLabel = isEmployeeProfileActive
-    ? EMPLOYEE_PROFILE_LABEL
-    : (visibleMenuItems.find(item => item.path === location)?.label ??
-      (area === "hr" ? "منصة الموارد البشرية" : "لوحة التحكم"));
+    ? employeeProfileLabel
+    : (activeMenuItem
+      ? getMenuLabel(activeMenuItem)
+      : area === "hr"
+        ? tr(language, "منصة الموارد البشرية", "Human Resources")
+        : tr(language, "لوحة التحكم", "Dashboard"));
   const layoutBrandLabel =
-    area === "hr" ? "منصة الموارد البشرية" : "معدن";
+    area === "hr"
+      ? tr(language, "منصة الموارد البشرية", "Human Resources")
+      : tr(language, "معدن", "MAEDIN");
   const homeTargetPath = area === "hr" ? "/hr" : "/";
 
   // اسم العرض: يفضل displayName ثم name ثم الإيميل
   const displayName = useMemo(() => {
     const dn = String((user as any)?.displayName ?? "").trim();
-    if (dn && dn !== "-" && dn.length >= 2) return dn;
+    if (dn && dn !== "-" && dn.length >= 2) {
+      return language === "en"
+        ? safeEnglishText(dn, String((user as any)?.email || "User"))
+        : dn;
+    }
 
     const dn2 = String((user as any)?.name ?? "").trim(); // احتياط إضافي
-    if (dn2 && dn2 !== "-" && dn2.length >= 2) return dn2;
+    if (dn2 && dn2 !== "-" && dn2.length >= 2) {
+      return language === "en"
+        ? safeEnglishText(dn2, String((user as any)?.email || "User"))
+        : dn2;
+    }
 
-    return nameFromEmail((user as any)?.email);
-  }, [user]);
+    return language === "en"
+      ? String((user as any)?.email || "User")
+      : nameFromEmail((user as any)?.email);
+  }, [language, user]);
 
   const sidebarProfile = useMemo(
     () =>
@@ -521,8 +565,9 @@ function DashboardLayoutContent({
       (user as any)?.jobTitle
     );
 
+    if (language === "en") return safeEnglishText(resolvedTitle, "Employee");
     return resolvedTitle || "موظف";
-  }, [sidebarProfileDoc, user]);
+  }, [language, sidebarProfileDoc, user]);
 
   useEffect(() => {
     if (!user?.uid) {
@@ -691,6 +736,13 @@ function DashboardLayoutContent({
                       : "max-w-48 translate-x-0 opacity-100"
                   )}
                 >
+                  {area === "hr" ? (
+                    <img
+                      src="/logo.png"
+                      alt={tr(language, "شعار معدن", "MAEDIN logo")}
+                      className="h-7 w-7 shrink-0 object-contain"
+                    />
+                  ) : null}
                   <span className="font-semibold tracking-tight truncate whitespace-nowrap text-[#F2B705]">
                     {layoutBrandLabel}
                   </span>
@@ -712,7 +764,7 @@ function DashboardLayoutContent({
                     onClick={() => setLocation(homeTargetPath)}
                   >
                     <Home className="h-4 w-4 text-[#F2B705]" />
-                    الرئيسية
+                    {tr(language, "الرئيسية", "Home")}
                   </Button>
                 </div>
               ) : null}
@@ -723,12 +775,13 @@ function DashboardLayoutContent({
             <SidebarMenu className="px-2 py-1">
               {visibleMenuItems.map(item => {
                 const isActive = location === item.path;
+                const itemLabel = getMenuLabel(item);
                 return (
                   <SidebarMenuItem key={item.path}>
                     <SidebarMenuButton
                       isActive={isActive}
                       onClick={() => setLocation(item.path)}
-                      tooltip={item.label}
+                      tooltip={itemLabel}
                       className="h-10 rounded-xl font-normal text-slate-300 transition-all hover:text-white data-[active=true]:bg-white/10 data-[active=true]:text-white [&>svg]:text-[#F2B705]"
                     >
                       <item.icon
@@ -745,7 +798,7 @@ function DashboardLayoutContent({
                             : "max-w-40 opacity-100"
                         )}
                       >
-                        {item.label}
+                        {itemLabel}
                       </span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
@@ -763,7 +816,7 @@ function DashboardLayoutContent({
                       <SidebarMenuButton
                         asChild
                         isActive={isEmployeeProfileActive}
-                        tooltip={EMPLOYEE_PROFILE_LABEL}
+                        tooltip={employeeProfileLabel}
                         className="h-10 rounded-xl font-normal text-slate-300 transition-all hover:text-white data-[active=true]:bg-white/10 data-[active=true]:text-white [&>svg]:text-[#F2B705]"
                       >
                         <Link href={EMPLOYEE_PROFILE_PATH}>
@@ -781,7 +834,7 @@ function DashboardLayoutContent({
                                 : "max-w-40 opacity-100"
                             )}
                           >
-                            {EMPLOYEE_PROFILE_LABEL}
+                            {employeeProfileLabel}
                           </span>
                         </Link>
                       </SidebarMenuButton>
@@ -851,7 +904,7 @@ function DashboardLayoutContent({
                   className="cursor-pointer text-destructive focus:text-destructive"
                 >
                   <LogOut className="mr-2 h-4 w-4" />
-                  <span>تسجيل الخروج</span>
+                  <span>{tr(language, "تسجيل الخروج", "Logout")}</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -898,7 +951,7 @@ function DashboardLayoutContent({
               onClick={() => setLocation(homeTargetPath)}
             >
               <Home className="h-4 w-4" />
-              الرئيسية
+              {tr(language, "الرئيسية", "Home")}
             </Button>
 
             <NotificationBell />

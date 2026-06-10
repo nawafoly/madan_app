@@ -5,6 +5,28 @@
   "outputDirectory": "client/dist",
   "rewrites": [
     {
+      "source": "/hr",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(WhatsApp|facebookexternalhit|Facebot|Twitterbot|LinkedInBot|Slackbot|TelegramBot|Discordbot|Applebot|SkypeUriPreview|TeamsBot).*"
+        }
+      ],
+      "destination": "/hr-preview.html"
+    },
+    {
+      "source": "/hr/:path*",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(WhatsApp|facebookexternalhit|Facebot|Twitterbot|LinkedInBot|Slackbot|TelegramBot|Discordbot|Applebot|SkypeUriPreview|TeamsBot).*"
+        }
+      ],
+      "destination": "/hr-preview.html"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

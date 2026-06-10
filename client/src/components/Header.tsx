@@ -12,6 +12,7 @@ import {
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useSiteContent } from "@/contexts/SiteContentContext";
 import { getSiteLogoAlt, getSiteLogoUrl } from "@/lib/siteContent";
+import { safeEnglishText } from "@/lib/i18n";
 
 export default function Header() {
   const [isScrolled, setIsScrolled] = useState(false);
@@ -95,7 +96,9 @@ export default function Header() {
   const navBtnClass =
     "rsg-nav__action h-10 px-4 rounded-full text-[14px] font-semibold";
   const logoUrl = getSiteLogoUrl(content, "light", "/logo.png");
-  const logoAlt = getSiteLogoAlt(content, "light", "MAEDIN logo");
+  const rawLogoAlt = getSiteLogoAlt(content, "light", "MAEDIN logo");
+  const logoAlt =
+    language === "ar" ? rawLogoAlt : safeEnglishText(rawLogoAlt, "MAEDIN logo");
   const navLogoStyle = {
     "--site-logo-url": `url(${JSON.stringify(logoUrl)})`,
   } as CSSProperties;
@@ -170,10 +173,10 @@ export default function Header() {
                 onClick={toggleLanguage}
                 className="rsg-nav__icon-btn rsg-nav__lang-toggle hidden md:inline-flex"
                 aria-label="Toggle language"
-                title={language === "ar" ? "English" : "العربية"}
+                title={language === "ar" ? "English" : "Arabic"}
               >
                 <Globe className="h-5 w-5" />
-                <span>{language === "ar" ? "AR" : "EN"}</span>
+                <span>{language === "ar" ? "EN" : "AR"}</span>
               </Button>
 
               {isAuthenticated ? (
@@ -293,7 +296,7 @@ export default function Header() {
                       closeMobile();
                     }}
                   >
-                    {language === "ar" ? "English" : "العربية"}
+                    {language === "ar" ? "English" : "Arabic"}
                   </Button>
 
                   {!isAuthenticated ? (

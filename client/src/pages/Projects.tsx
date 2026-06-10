@@ -63,6 +63,15 @@ import { db } from "@/_core/firebase";
 import { getProjectBusinessId } from "@/lib/businessIds";
 import { useSiteContent } from "@/contexts/SiteContentContext";
 import { getSitePageMediaUrl } from "@/lib/siteContent";
+import { useLanguage } from "@/contexts/LanguageContext";
+import {
+  hasArabicText,
+  languageDir,
+  pickLabelValue,
+  pickLocalizedText,
+  safeEnglishText,
+  tr,
+} from "@/lib/i18n";
 import {
   formatCurrencyEN,
   formatNumberEN,
@@ -87,15 +96,15 @@ type FlagsDoc = {
 
 const DEFAULT_LABELS: Required<LabelsDoc> = {
   projectTypes: {
-    sukuk: "استثمار بالصكوك",
-    land_development: "تطوير أراضي",
-    vip_exclusive: "VIP حصري",
+    sukuk: { ar: "استثمار بالصكوك", en: "Sukuk Investment" },
+    land_development: { ar: "تطوير أراضي", en: "Land Development" },
+    vip_exclusive: { ar: "VIP حصري", en: "VIP Exclusive" },
   },
   projectStatuses: {
-    draft: "قريبا",
-    published: "منشور",
-    closed: "مغلق",
-    completed: "مكتمل",
+    draft: { ar: "قريبا", en: "Coming Soon" },
+    published: { ar: "منشور", en: "Published" },
+    closed: { ar: "مغلق", en: "Closed" },
+    completed: { ar: "مكتمل", en: "Completed" },
   },
 };
 
@@ -167,6 +176,7 @@ function MobileProjectCarousel({
   hint: string;
   tone?: "light" | "dark";
 }) {
+  const { language } = useLanguage();
   const [activeIndex, setActiveIndex] = useState(0);
   const [dragOffsetPx, setDragOffsetPx] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
@@ -298,8 +308,11 @@ function MobileProjectCarousel({
                   toneMap.counter
                 )}
               >
-                الفرصة {formatNumberEN(activeIndex + 1)} من{" "}
-                {formatNumberEN(items.length)}
+                {tr(
+                  language,
+                  `الفرصة ${formatNumberEN(activeIndex + 1)} من ${formatNumberEN(items.length)}`,
+                  `Opportunity ${formatNumberEN(activeIndex + 1)} of ${formatNumberEN(items.length)}`
+                )}
               </div>
 
               {canNavigate ? (
@@ -309,7 +322,7 @@ function MobileProjectCarousel({
                     toneMap.swipeHint
                   )}
                 >
-                  اسحب للتنقل أو استخدم الأسهم
+                  {tr(language, "اسحب للتنقل أو استخدم الأسهم", "Swipe or use arrows")}
                 </div>
               ) : null}
             </div>
@@ -332,7 +345,7 @@ function MobileProjectCarousel({
                 )}
                 onClick={() => scrollToIndex(activeIndex - 1)}
                 disabled={!canScrollPrev}
-                aria-label="الفرصة السابقة"
+                aria-label={tr(language, "الفرصة السابقة", "Previous opportunity")}
               >
                 <ChevronLeft className="h-4 w-4" />
               </Button>
@@ -348,7 +361,7 @@ function MobileProjectCarousel({
                 )}
                 onClick={() => scrollToIndex(activeIndex + 1)}
                 disabled={!canScrollNext}
-                aria-label="الفرصة التالية"
+                aria-label={tr(language, "الفرصة التالية", "Next opportunity")}
               >
                 <ChevronRight className="h-4 w-4" />
               </Button>
@@ -380,7 +393,7 @@ function MobileProjectCarousel({
               {items.map((project, index) => (
                 <div
                   key={project.id}
-                  dir="rtl"
+                  dir={languageDir(language)}
                   data-mobile-project-card
                   className="min-w-full max-w-full flex-none pb-2 pt-1"
                 >
@@ -399,7 +412,11 @@ function MobileProjectCarousel({
             )}
           >
             <div className={cn("text-[11px] font-medium", toneMap.helper)}>
-              تنقل سريع بين الفرص مع تثبيت واضح لكل بطاقة
+              {tr(
+                language,
+                "تنقل سريع بين الفرص مع تثبيت واضح لكل بطاقة",
+                "Quick navigation between opportunities"
+              )}
             </div>
             <div className="flex items-center gap-1.5">
               {items.map((item, index) => (
@@ -413,7 +430,11 @@ function MobileProjectCarousel({
                       : cn("w-2", toneMap.dotIdle)
                   )}
                   onClick={() => scrollToIndex(index)}
-                  aria-label={`الانتقال إلى الفرصة ${index + 1}`}
+                  aria-label={tr(
+                    language,
+                    `الانتقال إلى الفرصة ${index + 1}`,
+                    `Go to opportunity ${index + 1}`
+                  )}
                   aria-current={index === activeIndex ? "true" : undefined}
                 />
               ))}
@@ -459,20 +480,28 @@ function getProjectImageSource(project: ProjectDoc) {
   );
 }
 
-function humanizeFirestoreError(err: unknown): string {
+function humanizeFirestoreError(err: unknown, language: "ar" | "en" = "ar"): string {
   const e = err as Partial<FirestoreError> | undefined;
 
   if (e?.code === "permission-denied") {
-    return "تعذر تحميل المشاريع بسبب صلاحيات الوصول. يرجى التواصل مع إدارة المنصة.";
+    return tr(
+      language,
+      "تعذر تحميل المشاريع بسبب صلاحيات الوصول. يرجى التواصل مع إدارة المنصة.",
+      "Projects could not be loaded because of access permissions. Contact the platform team."
+    );
   }
   if (e?.code === "failed-precondition") {
-    return "تعذر تحميل المشاريع بسبب إعداد غير مكتمل في خدمة البيانات. يرجى التواصل مع إدارة المنصة.";
+    return tr(
+      language,
+      "تعذر تحميل المشاريع بسبب إعداد غير مكتمل في خدمة البيانات. يرجى التواصل مع إدارة المنصة.",
+      "Projects could not be loaded because a data service setup is incomplete. Contact the platform team."
+    );
   }
   if (e?.code === "unauthenticated") {
-    return "يرجى تسجيل الدخول لعرض المشاريع.";
+    return tr(language, "يرجى تسجيل الدخول لعرض المشاريع.", "Sign in to view projects.");
   }
 
-  return "تعذر تحميل المشاريع";
+  return tr(language, "تعذر تحميل المشاريع", "Could not load projects");
 }
 
 /**
@@ -485,6 +514,7 @@ function usePagedProjects(opts: {
   statusIn?: string[];
   pageSize?: number;
   refreshKey: number;
+  language?: "ar" | "en";
 }) {
   const pageSize = opts.pageSize ?? PAGE_SIZE;
 
@@ -574,7 +604,7 @@ function usePagedProjects(opts: {
         setHasMore(snap.docs.length === pageSize);
       } catch (err) {
         console.error("Projects load error:", err);
-        setLoadError(humanizeFirestoreError(err));
+        setLoadError(humanizeFirestoreError(err, opts.language));
         setHasMore(false);
       } finally {
         setLoading(false);
@@ -583,7 +613,7 @@ function usePagedProjects(opts: {
 
     loadFirstPage();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [opts.refreshKey]);
+  }, [opts.refreshKey, opts.language]);
 
   const loadMore = async () => {
     if (!hasMore || loadingMore || !lastDoc) return;
@@ -680,6 +710,7 @@ function CurvedProjectsHero({
 }
 
 export default function ProjectsPage() {
+  const { language } = useLanguage();
   const { content } = useSiteContent();
   const publishedSlider = useDragScroll<HTMLDivElement>();
   const upcomingSlider = useDragScroll<HTMLDivElement>();
@@ -693,11 +724,20 @@ export default function ProjectsPage() {
 
   const [refreshKey, setRefreshKey] = useState(0);
 
-  const published = usePagedProjects({ statusEq: "published", refreshKey });
-  const upcoming = usePagedProjects({ statusEq: "draft", refreshKey });
+  const published = usePagedProjects({
+    statusEq: "published",
+    refreshKey,
+    language,
+  });
+  const upcoming = usePagedProjects({
+    statusEq: "draft",
+    refreshKey,
+    language,
+  });
   const done = usePagedProjects({
     statusIn: ["closed", "completed"],
     refreshKey,
+    language,
   });
 
   const [qText, setQText] = useState("");
@@ -738,7 +778,120 @@ export default function ProjectsPage() {
   }, []);
 
   const typeLabel = (key: any) =>
-    pickLabel(labels.projectTypes[String(key)], "ar", String(key || ""));
+    pickLabelValue(language, labels.projectTypes[String(key)], {
+      ar: String(key || ""),
+      en: String(key || "Project type").replace(/_/g, " "),
+    });
+
+  const projectTitle = (project: ProjectDoc) =>
+    pickLocalizedText(
+      language,
+      {
+        ar: project.titleAr,
+        en: project.titleEn,
+        neutral: (project as any).title,
+      },
+      { ar: "بدون عنوان", en: "Untitled Project" }
+    );
+
+  const projectLocation = (project: ProjectDoc) =>
+    pickLocalizedText(
+      language,
+      {
+        ar: project.locationAr,
+        en: project.locationEn,
+        neutral: (project as any).location,
+      },
+      { ar: "—", en: "Location unavailable" }
+    );
+
+  const projectDescription = (project: ProjectDoc, fallback: string) => {
+    const source =
+      language === "ar"
+        ? project.overviewAr || project.descriptionAr || project.descriptionEn || ""
+        : project.descriptionEn || (!hasArabicText(project.overviewAr) ? project.overviewAr : "");
+    return language === "ar" ? String(source || fallback) : safeEnglishText(source, fallback);
+  };
+
+  const copy = {
+    title: tr(language, "مشاريعنا الاستثمارية", "Our Investment Projects"),
+    maintenanceTitle: tr(language, "المنصة تحت الصيانة", "Platform Under Maintenance"),
+    maintenanceText: tr(
+      language,
+      "بعض الإجراءات الاستثمارية متوقفة مؤقتًا، لكن بإمكانك مراجعة المشروعات المتاحة والبيانات الحالية.",
+      "Some investment actions are temporarily paused, but you can still review available projects and current data."
+    ),
+    vipTitle: tr(language, "وضع الوصول الاستثماري الخاص", "Private Investment Access"),
+    vipText: tr(
+      language,
+      "القائمة الحالية تركز على الفرص الحصرية فقط، مع استمرار نفس البيانات والمنطق التشغيلي بدون تغيير.",
+      "The current list focuses on exclusive opportunities while keeping the same data and operating logic."
+    ),
+    openMarket: tr(language, "السوق المفتوح", "Open Market"),
+    vipOnly: tr(language, "VIP فقط", "VIP Only"),
+    liveTitle: tr(language, "فرص استثمارية متاحة الآن", "Investment Opportunities Available Now"),
+    liveDesc: tr(
+      language,
+      "وحدات استثمارية مصممة لإبراز العائد والمدد ونِسب التغطية، مع قراءة أسرع للقرار المالي داخل كل بطاقة.",
+      "Investment cards designed to highlight returns, terms, and coverage ratios for faster financial review."
+    ),
+    currentFunding: tr(language, "التمويل الجاري", "Current Funding"),
+    targetCapital: tr(language, "الرأسمال المستهدف", "Target Capital"),
+    bestReturn: tr(language, "أعلى عائد", "Best Return"),
+    unavailableMaintenance: tr(
+      language,
+      "المشاريع غير متاحة حاليًا بسبب الصيانة.",
+      "Projects are currently unavailable due to maintenance."
+    ),
+    loading: tr(language, "جاري تحميل المشروعات...", "Loading projects..."),
+    sortNote: tr(
+      language,
+      "ملاحظة: تعذر ترتيب المشاريع بسبب نقص في بيانات تاريخ النشر.",
+      "Note: Projects could not be sorted because publish date data is incomplete."
+    ),
+    retry: tr(language, "إعادة المحاولة", "Try Again"),
+    noPublished: tr(
+      language,
+      "لا توجد مشروعات مطابقة لنتائج البحث أو الفلترة الحالية.",
+      "No projects match the current search or filters."
+    ),
+    loadMore: tr(language, "تحميل المزيد", "Load More"),
+    loadingMore: tr(language, "جاري التحميل...", "Loading..."),
+    currentOpportunities: tr(language, "الفرص الحالية", "Current Opportunities"),
+    currentHint: tr(
+      language,
+      "اسحب لتصفح المشاريع أو استخدم الأسهم والتنقل السريع بين الفرص.",
+      "Swipe through projects or use the arrows to move between opportunities."
+    ),
+    pipelineBadge: tr(language, "قريبًا", "Coming Soon"),
+    pipelineTitle: tr(language, "فرص استثمارية قيد الإطلاق", "Investment Opportunities In Launch Pipeline"),
+    pipelineDesc: tr(
+      language,
+      "نفس نموذج البطاقة الاستثمارية، لكن بحالة قادمة حتى تبقى الرؤية متسقة بين السوق الحالي وخط الفرص القادم.",
+      "The same investment card model, marked as upcoming for a consistent view of current and future opportunities."
+    ),
+    opportunityCount: tr(language, "عدد الفرص", "Opportunities"),
+    expectedCapital: tr(language, "رأسمال متوقع", "Expected Capital"),
+    announcedReturn: tr(language, "أعلى عائد معلن", "Highest Announced Return"),
+    noUpcoming: tr(language, "لا توجد مشروعات مستقبلية حالياً.", "No upcoming projects are available now."),
+    upcomingSection: tr(language, "الفرص القادمة", "Upcoming Opportunities"),
+    upcomingHint: tr(
+      language,
+      "هناك أكثر من فرصة قادمة. تنقّل بالسحب أو بالأسهم لمراجعة الخطط المقبلة.",
+      "There is more than one upcoming opportunity. Swipe or use arrows to review the pipeline."
+    ),
+    completedBadge: tr(language, "منجزة", "Completed"),
+    completedTitle: tr(language, "سجل المشاريع المكتملة", "Completed Project Track Record"),
+    completedDesc: tr(
+      language,
+      "واجهة مستقلة للمشاريع التي تم تنفيذها وإقفالها، تركّز على الصورة والنتائج والمخرجات النهائية بدل مؤشرات الاستثمار النشط.",
+      "A dedicated view for executed and closed projects, focused on outcomes and final deliverables."
+    ),
+    completedProjects: tr(language, "مشاريع مكتملة", "Completed Projects"),
+    vipProjects: tr(language, "مشاريع VIP", "VIP Projects"),
+    documentedOutputs: tr(language, "بمخرجات موثقة", "Documented Outputs"),
+    noCompleted: tr(language, "لا توجد مشروعات مكتملة حالياً.", "No completed projects are available now."),
+  };
 
   const isVipProject = (project: ProjectDoc) =>
     Boolean(project.vipOnly) ||
@@ -952,15 +1105,15 @@ export default function ProjectsPage() {
 
   const CompletedProjectCard = (project: ProjectDoc) => {
     const cover = getProjectImageSource(project);
-    const title = project.titleAr || project.titleEn || "بدون عنوان";
-    const location = project.locationAr || project.locationEn || "—";
+    const title = projectTitle(project);
+    const location = projectLocation(project);
     const projectTypeLabel = typeLabel(project.projectType);
     const isVip = isVipProject(project);
     const auxiliaryTag = isVip
       ? "VIP"
       : project.featured
-        ? "مميز"
-        : "سجل منجز";
+        ? tr(language, "مميز", "Featured")
+        : tr(language, "سجل منجز", "Completed Record");
 
     return (
       <Card
@@ -987,7 +1140,7 @@ export default function ProjectsPage() {
           <div className="absolute left-4 right-4 top-4 flex items-start justify-between gap-3">
             <div className="flex flex-wrap gap-2">
               <Badge className="rounded-full border border-emerald-300/24 bg-emerald-300/14 px-3 py-1 text-[11px] font-semibold text-emerald-50 backdrop-blur">
-                مكتمل
+                {tr(language, "مكتمل", "Completed")}
               </Badge>
               {projectTypeLabel ? (
                 <Badge className="rounded-full border border-white/16 bg-black/25 px-3 py-1 text-[11px] font-semibold text-white/92 backdrop-blur">
@@ -1020,7 +1173,7 @@ export default function ProjectsPage() {
 
                 <Link href={`/projects/${project.id}`}>
                   <Button className="mt-2 h-11 rounded-2xl border border-white/14 bg-white/12 px-4 text-sm font-semibold text-white shadow-none hover:bg-white hover:text-slate-950">
-                    <span>عرض النتائج</span>
+                    <span>{tr(language, "عرض النتائج", "View Results")}</span>
                     <ArrowRight className="h-4 w-4" />
                   </Button>
                 </Link>
@@ -1043,16 +1196,20 @@ export default function ProjectsPage() {
       mode === "done" && !current && target ? target : current;
     const progress = mode === "done" ? 100 : progressPercent(p);
     const cover = getProjectImageSource(p);
-    const title = p.titleAr || p.titleEn || "بدون عنوان";
-    const location = p.locationAr || p.locationEn || "—";
-    const description = (
-      p.overviewAr ||
-      p.descriptionAr ||
-      p.descriptionEn ||
-      ""
-    ).trim();
+    const title = projectTitle(p);
+    const location = projectLocation(p);
+    const description = projectDescription(
+      p,
+      tr(
+        language,
+        "فرصة استثمارية معروضة ببيانات مالية واضحة تسهّل قراءة القرار.",
+        "An investment opportunity presented with clear financial data for easier review."
+      )
+    );
     const leadingHighlight = Array.isArray(p.highlights)
-      ? p.highlights.map(item => String(item || "").trim()).find(Boolean) || ""
+      ? p.highlights
+          .map(item => String(item || "").trim())
+          .find(item => item && (language === "ar" || !hasArabicText(item))) || ""
       : "";
     const annualReturn = safeNumber(p.annualReturn);
     const duration = safeNumber(p.duration);
@@ -1067,50 +1224,82 @@ export default function ProjectsPage() {
     const modeMeta =
       mode === "published"
         ? {
-          badgeLabel: "مفتوح الآن",
+          badgeLabel: tr(language, "مفتوح الآن", "Open Now"),
           badgeClass: "border-emerald-200 bg-emerald-50 text-emerald-700",
-          subline: "فرصة استثمارية نشطة",
+          subline: tr(language, "فرصة استثمارية نشطة", "Active Investment Opportunity"),
           heroCaption:
-            "العائد الظاهر هنا هو أول عنصر يجب أن يلتقط عين المستثمر عند تقييم الفرصة.",
-          ctaLabel: "التفاصيل",
+            tr(
+              language,
+              "العائد الظاهر هنا هو أول عنصر يجب أن يلتقط عين المستثمر عند تقييم الفرصة.",
+              "The displayed return is a primary signal for evaluating this opportunity."
+            ),
+          ctaLabel: tr(language, "التفاصيل", "Details"),
           ctaClass:
             "bg-slate-900 text-white shadow-[0_18px_40px_-24px_rgba(15,23,42,0.55)] hover:bg-slate-800",
-          noteLabel: "جاهز للاستثمار",
+          noteLabel: tr(language, "جاهز للاستثمار", "Ready To Invest"),
           noteCopy:
-            "الفرصة مفتوحة الآن ويمكن الانتقال من صفحة المشروع مباشرة إلى طلب الاستثمار.",
+            tr(
+              language,
+              "الفرصة مفتوحة الآن ويمكن الانتقال من صفحة المشروع مباشرة إلى طلب الاستثمار.",
+              "This opportunity is open now, and you can move from the project page directly to the investment request."
+            ),
           trustCopy:
             investors > 0
-              ? `انضم ${formatNumberEN(investors)} مستثمرًا حتى الآن`
-              : "فرصة جاهزة للمراجعة والاستثمار",
+              ? tr(
+                  language,
+                  `انضم ${formatNumberEN(investors)} مستثمرًا حتى الآن`,
+                  `${formatNumberEN(investors)} investors joined so far`
+                )
+              : tr(
+                  language,
+                  "فرصة جاهزة للمراجعة والاستثمار",
+                  "Ready for review and investment"
+                ),
         }
         : mode === "draft"
           ? {
-            badgeLabel: "قريبًا",
+            badgeLabel: tr(language, "قريبًا", "Coming Soon"),
             badgeClass: "border-amber-200 bg-amber-50 text-amber-800",
-            subline: "فرصة قيد الإطلاق",
+            subline: tr(language, "فرصة قيد الإطلاق", "Launch Pipeline Opportunity"),
             heroCaption:
-              "بطاقة استثمار أولية تمنح نظرة مبكرة على العائد والمدة وهيكل الفرصة القادمة.",
-            ctaLabel: "عرض الخطة والتسجيل",
+              tr(
+                language,
+                "بطاقة استثمار أولية تمنح نظرة مبكرة على العائد والمدة وهيكل الفرصة القادمة.",
+                "An early investment card showing return, duration, and structure before launch."
+              ),
+            ctaLabel: tr(language, "عرض الخطة والتسجيل", "View Plan And Register"),
             ctaClass:
               "bg-amber-50 text-amber-900 ring-1 ring-amber-200 hover:bg-amber-100",
-            noteLabel: "مرحلة تمهيد",
+            noteLabel: tr(language, "مرحلة تمهيد", "Preparation Stage"),
             noteCopy:
-              "لا يوجد اكتتاب مفتوح بعد، لكن يمكنك متابعة الخطة والتسجيل للاهتمام عند الإطلاق.",
-            trustCopy: "تحت التحضير والإتاحة قريبًا",
+              tr(
+                language,
+                "لا يوجد اكتتاب مفتوح بعد، لكن يمكنك متابعة الخطة والتسجيل للاهتمام عند الإطلاق.",
+                "Subscription is not open yet, but you can review the plan and register interest for launch."
+              ),
+            trustCopy: tr(language, "تحت التحضير والإتاحة قريبًا", "In preparation and coming soon"),
           }
           : {
-            badgeLabel: "مكتمل",
+            badgeLabel: tr(language, "مكتمل", "Completed"),
             badgeClass: "border-slate-300 bg-slate-100 text-slate-700",
-            subline: "أداء مشروع منجز",
+            subline: tr(language, "أداء مشروع منجز", "Completed Project Performance"),
             heroCaption:
-              "المشروع وصل إلى مرحلته النهائية ويمكن مراجعته كمرجع أداء واستثمار مكتمل.",
-            ctaLabel: "عرض النتائج",
+              tr(
+                language,
+                "المشروع وصل إلى مرحلته النهائية ويمكن مراجعته كمرجع أداء واستثمار مكتمل.",
+                "This project reached its final stage and can be reviewed as a completed investment reference."
+              ),
+            ctaLabel: tr(language, "عرض النتائج", "View Results"),
             ctaClass:
               "bg-slate-100 text-slate-800 ring-1 ring-slate-200 hover:bg-slate-200",
-            noteLabel: "عرض معلوماتي",
+            noteLabel: tr(language, "عرض معلوماتي", "Informational View"),
             noteCopy:
-              "الاكتتاب مغلق لهذا المشروع، وتبقى البطاقة مدخلًا لمراجعة الأداء والنتائج النهائية.",
-            trustCopy: "سجل إنجاز مكتمل داخل المنصة",
+              tr(
+                language,
+                "الاكتتاب مغلق لهذا المشروع، وتبقى البطاقة مدخلًا لمراجعة الأداء والنتائج النهائية.",
+                "Subscription is closed for this project; the card remains an entry point to review performance and final outcomes."
+              ),
+            trustCopy: tr(language, "سجل إنجاز مكتمل داخل المنصة", "Completed achievement record"),
           };
 
     return (
@@ -1161,7 +1350,7 @@ export default function ProjectsPage() {
               ) : null}
               {isFeatured ? (
                 <Badge className="rounded-full border border-sky-300/20 bg-sky-300/14 px-2.5 py-0.5 text-[10px] text-sky-100 backdrop-blur-md md:px-3 md:py-1 md:text-xs">
-                  مميز
+                  {tr(language, "مميز", "Featured")}
                 </Badge>
               ) : null}
             </div>
@@ -1208,7 +1397,7 @@ export default function ProjectsPage() {
           <div className="grid grid-cols-3 gap-2">
             <div className="rounded-[18px] border border-slate-200/80 bg-slate-50/85 px-3 py-2.5">
               <div className="text-[10px] font-semibold tracking-[0.12em] text-slate-400">
-                العائد
+                {tr(language, "العائد", "Return")}
               </div>
               <div className="mt-1 flex items-center gap-1 text-sm font-semibold text-slate-950">
                 <TrendingUp className="h-3.5 w-3.5 text-emerald-600" />
@@ -1220,17 +1409,18 @@ export default function ProjectsPage() {
 
             <div className="rounded-[18px] border border-slate-200/80 bg-slate-50/85 px-3 py-2.5">
               <div className="text-[10px] font-semibold tracking-[0.12em] text-slate-400">
-                المدة
+                {tr(language, "المدة", "Duration")}
               </div>
               <div className="mt-1 flex items-center gap-1 text-sm font-semibold text-slate-950">
                 <Clock3 className="h-3.5 w-3.5 text-slate-500" />
-                {duration ? formatNumberEN(duration) : "—"} شهر
+                {duration ? formatNumberEN(duration) : "—"}{" "}
+                {tr(language, "شهر", "months")}
               </div>
             </div>
 
             <div className="rounded-[18px] border border-slate-200/80 bg-slate-50/85 px-3 py-2.5">
               <div className="text-[10px] font-semibold tracking-[0.12em] text-slate-400">
-                النوع
+                {tr(language, "النوع", "Type")}
               </div>
               <div className="mt-1 text-sm font-semibold text-slate-950 line-clamp-1">
                 {typeLabel(p.projectType)}
@@ -1240,7 +1430,9 @@ export default function ProjectsPage() {
 
           <div className="rounded-[20px] border border-slate-200/80 bg-[linear-gradient(180deg,#ffffff_0%,rgba(248,250,252,0.95)_100%)] px-4 py-3.5 shadow-[0_18px_34px_-34px_rgba(15,23,42,0.18)]">
             <div className="flex items-center justify-between gap-3 text-xs">
-              <span className="font-semibold text-slate-500">نسبة التمويل</span>
+              <span className="font-semibold text-slate-500">
+                {tr(language, "نسبة التمويل", "Funding Ratio")}
+              </span>
               <span className="font-semibold text-slate-950">
                 {formatPercentEN(progress, {
                   minimumFractionDigits: 0,
@@ -1262,13 +1454,13 @@ export default function ProjectsPage() {
 
             <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-slate-500">
               <div>
-                المبلغ الحالي
+                {tr(language, "المبلغ الحالي", "Current Amount")}
                 <div className="mt-1 text-sm font-semibold text-slate-950">
                   {fmtSAR(displayCurrent)}
                 </div>
               </div>
               <div className="text-left">
-                المبلغ المستهدف
+                {tr(language, "المبلغ المستهدف", "Target Amount")}
                 <div className="mt-1 text-sm font-semibold text-slate-950">
                   {fmtSAR(target)}
                 </div>
@@ -1279,7 +1471,7 @@ export default function ProjectsPage() {
           <div className="grid grid-cols-2 gap-2">
             <div className="rounded-[18px] border border-slate-200/80 bg-white px-3 py-2.5">
               <div className="text-[10px] font-semibold tracking-[0.12em] text-slate-400">
-                الحد الأدنى
+                {tr(language, "الحد الأدنى", "Minimum")}
               </div>
               <div className="mt-1 text-sm font-semibold text-slate-950">
                 {fmtSAR(minInvestment)}
@@ -1288,7 +1480,7 @@ export default function ProjectsPage() {
 
             <div className="rounded-[18px] border border-slate-200/80 bg-white px-3 py-2.5">
               <div className="text-[10px] font-semibold tracking-[0.12em] text-slate-400">
-                المستثمرون
+                {tr(language, "المستثمرون", "Investors")}
               </div>
               <div className="mt-1 text-sm font-semibold text-slate-950">
                 {formatNumberEN(investors)}
@@ -1299,11 +1491,23 @@ export default function ProjectsPage() {
           <p className="text-sm leading-6 text-slate-600 line-clamp-2">
             {leadingHighlight ||
               description ||
-              (mode === "done"
-                ? "مشروع مكتمل يوضح شكل الإنجاز النهائي داخل المنصة."
+                (mode === "done"
+                ? tr(
+                    language,
+                    "مشروع مكتمل يوضح شكل الإنجاز النهائي داخل المنصة.",
+                    "A completed project showing the final outcome inside the platform."
+                  )
                 : mode === "draft"
-                  ? "فرصة قادمة قيد الإعداد مع مؤشرات أولية واضحة للمستثمر."
-                  : "فرصة استثمارية معروضة ببيانات مالية واضحة تسهّل قراءة القرار.")}
+                  ? tr(
+                      language,
+                      "فرصة قادمة قيد الإعداد مع مؤشرات أولية واضحة للمستثمر.",
+                      "An upcoming opportunity in preparation with early investor indicators."
+                    )
+                  : tr(
+                      language,
+                      "فرصة استثمارية معروضة ببيانات مالية واضحة تسهّل قراءة القرار.",
+                      "An investment opportunity presented with clear financial data for easier review."
+                    ))}
           </p>
 
           <div className="rounded-[18px] border border-slate-200/80 bg-slate-50/90 px-3.5 py-3 text-xs leading-6 text-slate-600 line-clamp-2">
@@ -1337,7 +1541,7 @@ export default function ProjectsPage() {
 
               <div className="rounded-[20px] bg-slate-50/90 px-4 py-3 text-right shadow-[inset_0_1px_0_rgba(255,255,255,0.75)] sm:min-w-[180px]">
                 <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-                  الثقة
+                  {tr(language, "الثقة", "Confidence")}
                 </div>
                 <div className="mt-1.5 text-sm font-semibold leading-6 text-slate-800">
                   {modeMeta.trustCopy}
@@ -1361,7 +1565,7 @@ export default function ProjectsPage() {
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
                 <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/56">
-                  العائد السنوي المتوقع
+                  {tr(language, "العائد السنوي المتوقع", "Expected Annual Return")}
                 </div>
                 <div className="mt-3 flex items-end gap-2">
                   <div className="text-5xl font-bold tracking-tight">
@@ -1369,7 +1573,9 @@ export default function ProjectsPage() {
                       maximumFractionDigits: 0,
                     })}
                   </div>
-                  <div className="pb-2 text-sm text-white/66">سنوياً</div>
+                  <div className="pb-2 text-sm text-white/66">
+                    {tr(language, "سنوياً", "annually")}
+                  </div>
                 </div>
                 <p className="mt-2 max-w-md text-sm leading-7 text-white/72">
                   {modeMeta.heroCaption}
@@ -1378,14 +1584,14 @@ export default function ProjectsPage() {
 
               <div className="min-w-[124px] rounded-[22px] border border-white/12 bg-white/10 p-4 text-right shadow-inner backdrop-blur">
                 <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/56">
-                  المدة
+                  {tr(language, "المدة", "Duration")}
                 </div>
                 <div className="mt-2 text-2xl font-semibold">
                   {duration ? formatNumberEN(duration) : "—"}
                 </div>
                 <div className="mt-1 flex items-center justify-end gap-1 text-xs text-white/66">
                   <Clock3 className="h-3.5 w-3.5" />
-                  <span>شهر</span>
+                  <span>{tr(language, "شهر", "months")}</span>
                 </div>
               </div>
             </div>
@@ -1395,7 +1601,7 @@ export default function ProjectsPage() {
             <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/85 p-4 shadow-sm">
               <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
                 <Target className="h-4 w-4 text-slate-500" />
-                <span>المبلغ المستهدف</span>
+                <span>{tr(language, "المبلغ المستهدف", "Target Amount")}</span>
               </div>
               <div className="mt-3 text-lg font-semibold text-slate-950">
                 {fmtSAR(target)}
@@ -1406,7 +1612,9 @@ export default function ProjectsPage() {
               <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
                 <Wallet className="h-4 w-4 text-slate-500" />
                 <span>
-                  {mode === "done" ? "المبلغ النهائي" : "المبلغ الحالي"}
+                  {mode === "done"
+                    ? tr(language, "المبلغ النهائي", "Final Amount")
+                    : tr(language, "المبلغ الحالي", "Current Amount")}
                 </span>
               </div>
               <div className="mt-3 text-lg font-semibold text-slate-950">
@@ -1417,7 +1625,7 @@ export default function ProjectsPage() {
             <div className="rounded-[22px] border border-slate-200/80 bg-white p-4 shadow-sm">
               <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
                 <Landmark className="h-4 w-4 text-slate-500" />
-                <span>الحد الأدنى</span>
+                <span>{tr(language, "الحد الأدنى", "Minimum")}</span>
               </div>
               <div className="mt-3 text-lg font-semibold text-slate-950">
                 {fmtSAR(minInvestment)}
@@ -1427,7 +1635,7 @@ export default function ProjectsPage() {
             <div className="rounded-[22px] border border-slate-200/80 bg-white p-4 shadow-sm">
               <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
                 <Users className="h-4 w-4 text-slate-500" />
-                <span>عدد المستثمرين</span>
+                <span>{tr(language, "عدد المستثمرين", "Investors")}</span>
               </div>
               <div className="mt-3 text-lg font-semibold text-slate-950">
                 {formatNumberEN(investors)}
@@ -1439,7 +1647,7 @@ export default function ProjectsPage() {
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
                 <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-                  نسبة التمويل
+                  {tr(language, "نسبة التمويل", "Funding Ratio")}
                 </div>
                 <div className="mt-1 text-2xl font-semibold text-slate-950">
                   {formatPercentEN(progress, {
@@ -1452,10 +1660,10 @@ export default function ProjectsPage() {
               <div className="text-right">
                 <div className="text-xs text-slate-500">
                   {mode === "done"
-                    ? "تم الوصول إلى الهدف"
+                    ? tr(language, "تم الوصول إلى الهدف", "Target reached")
                     : mode === "draft"
-                      ? "جاهز للإطلاق"
-                      : "الممول حاليًا"}
+                      ? tr(language, "جاهز للإطلاق", "Ready for launch")
+                      : tr(language, "الممول حاليًا", "Currently funded")}
                 </div>
                 <div className="mt-1 text-sm font-semibold text-slate-950">
                   {fmtSAR(displayCurrent)}
@@ -1507,7 +1715,7 @@ export default function ProjectsPage() {
               </Badge>
               {isVip ? (
                 <Badge className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-amber-700">
-                  وصول خاص
+                  {tr(language, "وصول خاص", "Private Access")}
                 </Badge>
               ) : null}
             </div>
@@ -1515,10 +1723,22 @@ export default function ProjectsPage() {
               {leadingHighlight ||
                 description ||
                 (mode === "done"
-                  ? "مشروع مكتمل يوضح شكل الإنجاز النهائي داخل المنصة."
+                  ? tr(
+                      language,
+                      "مشروع مكتمل يوضح شكل الإنجاز النهائي داخل المنصة.",
+                      "A completed project showing the final outcome inside the platform."
+                    )
                   : mode === "draft"
-                    ? "فرصة قادمة قيد الإعداد، ويمكن استعراض هيكلها المالي من الآن."
-                    : "فرصة استثمارية معروضة ببيانات مالية واضحة تسهّل قراءة القرار.")}
+                    ? tr(
+                        language,
+                        "فرصة قادمة قيد الإعداد، ويمكن استعراض هيكلها المالي من الآن.",
+                        "An upcoming opportunity in preparation with its financial structure available now."
+                      )
+                    : tr(
+                        language,
+                        "فرصة استثمارية معروضة ببيانات مالية واضحة تسهّل قراءة القرار.",
+                        "An investment opportunity presented with clear financial data for easier review."
+                      ))}
             </p>
             <div className="mt-3 rounded-[18px] bg-slate-50/90 px-4 py-3 text-sm leading-7 text-slate-700">
               {modeMeta.noteCopy}
@@ -1773,13 +1993,16 @@ export default function ProjectsPage() {
   );
 
   const premiumView = (
-    <div className="rsg-page w-full bg-[linear-gradient(180deg,#f8fafc_0%,#eef2f7_42%,#ffffff_100%)] text-foreground">
+    <div
+      dir={languageDir(language)}
+      className="rsg-page w-full bg-[linear-gradient(180deg,#f8fafc_0%,#eef2f7_42%,#ffffff_100%)] text-foreground"
+    >
       <div className="pt-0">
         <CurvedProjectsHero
           imageSrc={projectsHeroImage}
           title={
             <>
-              مشاريعنا الاستثمارية
+              {copy.title}
             </>
           }
           desc=""
@@ -1791,11 +2014,10 @@ export default function ProjectsPage() {
                   <AlertTriangle className="mt-0.5 h-5 w-5 text-amber-600" />
                   <div className="space-y-1">
                     <div className="font-semibold text-slate-950">
-                      المنصة تحت الصيانة
+                      {copy.maintenanceTitle}
                     </div>
                     <div className="text-sm leading-7 text-slate-600">
-                      بعض الإجراءات الاستثمارية متوقفة مؤقتًا، لكن بإمكانك
-                      مراجعة المشروعات المتاحة والبيانات الحالية.
+                      {copy.maintenanceText}
                     </div>
                   </div>
                 </CardContent>
@@ -1808,108 +2030,16 @@ export default function ProjectsPage() {
                   <Shield className="mt-0.5 h-5 w-5 text-sky-600" />
                   <div className="space-y-1">
                     <div className="font-semibold text-slate-950">
-                      وضع الوصول الاستثماري الخاص
+                      {copy.vipTitle}
                     </div>
                     <div className="text-sm leading-7 text-slate-600">
-                      القائمة الحالية تركز على الفرص الحصرية فقط، مع استمرار نفس
-                      البيانات والمنطق التشغيلي بدون تغيير.
+                      {copy.vipText}
                     </div>
                   </div>
                 </CardContent>
               </Card>
             )}
 
-            <Card className="hidden">
-              <CardContent className="p-4 sm:p-[18px]">
-                <div className="flex flex-col gap-4">
-                  <div className="flex flex-col gap-3.5">
-                    <div className="max-w-[42rem]">
-                      <div className="flex flex-wrap items-center gap-3">
-                        <Badge className="rounded-full border border-white/12 bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/85">
-                          Investment Desk
-                        </Badge>
-                        <Badge className="rounded-full border border-emerald-300/20 bg-emerald-300/12 px-3 py-1 text-xs font-semibold text-emerald-200">
-                          فرص جارية
-                        </Badge>
-                      </div>
-
-                      <h2 className="mt-2.5 text-2xl font-semibold tracking-tight text-white sm:text-[1.85rem]">
-                        سوق استثماري يضع العائد والتغطية في مقدمة القرار
-                      </h2>
-                      <p className="mt-2 max-w-[38rem] text-sm leading-7 text-white/76 sm:text-[15px]">
-                        ابحث في الفرص المفتوحة
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                    <div className="rounded-[22px] border border-white/10 bg-[rgba(5,12,22,0.42)] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_16px_34px_-28px_rgba(0,0,0,0.72)] backdrop-blur-md">
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/62">
-                        بحث سريع
-                      </div>
-                      <div className="relative mt-2">
-                        <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/52" />
-                        <Input
-                          value={qText}
-                          onChange={e => setQText(e.target.value)}
-                          placeholder="ابحث بالعنوان أو الموقع أو رقم الإصدار"
-                          className="h-9 rounded-xl border-white/10 bg-[rgba(3,9,17,0.52)] pr-9 text-sm text-white placeholder:text-white/42 focus-visible:ring-1 focus-visible:ring-white/20"
-                          disabled={flags.maintenanceMode}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="rounded-[22px] border border-white/10 bg-[rgba(5,12,22,0.42)] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_16px_34px_-28px_rgba(0,0,0,0.72)] backdrop-blur-md">
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/62">
-                        نوع الفرصة
-                      </div>
-                      <Select
-                        value={typeFilter}
-                        onValueChange={setTypeFilter}
-                        disabled={flags.maintenanceMode}
-                      >
-                        <SelectTrigger className="mt-2 h-9 rounded-xl border-white/10 bg-[rgba(3,9,17,0.52)] text-sm text-white">
-                          <SelectValue placeholder="كل الأنواع" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">كل الأنواع</SelectItem>
-                          {Object.entries(labels.projectTypes).map(
-                            ([key, value]) => (
-                              <SelectItem key={key} value={key}>
-                                {pickLabel(value, "ar", key)}
-                              </SelectItem>
-                            )
-                          )}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="rounded-[22px] border border-white/10 bg-[rgba(5,12,22,0.42)] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_16px_34px_-28px_rgba(0,0,0,0.72)] backdrop-blur-md">
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/62">
-                        ترتيب العرض
-                      </div>
-                      <Select
-                        value={sortBy}
-                        onValueChange={setSortBy}
-                        disabled={flags.maintenanceMode}
-                      >
-                        <SelectTrigger className="mt-2 h-9 rounded-xl border-white/10 bg-[rgba(3,9,17,0.52)] text-sm text-white">
-                          <SelectValue placeholder="اختر الترتيب" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="newest">الأحدث</SelectItem>
-                          <SelectItem value="progress">
-                            الأعلى تمويلاً
-                          </SelectItem>
-                          <SelectItem value="return">الأعلى عائدًا</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-
-                </div>
-              </CardContent>
-            </Card>
           </div>
         </CurvedProjectsHero>
       </div>
@@ -1919,20 +2049,20 @@ export default function ProjectsPage() {
           <div className="space-y-10">
             <SectionHeaderBlock
               kicker="Live Opportunities"
-              badge={flags.vipOnlyMode ? "VIP فقط" : "السوق المفتوح"}
-              title="فرص استثمارية متاحة الآن"
-              desc="وحدات استثمارية مصممة لإبراز العائد والمدد ونِسب التغطية، مع قراءة أسرع للقرار المالي داخل كل بطاقة."
+              badge={flags.vipOnlyMode ? copy.vipOnly : copy.openMarket}
+              title={copy.liveTitle}
+              desc={copy.liveDesc}
               metrics={[
                 {
-                  label: "التمويل الجاري",
+                  label: copy.currentFunding,
                   value: fmtSAR(publishedFundingCurrent),
                 },
                 {
-                  label: "الرأسمال المستهدف",
+                  label: copy.targetCapital,
                   value: fmtSAR(publishedFundingTarget),
                 },
                 {
-                  label: "أعلى عائد",
+                  label: copy.bestReturn,
                   value: formatPercentEN(bestPublishedReturn, {
                     minimumFractionDigits: 0,
                     maximumFractionDigits: 0,
@@ -1944,13 +2074,13 @@ export default function ProjectsPage() {
             <div className="rounded-[34px] border border-slate-200/70 bg-white/85 p-4 shadow-[0_34px_90px_-56px_rgba(15,23,42,0.42)] backdrop-blur sm:p-6">
               {flags.maintenanceMode ? (
                 <div className="py-16 text-center text-muted-foreground">
-                  المشاريع غير متاحة حاليًا بسبب الصيانة.
+                  {copy.unavailableMaintenance}
                 </div>
               ) : (
                 <>
                   {published.loading && (
                     <div className="py-16 text-center text-muted-foreground">
-                      جاري تحميل المشروعات...
+                      {copy.loading}
                     </div>
                   )}
 
@@ -1961,14 +2091,14 @@ export default function ProjectsPage() {
                           {published.loadError}
                         </div>
                         <div className="text-sm text-muted-foreground">
-                          ملاحظة: تعذر ترتيب المشاريع بسبب نقص في بيانات تاريخ النشر.
+                          {copy.sortNote}
                         </div>
                         <Button
                           variant="outline"
                           onClick={() => setRefreshKey(x => x + 1)}
                           className="h-11 rounded-2xl px-5"
                         >
-                          إعادة المحاولة
+                          {copy.retry}
                         </Button>
                       </CardContent>
                     </Card>
@@ -1980,8 +2110,7 @@ export default function ProjectsPage() {
                       <Card className="mt-2 border-slate-200/80 shadow-sm">
                         <CardContent className="space-y-3 py-12 text-center text-muted-foreground">
                           <div>
-                            لا توجد مشروعات مطابقة لنتائج البحث أو الفلترة
-                            الحالية.
+                            {copy.noPublished}
                           </div>
                           {published.hasMore && published.items.length > 0 && (
                             <Button
@@ -1991,8 +2120,8 @@ export default function ProjectsPage() {
                               className="h-11 rounded-2xl px-5"
                             >
                               {published.loadingMore
-                                ? "جاري التحميل..."
-                                : "تحميل المزيد"}
+                                ? copy.loadingMore
+                                : copy.loadMore}
                             </Button>
                           )}
                         </CardContent>
@@ -2005,8 +2134,8 @@ export default function ProjectsPage() {
                       <>
                         <MobileProjectCarousel
                           items={filteredPublished}
-                          sectionLabel="الفرص الحالية"
-                          hint="اسحب لتصفح المشاريع أو استخدم الأسهم والتنقل السريع بين الفرص."
+                          sectionLabel={copy.currentOpportunities}
+                          hint={copy.currentHint}
                           renderCard={project =>
                             InvestmentCard(project, "published")
                           }
@@ -2027,8 +2156,8 @@ export default function ProjectsPage() {
                               className="h-12 rounded-2xl border-slate-300/80 px-6"
                             >
                               {published.loadingMore
-                                ? "جاري التحميل..."
-                                : "تحميل المزيد"}
+                                ? copy.loadingMore
+                                : copy.loadMore}
                             </Button>
                           ) : (
                             <div className="text-sm text-muted-foreground" />
@@ -2063,18 +2192,18 @@ export default function ProjectsPage() {
           <div className="space-y-10">
             <SectionHeaderBlock
               kicker="Pipeline"
-              badge="قريبًا"
+              badge={copy.pipelineBadge}
               inverted
-              title="فرص استثمارية قيد الإطلاق"
-              desc="نفس نموذج البطاقة الاستثمارية، لكن بحالة قادمة حتى تبقى الرؤية متسقة بين السوق الحالي وخط الفرص القادم."
+              title={copy.pipelineTitle}
+              desc={copy.pipelineDesc}
               metrics={[
                 {
-                  label: "عدد الفرص",
+                  label: copy.opportunityCount,
                   value: formatNumberEN(upcoming.items.length),
                 },
-                { label: "رأسمال متوقع", value: fmtSAR(upcomingFundingTarget) },
+                { label: copy.expectedCapital, value: fmtSAR(upcomingFundingTarget) },
                 {
-                  label: "أعلى عائد معلن",
+                  label: copy.announcedReturn,
                   value: formatPercentEN(upcomingBestReturn, {
                     minimumFractionDigits: 0,
                     maximumFractionDigits: 0,
@@ -2086,7 +2215,7 @@ export default function ProjectsPage() {
             <div className="rounded-[34px] border border-white/10 bg-white/6 p-4 shadow-[0_34px_90px_-56px_rgba(0,0,0,0.68)] backdrop-blur sm:p-6">
               {upcoming.loading ? (
                 <div className="py-16 text-center text-white/70">
-                  جاري تحميل المشروعات...
+                  {copy.loading}
                 </div>
               ) : upcoming.loadError ? (
                 <Card className="mt-2 border-white/10 bg-white/5 backdrop-blur">
@@ -2097,20 +2226,20 @@ export default function ProjectsPage() {
                       onClick={() => setRefreshKey(x => x + 1)}
                       className="h-11 rounded-2xl border-white/15 bg-white/5 px-5 text-white hover:bg-white hover:text-slate-950"
                     >
-                      إعادة المحاولة
+                      {copy.retry}
                     </Button>
                   </CardContent>
                 </Card>
               ) : upcoming.items.length === 0 ? (
                 <div className="py-16 text-center text-white/70">
-                  لا توجد مشروعات مستقبلية حالياً.
+                  {copy.noUpcoming}
                 </div>
               ) : (
                 <>
                   <MobileProjectCarousel
                     items={upcoming.items}
-                    sectionLabel="الفرص القادمة"
-                    hint="هناك أكثر من فرصة قادمة. تنقّل بالسحب أو بالأسهم لمراجعة الخطط المقبلة."
+                    sectionLabel={copy.upcomingSection}
+                    hint={copy.upcomingHint}
                     tone="dark"
                     renderCard={project => InvestmentCard(project, "draft")}
                   />
@@ -2133,7 +2262,7 @@ export default function ProjectsPage() {
                     {upcoming.items.map(p => (
                       <div
                         key={p.id}
-                        dir="rtl"
+                        dir={languageDir(language)}
                         className="w-[88%] shrink-0 snap-start sm:w-[420px] md:w-[460px]"
                       >
                         {InvestmentCard(p, "draft")}
@@ -2150,8 +2279,8 @@ export default function ProjectsPage() {
                         className="h-12 rounded-2xl border-white/15 bg-white/5 px-6 text-white hover:bg-white hover:text-slate-950"
                       >
                         {upcoming.loadingMore
-                          ? "جاري التحميل..."
-                          : "تحميل المزيد"}
+                          ? copy.loadingMore
+                          : copy.loadMore}
                       </Button>
                     ) : (
                       <div className="text-sm text-white/65" />
@@ -2167,26 +2296,26 @@ export default function ProjectsPage() {
           <div className="space-y-10">
             <SectionHeaderBlock
               kicker="Track Record"
-              badge="منجزة"
-              title="سجل المشاريع المكتملة"
-              desc="واجهة مستقلة للمشاريع التي تم تنفيذها وإقفالها، تركّز على الصورة والنتائج والمخرجات النهائية بدل مؤشرات الاستثمار النشط."
+              badge={copy.completedBadge}
+              title={copy.completedTitle}
+              desc={copy.completedDesc}
               metrics={[
                 {
-                  label: "مشاريع مكتملة",
+                  label: copy.completedProjects,
                   value: formatNumberEN(done.items.length),
                 },
                 {
-                  label: "مشاريع VIP",
+                  label: copy.vipProjects,
                   value: formatNumberEN(completedVipCount),
                 },
-                { label: "بمخرجات موثقة", value: formatNumberEN(completedDocumentedCount) },
+                { label: copy.documentedOutputs, value: formatNumberEN(completedDocumentedCount) },
               ]}
             />
 
             <div className="rounded-[34px] border border-slate-200/70 bg-white/85 p-4 shadow-[0_34px_90px_-56px_rgba(15,23,42,0.42)] backdrop-blur sm:p-6">
               {done.loading ? (
                 <div className="py-16 text-center text-muted-foreground">
-                  جاري تحميل المشروعات...
+                  {copy.loading}
                 </div>
               ) : done.loadError ? (
                 <Card className="mt-2 border-destructive/25 shadow-sm">
@@ -2197,13 +2326,13 @@ export default function ProjectsPage() {
                       onClick={() => setRefreshKey(x => x + 1)}
                       className="h-11 rounded-2xl px-5"
                     >
-                      إعادة المحاولة
+                      {copy.retry}
                     </Button>
                   </CardContent>
                 </Card>
               ) : done.items.length === 0 ? (
                 <div className="py-16 text-center text-muted-foreground">
-                  لا توجد مشروعات مكتملة حالياً.
+                  {copy.noCompleted}
                 </div>
               ) : (
                 <>
@@ -2219,7 +2348,7 @@ export default function ProjectsPage() {
                         disabled={done.loadingMore}
                         className="h-12 rounded-2xl border-slate-300/80 px-6"
                       >
-                        {done.loadingMore ? "جاري التحميل..." : "تحميل المزيد"}
+                        {done.loadingMore ? copy.loadingMore : copy.loadMore}
                       </Button>
                     ) : (
                       <div className="text-sm text-muted-foreground" />

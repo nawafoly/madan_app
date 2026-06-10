@@ -19,6 +19,12 @@ import { useSiteContent } from "@/contexts/SiteContentContext";
 import {
   getSitePageMediaUrl,
 } from "@/lib/siteContent";
+import { useLanguage } from "@/contexts/LanguageContext";
+import {
+  languageDir,
+  textAlignClass,
+  type LocalizedText,
+} from "@/lib/i18n";
 
 type AboutStats = {
   projects: string;
@@ -34,15 +40,15 @@ type ParsedStat = {
 };
 
 type FeatureBlock = {
-  title: string;
-  description: string;
+  title: LocalizedText;
+  description: LocalizedText;
   icon: LucideIcon;
 };
 
 type FrameworkBlock = {
-  eyebrow: string;
-  title: string;
-  description: string;
+  eyebrow: LocalizedText;
+  title: LocalizedText;
+  description: LocalizedText;
   icon: LucideIcon;
 };
 
@@ -55,55 +61,143 @@ type SectionIntroProps = {
 };
 
 const HERO_POINTS = [
-  "فرص مدروسة بعناية",
-  "حوكمة واضحة للمعلومات",
-  "متابعة تشغيلية أكثر اتساقًا",
+  { ar: "فرص مدروسة بعناية", en: "Carefully studied opportunities" },
+  { ar: "حوكمة واضحة للمعلومات", en: "Clear information governance" },
+  { ar: "متابعة تشغيلية أكثر اتساقًا", en: "More consistent operational follow-up" },
 ];
 
 const PLATFORM_STRENGTHS: FeatureBlock[] = [
   {
-    title: "فحص دقيق للفرص",
-    description:
-      "نقيّم كل فرصة استثمارية ضمن معايير واضحة توازن بين الجاذبية الاستثمارية والانضباط المهني.",
+    title: { ar: "فحص دقيق للفرص", en: "Detailed Opportunity Review" },
+    description: {
+      ar: "نقيّم كل فرصة استثمارية ضمن معايير واضحة توازن بين الجاذبية الاستثمارية والانضباط المهني.",
+      en: "We assess every investment opportunity through clear standards that balance attractiveness with professional discipline.",
+    },
     icon: ScanSearch,
   },
   {
-    title: "وضوح في العرض",
-    description:
-      "نعرض البيانات الأساسية والمالية والتشغيلية بصيغة منظمة تساعد على القراءة السريعة واتخاذ القرار.",
+    title: { ar: "وضوح في العرض", en: "Clear Presentation" },
+    description: {
+      ar: "نعرض البيانات الأساسية والمالية والتشغيلية بصيغة منظمة تساعد على القراءة السريعة واتخاذ القرار.",
+      en: "We organize core, financial, and operational data for faster reading and better decisions.",
+    },
     icon: ShieldCheck,
   },
   {
-    title: "تنفيذ ومتابعة",
-    description:
-      "لا يتوقف دورنا عند عرض الفرصة، بل يمتد إلى المتابعة المستمرة وبناء صورة أوضح لمسار الاستثمار.",
+    title: { ar: "تنفيذ ومتابعة", en: "Execution And Follow-Up" },
+    description: {
+      ar: "لا يتوقف دورنا عند عرض الفرصة، بل يمتد إلى المتابعة المستمرة وبناء صورة أوضح لمسار الاستثمار.",
+      en: "Our role extends beyond presentation into continuous follow-up and clearer investment tracking.",
+    },
     icon: Award,
   },
 ];
 
 const COMPANY_FRAMEWORK: FrameworkBlock[] = [
   {
-    eyebrow: "الرؤية",
-    title: "حضور مؤسسي يبني الثقة",
-    description:
-      "أن تكون «معدن» مرجعًا أوضح للفرص العقارية، بمنهج يعزز الثقة ويختصر الطريق إلى القرار.",
+    eyebrow: { ar: "الرؤية", en: "Vision" },
+    title: { ar: "حضور مؤسسي يبني الثقة", en: "An institutional presence that builds trust" },
+    description: {
+      ar: "أن تكون «معدن» مرجعًا أوضح للفرص العقارية، بمنهج يعزز الثقة ويختصر الطريق إلى القرار.",
+      en: "To make MAEDIN a clearer reference for real estate opportunities through a method that strengthens confidence and shortens the path to decision.",
+    },
     icon: Landmark,
   },
   {
-    eyebrow: "الرسالة",
-    title: "تجربة استثمارية أكثر وضوحًا",
-    description:
-      "تقديم فرص عقارية مدروسة ضمن تجربة رقمية متسقة، تنظّم المعلومات وتدعم قراءة المشروع من جميع جوانبه.",
+    eyebrow: { ar: "الرسالة", en: "Mission" },
+    title: { ar: "تجربة استثمارية أكثر وضوحًا", en: "A clearer investment experience" },
+    description: {
+      ar: "تقديم فرص عقارية مدروسة ضمن تجربة رقمية متسقة، تنظّم المعلومات وتدعم قراءة المشروع من جميع جوانبه.",
+      en: "To present studied real estate opportunities through a consistent digital experience that organizes information and supports full project review.",
+    },
     icon: Building2,
   },
   {
-    eyebrow: "المنهج",
-    title: "اختيار وتحليل ثم متابعة",
-    description:
-      "نعتمد تسلسلًا واضحًا يبدأ بدراسة الفرصة، ثم بناء عرض منظم لها، ثم متابعة مستمرة لما بعد الإطلاق.",
+    eyebrow: { ar: "المنهج", en: "Approach" },
+    title: { ar: "اختيار وتحليل ثم متابعة", en: "Selection, analysis, then follow-up" },
+    description: {
+      ar: "نعتمد تسلسلًا واضحًا يبدأ بدراسة الفرصة، ثم بناء عرض منظم لها، ثم متابعة مستمرة لما بعد الإطلاق.",
+      en: "We follow a clear sequence that starts with studying the opportunity, then building a structured presentation, then continuing post-launch follow-up.",
+    },
     icon: TrendingUp,
   },
 ];
+
+const ABOUT_COPY = {
+  stats: {
+    projects: { ar: "مشروع", en: "Projects" },
+    investors: { ar: "مستثمر", en: "Investors" },
+    annualReturn: { ar: "عائد سنوي", en: "Annual Return" },
+    totalInvestment: { ar: "إجمالي الاستثمارات", en: "Total Investments" },
+  },
+  heroAlt: { ar: "عن معدن", en: "About MAEDIN" },
+  heroTitle: {
+    ar: "شركة ومنصة استثمارية تنظّم القرار العقاري بوضوح أعلى",
+    en: "An investment company and platform that brings clarity to real estate decisions",
+  },
+  heroText: {
+    ar: "نعمل في «معدن» على تقديم فرص استثمارية عقارية مدروسة، تجمع بين وضوح العرض، الانضباط التشغيلي، والمتابعة المستمرة ضمن تجربة رقمية مؤسسية متسقة.",
+    en: "At MAEDIN, we present carefully studied real estate opportunities through clear presentation, operational discipline, and continuous follow-up in a consistent institutional experience.",
+  },
+  storyImageAlt: { ar: "معدن", en: "MAEDIN" },
+  storyTag: {
+    ar: "حضور مؤسسي أوضح للفرص والاستثمار",
+    en: "A clearer institutional presence for opportunities and investment",
+  },
+  platformBadge: { ar: "منصة في صيغة أوضح", en: "A clearer platform format" },
+  platformText: {
+    ar: "نبني تجربة تجمع بين وضوح العرض والانضباط التشغيلي، لتقديم فرص عقارية بصيغة أكثر ثقة واتزانًا.",
+    en: "We build an experience that combines presentation clarity and operational discipline to present real estate opportunities with confidence and balance.",
+  },
+  whoWeAre: {
+    eyebrow: { ar: "من نحن", en: "Who We Are" },
+    title: {
+      ar: "معدن تجمع بين خبرة السوق وبناء تجربة استثمارية أكثر تنظيمًا",
+      en: "MAEDIN combines market expertise with a more organized investment experience",
+    },
+    description: {
+      ar: "لسنا مجرد واجهة عرض للفرص، بل منصة تعمل بمنهج مؤسسي يربط بين دراسة المشروع، تنظيم المعلومات، ومتابعة التنفيذ داخل تجربة متسقة وواضحة للمستثمر.",
+      en: "We are not only an opportunity showcase; we operate through an institutional approach that connects project study, information structure, and execution follow-up.",
+    },
+  },
+  bodyParagraphs: [
+    {
+      ar: "تأسست «معدن» لتمنح المستثمر مدخلًا أوضح إلى الفرص العقارية، عبر معلومات منظمة ومسار يساعد على الانتقال من قراءة الفرصة إلى اتخاذ القرار بثقة أعلى.",
+      en: "MAEDIN was founded to give investors a clearer entry into real estate opportunities through organized information and a path from review to confident decision.",
+    },
+    {
+      ar: "نعمل على تقديم المحتوى الاستثماري بلغة احترافية متوازنة، بحيث تكون كل فرصة معروضة ضمن إطار مهني يوازن بين الجاذبية الاستثمارية والوضوح في التفاصيل الأساسية.",
+      en: "We present investment content with professional balance so each opportunity is framed with both investment appeal and clarity in essential details.",
+    },
+  ],
+  numbers: {
+    eyebrow: { ar: "الأرقام", en: "Numbers" },
+    title: { ar: "مؤشرات تعكس الحضور والثقة", en: "Indicators that reflect presence and trust" },
+    description: {
+      ar: "أرقام مختصرة تساعد على تكوين صورة أولية عن حجم النشاط الاستثماري والحضور المؤسسي الذي تبنيه «معدن».",
+      en: "Concise numbers help form an initial view of MAEDIN's investment activity and institutional presence.",
+    },
+  },
+  value: {
+    eyebrow: { ar: "عرض القيمة", en: "Value Proposition" },
+    title: { ar: "ما الذي يميز معدن", en: "What Sets MAEDIN Apart" },
+    description: {
+      ar: "مرتكزات عملية تنعكس على طريقة اختيار الفرص، تنظيم عرضها، ومتابعتها ضمن تجربة استثمارية أكثر وضوحًا واتزانًا.",
+      en: "Practical pillars shape how opportunities are selected, presented, and followed up within a clearer investment experience.",
+    },
+  },
+  framework: {
+    eyebrow: { ar: "الرؤية والرسالة والمنهج", en: "Vision, Mission, And Approach" },
+    title: {
+      ar: "منهج مؤسسي يربط بين الاختيار والتنفيذ والمتابعة",
+      en: "An institutional approach connecting selection, execution, and follow-up",
+    },
+    description: {
+      ar: "تسلسل العمل في «معدن» لا يعتمد على العرض وحده، بل على إطار متكامل يبدأ بتقييم الفرصة، ويمر بتنظيم المعلومات، وينتهي بمتابعة أكثر اتساقًا لمسار الاستثمار.",
+      en: "MAEDIN's work is built on an integrated framework that begins with opportunity evaluation, organizes information, and continues with consistent investment follow-up.",
+    },
+  },
+};
 
 function parseStat(input: string): ParsedStat {
   const value = String(input ?? "").trim();
@@ -179,10 +273,11 @@ function SectionIntro({
   centered = false,
   invert = false,
 }: SectionIntroProps) {
+  const { language } = useLanguage();
   return (
     <div
       className={`max-w-3xl space-y-4 ${
-        centered ? "mx-auto text-center" : "text-right"
+        centered ? "mx-auto text-center" : textAlignClass(language)
       }`}
     >
       <span
@@ -213,6 +308,7 @@ function SectionIntro({
 }
 
 export default function About() {
+  const { language } = useLanguage();
   const { content } = useSiteContent();
   const [statsData, setStatsData] = useState<AboutStats>({
     projects: "15+",
@@ -272,7 +368,7 @@ export default function About() {
   const stats = [
     {
       icon: Building2,
-      label: "مشروع",
+      label: ABOUT_COPY.stats.projects[language],
       animated: useCountUp(parsedStats.projects.value, statsInView, {
         decimals: parsedStats.projects.decimals,
       }),
@@ -280,7 +376,7 @@ export default function About() {
     },
     {
       icon: CheckCircle2,
-      label: "مستثمر",
+      label: ABOUT_COPY.stats.investors[language],
       animated: useCountUp(parsedStats.investors.value, statsInView, {
         decimals: parsedStats.investors.decimals,
       }),
@@ -288,7 +384,7 @@ export default function About() {
     },
     {
       icon: TrendingUp,
-      label: "عائد سنوي",
+      label: ABOUT_COPY.stats.annualReturn[language],
       animated: useCountUp(parsedStats.annualReturn.value, statsInView, {
         decimals: parsedStats.annualReturn.decimals,
       }),
@@ -296,7 +392,7 @@ export default function About() {
     },
     {
       icon: Landmark,
-      label: "إجمالي الاستثمارات",
+      label: ABOUT_COPY.stats.totalInvestment[language],
       animated: useCountUp(parsedStats.totalInvestment.value, statsInView, {
         decimals: parsedStats.totalInvestment.decimals,
       }),
@@ -318,7 +414,7 @@ export default function About() {
 
   return (
     <div
-      dir="rtl"
+      dir={languageDir(language)}
       className="min-h-screen bg-[linear-gradient(180deg,#f5f6f8_0%,#ffffff_18%,#f8f8f9_100%)] text-foreground"
     >
       <main className="relative overflow-hidden">
@@ -335,7 +431,7 @@ export default function About() {
           <div className="absolute inset-0">
             <img
               src={aboutHeroImage}
-              alt="عن معدن"
+              alt={ABOUT_COPY.heroAlt[language]}
               className="h-full w-full object-cover object-center"
               onError={event => {
                 const image = event.currentTarget;
@@ -350,24 +446,22 @@ export default function About() {
           <div className="container relative z-10 flex min-h-[100svh] items-center px-4 sm:px-6">
             <div className="mx-auto max-w-5xl text-center text-white">
               <h1 className="text-4xl font-bold leading-[1.35] tracking-tight sm:text-5xl lg:text-6xl lg:leading-[1.22]">
-                شركة ومنصة استثمارية تنظّم القرار العقاري بوضوح أعلى
+                {ABOUT_COPY.heroTitle[language]}
               </h1>
 
               <p className="mx-auto mt-6 max-w-3xl text-lg leading-8 text-white/76 sm:text-xl">
-                نعمل في «معدن» على تقديم فرص استثمارية عقارية مدروسة، تجمع بين
-                وضوح العرض، الانضباط التشغيلي، والمتابعة المستمرة ضمن تجربة رقمية
-                مؤسسية متسقة.
+                {ABOUT_COPY.heroText[language]}
               </p>
 
               <div className="mt-8 grid gap-3 sm:grid-cols-3">
                 {HERO_POINTS.map(point => (
                   <div
-                    key={point}
+                    key={point.en}
                     className="rounded-[22px] border border-white/12 bg-white/8 px-4 py-4 text-sm font-medium text-white/88 backdrop-blur-sm"
                   >
                     <div className="flex items-center justify-center gap-2">
                       <CheckCircle2 className="h-4 w-4 text-[#f2ae30]" />
-                      <span>{point}</span>
+                      <span>{point[language]}</span>
                     </div>
                   </div>
                 ))}
@@ -394,7 +488,7 @@ export default function About() {
               <div className="relative min-h-[460px] overflow-hidden rounded-[34px] border border-slate-200/70 bg-slate-950 shadow-[0_30px_90px_-50px_rgba(11,23,38,0.52)]">
                 <img
                   src={aboutStoryImage}
-                  alt="معدن"
+                  alt={ABOUT_COPY.storyImageAlt[language]}
                   className="absolute inset-0 h-full w-full object-cover"
                   onError={event => {
                     const image = event.currentTarget;
@@ -407,17 +501,16 @@ export default function About() {
 
                 <div className="relative z-10 flex h-full flex-col justify-between p-6 md:p-8">
                   <div className="inline-flex w-fit rounded-full border border-white/14 bg-white/8 px-4 py-2 text-[11px] font-semibold tracking-[0.18em] text-white/78 backdrop-blur-sm">
-                    حضور مؤسسي أوضح للفرص والاستثمار
+                    {ABOUT_COPY.storyTag[language]}
                   </div>
 
                   <div className="max-w-[25rem] rounded-[28px] border border-slate-200/85 bg-white/95 p-6 shadow-[0_24px_70px_-44px_rgba(11,23,38,0.35)] backdrop-blur-sm">
                     <div className="text-right">
                       <div className="text-xs font-semibold tracking-[0.18em] text-primary/72">
-                        منصة في صيغة أوضح
+                        {ABOUT_COPY.platformBadge[language]}
                       </div>
                       <p className="mt-4 text-lg leading-8 text-foreground">
-                        نبني تجربة تجمع بين وضوح العرض والانضباط التشغيلي، لتقديم
-                        فرص عقارية بصيغة أكثر ثقة واتزانًا.
+                        {ABOUT_COPY.platformText[language]}
                       </p>
                     </div>
                   </div>
@@ -426,22 +519,15 @@ export default function About() {
 
               <div className="text-right">
                 <SectionIntro
-                  eyebrow="من نحن"
-                  title="معدن تجمع بين خبرة السوق وبناء تجربة استثمارية أكثر تنظيمًا"
-                  description="لسنا مجرد واجهة عرض للفرص، بل منصة تعمل بمنهج مؤسسي يربط بين دراسة المشروع، تنظيم المعلومات، ومتابعة التنفيذ داخل تجربة متسقة وواضحة للمستثمر."
+                  eyebrow={ABOUT_COPY.whoWeAre.eyebrow[language]}
+                  title={ABOUT_COPY.whoWeAre.title[language]}
+                  description={ABOUT_COPY.whoWeAre.description[language]}
                 />
 
                 <div className="mt-6 space-y-4 text-base leading-8 text-muted-foreground sm:text-lg">
-                  <p>
-                    تأسست «معدن» لتمنح المستثمر مدخلًا أوضح إلى الفرص العقارية،
-                    عبر معلومات منظمة ومسار يساعد على الانتقال من قراءة الفرصة إلى
-                    اتخاذ القرار بثقة أعلى.
-                  </p>
-                  <p>
-                    نعمل على تقديم المحتوى الاستثماري بلغة احترافية متوازنة، بحيث
-                    تكون كل فرصة معروضة ضمن إطار مهني يوازن بين الجاذبية
-                    الاستثمارية والوضوح في التفاصيل الأساسية.
-                  </p>
+                  {ABOUT_COPY.bodyParagraphs.map(paragraph => (
+                    <p key={paragraph.en}>{paragraph[language]}</p>
+                  ))}
                 </div>
               </div>
             </div>
@@ -455,9 +541,9 @@ export default function About() {
           <div className="container px-4 sm:px-6">
             <div className="overflow-hidden rounded-[36px] bg-[linear-gradient(135deg,#0b1726_0%,#13253b_55%,#1a2f48_100%)] px-6 py-10 text-white shadow-[0_36px_110px_-56px_rgba(11,23,38,0.95)] sm:px-8 lg:px-12 lg:py-12">
               <SectionIntro
-                eyebrow="الأرقام"
-                title="مؤشرات تعكس الحضور والثقة"
-                description="أرقام مختصرة تساعد على تكوين صورة أولية عن حجم النشاط الاستثماري والحضور المؤسسي الذي تبنيه «معدن»."
+                eyebrow={ABOUT_COPY.numbers.eyebrow[language]}
+                title={ABOUT_COPY.numbers.title[language]}
+                description={ABOUT_COPY.numbers.description[language]}
                 centered
                 invert
               />
@@ -492,9 +578,9 @@ export default function About() {
         <section className="py-20 sm:py-24">
           <div className="container px-4 sm:px-6">
             <SectionIntro
-              eyebrow="عرض القيمة"
-              title="ما الذي يميز معدن"
-              description="مرتكزات عملية تنعكس على طريقة اختيار الفرص، تنظيم عرضها، ومتابعتها ضمن تجربة استثمارية أكثر وضوحًا واتزانًا."
+              eyebrow={ABOUT_COPY.value.eyebrow[language]}
+              title={ABOUT_COPY.value.title[language]}
+              description={ABOUT_COPY.value.description[language]}
               centered
             />
 
@@ -504,7 +590,7 @@ export default function About() {
 
                 return (
                   <article
-                    key={item.title}
+                    key={item.title.en}
                     className="flex min-h-[220px] flex-col justify-between rounded-[30px] border border-slate-200/70 bg-white p-6 text-right shadow-[0_24px_80px_-56px_rgba(11,23,38,0.24)]"
                   >
                     <div className="inline-flex w-fit rounded-2xl bg-[#f7f3ea] p-3 text-primary">
@@ -512,10 +598,10 @@ export default function About() {
                     </div>
                     <div className="mt-6 space-y-3">
                       <h3 className="text-xl font-semibold text-foreground">
-                        {item.title}
+                        {item.title[language]}
                       </h3>
                       <p className="text-sm leading-7 text-muted-foreground sm:text-[15px]">
-                        {item.description}
+                        {item.description[language]}
                       </p>
                     </div>
                   </article>
@@ -530,9 +616,9 @@ export default function About() {
             <div className="grid gap-6 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
               <div className="rounded-[34px] border border-slate-200/70 bg-white p-8 shadow-[0_28px_80px_-52px_rgba(11,23,38,0.28)] sm:p-10">
                 <SectionIntro
-                  eyebrow="الرؤية والرسالة والمنهج"
-                  title="منهج مؤسسي يربط بين الاختيار والتنفيذ والمتابعة"
-                  description="تسلسل العمل في «معدن» لا يعتمد على العرض وحده، بل على إطار متكامل يبدأ بتقييم الفرصة، ويمر بتنظيم المعلومات، وينتهي بمتابعة أكثر اتساقًا لمسار الاستثمار."
+                  eyebrow={ABOUT_COPY.framework.eyebrow[language]}
+                  title={ABOUT_COPY.framework.title[language]}
+                  description={ABOUT_COPY.framework.description[language]}
                 />
               </div>
 
@@ -542,20 +628,20 @@ export default function About() {
 
                   return (
                     <article
-                      key={item.eyebrow}
+                      key={item.eyebrow.en}
                       className="rounded-[28px] border border-slate-200/70 bg-white p-6 text-right shadow-[0_22px_70px_-52px_rgba(11,23,38,0.22)]"
                     >
                       <div className="inline-flex rounded-2xl bg-[#f7f3ea] p-3 text-primary">
                         <Icon className="h-5 w-5" />
                       </div>
                       <div className="mt-5 text-xs font-semibold tracking-[0.18em] text-primary/68">
-                        {item.eyebrow}
+                        {item.eyebrow[language]}
                       </div>
                       <h3 className="mt-3 text-lg font-semibold text-foreground">
-                        {item.title}
+                        {item.title[language]}
                       </h3>
                       <p className="mt-3 text-sm leading-7 text-muted-foreground">
-                        {item.description}
+                        {item.description[language]}
                       </p>
                     </article>
                   );

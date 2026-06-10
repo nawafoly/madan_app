@@ -12,20 +12,48 @@ import {
 
 import { useSiteContent } from "@/contexts/SiteContentContext";
 import { getSiteLogoAlt, getSiteLogoUrl } from "@/lib/siteContent";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { languageDir, safeEnglishText, tr } from "@/lib/i18n";
 
 export default function Footer() {
   const currentYear = new Date().getFullYear();
+  const { language } = useLanguage();
   const { content } = useSiteContent();
   const footerLogoUrl = getSiteLogoUrl(content, "footer", "/logo.png");
-  const footerLogoAlt = getSiteLogoAlt(content, "footer", "معدن");
+  const rawFooterLogoAlt = getSiteLogoAlt(content, "footer", "MAEDIN");
+  const footerLogoAlt =
+    language === "ar"
+      ? rawFooterLogoAlt
+      : safeEnglishText(rawFooterLogoAlt, "MAEDIN logo");
   const footerAbout =
-    content.footerAboutAr ||
-    "منصة الاستثمار العقاري الرائدة التي تربط المستثمرين بفرص التطوير العقاري المتميزة.";
+    language === "ar"
+      ? content.footerAboutAr ||
+        "منصة الاستثمار العقاري الرائدة التي تربط المستثمرين بفرص التطوير العقاري المتميزة."
+      : safeEnglishText(
+          content.footerAboutEn,
+          "A real estate investment platform connecting investors with curated development opportunities."
+        );
   const contactEmail = content.contactEmail || "info@maedin.sa";
   const contactPhone = content.contactPhone || "+966 50 123 4567";
+  const quickLinks = [
+    { href: "/", label: tr(language, "الرئيسية", "Home") },
+    { href: "/projects", label: tr(language, "المشاريع", "Projects") },
+    { href: "/about", label: tr(language, "عن معدن", "About MAEDIN") },
+  ];
+  const investmentLinks = [
+    {
+      href: "/projects?type=sukuk",
+      label: tr(language, "استثمار بالصكوك", "Sukuk Investments"),
+    },
+    {
+      href: "/projects?type=land_development",
+      label: tr(language, "تطوير الأراضي", "Land Development"),
+    },
+    { href: "/vip", label: tr(language, "برنامج VIP", "VIP Program") },
+  ];
 
   return (
-    <footer className="rsg-footer">
+    <footer className="rsg-footer" dir={languageDir(language)}>
       <div className="container relative z-10 pb-12 pt-32 md:pt-40">
         <div className="border-t border-white/10 pt-12">
           <div className="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-4">
@@ -44,9 +72,15 @@ export default function Footer() {
                   />
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-white">معدن</div>
+                  <div className="text-2xl font-bold text-white">
+                    {tr(language, "معدن", "MAEDIN")}
+                  </div>
                   <div className="text-xs text-white/60">
-                    منصة الاستثمار العقاري
+                    {tr(
+                      language,
+                      "منصة الاستثمار العقاري",
+                      "Real Estate Investment Platform"
+                    )}
                   </div>
                 </div>
               </div>
@@ -68,37 +102,11 @@ export default function Footer() {
             </div>
 
             <div>
-              <h3 className="mb-4 text-lg font-bold text-white">روابط سريعة</h3>
-              <ul className="space-y-2">
-                {[
-                  { href: "/", label: "الرئيسية" },
-                  { href: "/projects", label: "المشاريع" },
-                  { href: "/about", label: "عن معدن" },
-                ].map(item => (
-                  <li key={item.href}>
-                    <Link href={item.href}>
-                      <span className="cursor-pointer text-white/70 hover:text-white">
-                        {item.label}
-                      </span>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            <div>
               <h3 className="mb-4 text-lg font-bold text-white">
-                أنواع الاستثمار
+                {tr(language, "روابط سريعة", "Quick Links")}
               </h3>
               <ul className="space-y-2">
-                {[
-                  { href: "/projects?type=sukuk", label: "استثمار بالصكوك" },
-                  {
-                    href: "/projects?type=land_development",
-                    label: "تطوير الأراضي",
-                  },
-                  { href: "/vip", label: "برنامج VIP" },
-                ].map(item => (
+                {quickLinks.map(item => (
                   <li key={item.href}>
                     <Link href={item.href}>
                       <span className="cursor-pointer text-white/70 hover:text-white">
@@ -112,13 +120,34 @@ export default function Footer() {
 
             <div>
               <h3 className="mb-4 text-lg font-bold text-white">
-                بيانات التواصل
+                {tr(language, "أنواع الاستثمار", "Investment Types")}
+              </h3>
+              <ul className="space-y-2">
+                {investmentLinks.map(item => (
+                  <li key={item.href}>
+                    <Link href={item.href}>
+                      <span className="cursor-pointer text-white/70 hover:text-white">
+                        {item.label}
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div>
+              <h3 className="mb-4 text-lg font-bold text-white">
+                {tr(language, "بيانات التواصل", "Contact Details")}
               </h3>
               <ul className="space-y-3">
                 <li className="flex gap-3">
                   <MapPin className="mt-1 h-5 w-5 text-white/80" />
                   <span className="text-white/70">
-                    الرياض، المملكة العربية السعودية
+                    {tr(
+                      language,
+                      "الرياض، المملكة العربية السعودية",
+                      "Riyadh, Saudi Arabia"
+                    )}
                   </span>
                 </li>
                 <li className="flex gap-3">
@@ -137,18 +166,22 @@ export default function Footer() {
 
           <div className="mt-10 flex flex-col items-center justify-between gap-4 border-t border-white/15 pt-8 md:flex-row">
             <p className="text-sm text-white/60">
-              © {currentYear} معدن. جميع الحقوق محفوظة.
+              {tr(
+                language,
+                `© ${currentYear} معدن. جميع الحقوق محفوظة.`,
+                `© ${currentYear} MAEDIN. All rights reserved.`
+              )}
             </p>
 
             <div className="flex gap-6 text-sm">
               <Link href="/privacy">
                 <span className="cursor-pointer text-white/60 hover:text-white">
-                  سياسة الخصوصية
+                  {tr(language, "سياسة الخصوصية", "Privacy Policy")}
                 </span>
               </Link>
               <Link href="/terms">
                 <span className="cursor-pointer text-white/60 hover:text-white">
-                  الشروط والأحكام
+                  {tr(language, "الشروط والأحكام", "Terms and Conditions")}
                 </span>
               </Link>
             </div>
