@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import hrLogoUrl from "@/assets/maedin-logo.png";
+import hrLogoInlineUrl from "@/assets/maedin-logo.png?inline";
 import { cn } from "@/lib/utils";
 
 type HrBrandMarkProps = {
@@ -16,7 +17,7 @@ export function HrBrandMark({
   imageClassName,
   compact = false,
 }: HrBrandMarkProps) {
-  const logoSources = ["/logo.png", hrLogoUrl];
+  const logoSources = [hrLogoInlineUrl, "/logo.png", hrLogoUrl];
   const [sourceIndex, setSourceIndex] = useState(0);
   const logoSrc = logoSources[sourceIndex];
   const failed = !logoSrc;
