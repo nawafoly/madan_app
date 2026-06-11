@@ -17,7 +17,7 @@ import { NotificationBell } from "@/components/NotificationBell";
 import { HrBrandMark } from "@/components/HrBrandMark";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { hasPermission, useAuth } from "@/_core/hooks/useAuth";
+import { hasStaffAdminPermission, useAuth } from "@/_core/hooks/useAuth";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { safeEnglishText, tr } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -41,13 +41,13 @@ export default function EmployeeLayout({
   const languageToggleLabel = language === "ar" ? "English" : "Arabic";
   const currentPath = location.split("?")[0];
   const employeeReturnPath = user
-    ? hasPermission(user, "recruitment.view") ||
-      hasPermission(user, "recruitment.manage")
+    ? hasStaffAdminPermission(user, "recruitment.view") ||
+      hasStaffAdminPermission(user, "recruitment.manage")
       ? "/hr/recruitment"
-      : hasPermission(user, "employees.view") ||
-          hasPermission(user, "employees.manage")
+      : hasStaffAdminPermission(user, "employees.view") ||
+          hasStaffAdminPermission(user, "employees.manage")
         ? "/hr/employees"
-        : hasPermission(user, "settings.manage")
+        : hasStaffAdminPermission(user, "settings.manage")
           ? "/hr/settings"
           : "/hr"
     : "/hr";

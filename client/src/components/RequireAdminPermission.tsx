@@ -2,22 +2,31 @@ import { useEffect, type ReactNode } from "react";
 import { useLocation } from "wouter";
 import {
   getHomePathForUser,
-  hasPermission,
-  isOpsRole,
+  hasInvestmentAdminPermission,
+  hasStaffAdminPermission,
   useAuth,
   type Permission,
 } from "@/_core/hooks/useAuth";
 
 type Props = {
   permission: Permission;
+  area?: "investment" | "staff";
   children: ReactNode;
 };
 
-export default function RequireAdminPermission({ permission, children }: Props) {
+export default function RequireAdminPermission({
+  permission,
+  area = "investment",
+  children,
+}: Props) {
   const { user, loading } = useAuth();
   const [location, setLocation] = useLocation();
 
-  const allowed = !!user && isOpsRole(user.role) && hasPermission(user, permission);
+  const allowed =
+    !!user &&
+    (area === "staff"
+      ? hasStaffAdminPermission(user, permission)
+      : hasInvestmentAdminPermission(user, permission));
 
   useEffect(() => {
     if (loading) return;

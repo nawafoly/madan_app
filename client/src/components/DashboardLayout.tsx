@@ -1,5 +1,6 @@
 import {
-  hasPermission,
+  hasInvestmentAdminPermission,
+  hasStaffAdminPermission,
   isOpsRole,
   useAuth,
   type Permission,
@@ -162,35 +163,35 @@ const hrMenuItems: MenuItem[] = [
     icon: BriefcaseBusiness,
     label: "طلبات التوظيف",
     path: "/hr/recruitment",
-    allow: ["owner", "admin", "hr"],
+    allow: ["hr"],
     permission: "recruitment.view",
   },
   {
     icon: Users,
     label: "إدارة الموظفين",
     path: "/hr/employees",
-    allow: ["owner", "admin", "hr"],
+    allow: ["hr"],
     permission: "employees.view",
   },
   {
     icon: UserPlus,
     label: "إنشاء حساب موظف",
     path: "/hr/create-staff",
-    allow: ["owner", "admin", "hr"],
-    permission: "employees.view",
+    allow: ["hr"],
+    permission: "employees.manage",
   },
   {
     icon: ClipboardList,
     label: "التقارير الأسبوعية",
     path: "/hr/weekly-reports",
-    allow: ["owner", "admin", "hr"],
+    allow: ["hr"],
     authOnly: true,
   },
   {
     icon: Settings,
     label: "إعدادات الإدارة",
     path: "/hr/settings",
-    allow: ["owner", "admin"],
+    allow: ["hr"],
     permission: "settings.manage",
   },
 ];
@@ -562,10 +563,19 @@ function DashboardLayoutContent({
   // عناصر القائمة المسموحة
   const visibleMenuItems = useMemo(() => {
     if (!role) return [];
-    if (area === "hr") return hrMenuItems;
+    if (area === "hr") {
+      return hrMenuItems.filter(item => {
+        if (!item.allow.includes(role as RoleKey)) return false;
+        if (item.authOnly) return true;
+        return !!item.permission && hasStaffAdminPermission(user, item.permission);
+      });
+    }
     if (!isOpsRole(role)) return [];
     return adminMenuItems.filter(
-      item => !!item.permission && hasPermission(user, item.permission)
+      item =>
+        item.allow.includes(role as RoleKey) &&
+        !!item.permission &&
+        hasInvestmentAdminPermission(user, item.permission)
     );
   }, [area, role, user]);
 
@@ -931,7 +941,11 @@ function DashboardLayoutContent({
               {visibleMenuItems.map(item => {
                 const isSettingsItem = area === "hr" && item.path === "/hr/settings";
                 const canAccessItem =
-                  item.authOnly || (!!item.permission && hasPermission(user, item.permission));
+                  item.authOnly ||
+                  (!!item.permission &&
+                    (area === "hr"
+                      ? hasStaffAdminPermission(user, item.permission)
+                      : hasInvestmentAdminPermission(user, item.permission)));
                 const isActive = location === item.path;
                 const itemLabel = getMenuLabel(item);
 

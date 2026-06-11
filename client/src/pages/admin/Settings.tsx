@@ -859,14 +859,12 @@ type AppRoleKey =
   | "guest";
 
 const INVESTMENT_ADMIN_ROLE_KEYS = ["owner", "admin", "accountant"] as const;
-const STAFF_ADMIN_ROLE_KEYS = [
-  "owner",
-  "admin",
-  "accountant",
-  "hr",
-  "staff",
+const STAFF_ADMIN_ROLE_KEYS = ["hr", "staff"] as const;
+const ADMIN_ROLE_KEYS = [
+  ...INVESTMENT_ADMIN_ROLE_KEYS,
+  ...STAFF_ADMIN_ROLE_KEYS,
 ] as const;
-type AdminRoleKey = (typeof STAFF_ADMIN_ROLE_KEYS)[number];
+type AdminRoleKey = (typeof ADMIN_ROLE_KEYS)[number];
 
 const ADMIN_ROLE_LABELS: Record<AdminRoleKey, string> = {
   owner: "المالك",
@@ -880,7 +878,7 @@ const ALL_PERMISSION_KEYS = DEFAULT_PERMISSIONS.map(
   ({ key }) => key as Permission
 );
 
-const STAFF_PERMISSION_KEYS = new Set<Permission>([
+const HR_ONLY_PERMISSION_KEYS = new Set<Permission>([
   "recruitment.view",
   "recruitment.manage",
   "employees.view",
@@ -888,17 +886,30 @@ const STAFF_PERMISSION_KEYS = new Set<Permission>([
   "weekly_reports.manager_notes",
 ]);
 
+const STAFF_PERMISSION_KEYS = new Set<Permission>([
+  "recruitment.view",
+  "recruitment.manage",
+  "employees.view",
+  "employees.manage",
+  "weekly_reports.manager_notes",
+  "settings.manage",
+]);
+
 const INVESTMENT_PERMISSION_DEFINITIONS =
   CENTRAL_PERMISSION_DEFINITIONS.filter(
-    permission => !STAFF_PERMISSION_KEYS.has(permission.key)
+    permission => !HR_ONLY_PERMISSION_KEYS.has(permission.key)
   );
+
+const STAFF_PERMISSION_DEFINITIONS = CENTRAL_PERMISSION_DEFINITIONS.filter(
+  permission => STAFF_PERMISSION_KEYS.has(permission.key)
+);
 
 function isSystemRoleKey(roleKey: string): roleKey is AppRoleKey {
   return SYSTEM_ROLE_KEYS.includes(roleKey);
 }
 
 function isAdminRoleKey(roleKey: unknown): roleKey is AdminRoleKey {
-  return STAFF_ADMIN_ROLE_KEYS.includes(String(roleKey || "") as AdminRoleKey);
+  return ADMIN_ROLE_KEYS.includes(String(roleKey || "") as AdminRoleKey);
 }
 
 function normalizeAdminRoleKey(roleKey: unknown): AdminRoleKey {
@@ -906,7 +917,8 @@ function normalizeAdminRoleKey(roleKey: unknown): AdminRoleKey {
 }
 
 function isRoleVisibleInSettingsArea(roleKey: unknown, area: SettingsArea) {
-  const normalizedRoleKey = normalizeAdminRoleKey(roleKey);
+  if (!isAdminRoleKey(roleKey)) return false;
+  const normalizedRoleKey = roleKey;
   const allowedRoleKeys =
     area === "staff" ? STAFF_ADMIN_ROLE_KEYS : INVESTMENT_ADMIN_ROLE_KEYS;
   return (allowedRoleKeys as readonly string[]).includes(normalizedRoleKey);
@@ -1450,10 +1462,13 @@ export default function Settings({
   );
   const visiblePermissionDefinitions =
     area === "staff"
-      ? CENTRAL_PERMISSION_DEFINITIONS
+      ? STAFF_PERMISSION_DEFINITIONS
       : INVESTMENT_PERMISSION_DEFINITIONS;
+  const visiblePermissionKeySet = new Set<Permission>(
+    visiblePermissionDefinitions.map(permission => permission.key)
+  );
   const visibleRoles = roles.filter(role =>
-    area === "staff" || !["hr", "staff"].includes(role.key)
+    isRoleVisibleInSettingsArea(role.key, area)
   );
   const activeRolesCount = visibleRoles.filter(role => role.isActive).length;
   const systemRolesCount = visibleRoles.filter(role => role.isSystem).length;
@@ -2343,17 +2358,32 @@ export default function Settings({
         adminForm.roleKey,
         adminForm.permissionsAllow || [],
         adminForm.permissionsDeny || []
-      ),
-    [adminForm.permissionsAllow, adminForm.permissionsDeny, adminForm.roleKey]
+      ).filter(permissionKey => visiblePermissionKeySet.has(permissionKey)),
+    [
+      adminForm.permissionsAllow,
+      adminForm.permissionsDeny,
+      adminForm.roleKey,
+      visiblePermissionKeySet,
+    ]
   );
 
   const adminFormPermissionOverrides = useMemo(
-    () =>
-      normalizePermissionOverrides(
+    () => {
+      const normalized = normalizePermissionOverrides(
         adminForm.permissionsAllow || [],
         adminForm.permissionsDeny || []
-      ),
-    [adminForm.permissionsAllow, adminForm.permissionsDeny]
+      );
+
+      return {
+        permissionsAllow: normalized.permissionsAllow.filter(permissionKey =>
+          visiblePermissionKeySet.has(permissionKey)
+        ),
+        permissionsDeny: normalized.permissionsDeny.filter(permissionKey =>
+          visiblePermissionKeySet.has(permissionKey)
+        ),
+      };
+    },
+    [adminForm.permissionsAllow, adminForm.permissionsDeny, visiblePermissionKeySet]
   );
 
   const selectedEmployeeDirectoryEntry = useMemo(
@@ -2756,9 +2786,23 @@ export default function Settings({
     if (!roleKey) return toast.error("اختر الدور");
 
     // ✅ sanitize arrays
-    const { permissionsAllow, permissionsDeny } = normalizePermissionOverrides(
+    if (!isRoleVisibleInSettingsArea(roleKey, area)) {
+      return toast.error(
+        area === "staff"
+          ? "هذا الدور غير مسموح داخل إعدادات HR"
+          : "هذا الدور غير مسموح داخل إعدادات الاستثمار"
+      );
+    }
+
+    const normalizedOverrides = normalizePermissionOverrides(
       adminForm.permissionsAllow || [],
       adminForm.permissionsDeny || []
+    );
+    const permissionsAllow = normalizedOverrides.permissionsAllow.filter(
+      permissionKey => visiblePermissionKeySet.has(permissionKey)
+    );
+    const permissionsDeny = normalizedOverrides.permissionsDeny.filter(
+      permissionKey => visiblePermissionKeySet.has(permissionKey)
     );
     const effectivePermissions = getEffectivePermissionKeys(
       roleKey,

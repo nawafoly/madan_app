@@ -91,10 +91,6 @@ export const ROLE_DEFAULT_PERMS: Record<AppRole, Permission[]> = {
     "users.manage",
     "messages.view",
     "messages.manage",
-    "recruitment.view",
-    "recruitment.manage",
-    "employees.view",
-    "employees.manage",
     "reports.view",
     "financial.view",
     "financial.edit",
@@ -111,10 +107,6 @@ export const ROLE_DEFAULT_PERMS: Record<AppRole, Permission[]> = {
     "users.manage",
     "messages.view",
     "messages.manage",
-    "recruitment.view",
-    "recruitment.manage",
-    "employees.view",
-    "employees.manage",
     "reports.view",
     "settings.manage",
   ],
@@ -138,6 +130,12 @@ export const ROLE_DEFAULT_PERMS: Record<AppRole, Permission[]> = {
 };
 
 export const OPS_ROLES: AppRole[] = ["owner", "admin", "accountant", "hr"];
+export const INVESTMENT_ADMIN_ROLES: AppRole[] = [
+  "owner",
+  "admin",
+  "accountant",
+];
+export const STAFF_ADMIN_ROLES: AppRole[] = ["hr"];
 
 export type AppUser = {
   uid: string;
@@ -481,6 +479,14 @@ export function isOpsRole(role: AppRole | null | undefined) {
   return !!role && OPS_ROLES.includes(role);
 }
 
+export function isInvestmentAdminRole(role: AppRole | null | undefined) {
+  return !!role && INVESTMENT_ADMIN_ROLES.includes(role);
+}
+
+export function isStaffAdminRole(role: AppRole | null | undefined) {
+  return !!role && STAFF_ADMIN_ROLES.includes(role);
+}
+
 type PermissionSubject = Pick<
   AppUser,
   "role" | "permissionsAllow" | "permissionsDeny" | "isActive"
@@ -528,6 +534,30 @@ export function hasPermission(
   return baseline.includes(perm);
 }
 
+export function hasInvestmentAdminPermission(
+  user: PermissionSubject | null | undefined,
+  perm: Permission
+): boolean {
+  return isInvestmentAdminRole(user?.role) && hasPermission(user, perm);
+}
+
+export function hasStaffAdminPermission(
+  user: PermissionSubject | null | undefined,
+  perm: Permission
+): boolean {
+  return isStaffAdminRole(user?.role) && hasPermission(user, perm);
+}
+
+export function hasStaffAreaPermission(
+  user: PermissionSubject | null | undefined,
+  perm: Permission
+): boolean {
+  return (
+    (isStaffAdminRole(user?.role) || user?.role === "staff") &&
+    hasPermission(user, perm)
+  );
+}
+
 export function getHomePathForRole(role: AppRole | null | undefined) {
   if (!role) return "/login";
   if (role === "owner" || role === "admin" || role === "accountant") {
@@ -548,22 +578,26 @@ export function getStaffHomePathForUser(
 ) {
   if (!user) return "/login";
 
-  if (user.role === "staff" || canAccessEmployeeProfile(user)) {
-    return "/hr/profile";
-  }
-
   if (
-    hasPermission(user, "recruitment.view") ||
-    hasPermission(user, "recruitment.manage")
+    hasStaffAdminPermission(user, "recruitment.view") ||
+    hasStaffAdminPermission(user, "recruitment.manage")
   ) {
     return "/hr/recruitment";
   }
 
   if (
-    hasPermission(user, "employees.view") ||
-    hasPermission(user, "employees.manage")
+    hasStaffAdminPermission(user, "employees.view") ||
+    hasStaffAdminPermission(user, "employees.manage")
   ) {
     return "/hr/employees";
+  }
+
+  if (hasStaffAdminPermission(user, "settings.manage")) {
+    return "/hr/settings";
+  }
+
+  if (user.role === "staff" || canAccessEmployeeProfile(user)) {
+    return "/hr/profile";
   }
 
   return "/login";
@@ -587,39 +621,16 @@ export function getHomePathForUser(
   if (user.role === "client" || user.role === "guest") return "/client/dashboard";
 
   if (user.role === "hr") {
-    if (
-      hasPermission(user, "recruitment.view") ||
-      hasPermission(user, "recruitment.manage")
-    ) {
-      return "/hr/recruitment";
-    }
-    if (
-      hasPermission(user, "employees.view") ||
-      hasPermission(user, "employees.manage")
-    ) {
-      return "/hr/employees";
-    }
+    return getStaffHomePathForUser(user);
   }
 
-  if (isOpsRole(user.role)) {
-    if (hasPermission(user, "dashboard.view")) return "/dashboard";
-    if (
-      hasPermission(user, "recruitment.view") ||
-      hasPermission(user, "recruitment.manage")
-    ) {
-      return "/hr/recruitment";
-    }
-    if (
-      hasPermission(user, "employees.view") ||
-      hasPermission(user, "employees.manage")
-    ) {
-      return "/hr/employees";
-    }
-    if (hasPermission(user, "messages.view")) return "/admin/messages";
-    if (hasPermission(user, "users.view")) return "/admin/clients";
-    if (hasPermission(user, "projects.manage")) return "/admin/projects";
-    if (hasPermission(user, "financial.view")) return "/admin/financial";
-    if (hasPermission(user, "reports.view")) return "/admin/reports";
+  if (isInvestmentAdminRole(user.role)) {
+    if (hasInvestmentAdminPermission(user, "dashboard.view")) return "/dashboard";
+    if (hasInvestmentAdminPermission(user, "messages.view")) return "/admin/messages";
+    if (hasInvestmentAdminPermission(user, "users.view")) return "/admin/clients";
+    if (hasInvestmentAdminPermission(user, "projects.manage")) return "/admin/projects";
+    if (hasInvestmentAdminPermission(user, "financial.view")) return "/admin/financial";
+    if (hasInvestmentAdminPermission(user, "reports.view")) return "/admin/reports";
   }
 
   if (hasPermission(user, "projects.view")) return "/projects";

@@ -254,25 +254,25 @@ function Router() {
 
         {/* ================= HR Workspace ================= */}
         <Route path="/hr/recruitment">
-          <RequireAdminPermission permission="recruitment.view">
+          <RequireAdminPermission permission="recruitment.view" area="staff">
             <RecruitmentApplicationsPage />
           </RequireAdminPermission>
         </Route>
 
         <Route path="/hr/employees">
-          <RequireAdminPermission permission="employees.view">
+          <RequireAdminPermission permission="employees.view" area="staff">
             <EmployeesManagementPage />
           </RequireAdminPermission>
         </Route>
 
         <Route path="/hr/create-staff">
-          <RequireRole allow={["owner", "admin", "hr"]}>
+          <RequireAdminPermission permission="employees.manage" area="staff">
             <CreateStaffAccount />
-          </RequireRole>
+          </RequireAdminPermission>
         </Route>
 
         <Route path="/hr/settings">
-          <RequireAdminPermission permission="settings.manage">
+          <RequireAdminPermission permission="settings.manage" area="staff">
             <Settings area="staff" />
           </RequireAdminPermission>
         </Route>
@@ -336,7 +336,7 @@ function Router() {
         </Route>
 
         <Route path="/hr/weekly-reports">
-          <RequireEmployeeProfileAccess>
+          <RequireEmployeeProfileAccess allowStaffAdmin>
             <EmployeeWeeklyReportsPage />
           </RequireEmployeeProfileAccess>
         </Route>

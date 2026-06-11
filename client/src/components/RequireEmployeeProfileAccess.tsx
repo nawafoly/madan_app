@@ -5,16 +5,21 @@ import { doc, getDoc } from "firebase/firestore";
 import {
   canAccessEmployeeProfile,
   getHomePathForUser,
-  isOpsRole,
+  hasStaffAdminPermission,
+  hasStaffAreaPermission,
   useAuth,
 } from "@/_core/hooks/useAuth";
 import { db } from "@/_core/firebase";
 
 type Props = {
   children: ReactNode;
+  allowStaffAdmin?: boolean;
 };
 
-export default function RequireEmployeeProfileAccess({ children }: Props) {
+export default function RequireEmployeeProfileAccess({
+  children,
+  allowStaffAdmin = false,
+}: Props) {
   const { user, loading } = useAuth();
   const [location, setLocation] = useLocation();
   const [hasLinkedEmployeeRecord, setHasLinkedEmployeeRecord] = useState<
@@ -22,8 +27,13 @@ export default function RequireEmployeeProfileAccess({ children }: Props) {
   >(null);
 
   const hasDirectAccess = useMemo(
-    () => isOpsRole(user?.role) || canAccessEmployeeProfile(user),
-    [user]
+    () =>
+      canAccessEmployeeProfile(user) ||
+      (allowStaffAdmin &&
+        (hasStaffAdminPermission(user, "employees.view") ||
+          hasStaffAdminPermission(user, "employees.manage") ||
+          hasStaffAreaPermission(user, "weekly_reports.manager_notes"))),
+    [allowStaffAdmin, user]
   );
 
   useEffect(() => {

@@ -75,10 +75,6 @@ service cloud.firestore {
             "users.manage",
             "messages.view",
             "messages.manage",
-            "recruitment.view",
-            "recruitment.manage",
-            "employees.view",
-            "employees.manage",
             "reports.view",
             "financial.view",
             "financial.edit",
@@ -96,10 +92,6 @@ service cloud.firestore {
               "users.manage",
               "messages.view",
               "messages.manage",
-              "recruitment.view",
-              "recruitment.manage",
-              "employees.view",
-              "employees.manage",
               "reports.view",
               "settings.manage"
             ]
@@ -139,17 +131,17 @@ service cloud.firestore {
     }
 
     function canReadUsersAdmin() {
-      return hasAdminPermission("users.view")
-        || hasAdminPermission("users.manage")
-        || hasAdminPermission("settings.manage")
-        || hasAdminPermission("reports.view")
-        || hasAdminPermission("financial.view")
-        || hasAdminPermission("financial.edit");
+      return hasInvestmentAdminPermission("users.view")
+        || hasInvestmentAdminPermission("users.manage")
+        || hasInvestmentAdminPermission("settings.manage")
+        || hasInvestmentAdminPermission("reports.view")
+        || hasInvestmentAdminPermission("financial.view")
+        || hasInvestmentAdminPermission("financial.edit");
     }
 
     function canManageUsersAdmin() {
-      return hasAdminPermission("users.manage")
-        || hasAdminPermission("settings.manage");
+      return hasInvestmentAdminPermission("users.manage")
+        || hasInvestmentAdminPermission("settings.manage");
     }
 
     function myAdminUserDocId() {
@@ -212,10 +204,6 @@ service cloud.firestore {
             "users.manage",
             "messages.view",
             "messages.manage",
-            "recruitment.view",
-            "recruitment.manage",
-            "employees.view",
-            "employees.manage",
             "reports.view",
             "financial.view",
             "financial.edit",
@@ -233,10 +221,6 @@ service cloud.firestore {
               "users.manage",
               "messages.view",
               "messages.manage",
-              "recruitment.view",
-              "recruitment.manage",
-              "employees.view",
-              "employees.manage",
               "reports.view",
               "settings.manage"
             ]
@@ -283,6 +267,83 @@ service cloud.firestore {
         && (permission in adminUserAllowPermissions());
     }
 
+    function isInvestmentAdminRoleValue(role) {
+      return role in ["owner", "admin", "accountant"];
+    }
+
+    function isStaffAdminRoleValue(role) {
+      return role == "hr";
+    }
+
+    function hasInvestmentUserPermission(permission) {
+      return signedIn()
+        && myIsActive()
+        && isInvestmentAdminRoleValue(myRole())
+        && !(permission in myDenyPermissions())
+        && ((permission in myAllowPermissions()) || (permission in roleDefaultPermissions()));
+    }
+
+    function hasStaffUserPermission(permission) {
+      return signedIn()
+        && myIsActive()
+        && isStaffAdminRoleValue(myRole())
+        && !(permission in myDenyPermissions())
+        && ((permission in myAllowPermissions()) || (permission in roleDefaultPermissions()));
+    }
+
+    function hasInvestmentAdminUserPermission(permission) {
+      return signedIn()
+        && adminUserDocExists()
+        && adminUserIsActive()
+        && isInvestmentAdminRoleValue(adminUserRoleValue())
+        && !(permission in adminUserDenyPermissions())
+        && (
+          (permission in adminUserAllowPermissions())
+          || (permission in adminUserRoleDefaultPermissions())
+        );
+    }
+
+    function hasStaffAdminUserPermission(permission) {
+      return signedIn()
+        && adminUserDocExists()
+        && adminUserIsActive()
+        && isStaffAdminRoleValue(adminUserRoleValue())
+        && !(permission in adminUserDenyPermissions())
+        && (
+          (permission in adminUserAllowPermissions())
+          || (permission in adminUserRoleDefaultPermissions())
+        );
+    }
+
+    function hasInvestmentAdminPermission(permission) {
+      return hasInvestmentUserPermission(permission)
+        || hasInvestmentAdminUserPermission(permission);
+    }
+
+    function hasStaffAdminPermission(permission) {
+      return hasStaffUserPermission(permission)
+        || hasStaffAdminUserPermission(permission);
+    }
+
+    function hasStaffAreaPermission(permission) {
+      return hasStaffAdminPermission(permission)
+        || (
+          isStaff()
+          && !(permission in myDenyPermissions())
+          && ((permission in myAllowPermissions()) || (permission in roleDefaultPermissions()))
+        )
+        || (
+          adminUserDocExists()
+          && adminUserIsActive()
+          && adminUserRoleValue() == "staff"
+          && !(permission in adminUserDenyPermissions())
+          && (
+            (permission in adminUserAllowPermissions())
+            || (permission in adminUserRoleDefaultPermissions())
+          )
+        );
+    }
+
     function isBootstrapOwnerEmail() {
       return signedIn()
         && (
@@ -299,6 +360,44 @@ service cloud.firestore {
       return (("role" in data) && (data.role is string))
         ? lower(data.role)
         : "";
+    }
+
+    function adminRoleFromData(data) {
+      return (("roleKey" in data) && (data.roleKey is string))
+        ? lower(data.roleKey)
+        : roleFromData(data);
+    }
+
+    function isInvestmentAdminData(data) {
+      return isInvestmentAdminRoleValue(adminRoleFromData(data));
+    }
+
+    function isStaffAdminData(data) {
+      return adminRoleFromData(data) in ["hr", "staff"];
+    }
+
+    function canReadAdminUserData(data) {
+      return (hasInvestmentAdminPermission("settings.manage") && isInvestmentAdminData(data))
+        || (hasStaffAdminPermission("settings.manage") && isStaffAdminData(data))
+        || (canManageEmployeesAdmin() && adminRoleFromData(data) == "staff");
+    }
+
+    function canWriteAdminUserData(data) {
+      return (hasInvestmentAdminPermission("settings.manage") && isInvestmentAdminData(data))
+        || (hasStaffAdminPermission("settings.manage") && isStaffAdminData(data))
+        || (canManageEmployeesAdmin() && adminRoleFromData(data) == "staff");
+    }
+
+    function roleInviteRoleFromData(data) {
+      return (("roleKey" in data) && (data.roleKey is string))
+        ? lower(data.roleKey)
+        : roleFromData(data);
+    }
+
+    function canAccessRoleInviteData(data) {
+      let role = roleInviteRoleFromData(data);
+      return (hasInvestmentAdminPermission("settings.manage") && isInvestmentAdminRoleValue(role))
+        || (hasStaffAdminPermission("settings.manage") && role in ["hr", "staff"]);
     }
 
     function isStaffUserDoc(data) {
@@ -352,12 +451,12 @@ service cloud.firestore {
     }
 
     function canReadEmployeesAdmin() {
-      return hasAdminPermission("employees.view")
-        || hasAdminPermission("employees.manage");
+      return hasStaffAdminPermission("employees.view")
+        || hasStaffAdminPermission("employees.manage");
     }
 
     function canManageEmployeesAdmin() {
-      return hasAdminPermission("employees.manage");
+      return hasStaffAdminPermission("employees.manage");
     }
 
     function isEmployeeManagedUserDoc(data) {
@@ -365,12 +464,12 @@ service cloud.firestore {
     }
 
     function canReadRecruitmentAdmin() {
-      return hasAdminPermission("recruitment.view")
-        || hasAdminPermission("recruitment.manage");
+      return hasStaffAdminPermission("recruitment.view")
+        || hasStaffAdminPermission("recruitment.manage");
     }
 
     function canManageRecruitmentAdmin() {
-      return hasAdminPermission("recruitment.manage");
+      return hasStaffAdminPermission("recruitment.manage");
     }
 
     function isValidEmployeeSelfProfileUpdate() {
@@ -615,12 +714,12 @@ service cloud.firestore {
     }
 
     function canReadMessagesAdmin() {
-      return hasAdminPermission("messages.view")
-        || hasAdminPermission("messages.manage");
+      return hasInvestmentAdminPermission("messages.view")
+        || hasInvestmentAdminPermission("messages.manage");
     }
 
     function canManageMessagesAdmin() {
-      return hasAdminPermission("messages.manage");
+      return hasInvestmentAdminPermission("messages.manage");
     }
 
     function employeeMessageOwnerUid(data) {
@@ -679,8 +778,7 @@ service cloud.firestore {
     }
 
     function canWriteWeeklyReportManagerNotes() {
-      return hasEffectivePermission("weekly_reports.manager_notes")
-        || hasAdminUserExplicitPermission("weekly_reports.manager_notes");
+      return hasStaffAreaPermission("weekly_reports.manager_notes");
     }
 
     function isValidWeeklyReportWrite() {
@@ -993,26 +1091,26 @@ service cloud.firestore {
     }
 
     function canReadInvestmentsAdmin() {
-      return hasAdminPermission("investments.view")
-        || hasAdminPermission("investments.manage")
-        || hasAdminPermission("financial.view")
-        || hasAdminPermission("financial.edit")
-        || hasAdminPermission("reports.view")
-        || hasAdminPermission("projects.manage")
+      return hasInvestmentAdminPermission("investments.view")
+        || hasInvestmentAdminPermission("investments.manage")
+        || hasInvestmentAdminPermission("financial.view")
+        || hasInvestmentAdminPermission("financial.edit")
+        || hasInvestmentAdminPermission("reports.view")
+        || hasInvestmentAdminPermission("projects.manage")
         || canReadMessagesAdmin();
     }
 
     function canManageInvestmentsAdmin() {
-      return hasAdminPermission("investments.manage")
-        || hasAdminPermission("financial.edit");
+      return hasInvestmentAdminPermission("investments.manage")
+        || hasInvestmentAdminPermission("financial.edit");
     }
 
     function canReadContractsAdmin() {
       return canReadMessagesAdmin()
-        || hasAdminPermission("investments.view")
+        || hasInvestmentAdminPermission("investments.view")
         || canManageInvestmentsAdmin()
-        || hasAdminPermission("financial.view")
-        || hasAdminPermission("reports.view");
+        || hasInvestmentAdminPermission("financial.view")
+        || hasInvestmentAdminPermission("reports.view");
     }
 
     function canManageContractsAdmin() {
@@ -1282,7 +1380,13 @@ service cloud.firestore {
     ========================= */
     match /settings/{docId} {
       allow read: if true;
-      allow write: if hasAdminPermission("settings.manage");
+      allow write: if (
+        docId in ["app", "content"]
+        && hasInvestmentAdminPermission("settings.manage")
+      ) || (
+        docId in ["notifications", "security", "roles", "labels", "flags", "recruitment"]
+        && hasStaffAdminPermission("settings.manage")
+      );
     }
 
     /* =========================
@@ -1290,10 +1394,10 @@ service cloud.firestore {
     ========================= */
     match /projects/{projectId} {
       allow read: if true;
-      allow create, delete: if hasAdminPermission("projects.manage");
+      allow create, delete: if hasInvestmentAdminPermission("projects.manage");
 
-      allow update: if hasAdminPermission("projects.manage")
-        || hasAdminPermission("projects.publish");
+      allow update: if hasInvestmentAdminPermission("projects.manage")
+        || hasInvestmentAdminPermission("projects.publish");
     }
 
     /* =========================
@@ -1304,13 +1408,16 @@ service cloud.firestore {
         || canReadUsersAdmin()
         || (canReadEmployeesAdmin() && isEmployeeManagedUserDoc(resource.data));
 
-      allow create: if signedIn()
+      allow create: if (
+        signedIn()
         && request.auth.uid == userId
         && request.resource.data.email == request.auth.token.email
-        && isValidRoleOnCreate();
+        && isValidRoleOnCreate()
+      ) || isValidEmployeeUserCreate(userId);
 
       allow update: if canManageUsersAdmin()
         || (canManageEmployeesAdmin() && isValidEmployeeAdminUpdate())
+        || (canManageEmployeesAdmin() && isValidEmployeeUserStaffPromotion(userId))
         || (
           signedIn()
           && request.auth.uid == userId
@@ -1326,6 +1433,52 @@ service cloud.firestore {
           && (!("permissionsAllow" in request.resource.data) || request.resource.data.permissionsAllow.size() == 0)
           && (!("permissionsDeny" in request.resource.data) || request.resource.data.permissionsDeny.size() == 0)
           && (!("active" in request.resource.data) || request.resource.data.active == true);
+      }
+
+      function isValidEmployeeUserCreate(userId) {
+        return canManageEmployeesAdmin()
+          && request.resource.data.uid == userId
+          && request.resource.data.email is string
+          && request.resource.data.email.size() > 0
+          && request.resource.data.role is string
+          && lower(request.resource.data.role) == "staff"
+          && (
+            !("roleKey" in request.resource.data)
+            || (
+              request.resource.data.roleKey is string
+              && lower(request.resource.data.roleKey) == "staff"
+            )
+          )
+          && (!("permissionsAllow" in request.resource.data) || request.resource.data.permissionsAllow.size() == 0)
+          && (!("permissionsDeny" in request.resource.data) || request.resource.data.permissionsDeny.size() == 0)
+          && (!("active" in request.resource.data) || request.resource.data.active == true)
+          && (!("isActive" in request.resource.data) || request.resource.data.isActive == true);
+      }
+
+      function isValidEmployeeUserStaffPromotion(userId) {
+        let keys = request.resource.data.diff(resource.data).changedKeys();
+        return request.resource.data.role is string
+          && lower(request.resource.data.role) == "staff"
+          && request.resource.data.roleKey is string
+          && lower(request.resource.data.roleKey) == "staff"
+          && (!("uid" in request.resource.data) || request.resource.data.uid == userId)
+          && (!("permissionsAllow" in request.resource.data) || request.resource.data.permissionsAllow.size() == 0)
+          && (!("permissionsDeny" in request.resource.data) || request.resource.data.permissionsDeny.size() == 0)
+          && keys.hasOnly([
+            "role",
+            "roleKey",
+            "active",
+            "isActive",
+            "displayName",
+            "name",
+            "title",
+            "employeeProfileEnabled",
+            "includeInEmployeeManagement",
+            "linkedEmployeeId",
+            "permissionsAllow",
+            "permissionsDeny",
+            "updatedAt"
+          ]);
       }
     }
 
@@ -1465,7 +1618,8 @@ service cloud.firestore {
         && (canManageMessagesAdmin()
         || canManageInvestmentsAdmin()
         || canManageUsersAdmin()
-        || hasAdminPermission("settings.manage")
+        || hasInvestmentAdminPermission("settings.manage")
+        || hasStaffAdminPermission("settings.manage")
         || canManageEmployeesAdmin()
         || isValidEmployeeMessageNotificationCreate()
         || isValidWeeklyReportNotificationCreate());
@@ -1473,12 +1627,14 @@ service cloud.firestore {
         || canManageMessagesAdmin()
         || canManageInvestmentsAdmin()
         || canManageUsersAdmin()
-        || hasAdminPermission("settings.manage")
+        || hasInvestmentAdminPermission("settings.manage")
+        || hasStaffAdminPermission("settings.manage")
         || canManageEmployeesAdmin();
       allow delete: if canManageMessagesAdmin()
         || canManageInvestmentsAdmin()
         || canManageUsersAdmin()
-        || hasAdminPermission("settings.manage")
+        || hasInvestmentAdminPermission("settings.manage")
+        || hasStaffAdminPermission("settings.manage")
         || canManageEmployeesAdmin();
     }
 
@@ -1566,19 +1722,25 @@ service cloud.firestore {
     match /admin_users/{docId} {
       allow read: if signedIn()
         && (
-          isOwner()
-          || isAdmin()
-          || (
+          (
             lower(request.auth.token.email) != ""
             && docId == lower(request.auth.token.email)
           )
+          || canReadAdminUserData(resource.data)
         );
 
-      allow create, update, delete: if isOwner() || isAdmin();
+      allow create: if canWriteAdminUserData(request.resource.data);
+      allow update: if canWriteAdminUserData(resource.data)
+        && canWriteAdminUserData(request.resource.data);
+      allow delete: if canWriteAdminUserData(resource.data);
     }
 
     match /role_invites/{docId} {
-      allow read, write: if hasAdminPermission("settings.manage");
+      allow read: if canAccessRoleInviteData(resource.data);
+      allow create: if canAccessRoleInviteData(request.resource.data);
+      allow update: if canAccessRoleInviteData(resource.data)
+        && canAccessRoleInviteData(request.resource.data);
+      allow delete: if canAccessRoleInviteData(resource.data);
     }
 
     /* =========================
@@ -1600,15 +1762,16 @@ service cloud.firestore {
     ========================= */
     match /job_applications/{id} {
       allow create: if isValidJobApplicationCreate();
-      allow read: if canReadRecruitmentAdmin() || hasAdminPermission("settings.manage");
-      allow update, delete: if canManageRecruitmentAdmin() || hasAdminPermission("settings.manage");
+      allow read: if canReadRecruitmentAdmin() || hasStaffAdminPermission("settings.manage");
+      allow update, delete: if canManageRecruitmentAdmin() || hasStaffAdminPermission("settings.manage");
     }
 
     /* =========================
        audit_logs
     ========================= */
     match /audit_logs/{id} {
-      allow read: if hasAdminPermission("settings.manage");
+      allow read: if hasInvestmentAdminPermission("settings.manage")
+        || hasStaffAdminPermission("settings.manage");
       allow create, update, delete: if false;
     }
 

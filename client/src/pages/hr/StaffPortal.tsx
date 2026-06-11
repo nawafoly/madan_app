@@ -26,7 +26,8 @@ import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { auth, db } from "@/_core/firebase";
 import {
   getHomePathForUser,
-  hasPermission,
+  hasStaffAdminPermission,
+  hasStaffAreaPermission,
   useAuth,
 } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -158,7 +159,7 @@ export default function StaffPortalPage() {
   const homePath = user ? getHomePathForUser(user, "staff") : "/login";
   const hasInternalAccess = user && homePath !== "/login";
   const canWriteWeeklyReportNotes =
-    !!user && hasPermission(user, WEEKLY_REPORT_MANAGER_NOTES_PERMISSION);
+    !!user && hasStaffAreaPermission(user, WEEKLY_REPORT_MANAGER_NOTES_PERMISSION);
 
   useEffect(() => {
     if (!user?.uid) {
@@ -235,8 +236,8 @@ export default function StaffPortalPage() {
           icon: BriefcaseBusiness,
           canEnter:
             !!user &&
-            (hasPermission(user, "recruitment.view") ||
-              hasPermission(user, "recruitment.manage")),
+            (hasStaffAdminPermission(user, "recruitment.view") ||
+              hasStaffAdminPermission(user, "recruitment.manage")),
         },
         {
           title: tr(language, "إدارة الموظفين", "Employee Management"),
@@ -249,8 +250,8 @@ export default function StaffPortalPage() {
           icon: Users,
           canEnter:
             !!user &&
-            (hasPermission(user, "employees.view") ||
-              hasPermission(user, "employees.manage")),
+            (hasStaffAdminPermission(user, "employees.view") ||
+              hasStaffAdminPermission(user, "employees.manage")),
         },
         {
           title: tr(language, "التقارير الأسبوعية", "Weekly Reports"),
@@ -278,7 +279,7 @@ export default function StaffPortalPage() {
           ),
           href: "/hr/settings",
           icon: Settings,
-          canEnter: !!user && hasPermission(user, "settings.manage"),
+          canEnter: !!user && hasStaffAdminPermission(user, "settings.manage"),
         },
       ],
     [canWriteWeeklyReportNotes, language, user]
