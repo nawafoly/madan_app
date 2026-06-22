@@ -4,6 +4,8 @@ import {
   CalendarCheck2,
   CheckCircle2,
   Download,
+  Eye,
+  EyeOff,
   ExternalLink,
   Filter,
   LogIn,
@@ -109,6 +111,12 @@ function rejectionLabel(reason: string | null, language: "ar" | "en") {
   return reason ? labels[reason]?.[language] || reason : "-";
 }
 
+function shortDeviceId(value: string | null | undefined) {
+  if (!value) return "-";
+  if (value.length <= 12) return value;
+  return `...${value.slice(-8)}`;
+}
+
 function csvCell(value: unknown) {
   return `"${String(value ?? "").replace(/"/g, '""')}"`;
 }
@@ -170,6 +178,9 @@ export default function HrAttendancePage() {
   >([]);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
+  const [visibleDeviceIds, setVisibleDeviceIds] = useState<Set<string>>(
+    () => new Set()
+  );
   const [error, setError] = useState("");
   const requestIdRef = useRef(0);
 
@@ -251,24 +262,28 @@ export default function HrAttendancePage() {
       value: data?.summary.checkIns ?? 0,
       icon: LogIn,
       tone: "text-emerald-700 bg-emerald-50 border-emerald-200",
+      accent: "bg-emerald-500",
     },
     {
       label: tr(language, "انصراف اليوم", "Today's check-outs"),
       value: data?.summary.checkOuts ?? 0,
       icon: LogOut,
       tone: "text-sky-700 bg-sky-50 border-sky-200",
+      accent: "bg-sky-500",
     },
     {
       label: tr(language, "المرفوض اليوم", "Rejected today"),
       value: data?.summary.rejected ?? 0,
       icon: ShieldX,
       tone: "text-rose-700 bg-rose-50 border-rose-200",
+      accent: "bg-rose-500",
     },
     {
       label: tr(language, "أجهزة جديدة اليوم", "New devices today"),
       value: data?.summary.newDevices ?? 0,
       icon: Smartphone,
       tone: "text-amber-700 bg-amber-50 border-amber-200",
+      accent: "bg-amber-500",
     },
     {
       label: tr(language, "متوسط دقة GPS", "Average GPS accuracy"),
@@ -278,8 +293,18 @@ export default function HrAttendancePage() {
           : `${Math.round(data.summary.averageAccuracy)} m`,
       icon: Navigation,
       tone: "text-violet-700 bg-violet-50 border-violet-200",
+      accent: "bg-violet-500",
     },
   ];
+
+  const activeFiltersCount = [
+    appliedFilters.employeeUid !== EMPTY_FILTERS.employeeUid,
+    Boolean(appliedFilters.fromDate),
+    Boolean(appliedFilters.toDate),
+    appliedFilters.type !== EMPTY_FILTERS.type,
+    appliedFilters.result !== EMPTY_FILTERS.result,
+    appliedFilters.deviceChanged,
+  ].filter(Boolean).length;
 
   const handleApplyFilters = () => {
     setPage(1);
@@ -290,6 +315,18 @@ export default function HrAttendancePage() {
     setFilters(EMPTY_FILTERS);
     setAppliedFilters(EMPTY_FILTERS);
     setPage(1);
+  };
+
+  const toggleDeviceVisibility = (key: string) => {
+    setVisibleDeviceIds(current => {
+      const next = new Set(current);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
   };
 
   const handleExport = async () => {
@@ -328,384 +365,613 @@ export default function HrAttendancePage() {
     <DashboardLayout area="hr">
       <main
         dir={languageDir(language)}
-        className="min-h-screen space-y-6 bg-slate-50 px-2 py-3 sm:px-4"
+        className="min-h-screen bg-[#f6f8fb] px-3 py-4 text-slate-950 sm:px-5 lg:px-7"
       >
-        <header className="flex flex-col gap-4 border-b border-slate-200 pb-5 lg:flex-row lg:items-end lg:justify-between">
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 text-sm font-semibold text-emerald-700">
-              <CalendarCheck2 className="h-4 w-4" />
-              {tr(language, "الموارد البشرية", "Human Resources")}
+        <div className="mx-auto flex w-full max-w-[1680px] flex-col gap-5">
+          <header className="flex flex-col gap-4 border-b border-slate-200/80 pb-5 lg:flex-row lg:items-end lg:justify-between">
+            <div className="space-y-2">
+              <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                <CalendarCheck2 className="h-4 w-4" />
+                {tr(language, "الموارد البشرية", "Human Resources")}
+              </div>
+              <div className="space-y-1">
+                <h1 className="text-2xl font-semibold tracking-normal text-slate-950 sm:text-3xl">
+                  {tr(language, "الحضور والانصراف", "Attendance")}
+                </h1>
+                <p className="text-sm text-slate-500">
+                  {tr(
+                    language,
+                    `${data?.total || 0} سجل مطابق`,
+                    `${data?.total || 0} matching records`
+                  )}
+                </p>
+              </div>
             </div>
-            <h1 className="text-2xl font-semibold text-slate-950 sm:text-3xl">
-              {tr(language, "الحضور والانصراف", "Attendance")}
-            </h1>
-            <p className="text-sm text-slate-600">
-              {tr(
-                language,
-                `${data?.total || 0} سجل مطابق`,
-                `${data?.total || 0} matching records`
-              )}
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              variant="outline"
-              onClick={() => void loadRecords()}
-              disabled={loading}
-            >
-              <RefreshCw
-                className={`h-4 w-4 ${loading ? "animate-spin" : ""}`}
-              />
-              {tr(language, "تحديث", "Refresh")}
-            </Button>
-            <Button
-              onClick={() => void handleExport()}
-              disabled={exporting || !data?.total}
-            >
-              <Download className="h-4 w-4" />
-              {tr(language, "تصدير CSV", "Export CSV")}
-            </Button>
-          </div>
-        </header>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                className="h-10 rounded-full border-slate-200 bg-white px-4 shadow-sm hover:bg-slate-50"
+                onClick={() => void loadRecords()}
+                disabled={loading}
+              >
+                <RefreshCw
+                  className={`h-4 w-4 ${loading ? "animate-spin" : ""}`}
+                />
+                {tr(language, "تحديث", "Refresh")}
+              </Button>
+              <Button
+                className="h-10 rounded-full bg-slate-950 px-4 shadow-sm hover:bg-slate-800"
+                onClick={() => void handleExport()}
+                disabled={exporting || !data?.total}
+              >
+                <Download className="h-4 w-4" />
+                {tr(language, "تصدير CSV", "Export CSV")}
+              </Button>
+            </div>
+          </header>
 
-        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-          {summaryCards.map(card => (
-            <Card
-              key={card.label}
-              className="rounded-lg border-slate-200 shadow-none"
-            >
-              <CardContent className="flex items-center gap-3 p-4">
-                <div
-                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border ${card.tone}`}
+          <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+            {summaryCards.map(card => (
+              <Card
+                key={card.label}
+                className="overflow-hidden rounded-xl border-slate-200/80 bg-white shadow-sm shadow-slate-200/60"
+              >
+                <CardContent className="relative flex min-h-28 items-center justify-between gap-4 p-5">
+                  <span
+                    className={`absolute inset-y-0 start-0 w-1 ${card.accent}`}
+                  />
+                  <div className="min-w-0 space-y-1">
+                    <div className="text-2xl font-semibold leading-none text-slate-950">
+                      {card.value}
+                    </div>
+                    <div className="text-xs font-medium leading-5 text-slate-500">
+                      {card.label}
+                    </div>
+                  </div>
+                  <div
+                    className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full border ${card.tone}`}
+                  >
+                    <card.icon className="h-5 w-5" />
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </section>
+
+          <section className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm shadow-slate-200/60">
+            <div className="mb-4 flex flex-col gap-3 border-b border-slate-100 pb-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-sm font-semibold text-slate-950">
+                  {tr(language, "تصفية السجلات", "Filter records")}
+                </h2>
+                <p className="mt-1 text-xs text-slate-500">
+                  {tr(
+                    language,
+                    activeFiltersCount
+                      ? `${activeFiltersCount} فلتر نشط`
+                      : "لا توجد فلاتر نشطة",
+                    activeFiltersCount
+                      ? `${activeFiltersCount} active filters`
+                      : "No active filters"
+                  )}
+                </p>
+              </div>
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700">
+                <Checkbox
+                  checked={filters.deviceChanged}
+                  onCheckedChange={checked =>
+                    setFilters(current => ({
+                      ...current,
+                      deviceChanged: checked === true,
+                    }))
+                  }
+                />
+                {tr(language, "جهاز جديد فقط", "New device only")}
+              </label>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+              <div className="space-y-2 xl:col-span-2">
+                <Label className="text-xs font-semibold text-slate-600">
+                  {tr(language, "الموظف", "Employee")}
+                </Label>
+                <Select
+                  value={filters.employeeUid}
+                  onValueChange={value =>
+                    setFilters(current => ({ ...current, employeeUid: value }))
+                  }
                 >
-                  <card.icon className="h-5 w-5" />
-                </div>
-                <div className="min-w-0">
-                  <div className="text-xl font-semibold text-slate-950">
-                    {card.value}
-                  </div>
-                  <div className="text-xs leading-5 text-slate-500">
-                    {card.label}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </section>
-
-        <section className="border-y border-slate-200 bg-white py-4">
-          <div className="grid gap-4 px-1 md:grid-cols-2 xl:grid-cols-6">
-            <div className="space-y-2 xl:col-span-2">
-              <Label>{tr(language, "الموظف", "Employee")}</Label>
-              <Select
-                value={filters.employeeUid}
-                onValueChange={value =>
-                  setFilters(current => ({ ...current, employeeUid: value }))
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">
-                    {tr(language, "جميع الموظفين", "All employees")}
-                  </SelectItem>
-                  {employeeOptions.map(employee => (
-                    <SelectItem key={employee.uid} value={employee.uid}>
-                      {employee.name}
+                  <SelectTrigger className="h-10 rounded-lg border-slate-200 bg-slate-50/70">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">
+                      {tr(language, "جميع الموظفين", "All employees")}
                     </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                    {employeeOptions.map(employee => (
+                      <SelectItem key={employee.uid} value={employee.uid}>
+                        {employee.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label
+                  htmlFor="attendance-from"
+                  className="text-xs font-semibold text-slate-600"
+                >
+                  {tr(language, "من تاريخ", "From")}
+                </Label>
+                <Input
+                  id="attendance-from"
+                  type="date"
+                  className="h-10 rounded-lg border-slate-200 bg-slate-50/70"
+                  value={filters.fromDate}
+                  onChange={event =>
+                    setFilters(current => ({
+                      ...current,
+                      fromDate: event.target.value,
+                    }))
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label
+                  htmlFor="attendance-to"
+                  className="text-xs font-semibold text-slate-600"
+                >
+                  {tr(language, "إلى تاريخ", "To")}
+                </Label>
+                <Input
+                  id="attendance-to"
+                  type="date"
+                  className="h-10 rounded-lg border-slate-200 bg-slate-50/70"
+                  value={filters.toDate}
+                  onChange={event =>
+                    setFilters(current => ({
+                      ...current,
+                      toDate: event.target.value,
+                    }))
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-semibold text-slate-600">
+                  {tr(language, "نوع العملية", "Type")}
+                </Label>
+                <Select
+                  value={filters.type}
+                  onValueChange={value =>
+                    setFilters(current => ({ ...current, type: value }))
+                  }
+                >
+                  <SelectTrigger className="h-10 rounded-lg border-slate-200 bg-slate-50/70">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">
+                      {tr(language, "الكل", "All")}
+                    </SelectItem>
+                    <SelectItem value="check_in">
+                      {tr(language, "حضور", "Check-in")}
+                    </SelectItem>
+                    <SelectItem value="check_out">
+                      {tr(language, "انصراف", "Check-out")}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-semibold text-slate-600">
+                  {tr(language, "النتيجة", "Result")}
+                </Label>
+                <Select
+                  value={filters.result}
+                  onValueChange={value =>
+                    setFilters(current => ({ ...current, result: value }))
+                  }
+                >
+                  <SelectTrigger className="h-10 rounded-lg border-slate-200 bg-slate-50/70">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">
+                      {tr(language, "الكل", "All")}
+                    </SelectItem>
+                    <SelectItem value="allowed">
+                      {tr(language, "مسموح", "Allowed")}
+                    </SelectItem>
+                    <SelectItem value="rejected">
+                      {tr(language, "مرفوض", "Rejected")}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="attendance-from">
-                {tr(language, "من تاريخ", "From")}
-              </Label>
-              <Input
-                id="attendance-from"
-                type="date"
-                value={filters.fromDate}
-                onChange={event =>
-                  setFilters(current => ({
-                    ...current,
-                    fromDate: event.target.value,
-                  }))
-                }
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="attendance-to">
-                {tr(language, "إلى تاريخ", "To")}
-              </Label>
-              <Input
-                id="attendance-to"
-                type="date"
-                value={filters.toDate}
-                onChange={event =>
-                  setFilters(current => ({
-                    ...current,
-                    toDate: event.target.value,
-                  }))
-                }
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>{tr(language, "نوع العملية", "Type")}</Label>
-              <Select
-                value={filters.type}
-                onValueChange={value =>
-                  setFilters(current => ({ ...current, type: value }))
-                }
+            <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+              <Button
+                variant="ghost"
+                className="h-10 rounded-full px-4"
+                onClick={handleResetFilters}
               >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">
-                    {tr(language, "الكل", "All")}
-                  </SelectItem>
-                  <SelectItem value="check_in">
-                    {tr(language, "حضور", "Check-in")}
-                  </SelectItem>
-                  <SelectItem value="check_out">
-                    {tr(language, "انصراف", "Check-out")}
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>{tr(language, "النتيجة", "Result")}</Label>
-              <Select
-                value={filters.result}
-                onValueChange={value =>
-                  setFilters(current => ({ ...current, result: value }))
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">
-                    {tr(language, "الكل", "All")}
-                  </SelectItem>
-                  <SelectItem value="allowed">
-                    {tr(language, "مسموح", "Allowed")}
-                  </SelectItem>
-                  <SelectItem value="rejected">
-                    {tr(language, "مرفوض", "Rejected")}
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 px-1">
-            <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
-              <Checkbox
-                checked={filters.deviceChanged}
-                onCheckedChange={checked =>
-                  setFilters(current => ({
-                    ...current,
-                    deviceChanged: checked === true,
-                  }))
-                }
-              />
-              {tr(language, "جهاز جديد فقط", "New device only")}
-            </label>
-            <div className="flex gap-2">
-              <Button variant="ghost" onClick={handleResetFilters}>
                 {tr(language, "مسح", "Clear")}
               </Button>
-              <Button onClick={handleApplyFilters}>
+              <Button
+                className="h-10 rounded-full bg-slate-950 px-4 hover:bg-slate-800"
+                onClick={handleApplyFilters}
+              >
                 <Filter className="h-4 w-4" />
                 {tr(language, "تطبيق", "Apply")}
               </Button>
             </div>
-          </div>
-        </section>
+          </section>
 
-        <Card className="overflow-hidden rounded-lg border-slate-200 shadow-none">
-          <CardContent className="p-0">
-            {loading ? (
-              <div className="space-y-3 p-5">
-                {Array.from({ length: 6 }, (_, index) => (
-                  <Skeleton key={index} className="h-12 w-full" />
-                ))}
-              </div>
-            ) : error ? (
-              <div className="flex min-h-64 flex-col items-center justify-center gap-3 p-8 text-center">
-                <AlertTriangle className="h-8 w-8 text-rose-600" />
-                <p className="text-sm text-slate-700">{error}</p>
-                <Button variant="outline" onClick={() => void loadRecords()}>
-                  {tr(language, "إعادة المحاولة", "Retry")}
-                </Button>
-              </div>
-            ) : !data?.records.length ? (
-              <div className="flex min-h-64 flex-col items-center justify-center gap-3 p-8 text-center text-slate-500">
-                <SearchX className="h-8 w-8" />
-                <p className="text-sm">
+          <Card className="overflow-hidden rounded-xl border-slate-200/80 bg-white shadow-sm shadow-slate-200/60">
+            <div className="flex flex-col gap-2 border-b border-slate-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-sm font-semibold text-slate-950">
+                  {tr(language, "سجل العمليات", "Attendance log")}
+                </h2>
+                <p className="mt-1 text-xs text-slate-500">
                   {tr(
                     language,
-                    "لا توجد سجلات مطابقة.",
-                    "No matching records."
+                    "تفاصيل الموقع والجهاز لكل عملية حضور أو انصراف",
+                    "Location and device details for every check-in or check-out"
                   )}
                 </p>
               </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <Table className="min-w-[1500px]">
-                  <TableHeader>
-                    <TableRow className="bg-slate-50">
-                      <TableHead>
-                        {tr(language, "الموظف", "Employee")}
-                      </TableHead>
-                      <TableHead>{tr(language, "العملية", "Type")}</TableHead>
-                      <TableHead>{tr(language, "النتيجة", "Result")}</TableHead>
-                      <TableHead>
-                        {tr(language, "التاريخ والوقت", "Date and time")}
-                      </TableHead>
-                      <TableHead>{tr(language, "النطاق", "Zone")}</TableHead>
-                      <TableHead>
-                        {tr(language, "المسافة", "Distance")}
-                      </TableHead>
-                      <TableHead>{tr(language, "GPS", "GPS")}</TableHead>
-                      <TableHead>
-                        {tr(language, "الموقع", "Location")}
-                      </TableHead>
-                      <TableHead>{tr(language, "الجهاز", "Device")}</TableHead>
-                      <TableHead>
-                        {tr(language, "سبب الرفض", "Rejection")}
-                      </TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {data.records.map(record => (
-                      <TableRow key={record.id}>
-                        <TableCell>
-                          <div className="font-medium text-slate-950">
-                            {record.employeeName || record.employeeUid}
-                          </div>
-                          <div
-                            className="mt-1 max-w-44 truncate font-mono text-[11px] text-slate-500"
-                            title={record.employeeUid}
-                          >
-                            {record.employeeUid}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline">
-                            {record.type === "check_in"
-                              ? tr(language, "حضور", "Check-in")
-                              : tr(language, "انصراف", "Check-out")}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            className={
-                              record.result === "allowed"
-                                ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-100"
-                                : "bg-rose-100 text-rose-800 hover:bg-rose-100"
-                            }
-                          >
-                            {record.result === "allowed" ? (
-                              <CheckCircle2 className="h-3.5 w-3.5" />
-                            ) : (
-                              <ShieldX className="h-3.5 w-3.5" />
-                            )}
-                            {record.result === "allowed"
-                              ? tr(language, "مسموح", "Allowed")
-                              : tr(language, "مرفوض", "Rejected")}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap">
-                          {formatDateTime(record.serverTime, language)}
-                        </TableCell>
-                        <TableCell>{record.zoneName || "-"}</TableCell>
-                        <TableCell>
-                          {record.distanceMeters == null
-                            ? "-"
-                            : `${record.distanceMeters} m`}
-                        </TableCell>
-                        <TableCell>
-                          {Math.round(record.location.accuracy)} m
-                        </TableCell>
-                        <TableCell>
-                          <div dir="ltr" className="font-mono text-xs">
-                            {record.location.lat.toFixed(5)},{" "}
-                            {record.location.lng.toFixed(5)}
-                          </div>
-                          <Button
-                            variant="link"
-                            className="h-auto p-0 text-xs"
-                            asChild
-                          >
-                            <a
-                              href={`https://www.google.com/maps?q=${record.location.lat},${record.location.lng}`}
-                              target="_blank"
-                              rel="noreferrer"
-                            >
-                              <ExternalLink className="h-3.5 w-3.5" />
-                              {tr(
-                                language,
-                                "فتح في Google Maps",
-                                "Open in Google Maps"
-                              )}
-                            </a>
-                          </Button>
-                        </TableCell>
-                        <TableCell>
-                          <div className="max-w-52 break-all font-mono text-xs">
-                            {record.deviceInfo.deviceId || "-"}
-                          </div>
-                          {record.deviceInfo.deviceChanged ? (
-                            <div className="mt-2 space-y-1">
-                              <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100">
-                                <Smartphone className="h-3.5 w-3.5" />
-                                {tr(language, "جهاز جديد", "New device")}
-                              </Badge>
-                              <div className="max-w-52 break-all font-mono text-[11px] text-slate-500">
-                                {record.deviceInfo.previousDeviceId || "-"}
-                              </div>
-                            </div>
-                          ) : null}
-                        </TableCell>
-                        <TableCell className="max-w-52 text-sm text-slate-600">
-                          {rejectionLabel(record.rejectionReason, language)}
-                        </TableCell>
+              <Badge
+                variant="outline"
+                className="w-fit rounded-full border-slate-200 bg-slate-50 px-3 py-1 text-slate-600"
+              >
+                {tr(
+                  language,
+                  `${data?.records.length || 0} سجل في الصفحة`,
+                  `${data?.records.length || 0} records on this page`
+                )}
+              </Badge>
+            </div>
+            <CardContent className="p-0">
+              {loading ? (
+                <div className="space-y-3 p-5">
+                  {Array.from({ length: 6 }, (_, index) => (
+                    <Skeleton key={index} className="h-12 w-full" />
+                  ))}
+                </div>
+              ) : error ? (
+                <div className="flex min-h-64 flex-col items-center justify-center gap-3 p-8 text-center">
+                  <AlertTriangle className="h-8 w-8 text-rose-600" />
+                  <p className="text-sm text-slate-700">{error}</p>
+                  <Button variant="outline" onClick={() => void loadRecords()}>
+                    {tr(language, "إعادة المحاولة", "Retry")}
+                  </Button>
+                </div>
+              ) : !data?.records.length ? (
+                <div className="flex min-h-64 flex-col items-center justify-center gap-3 p-8 text-center text-slate-500">
+                  <SearchX className="h-8 w-8" />
+                  <p className="text-sm">
+                    {tr(
+                      language,
+                      "لا توجد سجلات مطابقة.",
+                      "No matching records."
+                    )}
+                  </p>
+                </div>
+              ) : (
+                <div className="max-h-[62vh] overflow-auto">
+                  <Table className="min-w-[1120px]">
+                    <TableHeader>
+                      <TableRow className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50/95 backdrop-blur">
+                        <TableHead className="h-12 w-[230px] px-5 text-xs font-semibold text-slate-500">
+                          {tr(language, "الموظف", "Employee")}
+                        </TableHead>
+                        <TableHead className="h-12 w-[190px] px-4 text-xs font-semibold text-slate-500">
+                          {tr(language, "الحالة", "Status")}
+                        </TableHead>
+                        <TableHead className="h-12 w-[180px] px-4 text-xs font-semibold text-slate-500">
+                          {tr(language, "التاريخ والوقت", "Date and time")}
+                        </TableHead>
+                        <TableHead className="h-12 w-[150px] px-4 text-xs font-semibold text-slate-500">
+                          {tr(language, "النطاق", "Zone")}
+                        </TableHead>
+                        <TableHead className="h-12 w-[260px] px-4 text-xs font-semibold text-slate-500">
+                          {tr(language, "الموقع", "Location")}
+                        </TableHead>
+                        <TableHead className="h-12 w-[220px] px-4 text-xs font-semibold text-slate-500">
+                          {tr(language, "الجهاز", "Device")}
+                        </TableHead>
+                        <TableHead className="h-12 w-[150px] px-5 text-xs font-semibold text-slate-500">
+                          {tr(language, "سبب الرفض", "Rejection")}
+                        </TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                    </TableHeader>
+                    <TableBody className="divide-y divide-slate-100">
+                      {data.records.map(record => (
+                        <TableRow
+                          key={record.id}
+                          className="border-0 odd:bg-white even:bg-slate-50/35 hover:bg-slate-100/70"
+                        >
+                          <TableCell className="px-5 py-4">
+                            <div className="text-sm font-semibold text-slate-950">
+                              {record.employeeName || record.employeeUid}
+                            </div>
+                            <div
+                              className="mt-1 max-w-52 truncate font-mono text-[11px] leading-5 text-slate-500"
+                              title={record.employeeUid}
+                            >
+                              {record.employeeUid}
+                            </div>
+                          </TableCell>
+                          <TableCell className="px-4 py-4">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Badge
+                                variant="outline"
+                                className={
+                                  record.type === "check_in"
+                                    ? "rounded-full border-emerald-200 bg-emerald-50 text-emerald-700"
+                                    : "rounded-full border-sky-200 bg-sky-50 text-sky-700"
+                                }
+                              >
+                                {record.type === "check_in" ? (
+                                  <LogIn className="h-3.5 w-3.5" />
+                                ) : (
+                                  <LogOut className="h-3.5 w-3.5" />
+                                )}
+                                {record.type === "check_in"
+                                  ? tr(language, "حضور", "Check-in")
+                                  : tr(language, "انصراف", "Check-out")}
+                              </Badge>
+                              <Badge
+                                className={
+                                  record.result === "allowed"
+                                    ? "rounded-full bg-emerald-100 text-emerald-800 shadow-sm shadow-emerald-100 hover:bg-emerald-100"
+                                    : "rounded-full bg-rose-100 text-rose-800 shadow-sm shadow-rose-100 hover:bg-rose-100"
+                                }
+                              >
+                                {record.result === "allowed" ? (
+                                  <CheckCircle2 className="h-3.5 w-3.5" />
+                                ) : (
+                                  <ShieldX className="h-3.5 w-3.5" />
+                                )}
+                                {record.result === "allowed"
+                                  ? tr(language, "مسموح", "Allowed")
+                                  : tr(language, "مرفوض", "Rejected")}
+                              </Badge>
+                            </div>
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap px-4 py-4 text-sm font-medium text-slate-700">
+                            {formatDateTime(record.serverTime, language)}
+                          </TableCell>
+                          <TableCell className="px-4 py-4">
+                            <div className="w-fit rounded-md bg-slate-100 px-2.5 py-1 text-sm font-medium text-slate-700">
+                              {record.zoneName || "-"}
+                            </div>
+                          </TableCell>
+                          <TableCell className="px-4 py-4">
+                            <div className="space-y-2">
+                              <div className="flex flex-wrap items-center gap-2 text-xs">
+                                <span className="rounded-md bg-slate-100 px-2 py-1 font-medium text-slate-700">
+                                  {tr(language, "المسافة", "Distance")}:{" "}
+                                  {record.distanceMeters == null
+                                    ? "-"
+                                    : `${record.distanceMeters} m`}
+                                </span>
+                                <span className="rounded-md bg-slate-100 px-2 py-1 font-medium text-slate-700">
+                                  GPS: {Math.round(record.location.accuracy)} m
+                                </span>
+                              </div>
+                              <div
+                                dir="ltr"
+                                className="max-w-56 truncate font-mono text-xs text-slate-500"
+                                title={`${record.location.lat}, ${record.location.lng}`}
+                              >
+                                {record.location.lat.toFixed(5)},{" "}
+                                {record.location.lng.toFixed(5)}
+                              </div>
+                              <a
+                                href={`https://www.google.com/maps?q=${record.location.lat},${record.location.lng}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 hover:text-slate-950"
+                              >
+                                <ExternalLink className="h-3.5 w-3.5" />
+                                {tr(language, "فتح الخريطة", "Open map")}
+                              </a>
+                            </div>
+                          </TableCell>
+                          <TableCell className="px-4 py-4">
+                            <div className="space-y-2">
+                              <div
+                                className={
+                                  record.deviceInfo.deviceChanged
+                                    ? "inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-800"
+                                    : record.deviceInfo.deviceId
+                                      ? "inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-800"
+                                      : "inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-500"
+                                }
+                              >
+                                {record.deviceInfo.deviceChanged ? (
+                                  <AlertTriangle className="h-3.5 w-3.5" />
+                                ) : record.deviceInfo.deviceId ? (
+                                  <CheckCircle2 className="h-3.5 w-3.5" />
+                                ) : (
+                                  <Smartphone className="h-3.5 w-3.5" />
+                                )}
+                                {record.deviceInfo.deviceChanged
+                                  ? tr(
+                                      language,
+                                      "تم تغيير الجهاز",
+                                      "Device changed"
+                                    )
+                                  : record.deviceInfo.deviceId
+                                    ? tr(language, "جهاز معروف", "Known device")
+                                    : tr(language, "لا يوجد جهاز", "No device")}
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <div
+                                  dir="ltr"
+                                  className={
+                                    record.deviceInfo.deviceId
+                                      ? "max-w-48 truncate rounded-md bg-slate-100 px-2.5 py-1 font-mono text-xs text-slate-700"
+                                      : "rounded-md bg-slate-50 px-2.5 py-1 text-xs text-slate-400"
+                                  }
+                                >
+                                  {record.deviceInfo.deviceId
+                                    ? visibleDeviceIds.has(
+                                        `${record.id}:device`
+                                      )
+                                      ? record.deviceInfo.deviceId
+                                      : "••••••••"
+                                    : "-"}
+                                </div>
+                                {record.deviceInfo.deviceId ? (
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="icon-sm"
+                                    className="h-7 w-7 rounded-full border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                                    onClick={() =>
+                                      toggleDeviceVisibility(
+                                        `${record.id}:device`
+                                      )
+                                    }
+                                    title={
+                                      visibleDeviceIds.has(
+                                        `${record.id}:device`
+                                      )
+                                        ? tr(
+                                            language,
+                                            "إخفاء رقم الجهاز",
+                                            "Hide device ID"
+                                          )
+                                        : tr(
+                                            language,
+                                            "إظهار رقم الجهاز",
+                                            "Show device ID"
+                                          )
+                                    }
+                                  >
+                                    {visibleDeviceIds.has(
+                                      `${record.id}:device`
+                                    ) ? (
+                                      <EyeOff className="h-3.5 w-3.5" />
+                                    ) : (
+                                      <Eye className="h-3.5 w-3.5" />
+                                    )}
+                                  </Button>
+                                ) : null}
+                              </div>
+                              {record.deviceInfo.deviceChanged ? (
+                                <div className="space-y-1 rounded-lg border border-amber-100 bg-amber-50/60 px-3 py-2">
+                                  <div className="text-[11px] font-semibold text-amber-800">
+                                    {tr(
+                                      language,
+                                      "الجهاز السابق",
+                                      "Previous device"
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <div
+                                      dir="ltr"
+                                      className="max-w-40 truncate font-mono text-[11px] text-amber-900"
+                                    >
+                                      {record.deviceInfo.previousDeviceId
+                                        ? visibleDeviceIds.has(
+                                            `${record.id}:previous-device`
+                                          )
+                                          ? record.deviceInfo.previousDeviceId
+                                          : "••••••••"
+                                        : "-"}
+                                    </div>
+                                    {record.deviceInfo.previousDeviceId ? (
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="icon-sm"
+                                        className="h-7 w-7 rounded-full border-amber-200 bg-white/80 text-amber-800 hover:bg-white"
+                                        onClick={() =>
+                                          toggleDeviceVisibility(
+                                            `${record.id}:previous-device`
+                                          )
+                                        }
+                                        title={
+                                          visibleDeviceIds.has(
+                                            `${record.id}:previous-device`
+                                          )
+                                            ? tr(
+                                                language,
+                                                "إخفاء رقم الجهاز السابق",
+                                                "Hide previous device ID"
+                                              )
+                                            : tr(
+                                                language,
+                                                "إظهار رقم الجهاز السابق",
+                                                "Show previous device ID"
+                                              )
+                                        }
+                                      >
+                                        {visibleDeviceIds.has(
+                                          `${record.id}:previous-device`
+                                        ) ? (
+                                          <EyeOff className="h-3.5 w-3.5" />
+                                        ) : (
+                                          <Eye className="h-3.5 w-3.5" />
+                                        )}
+                                      </Button>
+                                    ) : null}
+                                  </div>
+                                </div>
+                              ) : null}
+                            </div>
+                          </TableCell>
+                          <TableCell className="px-5 py-4 text-sm">
+                            <span
+                              className={
+                                record.rejectionReason
+                                  ? "text-rose-700"
+                                  : "text-slate-400"
+                              }
+                            >
+                              {rejectionLabel(record.rejectionReason, language)}
+                            </span>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
-        <footer className="flex flex-wrap items-center justify-between gap-3 pb-4">
-          <span className="text-sm text-slate-500">
-            {tr(
-              language,
-              `صفحة ${page} من ${totalPages}`,
-              `Page ${page} of ${totalPages}`
-            )}
-          </span>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              disabled={page <= 1 || loading}
-              onClick={() => setPage(current => Math.max(1, current - 1))}
-            >
-              {tr(language, "السابق", "Previous")}
-            </Button>
-            <Button
-              variant="outline"
-              disabled={page >= totalPages || loading}
-              onClick={() => setPage(current => current + 1)}
-            >
-              {tr(language, "التالي", "Next")}
-            </Button>
-          </div>
-        </footer>
+          <footer className="flex flex-wrap items-center justify-between gap-3 pb-4">
+            <span className="text-sm text-slate-500">
+              {tr(
+                language,
+                `صفحة ${page} من ${totalPages}`,
+                `Page ${page} of ${totalPages}`
+              )}
+            </span>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className="h-10 rounded-full border-slate-200 bg-white px-4 shadow-sm"
+                disabled={page <= 1 || loading}
+                onClick={() => setPage(current => Math.max(1, current - 1))}
+              >
+                {tr(language, "السابق", "Previous")}
+              </Button>
+              <Button
+                variant="outline"
+                className="h-10 rounded-full border-slate-200 bg-white px-4 shadow-sm"
+                disabled={page >= totalPages || loading}
+                onClick={() => setPage(current => current + 1)}
+              >
+                {tr(language, "التالي", "Next")}
+              </Button>
+            </div>
+          </footer>
+        </div>
       </main>
     </DashboardLayout>
   );
