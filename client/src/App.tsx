@@ -46,6 +46,7 @@ import EmployeeMessagesPage from "@/pages/employee/Messages";
 import EmployeeWeeklyReportsPage from "@/pages/employee/WeeklyReports";
 import CreateStaffAccount from "@/pages/admin/CreateStaffAccount";
 import StaffPortalPage from "@/pages/hr/StaffPortal";
+import HrAttendancePage from "@/pages/hr/Attendance";
 
 // ✅ Client pages
 import ClientDashboard from "@/pages/client/MyInvestments";
@@ -105,7 +106,8 @@ function PlatformBoundary({ children }: { children: ReactNode }) {
 
 function LoginRoute() {
   const [location] = useLocation();
-  const isStaffSurface = getCurrentAppSurface(normalizePathname(location)) === "staff";
+  const isStaffSurface =
+    getCurrentAppSurface(normalizePathname(location)) === "staff";
 
   if (isStaffSurface) return <LoginPage />;
 
@@ -221,7 +223,6 @@ function Router() {
           </RequireAdminPermission>
         </Route>
 
-
         {/* ===== Admin: VIP ===== */}
         <Route path="/admin/vip">
           <RequireAdminPermission permission="users.manage">
@@ -275,6 +276,12 @@ function Router() {
           <RequireAdminPermission permission="settings.manage" area="staff">
             <Settings area="staff" />
           </RequireAdminPermission>
+        </Route>
+
+        <Route path="/hr/attendance">
+          <RequireRole allow={["owner", "admin", "hr"]}>
+            <HrAttendancePage />
+          </RequireRole>
         </Route>
 
         <Route path="/hr">

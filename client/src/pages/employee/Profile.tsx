@@ -50,6 +50,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import EmployeeAttendanceCard from "@/components/EmployeeAttendanceCard";
 import EmployeeLayout from "@/components/EmployeeLayout";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -1437,6 +1438,15 @@ export default function EmployeeProfilePage() {
             icon={BriefcaseBusiness}
             title="بيانات العمل"
             description="هذه البيانات مرتبطة بوظيفتك داخل الشركة، وهي للعرض فقط في هذه المرحلة. تعديلها سيكون لاحقًا من جهة الإدارة أو الموارد البشرية."
+          />
+
+          <EmployeeAttendanceCard
+            employeeId={
+              employeeProfileSource?.entityId ||
+              user?.linkedEmployeeId ||
+              user?.uid ||
+              null
+            }
           />
 
           <Card className="rounded-[28px] border border-slate-200/80 bg-white/95 shadow-[0_24px_70px_-42px_rgba(15,23,42,0.22)]">

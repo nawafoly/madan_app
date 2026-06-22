@@ -37,6 +37,7 @@ import {
   Inbox,
   Loader2,
   Mail,
+  MapPin,
   Minus,
   Phone,
   Plus,
@@ -54,6 +55,7 @@ import DashboardLayout from "@/components/DashboardLayout";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -178,6 +180,12 @@ import {
 import { useLanguage } from "@/contexts/LanguageContext";
 import { languageDir, safeEnglishText, tr } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import {
+  fetchWorkZones,
+  formatZoneRadiusLabel,
+  normalizeAllowedZoneIds,
+  type WorkZone,
+} from "@/lib/workZones";
 import type {
   EmployeeAbsenceType,
   EmployeeEmploymentDoc,
@@ -196,6 +204,7 @@ import {
 type EmployeeRecord = EmployeeProfileUserDoc & {
   id: string;
   linkedEmployeeId?: string | null;
+  allowedZoneIds?: string[] | null;
   firebaseUser?: {
     photoURL?: string | null;
   } | null;
@@ -217,6 +226,7 @@ type EmployeeFormValues = {
   actualWorkedHours: string;
   overtimeHourlyRate: string;
   insuranceDeduction: string;
+  allowedZoneIds: string[];
   adminNotes: string;
 };
 
@@ -554,6 +564,13 @@ function buildMergedEmployeeRecord(input: {
       ) || null,
     linkedEmployeeId:
       pickText(userData.linkedEmployeeId, employeeDocId) || null,
+    allowedZoneIds: normalizeAllowedZoneIds(
+      employeeData?.allowedZoneIds ||
+        mergedEmployment?.allowedZoneIds ||
+        userData.allowedZoneIds ||
+        userData.employeeProfile?.employment?.allowedZoneIds ||
+        userData.employment?.allowedZoneIds
+    ),
     employeeProfile: mergedEmployeeProfile,
     personal: mergedPersonal,
     employment: mergedEmployment,
@@ -622,6 +639,9 @@ function buildEmployeeFormValues(
       employment.insuranceDeduction === 0
         ? "0"
         : pickText(employment.insuranceDeduction),
+    allowedZoneIds: normalizeAllowedZoneIds(
+      employment.allowedZoneIds || employee?.allowedZoneIds
+    ),
     adminNotes: pickText(employment.adminNotes),
   };
 }
@@ -1425,6 +1445,8 @@ export default function EmployeesManagementPage() {
   const pageDir = languageDir(language);
   const pageTextAlignClass = language === "ar" ? "text-right" : "text-left";
   const [employees, setEmployees] = useState<EmployeeRecord[]>([]);
+  const [workZones, setWorkZones] = useState<WorkZone[]>([]);
+  const [workZonesLoading, setWorkZonesLoading] = useState(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -1618,6 +1640,25 @@ export default function EmployeesManagementPage() {
   const resetEmployeeMessageForm = () => {
     setEmployeeMessageForm(buildEmployeeMessageFormValues());
   };
+
+  useEffect(() => {
+    let active = true;
+    fetchWorkZones()
+      .then(zones => {
+        if (active) setWorkZones(zones);
+      })
+      .catch(snapshotError => {
+        console.error("employee_work_zones_snapshot_error", snapshotError);
+        if (active) setWorkZones([]);
+      })
+      .finally(() => {
+        if (active) setWorkZonesLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     setLoading(true);
@@ -2921,6 +2962,20 @@ export default function EmployeesManagementPage() {
       ...current,
       [key]: value,
     }));
+  };
+
+  const handleToggleAllowedZone = (zoneId: string, checked: boolean) => {
+    setForm(current => {
+      const currentIds = normalizeAllowedZoneIds(current.allowedZoneIds);
+      const nextIds = checked
+        ? Array.from(new Set([...currentIds, zoneId]))
+        : currentIds.filter(id => id !== zoneId);
+
+      return {
+        ...current,
+        allowedZoneIds: nextIds,
+      };
+    });
   };
 
   const handleReset = () => {
@@ -4277,6 +4332,7 @@ export default function EmployeesManagementPage() {
 
       const normalizedSalaryDeductions =
         normalizeSalaryDeductionsForPersistence(salaryDeductions);
+      const allowedZoneIds = normalizeAllowedZoneIds(form.allowedZoneIds);
 
       const nextEmployment: EmployeeEmploymentDoc = {
         ...currentEmployment,
@@ -4305,6 +4361,7 @@ export default function EmployeesManagementPage() {
         status: form.employmentStatus || "active",
         employmentStatus: form.employmentStatus || "active",
         fingerprintNumber: normalizedFingerprintNumber || null,
+        allowedZoneIds,
         adminNotes: form.adminNotes.trim() || null,
         updatedAt: serverTimestamp(),
         updatedByUid: user?.uid || null,
@@ -4326,6 +4383,7 @@ export default function EmployeesManagementPage() {
             "profile.phone": normalizedPhone || null,
             title: form.jobTitle.trim() || null,
             department: form.department.trim() || null,
+            allowedZoneIds,
             startDate: form.startDate || null,
             leaveBalance,
             updatedAt: serverTimestamp(),
@@ -4351,6 +4409,7 @@ export default function EmployeesManagementPage() {
             department: nextEmployment.department || null,
             employmentStatus: nextEmployment.employmentStatus || null,
             fingerprintNumber: nextEmployment.fingerprintNumber || null,
+            allowedZoneIds,
             leaveBalance,
             baseSalary,
             expectedWorkDays,
@@ -4398,6 +4457,7 @@ export default function EmployeesManagementPage() {
               },
               title: form.jobTitle.trim() || null,
               department: form.department.trim() || null,
+              allowedZoneIds,
               startDate: form.startDate || null,
               leaveBalance,
               updatedAt: serverTimestamp(),
@@ -7803,6 +7863,78 @@ export default function EmployeesManagementPage() {
                           placeholder="مثال: 10245"
                           disabled={!canManageEmployees || saving}
                         />
+                      </Field>
+
+                      <Field
+                        label="صلاحية الصفحة"
+                        description={
+                          canManageEmployees
+                            ? "يمكنك تعديل بيانات العمل وحفظها من هذه الصفحة."
+                            : "تمتلك صلاحية عرض فقط، والحفظ معطل لهذا الحساب."
+                        }
+                      >
+                        <div className="space-y-2 rounded-[18px] border border-slate-200 bg-slate-50 p-3">
+                          {workZonesLoading ? (
+                            <div className="text-sm text-slate-500">
+                              جارٍ تحميل مناطق العمل...
+                            </div>
+                          ) : workZones.length ? (
+                            workZones.map(zone => {
+                              const checked = form.allowedZoneIds.includes(
+                                zone.id
+                              );
+                              return (
+                                <label
+                                  key={zone.id}
+                                  className={cn(
+                                    "flex cursor-pointer items-start gap-3 rounded-2xl border px-3 py-3 transition-colors",
+                                    checked
+                                      ? "border-[#F2B705]/45 bg-[#F2B705]/10"
+                                      : "border-slate-200 bg-white"
+                                  )}
+                                >
+                                  <Checkbox
+                                    checked={checked}
+                                    onCheckedChange={value =>
+                                      handleToggleAllowedZone(
+                                        zone.id,
+                                        value === true
+                                      )
+                                    }
+                                    disabled={!canManageEmployees || saving}
+                                    className="mt-1"
+                                  />
+                                  <span className="min-w-0 flex-1 space-y-1">
+                                    <span className="flex flex-wrap items-center gap-2">
+                                      <span className="text-sm font-semibold text-slate-950">
+                                        {zone.name}
+                                      </span>
+                                      <Badge
+                                        variant="outline"
+                                        className={cn(
+                                          "rounded-full",
+                                          zone.active
+                                            ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                            : "border-slate-200 bg-slate-100 text-slate-500"
+                                        )}
+                                      >
+                                        {zone.active ? "مفعلة" : "غير مفعلة"}
+                                      </Badge>
+                                    </span>
+                                    <span className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                                      <MapPin className="h-3.5 w-3.5" />
+                                      Radius {formatZoneRadiusLabel(zone)}
+                                    </span>
+                                  </span>
+                                </label>
+                              );
+                            })
+                          ) : (
+                            <div className="text-sm leading-6 text-slate-500">
+                              لا توجد مناطق عمل. أضفها من إعدادات HR ثم عد لهذه الصفحة.
+                            </div>
+                          )}
+                        </div>
                       </Field>
 
                       <Field

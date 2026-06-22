@@ -75,6 +75,11 @@ service cloud.firestore {
             "users.manage",
             "messages.view",
             "messages.manage",
+            "recruitment.view",
+            "recruitment.manage",
+            "employees.view",
+            "employees.manage",
+            "weekly_reports.manager_notes",
             "reports.view",
             "financial.view",
             "financial.edit",
@@ -204,6 +209,11 @@ service cloud.firestore {
             "users.manage",
             "messages.view",
             "messages.manage",
+            "recruitment.view",
+            "recruitment.manage",
+            "employees.view",
+            "employees.manage",
+            "weekly_reports.manager_notes",
             "reports.view",
             "financial.view",
             "financial.edit",
@@ -272,7 +282,7 @@ service cloud.firestore {
     }
 
     function isStaffAdminRoleValue(role) {
-      return role == "hr";
+      return role in ["owner", "hr"];
     }
 
     function hasInvestmentUserPermission(permission) {
@@ -1517,6 +1527,23 @@ service cloud.firestore {
     match /employee_payroll_records/{recordId} {
       allow read: if canReadEmployeesAdmin();
       allow create, update, delete: if canManageEmployeesAdmin();
+    }
+
+    match /work_zones/{zoneId} {
+      allow read: if canReadEmployeesAdmin();
+      allow create, update, delete: if canManageEmployeesAdmin();
+    }
+
+    match /attendance_records/{recordId} {
+      allow read: if canReadEmployeesAdmin()
+        || (signedIn() && resource.data.employeeUid == request.auth.uid);
+      allow create, update, delete: if false;
+    }
+
+    match /attendance_state/{employeeUid} {
+      allow read: if canReadEmployeesAdmin()
+        || (signedIn() && employeeUid == request.auth.uid);
+      allow create, update, delete: if false;
     }
 
     match /employee_messages/{id} {

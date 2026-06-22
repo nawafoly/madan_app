@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   ArrowLeft,
   BriefcaseBusiness,
+  CalendarCheck2,
   CalendarDays,
   ClipboardList,
   Eye,
@@ -84,8 +85,12 @@ function createEmptyPortalNotificationCounts(): PortalNotificationCounts {
 }
 
 function resolvePortalNotificationBucket(data: Record<string, unknown>) {
-  const relatedTo = String(data.relatedTo ?? "").trim().toLowerCase();
-  const type = String(data.type ?? "").trim().toLowerCase();
+  const relatedTo = String(data.relatedTo ?? "")
+    .trim()
+    .toLowerCase();
+  const type = String(data.type ?? "")
+    .trim()
+    .toLowerCase();
 
   if (relatedTo === "weekly_report") return "reports";
   if (relatedTo === "employee_message" || type === "message") return "messages";
@@ -117,13 +122,21 @@ function getAccountInitials(value: string) {
 function friendlyAuthError(code: string | undefined, language: "ar" | "en") {
   switch (code) {
     case "auth/invalid-email":
-      return tr(language, "البريد الإلكتروني غير صحيح.", "Invalid email address.");
+      return tr(
+        language,
+        "البريد الإلكتروني غير صحيح.",
+        "Invalid email address."
+      );
     case "auth/missing-password":
       return tr(language, "اكتب كلمة المرور.", "Enter your password.");
     case "auth/user-not-found":
     case "auth/wrong-password":
     case "auth/invalid-credential":
-      return tr(language, "بيانات الدخول غير صحيحة.", "Invalid sign-in details.");
+      return tr(
+        language,
+        "بيانات الدخول غير صحيحة.",
+        "Invalid sign-in details."
+      );
     case "auth/too-many-requests":
       return tr(
         language,
@@ -131,9 +144,17 @@ function friendlyAuthError(code: string | undefined, language: "ar" | "en") {
         "Too many attempts. Wait a moment and try again."
       );
     case "auth/network-request-failed":
-      return tr(language, "مشكلة اتصال بالإنترنت. حاول مرة أخرى.", "Network issue. Try again.");
+      return tr(
+        language,
+        "مشكلة اتصال بالإنترنت. حاول مرة أخرى.",
+        "Network issue. Try again."
+      );
     default:
-      return tr(language, "تعذر تسجيل الدخول. حاول مرة أخرى.", "Could not sign in. Try again.");
+      return tr(
+        language,
+        "تعذر تسجيل الدخول. حاول مرة أخرى.",
+        "Could not sign in. Try again."
+      );
   }
 }
 
@@ -159,7 +180,8 @@ export default function StaffPortalPage() {
   const homePath = user ? getHomePathForUser(user, "staff") : "/login";
   const hasInternalAccess = user && homePath !== "/login";
   const canWriteWeeklyReportNotes =
-    !!user && hasStaffAreaPermission(user, WEEKLY_REPORT_MANAGER_NOTES_PERMISSION);
+    !!user &&
+    hasStaffAreaPermission(user, WEEKLY_REPORT_MANAGER_NOTES_PERMISSION);
 
   useEffect(() => {
     if (!user?.uid) {
@@ -223,65 +245,75 @@ export default function StaffPortalPage() {
   }, [canWriteWeeklyReportNotes, user?.uid]);
 
   const portalLinks = useMemo(
-    () =>
-      [
-        {
-          title: tr(language, "طلبات التوظيف", "Recruitment Applications"),
-          description: tr(
-            language,
-            "مراجعة طلبات المرشحين والمرفقات.",
-            "Review candidate applications and attachments."
-          ),
-          href: "/hr/recruitment",
-          icon: BriefcaseBusiness,
-          canEnter:
-            !!user &&
-            (hasStaffAdminPermission(user, "recruitment.view") ||
-              hasStaffAdminPermission(user, "recruitment.manage")),
-        },
-        {
-          title: tr(language, "إدارة الموظفين", "Employee Management"),
-          description: tr(
-            language,
-            "الدوام، الإجازات، الرواتب، الملفات والرسائل.",
-            "Attendance, leave, payroll, files, and messages."
-          ),
-          href: "/hr/employees",
-          icon: Users,
-          canEnter:
-            !!user &&
-            (hasStaffAdminPermission(user, "employees.view") ||
-              hasStaffAdminPermission(user, "employees.manage")),
-        },
-        {
-          title: tr(language, "التقارير الأسبوعية", "Weekly Reports"),
-          description: canWriteWeeklyReportNotes
-            ? tr(
-                language,
-                "مراجعة تقارير الموظفين وكتابة ملاحظات المدير.",
-                "Review staff reports and add manager notes."
-              )
-            : tr(
-                language,
-                "إرسال تقرير العمل ومراجعة ملاحظات المدير.",
-                "Submit work reports and review manager notes."
-          ),
-          href: "/hr/weekly-reports",
-          icon: ClipboardList,
-          canEnter: !!user,
-        },
-        {
-          title: tr(language, "إعدادات الإدارة", "Administration Settings"),
-          description: tr(
-            language,
-            "الأمان، الصلاحيات، حسابات الإدارة، والتوظيف.",
-            "Security, permissions, admin accounts, and recruitment."
-          ),
-          href: "/hr/settings",
-          icon: Settings,
-          canEnter: !!user && hasStaffAdminPermission(user, "settings.manage"),
-        },
-      ],
+    () => [
+      {
+        title: tr(language, "طلبات التوظيف", "Recruitment Applications"),
+        description: tr(
+          language,
+          "مراجعة طلبات المرشحين والمرفقات.",
+          "Review candidate applications and attachments."
+        ),
+        href: "/hr/recruitment",
+        icon: BriefcaseBusiness,
+        canEnter:
+          !!user &&
+          (hasStaffAdminPermission(user, "recruitment.view") ||
+            hasStaffAdminPermission(user, "recruitment.manage")),
+      },
+      {
+        title: tr(language, "إدارة الموظفين", "Employee Management"),
+        description: tr(
+          language,
+          "الدوام، الإجازات، الرواتب، الملفات والرسائل.",
+          "Attendance, leave, payroll, files, and messages."
+        ),
+        href: "/hr/employees",
+        icon: Users,
+        canEnter:
+          !!user &&
+          (hasStaffAdminPermission(user, "employees.view") ||
+            hasStaffAdminPermission(user, "employees.manage")),
+      },
+      {
+        title: tr(language, "الحضور والانصراف", "Attendance"),
+        description: tr(
+          language,
+          "مراجعة سجلات الدوام والمواقع والأجهزة.",
+          "Review attendance, locations, and devices."
+        ),
+        href: "/hr/attendance",
+        icon: CalendarCheck2,
+        canEnter: !!user && ["owner", "admin", "hr"].includes(user.role || ""),
+      },
+      {
+        title: tr(language, "التقارير الأسبوعية", "Weekly Reports"),
+        description: canWriteWeeklyReportNotes
+          ? tr(
+              language,
+              "مراجعة تقارير الموظفين وكتابة ملاحظات المدير.",
+              "Review staff reports and add manager notes."
+            )
+          : tr(
+              language,
+              "إرسال تقرير العمل ومراجعة ملاحظات المدير.",
+              "Submit work reports and review manager notes."
+            ),
+        href: "/hr/weekly-reports",
+        icon: ClipboardList,
+        canEnter: !!user,
+      },
+      {
+        title: tr(language, "إعدادات الإدارة", "Administration Settings"),
+        description: tr(
+          language,
+          "الأمان، الصلاحيات، حسابات الإدارة، والتوظيف.",
+          "Security, permissions, admin accounts, and recruitment."
+        ),
+        href: "/hr/settings",
+        icon: Settings,
+        canEnter: !!user && hasStaffAdminPermission(user, "settings.manage"),
+      },
+    ],
     [canWriteWeeklyReportNotes, language, user]
   );
 
@@ -526,9 +558,15 @@ export default function StaffPortalPage() {
                   />
                   <div>
                     <div className="text-lg font-semibold tracking-tight">
-                      {tr(language, "منصة الموارد البشرية", "Human Resources Platform")}
+                      {tr(
+                        language,
+                        "منصة الموارد البشرية",
+                        "Human Resources Platform"
+                      )}
                     </div>
-                    <div className="text-sm text-white/50">MAEDIN Staff Portal</div>
+                    <div className="text-sm text-white/50">
+                      MAEDIN Staff Portal
+                    </div>
                   </div>
                 </div>
 
@@ -553,7 +591,11 @@ export default function StaffPortalPage() {
 
               <div className="max-w-2xl space-y-5">
                 <Badge className="rounded-full border border-[#F2B705]/30 bg-[#F2B705]/10 px-4 py-1.5 text-[#F2B705] shadow-none hover:bg-[#F2B705]/10">
-                  {tr(language, "نظام داخلي مستقل", "Independent Internal System")}
+                  {tr(
+                    language,
+                    "نظام داخلي مستقل",
+                    "Independent Internal System"
+                  )}
                 </Badge>
                 <h1 className="text-3xl font-semibold leading-tight tracking-tight sm:text-4xl">
                   {tr(
@@ -638,7 +680,10 @@ export default function StaffPortalPage() {
                     <div className="truncate text-lg font-semibold text-white">
                       {accountDisplayName}
                     </div>
-                    <div className="mt-1 truncate text-xs text-white/48" dir="ltr">
+                    <div
+                      className="mt-1 truncate text-xs text-white/48"
+                      dir="ltr"
+                    >
                       {accountEmail || "MAEDIN Staff Portal"}
                     </div>
                   </div>
@@ -687,7 +732,11 @@ export default function StaffPortalPage() {
             <div className="w-full max-w-[560px] rounded-[32px] border border-slate-200 bg-white/96 p-6 shadow-[0_32px_90px_-52px_rgba(15,23,42,0.42)] backdrop-blur sm:p-8">
               {loading ? (
                 <div className="py-16 text-center text-sm text-slate-500">
-                  {tr(language, "جارٍ التحقق من الجلسة...", "Checking session...")}
+                  {tr(
+                    language,
+                    "جارٍ التحقق من الجلسة...",
+                    "Checking session..."
+                  )}
                 </div>
               ) : hasInternalAccess ? (
                 <div className="space-y-6">
@@ -696,7 +745,11 @@ export default function StaffPortalPage() {
                       {tr(language, "تم تسجيل الدخول", "Signed In")}
                     </Badge>
                     <h2 className="text-3xl font-semibold tracking-tight text-slate-950">
-                      {tr(language, "اختر وجهتك داخل المنصة", "Choose Your Destination")}
+                      {tr(
+                        language,
+                        "اختر وجهتك داخل المنصة",
+                        "Choose Your Destination"
+                      )}
                     </h2>
                     <p className="text-sm leading-7 text-slate-500">
                       {tr(
@@ -707,7 +760,9 @@ export default function StaffPortalPage() {
                     </p>
                   </div>
 
-                  {error ? <PortalAlert tone="error">{error}</PortalAlert> : null}
+                  {error ? (
+                    <PortalAlert tone="error">{error}</PortalAlert>
+                  ) : null}
 
                   <div className="grid gap-3">
                     {portalLinks.map(item => {
@@ -738,7 +793,9 @@ export default function StaffPortalPage() {
                               <span
                                 className={cn(
                                   "block text-base font-semibold",
-                                  isAllowed ? "text-slate-950" : "text-slate-500"
+                                  isAllowed
+                                    ? "text-slate-950"
+                                    : "text-slate-500"
                                 )}
                               >
                                 {item.title}
@@ -746,7 +803,9 @@ export default function StaffPortalPage() {
                               <span
                                 className={cn(
                                   "mt-1 block text-sm leading-6",
-                                  isAllowed ? "text-slate-500" : "text-slate-400"
+                                  isAllowed
+                                    ? "text-slate-500"
+                                    : "text-slate-400"
                                 )}
                               >
                                 {item.description}
@@ -766,7 +825,14 @@ export default function StaffPortalPage() {
 
                       if (!isAllowed) {
                         return (
-                          <div key={item.href} title={tr(language, "يتطلب صلاحية دخول", "Permission required")}>
+                          <div
+                            key={item.href}
+                            title={tr(
+                              language,
+                              "يتطلب صلاحية دخول",
+                              "Permission required"
+                            )}
+                          >
                             {destinationCard}
                           </div>
                         );
@@ -801,7 +867,11 @@ export default function StaffPortalPage() {
                   </PortalAlert>
                   <Link href="/">
                     <Button className="h-12 w-full rounded-2xl">
-                      {tr(language, "العودة إلى الموقع الرئيسي", "Back To Main Website")}
+                      {tr(
+                        language,
+                        "العودة إلى الموقع الرئيسي",
+                        "Back To Main Website"
+                      )}
                     </Button>
                   </Link>
                 </div>
@@ -815,7 +885,11 @@ export default function StaffPortalPage() {
                       {tr(language, "دخول الموظفين", "Staff Sign In")}
                     </Badge>
                     <h2 className="text-3xl font-semibold tracking-tight text-slate-950">
-                      {tr(language, "تسجيل الدخول للمنصة الداخلية", "Sign In To The Internal Platform")}
+                      {tr(
+                        language,
+                        "تسجيل الدخول للمنصة الداخلية",
+                        "Sign In To The Internal Platform"
+                      )}
                     </h2>
                     <p className="text-sm leading-7 text-slate-500">
                       {tr(
@@ -828,11 +902,17 @@ export default function StaffPortalPage() {
 
                   {!firebaseConfigured ? (
                     <PortalAlert tone="error">
-                      {tr(language, "إعدادات Firebase غير مكتملة.", "Firebase settings are incomplete.")}
+                      {tr(
+                        language,
+                        "إعدادات Firebase غير مكتملة.",
+                        "Firebase settings are incomplete."
+                      )}
                     </PortalAlert>
                   ) : null}
 
-                  {error ? <PortalAlert tone="error">{error}</PortalAlert> : null}
+                  {error ? (
+                    <PortalAlert tone="error">{error}</PortalAlert>
+                  ) : null}
                   {info ? <PortalAlert tone="info">{info}</PortalAlert> : null}
 
                   <form
@@ -878,8 +958,16 @@ export default function StaffPortalPage() {
                           className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-slate-700"
                           aria-label={
                             showPassword
-                              ? tr(language, "إخفاء كلمة المرور", "Hide password")
-                              : tr(language, "إظهار كلمة المرور", "Show password")
+                              ? tr(
+                                  language,
+                                  "إخفاء كلمة المرور",
+                                  "Hide password"
+                                )
+                              : tr(
+                                  language,
+                                  "إظهار كلمة المرور",
+                                  "Show password"
+                                )
                           }
                         >
                           {showPassword ? (

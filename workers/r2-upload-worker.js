@@ -1,3 +1,5 @@
+import { handleAttendanceRequest } from "./attendance-worker.js";
+
 /**
  * ARCHITECTURE NOTE (2026-03-12):
  * Files are stored in Cloudflare R2.
@@ -20,6 +22,7 @@ const LIST_LIMIT_DEFAULT = 50;
 const LIST_LIMIT_MAX = 200;
 const DEFAULT_ALLOWED_ORIGINS = new Set([
   "http://localhost:5173",
+  "http://127.0.0.1:5173",
   "https://madan-app.vercel.app",
 ]);
 const EMPLOYEE_DIRECTORY_CALLER_ROLES = new Set([
@@ -46,7 +49,7 @@ const ROLE_ALIASES = {
   "human resources": "hr",
   humanresources: "hr",
   administrator: "admin",
-  "super_admin": "admin",
+  super_admin: "admin",
   "super-admin": "admin",
   "super admin": "admin",
   superadmin: "admin",
@@ -119,12 +122,12 @@ const ROLE_DEFAULT_PERMISSIONS = {
     "reports.view",
   ],
   hr: [
-      "recruitment.view",
-      "recruitment.manage",
-      "employees.view",
-      "employees.manage",
-      "settings.manage", 
-    ],
+    "recruitment.view",
+    "recruitment.manage",
+    "employees.view",
+    "employees.manage",
+    "settings.manage",
+  ],
   staff: [],
   client: ["projects.view"],
   guest: ["projects.view"],
@@ -139,6 +142,25 @@ export default {
     const bucket = getBucket(env);
     const db = getDatabase(env);
     const url = new URL(request.url);
+
+    if (url.pathname.startsWith("/attendance/")) {
+      const attendanceDb = env?.ATTENDANCE_DB || null;
+      const response = attendanceDb
+        ? await handleAttendanceRequest({
+            request,
+            url,
+            db: attendanceDb,
+            directoryDb: db,
+            resolveRequesterContext,
+            fetchFirestoreDocument,
+          })
+        : json(500, {
+            ok: false,
+            success: false,
+            message: "missing_attendance_d1_binding",
+          });
+      return withCors(response, request, env);
+    }
 
     if (request.method === "GET" && url.pathname === "/download") {
       if (!bucket) {
@@ -1018,7 +1040,10 @@ async function handleDownload(request, url, bucket) {
 
   headers.set("Content-Type", contentType);
   headers.set("Accept-Ranges", "bytes");
-  headers.set("Content-Length", String(range ? range.end - range.start + 1 : object.size || 0));
+  headers.set(
+    "Content-Length",
+    String(range ? range.end - range.start + 1 : object.size || 0)
+  );
   if (range) {
     headers.set(
       "Content-Range",
@@ -1362,10 +1387,10 @@ async function resolveRequesterContext(request) {
     userData: userDocResult?.data ?? null,
     adminData: adminUserDocResult?.data ?? null,
   });
-  
+
   const runtime = resolveEffectiveRuntime(
-    userDocResult.found ? userDocResult.data?.data ?? null : null,
-    adminUserDocResult.found ? adminUserDocResult.data?.data ?? null : null
+    userDocResult.found ? (userDocResult.data?.data ?? null) : null,
+    adminUserDocResult.found ? (adminUserDocResult.data?.data ?? null) : null
   );
 
   return {
@@ -1375,6 +1400,10 @@ async function resolveRequesterContext(request) {
     uid,
     email,
     runtime,
+    userData: userDocResult.found ? (userDocResult.data?.data ?? null) : null,
+    adminUserData: adminUserDocResult.found
+      ? (adminUserDocResult.data?.data ?? null)
+      : null,
   };
 }
 
@@ -1468,9 +1497,7 @@ function buildFirestoreCollectionUrl(
   collectionPath,
   { pageSize, pageToken, maskFields = [] } = {}
 ) {
-  const url = new URL(
-    buildFirestoreDocumentUrl(projectId, collectionPath)
-  );
+  const url = new URL(buildFirestoreDocumentUrl(projectId, collectionPath));
 
   if (pageSize) {
     url.searchParams.set("pageSize", String(pageSize));
@@ -1757,7 +1784,8 @@ function resolveEmployeeDirectoryActive(data) {
   const legacyStatus = parseActiveValue(data?.status);
   if (legacyStatus !== null) return legacyStatus;
 
-  const employment = data?.employeeProfile?.employment || data?.employment || {};
+  const employment =
+    data?.employeeProfile?.employment || data?.employment || {};
   const employmentStatus = parseActiveValue(
     employment?.employmentStatus ?? employment?.status
   );
@@ -1816,7 +1844,8 @@ function buildEmployeeDirectoryRow(uid, data, syncedAt) {
     return null;
   }
 
-  const employment = data?.employeeProfile?.employment || data?.employment || {};
+  const employment =
+    data?.employeeProfile?.employment || data?.employment || {};
   const personal = data?.employeeProfile?.personal || data?.personal || {};
   const role = normalizeEmployeeDirectoryRole(data) || null;
   const isActive = resolveEmployeeDirectoryActive(data);
@@ -1843,7 +1872,9 @@ function buildEmployeeDirectoryRow(uid, data, syncedAt) {
         data?.photoURL,
         data?.profile?.photoURL
       ) || null,
-    title: pickFirstText(employment?.title, employment?.jobTitle, data?.title) || null,
+    title:
+      pickFirstText(employment?.title, employment?.jobTitle, data?.title) ||
+      null,
     department: pickFirstText(employment?.department, data?.department) || null,
     statusKey,
     role,
@@ -1861,7 +1892,8 @@ function isEmployeeDirectoryCandidate(data) {
   const role = normalizeEmployeeDirectoryRole(data);
   if (EMPLOYEE_DIRECTORY_EXCLUDED_ROLES.has(role)) return false;
 
-  const employment = data?.employeeProfile?.employment || data?.employment || {};
+  const employment =
+    data?.employeeProfile?.employment || data?.employment || {};
   const personal = data?.employeeProfile?.personal || data?.personal || {};
 
   return (
@@ -2068,11 +2100,15 @@ function normalizeContentType(type, fileName) {
 }
 
 function isVideoContentType(contentType) {
-  return String(contentType || "").toLowerCase().startsWith("video/");
+  return String(contentType || "")
+    .toLowerCase()
+    .startsWith("video/");
 }
 
 function isImageContentType(contentType) {
-  return String(contentType || "").toLowerCase().startsWith("image/");
+  return String(contentType || "")
+    .toLowerCase()
+    .startsWith("image/");
 }
 
 function getUploadFileSizeLimitMb(contentType) {
@@ -2193,7 +2229,7 @@ function withCors(response, request, env) {
     headers.append("Vary", "Origin");
   }
 
-  headers.set("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+  headers.set("Access-Control-Allow-Methods", "GET,POST,PATCH,DELETE,OPTIONS");
   headers.set("Access-Control-Allow-Headers", "Content-Type,Authorization");
   headers.set("Access-Control-Max-Age", "86400");
 

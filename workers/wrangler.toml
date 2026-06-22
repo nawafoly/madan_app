@@ -16,3 +16,9 @@ binding = "DOCUMENTS_DB"
 database_name = "maedin-documents"
 database_id = "ddc201f4-f49b-4634-a4fa-0c0f3fc4732f"
 migrations_dir = "migrations"
+
+[[d1_databases]]
+binding = "ATTENDANCE_DB"
+database_name = "maedin-attendance"
+database_id = "b765c430-0bf1-4128-8c34-b1f57489aa3f"
+migrations_dir = "attendance-migrations"

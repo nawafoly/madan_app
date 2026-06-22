@@ -50,6 +50,8 @@ import {
   ChevronDown,
   LockKeyhole,
   ClipboardList,
+  MapPin,
+  CalendarCheck2,
 } from "lucide-react";
 import { CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useSearch } from "wouter";
@@ -163,35 +165,42 @@ const hrMenuItems: MenuItem[] = [
     icon: BriefcaseBusiness,
     label: "طلبات التوظيف",
     path: "/hr/recruitment",
-    allow: ["hr"],
+    allow: ["owner", "hr"],
     permission: "recruitment.view",
   },
   {
     icon: Users,
     label: "إدارة الموظفين",
     path: "/hr/employees",
-    allow: ["hr"],
+    allow: ["owner", "hr"],
     permission: "employees.view",
+  },
+  {
+    icon: CalendarCheck2,
+    label: "الحضور والانصراف",
+    path: "/hr/attendance",
+    allow: ["owner", "admin", "hr"],
+    authOnly: true,
   },
   {
     icon: UserPlus,
     label: "إنشاء حساب موظف",
     path: "/hr/create-staff",
-    allow: ["hr"],
+    allow: ["owner", "hr"],
     permission: "employees.manage",
   },
   {
     icon: ClipboardList,
     label: "التقارير الأسبوعية",
     path: "/hr/weekly-reports",
-    allow: ["hr"],
+    allow: ["owner", "hr"],
     authOnly: true,
   },
   {
     icon: Settings,
     label: "إعدادات الإدارة",
     path: "/hr/settings",
-    allow: ["hr"],
+    allow: ["owner", "hr"],
     permission: "settings.manage",
   },
 ];
@@ -208,6 +217,7 @@ const EMPLOYEE_PROFILE_LABEL = "بروفايل الموظف";
 const HR_MENU_LABELS: Record<string, { ar: string; en: string }> = {
   "/hr/recruitment": { ar: "طلبات التوظيف", en: "Recruitment" },
   "/hr/employees": { ar: "إدارة الموظفين", en: "Employees" },
+  "/hr/attendance": { ar: "الحضور والانصراف", en: "Attendance" },
   "/hr/create-staff": { ar: "إنشاء حساب موظف", en: "Create Staff" },
   "/hr/weekly-reports": { ar: "التقارير الأسبوعية", en: "Weekly Reports" },
   "/hr/settings": { ar: "إعدادات الإدارة", en: "Settings" },
@@ -275,6 +285,15 @@ const HR_SETTINGS_SUB_ITEMS = [
     helper: {
       ar: "محرر الحقول ونموذج التقديم العام",
       en: "Fields editor and public application form",
+    },
+  },
+  {
+    value: "attendance",
+    icon: MapPin,
+    label: { ar: "الحضور", en: "Attendance" },
+    helper: {
+      ar: "مناطق العمل ونطاقات Radius",
+      en: "Work zones and radius ranges",
     },
   },
   {
@@ -473,8 +492,8 @@ export default function DashboardLayout({
               تسجيل الدخول للمتابعة
             </h1>
             <p className="text-sm text-muted-foreground text-center max-w-sm">
-              يتطلب الوصول إلى لوحة التحكم تسجيل الدخول. تابع لبدء عملية
-              تسجيل الدخول.
+              يتطلب الوصول إلى لوحة التحكم تسجيل الدخول. تابع لبدء عملية تسجيل
+              الدخول.
             </p>
           </div>
           <Button
@@ -567,7 +586,9 @@ function DashboardLayoutContent({
       return hrMenuItems.filter(item => {
         if (!item.allow.includes(role as RoleKey)) return false;
         if (item.authOnly) return true;
-        return !!item.permission && hasStaffAdminPermission(user, item.permission);
+        return (
+          !!item.permission && hasStaffAdminPermission(user, item.permission)
+        );
       });
     }
     if (!isOpsRole(role)) return [];
@@ -617,11 +638,11 @@ function DashboardLayoutContent({
   const activeMenuItem = visibleMenuItems.find(item => item.path === location);
   const activeMenuLabel = isEmployeeProfileActive
     ? employeeProfileLabel
-    : (activeMenuItem
+    : activeMenuItem
       ? getMenuLabel(activeMenuItem)
       : area === "hr"
         ? tr(language, "منصة الموارد البشرية", "Human Resources")
-        : tr(language, "لوحة التحكم", "Dashboard"));
+        : tr(language, "لوحة التحكم", "Dashboard");
   const layoutBrandLabel =
     area === "hr"
       ? tr(language, "منصة الموارد البشرية", "Human Resources")
@@ -657,7 +678,12 @@ function DashboardLayoutContent({
         email: String(user?.email || "").trim() || null,
         photoURL: user?.firebaseUser?.photoURL || auth.currentUser?.photoURL,
       }),
-    [sidebarProfileDoc, user?.displayName, user?.email, user?.firebaseUser?.photoURL]
+    [
+      sidebarProfileDoc,
+      user?.displayName,
+      user?.email,
+      user?.firebaseUser?.photoURL,
+    ]
   );
 
   const sidebarAvatarUrl = sidebarProfile.personal.avatarUrl;
@@ -734,7 +760,9 @@ function DashboardLayoutContent({
     const unsubscribe = onSnapshot(
       doc(db, sidebarProfileSource.collectionName, sidebarProfileSource.docId),
       snapshot => {
-        const snapshotData = snapshot.data() as EmployeeProfileUserDoc | undefined;
+        const snapshotData = snapshot.data() as
+          | EmployeeProfileUserDoc
+          | undefined;
         setSidebarProfileDoc(
           snapshot.exists()
             ? ({
@@ -831,9 +859,7 @@ function DashboardLayoutContent({
 
       <div
         className={cn(
-          isMobile
-            ? "contents"
-            : "fixed inset-y-0 z-30 h-screen shrink-0",
+          isMobile ? "contents" : "fixed inset-y-0 z-30 h-screen shrink-0",
           !isMobile && (isRight ? "right-0" : "left-0")
         )}
         style={
@@ -939,7 +965,8 @@ function DashboardLayoutContent({
           <SidebarContent className="gap-0 bg-transparent">
             <SidebarMenu className="px-2 py-1">
               {visibleMenuItems.map(item => {
-                const isSettingsItem = area === "hr" && item.path === "/hr/settings";
+                const isSettingsItem =
+                  area === "hr" && item.path === "/hr/settings";
                 const canAccessItem =
                   item.authOnly ||
                   (!!item.permission &&
@@ -967,7 +994,9 @@ function DashboardLayoutContent({
                         }}
                         tooltip={itemLabel}
                         aria-disabled={!canAccessItem}
-                        aria-expanded={canAccessItem ? isSettingsMenuOpen : false}
+                        aria-expanded={
+                          canAccessItem ? isSettingsMenuOpen : false
+                        }
                         className={cn(
                           "h-10 rounded-xl font-normal text-slate-300 transition-all hover:text-white data-[active=true]:bg-white/10 data-[active=true]:text-white [&>svg]:text-[#F2B705]",
                           !canAccessItem &&
@@ -1093,11 +1122,11 @@ function DashboardLayoutContent({
                             : "max-w-40 opacity-100"
                         )}
                       >
-                          {itemLabel}
-                        </span>
-                        {!canAccessItem && !isCollapsed ? (
-                          <LockKeyhole className="h-3.5 w-3.5 shrink-0 text-slate-500" />
-                        ) : null}
+                        {itemLabel}
+                      </span>
+                      {!canAccessItem && !isCollapsed ? (
+                        <LockKeyhole className="h-3.5 w-3.5 shrink-0 text-slate-500" />
+                      ) : null}
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 );
@@ -1201,10 +1230,7 @@ function DashboardLayoutContent({
                   className="h-9 w-9 shrink-0 rounded-xl border-red-300/25 bg-red-500/10 text-red-200 shadow-none hover:border-red-300/40 hover:bg-red-500/16 hover:text-red-100"
                 >
                   <LogOut
-                    className={cn(
-                      "h-4 w-4",
-                      language === "ar" && "rotate-180"
-                    )}
+                    className={cn("h-4 w-4", language === "ar" && "rotate-180")}
                   />
                 </Button>
               ) : null}

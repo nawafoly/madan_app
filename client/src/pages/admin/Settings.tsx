@@ -14,6 +14,7 @@ import RecruitmentSettingsEditor from "@/components/recruitment/RecruitmentSetti
 import SettingsBackupTab from "./settings/SettingsBackupTab";
 import SettingsContentTab from "./settings/SettingsContentTab";
 import SettingsDatabaseTab from "./settings/SettingsDatabaseTab";
+import SettingsAttendanceTab from "./settings/SettingsAttendanceTab";
 import SettingsFlagsTab from "./settings/SettingsFlagsTab";
 import SettingsGeneralTab from "./settings/SettingsGeneralTab";
 import SettingsLabelsTab from "./settings/SettingsLabelsTab";
@@ -84,6 +85,7 @@ import {
   HardDrive,
   Landmark,
   Mail,
+  MapPin,
   RefreshCw,
   Sparkles,
   ServerCog,
@@ -859,7 +861,7 @@ type AppRoleKey =
   | "guest";
 
 const INVESTMENT_ADMIN_ROLE_KEYS = ["owner", "admin", "accountant"] as const;
-const STAFF_ADMIN_ROLE_KEYS = ["hr", "staff"] as const;
+const STAFF_ADMIN_ROLE_KEYS = ["owner", "hr", "staff"] as const;
 const ADMIN_ROLE_KEYS = [
   ...INVESTMENT_ADMIN_ROLE_KEYS,
   ...STAFF_ADMIN_ROLE_KEYS,
@@ -1083,6 +1085,7 @@ const STAFF_SETTINGS_TABS: ReadonlySet<string> = new Set([
   "labels",
   "flags",
   "recruitment",
+  "attendance",
   "database",
 ]);
 
@@ -1124,6 +1127,10 @@ export default function Settings({
   // NEW: roles / admin users / labels / flags / content
   const [roles, setRoles] = useState<RoleDoc[]>([]);
   const [adminUsers, setAdminUsers] = useState<AdminUserDoc[]>([]);
+  const [adminAccountSearch, setAdminAccountSearch] = useState("");
+  const [adminAccountRoleFilter, setAdminAccountRoleFilter] = useState<
+    "all" | AdminRoleKey
+  >("all");
   const [employeeDirectory, setEmployeeDirectory] = useState<
     EmployeeDirectoryEntry[]
   >([]);
@@ -1191,6 +1198,7 @@ export default function Settings({
     contactEmail: "",
     contactPhone: "",
     media: createDefaultSiteMediaSettings(),
+    nextStepSlider: createDefaultNextStepSliderSettings(),
   });
   const [savedContent, setSavedContent] = useState<ContentSettings>(
     createDefaultContentSettings
@@ -1473,9 +1481,116 @@ export default function Settings({
   const activeRolesCount = visibleRoles.filter(role => role.isActive).length;
   const systemRolesCount = visibleRoles.filter(role => role.isSystem).length;
   const activeAdminsCount = adminUsers.filter(user => user.isActive).length;
+  const disabledAdminsCount = adminUsers.length - activeAdminsCount;
   const activeInvitesCount = roleInvites.filter(
     invite => invite.isActive
   ).length;
+  const adminPermissionSummary = useMemo(() => {
+    let totalEffectivePermissions = 0;
+    let accountsWithOverrides = 0;
+
+    for (const user of adminUsers) {
+      const normalized = normalizePermissionOverrides(
+        user.permissionsAllow || [],
+        user.permissionsDeny || []
+      );
+      const permissionsAllow = normalized.permissionsAllow.filter(permissionKey =>
+        visiblePermissionKeySet.has(permissionKey)
+      );
+      const permissionsDeny = normalized.permissionsDeny.filter(permissionKey =>
+        visiblePermissionKeySet.has(permissionKey)
+      );
+      const effectivePermissions = getEffectivePermissionKeys(
+        user.roleKey,
+        permissionsAllow,
+        permissionsDeny
+      ).filter(permissionKey => visiblePermissionKeySet.has(permissionKey));
+
+      totalEffectivePermissions += effectivePermissions.length;
+      if (permissionsAllow.length || permissionsDeny.length) {
+        accountsWithOverrides += 1;
+      }
+    }
+
+    return {
+      accountsWithOverrides,
+      averageEffectivePermissions: adminUsers.length
+        ? Math.round(totalEffectivePermissions / adminUsers.length)
+        : 0,
+      totalEffectivePermissions,
+    };
+  }, [adminUsers, visiblePermissionKeySet]);
+  const adminAccountRows = useMemo(() => {
+    const query = adminAccountSearch.trim().toLowerCase();
+
+    return adminUsers
+      .map(user => {
+        const normalized = normalizePermissionOverrides(
+          user.permissionsAllow || [],
+          user.permissionsDeny || []
+        );
+        const permissionsAllow = normalized.permissionsAllow.filter(
+          permissionKey => visiblePermissionKeySet.has(permissionKey)
+        );
+        const permissionsDeny = normalized.permissionsDeny.filter(permissionKey =>
+          visiblePermissionKeySet.has(permissionKey)
+        );
+        const effectivePermissions = getEffectivePermissionKeys(
+          user.roleKey,
+          permissionsAllow,
+          permissionsDeny
+        ).filter(permissionKey => visiblePermissionKeySet.has(permissionKey));
+        const defaultPermissions = getRoleDefaultPermissionKeys(
+          user.roleKey
+        ).filter(permissionKey => visiblePermissionKeySet.has(permissionKey));
+        const roleLabel =
+          getRoleDisplayLabel(user.roleKey) ||
+          ADMIN_ROLE_LABELS[normalizeAdminRoleKey(user.roleKey)] ||
+          user.roleKey;
+
+        return {
+          user,
+          defaultPermissions,
+          effectivePermissions,
+          permissionsAllow,
+          permissionsDeny,
+          roleLabel,
+        };
+      })
+      .filter(row => {
+        if (
+          adminAccountRoleFilter !== "all" &&
+          normalizeAdminRoleKey(row.user.roleKey) !== adminAccountRoleFilter
+        ) {
+          return false;
+        }
+
+        if (!query) return true;
+
+        const searchableText = [
+          row.user.displayName,
+          row.user.email,
+          row.user.id,
+          row.user.title,
+          row.roleLabel,
+          row.effectivePermissions.map(getPermissionLabel).join(" "),
+        ]
+          .join(" ")
+          .toLowerCase();
+
+        return searchableText.includes(query);
+      })
+      .sort((left, right) => {
+        const leftText = `${left.user.displayName || ""} ${left.user.email || ""}`;
+        const rightText = `${right.user.displayName || ""} ${right.user.email || ""}`;
+        return leftText.localeCompare(rightText);
+      });
+  }, [
+    adminAccountRoleFilter,
+    adminAccountSearch,
+    adminUsers,
+    visiblePermissionKeySet,
+  ]);
   const totalLabelEntries =
     Object.keys(labels.projectTypes || {}).length +
     Object.keys(labels.projectStatuses || {}).length +
@@ -2385,6 +2500,16 @@ export default function Settings({
     },
     [adminForm.permissionsAllow, adminForm.permissionsDeny, visiblePermissionKeySet]
   );
+  const adminFormDefaultPermissions = useMemo(
+    () =>
+      getRoleDefaultPermissionKeys(adminForm.roleKey).filter(permissionKey =>
+        visiblePermissionKeySet.has(permissionKey)
+      ),
+    [adminForm.roleKey, visiblePermissionKeySet]
+  );
+  const adminFormOverridesCount =
+    adminFormPermissionOverrides.permissionsAllow.length +
+    adminFormPermissionOverrides.permissionsDeny.length;
 
   const selectedEmployeeDirectoryEntry = useMemo(
     () =>
@@ -3795,6 +3920,12 @@ export default function Settings({
       icon: BriefcaseBusiness,
     },
     {
+      value: "attendance",
+      label: "الحضور",
+      helper: "مناطق العمل ونطاقات Radius",
+      icon: MapPin,
+    },
+    {
       value: "backup",
       label: "النسخ الاحتياطي",
       helper: "التصدير والاستيراد وحزم العقود",
@@ -3864,6 +3995,8 @@ export default function Settings({
         "إدارة محتوى الموقع التشغيلي والتسويقي من وحدات واضحة تحافظ على نفس جودة تجربة الإعدادات.",
       recruitment:
         "إدارة نموذج التوظيف العام من نفس مركز الإعدادات، مع ترتيب واضح للحقول، وأنواع منظمة، ومعاينة مباشرة لما سيظهر للزائر في الصفحة العامة.",
+      attendance:
+        "إدارة مناطق العمل بنطاق Radius وربطها لاحقاً بالموظفين أو الفروع أو المشاريع من نفس المرجع.",
       backup:
         "إدارة النسخ، الاستيراد، وحزم التصدير التشغيلية من تجربة منظمة تحافظ على وضوح الحالة والإجراءات.",
       database:
@@ -4424,162 +4557,294 @@ export default function Settings({
               </Button>
             }
           >
-            {adminUsers.length ? (
-              <div className="grid gap-4 xl:grid-cols-2">
-                {adminUsers
-                  .slice()
-                  .sort((a, b) =>
-                    String(a.email || "").localeCompare(String(b.email || ""))
-                  )
-                  .map(u => (
-                    <div
-                      key={u.id}
-                      className="rounded-[24px] border border-slate-200/80 bg-slate-50/60 p-5 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.24)]"
-                    >
-                      <div className="flex flex-wrap items-start justify-between gap-4">
-                        <div className="space-y-3">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <Badge variant="outline" className="rounded-full">
-                              ID: {u.id}
-                            </Badge>
-                            <Badge
-                              variant="outline"
-                              className={cn(
-                                "rounded-full",
-                                u.isActive
-                                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                                  : "border-slate-200 bg-white text-slate-500"
-                              )}
-                            >
-                              {u.isActive ? "مفعّل" : "معطّل"}
-                            </Badge>
-                            <Badge
-                              variant="secondary"
-                              className="rounded-full"
-                            >
-                              {getRoleDisplayLabel(u.roleKey) || u.roleKey}
-                            </Badge>
-                            {u.title ? (
-                              <Badge
-                                variant="outline"
-                                className="rounded-full"
-                              >
-                                {u.title}
-                              </Badge>
-                            ) : null}
-                          </div>
+            <div className="space-y-5">
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <SettingsOverviewStat
+                  icon={Users}
+                  label="الإجمالي"
+                  value={formatNumberEN(adminUsers.length)}
+                  helper="كل الحسابات داخل هذا المسار"
+                />
+                <SettingsOverviewStat
+                  icon={CheckCircle2}
+                  label="المفعلة"
+                  value={formatNumberEN(activeAdminsCount)}
+                  helper={`${formatNumberEN(disabledAdminsCount)} حسابات معطلة`}
+                />
+                <SettingsOverviewStat
+                  icon={KeyRound}
+                  label="متوسط الصلاحيات"
+                  value={formatNumberEN(
+                    adminPermissionSummary.averageEffectivePermissions
+                  )}
+                  helper={`${formatNumberEN(
+                    adminPermissionSummary.totalEffectivePermissions
+                  )} صلاحية فعلية`}
+                />
+                <SettingsOverviewStat
+                  icon={SlidersHorizontal}
+                  label="استثناءات"
+                  value={formatNumberEN(
+                    adminPermissionSummary.accountsWithOverrides
+                  )}
+                  helper="حسابات عليها تعديل صلاحيات يدوي"
+                />
+              </div>
 
-                          <div>
-                            <div className="text-lg font-semibold tracking-tight text-slate-950">
-                              {u.displayName || "بدون اسم"}
-                            </div>
-                            <div className="mt-1 text-sm text-slate-500">
-                              {u.email}
-                            </div>
-                          </div>
+              <div className="flex flex-col gap-3 rounded-[22px] border border-slate-200 bg-slate-50/70 p-4 lg:flex-row lg:items-center lg:justify-between">
+                <div className="grid w-full gap-3 md:grid-cols-[minmax(0,1fr)_220px]">
+                  <Input
+                    value={adminAccountSearch}
+                    onChange={event =>
+                      setAdminAccountSearch(event.target.value)
+                    }
+                    placeholder="ابحث بالاسم، البريد، الدور، أو الصلاحية"
+                    className="h-11 rounded-xl border-slate-200 bg-white shadow-none"
+                  />
+                  <Select
+                    value={adminAccountRoleFilter}
+                    onValueChange={value =>
+                      setAdminAccountRoleFilter(value as "all" | AdminRoleKey)
+                    }
+                  >
+                    <SelectTrigger className="h-11 rounded-xl border-slate-200 bg-white px-4 shadow-none">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">كل الأدوار</SelectItem>
+                      {roleOptions.map(role => (
+                        <SelectItem key={role.key} value={role.key}>
+                          {role.nameAr}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
 
-                          {getEffectivePermissionKeys(
-                            u.roleKey,
-                            u.permissionsAllow || [],
-                            u.permissionsDeny || []
-                          ).length ? (
-                            <div className="flex flex-wrap gap-2">
-                              {getEffectivePermissionKeys(
-                                u.roleKey,
-                                u.permissionsAllow || [],
-                                u.permissionsDeny || []
-                              )
-                                .slice(0, 6)
-                                .map(permissionKey => (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-11 shrink-0 rounded-xl border-slate-200 bg-white"
+                  disabled={
+                    !adminAccountSearch && adminAccountRoleFilter === "all"
+                  }
+                  onClick={() => {
+                    setAdminAccountSearch("");
+                    setAdminAccountRoleFilter("all");
+                  }}
+                >
+                  إعادة العرض
+                </Button>
+              </div>
+
+              {adminUsers.length ? (
+                adminAccountRows.length ? (
+                  <div className="grid gap-3">
+                    {adminAccountRows.map(
+                      ({
+                        user: u,
+                        defaultPermissions,
+                        effectivePermissions,
+                        permissionsAllow,
+                        permissionsDeny,
+                        roleLabel,
+                      }) => {
+                        const visiblePermissions = effectivePermissions.slice(
+                          0,
+                          4
+                        );
+                        const hiddenPermissionsCount =
+                          effectivePermissions.length -
+                          visiblePermissions.length;
+                        const overridesCount =
+                          permissionsAllow.length + permissionsDeny.length;
+                        const avatarText = String(
+                          u.displayName || u.email || "?"
+                        )
+                          .trim()
+                          .slice(0, 1);
+
+                        return (
+                          <div
+                            key={u.id}
+                            className="grid gap-5 rounded-[24px] border border-slate-200 bg-white p-4 shadow-[0_18px_44px_-40px_rgba(15,23,42,0.35)] lg:grid-cols-[minmax(0,1.35fr)_minmax(280px,0.85fr)_auto] lg:items-center lg:p-5"
+                          >
+                            <div className="flex min-w-0 gap-4">
+                              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-base font-semibold text-slate-900">
+                                {avatarText}
+                              </div>
+                              <div className="min-w-0 flex-1 space-y-3">
+                                <div className="flex flex-wrap items-center gap-2">
                                   <Badge
-                                    key={`effective-${u.id}-${permissionKey}`}
-                                    variant="secondary"
-                                    className="rounded-full text-xs"
-                                  >
-                                    {getPermissionLabel(permissionKey)}
-                                  </Badge>
-                                ))}
-                            </div>
-                          ) : null}
-
-                          {u.permissionsAllow?.length ||
-                            u.permissionsDeny?.length ? (
-                            <div className="flex flex-wrap gap-2">
-                              {(u.permissionsAllow || [])
-                                .slice(0, 6)
-                                .map((permissionKey: string) => (
-                                  <Badge
-                                    key={`a-${u.id}-${permissionKey}`}
-                                    variant="secondary"
-                                    className="rounded-full text-xs"
-                                  >
-                                    + {getPermissionLabel(permissionKey)}
-                                  </Badge>
-                                ))}
-
-                              {(u.permissionsDeny || [])
-                                .slice(0, 6)
-                                .map(permissionKey => (
-                                  <Badge
-                                    key={`d-${u.id}-${permissionKey}`}
                                     variant="outline"
-                                    className="rounded-full text-xs"
+                                    className={cn(
+                                      "rounded-full px-2.5 py-1 text-[11px]",
+                                      u.isActive
+                                        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                        : "border-slate-200 bg-slate-50 text-slate-500"
+                                    )}
                                   >
-                                    - {getPermissionLabel(permissionKey)}
+                                    {u.isActive ? "مفعّل" : "معطّل"}
                                   </Badge>
-                                ))}
+                                  <Badge
+                                    variant="secondary"
+                                    className="rounded-full px-2.5 py-1 text-[11px]"
+                                  >
+                                    {roleLabel}
+                                  </Badge>
+                                  {u.employeeProfileEnabled ? (
+                                    <Badge
+                                      variant="outline"
+                                      className="rounded-full border-sky-200 bg-sky-50 px-2.5 py-1 text-[11px] text-sky-700"
+                                    >
+                                      بروفايل موظف
+                                    </Badge>
+                                  ) : null}
+                                  {u.title ? (
+                                    <Badge
+                                      variant="outline"
+                                      className="rounded-full px-2.5 py-1 text-[11px]"
+                                    >
+                                      {u.title}
+                                    </Badge>
+                                  ) : null}
+                                </div>
+
+                                <div className="min-w-0">
+                                  <h3 className="truncate text-lg font-semibold tracking-tight text-slate-950">
+                                    {u.displayName || "بدون اسم"}
+                                  </h3>
+                                  <div
+                                    dir="ltr"
+                                    className="mt-1 break-all text-right text-sm font-medium text-slate-500"
+                                  >
+                                    {u.email}
+                                  </div>
+                                  <div
+                                    dir="ltr"
+                                    className="mt-1 break-all text-right text-xs text-slate-400"
+                                  >
+                                    ID: {u.id}
+                                  </div>
+                                </div>
+
+                                <p className="line-clamp-2 text-sm leading-7 text-slate-600">
+                                  {u.notes ||
+                                    "لا توجد ملاحظات مرتبطة بهذا الحساب."}
+                                </p>
+                              </div>
                             </div>
-                          ) : null}
 
-                          <p className="text-sm leading-7 text-slate-600">
-                            {u.notes || "لا توجد ملاحظات مرتبطة بهذا الحساب."}
-                          </p>
-                        </div>
+                            <div className="space-y-3">
+                              <div className="grid grid-cols-3 gap-2">
+                                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-center">
+                                  <div className="text-[11px] text-slate-500">
+                                    الفعلية
+                                  </div>
+                                  <div className="mt-1 text-xl font-semibold text-slate-950">
+                                    {formatNumberEN(
+                                      effectivePermissions.length
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-center">
+                                  <div className="text-[11px] text-slate-500">
+                                    الدور
+                                  </div>
+                                  <div className="mt-1 text-xl font-semibold text-slate-950">
+                                    {formatNumberEN(
+                                      defaultPermissions.length
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-center">
+                                  <div className="text-[11px] text-slate-500">
+                                    تعديل
+                                  </div>
+                                  <div className="mt-1 text-xl font-semibold text-slate-950">
+                                    {formatNumberEN(overridesCount)}
+                                  </div>
+                                </div>
+                              </div>
 
-                        <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-center">
-                          <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
-                            Effective
+                              <div className="flex min-h-8 flex-wrap gap-2">
+                                {visiblePermissions.length ? (
+                                  visiblePermissions.map(permissionKey => (
+                                    <Badge
+                                      key={`effective-${u.id}-${permissionKey}`}
+                                      variant="secondary"
+                                      className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] text-slate-700"
+                                    >
+                                      {getPermissionLabel(permissionKey)}
+                                    </Badge>
+                                  ))
+                                ) : (
+                                  <span className="text-sm text-slate-500">
+                                    لا توجد صلاحيات فعلية.
+                                  </span>
+                                )}
+                                {hiddenPermissionsCount > 0 ? (
+                                  <Badge
+                                    variant="outline"
+                                    className="rounded-full px-2.5 py-1 text-[11px]"
+                                  >
+                                    +{formatNumberEN(hiddenPermissionsCount)}
+                                  </Badge>
+                                ) : null}
+                              </div>
+                            </div>
+
+                            <div className="flex flex-wrap gap-2 lg:w-[196px] lg:justify-end">
+                              <Button
+                                variant="outline"
+                                className="h-10 rounded-xl"
+                                onClick={() => openEditAdmin(u)}
+                              >
+                                <Pencil className="h-4 w-4 ml-2" />
+                                تعديل
+                              </Button>
+                              <Button
+                                variant="outline"
+                                className="h-10 rounded-xl"
+                                onClick={() => handleToggleAdminActive(u)}
+                              >
+                                {u.isActive ? "تعطيل" : "تفعيل"}
+                              </Button>
+                              <Button
+                                variant="destructive"
+                                className="h-10 rounded-xl"
+                                onClick={() => handleDeleteAdmin(u)}
+                              >
+                                <Trash2 className="h-4 w-4 ml-2" />
+                                حذف
+                              </Button>
+                            </div>
                           </div>
-                          <div className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">
-                            {formatNumberEN(
-                              getEffectivePermissionKeys(
-                                u.roleKey,
-                                u.permissionsAllow || [],
-                                u.permissionsDeny || []
-                              ).length
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="mt-5 flex flex-wrap gap-2">
-                        <Button
-                          variant="outline"
-                          onClick={() => openEditAdmin(u)}
-                        >
-                          <Pencil className="w-4 h-4 ml-2" /> تعديل
-                        </Button>
-                        <Button
-                          variant="outline"
-                          onClick={() => handleToggleAdminActive(u)}
-                        >
-                          {u.isActive ? "تعطيل" : "تفعيل"}
-                        </Button>
-                        <Button
-                          variant="destructive"
-                          onClick={() => handleDeleteAdmin(u)}
-                        >
-                          <Trash2 className="w-4 h-4 ml-2" /> حذف
-                        </Button>
-                      </div>
+                        );
+                      }
+                    )}
+                  </div>
+                ) : (
+                  <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50/70 px-4 py-10 text-center">
+                    <div className="text-sm font-semibold text-slate-800">
+                      لا توجد نتائج مطابقة.
                     </div>
-                  ))}
-              </div>
+                    <p className="mt-2 text-sm text-slate-500">
+                      غيّر عبارة البحث أو فلتر الدور لعرض الحسابات.
+                    </p>
+                  </div>
+                )
             ) : (
-              <div className="rounded-[22px] border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-500">
-                لا توجد حسابات إدارة محفوظة حتى الآن.
-              </div>
+                <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50/70 px-4 py-10 text-center">
+                  <div className="text-sm font-semibold text-slate-800">
+                    لا توجد حسابات إدارة محفوظة حتى الآن.
+                  </div>
+                  <p className="mt-2 text-sm text-slate-500">
+                    أضف أول حساب إداري وحدد دوره وصلاحياته من الزر العلوي.
+                  </p>
+                </div>
             )}
+            </div>
           </SettingsSectionCard>
         </TabsContent>
 
@@ -5190,6 +5455,8 @@ export default function Settings({
           ) : null}
         </TabsContent>
 
+        <SettingsAttendanceTab />
+
         {/* =========================
               Backup
           ========================= */}
@@ -5475,385 +5742,527 @@ export default function Settings({
         Admin User Dialog
     ========================= */}
       <Dialog open={isAdminDialogOpen} onOpenChange={setIsAdminDialogOpen}>
-        <DialogContent className="!w-[98vw] !max-w-none h-[92vh] overflow-hidden p-0 sm:!w-[95vw]">
-          <DialogHeader className="p-6 pb-0">
-            <DialogTitle>
-              {editingAdminId ? "تعديل حساب إداري" : "إنشاء حساب إداري"}
-            </DialogTitle>
+        <DialogContent className="flex h-[92vh] !w-[96vw] !max-w-6xl flex-col overflow-hidden rounded-[28px] border-slate-200 bg-slate-50 p-0 sm:!w-[94vw]">
+          <DialogHeader className="border-b border-slate-200 bg-white px-5 py-4 text-right sm:px-6">
+            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+              <div className="space-y-1">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  {editingAdminId ? "تعديل الوصول" : "حساب جديد"}
+                </p>
+                <DialogTitle className="text-xl font-semibold tracking-tight text-slate-950">
+                  {editingAdminId ? "تعديل حساب إداري" : "إنشاء حساب إداري"}
+                </DialogTitle>
+                <p className="max-w-2xl text-sm leading-6 text-slate-500">
+                  رتّب بيانات الحساب، ربط الموظف، والصلاحيات الفعلية من شاشة واحدة واضحة.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    "rounded-full px-3 py-1",
+                    adminForm.isActive
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                      : "border-slate-200 bg-slate-50 text-slate-500"
+                  )}
+                >
+                  {adminForm.isActive ? "مفعّل" : "معطّل"}
+                </Badge>
+                <Badge
+                  variant="secondary"
+                  className="rounded-full px-3 py-1"
+                >
+                  {getRoleDisplayLabel(adminForm.roleKey) ||
+                    ADMIN_ROLE_LABELS[normalizeAdminRoleKey(adminForm.roleKey)]}
+                </Badge>
+              </div>
+            </div>
           </DialogHeader>
 
-          <div className="flex-1 overflow-y-auto p-6 space-y-4">
-            <div className="grid md:grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <Label>الاسم</Label>
-                <Input
-                  value={adminForm.displayName}
-                  onChange={e =>
-                    setAdminForm(p => ({ ...p, displayName: e.target.value }))
-                  }
-                />
-              </div>
-
-              <div className="space-y-1">
-                <Label>البريد</Label>
-                <Input
-                  value={adminForm.email}
-                  onChange={e =>
-                    setAdminForm(p => ({ ...p, email: e.target.value }))
-                  }
-                />
-              </div>
-            </div>
-
-            <div className="grid md:grid-cols-3 gap-4">
-              <div className="space-y-1">
-                <Label>الدور</Label>
-                <Select
-                  value={adminForm.roleKey}
-                  onValueChange={(v: AdminRoleKey) =>
-                    setAdminForm(p => ({
-                      ...p,
-                      roleKey: v,
-                    }))
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {roleOptions.map(r => (
-                      <SelectItem key={r.key} value={r.key}>
-                        {`${r.nameAr} (${r.key})`}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-1">
-                <Label>المنصب/العنوان (اختياري)</Label>
-                <Input
-                  value={adminForm.title || ""}
-                  onChange={e =>
-                    setAdminForm(p => ({ ...p, title: e.target.value }))
-                  }
-                  placeholder="مثال: مدير مالي"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <Label>الحالة</Label>
-                <div className="flex items-center justify-between border rounded-md px-3 py-2">
-                  <span className="text-sm">
-                    {adminForm.isActive ? "مفعّل" : "معطّل"}
-                  </span>
-                  <Switch
-                    checked={adminForm.isActive}
-                    onCheckedChange={v =>
-                      setAdminForm(p => ({ ...p, isActive: v }))
-                    }
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div
-              className={cn(
-                "space-y-3 rounded-xl border border-slate-200 p-4",
-                area !== "staff" && "hidden"
-              )}
-            >
-              <div className="flex items-center justify-between gap-4">
-                <div className="space-y-1">
-                  <Label>لديه بروفايل موظف</Label>
-                  <p className="text-xs text-muted-foreground">
-                    يبقى الدور مسؤولًا عن الصلاحيات فقط، بينما بروفايل الموظف
-                    يستخدم لبيانات الموظف التشغيلية والظهور في واجهات الموظفين.
-                  </p>
-                </div>
-
-                <Switch
-                  checked={!!adminForm.employeeProfileEnabled}
-                  onCheckedChange={checked =>
-                    setAdminForm(previous => ({
-                      ...previous,
-                      employeeProfileEnabled: checked,
-                      linkedEmployeeId: checked
-                        ? previous.linkedEmployeeId || null
-                        : null,
-                    }))
-                  }
-                />
-              </div>
-
-              {adminForm.employeeProfileEnabled ? (
-                <>
-                  {/* طريقة الربط */}
-                </>
-              ) : null}
-            </div>
-
-            <div
-              className={cn(
-                "space-y-3 rounded-xl border border-slate-200 p-4",
-                area !== "staff" && "hidden"
-              )}
-            >
-              <div className="flex items-center justify-between gap-4">
-                <div className="space-y-1">
-                  <Label>يعامل كموظف</Label>
-                  <p className="text-xs text-muted-foreground">
-                    عند التفعيل سيظهر هذا الحساب داخل صفحة إدارة الموظفين ويمكن إدارة ملفه الوظيفي.
-                    عند الإيقاف لن يظهر في قائمة الموظفين حتى لو كان Owner أو Admin.
-                  </p>
-                </div>
-                <Switch
-                  checked={!!adminForm.includeInEmployeeManagement}
-                  onCheckedChange={checked =>
-                    setAdminForm(previous => ({
-                      ...previous,
-                      includeInEmployeeManagement: checked,
-                    }))
-                  }
-                />
-              </div>
-
-              {adminForm.employeeProfileEnabled ? (
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-1">
-                    <Label>طريقة الربط</Label>
-                    <Select
-                      value={adminEmployeeLinkMode}
-                      onValueChange={(value: EmployeeLinkMode) => {
-                        setAdminEmployeeLinkMode(value);
-                        if (value === "create") {
-                          setAdminForm(previous => ({
-                            ...previous,
-                            linkedEmployeeId: null,
-                          }));
-                        }
-                      }}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="create">
-                          إنشاء سجل موظف جديد مرتبط بالحساب
-                        </SelectItem>
-                        <SelectItem value="existing">
-                          ربط بسجل موظف موجود
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6">
+            <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px] xl:items-start">
+              <div className="space-y-5">
+                <section className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-[0_18px_46px_-42px_rgba(15,23,42,0.45)]">
+                  <div className="flex items-start gap-3">
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-2.5 text-slate-700">
+                      <Users className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-semibold text-slate-950">
+                        بيانات الحساب
+                      </h3>
+                      <p className="mt-1 text-sm leading-6 text-slate-500">
+                        الاسم والبريد والدور هي البيانات الأساسية التي تظهر في الدليل وتحدد الوصول.
+                      </p>
+                    </div>
                   </div>
 
-                  {adminEmployeeLinkMode === "existing" ? (
-                    <div className="space-y-1">
-                      <Label>سجل الموظف المرتبط</Label>
+                  <div className="mt-5 grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label className="text-[13px] font-semibold text-slate-900">
+                        الاسم
+                      </Label>
+                      <Input
+                        value={adminForm.displayName}
+                        onChange={e =>
+                          setAdminForm(p => ({
+                            ...p,
+                            displayName: e.target.value,
+                          }))
+                        }
+                        placeholder="اسم الحساب"
+                        className="h-12 rounded-xl border-slate-200 bg-white shadow-none"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="text-[13px] font-semibold text-slate-900">
+                        البريد
+                      </Label>
+                      <Input
+                        dir="ltr"
+                        value={adminForm.email}
+                        onChange={e =>
+                          setAdminForm(p => ({ ...p, email: e.target.value }))
+                        }
+                        placeholder="name@example.com"
+                        className="h-12 rounded-xl border-slate-200 bg-white text-left shadow-none"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="text-[13px] font-semibold text-slate-900">
+                        الدور
+                      </Label>
                       <Select
-                        value={String(adminForm.linkedEmployeeId || "")}
-                        onValueChange={value =>
-                          setAdminForm(previous => ({
-                            ...previous,
-                            linkedEmployeeId: value || null,
+                        value={adminForm.roleKey}
+                        onValueChange={(v: AdminRoleKey) =>
+                          setAdminForm(p => ({
+                            ...p,
+                            roleKey: v,
                           }))
                         }
                       >
-                        <SelectTrigger>
-                          <SelectValue placeholder="اختر سجل موظف" />
+                        <SelectTrigger className="h-12 rounded-xl border-slate-200 bg-white px-4 shadow-none">
+                          <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {employeeDirectory.length ? (
-                            employeeDirectory.map(employee => (
-                              <SelectItem key={employee.id} value={employee.id}>
-                                {employee.displayName}
-                                {employee.email ? ` - ${employee.email}` : ""}
-                              </SelectItem>
-                            ))
-                          ) : (
-                            <SelectItem value="__empty" disabled>
-                              لا توجد سجلات موظفين متاحة
+                          {roleOptions.map(r => (
+                            <SelectItem key={r.key} value={r.key}>
+                              {`${r.nameAr} (${r.key})`}
                             </SelectItem>
-                          )}
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>
-                  ) : (
-                    <div className="space-y-1">
-                      <Label>طريقة الإنشاء</Label>
-                      <div className="rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground">
-                        سيتم إنشاء سجل موظف وربطه بحساب المستخدم عند الحفظ إذا وُجد حساب مطابق لهذا البريد.
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ) : null}
 
-              {adminForm.employeeProfileEnabled ? (
-                <div className="rounded-[18px] border border-slate-200 bg-slate-50/80 p-4">
-                  <div className="mb-3 text-xs font-semibold tracking-[0.12em] text-slate-500">
-                    ملخص الربط
-                  </div>
-
-                  <div className="grid gap-3 md:grid-cols-3">
-                    <div className="rounded-[14px] border border-white/80 bg-white px-3 py-3">
-                      <div className="text-[11px] text-slate-500">مصدر الربط</div>
-                      <div className="mt-1 text-sm font-semibold text-slate-900 break-all">
-                        {adminEmployeeLinkMode === "existing"
-                          ? String(adminForm.linkedEmployeeId ? "سجل موظف مرتبط" : "سجل موظف غير محدد")
-                          : "سجل موظف جديد مرتبط بالحساب"}
-                      </div>
-                    </div>
-
-                    <div className="rounded-[14px] border border-white/80 bg-white px-3 py-3">
-                      <div className="text-[11px] text-slate-500">الدور الحالي</div>
-                      <div className="mt-1 text-sm font-semibold text-slate-900">
-                        {getRoleDisplayLabel(adminForm.roleKey) || "موظف"}
-                      </div>
-                    </div>
-
-                    <div className="rounded-[14px] border border-white/80 bg-white px-3 py-3">
-                      <div className="text-[11px] text-slate-500">السجل المختار</div>
-                      <div className="mt-1 text-sm font-semibold text-slate-900 break-all">
-                        {selectedEmployeeDirectoryEntry
-                          ? `${selectedEmployeeDirectoryEntry.id}${selectedEmployeeDirectoryEntry.email
-                            ? ` - ${selectedEmployeeDirectoryEntry.email}`
-                            : ""
-                          }`
-                          : "لا يوجد سجل محدد"}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="mt-3 text-xs leading-6 text-slate-500">
-                    هذا الربط ينشئ أو يربط ملف الموظف فقط، ولا يغيّر الدور الفعلي للحساب.
-                  </div>
-                </div>
-              ) : null}
-            </div>
-
-            <div className="space-y-1">
-              <Label>ملاحظات (اختياري)</Label>
-              <Textarea
-                rows={3}
-                value={adminForm.notes || ""}
-                onChange={e =>
-                  setAdminForm(p => ({ ...p, notes: e.target.value }))
-                }
-              />
-            </div>
-
-            <div className="grid md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>الصلاحيات الفعلية</Label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {visiblePermissionDefinitions.map(perm => {
-                    const checked = adminFormEffectivePermissions.includes(
-                      perm.key as Permission
-                    );
-                    return (
-                      <Button
-                        key={`effective-${perm.key}`}
-                        type="button"
-                        variant={checked ? "default" : "outline"}
-                        className={checked ? "bg-[#F2B705] text-black" : ""}
-                        onClick={() =>
-                          toggleAdminEffectivePermission(perm.key as Permission)
+                    <div className="space-y-2">
+                      <Label className="text-[13px] font-semibold text-slate-900">
+                        المنصب/العنوان (اختياري)
+                      </Label>
+                      <Input
+                        value={adminForm.title || ""}
+                        onChange={e =>
+                          setAdminForm(p => ({ ...p, title: e.target.value }))
                         }
-                      >
-                        <div className="flex flex-col items-start leading-tight">
-                          <span className="text-sm font-medium">
-                            {perm.label}
-                          </span>
-                          <span className="text-[11px] opacity-70">
-                            {perm.key}
-                          </span>
+                        placeholder="مثال: مدير مالي"
+                        className="h-12 rounded-xl border-slate-200 bg-white shadow-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="mt-4 flex items-center justify-between gap-4 rounded-[20px] border border-slate-200 bg-slate-50/70 px-4 py-3">
+                    <div>
+                      <div className="text-sm font-semibold text-slate-900">
+                        الحالة التشغيلية
+                      </div>
+                      <p className="mt-1 text-xs leading-5 text-slate-500">
+                        تعطيل الحساب يوقف صلاحياته دون حذف بياناته أو ملاحظاته.
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-3">
+                      <span className="text-sm font-semibold text-slate-700">
+                        {adminForm.isActive ? "مفعّل" : "معطّل"}
+                      </span>
+                      <Switch
+                        checked={adminForm.isActive}
+                        onCheckedChange={v =>
+                          setAdminForm(p => ({ ...p, isActive: v }))
+                        }
+                      />
+                    </div>
+                  </div>
+                </section>
+
+                {area === "staff" ? (
+                  <section className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-[0_18px_46px_-42px_rgba(15,23,42,0.45)]">
+                    <div className="flex items-start gap-3">
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-2.5 text-slate-700">
+                        <Building2 className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <h3 className="text-base font-semibold text-slate-950">
+                          ارتباط الموظف
+                        </h3>
+                        <p className="mt-1 text-sm leading-6 text-slate-500">
+                          هذه الإعدادات تنظّم ظهور الحساب في إدارة الموظفين وربطه بسجل وظيفي.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-5 grid gap-3 md:grid-cols-2">
+                      <div className="flex items-start justify-between gap-4 rounded-[20px] border border-slate-200 bg-slate-50/70 px-4 py-3">
+                        <div>
+                          <Label className="font-semibold text-slate-900">
+                            لديه بروفايل موظف
+                          </Label>
+                          <p className="mt-1 text-xs leading-5 text-slate-500">
+                            يستخدم لبيانات الموظف التشغيلية والظهور في واجهات الموظفين.
+                          </p>
                         </div>
-                      </Button>
-                    );
-                  })}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  يتم العرض هنا بناءً على الصلاحيات الفعلية: صلاحيات الدور
-                  الأساسية مع أي استثناءات محفوظة للحساب.
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  <Badge variant="secondary">
-                    الصلاحيات الافتراضية:{" "}
-                    {getRoleDefaultPermissionKeys(adminForm.roleKey).length}
-                  </Badge>
-                  <Badge variant="secondary">
-                    الفعلية: {adminFormEffectivePermissions.length}
-                  </Badge>
-                  <Badge variant="outline">
-                    الاستثناءات: +
-                    {adminFormPermissionOverrides.permissionsAllow.length} / -
-                    {adminFormPermissionOverrides.permissionsDeny.length}
-                  </Badge>
-                </div>
+                        <Switch
+                          checked={!!adminForm.employeeProfileEnabled}
+                          onCheckedChange={checked =>
+                            setAdminForm(previous => ({
+                              ...previous,
+                              employeeProfileEnabled: checked,
+                              linkedEmployeeId: checked
+                                ? previous.linkedEmployeeId || null
+                                : null,
+                            }))
+                          }
+                        />
+                      </div>
+
+                      <div className="flex items-start justify-between gap-4 rounded-[20px] border border-slate-200 bg-slate-50/70 px-4 py-3">
+                        <div>
+                          <Label className="font-semibold text-slate-900">
+                            يعامل كموظف
+                          </Label>
+                          <p className="mt-1 text-xs leading-5 text-slate-500">
+                            عند الإيقاف لن يظهر في قائمة الموظفين حتى لو كان Owner أو Admin.
+                          </p>
+                        </div>
+                        <Switch
+                          checked={!!adminForm.includeInEmployeeManagement}
+                          onCheckedChange={checked =>
+                            setAdminForm(previous => ({
+                              ...previous,
+                              includeInEmployeeManagement: checked,
+                            }))
+                          }
+                        />
+                      </div>
+                    </div>
+
+                    {adminForm.employeeProfileEnabled ? (
+                      <div className="mt-5 grid gap-4 md:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label className="text-[13px] font-semibold text-slate-900">
+                            طريقة الربط
+                          </Label>
+                          <Select
+                            value={adminEmployeeLinkMode}
+                            onValueChange={(value: EmployeeLinkMode) => {
+                              setAdminEmployeeLinkMode(value);
+                              if (value === "create") {
+                                setAdminForm(previous => ({
+                                  ...previous,
+                                  linkedEmployeeId: null,
+                                }));
+                              }
+                            }}
+                          >
+                            <SelectTrigger className="h-12 rounded-xl border-slate-200 bg-white px-4 shadow-none">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="create">
+                                إنشاء سجل موظف جديد مرتبط بالحساب
+                              </SelectItem>
+                              <SelectItem value="existing">
+                                ربط بسجل موظف موجود
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {adminEmployeeLinkMode === "existing" ? (
+                          <div className="space-y-2">
+                            <Label className="text-[13px] font-semibold text-slate-900">
+                              سجل الموظف المرتبط
+                            </Label>
+                            <Select
+                              value={String(adminForm.linkedEmployeeId || "")}
+                              onValueChange={value =>
+                                setAdminForm(previous => ({
+                                  ...previous,
+                                  linkedEmployeeId: value || null,
+                                }))
+                              }
+                            >
+                              <SelectTrigger className="h-12 rounded-xl border-slate-200 bg-white px-4 shadow-none">
+                                <SelectValue placeholder="اختر سجل موظف" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {employeeDirectory.length ? (
+                                  employeeDirectory.map(employee => (
+                                    <SelectItem
+                                      key={employee.id}
+                                      value={employee.id}
+                                    >
+                                      {employee.displayName}
+                                      {employee.email
+                                        ? ` - ${employee.email}`
+                                        : ""}
+                                    </SelectItem>
+                                  ))
+                                ) : (
+                                  <SelectItem value="__empty" disabled>
+                                    لا توجد سجلات موظفين متاحة
+                                  </SelectItem>
+                                )}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        ) : (
+                          <div className="rounded-[18px] border border-dashed border-slate-200 bg-slate-50/70 px-4 py-3">
+                            <div className="text-sm font-semibold text-slate-900">
+                              طريقة الإنشاء
+                            </div>
+                            <p className="mt-1 text-sm leading-6 text-slate-500">
+                              سيتم إنشاء سجل موظف وربطه بحساب المستخدم عند الحفظ إذا وُجد حساب مطابق لهذا البريد.
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    ) : null}
+                  </section>
+                ) : null}
+
+                <section className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-[0_18px_46px_-42px_rgba(15,23,42,0.45)]">
+                  <div className="flex items-start gap-3">
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-2.5 text-slate-700">
+                      <Pencil className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-semibold text-slate-950">
+                        ملاحظات داخلية
+                      </h3>
+                      <p className="mt-1 text-sm leading-6 text-slate-500">
+                        تظهر في دليل الحسابات لتوضيح سبب الحساب أو أي قيود تشغيلية.
+                      </p>
+                    </div>
+                  </div>
+                  <Textarea
+                    rows={3}
+                    value={adminForm.notes || ""}
+                    onChange={e =>
+                      setAdminForm(p => ({ ...p, notes: e.target.value }))
+                    }
+                    placeholder="ملاحظات اختيارية عن الحساب"
+                    className="mt-5 min-h-[112px] rounded-xl border-slate-200 bg-white leading-7 shadow-none"
+                  />
+                </section>
+
+                <section className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-[0_18px_46px_-42px_rgba(15,23,42,0.45)]">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                    <div className="flex items-start gap-3">
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-2.5 text-slate-700">
+                        <Shield className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <h3 className="text-base font-semibold text-slate-950">
+                          الصلاحيات الفعلية
+                        </h3>
+                        <p className="mt-1 text-sm leading-6 text-slate-500">
+                          اضغط على أي صلاحية لإضافتها أو إيقافها كاستثناء على الدور الأساسي.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      <Badge variant="secondary" className="rounded-full">
+                        الدور: {formatNumberEN(adminFormDefaultPermissions.length)}
+                      </Badge>
+                      <Badge variant="secondary" className="rounded-full">
+                        الفعلية: {formatNumberEN(adminFormEffectivePermissions.length)}
+                      </Badge>
+                      <Badge variant="outline" className="rounded-full">
+                        الاستثناءات: {formatNumberEN(adminFormOverridesCount)}
+                      </Badge>
+                    </div>
+                  </div>
+
+                  <div className="mt-5 grid gap-2 md:grid-cols-2 2xl:grid-cols-3">
+                    {visiblePermissionDefinitions.map(perm => {
+                      const checked = adminFormEffectivePermissions.includes(
+                        perm.key as Permission
+                      );
+                      return (
+                        <Button
+                          key={`effective-${perm.key}`}
+                          type="button"
+                          variant="outline"
+                          aria-pressed={checked}
+                          className={cn(
+                            "h-auto min-h-[68px] justify-between rounded-2xl border px-4 py-3 text-right shadow-none",
+                            checked
+                              ? "border-[#F2B705]/60 bg-[#F2B705]/12 text-slate-950 hover:bg-[#F2B705]/18"
+                              : "border-slate-200 bg-slate-50/60 text-slate-700 hover:bg-slate-100"
+                          )}
+                          onClick={() =>
+                            toggleAdminEffectivePermission(
+                              perm.key as Permission
+                            )
+                          }
+                        >
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-semibold">
+                              {perm.label}
+                            </div>
+                            <div
+                              dir="ltr"
+                              className="mt-1 truncate text-right text-[11px] opacity-60"
+                            >
+                              {perm.key}
+                            </div>
+                          </div>
+                          <div
+                            className={cn(
+                              "mr-3 h-3 w-3 shrink-0 rounded-full border",
+                              checked
+                                ? "border-[#c18d00] bg-[#F2B705]"
+                                : "border-slate-300 bg-white"
+                            )}
+                          />
+                        </Button>
+                      );
+                    })}
+                  </div>
+                </section>
               </div>
 
-              <div className="space-y-2">
-                <Label>ملخص الاستثناءات</Label>
-                <div className="flex flex-wrap gap-2 rounded-lg border border-dashed p-3 min-h-16">
-                  {adminFormPermissionOverrides.permissionsAllow.map(
-                    permissionKey => (
-                      <Badge
-                        key={`override-allow-${permissionKey}`}
-                        variant="secondary"
-                      >
-                        + {getPermissionLabel(permissionKey)}
-                      </Badge>
-                    )
-                  )}
-                  {adminFormPermissionOverrides.permissionsDeny.map(
-                    permissionKey => (
-                      <Badge
-                        key={`override-deny-${permissionKey}`}
-                        variant="outline"
-                      >
-                        - {getPermissionLabel(permissionKey)}
-                      </Badge>
-                    )
-                  )}
-                  {adminFormPermissionOverrides.permissionsAllow.length === 0 &&
-                    adminFormPermissionOverrides.permissionsDeny.length === 0 ? (
-                    <span className="text-sm text-muted-foreground">
-                      لا توجد تعديلات يدوية حالياً. الحساب يستخدم صلاحيات الدور
-                      الافتراضية فقط.
-                    </span>
+              <aside className="space-y-4 xl:sticky xl:top-5">
+                <div className="rounded-[24px] border border-slate-900 bg-slate-950 p-5 text-white shadow-[0_24px_56px_-40px_rgba(2,6,23,0.8)]">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/45">
+                    ملخص الحساب
+                  </div>
+                  <div className="mt-4">
+                    <div className="text-lg font-semibold tracking-tight">
+                      {adminForm.displayName || "حساب إداري جديد"}
+                    </div>
+                    <div dir="ltr" className="mt-1 break-all text-right text-sm text-white/55">
+                      {adminForm.email || "email@example.com"}
+                    </div>
+                  </div>
+
+                  <div className="mt-5 grid grid-cols-3 gap-2">
+                    <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-3 text-center">
+                      <div className="text-[11px] text-white/45">الفعلية</div>
+                      <div className="mt-1 text-xl font-semibold">
+                        {formatNumberEN(adminFormEffectivePermissions.length)}
+                      </div>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-3 text-center">
+                      <div className="text-[11px] text-white/45">الدور</div>
+                      <div className="mt-1 text-xl font-semibold">
+                        {formatNumberEN(adminFormDefaultPermissions.length)}
+                      </div>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-3 text-center">
+                      <div className="text-[11px] text-white/45">تعديل</div>
+                      <div className="mt-1 text-xl font-semibold">
+                        {formatNumberEN(adminFormOverridesCount)}
+                      </div>
+                    </div>
+                  </div>
+
+                  {area === "staff" && adminForm.employeeProfileEnabled ? (
+                    <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                      <div className="text-xs text-white/45">سجل الموظف</div>
+                      <div className="mt-1 break-all text-sm font-semibold text-white/85">
+                        {adminEmployeeLinkMode === "existing"
+                          ? selectedEmployeeDirectoryEntry
+                            ? `${selectedEmployeeDirectoryEntry.displayName} - ${selectedEmployeeDirectoryEntry.email || selectedEmployeeDirectoryEntry.id}`
+                            : "سجل موظف غير محدد"
+                          : "سجل موظف جديد عند الحفظ"}
+                      </div>
+                    </div>
                   ) : null}
                 </div>
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={resetAdminPermissionOverrides}
-                    disabled={
-                      adminFormPermissionOverrides.permissionsAllow.length ===
-                      0 &&
-                      adminFormPermissionOverrides.permissionsDeny.length === 0
-                    }
-                  >
-                    إعادة ضبط الاستثناءات
-                  </Button>
-                </div>
-              </div>
-            </div>
 
-            <DialogFooter className="gap-2">
-              <Button
-                variant="outline"
-                onClick={() => setIsAdminDialogOpen(false)}
-              >
-                إلغاء
-              </Button>
-              <Button className="bg-[#F2B705]" onClick={handleSaveAdminUser}>
-                {editingAdminId ? "حفظ التعديل" : "إنشاء"}
-              </Button>
-            </DialogFooter>
+                <div className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-[0_18px_46px_-42px_rgba(15,23,42,0.45)]">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-sm font-semibold text-slate-950">
+                        ملخص الاستثناءات
+                      </h3>
+                      <p className="mt-1 text-xs text-slate-500">
+                        الإضافات والحجب اليدوي على الدور.
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-9 rounded-xl"
+                      onClick={resetAdminPermissionOverrides}
+                      disabled={adminFormOverridesCount === 0}
+                    >
+                      إعادة
+                    </Button>
+                  </div>
+
+                  <div className="mt-4 flex min-h-[88px] flex-wrap content-start gap-2 rounded-[18px] border border-dashed border-slate-200 bg-slate-50/70 p-3">
+                    {adminFormPermissionOverrides.permissionsAllow.map(
+                      permissionKey => (
+                        <Badge
+                          key={`override-allow-${permissionKey}`}
+                          variant="secondary"
+                          className="rounded-full bg-emerald-50 text-emerald-700"
+                        >
+                          + {getPermissionLabel(permissionKey)}
+                        </Badge>
+                      )
+                    )}
+                    {adminFormPermissionOverrides.permissionsDeny.map(
+                      permissionKey => (
+                        <Badge
+                          key={`override-deny-${permissionKey}`}
+                          variant="outline"
+                          className="rounded-full border-rose-200 bg-rose-50 text-rose-700"
+                        >
+                          - {getPermissionLabel(permissionKey)}
+                        </Badge>
+                      )
+                    )}
+                    {adminFormOverridesCount === 0 ? (
+                      <span className="text-sm leading-7 text-slate-500">
+                        لا توجد تعديلات يدوية حالياً. الحساب يستخدم صلاحيات الدور الافتراضية فقط.
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+              </aside>
+            </div>
           </div>
+
+          <DialogFooter className="border-t border-slate-200 bg-white px-5 py-4 sm:px-6">
+            <Button
+              variant="outline"
+              className="rounded-xl"
+              onClick={() => setIsAdminDialogOpen(false)}
+            >
+              إلغاء
+            </Button>
+            <Button
+              className="rounded-xl bg-[#F2B705] text-slate-950 hover:bg-[#e0ab00]"
+              onClick={handleSaveAdminUser}
+            >
+              {editingAdminId ? "حفظ التعديل" : "إنشاء الحساب"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </DashboardLayout >

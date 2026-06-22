@@ -91,6 +91,11 @@ export const ROLE_DEFAULT_PERMS: Record<AppRole, Permission[]> = {
     "users.manage",
     "messages.view",
     "messages.manage",
+    "recruitment.view",
+    "recruitment.manage",
+    "employees.view",
+    "employees.manage",
+    "weekly_reports.manager_notes",
     "reports.view",
     "financial.view",
     "financial.edit",
@@ -135,7 +140,7 @@ export const INVESTMENT_ADMIN_ROLES: AppRole[] = [
   "admin",
   "accountant",
 ];
-export const STAFF_ADMIN_ROLES: AppRole[] = ["hr"];
+export const STAFF_ADMIN_ROLES: AppRole[] = ["owner", "hr"];
 
 export type AppUser = {
   uid: string;

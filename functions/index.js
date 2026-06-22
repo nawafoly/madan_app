@@ -50,6 +50,35 @@ const PUBLIC_WEB_CALLABLE_OPTIONS = Object.freeze({
   cors: PUBLIC_WEB_APP_ORIGINS,
   invoker: "public",
 });
+const ATTENDANCE_APP_CHECK_ENFORCED = [
+  "1",
+  "true",
+  "yes",
+  "on",
+].includes(
+  String(
+    process.env.ENFORCE_ATTENDANCE_APP_CHECK ||
+      process.env.ENFORCE_APP_CHECK ||
+      ""
+  )
+    .trim()
+    .toLowerCase()
+);
+const ATTENDANCE_CALLABLE_OPTIONS = Object.freeze({
+  ...PUBLIC_WEB_CALLABLE_OPTIONS,
+  enforceAppCheck: ATTENDANCE_APP_CHECK_ENFORCED,
+  consumeAppCheckToken: ATTENDANCE_APP_CHECK_ENFORCED,
+});
+const ATTENDANCE_MAX_ACCURACY_METERS = 100;
+const ATTENDANCE_ALLOWED_ROLES = new Set([
+  "owner",
+  "admin",
+  "accountant",
+  "hr",
+  "staff",
+]);
+const ATTENDANCE_TYPES = new Set(["check_in", "check_out"]);
+const EARTH_RADIUS_METERS = 6371008.8;
 
 // ✅ vNext Contract: countedStatuses = [active, stopped, completed]
 const COUNTED_STATUSES = new Set(["active", "stopped", "completed"]);
@@ -319,6 +348,242 @@ const sanitizeEmployeeDirectoryEntry = (uid, data) => {
     ) || null,
     department: pickFirstText(employment?.department, data?.department) || null,
     statusKey,
+  };
+};
+
+const normalizeAttendanceType = value => {
+  const type = String(value || "")
+    .trim()
+    .toLowerCase();
+  return ATTENDANCE_TYPES.has(type) ? type : "";
+};
+
+const finiteNumberOrNull = value => {
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) ? numberValue : null;
+};
+
+const normalizeLatitude = value => {
+  const numberValue = finiteNumberOrNull(value);
+  return numberValue !== null && numberValue >= -90 && numberValue <= 90
+    ? numberValue
+    : null;
+};
+
+const normalizeLongitude = value => {
+  const numberValue = finiteNumberOrNull(value);
+  return numberValue !== null && numberValue >= -180 && numberValue <= 180
+    ? numberValue
+    : null;
+};
+
+const normalizeAttendanceLocation = value => {
+  const location = value && typeof value === "object" ? value : {};
+  const lat = normalizeLatitude(location.lat ?? location.latitude);
+  const lng = normalizeLongitude(
+    location.lng ?? location.lon ?? location.longitude
+  );
+  const accuracy = finiteNumberOrNull(location.accuracy);
+
+  if (lat === null || lng === null || accuracy === null || accuracy < 0) {
+    return null;
+  }
+
+  return {
+    lat,
+    lng,
+    accuracy,
+  };
+};
+
+const clampText = (value, maxLength = 180) => {
+  const text = stringOrEmpty(value).replace(/\s+/g, " ");
+  return text.length > maxLength ? text.slice(0, maxLength).trim() : text;
+};
+
+const normalizeAttendanceDeviceInfo = value => {
+  const info = value && typeof value === "object" ? value : {};
+  return {
+    userAgent: clampText(info.userAgent, 400) || null,
+    platform: clampText(info.platform, 120) || null,
+    language: clampText(info.language, 40) || null,
+    timeZone: clampText(info.timeZone, 80) || null,
+  };
+};
+
+const toRadians = degrees => (degrees * Math.PI) / 180;
+
+const calculateDistanceMeters = (left, right) => {
+  const latDelta = toRadians(right.lat - left.lat);
+  const lngDelta = toRadians(right.lng - left.lng);
+  const leftLat = toRadians(left.lat);
+  const rightLat = toRadians(right.lat);
+  const a =
+    Math.sin(latDelta / 2) * Math.sin(latDelta / 2) +
+    Math.cos(leftLat) *
+      Math.cos(rightLat) *
+      Math.sin(lngDelta / 2) *
+      Math.sin(lngDelta / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Math.round(EARTH_RADIUS_METERS * c);
+};
+
+const normalizeAttendanceZoneIds = (...values) => {
+  const ids = [];
+  for (const value of values) {
+    ids.push(...normalizeStringArray(value));
+  }
+  return Array.from(new Set(ids));
+};
+
+const pickAttendanceZoneIds = (employeeData, userData) =>
+  normalizeAttendanceZoneIds(
+    employeeData?.allowedZoneIds,
+    employeeData?.employeeProfile?.employment?.allowedZoneIds,
+    employeeData?.employment?.allowedZoneIds,
+    userData?.allowedZoneIds,
+    userData?.employeeProfile?.employment?.allowedZoneIds,
+    userData?.employment?.allowedZoneIds
+  );
+
+const pickAttendanceZoneId = (employeeData, userData) =>
+  pickFirstText(
+    employeeData?.workZoneId,
+    employeeData?.zoneId,
+    employeeData?.attendanceZoneId,
+    employeeData?.employeeProfile?.employment?.workZoneId,
+    employeeData?.employeeProfile?.employment?.zoneId,
+    userData?.workZoneId,
+    userData?.zoneId,
+    userData?.attendanceZoneId
+  );
+
+const pickAttendanceBranchId = (employeeData, userData) =>
+  pickFirstText(
+    employeeData?.branchId,
+    employeeData?.employeeProfile?.employment?.branchId,
+    userData?.branchId,
+    userData?.employeeProfile?.employment?.branchId
+  );
+
+const normalizeRadiusZoneSnapshot = docSnap => {
+  if (!docSnap?.exists) return null;
+
+  const data = docSnap.data() || {};
+  const type = String(data.type || "radius")
+    .trim()
+    .toLowerCase();
+  if (type !== "radius") {
+    return {
+      id: docSnap.id,
+      type,
+      unsupported: true,
+      active: data.active !== false,
+    };
+  }
+
+  const center = data.center || {};
+  const lat = normalizeLatitude(center.lat ?? center.latitude);
+  const lng = normalizeLongitude(center.lng ?? center.longitude);
+  const radiusMeters = finiteNumberOrNull(data.radiusMeters);
+  const active = data.active !== false;
+
+  if (!active || lat === null || lng === null || !radiusMeters || radiusMeters <= 0) {
+    return {
+      id: docSnap.id,
+      type,
+      invalid: true,
+      active,
+    };
+  }
+
+  return {
+    id: docSnap.id,
+    name: stringOrEmpty(data.name) || null,
+    type,
+    branchId: stringOrEmpty(data.branchId) || null,
+    center: { lat, lng },
+    radiusMeters,
+    active,
+  };
+};
+
+const resolveAttendanceZone = async (employeeData, userData) => {
+  const zoneIds = pickAttendanceZoneIds(employeeData, userData);
+  if (zoneIds.length > 0) {
+    const zoneRefs = zoneIds.map(zoneId => db.doc(`work_zones/${zoneId}`));
+    const zoneSnaps = await db.getAll(...zoneRefs);
+    const zones = [];
+
+    for (const zoneSnap of zoneSnaps) {
+      const zone = normalizeRadiusZoneSnapshot(zoneSnap);
+      if (!zone) return { zones: [], error: "zone_not_found" };
+      if (zone.unsupported) return { zones: [], error: "unsupported_zone_type" };
+      if (zone.invalid) return { zones: [], error: "zone_invalid" };
+      zones.push(zone);
+    }
+
+    return { zones, error: "" };
+  }
+
+  const zoneId = pickAttendanceZoneId(employeeData, userData);
+  if (zoneId) {
+    const zoneSnap = await db.doc(`work_zones/${zoneId}`).get();
+    const zone = normalizeRadiusZoneSnapshot(zoneSnap);
+
+    if (!zone) return { zones: [], error: "zone_not_found" };
+    if (zone.unsupported) return { zones: [], error: "unsupported_zone_type" };
+    if (zone.invalid) return { zones: [], error: "zone_invalid" };
+    return { zones: [zone], error: "" };
+  }
+
+  const branchId = pickAttendanceBranchId(employeeData, userData);
+  if (!branchId) {
+    return { zones: [], error: "" };
+  }
+
+  const zonesSnap = await db
+    .collection("work_zones")
+    .where("active", "==", true)
+    .get();
+  const matchingZone = zonesSnap.docs
+    .map(docSnap => normalizeRadiusZoneSnapshot(docSnap))
+    .find(
+      zone =>
+        zone &&
+        !zone.unsupported &&
+        !zone.invalid &&
+        zone.branchId === branchId
+    );
+
+  return { zones: matchingZone ? [matchingZone] : [], error: "" };
+};
+
+const evaluateAttendanceZones = (clientLocation, zones) => {
+  if (!Array.isArray(zones) || zones.length === 0) {
+    return {
+      zone: null,
+      distanceMeters: null,
+      withinZone: true,
+    };
+  }
+
+  const evaluatedZones = zones
+    .map(zone => ({
+      zone,
+      distanceMeters: calculateDistanceMeters(clientLocation, zone.center),
+    }))
+    .sort((left, right) => left.distanceMeters - right.distanceMeters);
+
+  const matchingZone = evaluatedZones.find(
+    item => item.distanceMeters <= item.zone.radiusMeters
+  );
+
+  return {
+    zone: matchingZone?.zone || evaluatedZones[0]?.zone || null,
+    distanceMeters:
+      matchingZone?.distanceMeters ?? evaluatedZones[0]?.distanceMeters ?? null,
+    withinZone: Boolean(matchingZone),
   };
 };
 
@@ -1067,6 +1332,195 @@ exports.adminRecomputeAllProjects = onCall(
  * + Apply role_invites/{emailLower} if exists and active
  * + Consume invite after use (isActive=false)
  */
+exports.recordAttendance = onCall(
+  ATTENDANCE_CALLABLE_OPTIONS,
+  async request => {
+    if (!request.auth?.uid) {
+      throw new HttpsError("unauthenticated", "Authentication required.");
+    }
+
+    const actorUid = stringOrEmpty(request.auth.uid);
+    const actorEmail = stringOrEmpty(request.auth.token?.email).toLowerCase();
+    const role = await getUserRole(actorUid, actorEmail);
+    const type = normalizeAttendanceType(request.data?.type);
+    const clientLocation = normalizeAttendanceLocation(
+      request.data?.location || request.data?.clientLocation
+    );
+    const requestedEmployeeId = stringOrEmpty(request.data?.employeeId);
+    const clientTime = clampText(request.data?.clientTime, 80) || null;
+    const deviceInfo = normalizeAttendanceDeviceInfo(request.data?.deviceInfo);
+
+    if (!type) {
+      throw new HttpsError(
+        "invalid-argument",
+        "Attendance type must be check_in or check_out."
+      );
+    }
+
+    if (!clientLocation) {
+      throw new HttpsError(
+        "invalid-argument",
+        "Valid GPS location is required."
+      );
+    }
+
+    const userSnap = await db.doc(`users/${actorUid}`).get();
+    const userData = userSnap.exists ? userSnap.data() || {} : {};
+    const linkedEmployeeId = pickFirstText(
+      userData?.linkedEmployeeId,
+      actorUid
+    );
+
+    if (
+      requestedEmployeeId &&
+      requestedEmployeeId !== actorUid &&
+      requestedEmployeeId !== linkedEmployeeId
+    ) {
+      throw new HttpsError(
+        "permission-denied",
+        "Attendance can only be recorded for the current employee."
+      );
+    }
+
+    if (
+      !ATTENDANCE_ALLOWED_ROLES.has(role) &&
+      !userData?.employeeProfileEnabled &&
+      !linkedEmployeeId
+    ) {
+      throw new HttpsError(
+        "permission-denied",
+        "Attendance is not enabled for this account."
+      );
+    }
+
+    const employeeDocId = linkedEmployeeId || actorUid;
+    const employeeSnap = await db.doc(`employees/${employeeDocId}`).get();
+    const employeeData = employeeSnap.exists ? employeeSnap.data() || {} : {};
+    const zoneResolution = await resolveAttendanceZone(employeeData, userData);
+    const zoneCheck = evaluateAttendanceZones(
+      clientLocation,
+      zoneResolution.zones
+    );
+    const zone = zoneCheck.zone;
+    let result = "allowed";
+    let rejectionReason = null;
+    let distanceMeters = zoneCheck.distanceMeters;
+
+    if (clientLocation.accuracy > ATTENDANCE_MAX_ACCURACY_METERS) {
+      result = "rejected";
+      rejectionReason = "poor_accuracy";
+    } else if (zoneResolution.error) {
+      result = "rejected";
+      rejectionReason = zoneResolution.error;
+    } else if (!zoneCheck.withinZone) {
+      result = "rejected";
+      rejectionReason = "outside_zone";
+    }
+
+    const recordRef = db.collection("attendance_records").doc();
+    const stateRef = db.doc(`attendance_state/${actorUid}`);
+    let savedResult = result;
+    let savedRejectionReason = rejectionReason;
+    let savedStatus = null;
+
+    await db.runTransaction(async transaction => {
+      let finalResult = result;
+      let finalRejectionReason = rejectionReason;
+      const stateSnap = await transaction.get(stateRef);
+      const currentStatus = stateSnap.exists
+        ? stringOrEmpty(stateSnap.data()?.status)
+        : "";
+
+      if (finalResult === "allowed") {
+        if (type === "check_in" && currentStatus === "checked_in") {
+          finalResult = "rejected";
+          finalRejectionReason = "duplicate_check_in";
+        } else if (type === "check_out" && currentStatus !== "checked_in") {
+          finalResult = "rejected";
+          finalRejectionReason = "not_checked_in";
+        }
+      }
+
+      savedResult = finalResult;
+      savedRejectionReason = finalRejectionReason;
+      savedStatus = currentStatus || null;
+
+      const serverTimestamp = FieldValue.serverTimestamp();
+      const recordPayload = {
+        employeeUid: actorUid,
+        employeeDocId,
+        type,
+        serverTime: serverTimestamp,
+        clientTime,
+        clientLocation,
+        zoneId: zone?.id || null,
+        zoneName: zone?.name || null,
+        zoneType: zone?.type || null,
+        allowedZoneIds: (zoneResolution.zones || []).map(item => item.id),
+        distanceMeters,
+        result: finalResult,
+        rejectionReason: finalRejectionReason || null,
+        accuracyAccepted:
+          clientLocation.accuracy <= ATTENDANCE_MAX_ACCURACY_METERS,
+        deviceInfo,
+        appCheck: {
+          enforced: ATTENDANCE_APP_CHECK_ENFORCED,
+          appId: request.app?.appId || null,
+        },
+        source: {
+          area: "employee",
+          page: "employee_profile",
+          route: "functions.recordAttendance",
+          method: "gps_button",
+        },
+        createdByUid: actorUid,
+        createdByEmail: actorEmail || "",
+        createdByRole: role,
+        createdAt: serverTimestamp,
+        updatedAt: serverTimestamp,
+      };
+
+      transaction.set(recordRef, recordPayload);
+
+      if (finalResult === "allowed") {
+        transaction.set(
+          stateRef,
+          {
+            employeeUid: actorUid,
+            employeeDocId,
+            status: type === "check_in" ? "checked_in" : "checked_out",
+            lastType: type,
+            lastRecordId: recordRef.id,
+            lastServerTime: serverTimestamp,
+            lastClientLocation: clientLocation,
+            lastZoneId: zone?.id || null,
+            updatedAt: serverTimestamp,
+          },
+          { merge: true }
+        );
+      }
+    });
+
+    return {
+      ok: savedResult === "allowed",
+      id: recordRef.id,
+      result: savedResult,
+      type,
+      rejectionReason: savedRejectionReason || null,
+      accuracy: clientLocation.accuracy,
+      zoneId: zone?.id || null,
+      distanceMeters,
+      previousStatus: savedStatus,
+      currentStatus:
+        savedResult === "allowed"
+          ? type === "check_in"
+            ? "checked_in"
+            : "checked_out"
+          : savedStatus,
+    };
+  }
+);
+
 exports.listActiveEmployeeDirectory = onCall(
   PUBLIC_WEB_CALLABLE_OPTIONS,
   async request => {

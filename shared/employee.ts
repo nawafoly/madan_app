@@ -98,6 +98,7 @@ export type EmployeeEmploymentStatus =
     employmentStatus?: EmployeeEmploymentStatus | null;
     employeeCode?: string | null;
     fingerprintNumber?: string | null;
+    allowedZoneIds?: string[] | null;
     adminNotes?: string | null;
     updatedAt?: unknown;
     updatedByUid?: string | null;

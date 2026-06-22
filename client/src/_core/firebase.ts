@@ -1,5 +1,6 @@
 // client/src/_core/firebase.ts
 import { initializeApp, getApps } from "firebase/app";
+import { initializeAppCheck, ReCaptchaV3Provider } from "firebase/app-check";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getFunctions } from "firebase/functions";
@@ -41,6 +42,29 @@ if (missing.length > 0) {
 // =========================
 export const app = 
   getApps().length > 0 ? getApps()[0] : initializeApp(firebaseConfig);
+
+const appCheckSiteKey = String(
+  import.meta.env.VITE_FB_APPCHECK_SITE_KEY ?? ""
+).trim();
+const appCheckDebugToken = String(
+  import.meta.env.VITE_FB_APPCHECK_DEBUG_TOKEN ?? ""
+).trim();
+const browserWindow =
+  typeof window !== "undefined" ? (window as any) : null;
+
+if (browserWindow && appCheckDebugToken) {
+  browserWindow.FIREBASE_APPCHECK_DEBUG_TOKEN =
+    appCheckDebugToken === "true" ? true : appCheckDebugToken;
+}
+
+export const appCheck =
+  browserWindow && appCheckSiteKey
+    ? browserWindow.__maedinAppCheck ||
+      (browserWindow.__maedinAppCheck = initializeAppCheck(app, {
+        provider: new ReCaptchaV3Provider(appCheckSiteKey),
+        isTokenAutoRefreshEnabled: true,
+      }))
+    : null;
 // =========================
 // Auth
 // =========================
@@ -69,6 +93,7 @@ if (import.meta.env.DEV) {
     auth,
     db,
     firebaseFunctions,
+    appCheck,
     firebaseConfig,
   };
 }
