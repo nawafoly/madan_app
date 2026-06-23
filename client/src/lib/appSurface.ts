@@ -63,28 +63,20 @@ export function mapLegacyStaffPath(pathWithSearch: string) {
     return `/hr/create-staff${suffix}`;
   }
 
-  if (path === "/employee" || path === "/employee/profile") {
-    return `/hr/profile${suffix}`;
+  if (path === "/hr/profile" || path === "/staff" || path === "/staff/profile") {
+    return `/employee/profile${suffix}`;
   }
 
-  if (path === "/employee/files") {
-    return `/hr/files${suffix}`;
+  if (path === "/hr/files" || path === "/staff/files") {
+    return `/employee/files${suffix}`;
   }
 
-  if (path === "/employee/messages") {
-    return `/hr/messages${suffix}`;
+  if (path === "/hr/messages" || path === "/staff/messages") {
+    return `/employee/messages${suffix}`;
   }
 
-  if (path === "/staff" || path === "/staff/profile") {
-    return `/hr/profile${suffix}`;
-  }
-
-  if (path === "/staff/files") {
-    return `/hr/files${suffix}`;
-  }
-
-  if (path === "/staff/messages") {
-    return `/hr/messages${suffix}`;
+  if (path === "/hr/weekly-reports" || path === "/staff/weekly-reports") {
+    return `/employee/weekly-reports${suffix}`;
   }
 
   return pathWithSearch || "/";

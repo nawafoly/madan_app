@@ -212,7 +212,7 @@ const MIN_WIDTH = 200;
 const MAX_WIDTH = 480;
 type DashboardArea = "admin" | "hr";
 
-const EMPLOYEE_PROFILE_PATH = "/hr/profile";
+const EMPLOYEE_PROFILE_PATH = "/employee/profile";
 const EMPLOYEE_PROFILE_LABEL = "بروفايل الموظف";
 const HR_MENU_LABELS: Record<string, { ar: string; en: string }> = {
   "/hr/recruitment": { ar: "طلبات التوظيف", en: "Recruitment" },
@@ -633,8 +633,8 @@ function DashboardLayoutContent({
   const isEmployeeProfileActive =
     area === "hr" &&
     (location === EMPLOYEE_PROFILE_PATH ||
-      location === "/hr/files" ||
-      location === "/hr/messages");
+      location === "/employee/files" ||
+      location === "/employee/messages");
   const activeMenuItem = visibleMenuItems.find(item => item.path === location);
   const activeMenuLabel = isEmployeeProfileActive
     ? employeeProfileLabel

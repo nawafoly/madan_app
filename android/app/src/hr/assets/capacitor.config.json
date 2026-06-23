@@ -1,0 +1,8 @@
+{
+  "appId": "com.madan.hr",
+  "appName": "Maedin HR",
+  "webDir": "client/dist",
+  "server": {
+    "url": "https://madan-app.vercel.app/hr"
+  }
+}

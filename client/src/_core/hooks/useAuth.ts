@@ -171,6 +171,8 @@ function normalizeRole(role: any): AppRole {
     return r;
   }
 
+  if (r === "employee") return "staff";
+
   if (
     r === "human_resources" ||
     r === "human-resources" ||
@@ -569,7 +571,7 @@ export function getHomePathForRole(role: AppRole | null | undefined) {
     return "/dashboard";
   }
   if (role === "hr") return "/hr/recruitment";
-  if (role === "staff") return "/hr/profile";
+  if (role === "staff") return "/employee/profile";
   if (role === "client" || role === "guest") return "/client/dashboard";
   return "/projects";
 }
@@ -602,7 +604,7 @@ export function getStaffHomePathForUser(
   }
 
   if (user.role === "staff" || canAccessEmployeeProfile(user)) {
-    return "/hr/profile";
+    return "/employee/profile";
   }
 
   return "/login";
@@ -622,7 +624,7 @@ export function getHomePathForUser(
     return getStaffHomePathForUser(user);
   }
 
-  if (user.role === "staff") return "/hr";
+  if (user.role === "staff") return "/employee/profile";
   if (user.role === "client" || user.role === "guest") return "/client/dashboard";
 
   if (user.role === "hr") {

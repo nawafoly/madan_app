@@ -60,7 +60,8 @@ export async function handleAttendanceRequest({
   }
 
   if (pathname === "/attendance/records" && request.method === "GET") {
-    if (!canReadAttendanceRecords(requester.runtime)) {
+    const employeeUid = normalizeText(url.searchParams.get("employeeUid"));
+    if (!canReadAttendanceRecords(requester.runtime, requester.uid, employeeUid)) {
       return json(403, { ok: false, message: "attendance_records_forbidden" });
     }
     return listAttendanceRecords(url, db, directoryDb);
@@ -120,10 +121,10 @@ function canManageAttendance(runtime) {
   );
 }
 
-function canReadAttendanceRecords(runtime) {
-  return Boolean(
-    runtime?.isActive && ATTENDANCE_ADMIN_ROLES.has(runtime?.role)
-  );
+function canReadAttendanceRecords(runtime, requesterUid, employeeUid) {
+  if (!runtime?.isActive) return false;
+  if (ATTENDANCE_ADMIN_ROLES.has(runtime?.role)) return true;
+  return Boolean(employeeUid && employeeUid === requesterUid);
 }
 
 function forbidden() {
@@ -656,6 +657,11 @@ async function recordAttendance({
     const targetStatus = type === "check_in" ? "checked_in" : "checked_out";
     const stateRejection =
       type === "check_in" ? "duplicate_check_in" : "not_checked_in";
+    const currentDay = getRiyadhDayBounds();
+    const stateUpdateWhere =
+      type === "check_in"
+        ? "(status = 'checked_out' OR last_server_time IS NULL OR last_server_time < ? OR last_server_time >= ?)"
+        : "(status = 'checked_in' AND last_server_time >= ? AND last_server_time < ?)";
     const source = JSON.stringify({
       area: "employee",
       page: "employee_profile",
@@ -697,7 +703,7 @@ async function recordAttendance({
         SET employee_doc_id = ?, status = ?, last_type = ?, last_record_id = ?,
             last_server_time = ?, last_location_lat = ?, last_location_lng = ?,
             last_location_accuracy = ?, last_zone_id = ?, updated_at = ?
-        WHERE employee_uid = ? AND status = ?
+        WHERE employee_uid = ? AND ${stateUpdateWhere}
       `
         )
         .bind(
@@ -712,7 +718,8 @@ async function recordAttendance({
           zone?.id || null,
           now,
           requester.uid,
-          stateRequirement
+          currentDay.start,
+          currentDay.end
         ),
       db
         .prepare(
@@ -930,15 +937,31 @@ export function evaluateLocationDecision({ location, zoneError, zoneCheck }) {
   return { result: "allowed", rejectionReason: null };
 }
 
-export function evaluateStateTransition(type, currentStatus) {
-  if (type === "check_in" && currentStatus === "checked_in") {
+function isServerTimeWithinBounds(serverTime, bounds) {
+  if (!bounds?.start || !bounds?.end || !serverTime) return true;
+  return serverTime >= bounds.start && serverTime < bounds.end;
+}
+
+export function evaluateStateTransition(type, currentStatus, options = {}) {
+  const isSameAttendanceDay = isServerTimeWithinBounds(
+    options.lastServerTime,
+    options.dayBounds
+  );
+  if (
+    type === "check_in" &&
+    currentStatus === "checked_in" &&
+    isSameAttendanceDay
+  ) {
     return {
       result: "rejected",
       rejectionReason: "duplicate_check_in",
       currentStatus,
     };
   }
-  if (type === "check_out" && currentStatus !== "checked_in") {
+  if (
+    type === "check_out" &&
+    (currentStatus !== "checked_in" || !isSameAttendanceDay)
+  ) {
     return {
       result: "rejected",
       rejectionReason: "not_checked_in",

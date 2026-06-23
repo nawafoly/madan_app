@@ -18,6 +18,7 @@ export function normalizeRole(dbRole: string, email?: string | null): AppRole {
   // ✅ Legacy mapping
   if (r === "user") return "client";
   if (r === "admin") return "admin";
+  if (r === "employee") return "staff";
 
   // ✅ Approved roles
   if (

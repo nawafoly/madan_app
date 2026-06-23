@@ -1,0 +1,8 @@
+{
+  "appId": "com.maedin.app",
+  "appName": "MAEDIN",
+  "webDir": "client/dist",
+  "server": {
+    "url": "https://madan-app.vercel.app"
+  }
+}

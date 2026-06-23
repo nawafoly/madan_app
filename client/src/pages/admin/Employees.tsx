@@ -52,6 +52,7 @@ import {
 import { toast } from "sonner";
 
 import DashboardLayout from "@/components/DashboardLayout";
+import EmployeeTodayAttendancePanel from "@/components/EmployeeTodayAttendancePanel";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -256,6 +257,7 @@ type EmployeeAbsenceFormValues = {
 
 type EmployeeWorkspaceSectionKey =
   | "profile"
+  | "attendance"
   | "salary"
   | "leave"
   | "messages"
@@ -268,6 +270,7 @@ const EMPLOYEE_WORKSPACE_SECTIONS: Array<{
   icon: typeof ShieldCheck;
 }> = [
     { key: "profile", label: "بيانات الموظف", icon: ShieldCheck },
+    { key: "attendance", label: "الحضور", icon: Clock3 },
     { key: "salary", label: "الرواتب", icon: BadgeCheck },
     { key: "leave", label: "الإجازات", icon: CalendarDays },
     { key: "messages", label: "الرسائل", icon: Mail },
@@ -287,6 +290,11 @@ function resolveEmployeeWorkspaceSection(
     case "employee":
     case "employee-info":
       return "profile";
+    case "attendance":
+    case "attendances":
+    case "check-in":
+    case "checkins":
+      return "attendance";
     case "salary":
     case "payroll":
     case "salary-info":
@@ -361,6 +369,7 @@ function resolveEmployeeWorkspaceNotificationSection(
 function createEmptyEmployeeWorkspaceNotificationBucket(): EmployeeWorkspaceNotificationBucket {
   return {
     profile: [],
+    attendance: [],
     salary: [],
     leave: [],
     messages: [],
@@ -1560,6 +1569,7 @@ export default function EmployeesManagementPage() {
   } | null>(null);
   const payrollMudadDocumentInputRef = useRef<HTMLInputElement | null>(null);
   const employeeSalarySectionRef = useRef<HTMLDivElement | null>(null);
+  const employeeAttendanceSectionRef = useRef<HTMLDivElement | null>(null);
   const employeeOverviewSectionRef = useRef<HTMLDivElement | null>(null);
   const employeeLeaveSectionRef = useRef<HTMLDivElement | null>(null);
   const employeeMessagesSectionRef = useRef<HTMLDivElement | null>(null);
@@ -1572,6 +1582,7 @@ export default function EmployeesManagementPage() {
 
   const employeeWorkspaceSectionRefs = {
     profile: employeeOverviewSectionRef,
+    attendance: employeeAttendanceSectionRef,
     salary: employeeSalarySectionRef,
     leave: employeeLeaveSectionRef,
     messages: employeeMessagesSectionRef,
@@ -2698,6 +2709,9 @@ export default function EmployeesManagementPage() {
   );
   const employeeWorkspaceSectionHasAlert = {
     profile: Boolean(selectedEmployeeWorkspaceUnreadNotificationBucket?.profile.length),
+    attendance: Boolean(
+      selectedEmployeeWorkspaceUnreadNotificationBucket?.attendance.length
+    ),
     salary:
       Boolean(selectedEmployeeWorkspaceUnreadNotificationBucket?.salary.length) ||
       employeeWorkspaceAlertState.salary.latestUpdateAt >
@@ -2716,7 +2730,8 @@ export default function EmployeesManagementPage() {
     employeeWorkspaceSectionHasAlert.leave ||
     employeeWorkspaceSectionHasAlert.messages ||
     employeeWorkspaceSectionHasAlert.files ||
-    employeeWorkspaceSectionHasAlert.profile;
+    employeeWorkspaceSectionHasAlert.profile ||
+    employeeWorkspaceSectionHasAlert.attendance;
 
   useEffect(() => {
     if (
@@ -5417,6 +5432,21 @@ export default function EmployeesManagementPage() {
                     </div>
                   </CardContent>
                 </Card>
+
+                <div
+                  id="employee-section-attendance"
+                  ref={employeeAttendanceSectionRef}
+                  className={cn(
+                    "order-20 scroll-mt-36 lg:scroll-mt-44",
+                    activeEmployeeWorkspaceSection !== "attendance" && "hidden"
+                  )}
+                >
+                  <EmployeeTodayAttendancePanel
+                    employeeUid={selectedEmployeeAuthUid || null}
+                    title="سجل حضور الموظف الشهري"
+                    description="عرض إداري لكل عمليات الحضور والانصراف المقبولة فعليًا لهذا الموظف خلال الشهر الحالي."
+                  />
+                </div>
 
                 <Card
                   id="employee-section-messages"

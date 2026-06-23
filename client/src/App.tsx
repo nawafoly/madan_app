@@ -61,6 +61,16 @@ import {
   normalizePathname,
 } from "@/lib/appSurface";
 
+function isEmployeeSelfServicePath(pathname: string) {
+  const path = normalizePathname(pathname);
+  return (
+    path === "/employee/profile" ||
+    path === "/employee/files" ||
+    path === "/employee/messages" ||
+    path === "/employee/weekly-reports"
+  );
+}
+
 function PlatformBoundary({ children }: { children: ReactNode }) {
   const { loading, user } = useAuth();
   const [location, setLocation] = useLocation();
@@ -87,8 +97,15 @@ function PlatformBoundary({ children }: { children: ReactNode }) {
 
       const target = user ? getHomePathForUser(user, "staff") : "/login";
       if (location !== target) setLocation(target);
+      return;
+    }
+
+    if (!loading && user?.role === "staff" && !isEmployeeSelfServicePath(currentPath)) {
+      const target = "/employee/profile";
+      if (location !== target) setLocation(target);
     }
   }, [
+    currentPath,
     isStaffPath,
     loading,
     location,
@@ -325,68 +342,68 @@ function Router() {
         {/* ================= Employee Self-Service ================= */}
 
         <Route path="/hr/profile">
+          <Redirect to="/employee/profile" />
+        </Route>
+
+        <Route path="/hr/files">
+          <Redirect to="/employee/files" />
+        </Route>
+
+        <Route path="/hr/messages">
+          <Redirect to="/employee/messages" />
+        </Route>
+
+        <Route path="/hr/weekly-reports">
+          <Redirect to="/employee/weekly-reports" />
+        </Route>
+
+        <Route path="/employee/profile">
           <RequireEmployeeProfileAccess>
             <EmployeeProfilePage />
           </RequireEmployeeProfileAccess>
         </Route>
 
-        <Route path="/hr/files">
+        <Route path="/employee/files">
           <RequireEmployeeProfileAccess>
             <EmployeeFilesPage />
           </RequireEmployeeProfileAccess>
         </Route>
 
-        <Route path="/hr/messages">
+        <Route path="/employee/messages">
           <RequireEmployeeProfileAccess>
             <EmployeeMessagesPage />
           </RequireEmployeeProfileAccess>
         </Route>
 
-        <Route path="/hr/weekly-reports">
+        <Route path="/employee/weekly-reports">
           <RequireEmployeeProfileAccess allowStaffAdmin>
             <EmployeeWeeklyReportsPage />
           </RequireEmployeeProfileAccess>
         </Route>
 
-        {/* ===== Legacy employee self-service links ===== */}
-        <Route path="/employee/profile">
-          <Redirect to="/hr/profile" />
-        </Route>
-
-        <Route path="/employee/files">
-          <Redirect to="/hr/files" />
-        </Route>
-
-        <Route path="/employee/messages">
-          <Redirect to="/hr/messages" />
-        </Route>
-
-        <Route path="/employee/weekly-reports">
-          <Redirect to="/hr/weekly-reports" />
-        </Route>
-
         <Route path="/employee">
-          <Redirect to="/hr/profile" />
+          <Redirect to="/employee/profile" />
         </Route>
 
+        {/* ===== Legacy employee self-service links ===== */}
         <Route path="/staff/profile">
-          <Redirect to="/hr/profile" />
+          <Redirect to="/employee/profile" />
         </Route>
 
         <Route path="/staff/files">
-          <Redirect to="/hr/files" />
+          <Redirect to="/employee/files" />
         </Route>
 
         <Route path="/staff/messages">
-          <Redirect to="/hr/messages" />
+          <Redirect to="/employee/messages" />
         </Route>
 
         <Route path="/staff/weekly-reports">
-          <Redirect to="/hr/weekly-reports" />
+          <Redirect to="/employee/weekly-reports" />
         </Route>
 
         <Route path="/staff">
-          <Redirect to="/hr/profile" />
+          <Redirect to="/employee/profile" />
         </Route>
 
         {/* ================= Client Area ================= */}

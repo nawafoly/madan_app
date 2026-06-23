@@ -34,6 +34,7 @@ import {
   Download,
   Eye,
   FileText,
+  ChevronDown,
   Loader2,
   Mail,
   Minus,
@@ -46,12 +47,16 @@ import {
   BadgeCheck,
   KeyRound,
   Send,
+  Hash,
   XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import EmployeeAttendanceCard from "@/components/EmployeeAttendanceCard";
+import EmployeeTodayAttendancePanel from "@/components/EmployeeTodayAttendancePanel";
 import EmployeeLayout from "@/components/EmployeeLayout";
+import EmployeeCard from "@/components/employee-portal/EmployeeCard";
+import InfoRow from "@/components/employee-portal/InfoRow";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -143,6 +148,62 @@ type AvatarCropMetrics = {
   maxOffsetX: number;
   maxOffsetY: number;
 };
+
+type EmployeePortalView =
+  | "dashboard"
+  | "attendance"
+  | "requests"
+  | "leave-request"
+  | "permission-request"
+  | "hr-info"
+  | "employment"
+  | "salary"
+  | "contracts"
+  | "leaves"
+  | "documents";
+
+const EMPLOYEE_PORTAL_VIEW_TITLES: Record<EmployeePortalView, string> = {
+  dashboard: "بوابة الموظف",
+  attendance: "الحضور",
+  requests: "الطلبات",
+  "leave-request": "طلب إجازة",
+  "permission-request": "طلب استئذان",
+  "hr-info": "معلومات الموارد البشرية",
+  employment: "البيانات الوظيفية",
+  salary: "الراتب والتفاصيل المالية",
+  contracts: "العقود",
+  leaves: "الإجازات",
+  documents: "المستندات",
+};
+
+const EMPLOYEE_PORTAL_HASH_TO_VIEW: Record<string, EmployeePortalView> = {
+  dashboard: "dashboard",
+  attendance: "attendance",
+  "employee-attendance": "attendance",
+  requests: "requests",
+  "employee-requests": "requests",
+  "leave-request": "leave-request",
+  "employee-leave-request": "leave-request",
+  "permission-request": "permission-request",
+  "employee-permission-request": "permission-request",
+  "hr-info": "hr-info",
+  "employee-profile-info": "hr-info",
+  employment: "employment",
+  "employee-employment-info": "employment",
+  salary: "salary",
+  "employee-payroll-info": "salary",
+  contracts: "contracts",
+  "employee-contracts-info": "contracts",
+  leaves: "leaves",
+  documents: "documents",
+  "employee-documents-info": "documents",
+};
+
+function getEmployeePortalViewFromHash(): EmployeePortalView {
+  if (typeof window === "undefined") return "dashboard";
+  const hash = window.location.hash.replace(/^#/, "").trim();
+  return EMPLOYEE_PORTAL_HASH_TO_VIEW[hash] || "dashboard";
+}
 
 function initialsFromName(name: string, email: string) {
   const source = String(name || email || "").trim();
@@ -508,6 +569,162 @@ function LeaveSummaryCard({
   );
 }
 
+function getRequestStatusPresentation(status: unknown) {
+  const meta = getLeaveStatusMeta(status);
+  const normalized = String(status || "").trim().toLowerCase();
+
+  if (
+    normalized === "approved" ||
+    normalized === "accepted" ||
+    normalized === "approve"
+  ) {
+    return {
+      label: meta.label || "مقبول",
+      dotClassName: "bg-emerald-500",
+      badgeClassName: "bg-emerald-50 text-emerald-700",
+    };
+  }
+
+  if (normalized === "rejected" || normalized === "declined") {
+    return {
+      label: meta.label || "مرفوض",
+      dotClassName: "bg-red-500",
+      badgeClassName: "bg-red-50 text-red-700",
+    };
+  }
+
+  return {
+    label: meta.label || "قيد المراجعة",
+    dotClassName: "bg-amber-500",
+    badgeClassName: "bg-amber-50 text-amber-700",
+  };
+}
+
+function getRequestNumber(request: EmployeeLeaveRequestRecord, index: number) {
+  const id = String(request.id || "").trim();
+  if (!id) return String(233000 + index + 1);
+  const compactId = id.replace(/[^a-zA-Z0-9]/g, "");
+  return compactId.slice(-6).toUpperCase() || String(233000 + index + 1);
+}
+
+function RequestFilterButton({ label }: { label: string }) {
+  return (
+    <button
+      type="button"
+      className="inline-flex h-14 min-w-[7rem] items-center justify-center gap-3 rounded-[14px] border border-slate-300 bg-white px-4 text-lg font-medium text-slate-800 shadow-[0_6px_16px_-14px_rgba(15,23,42,0.35)]"
+    >
+      <ChevronDown className="h-5 w-5 text-slate-700" />
+      {label}
+    </button>
+  );
+}
+
+function RequestInfoRow({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: typeof FileText;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="flex items-center justify-end gap-4 text-right">
+      <div className="min-w-0">
+        <div className="text-lg font-medium text-slate-500">{label}</div>
+        <div className="mt-2 text-base font-semibold text-slate-950">
+          {value}
+        </div>
+      </div>
+      <Icon className="h-9 w-9 shrink-0 text-slate-400" />
+    </div>
+  );
+}
+
+function EmployeeRequestCard({
+  request,
+  index,
+}: {
+  request: EmployeeLeaveRequestRecord;
+  index: number;
+}) {
+  const status = getRequestStatusPresentation(request.status);
+  const requestNumber = getRequestNumber(request, index);
+  const dateRange = formatLeaveDateRange(request.startDate, request.endDate);
+
+  return (
+    <article className="rounded-[20px] bg-white px-7 py-7 text-right shadow-[0_14px_34px_-26px_rgba(15,23,42,0.42)] ring-1 ring-slate-100">
+      <div className="flex items-start justify-between gap-6">
+        <div
+          className={cn(
+            "rounded-full px-5 py-3 text-base font-medium",
+            status.badgeClassName
+          )}
+        >
+          {status.label}
+        </div>
+
+        <div className="space-y-2">
+          <h3 className="text-2xl font-medium text-slate-950">طلب إجازة</h3>
+          <div className="text-sm text-slate-400">
+            {formatDateTimeEN(request.createdAt)}
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-10 grid gap-8">
+        <RequestInfoRow
+          icon={FileText}
+          label="نوع الطلب"
+          value={getLeaveTypeLabel(request.leaveType)}
+        />
+        <RequestInfoRow
+          icon={CalendarDays}
+          label="التاريخ المرتبط"
+          value={dateRange}
+        />
+        <RequestInfoRow icon={Hash} label="رقم الطلب" value={requestNumber} />
+      </div>
+
+      <div className="mt-10 flex items-center justify-end gap-3 text-lg text-slate-500">
+        <span>{status.label}</span>
+        <span className={cn("h-3 w-3 rounded-full", status.dotClassName)} />
+      </div>
+    </article>
+  );
+}
+
+function EmployeePortalViewHeader({
+  title,
+  description,
+  onBack,
+}: {
+  title: string;
+  description?: string;
+  onBack: () => void;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-4 rounded-[28px] border border-slate-100 bg-white px-5 py-5 shadow-[0_18px_45px_-34px_rgba(15,23,42,0.35)]">
+      <div className="space-y-1">
+        <h2 className="text-2xl font-semibold tracking-tight text-slate-950">
+          {title}
+        </h2>
+        {description ? (
+          <p className="text-sm leading-6 text-slate-500">{description}</p>
+        ) : null}
+      </div>
+      <Button
+        type="button"
+        variant="outline"
+        className="h-10 rounded-2xl border-slate-200 bg-white px-4 text-slate-700"
+        onClick={onBack}
+      >
+        رجوع
+      </Button>
+    </div>
+  );
+}
+
 export default function EmployeeProfilePage() {
   const { user } = useAuth();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -522,6 +739,9 @@ export default function EmployeeProfilePage() {
 
   const [userDoc, setUserDoc] = useState<EmployeeProfileUserDoc | null>(null);
   const [loading, setLoading] = useState(true);
+  const [activeView, setActiveView] = useState<EmployeePortalView>(() =>
+    getEmployeePortalViewFromHash()
+  );
   const [phoneInput, setPhoneInput] = useState("");
   const [savingPhone, setSavingPhone] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
@@ -558,6 +778,16 @@ export default function EmployeeProfilePage() {
     docId: string;
     entityId: string;
   } | null>(null);
+
+  useEffect(() => {
+    const syncViewFromHash = () => {
+      setActiveView(getEmployeePortalViewFromHash());
+    };
+
+    syncViewFromHash();
+    window.addEventListener("hashchange", syncViewFromHash);
+    return () => window.removeEventListener("hashchange", syncViewFromHash);
+  }, []);
 
   useEffect(() => {
     if (!user?.uid) {
@@ -1250,13 +1480,241 @@ export default function EmployeeProfilePage() {
         ? "border-amber-200 bg-amber-50 text-amber-700"
         : "border-slate-200 bg-slate-100 text-slate-600";
 
+  const employeeIdForAttendance =
+    employeeProfileSource?.entityId || user?.linkedEmployeeId || user?.uid || null;
+
+  const latestLeaveRequestsForDashboard = leaveRequests.slice(0, 2);
+
+  const openEmployeeView = (view: EmployeePortalView) => {
+    setActiveView(view);
+    if (typeof window === "undefined") return;
+
+    if (view === "dashboard") {
+      window.history.pushState(
+        null,
+        "",
+        `${window.location.pathname}${window.location.search}`
+      );
+    } else {
+      window.location.hash = view;
+    }
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const backToDashboard = () => openEmployeeView("dashboard");
+
   return (
     <EmployeeLayout
-      title="بروفايل الموظف"
-      description="هذه المساحة مخصصة لمتابعة بياناتك الشخصية والوظيفية، مع صلاحيات محددة لتعديل الجوال والصورة الشخصية وتغيير كلمة المرور فقط."
+      title={EMPLOYEE_PORTAL_VIEW_TITLES[activeView]}
+      description={
+        activeView === "dashboard"
+          ? "لوحة مختصرة لمتابعة الحضور، الطلبات، والتنقل بين معلومات الموظف."
+          : "عرض مستقل داخل بوابة الموظف بدون تغيير مسارات النظام أو منطق البيانات."
+      }
     >
+      {activeView === "dashboard" ? (
+        <div className="space-y-6">
+          <section className="space-y-2 text-right">
+            <p className="text-sm font-medium text-slate-500">مساء الخير</p>
+            <h1 className="text-3xl font-semibold tracking-tight text-slate-950">
+              {profile.personal.name}
+            </h1>
+            <p className="text-sm leading-6 text-slate-500">
+              {profile.employment.department} · {profile.employment.title}
+            </p>
+          </section>
+
+          <EmployeeAttendanceCard employeeId={employeeIdForAttendance} />
+
+          <EmployeeCard title="اختصارات سريعة" subtitle="وصول سريع لأكثر الإجراءات استخداماً">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <button
+                type="button"
+                className="rounded-[24px] border border-slate-100 bg-slate-50/80 px-4 py-5 text-center transition hover:bg-white hover:shadow-sm"
+                onClick={() => toast.info("TODO: واجهة تصحيح البصمة فقط حالياً بدون منطق جديد.")}
+              >
+                <UserRound className="mx-auto h-7 w-7 text-slate-500" />
+                <span className="mt-3 block text-sm font-semibold text-slate-900">
+                  تصحيح البصمة
+                </span>
+              </button>
+              <button
+                type="button"
+                className="rounded-[24px] border border-slate-100 bg-slate-50/80 px-4 py-5 text-center transition hover:bg-white hover:shadow-sm"
+                onClick={() => openEmployeeView("leave-request")}
+              >
+                <CalendarDays className="mx-auto h-7 w-7 text-slate-500" />
+                <span className="mt-3 block text-sm font-semibold text-slate-900">
+                  طلب إجازة
+                </span>
+              </button>
+              <button
+                type="button"
+                className="rounded-[24px] border border-slate-100 bg-slate-50/80 px-4 py-5 text-center transition hover:bg-white hover:shadow-sm"
+                onClick={() => openEmployeeView("permission-request")}
+              >
+                <Send className="mx-auto h-7 w-7 text-slate-500" />
+                <span className="mt-3 block text-sm font-semibold text-slate-900">
+                  طلب استئذان
+                </span>
+              </button>
+            </div>
+          </EmployeeCard>
+
+          <EmployeeCard title="معلومات الموارد البشرية" subtitle="عناصر تنقل فقط، كل قسم يفتح في صفحة داخلية مستقلة">
+            <div className="-mx-5 -my-5 divide-y divide-slate-100">
+              <InfoRow
+                icon={UserRound}
+                label="شخصي"
+                helper="المعلومات الشخصية، الهوية، العنوان"
+                onClick={() => openEmployeeView("hr-info")}
+              />
+              <InfoRow
+                icon={BriefcaseBusiness}
+                label="البيانات الوظيفية"
+                helper="تاريخ الالتحاق، المسمى الوظيفي، نوع التوظيف"
+                onClick={() => openEmployeeView("employment")}
+              />
+              <InfoRow
+                icon={BadgeCheck}
+                label="الراتب والتفاصيل المالية"
+                helper="واجهة عرض مبدئية حسب البيانات المتاحة"
+                onClick={() => openEmployeeView("salary")}
+              />
+              <InfoRow
+                icon={FileText}
+                label="العقود"
+                helper="العقود الحالية والمنتهية"
+                onClick={() => openEmployeeView("contracts")}
+              />
+              <InfoRow
+                icon={CalendarDays}
+                label="الإجازات"
+                helper="الإجازات السنوية والمجدولة والحالية"
+                onClick={() => openEmployeeView("leaves")}
+              />
+              <InfoRow
+                icon={FileText}
+                label="مستندات"
+                helper="الإقامة، الجواز والمستندات الأخرى"
+                onClick={() => openEmployeeView("documents")}
+              />
+            </div>
+          </EmployeeCard>
+
+          <EmployeeCard title="آخر الطلبات" subtitle="آخر طلبات الإجازة المسجلة في النظام الحالي">
+            {leaveRequestsLoading ? (
+              <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+                جاري تحميل الطلبات...
+              </div>
+            ) : latestLeaveRequestsForDashboard.length ? (
+              <div className="space-y-3">
+                {latestLeaveRequestsForDashboard.map(request => (
+                  <div
+                    key={request.id}
+                    className="rounded-[22px] border border-slate-100 bg-slate-50/70 p-4"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="text-base font-semibold text-slate-950">
+                          {getLeaveTypeLabel(request.leaveType)}
+                        </div>
+                        <div className="mt-1 text-xs text-slate-500">
+                          {formatLeaveDateRange(request.startDate, request.endDate)}
+                        </div>
+                      </div>
+                      <LeaveStatusBadge status={request.status} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+                لا توجد طلبات حتى الآن.
+              </div>
+            )}
+          </EmployeeCard>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <EmployeeCard title="الإعلانات" subtitle="TODO: Placeholder لربط إعلانات الموارد البشرية لاحقاً بدون Firebase جديد.">
+              <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+                لا توجد إعلانات حالياً.
+              </div>
+            </EmployeeCard>
+            <EmployeeCard title="الرصيد المتبقي" subtitle="يعرض الرصيد الحالي من بيانات الموظف الموجودة">
+              <div className="rounded-[24px] bg-slate-950 px-5 py-6 text-white">
+                <div className="text-sm text-white/65">رصيد الإجازات</div>
+                <div className="mt-2 text-3xl font-semibold">
+                  {profile.employment.leaveBalanceLabel}
+                </div>
+              </div>
+            </EmployeeCard>
+          </div>
+        </div>
+      ) : null}
+
+      {activeView === "attendance" ? (
+        <EmployeeTodayAttendancePanel
+          employeeUid={employeeIdForAttendance}
+          title="الحضور"
+        />
+      ) : null}
+
+      {activeView === "requests" ? (
+        <section dir="rtl" className="mx-auto max-w-[760px] space-y-7">
+          <h1 className="text-center text-3xl font-medium text-slate-950">
+            الطلبات
+          </h1>
+
+          <div className="flex flex-wrap justify-center gap-4">
+            <RequestFilterButton label="الحالة" />
+            <RequestFilterButton label="النوع" />
+            <RequestFilterButton label="الترتيب" />
+            <RequestFilterButton label="الموقع" />
+          </div>
+
+          {leaveRequestsLoading ? (
+            <div className="rounded-[24px] border border-dashed border-slate-200 bg-white px-5 py-12 text-center text-sm text-slate-500 shadow-sm">
+              جاري تحميل الطلبات...
+            </div>
+          ) : leaveRequests.length ? (
+            <div className="space-y-6">
+              {leaveRequests.map((request, index) => (
+                <EmployeeRequestCard
+                  key={request.id}
+                  request={request}
+                  index={index}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-[24px] border border-dashed border-slate-200 bg-white px-5 py-14 text-center shadow-sm">
+              <FileText className="mx-auto h-10 w-10 text-slate-300" />
+              <div className="mt-4 text-xl font-semibold text-slate-950">
+                لا توجد طلبات
+              </div>
+              <p className="mx-auto mt-2 max-w-sm text-sm leading-7 text-slate-400">
+                ستظهر هنا طلباتك الحالية وحالاتها بعد إنشائها من زر طلب جديد.
+              </p>
+            </div>
+          )}
+
+          <p className="text-center text-xs leading-6 text-slate-400">
+            TODO: فلاتر الحالة والنوع والترتيب والموقع واجهة فقط حالياً بدون
+            منطق تصفية جديد.
+          </p>
+        </section>
+      ) : null}
+
+      {activeView === "hr-info" || activeView === "employment" ? (
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
-        <section className="space-y-6">
+        <section className={cn("space-y-6", activeView !== "hr-info" && "hidden")}>
+          <EmployeePortalViewHeader
+            title="معلومات الموارد البشرية"
+            description="المعلومات الشخصية وإعدادات الحساب المتاحة حالياً."
+            onBack={backToDashboard}
+          />
+
           <SectionHeading
             icon={UserRound}
             title="البيانات الشخصية"
@@ -1433,20 +1891,17 @@ export default function EmployeeProfilePage() {
           </Card>
         </section>
 
-        <section className="space-y-6">
+        <section className={cn("space-y-6", activeView !== "employment" && "hidden")}>
+          <EmployeePortalViewHeader
+            title="البيانات الوظيفية"
+            description="بيانات العمل المعروضة من المصدر الحالي بدون تعديل."
+            onBack={backToDashboard}
+          />
+
           <SectionHeading
             icon={BriefcaseBusiness}
             title="بيانات العمل"
             description="هذه البيانات مرتبطة بوظيفتك داخل الشركة، وهي للعرض فقط في هذه المرحلة. تعديلها سيكون لاحقًا من جهة الإدارة أو الموارد البشرية."
-          />
-
-          <EmployeeAttendanceCard
-            employeeId={
-              employeeProfileSource?.entityId ||
-              user?.linkedEmployeeId ||
-              user?.uid ||
-              null
-            }
           />
 
           <Card className="rounded-[28px] border border-slate-200/80 bg-white/95 shadow-[0_24px_70px_-42px_rgba(15,23,42,0.22)]">
@@ -1629,8 +2084,123 @@ export default function EmployeeProfilePage() {
           </Card>
         </section>
       </div>
+      ) : null}
 
-      <section className="mt-8 space-y-6">
+      {activeView === "salary" ? (
+        <section className="space-y-6">
+          <EmployeePortalViewHeader
+            title="الراتب والتفاصيل المالية"
+            description="واجهة عرض مبدئية حسب البيانات المتاحة حالياً، بدون أي API أو Firebase جديد."
+            onBack={backToDashboard}
+          />
+
+          <EmployeeCard title="الراتب" subtitle="TODO: Placeholder حتى تتوفر بيانات الراتب الحالية داخل بوابة الموظف.">
+            <div className="space-y-4">
+              <div className="rounded-[28px] border border-slate-100 bg-slate-50/80 p-6">
+                <div className="text-sm text-slate-500">مجموع الراتب</div>
+                <div className="mt-2 text-3xl font-semibold text-slate-950">
+                  غير متوفر
+                </div>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <InfoRow label="الراتب الأساسي" value="غير متوفر" />
+                <InfoRow label="بدل سكن" value="غير متوفر" />
+                <InfoRow label="بدل مواصلات" value="غير متوفر" />
+              </div>
+              <div className="flex gap-3">
+                <Button type="button" className="rounded-2xl bg-slate-950 text-white" disabled>
+                  معاينة
+                </Button>
+                <Button type="button" variant="outline" className="rounded-2xl border-slate-200 bg-white" disabled>
+                  تنزيل
+                </Button>
+              </div>
+            </div>
+          </EmployeeCard>
+        </section>
+      ) : null}
+
+      {activeView === "contracts" ? (
+        <section className="space-y-6">
+          <EmployeePortalViewHeader
+            title="العقود"
+            description="واجهة عرض مبدئية للعقود بدون إنشاء Collections أو منطق جديد."
+            onBack={backToDashboard}
+          />
+
+          <EmployeeCard title="العقود الحالية والمنتهية" subtitle="TODO: Placeholder حتى تتوفر بيانات العقود من المصدر الحالي.">
+            <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50 px-5 py-10 text-center text-sm text-slate-500">
+              لا توجد بيانات عقود متاحة حالياً.
+            </div>
+          </EmployeeCard>
+        </section>
+      ) : null}
+
+      {activeView === "documents" ? (
+        <section className="space-y-6">
+          <EmployeePortalViewHeader
+            title="المستندات"
+            description="عرض المستندات الرسمية المتاحة حالياً مع رابط صفحة الملفات الموجودة مسبقاً."
+            onBack={backToDashboard}
+          />
+
+          <EmployeeCard
+            title="المستندات الرسمية"
+            subtitle="يعرض ما هو محمل مسبقاً من بيانات الملفات الحالية فقط."
+            action={
+              <Button asChild type="button" variant="outline" className="rounded-2xl border-slate-200 bg-white">
+                <a href="/employee/files">فتح صفحة الملفات</a>
+              </Button>
+            }
+          >
+            {employeeFilesLoading ? (
+              <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+                جاري تحميل المستندات...
+              </div>
+            ) : employeeOfficialFiles.length ? (
+              <div className="space-y-3">
+                {employeeOfficialFiles.map(file => (
+                  <div
+                    key={file.id}
+                    className="rounded-[22px] border border-slate-100 bg-slate-50/70 p-4"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="font-semibold text-slate-950">
+                          {file.title}
+                        </div>
+                        <div className="mt-1 text-xs text-slate-500">
+                          {file.fileTypeLabel}
+                        </div>
+                      </div>
+                      {file.viewUrl ? (
+                        <Button asChild type="button" variant="outline" size="sm">
+                          <a href={file.viewUrl} target="_blank" rel="noreferrer">
+                            فتح
+                          </a>
+                        </Button>
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50 px-5 py-10 text-center text-sm text-slate-500">
+                لا توجد مستندات رسمية مرفوعة حتى الآن.
+              </div>
+            )}
+          </EmployeeCard>
+        </section>
+      ) : null}
+
+      {activeView === "leave-request" ? (
+      <section className="space-y-6">
+        <EmployeePortalViewHeader
+          title="طلب إجازة"
+          description="إنشاء طلب إجازة باستخدام منطق الإرسال الحالي نفسه."
+          onBack={backToDashboard}
+        />
+
         <SectionHeading
           icon={CalendarDays}
           title="الإجازات"
@@ -1995,6 +2565,7 @@ export default function EmployeeProfilePage() {
           </CardContent>
         </Card>
       </section>
+      ) : null}
 
       <Dialog
         open={avatarCropOpen}

@@ -31,6 +31,7 @@ import { cn } from "@/lib/utils";
 
 type EmployeeAttendanceCardProps = {
   employeeId?: string | null;
+  onRecorded?: (response: AttendanceResponse) => void;
 };
 
 function formatMeters(value?: number | null) {
@@ -40,6 +41,7 @@ function formatMeters(value?: number | null) {
 
 export default function EmployeeAttendanceCard({
   employeeId,
+  onRecorded,
 }: EmployeeAttendanceCardProps) {
   const [pendingType, setPendingType] = useState<AttendanceType | null>(null);
   const [lastResponse, setLastResponse] = useState<AttendanceResponse | null>(
@@ -58,6 +60,7 @@ export default function EmployeeAttendanceCard({
         type,
       });
       setLastResponse(response);
+      onRecorded?.(response);
       setShowLocationPermissionHelp(false);
 
       if (response.result === "allowed") {

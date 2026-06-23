@@ -24,5 +24,6 @@ export async function getUserRole(uid: string): Promise<AppRole> {
   ) {
     return role;
   }
+  if (role === "employee") return "staff";
   return "user";
 }

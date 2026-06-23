@@ -56,6 +56,16 @@ client/node_modules/
 functions/node_modules/
 workers/node_modules/
 android/
+!android/
+android/*
+!android/app/
+android/app/*
+!android/app/src/
+android/app/src/*
+!android/app/src/hr/
+!android/app/src/hr/**
+!android/app/src/maedin/
+!android/app/src/maedin/**
 .gradle/
 **/build/
 *.apk

@@ -98,6 +98,33 @@ describe("attendance state transitions", () => {
       "not_checked_in"
     );
   });
+
+  it("allows a new check-in when the previous open check-in is from another day", () => {
+    expect(
+      evaluateStateTransition("check_in", "checked_in", {
+        lastServerTime: "2026-06-22T10:00:00.000Z",
+        dayBounds: {
+          start: parseRiyadhDateBoundary("2026-06-23", false),
+          end: parseRiyadhDateBoundary("2026-06-23", true),
+        },
+      })
+    ).toMatchObject({
+      result: "allowed",
+      currentStatus: "checked_in",
+    });
+  });
+
+  it("rejects check-out when the only open check-in is from another day", () => {
+    expect(
+      evaluateStateTransition("check_out", "checked_in", {
+        lastServerTime: "2026-06-22T10:00:00.000Z",
+        dayBounds: {
+          start: parseRiyadhDateBoundary("2026-06-23", false),
+          end: parseRiyadhDateBoundary("2026-06-23", true),
+        },
+      }).rejectionReason
+    ).toBe("not_checked_in");
+  });
 });
 
 describe("attendance device tracking", () => {

@@ -1,20 +1,30 @@
 import { useEffect, useState, type ReactNode } from "react";
 import {
   ArrowLeft,
+  CalendarCheck2,
   ClipboardList,
   FileText,
   BriefcaseBusiness,
   Globe,
   Home,
   LogOut,
+  Menu,
   Mail,
+  Send,
   ShieldCheck,
+  X,
   UserRound,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
+import { toast } from "sonner";
 
 import { NotificationBell } from "@/components/NotificationBell";
 import { HrBrandMark } from "@/components/HrBrandMark";
+import AppBottomNav from "@/components/employee-portal/AppBottomNav";
+import FloatingNewRequestButton from "@/components/employee-portal/FloatingNewRequestButton";
+import RequestBottomSheet, {
+  type EmployeeRequestType,
+} from "@/components/employee-portal/RequestBottomSheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { hasStaffAdminPermission, useAuth } from "@/_core/hooks/useAuth";
@@ -36,7 +46,11 @@ export default function EmployeeLayout({
   const { language, toggleLanguage } = useLanguage();
   const { user, logout } = useAuth();
   const [location, setLocation] = useLocation();
-  const [isNavFloating, setIsNavFloating] = useState(false);
+  const [currentHash, setCurrentHash] = useState(() =>
+    typeof window === "undefined" ? "" : window.location.hash.replace(/^#/, "")
+  );
+  const [navSheetOpen, setNavSheetOpen] = useState(false);
+  const [requestSheetOpen, setRequestSheetOpen] = useState(false);
   const layoutDir: "rtl" | "ltr" = language === "ar" ? "rtl" : "ltr";
   const languageToggleLabel = language === "ar" ? "English" : "Arabic";
   const currentPath = location.split("?")[0];
@@ -49,52 +63,171 @@ export default function EmployeeLayout({
         ? "/hr/employees"
         : hasStaffAdminPermission(user, "settings.manage")
           ? "/hr/settings"
-          : "/hr"
-    : "/hr";
+          : "/employee/profile"
+    : "/login";
   const employeeReturnLabel =
-    employeeReturnPath === "/hr"
-      ? tr(language, "بوابة الموظفين", "Staff Portal")
+    employeeReturnPath === "/employee/profile"
+      ? tr(language, "بوابة الموظف", "Employee Portal")
       : tr(language, "لوحة HR", "HR Dashboard");
 
   const handleLogout = async () => {
     await logout();
-    setLocation("/hr");
+    setLocation("/login");
+  };
+
+  const navigateToEmployeeAnchor = (anchor: string) => {
+    setCurrentHash(anchor);
+
+    if (currentPath !== "/employee/profile") {
+      setLocation("/employee/profile");
+      window.setTimeout(() => {
+        window.location.hash = anchor;
+      }, 0);
+      return;
+    }
+
+    window.location.hash = anchor;
+  };
+
+  const handleRequestSelect = (type: EmployeeRequestType) => {
+    if (type === "leave") {
+      navigateToEmployeeAnchor("employee-leave-request");
+      return;
+    }
+
+    if (type === "permission") {
+      navigateToEmployeeAnchor("employee-permission-request");
+      return;
+    }
+
+    if (type === "attendance_correction" || type === "overtime") {
+      navigateToEmployeeAnchor("employee-attendance");
+      toast.info("TODO: هذه واجهة مؤقتة حتى يتوفر منطق الطلب في النظام.");
+      return;
+    }
+
+    toast.info("TODO: هذا النوع من الطلبات واجهة مؤقتة فقط وغير مربوط بقاعدة البيانات حالياً.");
   };
 
   useEffect(() => {
-    const updateFloatingState = () => {
-      setIsNavFloating(window.scrollY > 180);
+    const updateHashState = () => {
+      setCurrentHash(window.location.hash.replace(/^#/, ""));
     };
 
-    updateFloatingState();
-    window.addEventListener("scroll", updateFloatingState, { passive: true });
-    return () => window.removeEventListener("scroll", updateFloatingState);
-  }, []);
+    updateHashState();
+    window.addEventListener("hashchange", updateHashState);
+    return () => window.removeEventListener("hashchange", updateHashState);
+  }, [location]);
 
   const navItems = [
     {
       label: tr(language, "الملف الشخصي", "Profile"),
-      href: "/hr/profile",
+      href: "/employee/profile",
       icon: UserRound,
-      active: currentPath === "/hr/profile",
+      active: currentPath === "/employee/profile",
     },
     {
       label: tr(language, "الملفات", "Files"),
-      href: "/hr/files",
+      href: "/employee/files",
       icon: FileText,
-      active: currentPath === "/hr/files",
+      active: currentPath === "/employee/files",
     },
     {
       label: tr(language, "الرسائل", "Messages"),
-      href: "/hr/messages?tab=hr",
+      href: "/employee/messages?tab=hr",
       icon: Mail,
-      active: currentPath === "/hr/messages",
+      active: currentPath === "/employee/messages",
     },
     {
       label: tr(language, "تقرير العمل الأسبوعي", "Weekly Report"),
-      href: "/hr/weekly-reports",
+      href: "/employee/weekly-reports",
       icon: ClipboardList,
-      active: currentPath === "/hr/weekly-reports",
+      active: currentPath === "/employee/weekly-reports",
+    },
+  ];
+  const isEmployeeProfilePath = currentPath === "/employee/profile";
+  const requestAnchors = new Set([
+    "employee-requests",
+    "employee-leave-request",
+    "employee-permission-request",
+  ]);
+  const innerViewAnchors = new Set([
+    "employee-attendance",
+    "employee-profile-info",
+    "hr-info",
+    "employee-employment-info",
+    "employment",
+    "employee-payroll-info",
+    "salary",
+    "employee-contracts-info",
+    "contracts",
+    "leaves",
+    "employee-documents-info",
+    "documents",
+    ...requestAnchors,
+  ]);
+  const hasFocusedProfileSection =
+    innerViewAnchors.has(currentHash) && currentHash !== "dashboard";
+  const hasActiveMenuPage = navItems.some(
+    item => item.href !== "/employee/profile" && item.active
+  );
+  const isMenuInnerView =
+    currentHash === "employee-profile-info" ||
+    currentHash === "hr-info" ||
+    currentHash === "employee-employment-info" ||
+    currentHash === "employment" ||
+    currentHash === "employee-payroll-info" ||
+    currentHash === "salary" ||
+    currentHash === "employee-contracts-info" ||
+    currentHash === "contracts" ||
+    currentHash === "leaves" ||
+    currentHash === "employee-documents-info" ||
+    currentHash === "documents";
+  const navigateToEmployeeHome = () => {
+    setCurrentHash("");
+    setLocation("/employee/profile");
+
+    if (typeof window === "undefined") return;
+
+    window.history.replaceState(null, "", "/employee/profile");
+    window.dispatchEvent(new HashChangeEvent("hashchange"));
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+  const bottomNavItems = [
+    {
+      key: "home",
+      label: tr(language, "الرئيسية", "Home"),
+      icon: Home,
+      active: isEmployeeProfilePath && !hasFocusedProfileSection,
+      onClick: navigateToEmployeeHome,
+    },
+    {
+      key: "attendance",
+      label: tr(language, "الحضور", "Attendance"),
+      icon: CalendarCheck2,
+      active: isEmployeeProfilePath && currentHash === "employee-attendance",
+      onClick: () => navigateToEmployeeAnchor("employee-attendance"),
+    },
+    {
+      key: "requests",
+      label: tr(language, "الطلبات", "Requests"),
+      icon: Send,
+      active: isEmployeeProfilePath && requestAnchors.has(currentHash),
+      onClick: () => navigateToEmployeeAnchor("employee-requests"),
+    },
+    {
+      key: "profile",
+      label: tr(language, "الملف الشخصي", "Profile"),
+      icon: UserRound,
+      active: isEmployeeProfilePath && currentHash === "employee-profile-info",
+      onClick: () => navigateToEmployeeAnchor("employee-profile-info"),
+    },
+    {
+      key: "menu",
+      label: tr(language, "المزيد", "More"),
+      icon: Menu,
+      active: hasActiveMenuPage || (isEmployeeProfilePath && isMenuInnerView),
+      onClick: () => setNavSheetOpen(true),
     },
   ];
   const displayTitle =
@@ -106,36 +239,63 @@ export default function EmployeeLayout({
           description,
           "Review your personal profile, files, and internal messages."
         );
-  const navLinks = (
-    <nav
-      aria-label={tr(language, "روابط بوابة الموظف", "Employee portal links")}
-      className={cn(
-        "pointer-events-auto inline-flex max-w-full flex-wrap items-center gap-1 rounded-2xl border border-slate-200/80 p-1 backdrop-blur-xl transition-[background-color,box-shadow,transform] duration-300 ease-out will-change-transform",
-        isNavFloating
-          ? "bg-white/90 shadow-[0_20px_54px_-34px_rgba(15,23,42,0.42)] supports-[backdrop-filter]:bg-white/75"
-          : "bg-white/80 shadow-[0_18px_50px_-36px_rgba(15,23,42,0.28)] supports-[backdrop-filter]:bg-white/70"
-      )}
-    >
-      {navItems.map(item => {
-        const Icon = item.icon;
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={cn(
-              "inline-flex h-10 items-center gap-2 rounded-xl px-3.5 text-sm font-semibold transition-all duration-200 ease-out sm:px-4",
-              item.active
-                ? "bg-slate-950 text-white shadow-sm"
-                : "text-slate-600 hover:bg-white hover:text-slate-950"
-            )}
+  const portalNavSheet = navSheetOpen ? (
+    <div className="fixed inset-0 z-[90]" dir={layoutDir} role="presentation">
+      <button
+        type="button"
+        className="absolute inset-0 bg-slate-950/55"
+        aria-label={tr(language, "إغلاق", "Close")}
+        onClick={() => setNavSheetOpen(false)}
+      />
+
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-label={tr(language, "قائمة بوابة الموظف", "Employee portal menu")}
+        className="absolute inset-x-0 bottom-0 overflow-hidden rounded-t-[28px] bg-white shadow-[0_-24px_70px_-28px_rgba(15,23,42,0.55)]"
+      >
+        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+          <button
+            type="button"
+            onClick={() => setNavSheetOpen(false)}
+            className="flex h-11 w-11 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-50 hover:text-slate-950"
+            aria-label={tr(language, "إغلاق", "Close")}
           >
-            <Icon className="h-4 w-4" />
-            <span className="whitespace-nowrap">{item.label}</span>
-          </Link>
-        );
-      })}
-    </nav>
-  );
+            <X className="h-6 w-6" />
+          </button>
+          <h2 className="text-lg font-semibold text-slate-950">
+            {tr(language, "القائمة", "Menu")}
+          </h2>
+          <span className="h-11 w-11" aria-hidden="true" />
+        </div>
+
+        <nav
+          aria-label={tr(language, "روابط بوابة الموظف", "Employee portal links")}
+          className="grid gap-2 px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-4"
+        >
+          {navItems.map(item => {
+            const Icon = item.icon;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => setNavSheetOpen(false)}
+                className={cn(
+                  "flex min-h-14 items-center justify-between gap-3 rounded-2xl border px-4 text-sm font-semibold transition",
+                  item.active
+                    ? "border-slate-950 bg-slate-950 text-white"
+                    : "border-slate-100 bg-slate-50/70 text-slate-700 hover:border-slate-200 hover:bg-white hover:text-slate-950"
+                )}
+              >
+                <span>{item.label}</span>
+                <Icon className="h-5 w-5" />
+              </Link>
+            );
+          })}
+        </nav>
+      </section>
+    </div>
+  ) : null;
 
   return (
     <div
@@ -217,7 +377,7 @@ export default function EmployeeLayout({
         </div>
       </header>
 
-      <main className="pb-16 pt-8">
+      <main className="pb-36 pt-8">
         <div className="container space-y-8">
           <section className="overflow-hidden rounded-[32px] border border-slate-200/80 bg-[linear-gradient(135deg,rgba(255,255,255,0.98)_0%,rgba(248,250,252,0.95)_52%,rgba(245,235,214,0.45)_100%)] px-6 py-7 shadow-[0_30px_90px_-48px_rgba(15,23,42,0.24)] sm:px-8 sm:py-8">
             <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
@@ -268,21 +428,25 @@ export default function EmployeeLayout({
             </div>
           </section>
 
-          <div className="-mt-5 h-14">
-            {isNavFloating ? (
-              <div className="fixed inset-x-0 top-3 z-[70] pointer-events-none">
-                <div className="container flex justify-start">{navLinks}</div>
-              </div>
-            ) : (
-              <div className="relative z-30 flex justify-start py-1">
-                {navLinks}
-              </div>
-            )}
-          </div>
-
           {children}
         </div>
       </main>
+
+      {user ? (
+        <>
+          <FloatingNewRequestButton
+            onClick={() => setRequestSheetOpen(true)}
+            label={tr(language, "طلب جديد", "New Request")}
+          />
+          <AppBottomNav items={bottomNavItems} />
+          {portalNavSheet}
+          <RequestBottomSheet
+            open={requestSheetOpen}
+            onOpenChange={setRequestSheetOpen}
+            onSelect={handleRequestSelect}
+          />
+        </>
+      ) : null}
     </div>
   );
 }
