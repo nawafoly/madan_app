@@ -771,6 +771,7 @@ export default function EmployeeProfilePage() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [changingPassword, setChangingPassword] = useState(false);
+  const [attendanceRefreshKey, setAttendanceRefreshKey] = useState(0);
   const [employeeFiles, setEmployeeFiles] = useState<EmployeeFileRecord[]>([]);
   const [employeeFilesLoading, setEmployeeFilesLoading] = useState(true);
   const [employeeProfileSource, setEmployeeProfileSource] = useState<{
@@ -1482,6 +1483,7 @@ export default function EmployeeProfilePage() {
 
   const employeeIdForAttendance =
     employeeProfileSource?.entityId || user?.linkedEmployeeId || user?.uid || null;
+  const employeeUidForAttendance = user?.uid || null;
 
   const latestLeaveRequestsForDashboard = leaveRequests.slice(0, 2);
 
@@ -1511,6 +1513,7 @@ export default function EmployeeProfilePage() {
           ? "لوحة مختصرة لمتابعة الحضور، الطلبات، والتنقل بين معلومات الموظف."
           : "عرض مستقل داخل بوابة الموظف بدون تغيير مسارات النظام أو منطق البيانات."
       }
+      hideHero={activeView === "dashboard"}
     >
       {activeView === "dashboard" ? (
         <div className="space-y-6">
@@ -1524,7 +1527,11 @@ export default function EmployeeProfilePage() {
             </p>
           </section>
 
-          <EmployeeAttendanceCard employeeId={employeeIdForAttendance} />
+          <EmployeeAttendanceCard
+            employeeId={employeeIdForAttendance}
+            employeeUid={employeeUidForAttendance}
+            onRecorded={() => setAttendanceRefreshKey(key => key + 1)}
+          />
 
           <EmployeeCard title="اختصارات سريعة" subtitle="وصول سريع لأكثر الإجراءات استخداماً">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -1654,10 +1661,15 @@ export default function EmployeeProfilePage() {
       ) : null}
 
       {activeView === "attendance" ? (
-        <EmployeeTodayAttendancePanel
-          employeeUid={employeeIdForAttendance}
-          title="الحضور"
-        />
+        <section className="mx-auto max-w-[760px]">
+          <EmployeeTodayAttendancePanel
+            employeeUid={employeeUidForAttendance}
+            title="الحضور"
+            refreshKey={attendanceRefreshKey}
+            shiftStartTime={profile.employment.shiftStartTime}
+            shiftEndTime={profile.employment.shiftEndTime}
+          />
+        </section>
       ) : null}
 
       {activeView === "requests" ? (

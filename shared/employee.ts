@@ -71,6 +71,8 @@ export type EmployeeEmploymentStatus =
     expectedWorkDays?: number | null;
     expectedWorkHours?: number | null;
     actualWorkedHours?: number | null;
+    shiftStartTime?: string | null;
+    shiftEndTime?: string | null;
 
     calculatedDailyRate?: number | null;
     
@@ -235,6 +237,13 @@ export type EmployeePayrollRecordDoc = {
   baseSalary: number;
   absenceDays: number;
   absenceDeduction: number;
+  expectedWorkHours?: number | null;
+  actualWorkedHours?: number | null;
+  attendanceLateHours?: number | null;
+  attendanceMissingHours?: number | null;
+  attendanceOvertimeHours?: number | null;
+  attendanceCompleteDays?: number | null;
+  attendanceIncompleteDays?: number | null;
   delayDeduction?: number | null;
   overtimeBonus?: number | null;
   insuranceDeduction?: number | null;

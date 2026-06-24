@@ -58,6 +58,8 @@ export type EmployeeProfileViewModel = {
     statusTone: "success" | "warning" | "muted";
     employeeCode: string;
     fingerprintNumber: string;
+    shiftStartTime: string;
+    shiftEndTime: string;
     isActive: boolean;
   };
 };
@@ -279,6 +281,8 @@ export function normalizeEmployeeProfile(
       user.fingerprintNumber,
       user.profile?.fingerprintNumber
     ) || EMPTY_VALUE;
+  const shiftStartTime = pickText(employment.shiftStartTime);
+  const shiftEndTime = pickText(employment.shiftEndTime);
 
   const employmentStatus = normalizeEmploymentStatus({
     rawStatus:
@@ -307,6 +311,8 @@ export function normalizeEmployeeProfile(
       statusTone: employmentStatus.tone,
       employeeCode,
       fingerprintNumber,
+      shiftStartTime,
+      shiftEndTime,
       isActive: accountStatus.isActive,
     },
   };

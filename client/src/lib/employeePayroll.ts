@@ -232,6 +232,34 @@ export function normalizeEmployeePayrollRecord(
     baseSalary: Math.max(0, toFiniteNumber(raw.baseSalary)),
     absenceDays: Math.max(0, toFiniteNumber(raw.absenceDays)),
     absenceDeduction: Math.max(0, toFiniteNumber(raw.absenceDeduction)),
+    expectedWorkHours:
+      raw.expectedWorkHours === null || raw.expectedWorkHours === undefined
+        ? null
+        : Math.max(0, toFiniteNumber(raw.expectedWorkHours)),
+    actualWorkedHours:
+      raw.actualWorkedHours === null || raw.actualWorkedHours === undefined
+        ? null
+        : Math.max(0, toFiniteNumber(raw.actualWorkedHours)),
+    attendanceLateHours:
+      raw.attendanceLateHours === null || raw.attendanceLateHours === undefined
+        ? null
+        : Math.max(0, toFiniteNumber(raw.attendanceLateHours)),
+    attendanceMissingHours:
+      raw.attendanceMissingHours === null || raw.attendanceMissingHours === undefined
+        ? null
+        : Math.max(0, toFiniteNumber(raw.attendanceMissingHours)),
+    attendanceOvertimeHours:
+      raw.attendanceOvertimeHours === null || raw.attendanceOvertimeHours === undefined
+        ? null
+        : Math.max(0, toFiniteNumber(raw.attendanceOvertimeHours)),
+    attendanceCompleteDays:
+      raw.attendanceCompleteDays === null || raw.attendanceCompleteDays === undefined
+        ? null
+        : Math.max(0, toFiniteNumber(raw.attendanceCompleteDays)),
+    attendanceIncompleteDays:
+      raw.attendanceIncompleteDays === null || raw.attendanceIncompleteDays === undefined
+        ? null
+        : Math.max(0, toFiniteNumber(raw.attendanceIncompleteDays)),
     delayDeduction:
       raw.delayDeduction === null || raw.delayDeduction === undefined
         ? null

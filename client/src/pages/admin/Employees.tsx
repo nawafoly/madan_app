@@ -99,6 +99,12 @@ import {
   logAuditEvent,
 } from "@/lib/auditLog";
 import {
+  fetchAttendanceRecords,
+  type AttendanceRecord,
+} from "@/lib/attendanceRecords";
+import { summarizeAttendanceForPayroll } from "@/lib/attendanceCalculations";
+import type { AttendancePayrollSummary } from "@/lib/attendanceCalculations";
+import {
   EMPLOYEE_ABSENCES_COLLECTION,
   EMPLOYEE_ABSENCE_TYPE_OPTIONS,
   buildEmployeeAbsenceDateInput,
@@ -182,9 +188,11 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { languageDir, safeEnglishText, tr } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import {
+  createWorkZone,
   fetchWorkZones,
   formatZoneRadiusLabel,
   normalizeAllowedZoneIds,
+  updateWorkZone,
   type WorkZone,
 } from "@/lib/workZones";
 import type {
@@ -225,11 +233,31 @@ type EmployeeFormValues = {
   expectedWorkDays: string;
   expectedWorkHours: string;
   actualWorkedHours: string;
+  shiftStartTime: string;
+  shiftEndTime: string;
   overtimeHourlyRate: string;
   insuranceDeduction: string;
   allowedZoneIds: string[];
   adminNotes: string;
 };
+
+type EmployeeWorkZoneFormValues = {
+  name: string;
+  lat: string;
+  lng: string;
+  radiusMeters: string;
+};
+
+const DEFAULT_WORK_ZONE_CENTER = { lat: 24.7136, lng: 46.6753 };
+
+function buildEmployeeWorkZoneFormValues(): EmployeeWorkZoneFormValues {
+  return {
+    name: "",
+    lat: String(DEFAULT_WORK_ZONE_CENTER.lat),
+    lng: String(DEFAULT_WORK_ZONE_CENTER.lng),
+    radiusMeters: "200",
+  };
+}
 
 type EmployeeFileFormValues = {
   title: string;
@@ -424,6 +452,36 @@ function toNullableNumber(value: string) {
 
   const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseFiniteNumber(value: string) {
+  const parsed = Number(String(value || "").trim());
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function formatCoordinate(value: number) {
+  return Number(value.toFixed(7)).toString();
+}
+
+function isValidTimeInput(value: string) {
+  const normalized = String(value || "").trim();
+  if (!normalized) return true;
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(normalized);
+}
+
+function getCurrentGpsPosition() {
+  return new Promise<GeolocationPosition>((resolve, reject) => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      reject(new Error("الموقع غير مدعوم في هذا الجهاز."));
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(resolve, reject, {
+      enableHighAccuracy: true,
+      maximumAge: 0,
+      timeout: 20000,
+    });
+  });
 }
 
 function isSupportedMudadPayrollDocument(file: File | null) {
@@ -640,6 +698,8 @@ function buildEmployeeFormValues(
       employment.actualWorkedHours === 0
         ? "0"
         : pickText(employment.actualWorkedHours),
+    shiftStartTime: pickText(employment.shiftStartTime),
+    shiftEndTime: pickText(employment.shiftEndTime),
     overtimeHourlyRate:
       employment.overtimeHourlyRate === 0
         ? "0"
@@ -1456,6 +1516,14 @@ export default function EmployeesManagementPage() {
   const [employees, setEmployees] = useState<EmployeeRecord[]>([]);
   const [workZones, setWorkZones] = useState<WorkZone[]>([]);
   const [workZonesLoading, setWorkZonesLoading] = useState(true);
+  const [newWorkZoneOpen, setNewWorkZoneOpen] = useState(false);
+  const [editingWorkZoneId, setEditingWorkZoneId] = useState<string | null>(
+    null
+  );
+  const [newWorkZoneForm, setNewWorkZoneForm] =
+    useState<EmployeeWorkZoneFormValues>(buildEmployeeWorkZoneFormValues);
+  const [creatingWorkZone, setCreatingWorkZone] = useState(false);
+  const [locatingWorkZone, setLocatingWorkZone] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -1486,6 +1554,9 @@ export default function EmployeesManagementPage() {
     null
   );
   const [creatingPayrollRecord, setCreatingPayrollRecord] = useState(false);
+  const [attendancePayrollSummary, setAttendancePayrollSummary] =
+    useState<AttendancePayrollSummary | null>(null);
+  const [attendancePayrollLoading, setAttendancePayrollLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [leaveRequests, setLeaveRequests] = useState<
     EmployeeLeaveRequestRecord[]
@@ -1962,6 +2033,15 @@ export default function EmployeesManagementPage() {
     },
     [language, selectedEmployee, selectedEmployeeProfile]
   );
+  const selectedEmployeeShiftSchedule = useMemo(() => {
+    const employment = (selectedEmployee?.employeeProfile?.employment ||
+      selectedEmployee?.employment ||
+      {}) as Record<string, any>;
+    return {
+      startTime: String(employment.shiftStartTime || "").trim() || null,
+      endTime: String(employment.shiftEndTime || "").trim() || null,
+    };
+  }, [selectedEmployee]);
 
   const employeeAvatarCropMetrics = useMemo(
     () =>
@@ -2391,6 +2471,15 @@ export default function EmployeesManagementPage() {
         : null,
     [employeePayrollRecords, selectedPayrollMonthMeta]
   );
+
+  useEffect(() => {
+    setAttendancePayrollSummary(null);
+  }, [
+    selectedEmployeeAuthUid,
+    selectedPayrollMonthMeta?.payrollMonth,
+    form.shiftStartTime,
+    form.shiftEndTime,
+  ]);
 
   const latestApprovedLeaveRequest = useMemo(
     () => getLatestApprovedEmployeeLeaveRequest(leaveRequests),
@@ -2890,6 +2979,13 @@ export default function EmployeesManagementPage() {
   const expectedWorkHoursNumber = Number(form.expectedWorkHours || 0);
   const actualWorkedHoursNumber = Number(form.actualWorkedHours || 0);
   const overtimeHourlyRateInputNumber = Number(form.overtimeHourlyRate || 0);
+  const shiftSchedule = useMemo(
+    () => ({
+      startTime: form.shiftStartTime,
+      endTime: form.shiftEndTime,
+    }),
+    [form.shiftEndTime, form.shiftStartTime]
+  );
   const insuranceDeductionNumber = Number(form.insuranceDeduction || 0);
 
   const totalSalaryDeductions = useMemo(
@@ -2991,6 +3087,160 @@ export default function EmployeesManagementPage() {
         allowedZoneIds: nextIds,
       };
     });
+  };
+
+  const buildAttendancePayrollSummary = async () => {
+    if (!selectedEmployeeAuthUid || !selectedPayrollMonthMeta) return null;
+    const response = await fetchAttendanceRecords({
+      employeeUid: selectedEmployeeAuthUid,
+      fromDate: selectedPayrollMonthMeta.monthStart,
+      toDate: selectedPayrollMonthMeta.monthEnd,
+      result: "allowed",
+      limit: 200,
+    });
+    return summarizeAttendanceForPayroll(response.records, shiftSchedule);
+  };
+
+  const handleCalculatePayrollFromAttendance = async () => {
+    if (!selectedPayrollMonthMeta) {
+      toast.error("اختر شهر الراتب أولًا.");
+      return;
+    }
+    if (!selectedEmployeeAuthUid) {
+      toast.error("لا يوجد معرف حضور مرتبط بالموظف.");
+      return;
+    }
+    if (!form.shiftStartTime || !form.shiftEndTime) {
+      toast.error("حدد وقت بداية ونهاية الدوام أولًا.");
+      return;
+    }
+
+    setAttendancePayrollLoading(true);
+    try {
+      const summary = await buildAttendancePayrollSummary();
+      if (!summary) return;
+      setAttendancePayrollSummary(summary);
+      setForm(current => ({
+        ...current,
+        expectedWorkHours: summary.expectedHours
+          ? String(summary.expectedHours)
+          : current.expectedWorkHours,
+        actualWorkedHours: String(summary.actualHours),
+      }));
+      toast.success("تم احتساب ساعات الراتب من سجلات الحضور.");
+    } catch (error) {
+      console.error("employee_attendance_payroll_summary_failed", error);
+      toast.error("تعذر احتساب ساعات الراتب من الحضور.");
+    } finally {
+      setAttendancePayrollLoading(false);
+    }
+  };
+
+  const handleNewWorkZoneFormChange = <K extends keyof EmployeeWorkZoneFormValues>(
+    key: K,
+    value: EmployeeWorkZoneFormValues[K]
+  ) => {
+    setNewWorkZoneForm(current => ({
+      ...current,
+      [key]: value,
+    }));
+  };
+
+  const resetWorkZoneForm = () => {
+    setEditingWorkZoneId(null);
+    setNewWorkZoneForm(buildEmployeeWorkZoneFormValues());
+    setNewWorkZoneOpen(false);
+  };
+
+  const handleEditWorkZoneFromEmployee = (zone: WorkZone) => {
+    setEditingWorkZoneId(zone.id);
+    setNewWorkZoneForm({
+      name: zone.name,
+      lat: formatCoordinate(zone.center.lat),
+      lng: formatCoordinate(zone.center.lng),
+      radiusMeters: String(Math.round(zone.radiusMeters)),
+    });
+    setNewWorkZoneOpen(true);
+  };
+
+  const handleUseCurrentLocationForWorkZone = async () => {
+    setLocatingWorkZone(true);
+    try {
+      const position = await getCurrentGpsPosition();
+      setNewWorkZoneForm(current => ({
+        ...current,
+        lat: formatCoordinate(position.coords.latitude),
+        lng: formatCoordinate(position.coords.longitude),
+      }));
+      toast.success("تم تحديد الموقع الحالي للنطاق.");
+    } catch (error) {
+      console.error("employee_work_zone_geolocation_failed", error);
+      toast.error(
+        error instanceof Error ? error.message : "تعذر جلب موقع الجهاز."
+      );
+    } finally {
+      setLocatingWorkZone(false);
+    }
+  };
+
+  const handleSaveWorkZoneFromEmployee = async () => {
+    const name = newWorkZoneForm.name.trim();
+    const lat = parseFiniteNumber(newWorkZoneForm.lat);
+    const lng = parseFiniteNumber(newWorkZoneForm.lng);
+    const radiusMeters = parseFiniteNumber(newWorkZoneForm.radiusMeters);
+
+    if (!name) {
+      toast.error("اسم النطاق مطلوب.");
+      return;
+    }
+
+    if (lat === null || lat < -90 || lat > 90) {
+      toast.error("خط العرض غير صحيح.");
+      return;
+    }
+
+    if (lng === null || lng < -180 || lng > 180) {
+      toast.error("خط الطول غير صحيح.");
+      return;
+    }
+
+    if (radiusMeters === null || radiusMeters <= 0) {
+      toast.error("Radius يجب أن يكون رقمًا أكبر من صفر.");
+      return;
+    }
+
+    setCreatingWorkZone(true);
+    try {
+      const payload = {
+        name,
+        type: "radius",
+        center: { lat, lng },
+        radiusMeters,
+        active: true,
+      } as const;
+
+      const savedZone = editingWorkZoneId
+        ? await updateWorkZone(editingWorkZoneId, payload)
+        : await createWorkZone(payload);
+      const nextZones = await fetchWorkZones();
+      setWorkZones(nextZones);
+
+      if (savedZone?.id) {
+        handleToggleAllowedZone(savedZone.id, true);
+      }
+
+      resetWorkZoneForm();
+      toast.success(
+        editingWorkZoneId
+          ? "تم تحديث نطاق الدوام."
+          : "تم إنشاء نطاق الدوام وتحديده للموظف."
+      );
+    } catch (error) {
+      console.error("employee_work_zone_save_failed", error);
+      toast.error("تعذر حفظ نطاق الدوام.");
+    } finally {
+      setCreatingWorkZone(false);
+    }
   };
 
   const handleReset = () => {
@@ -3135,6 +3385,8 @@ export default function EmployeesManagementPage() {
     const expectedWorkHours = toNullableNumber(form.expectedWorkHours);
     const actualWorkedHours = toNullableNumber(form.actualWorkedHours);
     const overtimeHourlyRate = toNullableNumber(form.overtimeHourlyRate);
+    const shiftStartTime = form.shiftStartTime.trim() || null;
+    const shiftEndTime = form.shiftEndTime.trim() || null;
     const insuranceDeduction = toNullableNumber(form.insuranceDeduction);
 
     if (baseSalary === null || baseSalary <= 0) {
@@ -3171,11 +3423,22 @@ export default function EmployeesManagementPage() {
 
       const normalizedSalaryDeductions =
         normalizeSalaryDeductionsForPersistence(salaryDeductions);
+      const attendanceSummary =
+        form.shiftStartTime && form.shiftEndTime
+          ? await buildAttendancePayrollSummary()
+          : null;
+      if (attendanceSummary) {
+        setAttendancePayrollSummary(attendanceSummary);
+      }
+      const effectiveExpectedWorkHours =
+        attendanceSummary?.expectedHours || expectedWorkHours;
+      const effectiveActualWorkedHours =
+        attendanceSummary?.actualHours || actualWorkedHours;
       const payrollComputation = computeEmployeePayroll({
         baseSalary,
         expectedWorkDays,
-        expectedWorkHours,
-        actualWorkedHours,
+        expectedWorkHours: effectiveExpectedWorkHours,
+        actualWorkedHours: effectiveActualWorkedHours,
         overtimeHourlyRate,
         insuranceDeduction,
         salaryDeductions: normalizedSalaryDeductions,
@@ -3236,6 +3499,13 @@ export default function EmployeesManagementPage() {
           insuranceDeduction: payrollComputation.insuranceDeduction,
           salaryDeductions: normalizedSalaryDeductions,
           totalSalaryDeductions: payrollComputation.totalSalaryDeductions,
+          expectedWorkHours: effectiveExpectedWorkHours,
+          actualWorkedHours: effectiveActualWorkedHours,
+          attendanceLateHours: attendanceSummary?.lateHours ?? null,
+          attendanceMissingHours: attendanceSummary?.missingHours ?? null,
+          attendanceOvertimeHours: attendanceSummary?.overtimeHours ?? null,
+          attendanceCompleteDays: attendanceSummary?.completeDays ?? null,
+          attendanceIncompleteDays: attendanceSummary?.incompleteDays ?? null,
           absenceCount: monthlyAbsences.length,
           absenceEntriesSummary: monthlyAbsences.map(absence => ({
             date: absence.date,
@@ -4297,6 +4567,14 @@ export default function EmployeesManagementPage() {
       return;
     }
 
+    if (
+      !isValidTimeInput(form.shiftStartTime) ||
+      !isValidTimeInput(form.shiftEndTime)
+    ) {
+      toast.error("وقت الدوام يجب أن يكون بصيغة صحيحة مثل 08:30.");
+      return;
+    }
+
     if (normalizedFingerprintNumber) {
       const duplicateEmployee = employees.find(employee => {
         if (employee.id === selectedEmployee.id) return false;
@@ -4360,6 +4638,8 @@ export default function EmployeesManagementPage() {
         expectedWorkDays,
         expectedWorkHours,
         actualWorkedHours,
+        shiftStartTime,
+        shiftEndTime,
         overtimeHours: calculatedOvertimeHours,
         missingHours: calculatedMissingHours,
         hoursDifference: calculatedHoursDifference,
@@ -4430,6 +4710,8 @@ export default function EmployeesManagementPage() {
             expectedWorkDays,
             expectedWorkHours,
             actualWorkedHours,
+            shiftStartTime,
+            shiftEndTime,
             overtimeHours: calculatedOvertimeHours,
             missingHours: calculatedMissingHours,
             hoursDifference: calculatedHoursDifference,
@@ -5443,6 +5725,8 @@ export default function EmployeesManagementPage() {
                 >
                   <EmployeeTodayAttendancePanel
                     employeeUid={selectedEmployeeAuthUid || null}
+                    shiftStartTime={selectedEmployeeShiftSchedule.startTime}
+                    shiftEndTime={selectedEmployeeShiftSchedule.endTime}
                     title="سجل حضور الموظف الشهري"
                     description="عرض إداري لكل عمليات الحضور والانصراف المقبولة فعليًا لهذا الموظف خلال الشهر الحالي."
                   />
@@ -6491,6 +6775,68 @@ export default function EmployeesManagementPage() {
                           {formatNumberEN(calculatedGrossSalary || 0)} ر.س
                         </div>
                       </Field>
+                    </div>
+
+                    <div className="grid gap-5 rounded-[24px] border border-slate-200 bg-slate-50/70 p-5 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+                      <Field label="بداية الدوام">
+                        <Input
+                          type="time"
+                          dir="ltr"
+                          value={form.shiftStartTime}
+                          onChange={event =>
+                            handleFormChange("shiftStartTime", event.target.value)
+                          }
+                          disabled={!canManageEmployees || saving}
+                        />
+                      </Field>
+                      <Field label="نهاية الدوام">
+                        <Input
+                          type="time"
+                          dir="ltr"
+                          value={form.shiftEndTime}
+                          onChange={event =>
+                            handleFormChange("shiftEndTime", event.target.value)
+                          }
+                          disabled={!canManageEmployees || saving}
+                        />
+                      </Field>
+                      <div className="flex items-end">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="h-11 rounded-2xl border-slate-200 bg-white"
+                          onClick={() => void handleCalculatePayrollFromAttendance()}
+                          disabled={
+                            !canManageEmployees ||
+                            saving ||
+                            attendancePayrollLoading ||
+                            !selectedPayrollMonthMeta
+                          }
+                        >
+                          {attendancePayrollLoading ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Clock3 className="h-4 w-4" />
+                          )}
+                          احتساب من الحضور
+                        </Button>
+                      </div>
+                      {attendancePayrollSummary ? (
+                        <div className="md:col-span-2 xl:col-span-3 grid gap-3 text-sm md:grid-cols-4">
+                          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                            التأخير: {formatNumberEN(attendancePayrollSummary.lateHours)} ساعة
+                          </div>
+                          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                            النقص: {formatNumberEN(attendancePayrollSummary.missingHours)} ساعة
+                          </div>
+                          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                            الأوفر تايم: {formatNumberEN(attendancePayrollSummary.overtimeHours)} ساعة
+                          </div>
+                          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                            أيام مكتملة: {formatNumberEN(attendancePayrollSummary.completeDays)}
+                          </div>
+                        </div>
+                      ) : null}
                     </div>
 
                     <div className="space-y-4 rounded-[24px] border border-slate-200 bg-slate-50/70 p-5">
@@ -7904,6 +8250,182 @@ export default function EmployeesManagementPage() {
                         }
                       >
                         <div className="space-y-2 rounded-[18px] border border-slate-200 bg-slate-50 p-3">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="text-sm font-semibold text-slate-800">
+                              نطاقات الدوام
+                            </div>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-9 rounded-xl border-slate-200 bg-white"
+                              onClick={() => {
+                                if (newWorkZoneOpen) {
+                                  resetWorkZoneForm();
+                                  return;
+                                }
+                                setNewWorkZoneOpen(true);
+                              }}
+                              disabled={!canManageEmployees || saving}
+                            >
+                              <Plus className="h-4 w-4" />
+                              {newWorkZoneOpen ? "إغلاق" : "إضافة نطاق"}
+                            </Button>
+                          </div>
+
+                          {newWorkZoneOpen ? (
+                            <div className="space-y-3 rounded-2xl border border-[#F2B705]/35 bg-white p-3">
+                              <div className="text-sm font-semibold text-slate-900">
+                                {editingWorkZoneId
+                                  ? "تعديل نطاق الدوام"
+                                  : "إضافة نطاق دوام جديد"}
+                              </div>
+                              <div className="grid gap-3 md:grid-cols-2">
+                                <div className="space-y-1.5">
+                                  <Label className="text-xs font-semibold text-slate-600">
+                                    اسم النطاق
+                                  </Label>
+                                  <Input
+                                    value={newWorkZoneForm.name}
+                                    onChange={event =>
+                                      handleNewWorkZoneFormChange(
+                                        "name",
+                                        event.target.value
+                                      )
+                                    }
+                                    placeholder="مثال: مكتب جدة"
+                                    disabled={
+                                      !canManageEmployees ||
+                                      saving ||
+                                      creatingWorkZone
+                                    }
+                                  />
+                                </div>
+
+                                <div className="space-y-1.5">
+                                  <Label className="text-xs font-semibold text-slate-600">
+                                    Radius بالمتر
+                                  </Label>
+                                  <Input
+                                    dir="ltr"
+                                    inputMode="numeric"
+                                    value={newWorkZoneForm.radiusMeters}
+                                    onChange={event =>
+                                      handleNewWorkZoneFormChange(
+                                        "radiusMeters",
+                                        event.target.value
+                                      )
+                                    }
+                                    placeholder="200"
+                                    disabled={
+                                      !canManageEmployees ||
+                                      saving ||
+                                      creatingWorkZone
+                                    }
+                                  />
+                                </div>
+
+                                <div className="space-y-1.5">
+                                  <Label className="text-xs font-semibold text-slate-600">
+                                    خط العرض
+                                  </Label>
+                                  <Input
+                                    dir="ltr"
+                                    inputMode="decimal"
+                                    value={newWorkZoneForm.lat}
+                                    onChange={event =>
+                                      handleNewWorkZoneFormChange(
+                                        "lat",
+                                        event.target.value
+                                      )
+                                    }
+                                    disabled={
+                                      !canManageEmployees ||
+                                      saving ||
+                                      creatingWorkZone
+                                    }
+                                  />
+                                </div>
+
+                                <div className="space-y-1.5">
+                                  <Label className="text-xs font-semibold text-slate-600">
+                                    خط الطول
+                                  </Label>
+                                  <Input
+                                    dir="ltr"
+                                    inputMode="decimal"
+                                    value={newWorkZoneForm.lng}
+                                    onChange={event =>
+                                      handleNewWorkZoneFormChange(
+                                        "lng",
+                                        event.target.value
+                                      )
+                                    }
+                                    disabled={
+                                      !canManageEmployees ||
+                                      saving ||
+                                      creatingWorkZone
+                                    }
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="flex flex-wrap justify-end gap-2">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="rounded-xl border-slate-200 bg-white"
+                                  onClick={resetWorkZoneForm}
+                                  disabled={creatingWorkZone}
+                                >
+                                  إلغاء
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="rounded-xl border-slate-200 bg-white"
+                                  onClick={() =>
+                                    void handleUseCurrentLocationForWorkZone()
+                                  }
+                                  disabled={
+                                    !canManageEmployees ||
+                                    saving ||
+                                    creatingWorkZone ||
+                                    locatingWorkZone
+                                  }
+                                >
+                                  {locatingWorkZone ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <MapPin className="h-4 w-4" />
+                                  )}
+                                  استخدام موقعي
+                                </Button>
+                                <Button
+                                  type="button"
+                                  className="rounded-xl bg-slate-950 text-white hover:bg-slate-900"
+                                  onClick={() =>
+                                    void handleSaveWorkZoneFromEmployee()
+                                  }
+                                  disabled={
+                                    !canManageEmployees ||
+                                    saving ||
+                                    creatingWorkZone
+                                  }
+                                >
+                                  {creatingWorkZone ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <Save className="h-4 w-4" />
+                                  )}
+                                  {editingWorkZoneId
+                                    ? "حفظ التعديل"
+                                    : "إنشاء وتحديد"}
+                                </Button>
+                              </div>
+                            </div>
+                          ) : null}
+
                           {workZonesLoading ? (
                             <div className="text-sm text-slate-500">
                               جارٍ تحميل مناطق العمل...
@@ -7954,6 +8476,20 @@ export default function EmployeesManagementPage() {
                                     <span className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
                                       <MapPin className="h-3.5 w-3.5" />
                                       Radius {formatZoneRadiusLabel(zone)}
+                                      {canManageEmployees ? (
+                                        <button
+                                          type="button"
+                                          className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs font-semibold text-slate-700 transition hover:border-[#F2B705]/45 hover:bg-[#F2B705]/10"
+                                          onClick={event => {
+                                            event.preventDefault();
+                                            event.stopPropagation();
+                                            handleEditWorkZoneFromEmployee(zone);
+                                          }}
+                                          disabled={saving || creatingWorkZone}
+                                        >
+                                          تعديل
+                                        </button>
+                                      ) : null}
                                     </span>
                                   </span>
                                 </label>

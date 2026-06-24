@@ -17,6 +17,7 @@ import {
   fetchAttendanceRecords,
   type AttendanceRecord,
 } from "@/lib/attendanceRecords";
+import { computeAttendanceDay } from "@/lib/attendanceCalculations";
 import { formatNumberEN } from "@/lib/formatters";
 import { cn } from "@/lib/utils";
 
@@ -26,6 +27,8 @@ type EmployeeTodayAttendancePanelProps = {
   description?: string;
   refreshKey?: number;
   className?: string;
+  shiftStartTime?: string | null;
+  shiftEndTime?: string | null;
 };
 
 type MonthBounds = {
@@ -230,6 +233,8 @@ export default function EmployeeTodayAttendancePanel({
   employeeUid,
   refreshKey = 0,
   className,
+  shiftStartTime,
+  shiftEndTime,
 }: EmployeeTodayAttendancePanelProps) {
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [loading, setLoading] = useState(false);
@@ -307,6 +312,28 @@ export default function EmployeeTodayAttendancePanel({
   ).length;
   const workDurationMs = getWorkDurationMs(selectedDay);
   const workDurationLabel = formatDurationFromMs(workDurationMs);
+  const attendanceComputation = selectedDay
+    ? computeAttendanceDay(selectedDay.date, selectedDay.records, {
+        startTime: shiftStartTime,
+        endTime: shiftEndTime,
+      })
+    : null;
+  const lateHoursLabel = attendanceComputation?.lateHours
+    ? `${formatNumberEN(attendanceComputation.lateHours)} ساعة`
+    : "--";
+  const overtimeHoursLabel = attendanceComputation?.overtimeHours
+    ? `${formatNumberEN(attendanceComputation.overtimeHours)} ساعة`
+    : "--";
+  const missingHoursLabel = attendanceComputation?.missingHours
+    ? `${formatNumberEN(attendanceComputation.missingHours)} ساعة`
+    : "--";
+  const differenceLabel = attendanceComputation
+    ? attendanceComputation.overtimeHours > 0
+      ? `+${formatNumberEN(attendanceComputation.overtimeHours)}`
+      : attendanceComputation.missingHours > 0
+        ? `-${formatNumberEN(attendanceComputation.missingHours)}`
+        : "0"
+    : "--";
   const selectedRecordsCount = selectedDay?.records.length || 0;
   const hasSelectedRecord = selectedRecordsCount > 0;
   const firstCheckInLabel = formatDisplayTime(selectedDay?.checkIn?.serverTime);
@@ -544,7 +571,7 @@ export default function EmployeeTodayAttendancePanel({
                 <AttendanceMetric label="مدة العمل" value={workDurationLabel} />
                 <AttendanceMetric
                   label="الفرق"
-                  value="+"
+                  value={differenceLabel}
                   valueClassName="text-2xl text-orange-600"
                 />
               </div>
@@ -555,7 +582,7 @@ export default function EmployeeTodayAttendancePanel({
                     عمل إضافي مؤكد
                   </div>
                   <div className="mt-8 text-base font-semibold text-slate-950">
-                    --
+                    {overtimeHoursLabel}
                   </div>
                 </div>
                 <div>
@@ -563,7 +590,7 @@ export default function EmployeeTodayAttendancePanel({
                     احتساب الساعة
                   </div>
                   <div className="mt-8 text-base font-semibold text-slate-950">
-                    --
+                    {lateHoursLabel}
                   </div>
                 </div>
                 <div>
@@ -571,7 +598,7 @@ export default function EmployeeTodayAttendancePanel({
                     التغييرات
                   </div>
                   <div className="mt-8 text-base font-semibold text-slate-950">
-                    --
+                    {missingHoursLabel}
                   </div>
                 </div>
               </div>

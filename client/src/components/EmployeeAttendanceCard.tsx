@@ -1,16 +1,15 @@
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertCircle,
+  CheckCircle2,
   Clock3,
-  LogIn,
-  LogOut,
+  Fingerprint,
   Loader2,
   MapPin,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -27,31 +26,148 @@ import {
   type AttendanceResponse,
   type AttendanceType,
 } from "@/lib/attendance";
+import {
+  fetchAttendanceRecords,
+  type AttendanceRecord,
+} from "@/lib/attendanceRecords";
 import { cn } from "@/lib/utils";
 
 type EmployeeAttendanceCardProps = {
   employeeId?: string | null;
+  employeeUid?: string | null;
   onRecorded?: (response: AttendanceResponse) => void;
+  className?: string;
 };
+
+const RIYADH_TIME_ZONE = "Asia/Riyadh";
 
 function formatMeters(value?: number | null) {
   if (typeof value !== "number" || !Number.isFinite(value)) return null;
   return `${Math.round(value)} م`;
 }
 
+function getRiyadhTodayKey() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: RIYADH_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+function formatDisplayTime(value?: string | null) {
+  if (!value) return "--:--";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "--:--";
+
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: RIYADH_TIME_ZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  }).format(date);
+}
+
+function getTodayAttendanceState(records: AttendanceRecord[]) {
+  const sorted = [...records].sort(
+    (left, right) =>
+      Date.parse(left.serverTime || "") - Date.parse(right.serverTime || "")
+  );
+  const checkIn = sorted.find(record => record.type === "check_in") || null;
+  const checkOut =
+    [...sorted].reverse().find(record => record.type === "check_out") || null;
+  const isCheckedIn = Boolean(checkIn && !checkOut);
+  const isComplete = Boolean(checkIn && checkOut);
+
+  return {
+    checkIn,
+    checkOut,
+    nextType: isComplete ? null : isCheckedIn ? "check_out" : "check_in",
+    statusLabel: isComplete
+      ? "تم تسجيل حضور وانصراف اليوم"
+      : isCheckedIn
+        ? "تم تسجيل الحضور"
+        : "لم يتم تسجيل الحضور",
+    actionLabel: isComplete
+      ? "تم اكتمال الدوام"
+      : isCheckedIn
+        ? "تسجيل انصراف"
+        : "تسجيل حضور",
+  } satisfies {
+    checkIn: AttendanceRecord | null;
+    checkOut: AttendanceRecord | null;
+    nextType: AttendanceType | null;
+    statusLabel: string;
+    actionLabel: string;
+  };
+}
+
 export default function EmployeeAttendanceCard({
   employeeId,
+  employeeUid,
   onRecorded,
+  className,
 }: EmployeeAttendanceCardProps) {
   const [pendingType, setPendingType] = useState<AttendanceType | null>(null);
   const [lastResponse, setLastResponse] = useState<AttendanceResponse | null>(
     null
   );
+  const [todayRecords, setTodayRecords] = useState<AttendanceRecord[]>([]);
+  const [loadingToday, setLoadingToday] = useState(false);
   const [showLocationPermissionHelp, setShowLocationPermissionHelp] =
     useState(false);
 
-  const handleAttendance = async (type: AttendanceType) => {
-    if (pendingType) return;
+  const [todayKey, setTodayKey] = useState(() => getRiyadhTodayKey());
+  const todayState = useMemo(
+    () => getTodayAttendanceState(todayRecords),
+    [todayRecords]
+  );
+
+  const loadTodayRecords = useCallback(async () => {
+    const uid = String(employeeUid || employeeId || "").trim();
+    if (!uid) {
+      setTodayRecords([]);
+      return;
+    }
+
+    setLoadingToday(true);
+    try {
+      const response = await fetchAttendanceRecords({
+        employeeUid: uid,
+        fromDate: todayKey,
+        toDate: todayKey,
+        result: "allowed",
+        limit: 20,
+      });
+      setTodayRecords(response.records);
+    } catch (error) {
+      console.error("employee_today_attendance_failed", error);
+      setTodayRecords([]);
+    } finally {
+      setLoadingToday(false);
+    }
+  }, [employeeId, employeeUid, todayKey]);
+
+  useEffect(() => {
+    void loadTodayRecords();
+  }, [loadTodayRecords]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setTodayKey(current => {
+        const next = getRiyadhTodayKey();
+        return next === current ? current : next;
+      });
+    }, 60_000);
+
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const handleAttendance = async () => {
+    const type = todayState.nextType;
+    if (pendingType || !type) return;
 
     setPendingType(type);
     try {
@@ -64,9 +180,11 @@ export default function EmployeeAttendanceCard({
       setShowLocationPermissionHelp(false);
 
       if (response.result === "allowed") {
-        toast.success(getAttendanceSuccessLabel(type));
+        toast.success(getAttendanceSuccessLabel(response.type));
+        await loadTodayRecords();
       } else {
         toast.error(getAttendanceRejectionLabel(response.rejectionReason));
+        await loadTodayRecords();
       }
     } catch (error) {
       console.error("employee_attendance_submit_failed", error);
@@ -79,9 +197,19 @@ export default function EmployeeAttendanceCard({
 
   const lastDistance = formatMeters(lastResponse?.distanceMeters);
   const lastAccuracy = formatMeters(lastResponse?.accuracy);
+  const checkInTime = formatDisplayTime(todayState.checkIn?.serverTime);
+  const checkOutTime = formatDisplayTime(todayState.checkOut?.serverTime);
+  const attendanceDone = Boolean(todayState.checkIn);
+  const checkoutDone = Boolean(todayState.checkOut);
 
   return (
-    <Card className="rounded-[28px] border border-slate-200/80 bg-white/95 shadow-[0_24px_70px_-42px_rgba(15,23,42,0.22)]">
+    <Card
+      dir="rtl"
+      className={cn(
+        "rounded-[28px] border border-slate-200/80 bg-white/95 shadow-[0_24px_70px_-42px_rgba(15,23,42,0.22)]",
+        className
+      )}
+    >
       <CardHeader className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
@@ -101,35 +229,73 @@ export default function EmployeeAttendanceCard({
       </CardHeader>
 
       <CardContent className="space-y-4">
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Button
-            type="button"
-            className="h-12 rounded-2xl bg-emerald-600 px-5 text-white hover:bg-emerald-700"
-            disabled={!!pendingType}
-            onClick={() => void handleAttendance("check_in")}
-          >
-            {pendingType === "check_in" ? (
-              <Loader2 className="ml-2 h-4 w-4 animate-spin" />
-            ) : (
-              <LogIn className="ml-2 h-4 w-4" />
-            )}
-            تسجيل حضور
-          </Button>
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 rounded-[24px] border border-slate-200 bg-slate-50/80 px-3 py-4 sm:px-5">
+          <div className="min-w-0 text-center">
+            <div className="text-sm font-semibold text-slate-500">الحضور</div>
+            <div className="mt-2 text-xl font-bold text-emerald-600">
+              {checkInTime}
+            </div>
+            <div
+              className={cn(
+                "mx-auto mt-3 inline-flex min-h-9 items-center justify-center gap-2 rounded-xl px-3 text-sm font-semibold",
+                attendanceDone
+                  ? "bg-emerald-100 text-emerald-700"
+                  : "bg-white text-slate-400"
+              )}
+            >
+              {attendanceDone ? <CheckCircle2 className="h-4 w-4" /> : null}
+              {attendanceDone ? "تم الحضور" : "لم يتم الحضور"}
+            </div>
+          </div>
 
-          <Button
-            type="button"
-            variant="outline"
-            className="h-12 rounded-2xl border-slate-200 bg-slate-950 px-5 text-white hover:bg-slate-900 hover:text-white"
-            disabled={!!pendingType}
-            onClick={() => void handleAttendance("check_out")}
-          >
-            {pendingType === "check_out" ? (
-              <Loader2 className="ml-2 h-4 w-4 animate-spin" />
-            ) : (
-              <LogOut className="ml-2 h-4 w-4" />
-            )}
-            تسجيل انصراف
-          </Button>
+          <div className="flex min-w-[104px] flex-col items-center">
+            <button
+              type="button"
+              className={cn(
+                "flex h-24 w-24 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-[0_18px_40px_-28px_rgba(15,23,42,0.55)] transition",
+                todayState.nextType
+                  ? "hover:border-emerald-200 hover:text-emerald-700"
+                  : "text-emerald-700",
+                pendingType && "cursor-wait"
+              )}
+              disabled={!!pendingType || loadingToday || !todayState.nextType}
+              onClick={() => void handleAttendance()}
+              aria-label={todayState.actionLabel}
+            >
+              {pendingType || loadingToday ? (
+                <Loader2 className="h-10 w-10 animate-spin" />
+              ) : (
+                <Fingerprint className="h-11 w-11 stroke-[1.9]" />
+              )}
+            </button>
+            <div className="mt-3 text-center text-sm font-semibold text-slate-600">
+              {todayState.actionLabel}
+            </div>
+          </div>
+
+          <div className="min-w-0 text-center">
+            <div className="text-sm font-semibold text-slate-500">
+              الانصراف
+            </div>
+            <div className="mt-2 text-xl font-bold text-slate-950">
+              {checkOutTime}
+            </div>
+            <div
+              className={cn(
+                "mx-auto mt-3 inline-flex min-h-9 items-center justify-center gap-2 rounded-xl px-3 text-sm font-semibold",
+                checkoutDone
+                  ? "bg-emerald-100 text-emerald-700"
+                  : "bg-white text-slate-400"
+              )}
+            >
+              {checkoutDone ? <CheckCircle2 className="h-4 w-4" /> : null}
+              {checkoutDone ? "تم الانصراف" : "لم يتم الانصراف"}
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-center text-sm font-semibold text-slate-600">
+          {loadingToday ? "جاري تحديث حالة اليوم..." : todayState.statusLabel}
         </div>
 
         {showLocationPermissionHelp ? (
@@ -140,7 +306,7 @@ export default function EmployeeAttendanceCard({
             </div>
             <p className="mt-2 text-xs leading-6 text-amber-800">
               افتح أيقونة القفل بجانب رابط الموقع، ثم إعدادات الموقع، واجعل
-              الموقع على السماح. بعد ذلك حدّث الصفحة وحاول تسجيل الدوام مرة
+              الموقع على السماح. بعد ذلك حدث الصفحة وحاول تسجيل الدوام مرة
               أخرى.
             </p>
           </div>
@@ -186,7 +352,7 @@ export default function EmployeeAttendanceCard({
               </div>
             </div>
           ) : (
-            "جاهز لتسجيل عملية الدوام."
+            "اضغط البصمة لتسجيل الحضور، والضغطة التالية في نفس اليوم تسجل الانصراف تلقائيًا."
           )}
         </div>
       </CardContent>

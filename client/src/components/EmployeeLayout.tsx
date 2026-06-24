@@ -36,12 +36,14 @@ type EmployeeLayoutProps = {
   title: string;
   description: string;
   children: ReactNode;
+  hideHero?: boolean;
 };
 
 export default function EmployeeLayout({
   title,
   description,
   children,
+  hideHero = false,
 }: EmployeeLayoutProps) {
   const { language, toggleLanguage } = useLanguage();
   const { user, logout } = useAuth();
@@ -379,54 +381,56 @@ export default function EmployeeLayout({
 
       <main className="pb-36 pt-8">
         <div className="container space-y-8">
-          <section className="overflow-hidden rounded-[32px] border border-slate-200/80 bg-[linear-gradient(135deg,rgba(255,255,255,0.98)_0%,rgba(248,250,252,0.95)_52%,rgba(245,235,214,0.45)_100%)] px-6 py-7 shadow-[0_30px_90px_-48px_rgba(15,23,42,0.24)] sm:px-8 sm:py-8">
-            <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-              <div className="space-y-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Link href={employeeReturnPath}>
-                    <Button
-                      type="button"
-                      variant="default"
-                      size="sm"
-                      className="h-10 rounded-full bg-slate-950 px-4 text-sm font-semibold text-white shadow-[0_18px_34px_-24px_rgba(15,23,42,0.5)] hover:bg-slate-900"
+          {!hideHero ? (
+            <section className="overflow-hidden rounded-[32px] border border-slate-200/80 bg-[linear-gradient(135deg,rgba(255,255,255,0.98)_0%,rgba(248,250,252,0.95)_52%,rgba(245,235,214,0.45)_100%)] px-6 py-7 shadow-[0_30px_90px_-48px_rgba(15,23,42,0.24)] sm:px-8 sm:py-8">
+              <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+                <div className="space-y-4">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Link href={employeeReturnPath}>
+                      <Button
+                        type="button"
+                        variant="default"
+                        size="sm"
+                        className="h-10 rounded-full bg-slate-950 px-4 text-sm font-semibold text-white shadow-[0_18px_34px_-24px_rgba(15,23,42,0.5)] hover:bg-slate-900"
+                      >
+                        <ArrowLeft
+                          className={cn(
+                            "h-4 w-4",
+                            language === "en" && "rotate-180"
+                          )}
+                        />
+                        {tr(language, "العودة للوحة HR", "Back To HR")}
+                      </Button>
+                    </Link>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge className="rounded-full border border-[#F2B705]/35 bg-[#F2B705]/12 px-4 py-1.5 text-[#8b6700] shadow-none">
+                      <BriefcaseBusiness className="ml-2 h-4 w-4" />
+                      {tr(language, "بوابة الموظف", "Employee Portal")}
+                    </Badge>
+                    <Badge
+                      variant="outline"
+                      className="rounded-full border-slate-200 bg-white/80 px-4 py-1.5 text-slate-600 shadow-none"
                     >
-                      <ArrowLeft
-                        className={cn(
-                          "h-4 w-4",
-                          language === "en" && "rotate-180"
-                        )}
-                      />
-                      {tr(language, "العودة للوحة HR", "Back To HR")}
-                    </Button>
-                  </Link>
-                </div>
+                      <ShieldCheck className="ml-2 h-4 w-4" />
+                      {tr(language, "وصول شخصي فقط", "Personal Access Only")}
+                    </Badge>
+                  </div>
 
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge className="rounded-full border border-[#F2B705]/35 bg-[#F2B705]/12 px-4 py-1.5 text-[#8b6700] shadow-none">
-                    <BriefcaseBusiness className="ml-2 h-4 w-4" />
-                    {tr(language, "بوابة الموظف", "Employee Portal")}
-                  </Badge>
-                  <Badge
-                    variant="outline"
-                    className="rounded-full border-slate-200 bg-white/80 px-4 py-1.5 text-slate-600 shadow-none"
-                  >
-                    <ShieldCheck className="ml-2 h-4 w-4" />
-                    {tr(language, "وصول شخصي فقط", "Personal Access Only")}
-                  </Badge>
-                </div>
+                  <div className="space-y-3">
+                    <h1 className="text-3xl font-semibold tracking-tight text-slate-950 sm:text-[2.3rem]">
+                      {displayTitle}
+                    </h1>
+                    <p className="max-w-3xl text-sm leading-8 text-slate-600 sm:text-[15px]">
+                      {displayDescription}
+                    </p>
+                  </div>
 
-                <div className="space-y-3">
-                  <h1 className="text-3xl font-semibold tracking-tight text-slate-950 sm:text-[2.3rem]">
-                    {displayTitle}
-                  </h1>
-                  <p className="max-w-3xl text-sm leading-8 text-slate-600 sm:text-[15px]">
-                    {displayDescription}
-                  </p>
                 </div>
-
               </div>
-            </div>
-          </section>
+            </section>
+          ) : null}
 
           {children}
         </div>

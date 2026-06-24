@@ -560,7 +560,7 @@ async function recordAttendance({
     return json(400, { ok: false, message: "invalid_gps_location" });
 
   const userData = requester.userData || {};
-  const linkedEmployeeId = firstText(userData.linkedEmployeeId, requester.uid);
+  const linkedEmployeeId = normalizeText(userData.linkedEmployeeId);
   const requestedEmployeeId = normalizeText(input.data?.employeeId);
   if (
     requestedEmployeeId &&
@@ -573,12 +573,13 @@ async function recordAttendance({
   if (
     !ATTENDANCE_ALLOWED_ROLES.has(requester.runtime?.role) &&
     !userData.employeeProfileEnabled &&
-    !linkedEmployeeId
+    !linkedEmployeeId &&
+    !requestedEmployeeId
   ) {
     return json(403, { ok: false, message: "attendance_not_enabled" });
   }
 
-  const employeeDocId = linkedEmployeeId || requester.uid;
+  const employeeDocId = requestedEmployeeId || linkedEmployeeId || requester.uid;
   const employeeResult = await fetchFirestoreDocument({
     projectId: requester.projectId,
     idToken: requester.idToken,
@@ -1006,7 +1007,27 @@ function pickAllowedZoneIds(employeeData, userData) {
     employeeData?.employment?.allowedZoneIds,
     userData?.allowedZoneIds,
     userData?.employeeProfile?.employment?.allowedZoneIds,
-    userData?.employment?.allowedZoneIds
+    userData?.employment?.allowedZoneIds,
+    [
+      employeeData?.workZoneId,
+      employeeData?.zoneId,
+      employeeData?.attendanceZoneId,
+      employeeData?.employeeProfile?.employment?.workZoneId,
+      employeeData?.employeeProfile?.employment?.zoneId,
+      employeeData?.employeeProfile?.employment?.attendanceZoneId,
+      employeeData?.employment?.workZoneId,
+      employeeData?.employment?.zoneId,
+      employeeData?.employment?.attendanceZoneId,
+      userData?.workZoneId,
+      userData?.zoneId,
+      userData?.attendanceZoneId,
+      userData?.employeeProfile?.employment?.workZoneId,
+      userData?.employeeProfile?.employment?.zoneId,
+      userData?.employeeProfile?.employment?.attendanceZoneId,
+      userData?.employment?.workZoneId,
+      userData?.employment?.zoneId,
+      userData?.employment?.attendanceZoneId,
+    ]
   );
 }
 
