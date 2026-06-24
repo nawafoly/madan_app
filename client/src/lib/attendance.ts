@@ -135,6 +135,15 @@ export function isGeolocationPermissionDenied(error: unknown) {
   return typeof geoError?.code === "number" && geoError.code === 1;
 }
 
+export function isGeolocationPositionError(error: unknown) {
+  const geoError = error as Partial<GeolocationPositionError> | null;
+  return (
+    typeof geoError?.code === "number" &&
+    geoError.code >= 1 &&
+    geoError.code <= 3
+  );
+}
+
 export function getAttendanceTypeLabel(type: AttendanceType) {
   return type === "check_in" ? "تسجيل حضور" : "تسجيل انصراف";
 }
@@ -215,13 +224,6 @@ export async function submitEmployeeAttendance(input: {
     lng: position.coords.longitude,
     accuracy: position.coords.accuracy,
   };
-
-  console.log(
-    "[attendance:gps]",
-    location.lat,
-    location.lng,
-    location.accuracy
-  );
 
   return recordAttendance({
     employeeId: input.employeeId || null,

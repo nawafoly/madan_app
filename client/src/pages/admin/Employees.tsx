@@ -4525,6 +4525,8 @@ export default function EmployeesManagementPage() {
     const actualWorkedHours = toNullableNumber(form.actualWorkedHours);
     const overtimeHourlyRate = toNullableNumber(form.overtimeHourlyRate);
     const insuranceDeduction = toNullableNumber(form.insuranceDeduction);
+    const shiftStartTime = form.shiftStartTime.trim() || null;
+    const shiftEndTime = form.shiftEndTime.trim() || null;
     if (!normalizedFullName) {
       toast.error("يجب إدخال اسم الموظف.");
       return;
@@ -9054,8 +9056,8 @@ export default function EmployeesManagementPage() {
                   </CardContent>
                 </Card>
                 {isDirty ? (
-                  <div className="pointer-events-none fixed inset-x-3 bottom-4 z-40 sm:inset-x-4 sm:bottom-5 xl:left-[calc(360px+2rem)] xl:right-8">
-                    <div className="pointer-events-auto rounded-[28px] border border-slate-200 bg-white/95 px-5 py-4 shadow-[0_20px_45px_-24px_rgba(15,23,42,0.28)] backdrop-blur">
+                  <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-4">
+                    <div className="pointer-events-auto mx-auto w-full max-w-4xl rounded-[24px] border border-slate-200 bg-white/95 px-4 py-3 shadow-[0_20px_45px_-24px_rgba(15,23,42,0.28)] backdrop-blur sm:px-5 sm:py-4">
                       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div className="space-y-1 text-right">
                           <div className="text-base font-semibold text-slate-950">

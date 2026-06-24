@@ -21,6 +21,7 @@ import {
   getAttendanceSubmitErrorMessage,
   getAttendanceSuccessLabel,
   getAttendanceTypeLabel,
+  isGeolocationPositionError,
   isGeolocationPermissionDenied,
   submitEmployeeAttendance,
   type AttendanceResponse,
@@ -187,7 +188,9 @@ export default function EmployeeAttendanceCard({
         await loadTodayRecords();
       }
     } catch (error) {
-      console.error("employee_attendance_submit_failed", error);
+      if (!isGeolocationPositionError(error)) {
+        console.error("employee_attendance_submit_failed", error);
+      }
       setShowLocationPermissionHelp(isGeolocationPermissionDenied(error));
       toast.error(getAttendanceSubmitErrorMessage(error));
     } finally {
