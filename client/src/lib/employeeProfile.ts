@@ -2,6 +2,11 @@ import { buildR2DownloadUrl } from "@/lib/documentUploadService";
 import { formatNumberEN, toDateSafe } from "@/lib/formatters";
 import { resolveUserAccountStatus } from "@/lib/userAccountStatus";
 import {
+  formatWeeklyOffDaysLabel,
+  normalizeWeeklyOffDays,
+  type WorkScheduleWeekday,
+} from "@/lib/workSchedule";
+import {
   EMPLOYEE_AVATAR_CATEGORY,
   type EmployeeAvatarDoc,
   type EmployeeEmploymentStatus,
@@ -60,6 +65,17 @@ export type EmployeeProfileViewModel = {
     fingerprintNumber: string;
     shiftStartTime: string;
     shiftEndTime: string;
+    weeklyOffDays: WorkScheduleWeekday[];
+    weeklyOffDaysLabel: string;
+    attendanceZoneLabel: string;
+    baseSalary: number | null;
+    insuranceDeduction: number | null;
+    allowances: number | null;
+    salaryDeductions: Array<{
+      id?: string | null;
+      title: string;
+      amount: number;
+    }>;
     isActive: boolean;
   };
 };
@@ -281,8 +297,30 @@ export function normalizeEmployeeProfile(
       user.fingerprintNumber,
       user.profile?.fingerprintNumber
     ) || EMPTY_VALUE;
-  const shiftStartTime = pickText(employment.shiftStartTime);
-  const shiftEndTime = pickText(employment.shiftEndTime);
+  const workSchedule = (employment.workSchedule || {}) as Record<string, any>;
+  const shiftStartTime = pickText(
+    workSchedule.startTime,
+    employment.shiftStartTime
+  );
+  const shiftEndTime = pickText(workSchedule.endTime, employment.shiftEndTime);
+  const weeklyOffDays = normalizeWeeklyOffDays(
+    workSchedule.weeklyOffDays ?? employment.weeklyOffDays
+  );
+  const allowedZoneIds = Array.isArray(employment.allowedZoneIds)
+    ? employment.allowedZoneIds.filter(Boolean)
+    : [];
+  const attendanceZoneLabel = allowedZoneIds.length
+    ? `${formatNumberEN(allowedZoneIds.length)} نطاق معتمد`
+    : EMPTY_VALUE;
+  const salaryDeductions = Array.isArray(employment.salaryDeductions)
+    ? employment.salaryDeductions
+        .map((item: Record<string, any>) => ({
+          id: pickText(item?.id) || null,
+          title: pickText(item?.title, item?.name) || "خصم ثابت",
+          amount: toNullableNumber(item?.amount) || 0,
+        }))
+        .filter(item => item.amount > 0)
+    : [];
 
   const employmentStatus = normalizeEmploymentStatus({
     rawStatus:
@@ -313,6 +351,13 @@ export function normalizeEmployeeProfile(
       fingerprintNumber,
       shiftStartTime,
       shiftEndTime,
+      weeklyOffDays,
+      weeklyOffDaysLabel: formatWeeklyOffDaysLabel(weeklyOffDays),
+      attendanceZoneLabel,
+      baseSalary: toNullableNumber(employment.baseSalary),
+      insuranceDeduction: toNullableNumber(employment.insuranceDeduction),
+      allowances: toNullableNumber(employment.allowances),
+      salaryDeductions,
       isActive: accountStatus.isActive,
     },
   };

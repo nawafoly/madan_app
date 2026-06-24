@@ -60,6 +60,12 @@ export type EmployeeEmploymentStatus =
   | "terminated"
   | string;
 
+export type EmployeeWorkScheduleDoc = {
+  startTime?: string | null;
+  endTime?: string | null;
+  weeklyOffDays?: string[] | null;
+};
+
   export type EmployeeEmploymentDoc = {
     title?: string | null;
     jobTitle?: string | null;
@@ -71,6 +77,7 @@ export type EmployeeEmploymentStatus =
     expectedWorkDays?: number | null;
     expectedWorkHours?: number | null;
     actualWorkedHours?: number | null;
+    workSchedule?: EmployeeWorkScheduleDoc | null;
     shiftStartTime?: string | null;
     shiftEndTime?: string | null;
 
@@ -246,6 +253,7 @@ export type EmployeePayrollRecordDoc = {
   attendanceIncompleteDays?: number | null;
   attendanceAbsentDays?: number | null;
   attendanceAbsenceDeduction?: number | null;
+  scheduleSnapshot?: EmployeeWorkScheduleDoc | null;
   delayDeduction?: number | null;
   overtimeBonus?: number | null;
   insuranceDeduction?: number | null;

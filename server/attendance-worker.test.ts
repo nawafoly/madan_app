@@ -45,6 +45,17 @@ describe("attendance location validation", () => {
     ).toBe("outside_zone");
   });
 
+  it("prioritizes outside zone over weak accuracy when the employee is clearly far away", () => {
+    const location = { lat: 24.809, lng: 46.6753, accuracy: 109 };
+    const zoneCheck = evaluateAttendanceZones(location, [zone]);
+    expect(zoneCheck.withinZone).toBe(false);
+    expect(zoneCheck.distanceMeters).toBeGreaterThan(10_000);
+    expect(
+      evaluateLocationDecision({ location, zoneError: "", zoneCheck })
+        .rejectionReason
+    ).toBe("outside_zone");
+  });
+
   it("rejects GPS accuracy greater than 100 meters", () => {
     const location = { ...center, accuracy: 101 };
     const zoneCheck = evaluateAttendanceZones(location, [zone]);

@@ -8,8 +8,7 @@ describe("employee payroll calculations", () => {
       baseSalary: 5500,
       expectedWorkDays: 30,
       expectedWorkHours: 240,
-      attendanceExpectedHours: 24,
-      actualWorkedHours: 2.01,
+      attendanceMissingHours: 21.99,
       insuranceDeduction: 487.5,
     });
 
@@ -20,20 +19,33 @@ describe("employee payroll calculations", () => {
     expect(result.finalSalary).toBeCloseTo(4508.56, 2);
   });
 
-  it("deducts full attendance days with no records in the payroll month", () => {
+  it("keeps no-show days out of the hourly shortage calculation", () => {
     const result = computeEmployeePayroll({
       baseSalary: 5500,
       expectedWorkDays: 30,
       expectedWorkHours: 240,
-      attendanceExpectedHours: 24,
       attendanceAbsentDays: 27,
-      actualWorkedHours: 2.01,
-      insuranceDeduction: 487.5,
+      attendanceMissingHours: 21.99,
     });
 
     expect(result.attendanceAbsentDays).toBe(27);
     expect(result.attendanceAbsenceDeduction).toBeCloseTo(4950, 2);
     expect(result.delayDeduction).toBeCloseTo(503.94, 2);
-    expect(result.finalSalary).toBe(0);
+    expect(result.finalSalary).toBeCloseTo(46.06, 2);
+  });
+
+  it("deducts full no-show days even when there is no attended-day shortage", () => {
+    const result = computeEmployeePayroll({
+      baseSalary: 5500,
+      expectedWorkDays: 30,
+      expectedWorkHours: 240,
+      attendanceAbsentDays: 27,
+      attendanceMissingHours: 0,
+      attendanceOvertimeHours: 0,
+    });
+
+    expect(result.attendanceAbsenceDeduction).toBeCloseTo(4950, 2);
+    expect(result.delayDeduction).toBe(0);
+    expect(result.finalSalary).toBeCloseTo(550, 2);
   });
 });

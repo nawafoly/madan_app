@@ -19,9 +19,22 @@ import {
   type AttendanceRecord,
 } from "@/lib/attendanceRecords";
 import { computeAttendanceDay } from "@/lib/attendanceCalculations";
+import { formatLeaveDateInput } from "@/lib/employeeLeave";
 import { formatNumberEN } from "@/lib/formatters";
 import { cn } from "@/lib/utils";
+import {
+  buildDateKeysInRange,
+  formatWeeklyOffDaysLabel,
+  isWeeklyOffDateKey,
+  type WorkScheduleWeekday,
+} from "@/lib/workSchedule";
 import { toast } from "sonner";
+
+type ApprovedLeaveLike = {
+  status?: unknown;
+  startDate?: unknown;
+  endDate?: unknown;
+};
 
 type EmployeeTodayAttendancePanelProps = {
   employeeUid?: string | null;
@@ -32,6 +45,9 @@ type EmployeeTodayAttendancePanelProps = {
   className?: string;
   shiftStartTime?: string | null;
   shiftEndTime?: string | null;
+  weeklyOffDays?: WorkScheduleWeekday[] | string[] | null;
+  approvedLeaveRequests?: ApprovedLeaveLike[];
+  holidayDateKeys?: string[];
   canManageAttendance?: boolean;
 };
 
@@ -57,6 +73,15 @@ type MonthlyAttendanceDay = {
   hasEvent: boolean;
   hasWarning: boolean;
 };
+
+type AttendanceStatus =
+  | "present"
+  | "partial"
+  | "absent"
+  | "leave"
+  | "off_day"
+  | "future"
+  | "today_pending";
 
 const WEEKDAY_LABELS = ["S", "M", "T", "W", "T", "F", "S"];
 const RIYADH_TIME_ZONE = "Asia/Riyadh";
@@ -192,11 +217,162 @@ function formatDurationFromHours(value: number | null | undefined) {
   return `${formatNumberEN(minutes)} دقيقة`;
 }
 
-function getAttendanceTone(day: MonthlyAttendanceDay | null, computation?: ReturnType<typeof computeAttendanceDay> | null) {
-  if (!day?.hasAttendance) return "empty";
-  if (computation?.lateHours || (day.checkIn && !day.checkOut)) return "warning";
-  if (computation?.overtimeHours) return "overtime";
-  return "normal";
+function getAttendanceStatus(
+  day: MonthlyAttendanceDay | null,
+  computation: ReturnType<typeof computeAttendanceDay> | null | undefined,
+  options: {
+    todayKey: string;
+    weeklyOffDays?: WorkScheduleWeekday[] | string[] | null;
+    approvedLeaveDateKeys: Set<string>;
+    holidayDateKeys: Set<string>;
+  }
+): AttendanceStatus {
+  if (!day) return "future";
+
+  if (day.hasAttendance) {
+    if (
+      !computation?.isComplete ||
+      computation.lateHours > 0 ||
+      (day.checkOut && computation.missingHours > 0)
+    ) {
+      return "partial";
+    }
+    return "present";
+  }
+
+  if (options.approvedLeaveDateKeys.has(day.date)) return "leave";
+  if (
+    isWeeklyOffDateKey(day.date, options.weeklyOffDays) ||
+    options.holidayDateKeys.has(day.date)
+  ) {
+    return "off_day";
+  }
+  if (day.date < options.todayKey) return "absent";
+  if (day.date === options.todayKey) return "today_pending";
+  return "future";
+}
+
+function getAttendanceStatusLabel(status: AttendanceStatus) {
+  switch (status) {
+    case "present":
+      return "حضور مكتمل";
+    case "partial":
+      return "حضور يحتاج مراجعة";
+    case "absent":
+      return "غياب كامل";
+    case "leave":
+      return "إجازة معتمدة";
+    case "off_day":
+      return "يوم راحة أسبوعية";
+    case "today_pending":
+      return "بانتظار تسجيل اليوم";
+    case "future":
+    default:
+      return "يوم قادم";
+  }
+}
+
+function getStatusIndicatorClass(status: AttendanceStatus) {
+  switch (status) {
+    case "present":
+      return "bg-emerald-500";
+    case "partial":
+      return "bg-orange-500";
+    case "absent":
+      return "bg-rose-500";
+    case "leave":
+      return "bg-blue-500";
+    case "off_day":
+      return "bg-slate-300";
+    default:
+      return "";
+  }
+}
+
+function getSelectedDayClass(status: AttendanceStatus) {
+  switch (status) {
+    case "present":
+      return "border-emerald-500 bg-emerald-50";
+    case "partial":
+      return "border-orange-500 bg-orange-50";
+    case "absent":
+      return "border-rose-500 bg-rose-50";
+    case "leave":
+      return "border-blue-500 bg-blue-50";
+    case "off_day":
+      return "border-slate-300 bg-slate-50";
+    default:
+      return "border-slate-900 bg-transparent";
+  }
+}
+
+function getSelectedNumberClass(status: AttendanceStatus) {
+  switch (status) {
+    case "present":
+      return "bg-emerald-600 text-white";
+    case "partial":
+      return "bg-orange-500 text-white";
+    case "absent":
+      return "bg-rose-600 text-white";
+    case "leave":
+      return "bg-blue-600 text-white";
+    case "off_day":
+      return "bg-slate-300 text-slate-800";
+    default:
+      return "bg-slate-950 text-white";
+  }
+}
+
+function getSelectedSummaryClass(status: AttendanceStatus) {
+  switch (status) {
+    case "partial":
+      return "border-orange-200 bg-orange-50/60";
+    case "absent":
+      return "border-rose-200 bg-rose-50/60";
+    case "leave":
+      return "border-blue-200 bg-blue-50/60";
+    case "off_day":
+      return "border-slate-200 bg-slate-50/70";
+    case "present":
+      return "border-emerald-200 bg-emerald-50/60";
+    default:
+      return "border-slate-200 bg-white";
+  }
+}
+
+function getSelectedAccentClass(status: AttendanceStatus) {
+  switch (status) {
+    case "partial":
+      return "bg-orange-400";
+    case "absent":
+      return "bg-rose-400";
+    case "leave":
+      return "bg-blue-400";
+    case "off_day":
+      return "bg-slate-300";
+    case "present":
+      return "bg-emerald-400";
+    default:
+      return "bg-slate-300";
+  }
+}
+
+function buildApprovedLeaveDateKeys(requests: ApprovedLeaveLike[] = []) {
+  const dates = new Set<string>();
+
+  for (const request of requests) {
+    if (String(request.status || "approved").trim().toLowerCase() !== "approved") {
+      continue;
+    }
+
+    const startDate = formatLeaveDateInput(request.startDate);
+    const endDate = formatLeaveDateInput(request.endDate || request.startDate);
+    for (const dateKey of buildDateKeysInRange(startDate, endDate)) {
+      dates.add(dateKey);
+    }
+  }
+
+  return dates;
 }
 
 function getWorkDurationMs(day?: MonthlyAttendanceDay | null) {
@@ -278,6 +454,9 @@ export default function EmployeeTodayAttendancePanel({
   className,
   shiftStartTime,
   shiftEndTime,
+  weeklyOffDays,
+  approvedLeaveRequests = [],
+  holidayDateKeys = [],
   canManageAttendance = false,
 }: EmployeeTodayAttendancePanelProps) {
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
@@ -357,6 +536,15 @@ export default function EmployeeTodayAttendancePanel({
     () => buildMonthlyDays(records, monthBounds),
     [monthBounds, records]
   );
+  const todayKey = getRiyadhTodayKey();
+  const approvedLeaveDateKeys = useMemo(
+    () => buildApprovedLeaveDateKeys(approvedLeaveRequests),
+    [approvedLeaveRequests]
+  );
+  const holidayDateKeySet = useMemo(
+    () => new Set(holidayDateKeys.map(date => String(date || "").trim()).filter(Boolean)),
+    [holidayDateKeys]
+  );
   const selectedDay = monthDays.get(selectedDate) || null;
   const attendanceDaysCount = Array.from(monthDays.values()).filter(
     day => day.hasAttendance
@@ -369,6 +557,12 @@ export default function EmployeeTodayAttendancePanel({
         endTime: shiftEndTime,
       })
     : null;
+  const selectedStatus = getAttendanceStatus(selectedDay, attendanceComputation, {
+    todayKey,
+    weeklyOffDays,
+    approvedLeaveDateKeys,
+    holidayDateKeys: holidayDateKeySet,
+  });
   const lateHoursLabel = attendanceComputation?.lateHours
     ? formatDurationFromHours(attendanceComputation.lateHours)
     : "--";
@@ -387,7 +581,7 @@ export default function EmployeeTodayAttendancePanel({
           ? `-${formatDurationFromHours(attendanceComputation.missingHours)}`
         : "0"
     : "--";
-  const selectedTone = getAttendanceTone(selectedDay, attendanceComputation);
+  const selectedStatusLabel = getAttendanceStatusLabel(selectedStatus);
   const selectedRecordsCount = selectedDay?.records.length || 0;
   const hasSelectedRecord = selectedRecordsCount > 0;
   const firstCheckInLabel = formatDisplayTime(selectedDay?.checkIn?.serverTime);
@@ -395,6 +589,7 @@ export default function EmployeeTodayAttendancePanel({
   const shiftTimeLabel = hasSelectedRecord
     ? `${firstCheckInLabel} — ${lastCheckOutLabel}`
     : "--";
+  const weeklyOffDaysLabel = formatWeeklyOffDaysLabel(weeklyOffDays);
 
   const openAttendanceAdjustment = () => {
     setAdjustmentCheckInTime(
@@ -540,7 +735,13 @@ export default function EmployeeTodayAttendancePanel({
               startTime: shiftStartTime,
               endTime: shiftEndTime,
             });
-            const dayTone = getAttendanceTone(day, dayComputation);
+            const attendanceStatus = getAttendanceStatus(day, dayComputation, {
+              todayKey,
+              weeklyOffDays,
+              approvedLeaveDateKeys,
+              holidayDateKeys: holidayDateKeySet,
+            });
+            const indicatorClass = getStatusIndicatorClass(attendanceStatus);
 
             return (
               <button
@@ -550,24 +751,17 @@ export default function EmployeeTodayAttendancePanel({
                 className={cn(
                   "relative mx-auto flex h-[54px] w-[48px] items-center justify-center rounded-sm text-xl font-medium text-slate-900 transition",
                   selected
-                    ? dayTone === "warning"
-                      ? "border-2 border-orange-500 bg-orange-50"
-                      : dayTone === "overtime"
-                        ? "border-2 border-blue-500 bg-blue-50"
-                        : dayTone === "normal"
-                          ? "border-2 border-emerald-500 bg-emerald-50"
-                          : "border-2 border-slate-900 bg-transparent"
+                    ? cn("border-2", getSelectedDayClass(attendanceStatus))
                     : "border-2 border-transparent hover:bg-slate-100"
                 )}
-                aria-label={formatArabicDate(day.date)}
+                aria-label={`${formatArabicDate(day.date)} - ${getAttendanceStatusLabel(attendanceStatus)}`}
               >
-                {day.hasAttendance ? (
+                {indicatorClass ? (
                   <span
                     className={cn(
                       "absolute left-1/2 top-0 h-1 w-10 -translate-x-1/2 rounded-full",
-                      dayTone === "warning" && "bg-orange-500",
-                      dayTone === "overtime" && "bg-blue-500",
-                      dayTone === "normal" && "bg-emerald-500"
+                      attendanceStatus === "absent" && "top-auto bottom-0",
+                      indicatorClass
                     )}
                   />
                 ) : null}
@@ -575,10 +769,7 @@ export default function EmployeeTodayAttendancePanel({
                 <span
                   className={cn(
                     "flex h-8 w-8 items-center justify-center rounded-md",
-                    selected && dayTone === "warning" && "bg-orange-500 text-white",
-                    selected && dayTone === "overtime" && "bg-blue-500 text-white",
-                    selected && dayTone === "normal" && "bg-emerald-600 text-white",
-                    selected && dayTone === "empty" && "bg-slate-950 text-white"
+                    selected && getSelectedNumberClass(attendanceStatus)
                   )}
                 >
                   {formatNumberEN(day.dayNumber)}
@@ -634,6 +825,26 @@ export default function EmployeeTodayAttendancePanel({
             <Fingerprint className="h-10 w-10 stroke-[2.2]" />
             <span className="text-2xl font-medium">
               {formatNumberEN(selectedRecordsCount)}
+            </span>
+            <span
+              className={cn(
+                "rounded-full border px-3 py-1 text-xs font-semibold",
+                selectedStatus === "present" &&
+                  "border-emerald-200 bg-emerald-50 text-emerald-700",
+                selectedStatus === "partial" &&
+                  "border-orange-200 bg-orange-50 text-orange-700",
+                selectedStatus === "absent" &&
+                  "border-rose-200 bg-rose-50 text-rose-700",
+                selectedStatus === "leave" &&
+                  "border-blue-200 bg-blue-50 text-blue-700",
+                selectedStatus === "off_day" &&
+                  "border-slate-200 bg-slate-50 text-slate-600",
+                (selectedStatus === "future" ||
+                  selectedStatus === "today_pending") &&
+                  "border-slate-200 bg-white text-slate-500"
+              )}
+            >
+              {selectedStatusLabel}
             </span>
             <span className="sr-only">عدد سجلات اليوم المحدد</span>
             {canManageAttendance ? (
@@ -738,17 +949,17 @@ export default function EmployeeTodayAttendancePanel({
                 <div
                   className={cn(
                     "relative overflow-hidden rounded-[16px] px-5 py-5 text-slate-900",
-                    selectedTone === "warning" && "bg-orange-50",
-                    selectedTone === "overtime" && "bg-blue-50",
-                    selectedTone !== "warning" && selectedTone !== "overtime" && "bg-emerald-50"
+                    selectedStatus === "partial" && "bg-orange-50",
+                    selectedStatus === "present" && "bg-emerald-50",
+                    selectedStatus !== "partial" &&
+                      selectedStatus !== "present" &&
+                      "bg-slate-50"
                   )}
                 >
                   <span
                     className={cn(
                       "absolute inset-y-0 left-0 w-4",
-                      selectedTone === "warning" && "bg-orange-400",
-                      selectedTone === "overtime" && "bg-blue-400",
-                      selectedTone !== "warning" && selectedTone !== "overtime" && "bg-emerald-400"
+                      getSelectedAccentClass(selectedStatus)
                     )}
                   />
                   <div className="grid grid-cols-[44px_1fr] items-center gap-3">
@@ -769,13 +980,47 @@ export default function EmployeeTodayAttendancePanel({
                   </div>
                 </div>
               ) : (
-                <div className="min-h-[150px] rounded-[18px] border border-dashed border-slate-200 bg-white px-5 py-8 text-center">
-                  <Grid3X3 className="mx-auto h-9 w-9 text-slate-300" />
-                  <div className="mt-3 text-lg font-semibold text-slate-950">
-                    لا يوجد سجل
+                <div
+                  className={cn(
+                    "min-h-[150px] rounded-[18px] border border-dashed px-5 py-8 text-center",
+                    selectedStatus === "absent"
+                      ? "border-rose-200 bg-rose-50 text-rose-800"
+                      : selectedStatus === "leave"
+                        ? "border-blue-200 bg-blue-50 text-blue-800"
+                        : selectedStatus === "off_day"
+                          ? "border-slate-200 bg-slate-50 text-slate-700"
+                          : "border-slate-200 bg-white text-slate-950"
+                  )}
+                >
+                  <Grid3X3
+                    className={cn(
+                      "mx-auto h-9 w-9",
+                      selectedStatus === "absent"
+                        ? "text-rose-400"
+                        : selectedStatus === "leave"
+                          ? "text-blue-400"
+                          : "text-slate-300"
+                    )}
+                  />
+                  <div className="mt-3 text-lg font-semibold">
+                    {selectedStatus === "absent"
+                      ? "غياب كامل - لا يوجد سجل حضور"
+                      : selectedStatus === "leave"
+                        ? "إجازة معتمدة لهذا اليوم"
+                        : selectedStatus === "off_day"
+                          ? "يوم راحة أسبوعية"
+                          : selectedStatus === "today_pending"
+                            ? "لم يتم تسجيل حضور لهذا اليوم حتى الآن"
+                            : "لا يوجد سجل"}
                   </div>
                   <p className="mt-2 text-sm leading-6 text-slate-400">
-                    لا توجد بيانات حضور فعلية لليوم المحدد.
+                    {selectedStatus === "absent"
+                      ? "هذا يوم عمل سابق بلا سجلات حضور، ويُعامل كغياب محسوب."
+                      : selectedStatus === "leave"
+                        ? "هذا اليوم مستثنى بسبب إجازة معتمدة للموظف."
+                        : selectedStatus === "off_day"
+                          ? `هذا اليوم ضمن أيام الراحة الأسبوعية: ${weeklyOffDaysLabel}.`
+                          : "لا توجد بيانات حضور فعلية لليوم المحدد."}
                   </p>
                 </div>
               )}
@@ -789,9 +1034,11 @@ export default function EmployeeTodayAttendancePanel({
                   value={differenceLabel}
                   valueClassName={cn(
                     "text-2xl",
-                    selectedTone === "warning" && "text-orange-600",
-                    selectedTone === "overtime" && "text-blue-600",
-                    selectedTone !== "warning" && selectedTone !== "overtime" && "text-emerald-600"
+                    selectedStatus === "partial" && "text-orange-600",
+                    selectedStatus === "present" && "text-emerald-600",
+                    selectedStatus === "absent" && "text-rose-600",
+                    selectedStatus === "leave" && "text-blue-600",
+                    selectedStatus === "off_day" && "text-slate-500"
                   )}
                 />
               </div>
@@ -799,10 +1046,7 @@ export default function EmployeeTodayAttendancePanel({
               <div
                 className={cn(
                   "grid min-h-[104px] grid-cols-3 rounded-[18px] border px-5 py-5 text-right shadow-[0_8px_24px_-22px_rgba(15,23,42,0.35)]",
-                  selectedTone === "warning" && "border-orange-200 bg-orange-50/60",
-                  selectedTone === "overtime" && "border-blue-200 bg-blue-50/60",
-                  selectedTone === "normal" && "border-emerald-200 bg-emerald-50/60",
-                  selectedTone === "empty" && "border-slate-200 bg-white"
+                  getSelectedSummaryClass(selectedStatus)
                 )}
               >
                 <div>

@@ -15,6 +15,7 @@ export type AttendanceResponse = {
   accuracy?: number | null;
   zoneId?: string | null;
   distanceMeters?: number | null;
+  allowedRadiusMeters?: number | null;
   previousStatus?: string | null;
   currentStatus?: string | null;
 };
@@ -92,17 +93,29 @@ async function recordAttendance(requestBody: AttendanceRequest) {
   return payload;
 }
 
+function createLocationUnavailableError(message: string) {
+  const error = new Error(message) as Error & {
+    attendanceLocationErrorType?: "location_unavailable";
+  };
+  error.attendanceLocationErrorType = "location_unavailable";
+  return error;
+}
+
 function getCurrentGpsPosition() {
   return new Promise<GeolocationPosition>((resolve, reject) => {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
-      reject(new Error("الموقع الجغرافي غير مدعوم في هذا الجهاز."));
+      reject(
+        createLocationUnavailableError(
+          "تعذر الحصول على موقعك. تأكد من تفعيل خدمة الموقع ومنح الإذن للمتصفح."
+        )
+      );
       return;
     }
 
     if (typeof window !== "undefined" && !window.isSecureContext) {
       reject(
-        new Error(
-          "خدمة الموقع تعمل فقط عبر HTTPS أو localhost. افتح النظام من رابط آمن ثم حاول مرة أخرى."
+        createLocationUnavailableError(
+          "تعذر الحصول على موقعك. تأكد من تفعيل خدمة الموقع ومنح الإذن للمتصفح."
         )
       );
       return;
@@ -155,9 +168,9 @@ export function getAttendanceSuccessLabel(type: AttendanceType) {
 export function getAttendanceRejectionLabel(reason?: string | null) {
   switch (reason) {
     case "poor_accuracy":
-      return "دقة الموقع ضعيفة. حاول من مكان أوضح أو فعّل GPS عالي الدقة.";
+      return "دقة الموقع ضعيفة. حاول من مكان مفتوح أو فعّل GPS عالي الدقة.";
     case "outside_zone":
-      return "الموقع خارج نطاق الدوام المسموح.";
+      return "أنت خارج نطاق تسجيل الحضور.";
     case "duplicate_check_in":
       return "يوجد حضور مسجل بالفعل ولم يتم تسجيل انصراف بعد.";
     case "not_checked_in":
@@ -174,22 +187,27 @@ export function getAttendanceRejectionLabel(reason?: string | null) {
 }
 
 export function getGeolocationErrorMessage(error: unknown) {
-  const geoError = error as Partial<GeolocationPositionError> | null;
+  const geoError = error as
+    | (Partial<GeolocationPositionError> & {
+        attendanceLocationErrorType?: "location_unavailable";
+      })
+    | null;
 
   if (typeof geoError?.code === "number") {
     if (geoError.code === 1) {
-      return "تم رفض إذن الموقع. فعّل صلاحية الموقع ثم حاول مرة أخرى.";
+      return "تم رفض إذن الوصول للموقع. فعّل إذن الموقع من إعدادات المتصفح ثم حاول مرة أخرى.";
     }
-    if (geoError.code === 2) {
-      return "تعذر تحديد الموقع الحالي.";
-    }
-    if (geoError.code === 3) {
-      return "انتهت مهلة تحديد الموقع. حاول مرة أخرى.";
+    if (geoError.code === 2 || geoError.code === 3) {
+      return "تعذر الحصول على موقعك. تأكد من تفعيل خدمة الموقع ومنح الإذن للمتصفح.";
     }
   }
 
+  if (geoError?.attendanceLocationErrorType === "location_unavailable") {
+    return "تعذر الحصول على موقعك. تأكد من تفعيل خدمة الموقع ومنح الإذن للمتصفح.";
+  }
+
   if (error instanceof Error && error.message) return error.message;
-  return "تعذر جلب موقع الجهاز.";
+  return "تعذر الحصول على موقعك. تأكد من تفعيل خدمة الموقع ومنح الإذن للمتصفح.";
 }
 
 export function getAttendanceSubmitErrorMessage(error: unknown) {

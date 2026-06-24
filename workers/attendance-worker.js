@@ -1148,14 +1148,14 @@ export function evaluateAttendanceZones(location, zones) {
 }
 
 export function evaluateLocationDecision({ location, zoneError, zoneCheck }) {
-  if (location.accuracy > ATTENDANCE_MAX_ACCURACY_METERS) {
-    return { result: "rejected", rejectionReason: "poor_accuracy" };
-  }
   if (zoneError) {
     return { result: "rejected", rejectionReason: zoneError };
   }
   if (!zoneCheck.withinZone) {
     return { result: "rejected", rejectionReason: "outside_zone" };
+  }
+  if (location.accuracy > ATTENDANCE_MAX_ACCURACY_METERS) {
+    return { result: "rejected", rejectionReason: "poor_accuracy" };
   }
   return { result: "allowed", rejectionReason: null };
 }
@@ -1368,6 +1368,7 @@ function attendanceResponse({
     accuracy: location.accuracy,
     zoneId: zone?.id || null,
     distanceMeters,
+    allowedRadiusMeters: zone?.radiusMeters ?? null,
     previousStatus: previousStatus || null,
     currentStatus: currentStatus || null,
   });

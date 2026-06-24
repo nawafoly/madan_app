@@ -10,6 +10,7 @@ import {
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -31,6 +32,13 @@ import {
   fetchAttendanceRecords,
   type AttendanceRecord,
 } from "@/lib/attendanceRecords";
+import {
+  buildAttendanceLocationFeedback,
+  buildGeolocationErrorFeedback,
+  formatAttendanceDistance,
+  formatAttendanceMeters,
+  type AttendanceLocationFeedback,
+} from "@/lib/attendanceLocationFeedback";
 import { cn } from "@/lib/utils";
 
 type EmployeeAttendanceCardProps = {
@@ -41,11 +49,6 @@ type EmployeeAttendanceCardProps = {
 };
 
 const RIYADH_TIME_ZONE = "Asia/Riyadh";
-
-function formatMeters(value?: number | null) {
-  if (typeof value !== "number" || !Number.isFinite(value)) return null;
-  return `${Math.round(value)} م`;
-}
 
 function getRiyadhTodayKey() {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -115,6 +118,8 @@ export default function EmployeeAttendanceCard({
   const [lastResponse, setLastResponse] = useState<AttendanceResponse | null>(
     null
   );
+  const [lastLocationFeedback, setLastLocationFeedback] =
+    useState<AttendanceLocationFeedback | null>(null);
   const [todayRecords, setTodayRecords] = useState<AttendanceRecord[]>([]);
   const [loadingToday, setLoadingToday] = useState(false);
   const [showLocationPermissionHelp, setShowLocationPermissionHelp] =
@@ -176,7 +181,9 @@ export default function EmployeeAttendanceCard({
         employeeId: employeeId || null,
         type,
       });
+      const locationFeedback = buildAttendanceLocationFeedback(response);
       setLastResponse(response);
+      setLastLocationFeedback(locationFeedback);
       onRecorded?.(response);
       setShowLocationPermissionHelp(false);
 
@@ -184,22 +191,50 @@ export default function EmployeeAttendanceCard({
         toast.success(getAttendanceSuccessLabel(response.type));
         await loadTodayRecords();
       } else {
-        toast.error(getAttendanceRejectionLabel(response.rejectionReason));
+        toast.error(
+          locationFeedback?.message ||
+            getAttendanceRejectionLabel(response.rejectionReason)
+        );
         await loadTodayRecords();
       }
     } catch (error) {
+      const locationFeedback = buildGeolocationErrorFeedback(error);
+      setLastLocationFeedback(locationFeedback);
+      if (locationFeedback) setLastResponse(null);
       if (!isGeolocationPositionError(error)) {
         console.error("employee_attendance_submit_failed", error);
       }
       setShowLocationPermissionHelp(isGeolocationPermissionDenied(error));
-      toast.error(getAttendanceSubmitErrorMessage(error));
+      toast.error(
+        locationFeedback?.message || getAttendanceSubmitErrorMessage(error)
+      );
     } finally {
       setPendingType(null);
     }
   };
 
-  const lastDistance = formatMeters(lastResponse?.distanceMeters);
-  const lastAccuracy = formatMeters(lastResponse?.accuracy);
+  const lastDistance = lastLocationFeedback
+    ? lastLocationFeedback.distanceLabel
+    : formatAttendanceDistance(lastResponse?.distanceMeters);
+  const lastAccuracy = lastLocationFeedback
+    ? lastLocationFeedback.accuracyLabel
+    : formatAttendanceMeters(lastResponse?.accuracy);
+  const lastAllowedRadius = lastLocationFeedback
+    ? lastLocationFeedback.allowedRadiusLabel
+    : formatAttendanceMeters(lastResponse?.allowedRadiusMeters);
+  const statusTitle = lastResponse
+    ? lastResponse.result === "allowed"
+      ? getAttendanceSuccessLabel(lastResponse.type)
+      : lastLocationFeedback?.title ||
+        getAttendanceRejectionLabel(lastResponse.rejectionReason)
+    : lastLocationFeedback?.title || null;
+  const statusMessage =
+    lastLocationFeedback?.message &&
+    lastLocationFeedback.message !== statusTitle
+      ? lastLocationFeedback.message
+      : null;
+  const hasLocationFailure = Boolean(lastLocationFeedback);
+  const showRetryLocationButton = Boolean(hasLocationFailure && todayState.nextType);
   const checkInTime = formatDisplayTime(todayState.checkIn?.serverTime);
   const checkOutTime = formatDisplayTime(todayState.checkOut?.serverTime);
   const attendanceDone = Boolean(todayState.checkIn);
@@ -320,39 +355,75 @@ export default function EmployeeAttendanceCard({
             "rounded-[22px] border px-4 py-4 text-sm leading-7",
             lastResponse?.result === "allowed"
               ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-              : lastResponse?.result === "rejected"
+              : lastResponse?.result === "rejected" || hasLocationFailure
                 ? "border-rose-200 bg-rose-50 text-rose-700"
                 : "border-slate-200 bg-slate-50 text-slate-600"
           )}
         >
-          {lastResponse ? (
-            <div className="space-y-2">
+          {lastResponse || hasLocationFailure ? (
+            <div className="space-y-3">
               <div className="flex flex-wrap items-center gap-2 font-semibold">
                 <MapPin className="h-4 w-4" />
-                <span>
-                  {lastResponse.result === "allowed"
-                    ? getAttendanceSuccessLabel(lastResponse.type)
-                    : getAttendanceRejectionLabel(
-                        lastResponse.rejectionReason
-                      )}
-                </span>
+                <span>{statusTitle}</span>
               </div>
+              {statusMessage ? (
+                <p className="text-sm font-medium leading-7 text-rose-700">
+                  {statusMessage}
+                </p>
+              ) : null}
 
-              <div className="flex flex-wrap gap-2 text-xs font-semibold">
-                <Badge variant="outline" className="rounded-full bg-white/75">
-                  {getAttendanceTypeLabel(lastResponse.type)}
-                </Badge>
-                {lastAccuracy ? (
+              {hasLocationFailure ? (
+                <div className="grid gap-2 text-xs font-semibold sm:grid-cols-2">
                   <Badge variant="outline" className="rounded-full bg-white/75">
-                    الدقة: {lastAccuracy}
+                    الحالة: {lastLocationFeedback?.statusLabel}
                   </Badge>
-                ) : null}
-                {lastDistance ? (
+                  {lastDistance ? (
+                    <Badge variant="outline" className="rounded-full bg-white/75">
+                      المسافة: {lastDistance}
+                    </Badge>
+                  ) : null}
+                  {lastAllowedRadius ? (
+                    <Badge variant="outline" className="rounded-full bg-white/75">
+                      النطاق المسموح: {lastAllowedRadius}
+                    </Badge>
+                  ) : null}
+                  {lastAccuracy ? (
+                    <Badge variant="outline" className="rounded-full bg-white/75">
+                      دقة GPS: {lastAccuracy}
+                    </Badge>
+                  ) : null}
+                </div>
+              ) : lastResponse ? (
+                <div className="flex flex-wrap gap-2 text-xs font-semibold">
                   <Badge variant="outline" className="rounded-full bg-white/75">
-                    المسافة: {lastDistance}
+                    {getAttendanceTypeLabel(lastResponse.type)}
                   </Badge>
-                ) : null}
-              </div>
+                  {lastAccuracy ? (
+                    <Badge variant="outline" className="rounded-full bg-white/75">
+                      الدقة: {lastAccuracy}
+                    </Badge>
+                  ) : null}
+                  {lastDistance ? (
+                    <Badge variant="outline" className="rounded-full bg-white/75">
+                      المسافة: {lastDistance}
+                    </Badge>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {showRetryLocationButton ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="rounded-full border-rose-200 bg-white/85 text-rose-700 hover:bg-white hover:text-rose-800"
+                  disabled={!!pendingType || loadingToday}
+                  onClick={() => void handleAttendance()}
+                >
+                  {pendingType ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  إعادة فحص الموقع
+                </Button>
+              ) : null}
             </div>
           ) : (
             "اضغط البصمة لتسجيل الحضور، والضغطة التالية في نفس اليوم تسجل الانصراف تلقائيًا."

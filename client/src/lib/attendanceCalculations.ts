@@ -1,10 +1,12 @@
 import type { AttendanceRecord } from "@/lib/attendanceRecords";
+import { isWeeklyOffDateKey, type WorkScheduleWeekday } from "@/lib/workSchedule";
 
 const RIYADH_TIME_ZONE = "Asia/Riyadh";
 
 export type ShiftSchedule = {
   startTime?: string | null;
   endTime?: string | null;
+  weeklyOffDays?: WorkScheduleWeekday[] | string[] | null;
 };
 
 export type AttendanceDayComputation = {
@@ -168,11 +170,23 @@ export function summarizeAttendanceForPayroll(
 
   return days.reduce<AttendancePayrollSummary>(
     (summary, day) => {
-      summary.expectedHours = roundHours(summary.expectedHours + day.expectedHours);
+      const countsAsWorkDay = !isWeeklyOffDateKey(
+        day.date,
+        schedule.weeklyOffDays
+      );
+      summary.expectedHours = roundHours(
+        summary.expectedHours + (countsAsWorkDay ? day.expectedHours : 0)
+      );
       summary.actualHours = roundHours(summary.actualHours + day.actualHours);
-      summary.lateHours = roundHours(summary.lateHours + day.lateHours);
-      summary.missingHours = roundHours(summary.missingHours + day.missingHours);
-      summary.overtimeHours = roundHours(summary.overtimeHours + day.overtimeHours);
+      summary.lateHours = roundHours(
+        summary.lateHours + (countsAsWorkDay ? day.lateHours : 0)
+      );
+      summary.missingHours = roundHours(
+        summary.missingHours + (countsAsWorkDay ? day.missingHours : 0)
+      );
+      summary.overtimeHours = roundHours(
+        summary.overtimeHours + (countsAsWorkDay ? day.overtimeHours : 0)
+      );
       summary.completeDays += day.isComplete ? 1 : 0;
       summary.incompleteDays += day.checkIn && !day.checkOut ? 1 : 0;
       summary.days.push(day);

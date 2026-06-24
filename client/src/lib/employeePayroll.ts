@@ -1,6 +1,7 @@
 import { formatDateEN, toDateSafe } from "@/lib/formatters";
 import { buildR2DownloadUrl } from "@/lib/documentUploadService";
 import { getEmployeeAbsenceDaysValue } from "@/lib/employeeAbsence";
+import { normalizeWeeklyOffDays } from "@/lib/workSchedule";
 import {
   EMPLOYEE_PAYROLL_RECORDS_COLLECTION,
   type EmployeeAbsenceDoc,
@@ -134,6 +135,8 @@ export function computeEmployeePayroll(input: {
   expectedWorkHours?: number | null;
   attendanceExpectedHours?: number | null;
   attendanceAbsentDays?: number | null;
+  attendanceMissingHours?: number | null;
+  attendanceOvertimeHours?: number | null;
   actualWorkedHours?: number | null;
   overtimeHourlyRate?: number | null;
   insuranceDeduction?: number | null;
@@ -150,6 +153,14 @@ export function computeEmployeePayroll(input: {
       : toFiniteNumber(input.attendanceExpectedHours)
   );
   const attendanceAbsentDays = Math.max(0, toFiniteNumber(input.attendanceAbsentDays));
+  const explicitMissingHours =
+    input.attendanceMissingHours === null || input.attendanceMissingHours === undefined
+      ? null
+      : Math.max(0, toFiniteNumber(input.attendanceMissingHours));
+  const explicitOvertimeHours =
+    input.attendanceOvertimeHours === null || input.attendanceOvertimeHours === undefined
+      ? null
+      : Math.max(0, toFiniteNumber(input.attendanceOvertimeHours));
   const actualWorkedHours = Math.max(0, toFiniteNumber(input.actualWorkedHours));
   const overtimeHourlyRate = Math.max(0, toFiniteNumber(input.overtimeHourlyRate));
   const insuranceDeduction = Math.max(0, toFiniteNumber(input.insuranceDeduction));
@@ -157,9 +168,19 @@ export function computeEmployeePayroll(input: {
 
   const hourlyRate =
     baseSalary > 0 && expectedWorkHours > 0 ? baseSalary / expectedWorkHours : 0;
-  const hoursDifference = actualWorkedHours - attendanceExpectedHours;
-  const overtimeHours = Math.max(0, hoursDifference);
-  const missingHours = Math.max(0, -hoursDifference);
+  const derivedHoursDifference = actualWorkedHours - attendanceExpectedHours;
+  const overtimeHours =
+    explicitOvertimeHours === null
+      ? Math.max(0, derivedHoursDifference)
+      : explicitOvertimeHours;
+  const missingHours =
+    explicitMissingHours === null
+      ? Math.max(0, -derivedHoursDifference)
+      : explicitMissingHours;
+  const hoursDifference =
+    explicitMissingHours === null && explicitOvertimeHours === null
+      ? derivedHoursDifference
+      : overtimeHours - missingHours;
   const effectiveOvertimeHourlyRate =
     overtimeHourlyRate > 0 ? overtimeHourlyRate : hourlyRate;
   const overtimeBonus = overtimeHours * effectiveOvertimeHourlyRate;
@@ -287,6 +308,17 @@ export function normalizeEmployeePayrollRecord(
       raw.attendanceAbsenceDeduction === undefined
         ? null
         : Math.max(0, toFiniteNumber(raw.attendanceAbsenceDeduction)),
+    scheduleSnapshot:
+      raw.scheduleSnapshot && typeof raw.scheduleSnapshot === "object"
+        ? {
+            startTime:
+              String(raw.scheduleSnapshot.startTime || "").trim() || null,
+            endTime: String(raw.scheduleSnapshot.endTime || "").trim() || null,
+            weeklyOffDays: normalizeWeeklyOffDays(
+              raw.scheduleSnapshot.weeklyOffDays
+            ),
+          }
+        : null,
     delayDeduction:
       raw.delayDeduction === null || raw.delayDeduction === undefined
         ? null

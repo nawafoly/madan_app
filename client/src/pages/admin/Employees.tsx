@@ -108,6 +108,14 @@ import {
 } from "@/lib/attendanceCalculations";
 import type { AttendancePayrollSummary } from "@/lib/attendanceCalculations";
 import {
+  WORK_SCHEDULE_WEEKDAYS,
+  buildDateKeysInRange,
+  buildWorkDateKeysInRange,
+  formatWeeklyOffDaysLabel,
+  normalizeWeeklyOffDays,
+  type WorkScheduleWeekday,
+} from "@/lib/workSchedule";
+import {
   EMPLOYEE_ABSENCES_COLLECTION,
   EMPLOYEE_ABSENCE_TYPE_OPTIONS,
   buildEmployeeAbsenceDateInput,
@@ -160,6 +168,7 @@ import {
 import {
   EMPLOYEE_LEAVE_REQUESTS_COLLECTION,
   getLatestApprovedEmployeeLeaveRequest,
+  formatLeaveDateInput,
   formatLeaveDateRange,
   formatLeaveDaysLabel,
   getLeaveStatusMeta,
@@ -247,6 +256,7 @@ type EmployeeFormValues = {
   actualWorkedHours: string;
   shiftStartTime: string;
   shiftEndTime: string;
+  weeklyOffDays: WorkScheduleWeekday[];
   overtimeHourlyRate: string;
   insuranceDeduction: string;
   allowedZoneIds: string[];
@@ -510,6 +520,59 @@ function isValidTimeInput(value: string) {
   return /^([01]\d|2[0-3]):[0-5]\d$/.test(normalized);
 }
 
+function readWorkScheduleFromEmployment(
+  employment: Record<string, any> | null | undefined
+) {
+  const workSchedule = (employment?.workSchedule || {}) as Record<string, any>;
+  return {
+    startTime: pickText(workSchedule.startTime, employment?.shiftStartTime),
+    endTime: pickText(workSchedule.endTime, employment?.shiftEndTime),
+    weeklyOffDays: normalizeWeeklyOffDays(
+      workSchedule.weeklyOffDays ?? employment?.weeklyOffDays
+    ),
+  };
+}
+
+function formatWorkScheduleTime(value?: string | null) {
+  const match = /^(\d{1,2}):([0-5]\d)$/.exec(String(value || "").trim());
+  if (!match) return "";
+
+  const hours = Number(match[1]);
+  const minutes = match[2];
+  const displayHours = hours % 12 || 12;
+  const suffix = hours < 12 ? "ص" : "م";
+  return `${formatNumberEN(displayHours, { maximumFractionDigits: 0 })}:${minutes} ${suffix}`;
+}
+
+function formatWorkScheduleRange(schedule: {
+  startTime?: string | null;
+  endTime?: string | null;
+}) {
+  const start = formatWorkScheduleTime(schedule.startTime);
+  const end = formatWorkScheduleTime(schedule.endTime);
+  return start && end ? `${start} - ${end}` : "غير محدد";
+}
+
+function buildApprovedLeaveDateKeys(
+  requests: Array<Pick<EmployeeLeaveRequestRecord, "status" | "startDate" | "endDate">>
+) {
+  const dates = new Set<string>();
+
+  for (const request of requests) {
+    if (String(request.status || "").trim().toLowerCase() !== "approved") {
+      continue;
+    }
+
+    const startDate = formatLeaveDateInput(request.startDate);
+    const endDate = formatLeaveDateInput(request.endDate || request.startDate);
+    for (const dateKey of buildDateKeysInRange(startDate, endDate)) {
+      dates.add(dateKey);
+    }
+  }
+
+  return dates;
+}
+
 function getCurrentGpsPosition() {
   return new Promise<GeolocationPosition>((resolve, reject) => {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
@@ -695,6 +758,7 @@ function buildEmployeeFormValues(
   const employment = (employee?.employeeProfile?.employment ||
     employee?.employment ||
     {}) as Record<string, any>;
+  const workSchedule = readWorkScheduleFromEmployment(employment);
 
   return {
     fullName: pickText(
@@ -739,8 +803,9 @@ function buildEmployeeFormValues(
       employment.actualWorkedHours === 0
         ? "0"
         : pickText(employment.actualWorkedHours),
-    shiftStartTime: pickText(employment.shiftStartTime),
-    shiftEndTime: pickText(employment.shiftEndTime),
+    shiftStartTime: workSchedule.startTime,
+    shiftEndTime: workSchedule.endTime,
+    weeklyOffDays: workSchedule.weeklyOffDays,
     overtimeHourlyRate:
       employment.overtimeHourlyRate === 0
         ? "0"
@@ -2085,11 +2150,17 @@ export default function EmployeesManagementPage() {
     const employment = (selectedEmployee?.employeeProfile?.employment ||
       selectedEmployee?.employment ||
       {}) as Record<string, any>;
+    const schedule = readWorkScheduleFromEmployment(employment);
     return {
-      startTime: String(employment.shiftStartTime || "").trim() || null,
-      endTime: String(employment.shiftEndTime || "").trim() || null,
+      startTime: schedule.startTime || null,
+      endTime: schedule.endTime || null,
+      weeklyOffDays: schedule.weeklyOffDays,
     };
   }, [selectedEmployee]);
+  const selectedEmployeeScheduleLabel = useMemo(
+    () => formatWorkScheduleRange(selectedEmployeeShiftSchedule),
+    [selectedEmployeeShiftSchedule]
+  );
 
   const employeeAvatarCropMetrics = useMemo(
     () =>
@@ -2564,8 +2635,9 @@ export default function EmployeesManagementPage() {
   }, [
     selectedEmployeeAuthUid,
     selectedPayrollMonthMeta?.payrollMonth,
-    form.shiftStartTime,
-    form.shiftEndTime,
+    selectedEmployeeShiftSchedule.startTime,
+    selectedEmployeeShiftSchedule.endTime,
+    selectedEmployeeShiftSchedule.weeklyOffDays,
   ]);
 
   const latestApprovedLeaveRequest = useMemo(
@@ -2577,6 +2649,28 @@ export default function EmployeesManagementPage() {
     () => leaveRequests.filter(request => request.status === "approved"),
     [leaveRequests]
   );
+  const approvedLeaveDateKeys = useMemo(
+    () => buildApprovedLeaveDateKeys(approvedLeaveRequests),
+    [approvedLeaveRequests]
+  );
+  const hasPayrollScheduleExclusions =
+    selectedEmployeeShiftSchedule.weeklyOffDays.length > 0 ||
+    approvedLeaveDateKeys.size > 0;
+  const payrollWorkingDateKeys = useMemo(() => {
+    if (!selectedPayrollMonthMeta || !hasPayrollScheduleExclusions) return [];
+
+    return buildWorkDateKeysInRange({
+      fromDate: selectedPayrollMonthMeta.monthStart,
+      toDate: selectedPayrollMonthMeta.monthEnd,
+      weeklyOffDays: selectedEmployeeShiftSchedule.weeklyOffDays,
+      excludedDateKeys: approvedLeaveDateKeys,
+    });
+  }, [
+    approvedLeaveDateKeys,
+    hasPayrollScheduleExclusions,
+    selectedEmployeeShiftSchedule.weeklyOffDays,
+    selectedPayrollMonthMeta,
+  ]);
 
   const pendingLeaveRequestsCount = useMemo(
     () => leaveRequests.filter(request => request.status === "pending").length,
@@ -3094,6 +3188,9 @@ export default function EmployeesManagementPage() {
   const baseSalaryNumber = Number(form.baseSalary || 0);
   const expectedWorkDaysNumber = Number(form.expectedWorkDays || 0);
   const expectedWorkHoursNumber = Number(form.expectedWorkHours || 0);
+  const payrollWorkingDaysNumber = payrollWorkingDateKeys.length;
+  const payrollExpectedWorkDaysNumber =
+    payrollWorkingDaysNumber > 0 ? payrollWorkingDaysNumber : expectedWorkDaysNumber;
   const overtimeHourlyRateInputNumber = Number(form.overtimeHourlyRate || 0);
   const shiftSchedule = useMemo(
     () => ({
@@ -3109,23 +3206,27 @@ export default function EmployeesManagementPage() {
   const scheduledMonthlyWorkHours = useMemo(() => {
     if (
       Number.isFinite(expectedWorkDaysNumber) &&
-      expectedWorkDaysNumber > 0 &&
+      payrollExpectedWorkDaysNumber > 0 &&
       shiftExpectedHoursNumber > 0
     ) {
-      return expectedWorkDaysNumber * shiftExpectedHoursNumber;
+      return payrollExpectedWorkDaysNumber * shiftExpectedHoursNumber;
     }
 
     return 0;
-  }, [expectedWorkDaysNumber, shiftExpectedHoursNumber]);
+  }, [expectedWorkDaysNumber, payrollExpectedWorkDaysNumber, shiftExpectedHoursNumber]);
   const payrollRateWorkHours =
     scheduledMonthlyWorkHours > 0 ? scheduledMonthlyWorkHours : expectedWorkHoursNumber;
-  const attendanceExpectedHoursNumber =
-    attendancePayrollSummary?.expectedHours ?? 0;
-  const attendanceActualWorkedHoursNumber =
-    attendancePayrollSummary?.actualHours ?? 0;
-  const attendanceRecordedDaysNumber = attendancePayrollSummary?.days.length ?? 0;
+  const attendanceMissingHoursNumber = attendancePayrollSummary?.missingHours ?? 0;
+  const attendanceOvertimeHoursNumber = attendancePayrollSummary?.overtimeHours ?? 0;
+  const attendanceRecordedDateKeys = useMemo(
+    () => new Set((attendancePayrollSummary?.days || []).map(day => day.date)),
+    [attendancePayrollSummary]
+  );
+  const attendanceRecordedDaysNumber = attendanceRecordedDateKeys.size;
   const attendanceAbsentDaysNumber = attendancePayrollSummary
-    ? Math.max(0, expectedWorkDaysNumber - attendanceRecordedDaysNumber)
+    ? payrollWorkingDateKeys.length
+      ? payrollWorkingDateKeys.filter(dateKey => !attendanceRecordedDateKeys.has(dateKey)).length
+      : Math.max(0, expectedWorkDaysNumber - attendanceRecordedDaysNumber)
     : 0;
   const insuranceDeductionNumber = Number(form.insuranceDeduction || 0);
   const effectiveInsuranceDeduction = Number.isFinite(insuranceDeductionNumber)
@@ -3142,11 +3243,14 @@ export default function EmployeesManagementPage() {
 
   const calculatedDailyRate = useMemo(() => {
     if (!Number.isFinite(baseSalaryNumber) || baseSalaryNumber <= 0) return 0;
-    if (!Number.isFinite(expectedWorkDaysNumber) || expectedWorkDaysNumber <= 0)
+    if (
+      !Number.isFinite(payrollExpectedWorkDaysNumber) ||
+      payrollExpectedWorkDaysNumber <= 0
+    )
       return 0;
 
-    return baseSalaryNumber / expectedWorkDaysNumber;
-  }, [baseSalaryNumber, expectedWorkDaysNumber]);
+    return baseSalaryNumber / payrollExpectedWorkDaysNumber;
+  }, [baseSalaryNumber, payrollExpectedWorkDaysNumber]);
 
   const calculatedHourlyRate = useMemo(() => {
     if (!Number.isFinite(baseSalaryNumber) || baseSalaryNumber <= 0) return 0;
@@ -3157,18 +3261,16 @@ export default function EmployeesManagementPage() {
   }, [baseSalaryNumber, payrollRateWorkHours]);
 
   const calculatedHoursDifference = useMemo(() => {
-    const safeExpectedHours = Math.max(0, attendanceExpectedHoursNumber || 0);
-    const safeActualHours = Math.max(0, attendanceActualWorkedHoursNumber || 0);
-    return safeActualHours - safeExpectedHours;
-  }, [attendanceExpectedHoursNumber, attendanceActualWorkedHoursNumber]);
+    return attendanceOvertimeHoursNumber - attendanceMissingHoursNumber;
+  }, [attendanceMissingHoursNumber, attendanceOvertimeHoursNumber]);
 
   const calculatedOvertimeHours = useMemo(() => {
-    return Math.max(0, calculatedHoursDifference);
-  }, [calculatedHoursDifference]);
+    return Math.max(0, attendanceOvertimeHoursNumber);
+  }, [attendanceOvertimeHoursNumber]);
 
   const calculatedMissingHours = useMemo(() => {
-    return Math.max(0, -calculatedHoursDifference);
-  }, [calculatedHoursDifference]);
+    return Math.max(0, attendanceMissingHoursNumber);
+  }, [attendanceMissingHoursNumber]);
 
   const effectiveOvertimeHourlyRate = useMemo(() => {
     if (
@@ -3256,6 +3358,27 @@ export default function EmployeesManagementPage() {
     });
   };
 
+  const handleToggleWeeklyOffDay = (
+    day: WorkScheduleWeekday,
+    checked: boolean
+  ) => {
+    setForm(current => {
+      const selected = new Set(normalizeWeeklyOffDays(current.weeklyOffDays));
+      if (checked) {
+        selected.add(day);
+      } else {
+        selected.delete(day);
+      }
+
+      return {
+        ...current,
+        weeklyOffDays: WORK_SCHEDULE_WEEKDAYS.map(option => option.value).filter(
+          option => selected.has(option)
+        ),
+      };
+    });
+  };
+
   const buildAttendancePayrollSummary = async () => {
     if (!selectedEmployeeAuthUid || !selectedPayrollMonthMeta) return null;
     const response = await fetchAttendanceRecords({
@@ -3265,7 +3388,7 @@ export default function EmployeesManagementPage() {
       result: "allowed",
       limit: 200,
     });
-    return summarizeAttendanceForPayroll(response.records, shiftSchedule);
+    return summarizeAttendanceForPayroll(response.records, selectedEmployeeShiftSchedule);
   };
 
   const handleCalculatePayrollFromAttendance = async () => {
@@ -3277,8 +3400,11 @@ export default function EmployeesManagementPage() {
       toast.error("لا يوجد معرف حضور مرتبط بالموظف.");
       return;
     }
-    if (!form.shiftStartTime || !form.shiftEndTime) {
-      toast.error("حدد وقت بداية ونهاية الدوام أولًا.");
+    if (
+      !selectedEmployeeShiftSchedule.startTime ||
+      !selectedEmployeeShiftSchedule.endTime
+    ) {
+      toast.error("يجب تحديد وقت الدوام من بيانات الموظف قبل الاحتساب من الحضور");
       return;
     }
 
@@ -3549,12 +3675,25 @@ export default function EmployeesManagementPage() {
     const expectedWorkHours = toNullableNumber(form.expectedWorkHours);
     const actualWorkedHours = toNullableNumber(form.actualWorkedHours);
     const overtimeHourlyRate = toNullableNumber(form.overtimeHourlyRate);
-    const shiftStartTime = form.shiftStartTime.trim() || null;
-    const shiftEndTime = form.shiftEndTime.trim() || null;
     const insuranceDeduction = toNullableNumber(form.insuranceDeduction);
+    const scheduleSnapshot = {
+      startTime: selectedEmployeeShiftSchedule.startTime,
+      endTime: selectedEmployeeShiftSchedule.endTime,
+      weeklyOffDays: selectedEmployeeShiftSchedule.weeklyOffDays,
+    };
 
     if (baseSalary === null || baseSalary <= 0) {
       toast.error("يجب إدخال الراتب الأساسي أولًا.");
+      return;
+    }
+
+    if (!scheduleSnapshot.startTime || !scheduleSnapshot.endTime) {
+      toast.error("يجب تحديد وقت الدوام من بيانات الموظف قبل الاحتساب من الحضور");
+      return;
+    }
+
+    if (!selectedEmployeeAuthUid) {
+      toast.error("لا يوجد معرف حضور مرتبط بالموظف.");
       return;
     }
 
@@ -3587,28 +3726,35 @@ export default function EmployeesManagementPage() {
 
       const normalizedSalaryDeductions =
         normalizeSalaryDeductionsForPersistence(salaryDeductions);
-      const attendanceSummary =
-        form.shiftStartTime && form.shiftEndTime
-          ? await buildAttendancePayrollSummary()
-          : null;
+      const attendanceSummary = await buildAttendancePayrollSummary();
       if (attendanceSummary) {
         setAttendancePayrollSummary(attendanceSummary);
       }
       const effectiveExpectedWorkHours =
         payrollRateWorkHours || expectedWorkHours;
       const effectiveAttendanceExpectedHours =
-        attendanceSummary?.expectedHours || expectedWorkHours;
+        attendanceSummary?.expectedHours ?? 0;
       const effectiveActualWorkedHours =
-        attendanceSummary?.actualHours || actualWorkedHours;
+        attendanceSummary?.actualHours ?? actualWorkedHours;
+      const attendanceSummaryDateKeys = new Set(
+        (attendanceSummary?.days || []).map(day => day.date)
+      );
       const effectiveAttendanceAbsentDays = attendanceSummary
-        ? Math.max(0, (expectedWorkDays || 0) - attendanceSummary.days.length)
+        ? payrollWorkingDateKeys.length
+          ? payrollWorkingDateKeys.filter(dateKey => !attendanceSummaryDateKeys.has(dateKey))
+              .length
+          : Math.max(0, (expectedWorkDays || 0) - attendanceSummary.days.length)
         : 0;
+      const effectiveExpectedWorkDays =
+        payrollExpectedWorkDaysNumber || expectedWorkDays;
       const payrollComputation = computeEmployeePayroll({
         baseSalary,
-        expectedWorkDays,
+        expectedWorkDays: effectiveExpectedWorkDays,
         expectedWorkHours: effectiveExpectedWorkHours,
         attendanceExpectedHours: effectiveAttendanceExpectedHours,
         attendanceAbsentDays: effectiveAttendanceAbsentDays,
+        attendanceMissingHours: attendanceSummary?.missingHours ?? 0,
+        attendanceOvertimeHours: attendanceSummary?.overtimeHours ?? 0,
         actualWorkedHours: effectiveActualWorkedHours,
         overtimeHourlyRate,
         insuranceDeduction,
@@ -3679,6 +3825,7 @@ export default function EmployeesManagementPage() {
           attendanceIncompleteDays: attendanceSummary?.incompleteDays ?? null,
           attendanceAbsentDays: payrollComputation.attendanceAbsentDays,
           attendanceAbsenceDeduction: payrollComputation.attendanceAbsenceDeduction,
+          scheduleSnapshot,
           absenceCount: monthlyAbsences.length,
           absenceEntriesSummary: monthlyAbsences.map(absence => ({
             date: absence.date,
@@ -3717,6 +3864,7 @@ export default function EmployeesManagementPage() {
             overtimeBonus: payrollComputation.overtimeBonus,
             totalSalaryDeductions: payrollComputation.totalSalaryDeductions,
             finalSalary: payrollComputation.finalSalary,
+            scheduleSnapshot,
             mudadDocument: mudadDocumentPayload
               ? {
                 id: mudadDocumentPayload.id,
@@ -4700,6 +4848,12 @@ export default function EmployeesManagementPage() {
     const insuranceDeduction = toNullableNumber(form.insuranceDeduction);
     const shiftStartTime = form.shiftStartTime.trim() || null;
     const shiftEndTime = form.shiftEndTime.trim() || null;
+    const weeklyOffDays = normalizeWeeklyOffDays(form.weeklyOffDays);
+    const workSchedule = {
+      startTime: shiftStartTime,
+      endTime: shiftEndTime,
+      weeklyOffDays,
+    };
     if (!normalizedFullName) {
       toast.error("يجب إدخال اسم الموظف.");
       return;
@@ -4808,6 +4962,7 @@ export default function EmployeesManagementPage() {
         expectedWorkDays,
         expectedWorkHours,
         actualWorkedHours,
+        workSchedule,
         shiftStartTime,
         shiftEndTime,
         overtimeHours: calculatedOvertimeHours,
@@ -4882,6 +5037,7 @@ export default function EmployeesManagementPage() {
             actualWorkedHours,
             shiftStartTime,
             shiftEndTime,
+            workSchedule,
             overtimeHours: calculatedOvertimeHours,
             missingHours: calculatedMissingHours,
             hoursDifference: calculatedHoursDifference,
@@ -5993,6 +6149,8 @@ export default function EmployeesManagementPage() {
                     employeeDocId={selectedEmployeeDocumentId || null}
                     shiftStartTime={selectedEmployeeShiftSchedule.startTime}
                     shiftEndTime={selectedEmployeeShiftSchedule.endTime}
+                    weeklyOffDays={selectedEmployeeShiftSchedule.weeklyOffDays}
+                    approvedLeaveRequests={approvedLeaveRequests}
                     canManageAttendance={canManageEmployees}
                     title="سجل حضور الموظف الشهري"
                     description="عرض إداري لكل عمليات الحضور والانصراف المقبولة فعليًا لهذا الموظف خلال الشهر الحالي."
@@ -7184,7 +7342,7 @@ export default function EmployeesManagementPage() {
                                     وقت الدوام واحتساب الحضور
                                   </div>
                                   <p className="text-xs leading-6 text-slate-500">
-                                    يحدد بداية ونهاية الدوام المستخدمة في حساب التأخير والأوفر تايم لهذا الشهر.
+                                    يقرأ وقت الدوام من بيانات الموظف المحفوظة ويستخدمه في حساب التأخير والأوفر تايم لهذا الشهر.
                                   </p>
                                   {selectedPayrollMonthMeta ? (
                                     <p className="text-xs leading-6 text-slate-500">
@@ -7215,36 +7373,31 @@ export default function EmployeesManagementPage() {
                                 </Button>
                               </div>
 
-                              <div className="grid gap-3 md:grid-cols-2">
-                                <div className="rounded-[18px] border border-slate-200 bg-slate-50/70 p-4">
-                                  <Field label="بداية الدوام">
-                                    <Input
-                                      type="time"
-                                      dir="ltr"
-                                      value={form.shiftStartTime}
-                                      onChange={event =>
-                                        handleFormChange("shiftStartTime", event.target.value)
-                                      }
-                                      className="h-11 bg-white text-center text-base font-semibold tabular-nums"
-                                      disabled={!canManageEmployees || saving}
-                                    />
-                                  </Field>
+                              <div
+                                className={cn(
+                                  "rounded-[18px] border px-4 py-3 text-sm font-semibold",
+                                  selectedEmployeeShiftSchedule.startTime &&
+                                    selectedEmployeeShiftSchedule.endTime
+                                    ? "border-slate-200 bg-slate-50 text-slate-800"
+                                    : "border-red-200 bg-red-50 text-red-700"
+                                )}
+                              >
+                                وقت الدوام المعتمد لهذا الموظف:{" "}
+                                {selectedEmployeeScheduleLabel}
+                                <div className="mt-1 text-xs font-medium leading-5 text-slate-500">
+                                  أيام الراحة:{" "}
+                                  {formatWeeklyOffDaysLabel(
+                                    selectedEmployeeShiftSchedule.weeklyOffDays
+                                  )}{" "}
+                                  · أيام العمل المحتسبة لهذا الشهر:{" "}
+                                  {formatNumberEN(payrollExpectedWorkDaysNumber)} يوم
                                 </div>
-
-                                <div className="rounded-[18px] border border-slate-200 bg-slate-50/70 p-4">
-                                  <Field label="نهاية الدوام">
-                                    <Input
-                                      type="time"
-                                      dir="ltr"
-                                      value={form.shiftEndTime}
-                                      onChange={event =>
-                                        handleFormChange("shiftEndTime", event.target.value)
-                                      }
-                                      className="h-11 bg-white text-center text-base font-semibold tabular-nums"
-                                      disabled={!canManageEmployees || saving}
-                                    />
-                                  </Field>
-                                </div>
+                                {!selectedEmployeeShiftSchedule.startTime ||
+                                !selectedEmployeeShiftSchedule.endTime ? (
+                                  <div className="mt-1 text-xs font-medium leading-5">
+                                    يجب تحديد وقت الدوام من بيانات الموظف قبل الاحتساب من الحضور
+                                  </div>
+                                ) : null}
                               </div>
 
                               {attendancePayrollSummary ? (
@@ -8796,15 +8949,94 @@ export default function EmployeesManagementPage() {
                       </Field>
 
                       <Field
-                        label="صلاحية الصفحة"
-                        description={
-                          canManageEmployees
-                            ? "يمكنك تعديل بيانات العمل وحفظها من هذه الصفحة."
-                            : "تمتلك صلاحية عرض فقط، والحفظ معطل لهذا الحساب."
-                        }
+                        label="جدول الدوام ونطاقات الحضور"
+                        description="حدد وقت الدوام الثابت، أيام الراحة الأسبوعية، والنطاقات المسموح منها تسجيل الحضور."
                       >
-                        <div className="space-y-2 rounded-[18px] border border-slate-200 bg-slate-50 p-3">
-                          <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="space-y-4 rounded-[18px] border border-slate-200 bg-slate-50 p-3">
+                          <div className="grid gap-3 md:grid-cols-2">
+                            <div className="space-y-1.5">
+                              <Label className="text-xs font-semibold text-slate-600">
+                                بداية الدوام
+                              </Label>
+                              <Input
+                                type="time"
+                                dir="ltr"
+                                value={form.shiftStartTime}
+                                onChange={event =>
+                                  handleFormChange("shiftStartTime", event.target.value)
+                                }
+                                className="h-11 bg-white text-center text-base font-semibold tabular-nums"
+                                disabled={!canManageEmployees || saving}
+                              />
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <Label className="text-xs font-semibold text-slate-600">
+                                نهاية الدوام
+                              </Label>
+                              <Input
+                                type="time"
+                                dir="ltr"
+                                value={form.shiftEndTime}
+                                onChange={event =>
+                                  handleFormChange("shiftEndTime", event.target.value)
+                                }
+                                className="h-11 bg-white text-center text-base font-semibold tabular-nums"
+                                disabled={!canManageEmployees || saving}
+                              />
+                            </div>
+                          </div>
+
+                          <div className="space-y-2 rounded-2xl border border-slate-200 bg-white px-3 py-3">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div>
+                                <div className="text-sm font-semibold text-slate-800">
+                                  أيام الراحة الأسبوعية
+                                </div>
+                                <div className="mt-1 text-xs leading-5 text-slate-500">
+                                  لا تُحسب هذه الأيام كغياب ولا تدخل في نقص الساعات.
+                                </div>
+                              </div>
+                              <Badge
+                                variant="outline"
+                                className="rounded-full border-slate-200 bg-slate-50 text-slate-600"
+                              >
+                                {formatWeeklyOffDaysLabel(form.weeklyOffDays)}
+                              </Badge>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
+                              {WORK_SCHEDULE_WEEKDAYS.map(day => {
+                                const checked = form.weeklyOffDays.includes(day.value);
+                                return (
+                                  <label
+                                    key={day.value}
+                                    className={cn(
+                                      "flex cursor-pointer items-center justify-center gap-2 rounded-xl border px-2 py-2 text-xs font-semibold transition-colors",
+                                      checked
+                                        ? "border-slate-900 bg-slate-950 text-white"
+                                        : "border-slate-200 bg-slate-50 text-slate-600"
+                                    )}
+                                  >
+                                    <Checkbox
+                                      checked={checked}
+                                      onCheckedChange={value =>
+                                        handleToggleWeeklyOffDay(
+                                          day.value,
+                                          value === true
+                                        )
+                                      }
+                                      disabled={!canManageEmployees || saving}
+                                      className="h-4 w-4 border-slate-300 data-[state=checked]:border-white data-[state=checked]:bg-white data-[state=checked]:text-slate-950"
+                                    />
+                                    {day.shortLabel}
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 pt-3">
                             <div className="text-sm font-semibold text-slate-800">
                               نطاقات الدوام
                             </div>

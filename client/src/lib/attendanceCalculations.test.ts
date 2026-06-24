@@ -84,4 +84,23 @@ describe("attendance payroll calculations", () => {
     expect(summary.lateHours).toBe(1);
     expect(summary.missingHours).toBe(2);
   });
+
+  it("excludes weekly off days from payroll shortage totals", () => {
+    const summary = summarizeAttendanceForPayroll(
+      [
+        record("check_in", "2026-06-26T07:00:00.000Z"),
+        record("check_out", "2026-06-26T08:00:00.000Z"),
+      ],
+      {
+        startTime: "09:00",
+        endTime: "17:00",
+        weeklyOffDays: ["friday"],
+      }
+    );
+
+    expect(summary.actualHours).toBe(1);
+    expect(summary.expectedHours).toBe(0);
+    expect(summary.missingHours).toBe(0);
+    expect(summary.lateHours).toBe(0);
+  });
 });

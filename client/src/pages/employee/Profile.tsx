@@ -36,6 +36,7 @@ import {
   FileText,
   Loader2,
   Mail,
+  MapPin,
   Minus,
   Phone,
   Plus,
@@ -119,6 +120,13 @@ import {
   sortEmployeeServiceRequests,
   type EmployeeServiceRequestRecord,
 } from "@/lib/employeeServiceRequests";
+import {
+  EMPLOYEE_PAYROLL_RECORDS_COLLECTION,
+  formatEmployeePayrollMonthLabel,
+  normalizeEmployeePayrollRecord,
+  sortEmployeePayrollRecords,
+  type EmployeePayrollRecord,
+} from "@/lib/employeePayroll";
 import type { EmployeeServiceRequestType } from "@shared/employee";
 import { uploadDocumentToCloudflare } from "@/lib/documentUploadService";
 import { createInAppNotification } from "@/lib/inAppNotifications";
@@ -142,6 +150,68 @@ const AVATAR_MAX_SIZE_BYTES = 5 * 1024 * 1024;
 const AVATAR_CROP_OUTPUT_SIZE = 512;
 const AVATAR_CROP_MIN_ZOOM = 1;
 const AVATAR_CROP_MAX_ZOOM = 3;
+
+function formatWorkScheduleTime(value?: string | null) {
+  const match = /^(\d{1,2}):([0-5]\d)$/.exec(String(value || "").trim());
+  if (!match) return "";
+
+  const hours = Number(match[1]);
+  const minutes = match[2];
+  const displayHours = hours % 12 || 12;
+  const suffix = hours < 12 ? "ص" : "م";
+  return `${formatNumberEN(displayHours, { maximumFractionDigits: 0 })}:${minutes} ${suffix}`;
+}
+
+function formatWorkScheduleRange(input: {
+  startTime?: string | null;
+  endTime?: string | null;
+}) {
+  const start = formatWorkScheduleTime(input.startTime);
+  const end = formatWorkScheduleTime(input.endTime);
+  return start && end ? `${start} - ${end}` : EMPLOYEE_EMPTY_VALUE;
+}
+
+function formatCurrencyValue(value: unknown) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) return EMPLOYEE_EMPTY_VALUE;
+  return `${formatNumberEN(amount)} ر.س`;
+}
+
+function formatOptionalCurrencyValue(value: unknown) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount <= 0) return "لا يوجد";
+  return formatCurrencyValue(amount);
+}
+
+function formatLeaveDaysCountValue(value: unknown) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount <= 0) return "0 يوم";
+  return `${formatNumberEN(amount)} يوم`;
+}
+
+function sumMoneyValues(items: Array<{ amount?: number | null }>) {
+  return items.reduce((sum, item) => {
+    const amount = Number(item.amount || 0);
+    return sum + (Number.isFinite(amount) ? amount : 0);
+  }, 0);
+}
+
+function calculatePayrollBeforeManualDeductions(
+  record: EmployeePayrollRecord | null
+) {
+  if (!record) return null;
+
+  const baseSalary = Number(record.baseSalary || 0);
+  const overtimeBonus = Number(record.overtimeBonus || 0);
+  const attendanceAbsenceDeduction = Number(
+    record.attendanceAbsenceDeduction || 0
+  );
+  const delayDeduction = Number(record.delayDeduction || 0);
+  return Math.max(
+    0,
+    baseSalary + overtimeBonus - attendanceAbsenceDeduction - delayDeduction
+  );
+}
 
 type AvatarCropDraft = {
   objectUrl: string;
@@ -908,6 +978,11 @@ export default function EmployeeProfilePage() {
   const [attendanceRefreshKey, setAttendanceRefreshKey] = useState(0);
   const [employeeFiles, setEmployeeFiles] = useState<EmployeeFileRecord[]>([]);
   const [employeeFilesLoading, setEmployeeFilesLoading] = useState(true);
+  const [employeePayrollRecords, setEmployeePayrollRecords] = useState<
+    EmployeePayrollRecord[]
+  >([]);
+  const [employeePayrollRecordsLoading, setEmployeePayrollRecordsLoading] =
+    useState(true);
   const [employeeProfileSource, setEmployeeProfileSource] = useState<{
     collectionName: "employees" | "users";
     docId: string;
@@ -1161,6 +1236,57 @@ export default function EmployeeProfilePage() {
 
   useEffect(() => {
     if (!user?.uid) {
+      setEmployeePayrollRecords([]);
+      setEmployeePayrollRecordsLoading(false);
+      return;
+    }
+
+    const linkedEmployeeId = String(user.linkedEmployeeId || "").trim();
+    const payrollQuery =
+      linkedEmployeeId && linkedEmployeeId !== user.uid
+        ? query(
+            collection(db, EMPLOYEE_PAYROLL_RECORDS_COLLECTION),
+            or(
+              where("employeeUid", "==", user.uid),
+              where("employeeId", "==", linkedEmployeeId)
+            )
+          )
+        : query(
+            collection(db, EMPLOYEE_PAYROLL_RECORDS_COLLECTION),
+            where("employeeUid", "==", user.uid)
+          );
+
+    setEmployeePayrollRecordsLoading(true);
+    const unsubscribe = onSnapshot(
+      payrollQuery,
+      snapshot => {
+        const rowsById = new Map<string, EmployeePayrollRecord>();
+        snapshot.docs.forEach(docSnapshot => {
+          rowsById.set(
+            docSnapshot.id,
+            normalizeEmployeePayrollRecord(
+              docSnapshot.id,
+              (docSnapshot.data() as Record<string, any>) || {}
+            )
+          );
+        });
+        setEmployeePayrollRecords(
+          sortEmployeePayrollRecords(Array.from(rowsById.values()))
+        );
+        setEmployeePayrollRecordsLoading(false);
+      },
+      error => {
+        console.error("employee_payroll_records_snapshot_error", error);
+        setEmployeePayrollRecords([]);
+        setEmployeePayrollRecordsLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [user?.linkedEmployeeId, user?.uid]);
+
+  useEffect(() => {
+    if (!user?.uid) {
       setLeaveRequests([]);
       setLeaveRequestsLoading(false);
       return;
@@ -1247,6 +1373,29 @@ export default function EmployeeProfilePage() {
     () => getLatestApprovedEmployeeLeaveRequest(leaveRequests),
     [leaveRequests]
   );
+  const approvedLeaveRequests = useMemo(
+    () => leaveRequests.filter(request => request.status === "approved"),
+    [leaveRequests]
+  );
+  const approvedLeaveDaysCount = useMemo(
+    () =>
+      approvedLeaveRequests.reduce((sum, request) => {
+        const daysCount = Number(request.daysCount || 0);
+        return sum + (Number.isFinite(daysCount) ? daysCount : 0);
+      }, 0),
+    [approvedLeaveRequests]
+  );
+  const leaveEntitlementDaysCount =
+    profile.employment.leaveBalance === null
+      ? null
+      : profile.employment.leaveBalance + approvedLeaveDaysCount;
+  const latestPayrollRecord = employeePayrollRecords[0] || null;
+  const latestPayrollBeforeManualDeductions =
+    calculatePayrollBeforeManualDeductions(latestPayrollRecord);
+  const fixedDeductionsTotal = sumMoneyValues(
+    profile.employment.salaryDeductions
+  );
+  const latestPayrollAttachment = latestPayrollRecord?.mudadDocument || null;
 
   const employeeOfficialFiles = useMemo(
     () => filterActiveEmployeeFiles(employeeFiles).filter(isOfficialEmployeeFile),
@@ -1916,7 +2065,7 @@ export default function EmployeeProfilePage() {
               <InfoRow
                 icon={BadgeCheck}
                 label="الراتب والتفاصيل المالية"
-                helper="واجهة عرض مبدئية حسب البيانات المتاحة"
+                helper="الراتب الأساسي، الخصومات، التأمينات وسجل الرواتب"
                 onClick={() => openEmployeeView("salary")}
               />
               <InfoRow
@@ -1928,7 +2077,7 @@ export default function EmployeeProfilePage() {
               <InfoRow
                 icon={CalendarDays}
                 label="الإجازات"
-                helper="الإجازات السنوية والمجدولة والحالية"
+                helper="الرصيد، الطلبات، والإجازات المعتمدة المستثناة من الغياب"
                 onClick={() => openEmployeeView("leaves")}
               />
               <InfoRow
@@ -2019,6 +2168,8 @@ export default function EmployeeProfilePage() {
             refreshKey={attendanceRefreshKey}
             shiftStartTime={profile.employment.shiftStartTime}
             shiftEndTime={profile.employment.shiftEndTime}
+            weeklyOffDays={profile.employment.weeklyOffDays}
+            approvedLeaveRequests={approvedLeaveRequests}
           />
         </section>
       ) : null}
@@ -2532,6 +2683,35 @@ export default function EmployeeProfilePage() {
                 ) : null}
               </div>
 
+              <div className="space-y-4 rounded-[24px] border border-slate-200 bg-slate-50/70 p-5">
+                <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                  <Clock3 className="h-4 w-4" />
+                  جدول الدوام
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <EmploymentTile
+                    label="وقت الدوام"
+                    value={formatWorkScheduleRange({
+                      startTime: profile.employment.shiftStartTime,
+                      endTime: profile.employment.shiftEndTime,
+                    })}
+                    icon={Clock3}
+                    dir="ltr"
+                  />
+                  <EmploymentTile
+                    label="أيام الراحة"
+                    value={profile.employment.weeklyOffDaysLabel}
+                    icon={CalendarDays}
+                  />
+                  <EmploymentTile
+                    label="نطاق الحضور"
+                    value={profile.employment.attendanceZoneLabel}
+                    icon={MapPin}
+                  />
+                </div>
+              </div>
+
               <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50/60 p-4 text-sm leading-7 text-slate-600">
                 بيانات العمل هنا للعرض فقط. لا يمكنك تعديل المسمى الوظيفي أو
                 رصيد الإجازات أو الحالة الوظيفية بنفسك من هذه الصفحة.
@@ -2660,32 +2840,308 @@ export default function EmployeeProfilePage() {
         <section className="space-y-6">
           <EmployeePortalViewHeader
             title="الراتب والتفاصيل المالية"
-            description="واجهة عرض مبدئية حسب البيانات المتاحة حالياً، بدون أي API أو Firebase جديد."
+            description="الراتب الأساسي، الخصومات، التأمينات وسجل رواتب نهاية الشهر."
             onBack={backToDashboard}
           />
 
-          <EmployeeCard title="الراتب" subtitle="TODO: Placeholder حتى تتوفر بيانات الراتب الحالية داخل بوابة الموظف.">
-            <div className="space-y-4">
-              <div className="rounded-[28px] border border-slate-100 bg-slate-50/80 p-6">
-                <div className="text-sm text-slate-500">مجموع الراتب</div>
-                <div className="mt-2 text-3xl font-semibold text-slate-950">
-                  غير متوفر
+          <EmployeeCard
+            title="التفاصيل المالية الأساسية"
+            subtitle="هذه القيم من بيانات الموظف وتستخدم كمرجع لاحتساب الرواتب المقفلة."
+          >
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <EmploymentTile
+                label="الراتب الأساسي"
+                value={
+                  profile.employment.baseSalary === null
+                    ? EMPLOYEE_EMPTY_VALUE
+                    : formatCurrencyValue(profile.employment.baseSalary)
+                }
+                icon={BadgeCheck}
+              />
+              <EmploymentTile
+                label="التأمينات"
+                value={formatOptionalCurrencyValue(
+                  profile.employment.insuranceDeduction
+                )}
+                icon={ShieldCheck}
+              />
+              <EmploymentTile
+                label="الخصومات الثابتة"
+                value={formatOptionalCurrencyValue(fixedDeductionsTotal)}
+                icon={Minus}
+              />
+              <EmploymentTile
+                label="البدلات"
+                value={formatOptionalCurrencyValue(profile.employment.allowances)}
+                icon={Plus}
+              />
+            </div>
+
+            {profile.employment.salaryDeductions.length ? (
+              <div className="mt-5 rounded-[24px] border border-slate-200 bg-slate-50/70 p-5">
+                <div className="mb-4 text-sm font-semibold text-slate-900">
+                  تفاصيل الخصومات الثابتة
+                </div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  {profile.employment.salaryDeductions.map((deduction, index) => (
+                    <div
+                      key={deduction.id || `${deduction.title}-${index}`}
+                      className="rounded-[18px] border border-slate-200 bg-white px-4 py-3"
+                    >
+                      <div className="text-xs text-slate-500">
+                        {deduction.title}
+                      </div>
+                      <div className="mt-1 text-base font-semibold text-slate-950">
+                        {formatCurrencyValue(deduction.amount)}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
-              <div className="grid gap-3 sm:grid-cols-3">
-                <InfoRow label="الراتب الأساسي" value="غير متوفر" />
-                <InfoRow label="بدل سكن" value="غير متوفر" />
-                <InfoRow label="بدل مواصلات" value="غير متوفر" />
+            ) : null}
+          </EmployeeCard>
+
+          <EmployeeCard
+            title="آخر راتب مقفل"
+            subtitle="آخر سجل راتب نهاية شهر محفوظ للموظف، مع الراتب قبل الخصومات والراتب النهائي."
+          >
+            {employeePayrollRecordsLoading ? (
+              <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50 px-5 py-10 text-center text-sm text-slate-500">
+                جاري تحميل سجلات الرواتب...
               </div>
-              <div className="flex gap-3">
-                <Button type="button" className="rounded-2xl bg-slate-950 text-white" disabled>
-                  معاينة
-                </Button>
-                <Button type="button" variant="outline" className="rounded-2xl border-slate-200 bg-white" disabled>
-                  تنزيل
-                </Button>
+            ) : latestPayrollRecord ? (
+              <div className="space-y-5">
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                  <EmploymentTile
+                    label="الشهر"
+                    value={formatEmployeePayrollMonthLabel(
+                      latestPayrollRecord.payrollMonth
+                    )}
+                    icon={CalendarDays}
+                  />
+                  <EmploymentTile
+                    label="الراتب قبل الخصومات"
+                    value={formatCurrencyValue(
+                      latestPayrollBeforeManualDeductions
+                    )}
+                    icon={Clock3}
+                  />
+                  <EmploymentTile
+                    label="الراتب النهائي"
+                    value={formatCurrencyValue(latestPayrollRecord.finalSalary)}
+                    icon={BadgeCheck}
+                    valueClassName="text-emerald-700"
+                  />
+                  <EmploymentTile
+                    label="أيام بدون حضور"
+                    value={formatLeaveDaysCountValue(
+                      latestPayrollRecord.attendanceAbsentDays || 0
+                    )}
+                    icon={CalendarDays}
+                    valueClassName={
+                      latestPayrollRecord.attendanceAbsentDays
+                        ? "text-rose-600"
+                        : undefined
+                    }
+                  />
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                  <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3">
+                    <div className="text-xs text-slate-500">
+                      خصم أيام بدون حضور
+                    </div>
+                    <div className="mt-1 font-semibold text-slate-950">
+                      {formatCurrencyValue(
+                        latestPayrollRecord.attendanceAbsenceDeduction || 0
+                      )}
+                    </div>
+                  </div>
+                  <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3">
+                    <div className="text-xs text-slate-500">
+                      خصم نقص الساعات
+                    </div>
+                    <div className="mt-1 font-semibold text-slate-950">
+                      {formatCurrencyValue(
+                        latestPayrollRecord.delayDeduction || 0
+                      )}
+                    </div>
+                  </div>
+                  <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3">
+                    <div className="text-xs text-slate-500">التأمينات</div>
+                    <div className="mt-1 font-semibold text-slate-950">
+                      {formatCurrencyValue(
+                        latestPayrollRecord.insuranceDeduction || 0
+                      )}
+                    </div>
+                  </div>
+                  <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3">
+                    <div className="text-xs text-slate-500">
+                      الخصومات الثابتة
+                    </div>
+                    <div className="mt-1 font-semibold text-slate-950">
+                      {formatCurrencyValue(
+                        latestPayrollRecord.totalSalaryDeductions || 0
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-[24px] border border-slate-200 bg-slate-50/70 p-5">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold text-slate-900">
+                        مرفقات الراتب
+                      </div>
+                      <div className="mt-1 text-sm leading-6 text-slate-500">
+                        {latestPayrollAttachment
+                          ? latestPayrollAttachment.fileName || "مرفق الراتب"
+                          : "لا توجد مرفقات راتب لهذا السجل."}
+                      </div>
+                    </div>
+
+                    {latestPayrollAttachment ? (
+                      <div className="flex flex-wrap gap-2">
+                        {latestPayrollRecord.mudadDocumentViewUrl ? (
+                          <Button asChild type="button" variant="outline">
+                            <a
+                              href={latestPayrollRecord.mudadDocumentViewUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              <Eye className="ml-2 h-4 w-4" />
+                              معاينة
+                            </a>
+                          </Button>
+                        ) : null}
+                        {latestPayrollRecord.mudadDocumentDownloadUrl ? (
+                          <Button asChild type="button" variant="outline">
+                            <a
+                              href={latestPayrollRecord.mudadDocumentDownloadUrl}
+                              rel="noreferrer"
+                              download={
+                                latestPayrollAttachment.fileName || true
+                              }
+                            >
+                              <Download className="ml-2 h-4 w-4" />
+                              تنزيل
+                            </a>
+                          </Button>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50 px-5 py-10 text-center text-sm text-slate-500">
+                لا توجد رواتب نهاية شهر مقفلة حتى الآن.
+              </div>
+            )}
+          </EmployeeCard>
+
+          <EmployeeCard
+            title="سجل رواتب نهاية الشهر"
+            subtitle="كل راتب مقفل يظهر هنا مع المبلغ النهائي ومرفق الراتب إن وجد."
+          >
+            {employeePayrollRecordsLoading ? (
+              <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50 px-5 py-10 text-center text-sm text-slate-500">
+                جاري تحميل سجل الرواتب...
+              </div>
+            ) : employeePayrollRecords.length ? (
+              <div className="space-y-3">
+                {employeePayrollRecords.map(record => {
+                  const beforeManualDeductions =
+                    calculatePayrollBeforeManualDeductions(record);
+
+                  return (
+                    <div
+                      key={record.id}
+                      className="rounded-[22px] border border-slate-100 bg-slate-50/70 p-4"
+                    >
+                      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                        <div className="space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Badge
+                              variant="outline"
+                              className="rounded-full border-emerald-200 bg-emerald-50 text-emerald-700 shadow-none"
+                            >
+                              مقفل
+                            </Badge>
+                            <div className="text-base font-semibold text-slate-950">
+                              {formatEmployeePayrollMonthLabel(
+                                record.payrollMonth
+                              )}
+                            </div>
+                          </div>
+                          <div className="grid gap-2 text-sm text-slate-600 md:grid-cols-3">
+                            <span>
+                              الأساسي:{" "}
+                              <strong className="text-slate-900">
+                                {formatCurrencyValue(record.baseSalary)}
+                              </strong>
+                            </span>
+                            <span>
+                              قبل الخصومات:{" "}
+                              <strong className="text-slate-900">
+                                {formatCurrencyValue(beforeManualDeductions)}
+                              </strong>
+                            </span>
+                            <span>
+                              النهائي:{" "}
+                              <strong className="text-emerald-700">
+                                {formatCurrencyValue(record.finalSalary)}
+                              </strong>
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap gap-2">
+                          {record.mudadDocumentViewUrl ? (
+                            <Button
+                              asChild
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                            >
+                              <a
+                                href={record.mudadDocumentViewUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                <Eye className="ml-2 h-4 w-4" />
+                                المرفق
+                              </a>
+                            </Button>
+                          ) : null}
+                          {record.mudadDocumentDownloadUrl ? (
+                            <Button
+                              asChild
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                            >
+                              <a
+                                href={record.mudadDocumentDownloadUrl}
+                                rel="noreferrer"
+                                download={record.mudadDocument?.fileName || true}
+                              >
+                                <Download className="ml-2 h-4 w-4" />
+                                تنزيل
+                              </a>
+                            </Button>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50 px-5 py-10 text-center text-sm text-slate-500">
+                لا يوجد سجل رواتب نهاية شهر حتى الآن.
+              </div>
+            )}
           </EmployeeCard>
         </section>
       ) : null}
@@ -2702,6 +3158,198 @@ export default function EmployeeProfilePage() {
             <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50 px-5 py-10 text-center text-sm text-slate-500">
               لا توجد بيانات عقود متاحة حالياً.
             </div>
+          </EmployeeCard>
+        </section>
+      ) : null}
+
+      {activeView === "leaves" ? (
+        <section className="space-y-6">
+          <EmployeePortalViewHeader
+            title="الإجازات"
+            description="رصيد الإجازات، الطلبات، والإجازات المعتمدة المستثناة من الغياب واحتساب الراتب."
+            onBack={backToDashboard}
+          />
+
+          <EmployeeCard
+            title="ملخص الإجازات"
+            subtitle="الإجازات المعتمدة تمرر لتقويم الحضور واحتساب الراتب كي لا تعتبر غياباً."
+            action={
+              <Button
+                type="button"
+                className="rounded-2xl bg-slate-950 text-white hover:bg-[#15233c]"
+                onClick={() => openEmployeeView("leave-request")}
+              >
+                <Send className="ml-2 h-4 w-4" />
+                رفع طلب إجازة
+              </Button>
+            }
+          >
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <LeaveSummaryCard
+                label="رصيد الإجازات"
+                value={
+                  leaveEntitlementDaysCount === null
+                    ? EMPLOYEE_EMPTY_VALUE
+                    : formatLeaveDaysCountValue(leaveEntitlementDaysCount)
+                }
+                icon={BadgeCheck}
+                accent="text-[#B98500]"
+              />
+              <LeaveSummaryCard
+                label="الإجازات المستخدمة"
+                value={formatLeaveDaysCountValue(approvedLeaveDaysCount)}
+                icon={CheckCircle2}
+                accent="text-emerald-600"
+              />
+              <LeaveSummaryCard
+                label="الإجازات المتبقية"
+                value={profile.employment.leaveBalanceLabel}
+                icon={CalendarDays}
+              />
+              <LeaveSummaryCard
+                label="آخر إجازة"
+                value={
+                  latestApprovedLeaveRequest
+                    ? formatLeaveDateRange(
+                        latestApprovedLeaveRequest.startDate,
+                        latestApprovedLeaveRequest.endDate
+                      )
+                    : "لا توجد"
+                }
+                icon={Clock3}
+              />
+            </div>
+          </EmployeeCard>
+
+          <EmployeeCard
+            title="الإجازات المعتمدة"
+            subtitle="هذه الأيام لا تظهر كغياب في تقويم الحضور ولا تدخل ضمن خصومات الراتب."
+          >
+            {leaveRequestsLoading ? (
+              <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50/70 px-5 py-10 text-center text-sm text-slate-500">
+                جاري تحميل الإجازات المعتمدة...
+              </div>
+            ) : approvedLeaveRequests.length ? (
+              <div className="space-y-3">
+                {approvedLeaveRequests.map(request => (
+                  <div
+                    key={request.id}
+                    className="rounded-[22px] border border-emerald-100 bg-emerald-50/45 p-4"
+                  >
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="space-y-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge
+                            variant="outline"
+                            className="rounded-full border-emerald-200 bg-white text-emerald-700 shadow-none"
+                          >
+                            {getLeaveTypeLabel(request.leaveType)}
+                          </Badge>
+                          <Badge
+                            variant="outline"
+                            className="rounded-full border-sky-200 bg-sky-50 text-sky-700 shadow-none"
+                          >
+                            مستثناة من الغياب والراتب
+                          </Badge>
+                        </div>
+                        <div className="grid gap-2 text-sm text-slate-600 md:grid-cols-3">
+                          <span>
+                            الفترة:{" "}
+                            <strong className="text-slate-900">
+                              {formatLeaveDateRange(
+                                request.startDate,
+                                request.endDate
+                              )}
+                            </strong>
+                          </span>
+                          <span>
+                            عدد الأيام:{" "}
+                            <strong className="text-slate-900">
+                              {formatLeaveDaysLabel(request.daysCount)}
+                            </strong>
+                          </span>
+                          <span>
+                            تاريخ الطلب:{" "}
+                            <strong className="text-slate-900">
+                              {formatDateTimeEN(request.createdAt)}
+                            </strong>
+                          </span>
+                        </div>
+                      </div>
+                      <LeaveStatusBadge status={request.status} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50/70 px-5 py-10 text-center text-sm text-slate-500">
+                لا توجد إجازات معتمدة حتى الآن.
+              </div>
+            )}
+          </EmployeeCard>
+
+          <EmployeeCard
+            title="طلبات الإجازة"
+            subtitle="كل طلب يظهر بنوع الإجازة وحالته: معلق، موافق، أو مرفوض."
+          >
+            {leaveRequestsLoading ? (
+              <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50/70 px-5 py-10 text-center text-sm text-slate-500">
+                جاري تحميل طلبات الإجازة...
+              </div>
+            ) : leaveRequests.length ? (
+              <div className="space-y-3">
+                {leaveRequests.map(request => (
+                  <div
+                    key={request.id}
+                    className="rounded-[22px] border border-slate-100 bg-slate-50/70 p-4"
+                  >
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="space-y-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant="outline" className="rounded-full">
+                            {getLeaveTypeLabel(request.leaveType)}
+                          </Badge>
+                          <LeaveStatusBadge status={request.status} />
+                        </div>
+                        <div className="grid gap-2 text-sm text-slate-600 md:grid-cols-3">
+                          <span>
+                            الفترة:{" "}
+                            <strong className="text-slate-900">
+                              {formatLeaveDateRange(
+                                request.startDate,
+                                request.endDate
+                              )}
+                            </strong>
+                          </span>
+                          <span>
+                            عدد الأيام:{" "}
+                            <strong className="text-slate-900">
+                              {formatLeaveDaysLabel(request.daysCount)}
+                            </strong>
+                          </span>
+                          <span>
+                            تاريخ الطلب:{" "}
+                            <strong className="text-slate-900">
+                              {formatDateTimeEN(request.createdAt)}
+                            </strong>
+                          </span>
+                        </div>
+                        {request.hrNote ? (
+                          <div className="rounded-2xl border border-emerald-200/80 bg-emerald-50/70 px-4 py-3 text-sm leading-7 text-emerald-800">
+                            <span className="font-semibold">ملاحظة HR:</span>{" "}
+                            {request.hrNote}
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50/70 px-5 py-10 text-center text-sm text-slate-500">
+                لا توجد طلبات إجازة حتى الآن.
+              </div>
+            )}
           </EmployeeCard>
         </section>
       ) : null}
