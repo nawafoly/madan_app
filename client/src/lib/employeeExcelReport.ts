@@ -195,13 +195,15 @@ export async function generateEmployeeExcelReport(
     payrollRecord?.insuranceDeduction ?? toNumber(employment.insuranceDeduction);
   const totalSalaryDeductions =
     payrollRecord?.totalSalaryDeductions ??
-    salaryDeductions.reduce((sum, item) => sum + toNumber(item?.amount), 0) +
-      insuranceDeduction;
+    salaryDeductions.reduce((sum, item) => sum + toNumber(item?.amount), 0);
   const calculatedNetSalary = toNumber(employment.calculatedNetSalary);
   const finalSalary =
     payrollRecord?.finalSalary ??
     (calculatedNetSalary ||
-      Math.max(0, baseSalary + overtimeBonus - totalSalaryDeductions));
+      Math.max(
+        0,
+        baseSalary + overtimeBonus - totalSalaryDeductions - insuranceDeduction
+      ));
   const missingHours =
     toNumber(employment.missingHours) ||
     Math.max(
@@ -240,7 +242,7 @@ export async function generateEmployeeExcelReport(
     {
       item: "إجمالي الخصومات",
       amount: totalSalaryDeductions,
-      notes: "يشمل الخصومات المسجلة والتأمين",
+      notes: "يشمل الخصومات المسجلة فقط ولا يشمل التأمينات",
       __style: "total",
     },
     { item: "صافي الراتب النهائي", amount: finalSalary, notes: "", __style: "net" },

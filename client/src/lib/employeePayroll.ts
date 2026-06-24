@@ -157,7 +157,7 @@ export function computeEmployeePayroll(input: {
     (sum, item) => sum + item.amount,
     0
   );
-  const totalSalaryDeductions = insuranceDeduction + salaryDeductionsTotal;
+  const totalSalaryDeductions = salaryDeductionsTotal;
   const absenceDays = (input.absences || []).reduce(
     (sum, item) => sum + getEmployeeAbsenceDaysValue(item.type),
     0
@@ -169,7 +169,7 @@ export function computeEmployeePayroll(input: {
   const grossSalary = Math.max(0, baseSalary + overtimeBonus - delayDeduction);
   const finalSalary = Math.max(
     0,
-    grossSalary - totalSalaryDeductions - absenceDeduction
+    grossSalary - totalSalaryDeductions - insuranceDeduction - absenceDeduction
   );
 
   return {

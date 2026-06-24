@@ -2987,17 +2987,16 @@ export default function EmployeesManagementPage() {
     [form.shiftEndTime, form.shiftStartTime]
   );
   const insuranceDeductionNumber = Number(form.insuranceDeduction || 0);
-
+  const effectiveInsuranceDeduction = Number.isFinite(insuranceDeductionNumber)
+    ? Math.max(0, insuranceDeductionNumber)
+    : 0;
   const totalSalaryDeductions = useMemo(
     () =>
       salaryDeductions.reduce((sum, item) => {
         const amount = Number(item.amount || 0);
         return sum + (Number.isFinite(amount) ? amount : 0);
-      }, 0) +
-      (Number.isFinite(insuranceDeductionNumber)
-        ? insuranceDeductionNumber
-        : 0),
-    [salaryDeductions, insuranceDeductionNumber]
+      }, 0),
+    [salaryDeductions]
   );
 
   const calculatedDailyRate = useMemo(() => {
@@ -3061,8 +3060,12 @@ export default function EmployeesManagementPage() {
   }, [baseSalaryNumber, calculatedOvertimeAmount, calculatedMissingDeduction]);
 
   const calculatedNetSalary = useMemo(
-    () => Math.max(0, calculatedGrossSalary - totalSalaryDeductions),
-    [calculatedGrossSalary, totalSalaryDeductions]
+    () =>
+      Math.max(
+        0,
+        calculatedGrossSalary - totalSalaryDeductions - effectiveInsuranceDeduction
+      ),
+    [calculatedGrossSalary, effectiveInsuranceDeduction, totalSalaryDeductions]
   );
 
   const handleFormChange = <K extends keyof EmployeeFormValues>(
@@ -6779,34 +6782,21 @@ export default function EmployeesManagementPage() {
                       </Field>
                     </div>
 
-                    <div className="grid gap-5 rounded-[24px] border border-slate-200 bg-slate-50/70 p-5 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
-                      <Field label="بداية الدوام">
-                        <Input
-                          type="time"
-                          dir="ltr"
-                          value={form.shiftStartTime}
-                          onChange={event =>
-                            handleFormChange("shiftStartTime", event.target.value)
-                          }
-                          disabled={!canManageEmployees || saving}
-                        />
-                      </Field>
-                      <Field label="نهاية الدوام">
-                        <Input
-                          type="time"
-                          dir="ltr"
-                          value={form.shiftEndTime}
-                          onChange={event =>
-                            handleFormChange("shiftEndTime", event.target.value)
-                          }
-                          disabled={!canManageEmployees || saving}
-                        />
-                      </Field>
-                      <div className="flex items-end">
+                    <div className="space-y-5 rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+                      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                        <div className="space-y-1">
+                          <div className="text-base font-semibold text-slate-950">
+                            وقت الدوام
+                          </div>
+                          <p className="text-sm leading-6 text-slate-500">
+                            يحدد بداية ونهاية الدوام المستخدمة في حساب التأخير والأوفر تايم.
+                          </p>
+                        </div>
+
                         <Button
                           type="button"
                           variant="outline"
-                          className="h-11 rounded-2xl border-slate-200 bg-white"
+                          className="h-12 w-full rounded-[18px] border-slate-200 bg-slate-50 px-5 text-slate-950 hover:bg-white lg:w-auto"
                           onClick={() => void handleCalculatePayrollFromAttendance()}
                           disabled={
                             !canManageEmployees ||
@@ -6816,15 +6806,48 @@ export default function EmployeesManagementPage() {
                           }
                         >
                           {attendancePayrollLoading ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <Loader2 className="ml-2 h-4 w-4 animate-spin" />
                           ) : (
-                            <Clock3 className="h-4 w-4" />
+                            <Clock3 className="ml-2 h-4 w-4" />
                           )}
                           احتساب من الحضور
                         </Button>
                       </div>
+
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <div className="rounded-[20px] border border-slate-200 bg-slate-50/70 p-4">
+                          <Field label="بداية الدوام">
+                            <Input
+                              type="time"
+                              dir="ltr"
+                              value={form.shiftStartTime}
+                              onChange={event =>
+                                handleFormChange("shiftStartTime", event.target.value)
+                              }
+                              className="h-12 bg-white text-center text-base font-semibold tabular-nums"
+                              disabled={!canManageEmployees || saving}
+                            />
+                          </Field>
+                        </div>
+
+                        <div className="rounded-[20px] border border-slate-200 bg-slate-50/70 p-4">
+                          <Field label="نهاية الدوام">
+                            <Input
+                              type="time"
+                              dir="ltr"
+                              value={form.shiftEndTime}
+                              onChange={event =>
+                                handleFormChange("shiftEndTime", event.target.value)
+                              }
+                              className="h-12 bg-white text-center text-base font-semibold tabular-nums"
+                              disabled={!canManageEmployees || saving}
+                            />
+                          </Field>
+                        </div>
+                      </div>
+
                       {attendancePayrollSummary ? (
-                        <div className="md:col-span-2 xl:col-span-3 grid gap-3 text-sm md:grid-cols-4">
+                        <div className="grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-4">
                           <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
                             التأخير: {formatNumberEN(attendancePayrollSummary.lateHours)} ساعة
                           </div>
@@ -6841,8 +6864,8 @@ export default function EmployeesManagementPage() {
                       ) : null}
                     </div>
 
-                    <div className="space-y-4 rounded-[24px] border border-slate-200 bg-slate-50/70 p-5">
-                      <div className="flex items-center justify-between gap-3">
+                    <div className="space-y-5 rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+                      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
                         <div className="space-y-1">
                           <div className="text-base font-semibold text-slate-950">
                             الخصومات
@@ -6852,14 +6875,28 @@ export default function EmployeesManagementPage() {
                           </p>
                         </div>
 
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={handleAddSalaryDeduction}
-                          disabled={!canManageEmployees || saving}
-                        >
-                          إضافة خصم
-                        </Button>
+                        <div className="flex flex-col gap-3 sm:flex-row lg:flex-col">
+                          <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3 text-right">
+                            <div className="text-xs font-semibold text-slate-500">
+                              إجمالي الخصومات
+                            </div>
+                            <div className="mt-1 text-lg font-semibold text-slate-950 tabular-nums">
+                              {formatNumberEN(totalSalaryDeductions || 0)} ر.س
+                            </div>
+                          </div>
+
+                          {salaryDeductions.length ? (
+                            <Button
+                              type="button"
+                              onClick={handleAddSalaryDeduction}
+                              disabled={!canManageEmployees || saving}
+                              className="h-12 rounded-[18px] bg-slate-950 px-6 text-white hover:bg-slate-900"
+                            >
+                              <Plus className="ml-2 h-4 w-4" />
+                              إضافة خصم جديد
+                            </Button>
+                          ) : null}
+                        </div>
                       </div>
 
                       {salaryDeductions.length ? (
@@ -6913,8 +6950,22 @@ export default function EmployeesManagementPage() {
                           ))}
                         </div>
                       ) : (
-                        <div className="rounded-[20px] border border-dashed border-slate-200 bg-white px-4 py-6 text-center text-sm text-slate-500">
-                          لا توجد خصومات مضافة حتى الآن.
+                        <div className="rounded-[22px] border border-dashed border-slate-300 bg-slate-50 px-5 py-8 text-center">
+                          <div className="text-sm font-semibold text-slate-950">
+                            لا توجد خصومات مضافة حتى الآن.
+                          </div>
+                          <div className="mt-1 text-sm leading-6 text-slate-500">
+                            أضف خصمًا يدويًا مثل الغياب أو التأخير أو أي استقطاع آخر.
+                          </div>
+                          <Button
+                            type="button"
+                            onClick={handleAddSalaryDeduction}
+                            disabled={!canManageEmployees || saving}
+                            className="mt-4 h-12 rounded-[18px] bg-slate-950 px-6 text-white hover:bg-slate-900"
+                          >
+                            <Plus className="ml-2 h-4 w-4" />
+                            إضافة أول خصم
+                          </Button>
                         </div>
                       )}
 

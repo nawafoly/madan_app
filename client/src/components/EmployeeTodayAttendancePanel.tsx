@@ -157,6 +157,29 @@ function formatDurationFromMs(value: number | null) {
   return `${formatNumberEN(minutes)} دقيقة`;
 }
 
+function formatDurationFromHours(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    return "--";
+  }
+
+  const totalMinutes = Math.round(value * 60);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+
+  if (hours && minutes) {
+    return `${formatNumberEN(hours)} ساعة ${formatNumberEN(minutes)} دقيقة`;
+  }
+  if (hours) return `${formatNumberEN(hours)} ساعة`;
+  return `${formatNumberEN(minutes)} دقيقة`;
+}
+
+function getAttendanceTone(day: MonthlyAttendanceDay | null, computation?: ReturnType<typeof computeAttendanceDay> | null) {
+  if (!day?.hasAttendance) return "empty";
+  if (computation?.lateHours || (day.checkIn && !day.checkOut)) return "warning";
+  if (computation?.overtimeHours) return "overtime";
+  return "normal";
+}
+
 function getWorkDurationMs(day?: MonthlyAttendanceDay | null) {
   if (!day?.checkIn?.serverTime || !day.checkOut?.serverTime) return null;
   const start = Date.parse(day.checkIn.serverTime);
@@ -319,21 +342,24 @@ export default function EmployeeTodayAttendancePanel({
       })
     : null;
   const lateHoursLabel = attendanceComputation?.lateHours
-    ? `${formatNumberEN(attendanceComputation.lateHours)} ساعة`
+    ? formatDurationFromHours(attendanceComputation.lateHours)
     : "--";
   const overtimeHoursLabel = attendanceComputation?.overtimeHours
-    ? `${formatNumberEN(attendanceComputation.overtimeHours)} ساعة`
+    ? formatDurationFromHours(attendanceComputation.overtimeHours)
     : "--";
-  const missingHoursLabel = attendanceComputation?.missingHours
-    ? `${formatNumberEN(attendanceComputation.missingHours)} ساعة`
+  const missingHoursLabel = attendanceComputation?.missingHours && selectedDay?.checkOut
+    ? formatDurationFromHours(attendanceComputation.missingHours)
     : "--";
   const differenceLabel = attendanceComputation
-    ? attendanceComputation.overtimeHours > 0
-      ? `+${formatNumberEN(attendanceComputation.overtimeHours)}`
-      : attendanceComputation.missingHours > 0
-        ? `-${formatNumberEN(attendanceComputation.missingHours)}`
+    ? attendanceComputation.lateHours > 0
+      ? `-${formatDurationFromHours(attendanceComputation.lateHours)}`
+      : attendanceComputation.overtimeHours > 0
+        ? `+${formatDurationFromHours(attendanceComputation.overtimeHours)}`
+        : attendanceComputation.missingHours > 0 && selectedDay?.checkOut
+          ? `-${formatDurationFromHours(attendanceComputation.missingHours)}`
         : "0"
     : "--";
+  const selectedTone = getAttendanceTone(selectedDay, attendanceComputation);
   const selectedRecordsCount = selectedDay?.records.length || 0;
   const hasSelectedRecord = selectedRecordsCount > 0;
   const firstCheckInLabel = formatDisplayTime(selectedDay?.checkIn?.serverTime);
@@ -436,6 +462,11 @@ export default function EmployeeTodayAttendancePanel({
 
             const day = cell.day;
             const selected = day.date === selectedDate;
+            const dayComputation = computeAttendanceDay(day.date, day.records, {
+              startTime: shiftStartTime,
+              endTime: shiftEndTime,
+            });
+            const dayTone = getAttendanceTone(day, dayComputation);
 
             return (
               <button
@@ -445,7 +476,13 @@ export default function EmployeeTodayAttendancePanel({
                 className={cn(
                   "relative mx-auto flex h-[54px] w-[48px] items-center justify-center rounded-sm text-xl font-medium text-slate-900 transition",
                   selected
-                    ? "border-2 border-slate-900 bg-transparent"
+                    ? dayTone === "warning"
+                      ? "border-2 border-orange-500 bg-orange-50"
+                      : dayTone === "overtime"
+                        ? "border-2 border-blue-500 bg-blue-50"
+                        : dayTone === "normal"
+                          ? "border-2 border-emerald-500 bg-emerald-50"
+                          : "border-2 border-slate-900 bg-transparent"
                     : "border-2 border-transparent hover:bg-slate-100"
                 )}
                 aria-label={formatArabicDate(day.date)}
@@ -454,7 +491,9 @@ export default function EmployeeTodayAttendancePanel({
                   <span
                     className={cn(
                       "absolute left-1/2 top-0 h-1 w-10 -translate-x-1/2 rounded-full",
-                      day.hasWarning ? "bg-orange-500" : "bg-slate-800"
+                      dayTone === "warning" && "bg-orange-500",
+                      dayTone === "overtime" && "bg-blue-500",
+                      dayTone === "normal" && "bg-emerald-500"
                     )}
                   />
                 ) : null}
@@ -462,7 +501,10 @@ export default function EmployeeTodayAttendancePanel({
                 <span
                   className={cn(
                     "flex h-8 w-8 items-center justify-center rounded-md",
-                    selected && "bg-slate-950 text-white"
+                    selected && dayTone === "warning" && "bg-orange-500 text-white",
+                    selected && dayTone === "overtime" && "bg-blue-500 text-white",
+                    selected && dayTone === "normal" && "bg-emerald-600 text-white",
+                    selected && dayTone === "empty" && "bg-slate-950 text-white"
                   )}
                 >
                   {formatNumberEN(day.dayNumber)}
@@ -480,22 +522,6 @@ export default function EmployeeTodayAttendancePanel({
       <div className="grid grid-cols-2 items-end gap-8 pt-3">
         <button
           type="button"
-          onClick={() => setActiveTab("leave")}
-          className={cn(
-            "pb-5 text-center text-xl font-medium transition",
-            activeTab === "leave" ? "text-slate-950" : "text-slate-300"
-          )}
-        >
-          إجازتي
-          <span
-            className={cn(
-              "mx-auto mt-5 block h-1.5 w-full max-w-[330px] rounded-full",
-              activeTab === "leave" ? "bg-slate-950" : "bg-transparent"
-            )}
-          />
-        </button>
-        <button
-          type="button"
           onClick={() => setActiveTab("records")}
           className={cn(
             "pb-5 text-center text-xl font-medium transition",
@@ -507,6 +533,22 @@ export default function EmployeeTodayAttendancePanel({
             className={cn(
               "mx-auto mt-5 block h-1.5 w-full max-w-[330px] rounded-full",
               activeTab === "records" ? "bg-slate-950" : "bg-transparent"
+            )}
+          />
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("leave")}
+          className={cn(
+            "pb-5 text-center text-xl font-medium transition",
+            activeTab === "leave" ? "text-slate-950" : "text-slate-300"
+          )}
+        >
+          إجازتي
+          <span
+            className={cn(
+              "mx-auto mt-5 block h-1.5 w-full max-w-[330px] rounded-full",
+              activeTab === "leave" ? "bg-slate-950" : "bg-transparent"
             )}
           />
         </button>
@@ -534,8 +576,22 @@ export default function EmployeeTodayAttendancePanel({
           ) : (
             <>
               {hasSelectedRecord ? (
-                <div className="relative overflow-hidden rounded-[16px] bg-[#e6f3df] px-5 py-5 text-slate-900">
-                  <span className="absolute inset-y-0 left-0 w-4 bg-[#8ddb7a]" />
+                <div
+                  className={cn(
+                    "relative overflow-hidden rounded-[16px] px-5 py-5 text-slate-900",
+                    selectedTone === "warning" && "bg-orange-50",
+                    selectedTone === "overtime" && "bg-blue-50",
+                    selectedTone !== "warning" && selectedTone !== "overtime" && "bg-emerald-50"
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "absolute inset-y-0 left-0 w-4",
+                      selectedTone === "warning" && "bg-orange-400",
+                      selectedTone === "overtime" && "bg-blue-400",
+                      selectedTone !== "warning" && selectedTone !== "overtime" && "bg-emerald-400"
+                    )}
+                  />
                   <div className="grid grid-cols-[44px_1fr] items-center gap-3">
                     <button
                       type="button"
@@ -572,40 +628,48 @@ export default function EmployeeTodayAttendancePanel({
                 <AttendanceMetric
                   label="الفرق"
                   value={differenceLabel}
-                  valueClassName="text-2xl text-orange-600"
+                  valueClassName={cn(
+                    "text-2xl",
+                    selectedTone === "warning" && "text-orange-600",
+                    selectedTone === "overtime" && "text-blue-600",
+                    selectedTone !== "warning" && selectedTone !== "overtime" && "text-emerald-600"
+                  )}
                 />
               </div>
 
-              <div className="grid min-h-[104px] grid-cols-3 rounded-[18px] border border-slate-200 bg-white px-5 py-5 text-right shadow-[0_8px_24px_-22px_rgba(15,23,42,0.35)]">
+              <div
+                className={cn(
+                  "grid min-h-[104px] grid-cols-3 rounded-[18px] border px-5 py-5 text-right shadow-[0_8px_24px_-22px_rgba(15,23,42,0.35)]",
+                  selectedTone === "warning" && "border-orange-200 bg-orange-50/60",
+                  selectedTone === "overtime" && "border-blue-200 bg-blue-50/60",
+                  selectedTone === "normal" && "border-emerald-200 bg-emerald-50/60",
+                  selectedTone === "empty" && "border-slate-200 bg-white"
+                )}
+              >
                 <div>
                   <div className="text-sm font-medium text-slate-400">
-                    عمل إضافي مؤكد
+                    الأوفر تايم
                   </div>
-                  <div className="mt-8 text-base font-semibold text-slate-950">
+                  <div className="mt-8 text-base font-semibold text-blue-700">
                     {overtimeHoursLabel}
                   </div>
                 </div>
                 <div>
                   <div className="text-sm font-medium text-slate-400">
-                    احتساب الساعة
+                    التأخير
                   </div>
-                  <div className="mt-8 text-base font-semibold text-slate-950">
+                  <div className="mt-8 text-base font-semibold text-orange-700">
                     {lateHoursLabel}
                   </div>
                 </div>
                 <div>
                   <div className="text-sm font-medium text-slate-400">
-                    التغييرات
+                    نقص الساعات
                   </div>
-                  <div className="mt-8 text-base font-semibold text-slate-950">
+                  <div className="mt-8 text-base font-semibold text-rose-700">
                     {missingHoursLabel}
                   </div>
                 </div>
-              </div>
-
-              <div className="text-xs leading-6 text-slate-400">
-                TODO: الفرق، العمل الإضافي، احتساب الساعة، التغييرات، الملاحظات
-                والتنبيهات تنتظر مصدر بيانات رسمي ولا يتم احتسابها حالياً.
               </div>
             </>
           )}

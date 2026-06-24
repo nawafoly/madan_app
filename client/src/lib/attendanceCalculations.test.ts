@@ -55,6 +55,18 @@ describe("attendance payroll calculations", () => {
     expect(day.missingHours).toBe(0);
   });
 
+  it("calculates late arrival from shift start even when checkout is missing", () => {
+    const day = computeAttendanceDay(
+      "2026-06-24",
+      [record("check_in", "2026-06-24T11:25:00.000Z")],
+      { startTime: "09:00", endTime: "17:00" }
+    );
+
+    expect(day.isComplete).toBe(false);
+    expect(day.lateHours).toBe(5.42);
+    expect(day.actualHours).toBe(0);
+  });
+
   it("summarizes monthly attendance records", () => {
     const summary = summarizeAttendanceForPayroll(
       [
