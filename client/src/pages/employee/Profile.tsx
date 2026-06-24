@@ -34,7 +34,6 @@ import {
   Download,
   Eye,
   FileText,
-  ChevronDown,
   Loader2,
   Mail,
   Minus,
@@ -111,9 +110,24 @@ import {
   sortEmployeeLeaveRequests,
   type EmployeeLeaveRequestRecord,
 } from "@/lib/employeeLeave";
+import {
+  EMPLOYEE_SERVICE_REQUESTS_COLLECTION,
+  buildEmployeeServiceRequestPayload,
+  getEmployeeServiceRequestStatusLabel,
+  getEmployeeServiceRequestTypeLabel,
+  normalizeEmployeeServiceRequest,
+  sortEmployeeServiceRequests,
+  type EmployeeServiceRequestRecord,
+} from "@/lib/employeeServiceRequests";
+import type { EmployeeServiceRequestType } from "@shared/employee";
 import { uploadDocumentToCloudflare } from "@/lib/documentUploadService";
 import { createInAppNotification } from "@/lib/inAppNotifications";
-import { formatDateEN, formatDateTimeEN, formatFileSizeEN } from "@/lib/formatters";
+import {
+  formatDateEN,
+  formatDateTimeEN,
+  formatFileSizeEN,
+  formatNumberEN,
+} from "@/lib/formatters";
 import { cn } from "@/lib/utils";
 import {
   Select,
@@ -155,6 +169,12 @@ type EmployeePortalView =
   | "requests"
   | "leave-request"
   | "permission-request"
+  | "attendance-correction-request"
+  | "overtime-request"
+  | "salary-advance-request"
+  | "resignation-request"
+  | "exit-reentry-request"
+  | "letter-request"
   | "hr-info"
   | "employment"
   | "salary"
@@ -168,6 +188,12 @@ const EMPLOYEE_PORTAL_VIEW_TITLES: Record<EmployeePortalView, string> = {
   requests: "الطلبات",
   "leave-request": "طلب إجازة",
   "permission-request": "طلب استئذان",
+  "attendance-correction-request": "طلب تصحيح",
+  "overtime-request": "طلب أوفرتايم",
+  "salary-advance-request": "صرف معجل للراتب",
+  "resignation-request": "طلب استقالة",
+  "exit-reentry-request": "طلب خروج وعودة",
+  "letter-request": "الخطابات",
   "hr-info": "معلومات الموارد البشرية",
   employment: "البيانات الوظيفية",
   salary: "الراتب والتفاصيل المالية",
@@ -186,6 +212,18 @@ const EMPLOYEE_PORTAL_HASH_TO_VIEW: Record<string, EmployeePortalView> = {
   "employee-leave-request": "leave-request",
   "permission-request": "permission-request",
   "employee-permission-request": "permission-request",
+  "attendance-correction-request": "attendance-correction-request",
+  "employee-attendance-correction-request": "attendance-correction-request",
+  "overtime-request": "overtime-request",
+  "employee-overtime-request": "overtime-request",
+  "salary-advance-request": "salary-advance-request",
+  "employee-salary-advance-request": "salary-advance-request",
+  "resignation-request": "resignation-request",
+  "employee-resignation-request": "resignation-request",
+  "exit-reentry-request": "exit-reentry-request",
+  "employee-exit-reentry-request": "exit-reentry-request",
+  "letter-request": "letter-request",
+  "employee-letter-request": "letter-request",
   "hr-info": "hr-info",
   "employee-profile-info": "hr-info",
   employment: "employment",
@@ -197,6 +235,18 @@ const EMPLOYEE_PORTAL_HASH_TO_VIEW: Record<string, EmployeePortalView> = {
   leaves: "leaves",
   documents: "documents",
   "employee-documents-info": "documents",
+};
+
+const SERVICE_REQUEST_VIEW_TO_TYPE: Partial<
+  Record<EmployeePortalView, EmployeeServiceRequestType>
+> = {
+  "attendance-correction-request": "attendance_correction",
+  "permission-request": "permission",
+  "overtime-request": "overtime",
+  "salary-advance-request": "salary_advance",
+  "resignation-request": "resignation",
+  "exit-reentry-request": "exit_reentry",
+  "letter-request": "letter",
 };
 
 function getEmployeePortalViewFromHash(): EmployeePortalView {
@@ -607,16 +657,14 @@ function getRequestNumber(request: EmployeeLeaveRequestRecord, index: number) {
   return compactId.slice(-6).toUpperCase() || String(233000 + index + 1);
 }
 
-function RequestFilterButton({ label }: { label: string }) {
-  return (
-    <button
-      type="button"
-      className="inline-flex h-14 min-w-[7rem] items-center justify-center gap-3 rounded-[14px] border border-slate-300 bg-white px-4 text-lg font-medium text-slate-800 shadow-[0_6px_16px_-14px_rgba(15,23,42,0.35)]"
-    >
-      <ChevronDown className="h-5 w-5 text-slate-700" />
-      {label}
-    </button>
-  );
+function getServiceRequestNumber(
+  request: EmployeeServiceRequestRecord,
+  index: number
+) {
+  const id = String(request.id || "").trim();
+  if (!id) return String(333000 + index + 1);
+  const compactId = id.replace(/[^a-zA-Z0-9]/g, "");
+  return compactId.slice(-6).toUpperCase() || String(333000 + index + 1);
 }
 
 function RequestInfoRow({
@@ -694,6 +742,77 @@ function EmployeeRequestCard({
   );
 }
 
+function EmployeeServiceRequestCard({
+  request,
+  index,
+}: {
+  request: EmployeeServiceRequestRecord;
+  index: number;
+}) {
+  const status = getRequestStatusPresentation(request.status);
+  const requestNumber = getServiceRequestNumber(request, index);
+  const dateValue =
+    request.startDate && request.endDate
+      ? `${request.startDate} إلى ${request.endDate}`
+      : request.requestDate || request.startDate || "--";
+  const timeValue =
+    request.startTime || request.endTime
+      ? `${request.startTime || "--"} - ${request.endTime || "--"}`
+      : request.amount
+        ? `${formatNumberEN(request.amount)} ر.س`
+        : request.letterType || "--";
+
+  return (
+    <article className="rounded-[20px] bg-white px-7 py-7 text-right shadow-[0_14px_34px_-26px_rgba(15,23,42,0.42)] ring-1 ring-slate-100">
+      <div className="flex items-start justify-between gap-6">
+        <div
+          className={cn(
+            "rounded-full px-5 py-3 text-base font-medium",
+            status.badgeClassName
+          )}
+        >
+          {status.label}
+        </div>
+
+        <div className="space-y-2">
+          <h3 className="text-2xl font-medium text-slate-950">
+            {getEmployeeServiceRequestTypeLabel(request.requestType)}
+          </h3>
+          <div className="text-sm text-slate-400">
+            {formatDateTimeEN(request.createdAt)}
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-10 grid gap-8">
+        <RequestInfoRow
+          icon={FileText}
+          label="نوع الطلب"
+          value={getEmployeeServiceRequestTypeLabel(request.requestType)}
+        />
+        <RequestInfoRow icon={CalendarDays} label="التاريخ" value={dateValue} />
+        <RequestInfoRow icon={Clock3} label="التفاصيل" value={timeValue} />
+        <RequestInfoRow icon={Hash} label="رقم الطلب" value={requestNumber} />
+      </div>
+
+      {request.employeeNote || request.hrNote ? (
+        <div className="mt-8 space-y-3 text-sm leading-7">
+          {request.employeeNote ? (
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-600">
+              {request.employeeNote}
+            </div>
+          ) : null}
+          {request.hrNote ? (
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-800">
+              {request.hrNote}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </article>
+  );
+}
+
 function EmployeePortalViewHeader({
   title,
   description,
@@ -760,13 +879,28 @@ export default function EmployeeProfilePage() {
     EmployeeLeaveRequestRecord[]
   >([]);
   const [leaveRequestsLoading, setLeaveRequestsLoading] = useState(true);
+  const [serviceRequests, setServiceRequests] = useState<
+    EmployeeServiceRequestRecord[]
+  >([]);
+  const [serviceRequestsLoading, setServiceRequestsLoading] = useState(true);
   const [leaveForm, setLeaveForm] = useState({
     leaveType: "annual",
     startDate: "",
     endDate: "",
     employeeNote: "",
   });
+  const [serviceRequestForm, setServiceRequestForm] = useState({
+    requestDate: "",
+    startDate: "",
+    endDate: "",
+    startTime: "",
+    endTime: "",
+    amount: "",
+    letterType: "",
+    employeeNote: "",
+  });
   const [submittingLeaveRequest, setSubmittingLeaveRequest] = useState(false);
+  const [submittingServiceRequest, setSubmittingServiceRequest] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -1064,6 +1198,41 @@ export default function EmployeeProfilePage() {
   }, [user?.uid]);
 
   useEffect(() => {
+    if (!user?.uid) {
+      setServiceRequests([]);
+      setServiceRequestsLoading(false);
+      return;
+    }
+
+    setServiceRequestsLoading(true);
+    const unsubscribe = onSnapshot(
+      query(
+        collection(db, EMPLOYEE_SERVICE_REQUESTS_COLLECTION),
+        where("employeeUid", "==", user.uid)
+      ),
+      snapshot => {
+        const rows = sortEmployeeServiceRequests(
+          snapshot.docs.map(docSnapshot =>
+            normalizeEmployeeServiceRequest(
+              docSnapshot.id,
+              (docSnapshot.data() as Record<string, any>) || {}
+            )
+          )
+        );
+        setServiceRequests(rows);
+        setServiceRequestsLoading(false);
+      },
+      error => {
+        console.error("employee_service_requests_snapshot_error", error);
+        setServiceRequests([]);
+        setServiceRequestsLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [user?.uid]);
+
+  useEffect(() => {
     setPhoneInput(profile.personal.phone || "");
   }, [profile.personal.phone]);
 
@@ -1340,6 +1509,163 @@ export default function EmployeeProfilePage() {
     }));
   };
 
+  const handleServiceRequestFormChange = (
+    key: keyof typeof serviceRequestForm,
+    value: string
+  ) => {
+    setServiceRequestForm(current => ({
+      ...current,
+      [key]: value,
+    }));
+  };
+
+  const resetServiceRequestForm = () => {
+    setServiceRequestForm({
+      requestDate: "",
+      startDate: "",
+      endDate: "",
+      startTime: "",
+      endTime: "",
+      amount: "",
+      letterType: "",
+      employeeNote: "",
+    });
+  };
+
+  const handleSubmitServiceRequest = async () => {
+    const requestType = SERVICE_REQUEST_VIEW_TO_TYPE[activeView];
+    if (!requestType) return;
+
+    if (!user?.uid || !employeeProfileSource) {
+      toast.error("تعذر تحديد ملف الموظف الحالي.");
+      return;
+    }
+
+    const amount = Number(serviceRequestForm.amount || 0);
+    const needsRequestDate = [
+      "attendance_correction",
+      "permission",
+      "overtime",
+      "resignation",
+    ].includes(requestType);
+    const needsTimeRange = [
+      "attendance_correction",
+      "permission",
+      "overtime",
+    ].includes(requestType);
+
+    if (needsRequestDate && !serviceRequestForm.requestDate) {
+      toast.error("حدد تاريخ الطلب.");
+      return;
+    }
+
+    if (
+      needsTimeRange &&
+      (!serviceRequestForm.startTime || !serviceRequestForm.endTime)
+    ) {
+      toast.error("حدد وقت البداية والنهاية.");
+      return;
+    }
+
+    if (
+      requestType === "salary_advance" &&
+      (!Number.isFinite(amount) || amount <= 0)
+    ) {
+      toast.error("أدخل مبلغ السلفة بشكل صحيح.");
+      return;
+    }
+
+    if (
+      requestType === "exit_reentry" &&
+      (!serviceRequestForm.startDate || !serviceRequestForm.endDate)
+    ) {
+      toast.error("حدد تاريخ الخروج وتاريخ العودة.");
+      return;
+    }
+
+    if (requestType === "letter" && !serviceRequestForm.letterType.trim()) {
+      toast.error("اكتب نوع الخطاب المطلوب.");
+      return;
+    }
+
+    if (!serviceRequestForm.employeeNote.trim()) {
+      toast.error("اكتب سبب الطلب أو ملاحظة مختصرة.");
+      return;
+    }
+
+    setSubmittingServiceRequest(true);
+    try {
+      const employeeDocId =
+        (employeeProfileSource.collectionName === "employees"
+          ? employeeProfileSource.docId
+          : String(user.linkedEmployeeId || "").trim()) || null;
+      const requestLabel = getEmployeeServiceRequestTypeLabel(requestType);
+      const docRef = await addDoc(
+        collection(db, EMPLOYEE_SERVICE_REQUESTS_COLLECTION),
+        {
+          ...buildEmployeeServiceRequestPayload({
+            authUid: user.uid,
+            employeeDocId,
+            employeeName:
+              profile.personal.name !== EMPLOYEE_EMPTY_VALUE
+                ? profile.personal.name
+                : user.displayName || user.email || "موظف",
+            employeeEmail:
+              profile.personal.email !== EMPLOYEE_EMPTY_VALUE
+                ? profile.personal.email
+                : user.email || null,
+            requestType,
+            requestDate: serviceRequestForm.requestDate,
+            startDate: serviceRequestForm.startDate,
+            endDate: serviceRequestForm.endDate,
+            startTime: serviceRequestForm.startTime,
+            endTime: serviceRequestForm.endTime,
+            amount: requestType === "salary_advance" ? amount : null,
+            letterType: serviceRequestForm.letterType,
+            employeeNote: serviceRequestForm.employeeNote,
+          }),
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        }
+      );
+
+      const hrUsers = await getDocs(
+        query(
+          collection(db, "users"),
+          where("role", "in", ["owner", "admin", "hr"])
+        )
+      );
+
+      const recipients = hrUsers.docs.filter(docSnap =>
+        docSnap.id !== user.uid &&
+        shouldReceiveLeaveNotification(docSnap.data() as Record<string, any>)
+      );
+
+      await Promise.all(
+        recipients.map(docSnap =>
+          createInAppNotification({
+            userId: docSnap.id,
+            title: `${requestLabel} جديد`,
+            body: `${requestLabel} جديد من ${user.displayName || user.email}`,
+            type: "system",
+            relatedId: docRef.id,
+            relatedTo: "employee_service_request",
+            relatedPath: `/hr/employees?employeeId=${user.uid}&panel=requests`,
+          })
+        )
+      );
+
+      resetServiceRequestForm();
+      toast.success("تم رفع الطلب بنجاح.");
+      openEmployeeView("requests");
+    } catch (error) {
+      console.error("employee_service_request_create_failed", error);
+      toast.error("تعذر رفع الطلب الآن.");
+    } finally {
+      setSubmittingServiceRequest(false);
+    }
+  };
+
   const handleSubmitLeaveRequest = async () => {
     if (!user?.uid || !employeeProfileSource) {
       toast.error("تعذر تحديد ملف الموظف الحالي.");
@@ -1486,6 +1812,11 @@ export default function EmployeeProfilePage() {
   const employeeUidForAttendance = user?.uid || null;
 
   const latestLeaveRequestsForDashboard = leaveRequests.slice(0, 2);
+  const latestServiceRequestsForDashboard = serviceRequests.slice(0, 2);
+  const currentServiceRequestType = SERVICE_REQUEST_VIEW_TO_TYPE[activeView] || null;
+  const currentServiceRequestLabel = currentServiceRequestType
+    ? getEmployeeServiceRequestTypeLabel(currentServiceRequestType)
+    : "";
 
   const openEmployeeView = (view: EmployeePortalView) => {
     setActiveView(view);
@@ -1538,7 +1869,7 @@ export default function EmployeeProfilePage() {
               <button
                 type="button"
                 className="rounded-[24px] border border-slate-100 bg-slate-50/80 px-4 py-5 text-center transition hover:bg-white hover:shadow-sm"
-                onClick={() => toast.info("TODO: واجهة تصحيح البصمة فقط حالياً بدون منطق جديد.")}
+                onClick={() => openEmployeeView("attendance-correction-request")}
               >
                 <UserRound className="mx-auto h-7 w-7 text-slate-500" />
                 <span className="mt-3 block text-sm font-semibold text-slate-900">
@@ -1609,13 +1940,33 @@ export default function EmployeeProfilePage() {
             </div>
           </EmployeeCard>
 
-          <EmployeeCard title="آخر الطلبات" subtitle="آخر طلبات الإجازة المسجلة في النظام الحالي">
-            {leaveRequestsLoading ? (
+          <EmployeeCard title="آخر الطلبات" subtitle="آخر الطلبات المسجلة في النظام الحالي">
+            {leaveRequestsLoading || serviceRequestsLoading ? (
               <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
                 جاري تحميل الطلبات...
               </div>
-            ) : latestLeaveRequestsForDashboard.length ? (
+            ) : latestLeaveRequestsForDashboard.length || latestServiceRequestsForDashboard.length ? (
               <div className="space-y-3">
+                {latestServiceRequestsForDashboard.map(request => (
+                  <div
+                    key={request.id}
+                    className="rounded-[22px] border border-slate-100 bg-slate-50/70 p-4"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="text-base font-semibold text-slate-950">
+                          {getEmployeeServiceRequestTypeLabel(request.requestType)}
+                        </div>
+                        <div className="mt-1 text-xs text-slate-500">
+                          {formatDateTimeEN(request.createdAt)}
+                        </div>
+                      </div>
+                      <Badge variant="outline" className="rounded-full border-slate-200 bg-white">
+                        {getEmployeeServiceRequestStatusLabel(request.status)}
+                      </Badge>
+                    </div>
+                  </div>
+                ))}
                 {latestLeaveRequestsForDashboard.map(request => (
                   <div
                     key={request.id}
@@ -1678,19 +2029,19 @@ export default function EmployeeProfilePage() {
             الطلبات
           </h1>
 
-          <div className="flex flex-wrap justify-center gap-4">
-            <RequestFilterButton label="الحالة" />
-            <RequestFilterButton label="النوع" />
-            <RequestFilterButton label="الترتيب" />
-            <RequestFilterButton label="الموقع" />
-          </div>
-
-          {leaveRequestsLoading ? (
+          {leaveRequestsLoading || serviceRequestsLoading ? (
             <div className="rounded-[24px] border border-dashed border-slate-200 bg-white px-5 py-12 text-center text-sm text-slate-500 shadow-sm">
               جاري تحميل الطلبات...
             </div>
-          ) : leaveRequests.length ? (
+          ) : leaveRequests.length || serviceRequests.length ? (
             <div className="space-y-6">
+              {serviceRequests.map((request, index) => (
+                <EmployeeServiceRequestCard
+                  key={request.id}
+                  request={request}
+                  index={index}
+                />
+              ))}
               {leaveRequests.map((request, index) => (
                 <EmployeeRequestCard
                   key={request.id}
@@ -1711,10 +2062,217 @@ export default function EmployeeProfilePage() {
             </div>
           )}
 
-          <p className="text-center text-xs leading-6 text-slate-400">
-            TODO: فلاتر الحالة والنوع والترتيب والموقع واجهة فقط حالياً بدون
-            منطق تصفية جديد.
-          </p>
+        </section>
+      ) : null}
+
+      {currentServiceRequestType ? (
+        <section className="space-y-6">
+          <EmployeePortalViewHeader
+            title={currentServiceRequestLabel}
+            description="ارفع الطلب وسيصل مباشرة إلى لوحة الموارد البشرية للمراجعة والاعتماد أو الرفض."
+            onBack={backToDashboard}
+          />
+
+          <Card className="rounded-[28px] border border-slate-200/80 bg-white/95 shadow-[0_24px_70px_-42px_rgba(15,23,42,0.22)]">
+            <CardHeader className="space-y-3">
+              <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                <Send className="h-4 w-4" />
+                طلب جديد
+              </div>
+              <CardTitle className="text-xl font-semibold text-slate-950">
+                {currentServiceRequestLabel}
+              </CardTitle>
+              <CardDescription className="text-sm leading-7 text-slate-600">
+                أدخل تفاصيل الطلب المطلوبة. لا يتم اعتماد الطلب إلا بعد مراجعة HR.
+              </CardDescription>
+            </CardHeader>
+
+            <CardContent className="space-y-5">
+              {[
+                "attendance_correction",
+                "permission",
+                "overtime",
+                "resignation",
+              ].includes(currentServiceRequestType) ? (
+                <div className="space-y-2">
+                  <Label className="text-sm font-semibold text-slate-800">
+                    تاريخ الطلب
+                  </Label>
+                  <Input
+                    type="date"
+                    value={serviceRequestForm.requestDate}
+                    onChange={event =>
+                      handleServiceRequestFormChange(
+                        "requestDate",
+                        event.target.value
+                      )
+                    }
+                    className="h-12 rounded-2xl border-slate-200 bg-slate-50/80 shadow-none"
+                    disabled={submittingServiceRequest}
+                  />
+                </div>
+              ) : null}
+
+              {[
+                "attendance_correction",
+                "permission",
+                "overtime",
+              ].includes(currentServiceRequestType) ? (
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label className="text-sm font-semibold text-slate-800">
+                      وقت البداية
+                    </Label>
+                    <Input
+                      type="time"
+                      dir="ltr"
+                      value={serviceRequestForm.startTime}
+                      onChange={event =>
+                        handleServiceRequestFormChange(
+                          "startTime",
+                          event.target.value
+                        )
+                      }
+                      className="h-12 rounded-2xl border-slate-200 bg-slate-50/80 text-center shadow-none"
+                      disabled={submittingServiceRequest}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-sm font-semibold text-slate-800">
+                      وقت النهاية
+                    </Label>
+                    <Input
+                      type="time"
+                      dir="ltr"
+                      value={serviceRequestForm.endTime}
+                      onChange={event =>
+                        handleServiceRequestFormChange(
+                          "endTime",
+                          event.target.value
+                        )
+                      }
+                      className="h-12 rounded-2xl border-slate-200 bg-slate-50/80 text-center shadow-none"
+                      disabled={submittingServiceRequest}
+                    />
+                  </div>
+                </div>
+              ) : null}
+
+              {currentServiceRequestType === "salary_advance" ? (
+                <div className="space-y-2">
+                  <Label className="text-sm font-semibold text-slate-800">
+                    مبلغ الصرف المعجل
+                  </Label>
+                  <Input
+                    type="number"
+                    inputMode="decimal"
+                    dir="rtl"
+                    value={serviceRequestForm.amount}
+                    onChange={event =>
+                      handleServiceRequestFormChange("amount", event.target.value)
+                    }
+                    placeholder="مثال: 1000"
+                    className="h-12 rounded-2xl border-slate-200 bg-slate-50/80 text-right shadow-none"
+                    disabled={submittingServiceRequest}
+                  />
+                </div>
+              ) : null}
+
+              {currentServiceRequestType === "exit_reentry" ? (
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label className="text-sm font-semibold text-slate-800">
+                      تاريخ الخروج
+                    </Label>
+                    <Input
+                      type="date"
+                      value={serviceRequestForm.startDate}
+                      onChange={event =>
+                        handleServiceRequestFormChange(
+                          "startDate",
+                          event.target.value
+                        )
+                      }
+                      className="h-12 rounded-2xl border-slate-200 bg-slate-50/80 shadow-none"
+                      disabled={submittingServiceRequest}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm font-semibold text-slate-800">
+                      تاريخ العودة
+                    </Label>
+                    <Input
+                      type="date"
+                      value={serviceRequestForm.endDate}
+                      onChange={event =>
+                        handleServiceRequestFormChange(
+                          "endDate",
+                          event.target.value
+                        )
+                      }
+                      className="h-12 rounded-2xl border-slate-200 bg-slate-50/80 shadow-none"
+                      disabled={submittingServiceRequest}
+                    />
+                  </div>
+                </div>
+              ) : null}
+
+              {currentServiceRequestType === "letter" ? (
+                <div className="space-y-2">
+                  <Label className="text-sm font-semibold text-slate-800">
+                    نوع الخطاب
+                  </Label>
+                  <Input
+                    value={serviceRequestForm.letterType}
+                    onChange={event =>
+                      handleServiceRequestFormChange(
+                        "letterType",
+                        event.target.value
+                      )
+                    }
+                    placeholder="مثال: تعريف راتب، خطاب جهة، شهادة خبرة"
+                    className="h-12 rounded-2xl border-slate-200 bg-slate-50/80 text-right shadow-none"
+                    disabled={submittingServiceRequest}
+                  />
+                </div>
+              ) : null}
+
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold text-slate-800">
+                  سبب الطلب / الملاحظات
+                </Label>
+                <Textarea
+                  value={serviceRequestForm.employeeNote}
+                  onChange={event =>
+                    handleServiceRequestFormChange(
+                      "employeeNote",
+                      event.target.value
+                    )
+                  }
+                  placeholder="اكتب تفاصيل الطلب بوضوح"
+                  className="min-h-32 rounded-[22px] border-slate-200 bg-slate-50/80 shadow-none"
+                  disabled={submittingServiceRequest}
+                />
+              </div>
+
+              <div className="flex justify-end rounded-[22px] border border-slate-200 bg-slate-50/80 px-4 py-4">
+                <Button
+                  type="button"
+                  className="h-11 rounded-2xl bg-slate-950 px-5 text-white hover:bg-[#15233c]"
+                  onClick={() => void handleSubmitServiceRequest()}
+                  disabled={submittingServiceRequest}
+                >
+                  {submittingServiceRequest ? (
+                    <Loader2 className="ml-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Send className="ml-2 h-4 w-4" />
+                  )}
+                  رفع الطلب
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </section>
       ) : null}
 

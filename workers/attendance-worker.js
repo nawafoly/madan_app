@@ -27,6 +27,12 @@ export async function handleAttendanceRequest({
   if (pathname === "/attendance/record" && request.method !== "POST") {
     return methodNotAllowed(["POST"]);
   }
+  if (
+    pathname === "/attendance/admin-adjustment" &&
+    request.method !== "POST"
+  ) {
+    return methodNotAllowed(["POST"]);
+  }
   if (pathname === "/attendance/records" && request.method !== "GET") {
     return methodNotAllowed(["GET"]);
   }
@@ -41,6 +47,7 @@ export async function handleAttendanceRequest({
   }
   if (
     pathname !== "/attendance/record" &&
+    pathname !== "/attendance/admin-adjustment" &&
     pathname !== "/attendance/records" &&
     pathname !== "/attendance/work-zones" &&
     !zoneMatch
@@ -70,6 +77,11 @@ export async function handleAttendanceRequest({
   if (pathname === "/attendance/work-zones" && request.method === "POST") {
     if (!canManageAttendance(requester.runtime)) return forbidden();
     return createWorkZone(request, db, requester);
+  }
+
+  if (pathname === "/attendance/admin-adjustment" && request.method === "POST") {
+    if (!canManageAttendance(requester.runtime)) return forbidden();
+    return adjustAttendanceRecords(request, db, requester);
   }
 
   if (zoneMatch && request.method === "PATCH") {
@@ -435,6 +447,162 @@ function mapAttendanceRecordRow(row, employeeName) {
     createdByEmail: row.created_by_email || null,
     createdByRole: row.created_by_role || null,
   };
+}
+
+function parseRiyadhDateTime(value, time) {
+  const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(normalizeText(value));
+  const timeMatch = /^(\d{1,2}):(\d{2})$/.exec(normalizeText(time));
+  if (!dateMatch || !timeMatch) return null;
+
+  const year = Number(dateMatch[1]);
+  const month = Number(dateMatch[2]);
+  const day = Number(dateMatch[3]);
+  const hours = Number(timeMatch[1]);
+  const minutes = Number(timeMatch[2]);
+  const check = new Date(Date.UTC(year, month - 1, day));
+  if (
+    check.getUTCFullYear() !== year ||
+    check.getUTCMonth() !== month - 1 ||
+    check.getUTCDate() !== day ||
+    !Number.isInteger(hours) ||
+    !Number.isInteger(minutes) ||
+    hours < 0 ||
+    hours > 23 ||
+    minutes < 0 ||
+    minutes > 59
+  ) {
+    return null;
+  }
+
+  return new Date(
+    Date.UTC(year, month - 1, day, hours - 3, minutes, 0, 0)
+  ).toISOString();
+}
+
+async function adjustAttendanceRecords(request, db, requester) {
+  const input = await readJsonBody(request);
+  if (!input.ok) return input.response;
+
+  const employeeUid = normalizeText(input.data?.employeeUid);
+  const employeeDocId = normalizeText(input.data?.employeeDocId) || employeeUid;
+  const date = normalizeText(input.data?.date);
+  const checkInTime = normalizeText(input.data?.checkInTime);
+  const checkOutTime = normalizeText(input.data?.checkOutTime);
+  const note = clampText(input.data?.note, 500);
+  if (!employeeUid || !employeeDocId) {
+    return json(400, { ok: false, message: "invalid_employee" });
+  }
+  if (!parseRiyadhDateBoundary(date, false)) {
+    return json(400, { ok: false, message: "invalid_attendance_date" });
+  }
+  if (!checkInTime && !checkOutTime) {
+    return json(400, { ok: false, message: "missing_attendance_time" });
+  }
+
+  const requested = [];
+  if (checkInTime) requested.push(["check_in", checkInTime]);
+  if (checkOutTime) requested.push(["check_out", checkOutTime]);
+
+  const source = JSON.stringify({
+    area: "hr",
+    page: "hr_employees",
+    route: "worker.attendance.admin-adjustment",
+    method: "manual_correction",
+    note: note || null,
+    adjustedByUid: requester.uid,
+    adjustedByEmail: requester.email || null,
+    adjustedAt: new Date().toISOString(),
+  });
+  const dayStart = parseRiyadhDateBoundary(date, false);
+  const dayEnd = parseRiyadhDateBoundary(date, true);
+  const now = new Date().toISOString();
+  const changed = [];
+
+  try {
+    for (const [type, time] of requested) {
+      const serverTime = parseRiyadhDateTime(date, time);
+      if (!serverTime) {
+        return json(400, { ok: false, message: "invalid_attendance_time" });
+      }
+
+      const existing = await db
+        .prepare(
+          `
+          SELECT id
+          FROM attendance_records
+          WHERE employee_uid = ? AND type = ? AND result = 'allowed'
+            AND server_time >= ? AND server_time < ?
+          ORDER BY server_time ${type === "check_in" ? "ASC" : "DESC"}, id ASC
+          LIMIT 1
+        `
+        )
+        .bind(employeeUid, type, dayStart, dayEnd)
+        .first();
+
+      if (existing?.id) {
+        await db
+          .prepare(
+            `
+            UPDATE attendance_records
+            SET server_time = ?, client_time = ?, source = ?,
+                updated_at = ?, created_by_uid = ?, created_by_email = ?,
+                created_by_role = ?
+            WHERE id = ?
+          `
+          )
+          .bind(
+            serverTime,
+            serverTime,
+            source,
+            now,
+            requester.uid,
+            requester.email || null,
+            normalizeText(requester.runtime?.role) || "hr",
+            existing.id
+          )
+          .run();
+        changed.push({ id: existing.id, type, action: "updated", serverTime });
+      } else {
+        const id = crypto.randomUUID();
+        await db
+          .prepare(
+            `
+            INSERT INTO attendance_records (
+              id, employee_uid, employee_doc_id, type, server_time, client_time,
+              location_lat, location_lng, location_accuracy, zone_id, zone_name,
+              zone_type, allowed_zone_ids, distance_meters, result,
+              rejection_reason, accuracy_accepted, device_info, source,
+              created_by_uid, created_by_email, created_by_role, created_at,
+              updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, 0, 0, 0, NULL, NULL, NULL, '[]',
+              NULL, 'allowed', NULL, 1, ?, ?, ?, ?, ?, ?, ?)
+          `
+          )
+          .bind(
+            id,
+            employeeUid,
+            employeeDocId,
+            type,
+            serverTime,
+            serverTime,
+            JSON.stringify({ adminAdjusted: true }),
+            source,
+            requester.uid,
+            requester.email || null,
+            normalizeText(requester.runtime?.role) || "hr",
+            now,
+            now
+          )
+          .run();
+        changed.push({ id, type, action: "created", serverTime });
+      }
+    }
+
+    await rebuildAttendanceState(db, employeeUid);
+    return json(200, { ok: true, records: changed });
+  } catch (error) {
+    return serverError("attendance_admin_adjustment_failed", error);
+  }
 }
 
 function safeJsonObject(value) {
@@ -860,6 +1028,60 @@ async function readAttendanceState(db, uid) {
     .prepare("SELECT status FROM attendance_state WHERE employee_uid = ?")
     .bind(uid)
     .first();
+}
+
+async function rebuildAttendanceState(db, employeeUid) {
+  const latest = await db
+    .prepare(
+      `
+      SELECT employee_uid, employee_doc_id, type, id, server_time,
+             location_lat, location_lng, location_accuracy, zone_id
+      FROM attendance_records
+      WHERE employee_uid = ? AND result = 'allowed'
+      ORDER BY server_time DESC, id DESC
+      LIMIT 1
+    `
+    )
+    .bind(employeeUid)
+    .first();
+
+  if (!latest) return;
+
+  await db
+    .prepare(
+      `
+      INSERT INTO attendance_state (
+        employee_uid, employee_doc_id, status, last_type, last_record_id,
+        last_server_time, last_location_lat, last_location_lng,
+        last_location_accuracy, last_zone_id, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(employee_uid) DO UPDATE SET
+        employee_doc_id = excluded.employee_doc_id,
+        status = excluded.status,
+        last_type = excluded.last_type,
+        last_record_id = excluded.last_record_id,
+        last_server_time = excluded.last_server_time,
+        last_location_lat = excluded.last_location_lat,
+        last_location_lng = excluded.last_location_lng,
+        last_location_accuracy = excluded.last_location_accuracy,
+        last_zone_id = excluded.last_zone_id,
+        updated_at = excluded.updated_at
+    `
+    )
+    .bind(
+      latest.employee_uid,
+      latest.employee_doc_id,
+      latest.type === "check_in" ? "checked_in" : "checked_out",
+      latest.type,
+      latest.id,
+      latest.server_time,
+      latest.location_lat,
+      latest.location_lng,
+      latest.location_accuracy,
+      latest.zone_id || null,
+      new Date().toISOString()
+    )
+    .run();
 }
 
 async function readLastSuccessfulDeviceId(db, employeeUid) {

@@ -24,7 +24,7 @@ export type EmployeeRequestType =
   | "exit_reentry"
   | "resignation"
   | "letters"
-  | "financial";
+  | "salary_advance";
 
 type RequestItem = {
   key: EmployeeRequestType;
@@ -58,14 +58,11 @@ const requestSections: RequestSection[] = [
   },
   {
     title: "المالية",
-    // TODO: اربط الطلبات المالية عند توفر منطقها في النظام الحالي.
-    emptyLabel: "لا يوجد طلبات",
     items: [
       {
-        key: "financial",
+        key: "salary_advance",
         label: "صرف معجل للراتب",
         icon: WalletCards,
-        disabled: true,
       },
     ],
   },

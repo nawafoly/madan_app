@@ -102,7 +102,10 @@ import {
   fetchAttendanceRecords,
   type AttendanceRecord,
 } from "@/lib/attendanceRecords";
-import { summarizeAttendanceForPayroll } from "@/lib/attendanceCalculations";
+import {
+  getShiftExpectedHours,
+  summarizeAttendanceForPayroll,
+} from "@/lib/attendanceCalculations";
 import type { AttendancePayrollSummary } from "@/lib/attendanceCalculations";
 import {
   EMPLOYEE_ABSENCES_COLLECTION,
@@ -165,6 +168,15 @@ import {
   sortEmployeeLeaveRequests,
   type EmployeeLeaveRequestRecord,
 } from "@/lib/employeeLeave";
+import {
+  EMPLOYEE_SERVICE_REQUESTS_COLLECTION,
+  getEmployeeServiceRequestStatusLabel,
+  getEmployeeServiceRequestTypeLabel,
+  normalizeEmployeeServiceRequest,
+  sortEmployeeServiceRequests,
+  type EmployeeServiceRequestRecord,
+} from "@/lib/employeeServiceRequests";
+import type { EmployeeServiceRequestStatus } from "@shared/employee";
 import {
   EMPLOYEE_PAYROLL_RECORDS_COLLECTION,
   buildEmployeePayrollMonthInput,
@@ -287,6 +299,7 @@ type EmployeeWorkspaceSectionKey =
   | "profile"
   | "attendance"
   | "salary"
+  | "requests"
   | "leave"
   | "messages"
   | "files";
@@ -300,6 +313,7 @@ const EMPLOYEE_WORKSPACE_SECTIONS: Array<{
     { key: "profile", label: "بيانات الموظف", icon: ShieldCheck },
     { key: "attendance", label: "الحضور", icon: Clock3 },
     { key: "salary", label: "الرواتب", icon: BadgeCheck },
+    { key: "requests", label: "الطلبات", icon: Inbox },
     { key: "leave", label: "الإجازات", icon: CalendarDays },
     { key: "messages", label: "الرسائل", icon: Mail },
     { key: "files", label: "الملفات", icon: FileText },
@@ -332,6 +346,11 @@ function resolveEmployeeWorkspaceSection(
     case "vacation":
     case "vacations":
       return "leave";
+    case "requests":
+    case "request":
+    case "service-requests":
+    case "employee-requests":
+      return "requests";
     case "messages":
       return "messages";
     case "files":
@@ -388,6 +407,7 @@ function resolveEmployeeWorkspaceNotificationSection(
 
   const relatedTo = String(notification.relatedTo || "").trim().toLowerCase();
   if (relatedTo === "leave_request") return "leave";
+  if (relatedTo === "employee_service_request") return "requests";
   if (relatedTo === "employee_message") return "messages";
   if (relatedTo === "employee_file") return "files";
 
@@ -399,6 +419,7 @@ function createEmptyEmployeeWorkspaceNotificationBucket(): EmployeeWorkspaceNoti
     profile: [],
     attendance: [],
     salary: [],
+    requests: [],
     leave: [],
     messages: [],
     files: [],
@@ -461,6 +482,26 @@ function parseFiniteNumber(value: string) {
 
 function formatCoordinate(value: number) {
   return Number(value.toFixed(7)).toString();
+}
+
+function formatHoursDuration(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value === 0) {
+    return "0 ساعة";
+  }
+
+  const totalMinutes = Math.round(Math.abs(value) * 60);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  const parts = [];
+  if (hours) parts.push(`${formatNumberEN(hours)} ساعة`);
+  if (minutes) parts.push(`${formatNumberEN(minutes)} دقيقة`);
+  return parts.join(" و ") || "0 ساعة";
+}
+
+function formatHoursDifferenceLabel(value: number) {
+  if (!Number.isFinite(value) || value === 0) return "0 ساعة";
+  const duration = formatHoursDuration(value);
+  return value > 0 ? `+${duration} إضافية` : `-${duration} نقص`;
 }
 
 function isValidTimeInput(value: string) {
@@ -1562,6 +1603,10 @@ export default function EmployeesManagementPage() {
     EmployeeLeaveRequestRecord[]
   >([]);
   const [leaveRequestsLoading, setLeaveRequestsLoading] = useState(false);
+  const [serviceRequests, setServiceRequests] = useState<
+    EmployeeServiceRequestRecord[]
+  >([]);
+  const [serviceRequestsLoading, setServiceRequestsLoading] = useState(false);
   const [reviewNotes, setReviewNotes] = useState<Record<string, string>>({});
   const [manualLeaveBalance, setManualLeaveBalance] = useState("");
   const [manualLeaveBalanceOperation, setManualLeaveBalanceOperation] =
@@ -1575,6 +1620,9 @@ export default function EmployeesManagementPage() {
     useState(false);
   const [employeeReportExporting, setEmployeeReportExporting] = useState(false);
   const [reviewingLeaveRequestId, setReviewingLeaveRequestId] = useState<
+    string | null
+  >(null);
+  const [reviewingServiceRequestId, setReviewingServiceRequestId] = useState<
     string | null
   >(null);
   const [employeeFiles, setEmployeeFiles] = useState<EmployeeFileRecord[]>([]);
@@ -2302,6 +2350,45 @@ export default function EmployeesManagementPage() {
 
   useEffect(() => {
     if (!selectedEmployeeAuthUid) {
+      setServiceRequests([]);
+      setServiceRequestsLoading(false);
+      return;
+    }
+
+    setServiceRequestsLoading(true);
+
+    const unsubscribe = onSnapshot(
+      query(
+        collection(db, EMPLOYEE_SERVICE_REQUESTS_COLLECTION),
+        where("employeeUid", "==", selectedEmployeeAuthUid)
+      ),
+      snapshot => {
+        const rows = sortEmployeeServiceRequests(
+          snapshot.docs.map(docSnapshot =>
+            normalizeEmployeeServiceRequest(
+              docSnapshot.id,
+              (docSnapshot.data() as Record<string, any>) || {}
+            )
+          )
+        );
+        setServiceRequests(rows);
+        setServiceRequestsLoading(false);
+      },
+      snapshotError => {
+        console.error(
+          "employee_service_requests_admin_snapshot_error",
+          snapshotError
+        );
+        setServiceRequests([]);
+        setServiceRequestsLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [selectedEmployeeAuthUid]);
+
+  useEffect(() => {
+    if (!selectedEmployeeAuthUid) {
       setLeaveBalanceAdjustments([]);
       setLeaveBalanceAdjustmentsLoading(false);
       return;
@@ -2494,6 +2581,11 @@ export default function EmployeesManagementPage() {
   const pendingLeaveRequestsCount = useMemo(
     () => leaveRequests.filter(request => request.status === "pending").length,
     [leaveRequests]
+  );
+  const pendingServiceRequestsCount = useMemo(
+    () =>
+      serviceRequests.filter(request => request.status === "pending").length,
+    [serviceRequests]
   );
 
   const approvedLeaveDaysTotal = useMemo(
@@ -2727,6 +2819,20 @@ export default function EmployeesManagementPage() {
       ),
     [leaveRequests]
   );
+  const latestEmployeeServiceRequestUpdateAt = useMemo(
+    () =>
+      getLatestTimestamp(
+        ...serviceRequests.map(request =>
+          toDateSafe(
+            request.updatedAt ||
+              request.reviewedAt ||
+              request.decidedAt ||
+              request.createdAt
+          )
+        )
+      ),
+    [serviceRequests]
+  );
   const latestEmployeePayrollUpdateAt = useMemo(
     () => employeePayrollRecords[0]?.createdAtDate?.getTime() || 0,
     [employeePayrollRecords]
@@ -2776,6 +2882,10 @@ export default function EmployeesManagementPage() {
         latestUpdateAt: latestEmployeeLeaveUpdateAt,
         viewedAt: employeeWorkspaceViewedAt.leave || 0,
       },
+      requests: {
+        latestUpdateAt: latestEmployeeServiceRequestUpdateAt,
+        viewedAt: employeeWorkspaceViewedAt.requests || 0,
+      },
       messages: {
         latestUpdateAt: latestEmployeeMessageUpdateAt,
         viewedAt: employeeWorkspaceViewedAt.messages || 0,
@@ -2789,9 +2899,11 @@ export default function EmployeesManagementPage() {
       employeeWorkspaceViewedAt.files,
       employeeWorkspaceViewedAt.leave,
       employeeWorkspaceViewedAt.messages,
+      employeeWorkspaceViewedAt.requests,
       employeeWorkspaceViewedAt.salary,
       latestEmployeeFileUpdateAt,
       latestEmployeeLeaveUpdateAt,
+      latestEmployeeServiceRequestUpdateAt,
       latestEmployeeMessageUpdateAt,
       latestEmployeePayrollUpdateAt,
     ]
@@ -2806,6 +2918,10 @@ export default function EmployeesManagementPage() {
       employeeWorkspaceAlertState.salary.latestUpdateAt >
         employeeWorkspaceAlertState.salary.viewedAt,
     leave: Boolean(selectedEmployeeWorkspaceUnreadNotificationBucket?.leave.length),
+    requests:
+      Boolean(selectedEmployeeWorkspaceUnreadNotificationBucket?.requests.length) ||
+      employeeWorkspaceAlertState.requests.latestUpdateAt >
+        employeeWorkspaceAlertState.requests.viewedAt,
     messages: Boolean(
       selectedEmployeeWorkspaceUnreadNotificationBucket?.messages.length
     ),
@@ -2816,6 +2932,7 @@ export default function EmployeesManagementPage() {
   } as const;
   const hasEmployeeWorkspaceAlerts =
     employeeWorkspaceSectionHasAlert.salary ||
+    employeeWorkspaceSectionHasAlert.requests ||
     employeeWorkspaceSectionHasAlert.leave ||
     employeeWorkspaceSectionHasAlert.messages ||
     employeeWorkspaceSectionHasAlert.files ||
@@ -2977,7 +3094,6 @@ export default function EmployeesManagementPage() {
   const baseSalaryNumber = Number(form.baseSalary || 0);
   const expectedWorkDaysNumber = Number(form.expectedWorkDays || 0);
   const expectedWorkHoursNumber = Number(form.expectedWorkHours || 0);
-  const actualWorkedHoursNumber = Number(form.actualWorkedHours || 0);
   const overtimeHourlyRateInputNumber = Number(form.overtimeHourlyRate || 0);
   const shiftSchedule = useMemo(
     () => ({
@@ -2986,6 +3102,31 @@ export default function EmployeesManagementPage() {
     }),
     [form.shiftEndTime, form.shiftStartTime]
   );
+  const shiftExpectedHoursNumber = useMemo(
+    () => getShiftExpectedHours(shiftSchedule),
+    [shiftSchedule]
+  );
+  const scheduledMonthlyWorkHours = useMemo(() => {
+    if (
+      Number.isFinite(expectedWorkDaysNumber) &&
+      expectedWorkDaysNumber > 0 &&
+      shiftExpectedHoursNumber > 0
+    ) {
+      return expectedWorkDaysNumber * shiftExpectedHoursNumber;
+    }
+
+    return 0;
+  }, [expectedWorkDaysNumber, shiftExpectedHoursNumber]);
+  const payrollRateWorkHours =
+    scheduledMonthlyWorkHours > 0 ? scheduledMonthlyWorkHours : expectedWorkHoursNumber;
+  const attendanceExpectedHoursNumber =
+    attendancePayrollSummary?.expectedHours ?? 0;
+  const attendanceActualWorkedHoursNumber =
+    attendancePayrollSummary?.actualHours ?? 0;
+  const attendanceRecordedDaysNumber = attendancePayrollSummary?.days.length ?? 0;
+  const attendanceAbsentDaysNumber = attendancePayrollSummary
+    ? Math.max(0, expectedWorkDaysNumber - attendanceRecordedDaysNumber)
+    : 0;
   const insuranceDeductionNumber = Number(form.insuranceDeduction || 0);
   const effectiveInsuranceDeduction = Number.isFinite(insuranceDeductionNumber)
     ? Math.max(0, insuranceDeductionNumber)
@@ -3009,17 +3150,17 @@ export default function EmployeesManagementPage() {
 
   const calculatedHourlyRate = useMemo(() => {
     if (!Number.isFinite(baseSalaryNumber) || baseSalaryNumber <= 0) return 0;
-    if (!Number.isFinite(expectedWorkHoursNumber) || expectedWorkHoursNumber <= 0)
+    if (!Number.isFinite(payrollRateWorkHours) || payrollRateWorkHours <= 0)
       return 0;
 
-    return baseSalaryNumber / expectedWorkHoursNumber;
-  }, [baseSalaryNumber, expectedWorkHoursNumber]);
+    return baseSalaryNumber / payrollRateWorkHours;
+  }, [baseSalaryNumber, payrollRateWorkHours]);
 
   const calculatedHoursDifference = useMemo(() => {
-    const safeExpectedHours = Math.max(0, expectedWorkHoursNumber || 0);
-    const safeActualHours = Math.max(0, actualWorkedHoursNumber || 0);
+    const safeExpectedHours = Math.max(0, attendanceExpectedHoursNumber || 0);
+    const safeActualHours = Math.max(0, attendanceActualWorkedHoursNumber || 0);
     return safeActualHours - safeExpectedHours;
-  }, [expectedWorkHoursNumber, actualWorkedHoursNumber]);
+  }, [attendanceExpectedHoursNumber, attendanceActualWorkedHoursNumber]);
 
   const calculatedOvertimeHours = useMemo(() => {
     return Math.max(0, calculatedHoursDifference);
@@ -3053,11 +3194,34 @@ export default function EmployeesManagementPage() {
     return calculatedMissingHours * calculatedHourlyRate;
   }, [calculatedMissingHours, calculatedHourlyRate]);
 
+  const calculatedAttendanceAbsenceDeduction = useMemo(() => {
+    if (!Number.isFinite(calculatedDailyRate) || calculatedDailyRate <= 0) return 0;
+
+    return attendanceAbsentDaysNumber * calculatedDailyRate;
+  }, [attendanceAbsentDaysNumber, calculatedDailyRate]);
+
   const calculatedGrossSalary = useMemo(() => {
     if (!Number.isFinite(baseSalaryNumber) || baseSalaryNumber <= 0) return 0;
 
-    return Math.max(0, baseSalaryNumber + calculatedOvertimeAmount - calculatedMissingDeduction);
-  }, [baseSalaryNumber, calculatedOvertimeAmount, calculatedMissingDeduction]);
+    return Math.max(
+      0,
+      baseSalaryNumber +
+        calculatedOvertimeAmount -
+        calculatedMissingDeduction -
+        calculatedAttendanceAbsenceDeduction
+    );
+  }, [
+    baseSalaryNumber,
+    calculatedAttendanceAbsenceDeduction,
+    calculatedOvertimeAmount,
+    calculatedMissingDeduction,
+  ]);
+
+  const baseSalaryAfterInsurance = useMemo(() => {
+    if (!Number.isFinite(baseSalaryNumber) || baseSalaryNumber <= 0) return 0;
+
+    return Math.max(0, baseSalaryNumber - effectiveInsuranceDeduction);
+  }, [baseSalaryNumber, effectiveInsuranceDeduction]);
 
   const calculatedNetSalary = useMemo(
     () =>
@@ -3125,9 +3289,6 @@ export default function EmployeesManagementPage() {
       setAttendancePayrollSummary(summary);
       setForm(current => ({
         ...current,
-        expectedWorkHours: summary.expectedHours
-          ? String(summary.expectedHours)
-          : current.expectedWorkHours,
         actualWorkedHours: String(summary.actualHours),
       }));
       toast.success("تم احتساب ساعات الراتب من سجلات الحضور.");
@@ -3434,13 +3595,20 @@ export default function EmployeesManagementPage() {
         setAttendancePayrollSummary(attendanceSummary);
       }
       const effectiveExpectedWorkHours =
+        payrollRateWorkHours || expectedWorkHours;
+      const effectiveAttendanceExpectedHours =
         attendanceSummary?.expectedHours || expectedWorkHours;
       const effectiveActualWorkedHours =
         attendanceSummary?.actualHours || actualWorkedHours;
+      const effectiveAttendanceAbsentDays = attendanceSummary
+        ? Math.max(0, (expectedWorkDays || 0) - attendanceSummary.days.length)
+        : 0;
       const payrollComputation = computeEmployeePayroll({
         baseSalary,
         expectedWorkDays,
         expectedWorkHours: effectiveExpectedWorkHours,
+        attendanceExpectedHours: effectiveAttendanceExpectedHours,
+        attendanceAbsentDays: effectiveAttendanceAbsentDays,
         actualWorkedHours: effectiveActualWorkedHours,
         overtimeHourlyRate,
         insuranceDeduction,
@@ -3509,6 +3677,8 @@ export default function EmployeesManagementPage() {
           attendanceOvertimeHours: attendanceSummary?.overtimeHours ?? null,
           attendanceCompleteDays: attendanceSummary?.completeDays ?? null,
           attendanceIncompleteDays: attendanceSummary?.incompleteDays ?? null,
+          attendanceAbsentDays: payrollComputation.attendanceAbsentDays,
+          attendanceAbsenceDeduction: payrollComputation.attendanceAbsenceDeduction,
           absenceCount: monthlyAbsences.length,
           absenceEntriesSummary: monthlyAbsences.map(absence => ({
             date: absence.date,
@@ -4562,11 +4732,6 @@ export default function EmployeesManagementPage() {
       return;
     }
 
-    if (form.actualWorkedHours.trim() && actualWorkedHours === null) {
-      toast.error("عدد الساعات الفعلية يجب أن يكون رقمًا صالحًا.");
-      return;
-    }
-
     if (form.overtimeHourlyRate.trim() && overtimeHourlyRate === null) {
       toast.error("سعر ساعة الأوفر تايم يجب أن يكون رقمًا صالحًا.");
       return;
@@ -5250,6 +5415,101 @@ export default function EmployeesManagementPage() {
     }
   };
 
+  const handleReviewServiceRequest = async (
+    request: EmployeeServiceRequestRecord,
+    nextStatus: EmployeeServiceRequestStatus
+  ) => {
+    if (!canManageEmployees) {
+      toast.error("لا تملك صلاحية مراجعة طلبات الموظفين.");
+      return;
+    }
+
+    const hrNote = String(reviewNotes[request.id] ?? request.hrNote ?? "").trim();
+    if (nextStatus === "rejected" && !hrNote) {
+      toast.error("يجب كتابة ملاحظة عند رفض الطلب.");
+      return;
+    }
+
+    setReviewingServiceRequestId(request.id);
+    try {
+      await runTransaction(db, async tx => {
+        const requestRef = doc(
+          db,
+          EMPLOYEE_SERVICE_REQUESTS_COLLECTION,
+          request.id
+        );
+        const requestSnap = await tx.get(requestRef);
+        if (!requestSnap.exists()) {
+          throw new Error("service_request_not_found");
+        }
+
+        const currentStatus = String(requestSnap.data()?.status || "pending")
+          .trim()
+          .toLowerCase();
+        if (currentStatus !== "pending") {
+          throw new Error("service_request_already_reviewed");
+        }
+
+        tx.update(requestRef, {
+          status: nextStatus,
+          hrNote,
+          decidedAt: serverTimestamp(),
+          decidedBy: user?.uid || null,
+          decidedByEmail: user?.email || null,
+          decidedByName: user?.displayName || user?.email || null,
+          reviewedAt: serverTimestamp(),
+          reviewedBy: user?.uid || null,
+          reviewedByEmail: user?.email || null,
+          reviewedByName: user?.displayName || user?.email || null,
+          updatedAt: serverTimestamp(),
+        });
+      });
+
+      try {
+        const requestLabel = getEmployeeServiceRequestTypeLabel(request.requestType);
+        await createInAppNotification({
+          userId: request.employeeUid,
+          title:
+            nextStatus === "approved"
+              ? `تم اعتماد ${requestLabel}`
+              : `تم رفض ${requestLabel}`,
+          body:
+            nextStatus === "approved"
+              ? `تم اعتماد ${requestLabel} الخاص بك.`
+              : `تم رفض ${requestLabel} الخاص بك. يمكنك مراجعة ملاحظة HR داخل الطلب.`,
+          type: "system",
+          relatedId: request.id,
+          relatedTo: "employee_service_request",
+          relatedPath: "/hr/profile#employee-requests",
+        });
+      } catch (notificationError) {
+        console.error("employee_service_request_notification_failed", notificationError);
+      }
+
+      setReviewNotes(current => {
+        const next = { ...current };
+        delete next[request.id];
+        return next;
+      });
+
+      toast.success(
+        nextStatus === "approved" ? "تم اعتماد الطلب." : "تم رفض الطلب."
+      );
+    } catch (reviewError) {
+      console.error("review_service_request_error", reviewError);
+      if (
+        reviewError instanceof Error &&
+        reviewError.message === "service_request_already_reviewed"
+      ) {
+        toast.error("تمت مراجعة هذا الطلب مسبقًا.");
+      } else {
+        toast.error("تعذر تحديث حالة الطلب.");
+      }
+    } finally {
+      setReviewingServiceRequestId(null);
+    }
+  };
+
   return (
     <DashboardLayout area="hr">
       <div
@@ -5730,8 +5990,10 @@ export default function EmployeesManagementPage() {
                 >
                   <EmployeeTodayAttendancePanel
                     employeeUid={selectedEmployeeAuthUid || null}
+                    employeeDocId={selectedEmployeeDocumentId || null}
                     shiftStartTime={selectedEmployeeShiftSchedule.startTime}
                     shiftEndTime={selectedEmployeeShiftSchedule.endTime}
+                    canManageAttendance={canManageEmployees}
                     title="سجل حضور الموظف الشهري"
                     description="عرض إداري لكل عمليات الحضور والانصراف المقبولة فعليًا لهذا الموظف خلال الشهر الحالي."
                   />
@@ -6625,11 +6887,10 @@ export default function EmployeesManagementPage() {
                           الرواتب
                         </div>
                         <div className="text-2xl font-semibold tracking-tight text-slate-950">
-                          الراتب والحضور والخصومات
+                          بيانات راتب الموظف
                         </div>
                         <p className="max-w-2xl text-sm leading-7 text-slate-500">
-                          أدخل الراتب الأساسي وساعات العمل والساعات الفعلية، وسيتم احتساب الراتب
-                          الفعلي تلقائيًا بعد تطبيق الخصومات.
+                          أدخل البيانات الأساسية للراتب ليتم عرضها للإدارة والموظف في ملفه الشخصي. الحساب الفعلي للشهر يتم من قفل راتب نهاية الشهر.
                         </p>
                       </div>
 
@@ -6641,26 +6902,20 @@ export default function EmployeesManagementPage() {
                         />
                         <LeaveOverviewStat
                           icon={Clock3}
-                          label="فرق الساعات"
-                          value={
-                            calculatedHoursDifference > 0
-                              ? `+${formatNumberEN(calculatedHoursDifference)} ساعة إضافية`
-                              : calculatedHoursDifference < 0
-                                ? `${formatNumberEN(calculatedHoursDifference)} ساعة نقص`
-                                : "0 ساعة"
-                          }
+                          label="ساعات العمل"
+                          value={`${formatHoursDuration(payrollRateWorkHours)} / ${formatNumberEN(expectedWorkDaysNumber || 0)} يوم`}
                         />
                         <LeaveOverviewStat
                           icon={CheckCircle2}
-                          label="الراتب الفعلي"
-                          value={`${formatNumberEN(calculatedNetSalary || 0)} ر.س`}
+                          label="بعد التأمينات"
+                          value={`${formatNumberEN(baseSalaryAfterInsurance || 0)} ر.س`}
                         />
                       </div>
                     </div>
                   </CardHeader>
 
                   <CardContent className="space-y-6 p-5">
-                    <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-5">
+                    <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
                       <Field label="الراتب الأساسي">
                         <Input
                           type="number"
@@ -6699,7 +6954,10 @@ export default function EmployeesManagementPage() {
                         />
                       </Field>
 
-                      <Field label="عدد ساعات العمل">
+                      <Field
+                        label="ساعات الشهر اليدوية"
+                        description="تستخدم كبديل فقط إذا لم يتم تحديد وقت بداية ونهاية الدوام."
+                      >
                         <Input
                           type="number"
                           dir="rtl"
@@ -6713,25 +6971,6 @@ export default function EmployeesManagementPage() {
                             )
                           }
                           placeholder="مثال: 240"
-                          className="text-right tabular-nums"
-                          disabled={!canManageEmployees || saving}
-                        />
-                      </Field>
-
-                      <Field label="عدد الساعات الفعلية">
-                        <Input
-                          type="number"
-                          dir="rtl"
-                          inputMode="decimal"
-                          step="0.5"
-                          value={form.actualWorkedHours}
-                          onChange={event =>
-                            handleFormChange(
-                              "actualWorkedHours",
-                              normalizeEnglishDigits(event.target.value)
-                            )
-                          }
-                          placeholder="مثال: 228"
                           className="text-right tabular-nums"
                           disabled={!canManageEmployees || saving}
                         />
@@ -6777,278 +7016,9 @@ export default function EmployeesManagementPage() {
 
                       <Field label="الراتب قبل الخصومات">
                         <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900">
-                          {formatNumberEN(calculatedGrossSalary || 0)} ر.س
+                          {formatNumberEN(baseSalaryNumber || 0)} ر.س
                         </div>
                       </Field>
-                    </div>
-
-                    <div className="space-y-5 rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-                      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                        <div className="space-y-1">
-                          <div className="text-base font-semibold text-slate-950">
-                            وقت الدوام
-                          </div>
-                          <p className="text-sm leading-6 text-slate-500">
-                            يحدد بداية ونهاية الدوام المستخدمة في حساب التأخير والأوفر تايم.
-                          </p>
-                        </div>
-
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="h-12 w-full rounded-[18px] border-slate-200 bg-slate-50 px-5 text-slate-950 hover:bg-white lg:w-auto"
-                          onClick={() => void handleCalculatePayrollFromAttendance()}
-                          disabled={
-                            !canManageEmployees ||
-                            saving ||
-                            attendancePayrollLoading ||
-                            !selectedPayrollMonthMeta
-                          }
-                        >
-                          {attendancePayrollLoading ? (
-                            <Loader2 className="ml-2 h-4 w-4 animate-spin" />
-                          ) : (
-                            <Clock3 className="ml-2 h-4 w-4" />
-                          )}
-                          احتساب من الحضور
-                        </Button>
-                      </div>
-
-                      <div className="grid gap-4 md:grid-cols-2">
-                        <div className="rounded-[20px] border border-slate-200 bg-slate-50/70 p-4">
-                          <Field label="بداية الدوام">
-                            <Input
-                              type="time"
-                              dir="ltr"
-                              value={form.shiftStartTime}
-                              onChange={event =>
-                                handleFormChange("shiftStartTime", event.target.value)
-                              }
-                              className="h-12 bg-white text-center text-base font-semibold tabular-nums"
-                              disabled={!canManageEmployees || saving}
-                            />
-                          </Field>
-                        </div>
-
-                        <div className="rounded-[20px] border border-slate-200 bg-slate-50/70 p-4">
-                          <Field label="نهاية الدوام">
-                            <Input
-                              type="time"
-                              dir="ltr"
-                              value={form.shiftEndTime}
-                              onChange={event =>
-                                handleFormChange("shiftEndTime", event.target.value)
-                              }
-                              className="h-12 bg-white text-center text-base font-semibold tabular-nums"
-                              disabled={!canManageEmployees || saving}
-                            />
-                          </Field>
-                        </div>
-                      </div>
-
-                      {attendancePayrollSummary ? (
-                        <div className="grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-4">
-                          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                            التأخير: {formatNumberEN(attendancePayrollSummary.lateHours)} ساعة
-                          </div>
-                          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                            النقص: {formatNumberEN(attendancePayrollSummary.missingHours)} ساعة
-                          </div>
-                          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                            الأوفر تايم: {formatNumberEN(attendancePayrollSummary.overtimeHours)} ساعة
-                          </div>
-                          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                            أيام مكتملة: {formatNumberEN(attendancePayrollSummary.completeDays)}
-                          </div>
-                        </div>
-                      ) : null}
-                    </div>
-
-                    <div className="space-y-5 rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-                      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
-                        <div className="space-y-1">
-                          <div className="text-base font-semibold text-slate-950">
-                            الخصومات
-                          </div>
-                          <p className="text-sm leading-6 text-slate-500">
-                            أضف أي خصم مثل الغياب أو التأخير أو أي استقطاع آخر.
-                          </p>
-                        </div>
-
-                        <div className="flex flex-col gap-3 sm:flex-row lg:flex-col">
-                          <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3 text-right">
-                            <div className="text-xs font-semibold text-slate-500">
-                              إجمالي الخصومات
-                            </div>
-                            <div className="mt-1 text-lg font-semibold text-slate-950 tabular-nums">
-                              {formatNumberEN(totalSalaryDeductions || 0)} ر.س
-                            </div>
-                          </div>
-
-                          {salaryDeductions.length ? (
-                            <Button
-                              type="button"
-                              onClick={handleAddSalaryDeduction}
-                              disabled={!canManageEmployees || saving}
-                              className="h-12 rounded-[18px] bg-slate-950 px-6 text-white hover:bg-slate-900"
-                            >
-                              <Plus className="ml-2 h-4 w-4" />
-                              إضافة خصم جديد
-                            </Button>
-                          ) : null}
-                        </div>
-                      </div>
-
-                      {salaryDeductions.length ? (
-                        <div className="space-y-3">
-                          {salaryDeductions.map(item => (
-                            <div
-                              key={item.id}
-                              className="grid gap-3 rounded-[20px] border border-slate-200 bg-white p-4 md:grid-cols-[minmax(0,1fr)_180px_auto]"
-                            >
-                              <Input
-                                value={item.title}
-                                onChange={event =>
-                                  handleSalaryDeductionChange(
-                                    item.id,
-                                    "title",
-                                    event.target.value
-                                  )
-                                }
-                                placeholder="مثال: خصم غياب"
-                                disabled={!canManageEmployees || saving}
-                              />
-
-                              <Input
-                                type="number"
-                                dir="rtl"
-                                inputMode="decimal"
-                                step="0.01"
-                                value={item.amount}
-                                onChange={event =>
-                                  handleSalaryDeductionChange(
-                                    item.id,
-                                    "amount",
-                                    normalizeEnglishDigits(event.target.value)
-                                  )
-                                }
-                                placeholder="قيمة الخصم"
-                                className="text-right tabular-nums"
-                                disabled={!canManageEmployees || saving}
-                              />
-
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className="border-rose-200 text-rose-700 hover:bg-rose-50 hover:text-rose-800"
-                                onClick={() => handleRemoveSalaryDeduction(item.id)}
-                                disabled={!canManageEmployees || saving}
-                              >
-                                حذف
-                              </Button>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="rounded-[22px] border border-dashed border-slate-300 bg-slate-50 px-5 py-8 text-center">
-                          <div className="text-sm font-semibold text-slate-950">
-                            لا توجد خصومات مضافة حتى الآن.
-                          </div>
-                          <div className="mt-1 text-sm leading-6 text-slate-500">
-                            أضف خصمًا يدويًا مثل الغياب أو التأخير أو أي استقطاع آخر.
-                          </div>
-                          <Button
-                            type="button"
-                            onClick={handleAddSalaryDeduction}
-                            disabled={!canManageEmployees || saving}
-                            className="mt-4 h-12 rounded-[18px] bg-slate-950 px-6 text-white hover:bg-slate-900"
-                          >
-                            <Plus className="ml-2 h-4 w-4" />
-                            إضافة أول خصم
-                          </Button>
-                        </div>
-                      )}
-
-                      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-                        <div className="rounded-[20px] border border-slate-200 bg-white px-4 py-4">
-                          <div className="text-xs font-semibold tracking-[0.14em] text-slate-500">
-                            فرق الساعات
-                          </div>
-                          <div
-                            className={cn(
-                              "mt-2 text-lg font-semibold",
-                              calculatedHoursDifference > 0 && "text-emerald-600",
-                              calculatedHoursDifference < 0 && "text-red-600",
-                              calculatedHoursDifference === 0 && "text-slate-950"
-                            )}
-                          >                            {calculatedHoursDifference > 0 && (
-                            <>+{formatNumberEN(calculatedHoursDifference)} ساعة إضافية</>
-                          )}
-
-                            {calculatedHoursDifference < 0 && (
-                              <>{formatNumberEN(calculatedHoursDifference)} ساعة نقص</>
-                            )}
-
-                            {calculatedHoursDifference === 0 && (
-                              <>0 ساعة</>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="rounded-[20px] border border-slate-200 bg-white px-4 py-4">
-                          <div className="text-xs font-semibold tracking-[0.14em] text-slate-500">
-                            راتب اليوم
-                          </div>
-                          <div className="mt-2 text-lg font-semibold text-slate-950">
-                            {formatNumberEN(calculatedDailyRate || 0)} ر.س
-                          </div>
-                        </div>
-
-                        <div className="rounded-[20px] border border-slate-200 bg-white px-4 py-4">
-                          <div className="text-xs font-semibold tracking-[0.14em] text-slate-500">
-                            راتب الساعة
-                          </div>
-                          <div className="mt-2 text-lg font-semibold text-slate-950">
-                            {formatNumberEN(calculatedHourlyRate || 0)} ر.س
-                          </div>
-                        </div>
-
-                        <div className="rounded-[20px] border border-slate-200 bg-white px-4 py-4">
-                          <div className="text-xs font-semibold tracking-[0.14em] text-slate-500">
-                            قيمة الأوفر تايم
-                          </div>
-                          <div className="mt-2 text-lg font-semibold text-slate-950">
-                            {formatNumberEN(calculatedOvertimeAmount || 0)} ر.س
-                          </div>
-                        </div>
-
-                        <div className="rounded-[20px] border border-slate-200 bg-white px-4 py-4">
-                          <div className="text-xs font-semibold tracking-[0.14em] text-slate-500">
-                            خصم نقص الساعات
-                          </div>
-                          <div className="mt-2 text-lg font-semibold text-slate-950">
-                            {formatNumberEN(calculatedMissingDeduction || 0)} ر.س
-                          </div>
-                        </div>
-
-                        <div className="rounded-[20px] border border-slate-200 bg-white px-4 py-4">
-                          <div className="text-xs font-semibold tracking-[0.14em] text-slate-500">
-                            الراتب قبل الخصومات
-                          </div>
-                          <div className="mt-2 text-lg font-semibold text-slate-950">
-                            {formatNumberEN(calculatedGrossSalary || 0)} ر.س
-                          </div>
-                        </div>
-
-                        <div className="rounded-[20px] border border-emerald-200 bg-emerald-50/70 px-4 py-4">
-                          <div className="text-xs font-semibold tracking-[0.14em] text-emerald-700">
-                            الراتب الفعلي النهائي
-                          </div>
-                          <div className="mt-2 text-lg font-semibold text-emerald-800">
-                            {formatNumberEN(calculatedNetSalary || 0)} ر.س
-                          </div>
-                        </div>
-                      </div>
                     </div>
 
                     <div className="grid gap-6 xl:grid-cols-[1fr_1.15fr]">
@@ -7184,11 +7154,10 @@ export default function EmployeesManagementPage() {
                         <div className="space-y-6">
                           <div className="max-w-3xl space-y-2">
                             <div className="text-base font-semibold text-slate-950">
-                              إضافة راتب نهاية الشهر
+                              قفل راتب نهاية الشهر
                             </div>
                             <p className="text-sm leading-7 text-slate-500">
-                              يتم إنشاء سجل راتب شهري مستقل للموظف، ويشمل ملخص الغياب لذلك الشهر
-                              ضمن التقرير فقط دون ربط سجل الرواتب بسجل الغياب نفسه.
+                              اضبط شهر الراتب، احسب الحضور، أضف الخصومات الداخلية ثم أنشئ سجلًا مستقلًا يحفظ نتيجة هذا الشهر.
                             </p>
                           </div>
 
@@ -7208,9 +7177,296 @@ export default function EmployeesManagementPage() {
                               </Field>
                             </div>
 
+                            <div className="space-y-4 rounded-[22px] border border-slate-200 bg-white p-4">
+                              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                                <div className="space-y-1">
+                                  <div className="text-sm font-semibold text-slate-950">
+                                    وقت الدوام واحتساب الحضور
+                                  </div>
+                                  <p className="text-xs leading-6 text-slate-500">
+                                    يحدد بداية ونهاية الدوام المستخدمة في حساب التأخير والأوفر تايم لهذا الشهر.
+                                  </p>
+                                  {selectedPayrollMonthMeta ? (
+                                    <p className="text-xs leading-6 text-slate-500">
+                                      نطاق الاحتساب من {selectedPayrollMonthMeta.monthStart} إلى{" "}
+                                      {selectedPayrollMonthMeta.monthEnd}، ولا يتأثر بيوم نزول الراتب.
+                                    </p>
+                                  ) : null}
+                                </div>
+
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="h-11 w-full rounded-[16px] border-slate-200 bg-slate-50 px-5 text-slate-950 hover:bg-white lg:w-auto"
+                                  onClick={() => void handleCalculatePayrollFromAttendance()}
+                                  disabled={
+                                    !canManageEmployees ||
+                                    saving ||
+                                    attendancePayrollLoading ||
+                                    !selectedPayrollMonthMeta
+                                  }
+                                >
+                                  {attendancePayrollLoading ? (
+                                    <Loader2 className="ml-2 h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <Clock3 className="ml-2 h-4 w-4" />
+                                  )}
+                                  احتساب من الحضور
+                                </Button>
+                              </div>
+
+                              <div className="grid gap-3 md:grid-cols-2">
+                                <div className="rounded-[18px] border border-slate-200 bg-slate-50/70 p-4">
+                                  <Field label="بداية الدوام">
+                                    <Input
+                                      type="time"
+                                      dir="ltr"
+                                      value={form.shiftStartTime}
+                                      onChange={event =>
+                                        handleFormChange("shiftStartTime", event.target.value)
+                                      }
+                                      className="h-11 bg-white text-center text-base font-semibold tabular-nums"
+                                      disabled={!canManageEmployees || saving}
+                                    />
+                                  </Field>
+                                </div>
+
+                                <div className="rounded-[18px] border border-slate-200 bg-slate-50/70 p-4">
+                                  <Field label="نهاية الدوام">
+                                    <Input
+                                      type="time"
+                                      dir="ltr"
+                                      value={form.shiftEndTime}
+                                      onChange={event =>
+                                        handleFormChange("shiftEndTime", event.target.value)
+                                      }
+                                      className="h-11 bg-white text-center text-base font-semibold tabular-nums"
+                                      disabled={!canManageEmployees || saving}
+                                    />
+                                  </Field>
+                                </div>
+                              </div>
+
+                              {attendancePayrollSummary ? (
+                                <div className="grid gap-3 text-sm sm:grid-cols-2">
+                                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                                    التأخير: {formatHoursDuration(attendancePayrollSummary.lateHours)}
+                                  </div>
+                                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                                    النقص: {formatHoursDuration(attendancePayrollSummary.missingHours)}
+                                  </div>
+                                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                                    الأوفر تايم: {formatHoursDuration(attendancePayrollSummary.overtimeHours)}
+                                  </div>
+                                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                                    أيام مكتملة: {formatNumberEN(attendancePayrollSummary.completeDays)}
+                                  </div>
+                                  <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-red-700">
+                                    أيام بدون حضور: {formatNumberEN(attendanceAbsentDaysNumber)}
+                                  </div>
+                                </div>
+                              ) : null}
+                            </div>
+
+                            <div className="space-y-4 rounded-[22px] border border-slate-200 bg-white p-4">
+                              <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
+                                <div className="space-y-1">
+                                  <div className="text-sm font-semibold text-slate-950">
+                                    الخصومات اليدوية
+                                  </div>
+                                  <p className="text-xs leading-6 text-slate-500">
+                                    أضف خصومات داخلية فقط مثل الغياب أو التأخير أو أي استقطاع آخر. التأمينات تظهر كحقل مستقل ولا تدخل في إجمالي الخصومات.
+                                  </p>
+                                </div>
+
+                                <div className="flex flex-col gap-3 sm:flex-row lg:flex-col">
+                                  <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-4 py-3 text-right">
+                                    <div className="text-xs font-semibold text-slate-500">
+                                      إجمالي الخصومات
+                                    </div>
+                                    <div className="mt-1 text-lg font-semibold text-slate-950 tabular-nums">
+                                      {formatNumberEN(totalSalaryDeductions || 0)} ر.س
+                                    </div>
+                                  </div>
+
+                                  {salaryDeductions.length ? (
+                                    <Button
+                                      type="button"
+                                      onClick={handleAddSalaryDeduction}
+                                      disabled={!canManageEmployees || saving}
+                                      className="h-11 rounded-[16px] bg-slate-950 px-5 text-white hover:bg-slate-900"
+                                    >
+                                      <Plus className="ml-2 h-4 w-4" />
+                                      إضافة خصم جديد
+                                    </Button>
+                                  ) : null}
+                                </div>
+                              </div>
+
+                              {salaryDeductions.length ? (
+                                <div className="space-y-3">
+                                  {salaryDeductions.map(item => (
+                                    <div
+                                      key={item.id}
+                                      className="grid gap-3 rounded-[18px] border border-slate-200 bg-slate-50/70 p-4 md:grid-cols-[minmax(0,1fr)_160px_auto]"
+                                    >
+                                      <Input
+                                        value={item.title}
+                                        onChange={event =>
+                                          handleSalaryDeductionChange(
+                                            item.id,
+                                            "title",
+                                            event.target.value
+                                          )
+                                        }
+                                        placeholder="مثال: خصم غياب"
+                                        disabled={!canManageEmployees || saving}
+                                      />
+
+                                      <Input
+                                        type="number"
+                                        dir="rtl"
+                                        inputMode="decimal"
+                                        step="0.01"
+                                        value={item.amount}
+                                        onChange={event =>
+                                          handleSalaryDeductionChange(
+                                            item.id,
+                                            "amount",
+                                            normalizeEnglishDigits(event.target.value)
+                                          )
+                                        }
+                                        placeholder="قيمة الخصم"
+                                        className="text-right tabular-nums"
+                                        disabled={!canManageEmployees || saving}
+                                      />
+
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        className="border-rose-200 text-rose-700 hover:bg-rose-50 hover:text-rose-800"
+                                        onClick={() => handleRemoveSalaryDeduction(item.id)}
+                                        disabled={!canManageEmployees || saving}
+                                      >
+                                        حذف
+                                      </Button>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="rounded-[20px] border border-dashed border-slate-300 bg-slate-50 px-5 py-7 text-center">
+                                  <div className="text-sm font-semibold text-slate-950">
+                                    لا توجد خصومات مضافة حتى الآن.
+                                  </div>
+                                  <div className="mt-1 text-sm leading-6 text-slate-500">
+                                    أضف خصمًا يدويًا مثل الغياب أو التأخير أو أي استقطاع آخر.
+                                  </div>
+                                  <Button
+                                    type="button"
+                                    onClick={handleAddSalaryDeduction}
+                                    disabled={!canManageEmployees || saving}
+                                    className="mt-4 h-11 rounded-[16px] bg-slate-950 px-5 text-white hover:bg-slate-900"
+                                  >
+                                    <Plus className="ml-2 h-4 w-4" />
+                                    إضافة أول خصم
+                                  </Button>
+                                </div>
+                              )}
+
+                              <div className="grid gap-3 sm:grid-cols-2">
+                                <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-4">
+                                  <div className="text-xs font-semibold text-slate-500">
+                                    فرق الساعات
+                                  </div>
+                                  <div
+                                    className={cn(
+                                      "mt-2 text-base font-semibold",
+                                      calculatedHoursDifference > 0 && "text-emerald-600",
+                                      calculatedHoursDifference < 0 && "text-red-600",
+                                      calculatedHoursDifference === 0 && "text-slate-950"
+                                    )}
+                                  >
+                                    {formatHoursDifferenceLabel(calculatedHoursDifference)}
+                                  </div>
+                                </div>
+
+                                <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-4">
+                                  <div className="text-xs font-semibold text-slate-500">
+                                    راتب اليوم
+                                  </div>
+                                  <div className="mt-2 text-base font-semibold text-slate-950">
+                                    {formatNumberEN(calculatedDailyRate || 0)} ر.س
+                                  </div>
+                                </div>
+
+                                <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-4">
+                                  <div className="text-xs font-semibold text-slate-500">
+                                    راتب الساعة
+                                  </div>
+                                  <div className="mt-2 text-base font-semibold text-slate-950">
+                                    {formatNumberEN(calculatedHourlyRate || 0)} ر.س
+                                  </div>
+                                </div>
+
+                                <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-4">
+                                  <div className="text-xs font-semibold text-slate-500">
+                                    قيمة الأوفر تايم
+                                  </div>
+                                  <div className="mt-2 text-base font-semibold text-slate-950">
+                                    {formatNumberEN(calculatedOvertimeAmount || 0)} ر.س
+                                  </div>
+                                </div>
+
+                                <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-4">
+                                  <div className="text-xs font-semibold text-slate-500">
+                                    خصم نقص الساعات
+                                  </div>
+                                  <div className="mt-2 text-base font-semibold text-slate-950">
+                                    {formatNumberEN(calculatedMissingDeduction || 0)} ر.س
+                                  </div>
+                                </div>
+
+                                <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-4">
+                                  <div className="text-xs font-semibold text-slate-500">
+                                    أيام بدون حضور
+                                  </div>
+                                  <div className="mt-2 text-base font-semibold text-red-600">
+                                    {formatNumberEN(attendanceAbsentDaysNumber)} يوم
+                                  </div>
+                                </div>
+
+                                <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-4">
+                                  <div className="text-xs font-semibold text-slate-500">
+                                    خصم أيام بدون حضور
+                                  </div>
+                                  <div className="mt-2 text-base font-semibold text-slate-950">
+                                    {formatNumberEN(calculatedAttendanceAbsenceDeduction || 0)} ر.س
+                                  </div>
+                                </div>
+
+                                <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-4">
+                                  <div className="text-xs font-semibold text-slate-500">
+                                    الراتب قبل الخصومات
+                                  </div>
+                                  <div className="mt-2 text-base font-semibold text-slate-950">
+                                    {formatNumberEN(calculatedGrossSalary || 0)} ر.س
+                                  </div>
+                                </div>
+
+                                <div className="rounded-[18px] border border-emerald-200 bg-emerald-50/70 px-4 py-4 sm:col-span-2">
+                                  <div className="text-xs font-semibold text-emerald-700">
+                                    الراتب الفعلي النهائي
+                                  </div>
+                                  <div className="mt-2 text-lg font-semibold text-emerald-800">
+                                    {formatNumberEN(calculatedNetSalary || 0)} ر.س
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
                             <div className="w-full">
                               <Field
-                                label="إرفاق مستند مدد (اختياري/إجباري)"
+                                label="إرفاق مستند مدد (اختياري)"
                                 description="الصيغ المدعومة: PDF, PNG, JPG."
                               >
                                 <Input
@@ -7470,6 +7726,24 @@ export default function EmployeesManagementPage() {
 
                                     <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3">
                                       <div className="text-xs font-semibold tracking-[0.14em] text-slate-500">
+                                        أيام بدون حضور
+                                      </div>
+                                      <div className="mt-2 text-sm font-semibold text-slate-900">
+                                        {formatNumberEN(record.attendanceAbsentDays || 0)} يوم
+                                      </div>
+                                    </div>
+
+                                    <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3">
+                                      <div className="text-xs font-semibold tracking-[0.14em] text-slate-500">
+                                        خصم أيام بدون حضور
+                                      </div>
+                                      <div className="mt-2 text-sm font-semibold text-slate-900">
+                                        {formatNumberEN(record.attendanceAbsenceDeduction || 0)} ر.س
+                                      </div>
+                                    </div>
+
+                                    <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3">
+                                      <div className="text-xs font-semibold tracking-[0.14em] text-slate-500">
                                         مكافأة الإضافي
                                       </div>
                                       <div className="mt-2 text-sm font-semibold text-slate-900">
@@ -7502,6 +7776,233 @@ export default function EmployeesManagementPage() {
                     </div>
                   </CardContent>
                 </Card>
+                <Card
+                  id="employee-section-requests"
+                  className={cn(
+                    "order-25 scroll-mt-36 gap-0 overflow-hidden border-slate-200/80 bg-white/95 py-0 shadow-sm lg:scroll-mt-44",
+                    activeEmployeeWorkspaceSection !== "requests" && "hidden"
+                  )}
+                >
+                  <CardHeader className="border-b border-white/70 bg-white/70 px-6 pt-6 pb-4 backdrop-blur">
+                    <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                          <Inbox className="h-4 w-4" />
+                          الطلبات
+                        </div>
+                        <div className="text-2xl font-semibold tracking-tight text-slate-950">
+                          طلبات الموظف العامة
+                        </div>
+                        <p className="max-w-2xl text-sm leading-7 text-slate-500">
+                          يشمل طلبات التصحيح والاستئذان والأوفر تايم والسلفة والاستقالة والخروج والعودة والخطابات.
+                        </p>
+                      </div>
+
+                      <div className="grid gap-3 sm:grid-cols-3">
+                        <LeaveOverviewStat
+                          icon={Clock3}
+                          label="بانتظار المراجعة"
+                          value={formatNumberEN(pendingServiceRequestsCount)}
+                        />
+                        <LeaveOverviewStat
+                          icon={CheckCircle2}
+                          label="المعتمدة"
+                          value={formatNumberEN(
+                            serviceRequests.filter(request => request.status === "approved").length
+                          )}
+                        />
+                        <LeaveOverviewStat
+                          icon={XCircle}
+                          label="المرفوضة"
+                          value={formatNumberEN(
+                            serviceRequests.filter(request => request.status === "rejected").length
+                          )}
+                        />
+                      </div>
+                    </div>
+                  </CardHeader>
+
+                  <CardContent className="space-y-4 p-5">
+                    {serviceRequestsLoading ? (
+                      <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50/70 px-5 py-10 text-center text-sm text-slate-500">
+                        جاري تحميل طلبات الموظف...
+                      </div>
+                    ) : serviceRequests.length ? (
+                      serviceRequests.map((request, index) => {
+                        const isPending = request.status === "pending";
+                        const currentReviewNote =
+                          reviewNotes[request.id] ?? request.hrNote ?? "";
+
+                        return (
+                          <div
+                            key={request.id}
+                            className={cn(
+                              "rounded-[24px] border p-5 shadow-sm",
+                              index === 0
+                                ? "border-[#F2B705]/35 bg-[#F2B705]/[0.08]"
+                                : "border-slate-200/80 bg-slate-50/70"
+                            )}
+                          >
+                            <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                              <div className="space-y-3">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  {index === 0 ? (
+                                    <Badge
+                                      variant="outline"
+                                      className="rounded-full border-[#F2B705]/35 bg-[#F2B705]/10 text-[#8b6700] shadow-none"
+                                    >
+                                      أحدث طلب
+                                    </Badge>
+                                  ) : null}
+                                  <Badge variant="outline" className="rounded-full">
+                                    {getEmployeeServiceRequestTypeLabel(request.requestType)}
+                                  </Badge>
+                                  <Badge
+                                    variant="outline"
+                                    className={cn(
+                                      "rounded-full shadow-none",
+                                      request.status === "approved"
+                                        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                        : request.status === "pending"
+                                          ? "border-amber-200 bg-amber-50 text-amber-700"
+                                          : "border-rose-200 bg-rose-50 text-rose-700"
+                                    )}
+                                  >
+                                    {getEmployeeServiceRequestStatusLabel(request.status)}
+                                  </Badge>
+                                </div>
+
+                                <div className="grid gap-2 text-sm text-slate-600">
+                                  {request.requestDate ? (
+                                    <div>
+                                      <span className="font-semibold text-slate-900">تاريخ الطلب:</span>{" "}
+                                      {formatDateEN(request.requestDate)}
+                                    </div>
+                                  ) : null}
+                                  {request.startDate || request.endDate ? (
+                                    <div>
+                                      <span className="font-semibold text-slate-900">الفترة:</span>{" "}
+                                      {[request.startDate, request.endDate]
+                                        .filter(Boolean)
+                                        .map(value => formatDateEN(value))
+                                        .join(" - ")}
+                                    </div>
+                                  ) : null}
+                                  {request.startTime || request.endTime ? (
+                                    <div>
+                                      <span className="font-semibold text-slate-900">الوقت:</span>{" "}
+                                      {[request.startTime, request.endTime].filter(Boolean).join(" - ")}
+                                    </div>
+                                  ) : null}
+                                  {request.amount ? (
+                                    <div>
+                                      <span className="font-semibold text-slate-900">المبلغ:</span>{" "}
+                                      {formatNumberEN(request.amount)} ر.س
+                                    </div>
+                                  ) : null}
+                                  {request.letterType ? (
+                                    <div>
+                                      <span className="font-semibold text-slate-900">نوع الخطاب:</span>{" "}
+                                      {request.letterType}
+                                    </div>
+                                  ) : null}
+                                  <div>
+                                    <span className="font-semibold text-slate-900">تاريخ الإنشاء:</span>{" "}
+                                    {formatDateTimeEN(request.createdAt)}
+                                  </div>
+                                </div>
+
+                                {request.employeeNote ? (
+                                  <div className="rounded-[20px] border border-slate-200 bg-white/85 px-4 py-3 text-sm leading-7 text-slate-700">
+                                    <span className="font-semibold text-slate-900">ملاحظة الموظف:</span>{" "}
+                                    {request.employeeNote}
+                                  </div>
+                                ) : null}
+                              </div>
+
+                              <div className="w-full max-w-xl space-y-3">
+                                <div className="rounded-[20px] border border-slate-200 bg-white/90 px-4 py-3 text-sm leading-7 text-slate-700">
+                                  <span className="font-semibold text-slate-900">ملاحظة HR:</span>{" "}
+                                  {request.hrNote || "لا توجد ملاحظة حتى الآن."}
+                                </div>
+
+                                {isPending ? (
+                                  <div className="space-y-3 rounded-[20px] border border-slate-200 bg-white/90 p-4">
+                                    <Label className="text-sm font-semibold text-slate-800">
+                                      ملاحظة إدارية للطلب
+                                    </Label>
+                                    <Textarea
+                                      value={currentReviewNote}
+                                      onChange={event =>
+                                        handleReviewNoteChange(
+                                          request.id,
+                                          event.target.value
+                                        )
+                                      }
+                                      placeholder="اكتب ملاحظة عند الاعتماد أو الرفض"
+                                      className="min-h-28"
+                                      disabled={
+                                        !canManageEmployees ||
+                                        reviewingServiceRequestId === request.id
+                                      }
+                                    />
+
+                                    <div className="flex flex-wrap gap-3">
+                                      <Button
+                                        type="button"
+                                        className="bg-emerald-600 text-white hover:bg-emerald-700"
+                                        disabled={
+                                          !canManageEmployees ||
+                                          reviewingServiceRequestId === request.id
+                                        }
+                                        onClick={() =>
+                                          void handleReviewServiceRequest(
+                                            request,
+                                            "approved"
+                                          )
+                                        }
+                                      >
+                                        {reviewingServiceRequestId === request.id ? (
+                                          <Clock3 className="ml-2 h-4 w-4 animate-pulse" />
+                                        ) : (
+                                          <CheckCircle2 className="ml-2 h-4 w-4" />
+                                        )}
+                                        اعتماد الطلب
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        className="border-rose-200 text-rose-700 hover:bg-rose-50 hover:text-rose-800"
+                                        disabled={
+                                          !canManageEmployees ||
+                                          reviewingServiceRequestId === request.id
+                                        }
+                                        onClick={() =>
+                                          void handleReviewServiceRequest(
+                                            request,
+                                            "rejected"
+                                          )
+                                        }
+                                      >
+                                        <XCircle className="ml-2 h-4 w-4" />
+                                        رفض الطلب
+                                      </Button>
+                                    </div>
+                                  </div>
+                                ) : null}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50/70 px-5 py-10 text-center text-sm text-slate-500">
+                        لا توجد طلبات عامة مسجلة لهذا الموظف.
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
                 <Card
                   id="employee-section-leave"
                   ref={employeeLeaveSectionRef}

@@ -14,21 +14,25 @@ import {
 
 import { Button } from "@/components/ui/button";
 import {
+  adjustAttendanceRecordsAsAdmin,
   fetchAttendanceRecords,
   type AttendanceRecord,
 } from "@/lib/attendanceRecords";
 import { computeAttendanceDay } from "@/lib/attendanceCalculations";
 import { formatNumberEN } from "@/lib/formatters";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 type EmployeeTodayAttendancePanelProps = {
   employeeUid?: string | null;
+  employeeDocId?: string | null;
   title: string;
   description?: string;
   refreshKey?: number;
   className?: string;
   shiftStartTime?: string | null;
   shiftEndTime?: string | null;
+  canManageAttendance?: boolean;
 };
 
 type MonthBounds = {
@@ -129,6 +133,21 @@ function formatDisplayTime(value?: string | null) {
     minute: "2-digit",
     hour12: true,
   }).format(date);
+}
+
+function formatTimeInputValue(value?: string | null) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: RIYADH_TIME_ZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  return `${values.hour}:${values.minute}`;
 }
 
 function formatArabicDate(value: string) {
@@ -254,10 +273,12 @@ function AttendanceMetric({
 
 export default function EmployeeTodayAttendancePanel({
   employeeUid,
+  employeeDocId,
   refreshKey = 0,
   className,
   shiftStartTime,
   shiftEndTime,
+  canManageAttendance = false,
 }: EmployeeTodayAttendancePanelProps) {
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [loading, setLoading] = useState(false);
@@ -265,6 +286,12 @@ export default function EmployeeTodayAttendancePanel({
   const [monthDate, setMonthDate] = useState(() => getRiyadhTodayMonthStart());
   const [selectedDate, setSelectedDate] = useState(() => getRiyadhTodayKey());
   const [activeTab, setActiveTab] = useState<"records" | "leave">("records");
+  const [adjustmentOpen, setAdjustmentOpen] = useState(false);
+  const [adjustmentCheckInTime, setAdjustmentCheckInTime] = useState("");
+  const [adjustmentCheckOutTime, setAdjustmentCheckOutTime] = useState("");
+  const [adjustmentNote, setAdjustmentNote] = useState("");
+  const [savingAdjustment, setSavingAdjustment] = useState(false);
+  const [adjustmentRefreshKey, setAdjustmentRefreshKey] = useState(0);
   const monthBounds = useMemo(() => getMonthBounds(monthDate), [monthDate]);
 
   useEffect(() => {
@@ -308,6 +335,7 @@ export default function EmployeeTodayAttendancePanel({
     employeeUid,
     monthBounds.fromDate,
     monthBounds.toDate,
+    adjustmentRefreshKey,
     refreshKey,
   ]);
 
@@ -367,6 +395,52 @@ export default function EmployeeTodayAttendancePanel({
   const shiftTimeLabel = hasSelectedRecord
     ? `${firstCheckInLabel} — ${lastCheckOutLabel}`
     : "--";
+
+  const openAttendanceAdjustment = () => {
+    setAdjustmentCheckInTime(
+      formatTimeInputValue(selectedDay?.checkIn?.serverTime) ||
+        String(shiftStartTime || "")
+    );
+    setAdjustmentCheckOutTime(
+      formatTimeInputValue(selectedDay?.checkOut?.serverTime) ||
+        String(shiftEndTime || "")
+    );
+    setAdjustmentNote("");
+    setAdjustmentOpen(true);
+  };
+
+  const handleSaveAttendanceAdjustment = async () => {
+    const uid = String(employeeUid || "").trim();
+    const docId = String(employeeDocId || employeeUid || "").trim();
+    if (!canManageAttendance || !uid || !docId) {
+      toast.error("لا تملك صلاحية تعديل بصمة الموظف.");
+      return;
+    }
+    if (!adjustmentCheckInTime && !adjustmentCheckOutTime) {
+      toast.error("أدخل وقت الحضور أو وقت الانصراف.");
+      return;
+    }
+
+    setSavingAdjustment(true);
+    try {
+      await adjustAttendanceRecordsAsAdmin({
+        employeeUid: uid,
+        employeeDocId: docId,
+        date: selectedDate,
+        checkInTime: adjustmentCheckInTime || undefined,
+        checkOutTime: adjustmentCheckOutTime || undefined,
+        note: adjustmentNote,
+      });
+      toast.success("تم تعديل بصمة الموظف.");
+      setAdjustmentOpen(false);
+      setAdjustmentRefreshKey(current => current + 1);
+    } catch (saveError) {
+      console.error("admin_attendance_adjustment_failed", saveError);
+      toast.error("تعذر تعديل بصمة الموظف.");
+    } finally {
+      setSavingAdjustment(false);
+    }
+  };
 
   const changeMonth = (direction: "next" | "previous") => {
     setMonthDate(current => {
@@ -562,7 +636,92 @@ export default function EmployeeTodayAttendancePanel({
               {formatNumberEN(selectedRecordsCount)}
             </span>
             <span className="sr-only">عدد سجلات اليوم المحدد</span>
+            {canManageAttendance ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="mr-auto rounded-full border-slate-200 bg-white px-4 text-slate-950"
+                onClick={openAttendanceAdjustment}
+                disabled={!employeeUid || savingAdjustment}
+              >
+                تعديل البصمة
+              </Button>
+            ) : null}
           </div>
+
+          {canManageAttendance && adjustmentOpen ? (
+            <div className="rounded-[20px] border border-slate-200 bg-white p-4 shadow-[0_12px_32px_-28px_rgba(15,23,42,0.35)]">
+              <div className="flex flex-col gap-1 text-right">
+                <div className="text-sm font-semibold text-slate-950">
+                  تعديل بصمة يوم {formatArabicDate(selectedDate)}
+                </div>
+                <p className="text-xs leading-6 text-slate-500">
+                  يستخدم عند اعتماد طلب تصحيح أو وجود مشكلة موقع أو نسيان البصمة.
+                </p>
+              </div>
+
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <label className="space-y-2 text-sm font-semibold text-slate-800">
+                  وقت الحضور
+                  <input
+                    type="time"
+                    dir="ltr"
+                    value={adjustmentCheckInTime}
+                    onChange={event => setAdjustmentCheckInTime(event.target.value)}
+                    className="h-11 w-full rounded-[14px] border border-slate-200 bg-slate-50 px-3 text-center text-base font-semibold tabular-nums outline-none transition focus:border-slate-400 focus:bg-white"
+                    disabled={savingAdjustment}
+                  />
+                </label>
+
+                <label className="space-y-2 text-sm font-semibold text-slate-800">
+                  وقت الانصراف
+                  <input
+                    type="time"
+                    dir="ltr"
+                    value={adjustmentCheckOutTime}
+                    onChange={event => setAdjustmentCheckOutTime(event.target.value)}
+                    className="h-11 w-full rounded-[14px] border border-slate-200 bg-slate-50 px-3 text-center text-base font-semibold tabular-nums outline-none transition focus:border-slate-400 focus:bg-white"
+                    disabled={savingAdjustment}
+                  />
+                </label>
+              </div>
+
+              <label className="mt-3 block space-y-2 text-sm font-semibold text-slate-800">
+                سبب التعديل
+                <textarea
+                  value={adjustmentNote}
+                  onChange={event => setAdjustmentNote(event.target.value)}
+                  placeholder="مثال: تم اعتماد طلب التصحيح بعد مراجعة HR"
+                  className="min-h-20 w-full resize-none rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-normal outline-none transition focus:border-slate-400 focus:bg-white"
+                  disabled={savingAdjustment}
+                />
+              </label>
+
+              <div className="mt-4 flex flex-wrap justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="rounded-full"
+                  onClick={() => setAdjustmentOpen(false)}
+                  disabled={savingAdjustment}
+                >
+                  إلغاء
+                </Button>
+                <Button
+                  type="button"
+                  className="rounded-full bg-slate-950 text-white hover:bg-slate-900"
+                  onClick={() => void handleSaveAttendanceAdjustment()}
+                  disabled={savingAdjustment}
+                >
+                  {savingAdjustment ? (
+                    <Loader2 className="ml-2 h-4 w-4 animate-spin" />
+                  ) : null}
+                  حفظ تعديل البصمة
+                </Button>
+              </div>
+            </div>
+          ) : null}
 
           {error ? (
             <div className="rounded-[18px] border border-rose-200 bg-rose-50 px-4 py-5 text-center text-sm text-rose-700">

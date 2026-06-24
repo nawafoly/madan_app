@@ -23,6 +23,8 @@ export type EmployeePayrollComputation = {
   hoursDifference: number;
   overtimeHours: number;
   missingHours: number;
+  attendanceAbsentDays: number;
+  attendanceAbsenceDeduction: number;
   effectiveOvertimeHourlyRate: number;
   overtimeBonus: number;
   delayDeduction: number;
@@ -130,6 +132,8 @@ export function computeEmployeePayroll(input: {
   baseSalary?: number | null;
   expectedWorkDays?: number | null;
   expectedWorkHours?: number | null;
+  attendanceExpectedHours?: number | null;
+  attendanceAbsentDays?: number | null;
   actualWorkedHours?: number | null;
   overtimeHourlyRate?: number | null;
   insuranceDeduction?: number | null;
@@ -139,6 +143,13 @@ export function computeEmployeePayroll(input: {
   const baseSalary = Math.max(0, toFiniteNumber(input.baseSalary));
   const expectedWorkDays = Math.max(0, toFiniteNumber(input.expectedWorkDays));
   const expectedWorkHours = Math.max(0, toFiniteNumber(input.expectedWorkHours));
+  const attendanceExpectedHours = Math.max(
+    0,
+    input.attendanceExpectedHours === null || input.attendanceExpectedHours === undefined
+      ? expectedWorkHours
+      : toFiniteNumber(input.attendanceExpectedHours)
+  );
+  const attendanceAbsentDays = Math.max(0, toFiniteNumber(input.attendanceAbsentDays));
   const actualWorkedHours = Math.max(0, toFiniteNumber(input.actualWorkedHours));
   const overtimeHourlyRate = Math.max(0, toFiniteNumber(input.overtimeHourlyRate));
   const insuranceDeduction = Math.max(0, toFiniteNumber(input.insuranceDeduction));
@@ -146,7 +157,7 @@ export function computeEmployeePayroll(input: {
 
   const hourlyRate =
     baseSalary > 0 && expectedWorkHours > 0 ? baseSalary / expectedWorkHours : 0;
-  const hoursDifference = actualWorkedHours - expectedWorkHours;
+  const hoursDifference = actualWorkedHours - attendanceExpectedHours;
   const overtimeHours = Math.max(0, hoursDifference);
   const missingHours = Math.max(0, -hoursDifference);
   const effectiveOvertimeHourlyRate =
@@ -165,8 +176,13 @@ export function computeEmployeePayroll(input: {
   const dailySalary =
     baseSalary > 0 && expectedWorkDays > 0
       ? baseSalary / expectedWorkDays
-      : 0; const absenceDeduction = absenceDays * dailySalary;
-  const grossSalary = Math.max(0, baseSalary + overtimeBonus - delayDeduction);
+      : 0;
+  const attendanceAbsenceDeduction = attendanceAbsentDays * dailySalary;
+  const absenceDeduction = absenceDays * dailySalary;
+  const grossSalary = Math.max(
+    0,
+    baseSalary + overtimeBonus - delayDeduction - attendanceAbsenceDeduction
+  );
   const finalSalary = Math.max(
     0,
     grossSalary - totalSalaryDeductions - insuranceDeduction - absenceDeduction
@@ -179,6 +195,8 @@ export function computeEmployeePayroll(input: {
     hoursDifference,
     overtimeHours,
     missingHours,
+    attendanceAbsentDays,
+    attendanceAbsenceDeduction,
     effectiveOvertimeHourlyRate,
     overtimeBonus,
     delayDeduction,
@@ -260,6 +278,15 @@ export function normalizeEmployeePayrollRecord(
       raw.attendanceIncompleteDays === null || raw.attendanceIncompleteDays === undefined
         ? null
         : Math.max(0, toFiniteNumber(raw.attendanceIncompleteDays)),
+    attendanceAbsentDays:
+      raw.attendanceAbsentDays === null || raw.attendanceAbsentDays === undefined
+        ? null
+        : Math.max(0, toFiniteNumber(raw.attendanceAbsentDays)),
+    attendanceAbsenceDeduction:
+      raw.attendanceAbsenceDeduction === null ||
+      raw.attendanceAbsenceDeduction === undefined
+        ? null
+        : Math.max(0, toFiniteNumber(raw.attendanceAbsenceDeduction)),
     delayDeduction:
       raw.delayDeduction === null || raw.delayDeduction === undefined
         ? null

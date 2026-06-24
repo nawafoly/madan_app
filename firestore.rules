@@ -723,6 +723,55 @@ service cloud.firestore {
         ]);
     }
 
+    function serviceRequestOwnerUid(data) {
+      return (("employeeUid" in data) && (data.employeeUid is string) && data.employeeUid.size() > 0)
+        ? data.employeeUid
+        : ((("userId" in data) && (data.userId is string) && data.userId.size() > 0)
+          ? data.userId
+          : "");
+    }
+
+    function isValidEmployeeServiceRequestCreate() {
+      return signedIn()
+        && request.resource.data.employeeUid is string
+        && request.resource.data.employeeUid.size() > 0
+        && request.resource.data.userId is string
+        && request.resource.data.userId == request.auth.uid
+        && serviceRequestOwnerUid(request.resource.data) == request.auth.uid
+        && requestStatusValue(request.resource.data) == "pending"
+        && request.resource.data.requestType is string
+        && request.resource.data.requestType in [
+          "attendance_correction",
+          "permission",
+          "overtime",
+          "salary_advance",
+          "resignation",
+          "exit_reentry",
+          "letter"
+        ];
+    }
+
+    function isValidEmployeeServiceRequestAdminUpdate() {
+      let keys = request.resource.data.diff(resource.data).changedKeys();
+      let beforeStatus = requestStatusValue(resource.data);
+      let afterStatus = requestStatusValue(request.resource.data);
+      return beforeStatus == "pending"
+        && afterStatus in ["approved", "rejected"]
+        && keys.hasOnly([
+          "status",
+          "hrNote",
+          "decidedAt",
+          "decidedBy",
+          "decidedByEmail",
+          "decidedByName",
+          "reviewedAt",
+          "reviewedBy",
+          "reviewedByEmail",
+          "reviewedByName",
+          "updatedAt"
+        ]);
+    }
+
     function canReadMessagesAdmin() {
       return hasInvestmentAdminPermission("messages.view")
         || hasInvestmentAdminPermission("messages.manage");
@@ -1516,6 +1565,15 @@ service cloud.firestore {
       allow create: if isValidEmployeeLeaveRequestCreate();
       allow update: if canManageEmployeesAdmin()
         && isValidEmployeeLeaveRequestAdminUpdate();
+      allow delete: if canManageEmployeesAdmin();
+    }
+
+    match /employee_service_requests/{requestId} {
+      allow read: if canReadEmployeesAdmin()
+        || (signedIn() && serviceRequestOwnerUid(resource.data) == request.auth.uid);
+      allow create: if isValidEmployeeServiceRequestCreate();
+      allow update: if canManageEmployeesAdmin()
+        && isValidEmployeeServiceRequestAdminUpdate();
       allow delete: if canManageEmployeesAdmin();
     }
 

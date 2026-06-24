@@ -244,6 +244,8 @@ export type EmployeePayrollRecordDoc = {
   attendanceOvertimeHours?: number | null;
   attendanceCompleteDays?: number | null;
   attendanceIncompleteDays?: number | null;
+  attendanceAbsentDays?: number | null;
+  attendanceAbsenceDeduction?: number | null;
   delayDeduction?: number | null;
   overtimeBonus?: number | null;
   insuranceDeduction?: number | null;
@@ -299,6 +301,52 @@ export type EmployeeLeaveRequestDoc = {
   startDate: unknown;
   endDate: unknown;
   daysCount: number | null;
+  employeeNote?: string | null;
+  hrNote?: string | null;
+  createdAt?: unknown;
+  decidedAt?: unknown;
+  decidedBy?: string | null;
+  decidedByEmail?: string | null;
+  decidedByName?: string | null;
+  reviewedAt?: unknown;
+  reviewedBy?: string | null;
+  reviewedByEmail?: string | null;
+  reviewedByName?: string | null;
+  updatedAt?: unknown;
+};
+
+export type EmployeeServiceRequestStatus =
+  | "pending"
+  | "approved"
+  | "rejected";
+
+export type EmployeeServiceRequestType =
+  | "attendance_correction"
+  | "permission"
+  | "overtime"
+  | "salary_advance"
+  | "resignation"
+  | "exit_reentry"
+  | "letter"
+  | string;
+
+export type EmployeeServiceRequestDoc = {
+  employeeId?: string | null;
+  employeeDocId?: string | null;
+  employeeUid: string;
+  userId?: string | null;
+  employeeName?: string | null;
+  employeeEmail?: string | null;
+  status: EmployeeServiceRequestStatus;
+  requestType: EmployeeServiceRequestType;
+  title?: string | null;
+  requestDate?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
+  startTime?: string | null;
+  endTime?: string | null;
+  amount?: number | null;
+  letterType?: string | null;
   employeeNote?: string | null;
   hrNote?: string | null;
   createdAt?: unknown;

@@ -63,6 +63,15 @@ export type AttendanceRecordsResponse = {
   summary: AttendanceSummary;
 };
 
+export type AdminAttendanceAdjustmentInput = {
+  employeeUid: string;
+  employeeDocId: string;
+  date: string;
+  checkInTime?: string;
+  checkOutTime?: string;
+  note?: string;
+};
+
 export async function fetchAttendanceRecords(
   filters: AttendanceRecordsFilters = {}
 ): Promise<AttendanceRecordsResponse> {
@@ -130,4 +139,48 @@ export async function fetchAttendanceRecords(
       date: String(payload.summary?.date || ""),
     },
   };
+}
+
+export async function adjustAttendanceRecordsAsAdmin(
+  input: AdminAttendanceAdjustmentInput
+) {
+  const currentUser = auth.currentUser;
+  if (!currentUser) throw new Error("Authentication required.");
+
+  const requestUrl = buildDocumentWorkerUrl("/attendance/admin-adjustment");
+  if (!requestUrl) throw new Error("Attendance worker URL is not configured.");
+
+  const response = await fetch(requestUrl, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${await currentUser.getIdToken()}`,
+    },
+    body: JSON.stringify(input),
+    cache: "no-store",
+  });
+  const payload = (await response.json().catch(() => null)) as {
+    ok?: boolean;
+    message?: string;
+    detail?: string;
+    records?: Array<{
+      id: string;
+      type: AttendanceRecordType;
+      action: "created" | "updated";
+      serverTime: string;
+    }>;
+  } | null;
+
+  if (!response.ok || !payload?.ok) {
+    throw new Error(
+      String(
+        payload?.message ||
+          payload?.detail ||
+          `Attendance adjustment request failed (${response.status}).`
+      )
+    );
+  }
+
+  return payload.records || [];
 }
