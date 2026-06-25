@@ -40,10 +40,10 @@ describe("attendance payroll calculations", () => {
 
   it("calculates late, missing, and overtime hours for one day", () => {
     const day = computeAttendanceDay(
-      "2026-06-24",
+      "2024-01-03",
       [
-        record("check_in", "2026-06-24T05:45:00.000Z"),
-        record("check_out", "2026-06-24T15:00:00.000Z"),
+        record("check_in", "2024-01-03T05:45:00.000Z"),
+        record("check_out", "2024-01-03T15:00:00.000Z"),
       ],
       { startTime: "08:30", endTime: "17:30" }
     );
@@ -57,8 +57,8 @@ describe("attendance payroll calculations", () => {
 
   it("calculates late arrival from shift start even when checkout is missing", () => {
     const day = computeAttendanceDay(
-      "2026-06-24",
-      [record("check_in", "2026-06-24T11:25:00.000Z")],
+      "2024-01-03",
+      [record("check_in", "2024-01-03T11:25:00.000Z")],
       { startTime: "09:00", endTime: "17:00" }
     );
 
@@ -70,10 +70,10 @@ describe("attendance payroll calculations", () => {
   it("summarizes monthly attendance records", () => {
     const summary = summarizeAttendanceForPayroll(
       [
-        record("check_in", "2026-06-24T05:30:00.000Z"),
-        record("check_out", "2026-06-24T14:30:00.000Z"),
-        record("check_in", "2026-06-25T06:30:00.000Z"),
-        record("check_out", "2026-06-25T13:30:00.000Z"),
+        record("check_in", "2024-01-03T05:30:00.000Z"),
+        record("check_out", "2024-01-03T14:30:00.000Z"),
+        record("check_in", "2024-01-04T06:30:00.000Z"),
+        record("check_out", "2024-01-04T13:30:00.000Z"),
       ],
       { startTime: "08:30", endTime: "17:30" }
     );
@@ -88,8 +88,8 @@ describe("attendance payroll calculations", () => {
   it("excludes weekly off days from payroll shortage totals", () => {
     const summary = summarizeAttendanceForPayroll(
       [
-        record("check_in", "2026-06-26T07:00:00.000Z"),
-        record("check_out", "2026-06-26T08:00:00.000Z"),
+        record("check_in", "2024-01-05T07:00:00.000Z"),
+        record("check_out", "2024-01-05T08:00:00.000Z"),
       ],
       {
         startTime: "09:00",
@@ -102,5 +102,50 @@ describe("attendance payroll calculations", () => {
     expect(summary.expectedHours).toBe(0);
     expect(summary.missingHours).toBe(0);
     expect(summary.lateHours).toBe(0);
+  });
+
+  it("counts absent work days from the same status logic used by the calendar", () => {
+    const summary = summarizeAttendanceForPayroll(
+      [
+        record("check_in", "2024-01-03T06:00:00.000Z"),
+        record("check_out", "2024-01-03T14:00:00.000Z"),
+      ],
+      {
+        startTime: "09:00",
+        endTime: "17:00",
+        weeklyOffDays: ["friday"],
+      },
+      {
+        workDateKeys: ["2024-01-03", "2024-01-04", "2024-01-05", "2024-01-06"],
+        todayDateKey: "2024-01-07",
+        approvedLeaveDateKeys: ["2024-01-06"],
+      }
+    );
+
+    expect(summary.absentDays).toBe(1);
+    expect(summary.absentDateKeys).toEqual(["2024-01-04"]);
+  });
+
+  it("lets manual absence override attendance records for payroll", () => {
+    const summary = summarizeAttendanceForPayroll(
+      [
+        record("check_in", "2024-06-17T06:00:00.000Z"),
+        record("check_out", "2024-06-17T14:00:00.000Z"),
+      ],
+      { startTime: "09:00", endTime: "17:00" },
+      {
+        workDateKeys: ["2024-06-17"],
+        todayDateKey: "2024-06-18",
+        absenceDateKeys: ["2024-06-17"],
+      }
+    );
+
+    expect(summary.absentDays).toBe(1);
+    expect(summary.absentDateKeys).toEqual(["2024-06-17"]);
+    expect(summary.actualHours).toBe(0);
+    expect(summary.lateHours).toBe(0);
+    expect(summary.missingHours).toBe(0);
+    expect(summary.overtimeHours).toBe(0);
+    expect(summary.completeDays).toBe(0);
   });
 });

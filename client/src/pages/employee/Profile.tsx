@@ -247,6 +247,8 @@ type EmployeePortalView =
   | "letter-request"
   | "hr-info"
   | "employment"
+  | "work-schedule"
+  | "salary-settings"
   | "salary"
   | "contracts"
   | "leaves"
@@ -266,6 +268,8 @@ const EMPLOYEE_PORTAL_VIEW_TITLES: Record<EmployeePortalView, string> = {
   "letter-request": "الخطابات",
   "hr-info": "معلومات الموارد البشرية",
   employment: "البيانات الوظيفية",
+  "work-schedule": "جدول الدوام",
+  "salary-settings": "بيانات الراتب",
   salary: "الراتب والتفاصيل المالية",
   contracts: "العقود",
   leaves: "الإجازات",
@@ -298,6 +302,10 @@ const EMPLOYEE_PORTAL_HASH_TO_VIEW: Record<string, EmployeePortalView> = {
   "employee-profile-info": "hr-info",
   employment: "employment",
   "employee-employment-info": "employment",
+  "work-schedule": "work-schedule",
+  "employee-work-schedule": "work-schedule",
+  "salary-settings": "salary-settings",
+  "employee-salary-settings": "salary-settings",
   salary: "salary",
   "employee-payroll-info": "salary",
   contracts: "contracts",
@@ -469,9 +477,9 @@ async function createAvatarCropDraft(file: File): Promise<AvatarCropDraft> {
 
 function resolveAvatarOutputType(fileType: string) {
   switch (
-  String(fileType || "")
-    .trim()
-    .toLowerCase()
+    String(fileType || "")
+      .trim()
+      .toLowerCase()
   ) {
     case "image/png":
       return "image/png";
@@ -691,7 +699,9 @@ function LeaveSummaryCard({
 
 function getRequestStatusPresentation(status: unknown) {
   const meta = getLeaveStatusMeta(status);
-  const normalized = String(status || "").trim().toLowerCase();
+  const normalized = String(status || "")
+    .trim()
+    .toLowerCase();
 
   if (
     normalized === "approved" ||
@@ -970,7 +980,8 @@ export default function EmployeeProfilePage() {
     employeeNote: "",
   });
   const [submittingLeaveRequest, setSubmittingLeaveRequest] = useState(false);
-  const [submittingServiceRequest, setSubmittingServiceRequest] = useState(false);
+  const [submittingServiceRequest, setSubmittingServiceRequest] =
+    useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -1078,11 +1089,11 @@ export default function EmployeeProfilePage() {
         setUserDoc(
           snapshot.exists()
             ? ({
-              ...(snapshotData || {}),
-              uid:
-                String(snapshotData?.uid || user.uid || snapshot.id).trim() ||
-                snapshot.id,
-            } as EmployeeProfileUserDoc)
+                ...(snapshotData || {}),
+                uid:
+                  String(snapshotData?.uid || user.uid || snapshot.id).trim() ||
+                  snapshot.id,
+              } as EmployeeProfileUserDoc)
             : null
         );
         setLoading(false);
@@ -1110,11 +1121,11 @@ export default function EmployeeProfilePage() {
     () =>
       avatarCropDraft
         ? getAvatarCropMetrics({
-          naturalWidth: avatarCropDraft.naturalWidth,
-          naturalHeight: avatarCropDraft.naturalHeight,
-          viewportSize: avatarCropViewportSize,
-          zoom: avatarCropZoom,
-        })
+            naturalWidth: avatarCropDraft.naturalWidth,
+            naturalHeight: avatarCropDraft.naturalHeight,
+            viewportSize: avatarCropViewportSize,
+            zoom: avatarCropZoom,
+          })
         : null,
     [avatarCropDraft, avatarCropViewportSize, avatarCropZoom]
   );
@@ -1129,10 +1140,12 @@ export default function EmployeeProfilePage() {
     return {
       width: `${avatarCropMetrics.width}px`,
       height: `${avatarCropMetrics.height}px`,
-      left: `${(avatarCropViewportSize - avatarCropMetrics.width) / 2 + position.x
-        }px`,
-      top: `${(avatarCropViewportSize - avatarCropMetrics.height) / 2 + position.y
-        }px`,
+      left: `${
+        (avatarCropViewportSize - avatarCropMetrics.width) / 2 + position.x
+      }px`,
+      top: `${
+        (avatarCropViewportSize - avatarCropMetrics.height) / 2 + position.y
+      }px`,
     };
   }, [avatarCropMetrics, avatarCropPosition, avatarCropViewportSize]);
   const avatarCropMiniPreviewStyle = useMemo(() => {
@@ -1148,11 +1161,13 @@ export default function EmployeeProfilePage() {
     return {
       width: `${avatarCropMetrics.width * scale}px`,
       height: `${avatarCropMetrics.height * scale}px`,
-      left: `${(previewSize - avatarCropMetrics.width * scale) / 2 + position.x * scale
-        }px`,
-      top: `${(previewSize - avatarCropMetrics.height * scale) / 2 +
+      left: `${
+        (previewSize - avatarCropMetrics.width * scale) / 2 + position.x * scale
+      }px`,
+      top: `${
+        (previewSize - avatarCropMetrics.height * scale) / 2 +
         position.y * scale
-        }px`,
+      }px`,
     };
   }, [avatarCropMetrics, avatarCropPosition, avatarCropViewportSize]);
   const avatarCropZoomLabel = `${Math.round(avatarCropZoom * 100)}%`;
@@ -1197,7 +1212,6 @@ export default function EmployeeProfilePage() {
       clampAvatarCropPosition(current, avatarCropMetrics)
     );
   }, [avatarCropMetrics]);
-
 
   useEffect(() => {
     if (!user?.uid) {
@@ -1398,7 +1412,8 @@ export default function EmployeeProfilePage() {
   const latestPayrollAttachment = latestPayrollRecord?.mudadDocument || null;
 
   const employeeOfficialFiles = useMemo(
-    () => filterActiveEmployeeFiles(employeeFiles).filter(isOfficialEmployeeFile),
+    () =>
+      filterActiveEmployeeFiles(employeeFiles).filter(isOfficialEmployeeFile),
     [employeeFiles]
   );
 
@@ -1785,9 +1800,10 @@ export default function EmployeeProfilePage() {
         )
       );
 
-      const recipients = hrUsers.docs.filter(docSnap =>
-        docSnap.id !== user.uid &&
-        shouldReceiveLeaveNotification(docSnap.data() as Record<string, any>)
+      const recipients = hrUsers.docs.filter(
+        docSnap =>
+          docSnap.id !== user.uid &&
+          shouldReceiveLeaveNotification(docSnap.data() as Record<string, any>)
       );
 
       await Promise.all(
@@ -1845,27 +1861,30 @@ export default function EmployeeProfilePage() {
           ? employeeProfileSource.docId
           : String(user.linkedEmployeeId || "").trim()) || null;
 
-      const docRef = await addDoc(collection(db, EMPLOYEE_LEAVE_REQUESTS_COLLECTION), {
-        ...buildEmployeeLeaveRequestPayload({
-          authUid: user.uid,
-          employeeDocId,
-          employeeName:
-            profile.personal.name !== EMPLOYEE_EMPTY_VALUE
-              ? profile.personal.name
-              : user.displayName || user.email || "موظف",
-          employeeEmail:
-            profile.personal.email !== EMPLOYEE_EMPTY_VALUE
-              ? profile.personal.email
-              : user.email || null,
-          leaveType: leaveForm.leaveType,
-          startDate,
-          endDate,
-          daysCount,
-          employeeNote: leaveForm.employeeNote,
-        }),
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
+      const docRef = await addDoc(
+        collection(db, EMPLOYEE_LEAVE_REQUESTS_COLLECTION),
+        {
+          ...buildEmployeeLeaveRequestPayload({
+            authUid: user.uid,
+            employeeDocId,
+            employeeName:
+              profile.personal.name !== EMPLOYEE_EMPTY_VALUE
+                ? profile.personal.name
+                : user.displayName || user.email || "موظف",
+            employeeEmail:
+              profile.personal.email !== EMPLOYEE_EMPTY_VALUE
+                ? profile.personal.email
+                : user.email || null,
+            leaveType: leaveForm.leaveType,
+            startDate,
+            endDate,
+            daysCount,
+            employeeNote: leaveForm.employeeNote,
+          }),
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        }
+      );
 
       const hrUsers = await getDocs(
         query(
@@ -1874,9 +1893,10 @@ export default function EmployeeProfilePage() {
         )
       );
 
-      const leaveNotificationRecipients = hrUsers.docs.filter(docSnap =>
-        docSnap.id !== user.uid &&
-        shouldReceiveLeaveNotification(docSnap.data() as Record<string, any>)
+      const leaveNotificationRecipients = hrUsers.docs.filter(
+        docSnap =>
+          docSnap.id !== user.uid &&
+          shouldReceiveLeaveNotification(docSnap.data() as Record<string, any>)
       );
 
       await Promise.all(
@@ -1957,12 +1977,16 @@ export default function EmployeeProfilePage() {
         : "border-slate-200 bg-slate-100 text-slate-600";
 
   const employeeIdForAttendance =
-    employeeProfileSource?.entityId || user?.linkedEmployeeId || user?.uid || null;
+    employeeProfileSource?.entityId ||
+    user?.linkedEmployeeId ||
+    user?.uid ||
+    null;
   const employeeUidForAttendance = user?.uid || null;
 
   const latestLeaveRequestsForDashboard = leaveRequests.slice(0, 2);
   const latestServiceRequestsForDashboard = serviceRequests.slice(0, 2);
-  const currentServiceRequestType = SERVICE_REQUEST_VIEW_TO_TYPE[activeView] || null;
+  const currentServiceRequestType =
+    SERVICE_REQUEST_VIEW_TO_TYPE[activeView] || null;
   const currentServiceRequestLabel = currentServiceRequestType
     ? getEmployeeServiceRequestTypeLabel(currentServiceRequestType)
     : "";
@@ -2013,12 +2037,17 @@ export default function EmployeeProfilePage() {
             onRecorded={() => setAttendanceRefreshKey(key => key + 1)}
           />
 
-          <EmployeeCard title="اختصارات سريعة" subtitle="وصول سريع لأكثر الإجراءات استخداماً">
+          <EmployeeCard
+            title="اختصارات سريعة"
+            subtitle="وصول سريع لأكثر الإجراءات استخداماً"
+          >
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <button
                 type="button"
                 className="rounded-[24px] border border-slate-100 bg-slate-50/80 px-4 py-5 text-center transition hover:bg-white hover:shadow-sm"
-                onClick={() => openEmployeeView("attendance-correction-request")}
+                onClick={() =>
+                  openEmployeeView("attendance-correction-request")
+                }
               >
                 <UserRound className="mx-auto h-7 w-7 text-slate-500" />
                 <span className="mt-3 block text-sm font-semibold text-slate-900">
@@ -2048,7 +2077,10 @@ export default function EmployeeProfilePage() {
             </div>
           </EmployeeCard>
 
-          <EmployeeCard title="معلومات الموارد البشرية" subtitle="عناصر تنقل فقط، كل قسم يفتح في صفحة داخلية مستقلة">
+          <EmployeeCard
+            title="معلومات الموارد البشرية"
+            subtitle="عناصر تنقل فقط، كل قسم يفتح في صفحة داخلية مستقلة"
+          >
             <div className="-mx-5 -my-5 divide-y divide-slate-100">
               <InfoRow
                 icon={UserRound}
@@ -2063,9 +2095,21 @@ export default function EmployeeProfilePage() {
                 onClick={() => openEmployeeView("employment")}
               />
               <InfoRow
+                icon={Clock3}
+                label="جدول الدوام"
+                helper="بداية ونهاية الدوام، أيام الراحة، ونطاق الحضور"
+                onClick={() => openEmployeeView("work-schedule")}
+              />
+              <InfoRow
+                icon={BadgeCheck}
+                label="بيانات الراتب"
+                helper="الراتب الأساسي، التأمينات، البدلات، والخصومات الثابتة"
+                onClick={() => openEmployeeView("salary-settings")}
+              />
+              <InfoRow
                 icon={BadgeCheck}
                 label="الراتب والتفاصيل المالية"
-                helper="الراتب الأساسي، الخصومات، التأمينات وسجل الرواتب"
+                helper="سجل رواتب نهاية الشهر والراتب النهائي المقفل"
                 onClick={() => openEmployeeView("salary")}
               />
               <InfoRow
@@ -2089,12 +2133,16 @@ export default function EmployeeProfilePage() {
             </div>
           </EmployeeCard>
 
-          <EmployeeCard title="آخر الطلبات" subtitle="آخر الطلبات المسجلة في النظام الحالي">
+          <EmployeeCard
+            title="آخر الطلبات"
+            subtitle="آخر الطلبات المسجلة في النظام الحالي"
+          >
             {leaveRequestsLoading || serviceRequestsLoading ? (
               <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
                 جاري تحميل الطلبات...
               </div>
-            ) : latestLeaveRequestsForDashboard.length || latestServiceRequestsForDashboard.length ? (
+            ) : latestLeaveRequestsForDashboard.length ||
+              latestServiceRequestsForDashboard.length ? (
               <div className="space-y-3">
                 {latestServiceRequestsForDashboard.map(request => (
                   <div
@@ -2104,13 +2152,18 @@ export default function EmployeeProfilePage() {
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <div className="text-base font-semibold text-slate-950">
-                          {getEmployeeServiceRequestTypeLabel(request.requestType)}
+                          {getEmployeeServiceRequestTypeLabel(
+                            request.requestType
+                          )}
                         </div>
                         <div className="mt-1 text-xs text-slate-500">
                           {formatDateTimeEN(request.createdAt)}
                         </div>
                       </div>
-                      <Badge variant="outline" className="rounded-full border-slate-200 bg-white">
+                      <Badge
+                        variant="outline"
+                        className="rounded-full border-slate-200 bg-white"
+                      >
                         {getEmployeeServiceRequestStatusLabel(request.status)}
                       </Badge>
                     </div>
@@ -2127,7 +2180,10 @@ export default function EmployeeProfilePage() {
                           {getLeaveTypeLabel(request.leaveType)}
                         </div>
                         <div className="mt-1 text-xs text-slate-500">
-                          {formatLeaveDateRange(request.startDate, request.endDate)}
+                          {formatLeaveDateRange(
+                            request.startDate,
+                            request.endDate
+                          )}
                         </div>
                       </div>
                       <LeaveStatusBadge status={request.status} />
@@ -2143,12 +2199,18 @@ export default function EmployeeProfilePage() {
           </EmployeeCard>
 
           <div className="grid gap-4 md:grid-cols-2">
-            <EmployeeCard title="الإعلانات" subtitle="TODO: Placeholder لربط إعلانات الموارد البشرية لاحقاً بدون Firebase جديد.">
+            <EmployeeCard
+              title="الإعلانات"
+              subtitle="TODO: Placeholder لربط إعلانات الموارد البشرية لاحقاً بدون Firebase جديد."
+            >
               <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
                 لا توجد إعلانات حالياً.
               </div>
             </EmployeeCard>
-            <EmployeeCard title="الرصيد المتبقي" subtitle="يعرض الرصيد الحالي من بيانات الموظف الموجودة">
+            <EmployeeCard
+              title="الرصيد المتبقي"
+              subtitle="يعرض الرصيد الحالي من بيانات الموظف الموجودة"
+            >
               <div className="rounded-[24px] bg-slate-950 px-5 py-6 text-white">
                 <div className="text-sm text-white/65">رصيد الإجازات</div>
                 <div className="mt-2 text-3xl font-semibold">
@@ -2212,7 +2274,6 @@ export default function EmployeeProfilePage() {
               </p>
             </div>
           )}
-
         </section>
       ) : null}
 
@@ -2234,7 +2295,8 @@ export default function EmployeeProfilePage() {
                 {currentServiceRequestLabel}
               </CardTitle>
               <CardDescription className="text-sm leading-7 text-slate-600">
-                أدخل تفاصيل الطلب المطلوبة. لا يتم اعتماد الطلب إلا بعد مراجعة HR.
+                أدخل تفاصيل الطلب المطلوبة. لا يتم اعتماد الطلب إلا بعد مراجعة
+                HR.
               </CardDescription>
             </CardHeader>
 
@@ -2264,11 +2326,9 @@ export default function EmployeeProfilePage() {
                 </div>
               ) : null}
 
-              {[
-                "attendance_correction",
-                "permission",
-                "overtime",
-              ].includes(currentServiceRequestType) ? (
+              {["attendance_correction", "permission", "overtime"].includes(
+                currentServiceRequestType
+              ) ? (
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label className="text-sm font-semibold text-slate-800">
@@ -2321,7 +2381,10 @@ export default function EmployeeProfilePage() {
                     dir="rtl"
                     value={serviceRequestForm.amount}
                     onChange={event =>
-                      handleServiceRequestFormChange("amount", event.target.value)
+                      handleServiceRequestFormChange(
+                        "amount",
+                        event.target.value
+                      )
                     }
                     placeholder="مثال: 1000"
                     className="h-12 rounded-2xl border-slate-200 bg-slate-50/80 text-right shadow-none"
@@ -2428,311 +2491,316 @@ export default function EmployeeProfilePage() {
       ) : null}
 
       {activeView === "hr-info" || activeView === "employment" ? (
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
-        <section className={cn("space-y-6", activeView !== "hr-info" && "hidden")}>
-          <EmployeePortalViewHeader
-            title="معلومات الموارد البشرية"
-            description="المعلومات الشخصية وإعدادات الحساب المتاحة حالياً."
-            onBack={backToDashboard}
-          />
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
+          <section
+            className={cn("space-y-6", activeView !== "hr-info" && "hidden")}
+          >
+            <EmployeePortalViewHeader
+              title="معلومات الموارد البشرية"
+              description="المعلومات الشخصية وإعدادات الحساب المتاحة حالياً."
+              onBack={backToDashboard}
+            />
 
-          <SectionHeading
-            icon={UserRound}
-            title="البيانات الشخصية"
-            description="يعرض هذا القسم بياناتك الأساسية. يمكنك تعديل رقم الجوال والصورة الشخصية فقط، بينما الاسم والبريد للعرض فقط في هذه المرحلة."
-          />
+            <SectionHeading
+              icon={UserRound}
+              title="البيانات الشخصية"
+              description="يعرض هذا القسم بياناتك الأساسية. يمكنك تعديل رقم الجوال والصورة الشخصية فقط، بينما الاسم والبريد للعرض فقط في هذه المرحلة."
+            />
 
-          <Card className="overflow-hidden rounded-[28px] border border-slate-200/80 bg-white/95 shadow-[0_24px_70px_-42px_rgba(15,23,42,0.28)]">
-            <CardContent className="space-y-6 p-6 sm:p-8">
-              <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-                <div className="flex items-center gap-4">
-                  <Avatar className="h-52 w-52 shrink-0 rounded-full border-2 border-white bg-slate-100 shadow-sm ring-2 ring-slate-200/80">
-                    <AvatarImage
-                      src={profile.personal.avatarUrl || undefined}
-                      alt={profile.personal.name}
-                      className="object-cover"
+            <Card className="overflow-hidden rounded-[28px] border border-slate-200/80 bg-white/95 shadow-[0_24px_70px_-42px_rgba(15,23,42,0.28)]">
+              <CardContent className="space-y-6 p-6 sm:p-8">
+                <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="flex items-center gap-4">
+                    <Avatar className="h-52 w-52 shrink-0 rounded-full border-2 border-white bg-slate-100 shadow-sm ring-2 ring-slate-200/80">
+                      <AvatarImage
+                        src={profile.personal.avatarUrl || undefined}
+                        alt={profile.personal.name}
+                        className="object-cover"
+                      />
+                      <AvatarFallback className="bg-slate-900 text-lg font-semibold text-white">
+                        {initialsFromName(
+                          profile.personal.name,
+                          profile.personal.email
+                        )}
+                      </AvatarFallback>
+                    </Avatar>
+
+                    <div className="space-y-2">
+                      <div className="text-2xl font-semibold tracking-tight text-slate-950">
+                        {profile.personal.name}
+                      </div>
+                      <div className="text-sm text-slate-500">
+                        {profile.personal.email}
+                      </div>
+                      <Badge
+                        variant="outline"
+                        className="rounded-full border-[#F2B705]/35 bg-[#F2B705]/10 text-[#8b6700] shadow-none"
+                      >
+                        موظف
+                      </Badge>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-3">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="rounded-2xl border-slate-200 bg-white/90"
+                      onClick={handleAvatarButtonClick}
+                      disabled={uploadingAvatar}
+                    >
+                      {uploadingAvatar ? (
+                        <Loader2 className="ml-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Camera className="ml-2 h-4 w-4" />
+                      )}
+                      {profile.personal.avatarUrl
+                        ? "تغيير الصورة"
+                        : "رفع الصورة"}
+                    </Button>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleAvatarChange}
                     />
-                    <AvatarFallback className="bg-slate-900 text-lg font-semibold text-white">
-                      {initialsFromName(
-                        profile.personal.name,
-                        profile.personal.email
-                      )}
-                    </AvatarFallback>
-                  </Avatar>
-
-                  <div className="space-y-2">
-                    <div className="text-2xl font-semibold tracking-tight text-slate-950">
-                      {profile.personal.name}
-                    </div>
-                    <div className="text-sm text-slate-500">
-                      {profile.personal.email}
-                    </div>
-                    <Badge
-                      variant="outline"
-                      className="rounded-full border-[#F2B705]/35 bg-[#F2B705]/10 text-[#8b6700] shadow-none"
-                    >
-                      موظف
-                    </Badge>
                   </div>
                 </div>
 
-                <div className="flex flex-wrap gap-3">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="rounded-2xl border-slate-200 bg-white/90"
-                    onClick={handleAvatarButtonClick}
-                    disabled={uploadingAvatar}
-                  >
-                    {uploadingAvatar ? (
-                      <Loader2 className="ml-2 h-4 w-4 animate-spin" />
-                    ) : (
-                      <Camera className="ml-2 h-4 w-4" />
-                    )}
-                    {profile.personal.avatarUrl ? "تغيير الصورة" : "رفع الصورة"}
-                  </Button>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={handleAvatarChange}
-                  />
-                </div>
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <ReadonlyField
-                  label="الاسم"
-                  value={profile.personal.name}
-                  icon={UserRound}
-                />
-                <ReadonlyField
-                  label="البريد الإلكتروني"
-                  value={profile.personal.email}
-                  icon={Mail}
-                  dir="ltr"
-                />
-              </div>
-
-              <div className="rounded-[24px] border border-slate-200/80 bg-slate-50/75 p-5 shadow-sm">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
-                      <Phone className="h-3.5 w-3.5" />
-                      رقم الجوال
-                    </div>
-                    <p className="text-sm leading-7 text-slate-600">
-                      يمكنك تحديث رقم الجوال المرتبط بحسابك لاستخدامه في
-                      التواصل.
-                    </p>
-                  </div>
-                  <Badge
-                    variant="outline"
-                    className="rounded-full border-emerald-200 bg-emerald-50 text-emerald-700 shadow-none"
-                  >
-                    قابل للتعديل
-                  </Badge>
-                </div>
-
-                <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-center">
-                  <Input
-                    dir="ltr"
-                    value={phoneInput}
-                    onChange={event => setPhoneInput(event.target.value)}
-                    placeholder="05xxxxxxxx"
-                    className="h-12 rounded-2xl border-slate-200 bg-white text-left shadow-none"
-                  />
-                  <Button
-                    type="button"
-                    className="h-12 rounded-2xl bg-slate-950 px-6 text-white hover:bg-[#15233c]"
-                    disabled={savingPhone || !phoneDirty || !phoneValid}
-                    onClick={handleSavePhone}
-                  >
-                    {savingPhone ? (
-                      <Loader2 className="ml-2 h-4 w-4 animate-spin" />
-                    ) : null}
-                    حفظ رقم الجوال
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="rounded-[28px] border border-slate-200/80 bg-white/95 shadow-[0_24px_70px_-42px_rgba(15,23,42,0.22)]">
-            <CardHeader className="space-y-3">
-              <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
-                <KeyRound className="h-4 w-4" />
-                أمان الحساب
-              </div>
-              <CardTitle className="text-xl font-semibold text-slate-950">
-                تغيير كلمة المرور
-              </CardTitle>
-              <CardDescription className="text-sm leading-7 text-slate-600">
-                يمكنك تغيير كلمة المرور الخاصة بحسابك فقط. لن يؤثر ذلك على أي
-                إعدادات إدارية أخرى.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-4">
-              <Input
-                type="password"
-                value={currentPassword}
-                onChange={event => setCurrentPassword(event.target.value)}
-                placeholder="كلمة المرور الحالية"
-                className="h-12 rounded-2xl border-slate-200 bg-slate-50/80 shadow-none"
-              />
-              <Input
-                type="password"
-                value={newPassword}
-                onChange={event => setNewPassword(event.target.value)}
-                placeholder="كلمة المرور الجديدة"
-                className="h-12 rounded-2xl border-slate-200 bg-slate-50/80 shadow-none"
-              />
-              <Input
-                type="password"
-                value={confirmPassword}
-                onChange={event => setConfirmPassword(event.target.value)}
-                placeholder="تأكيد كلمة المرور الجديدة"
-                className="h-12 rounded-2xl border-slate-200 bg-slate-50/80 shadow-none"
-              />
-              <div className="flex justify-start">
-                <Button
-                  type="button"
-                  className="h-12 rounded-2xl bg-[#F2B705] px-6 text-slate-950 hover:bg-[#dfaa00]"
-                  disabled={changingPassword}
-                  onClick={handleChangePassword}
-                >
-                  {changingPassword ? (
-                    <Loader2 className="ml-2 h-4 w-4 animate-spin" />
-                  ) : null}
-                  تغيير كلمة المرور
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </section>
-
-        <section className={cn("space-y-6", activeView !== "employment" && "hidden")}>
-          <EmployeePortalViewHeader
-            title="البيانات الوظيفية"
-            description="بيانات العمل المعروضة من المصدر الحالي بدون تعديل."
-            onBack={backToDashboard}
-          />
-
-          <SectionHeading
-            icon={BriefcaseBusiness}
-            title="بيانات العمل"
-            description="هذه البيانات مرتبطة بوظيفتك داخل الشركة، وهي للعرض فقط في هذه المرحلة. تعديلها سيكون لاحقًا من جهة الإدارة أو الموارد البشرية."
-          />
-
-          <Card className="rounded-[28px] border border-slate-200/80 bg-white/95 shadow-[0_24px_70px_-42px_rgba(15,23,42,0.22)]">
-            <CardContent className="space-y-5 p-6 sm:p-8">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <EmploymentTile
-                  label="المسمى الوظيفي"
-                  value={profile.employment.title}
-                  icon={BriefcaseBusiness}
-                />
-                <EmploymentTile
-                  label="القسم / الإدارة"
-                  value={profile.employment.department}
-                  icon={Building2}
-                />
-                <EmploymentTile
-                  label="تاريخ بداية العمل"
-                  value={
-                    profile.employment.startDate
-                      ? formatDateEN(profile.employment.startDate)
-                      : EMPLOYEE_EMPTY_VALUE
-                  }
-                  icon={CalendarDays}
-                />
-                <EmploymentTile
-                  label="رقم البصمة"
-                  value={profile.employment.fingerprintNumber}
-                  icon={UserRound}
-                  dir="ltr"
-                />
-                <EmploymentTile
-                  label="رصيد الإجازات"
-                  value={profile.employment.leaveBalanceLabel}
-                  icon={BadgeCheck}
-                />
-                <EmploymentTile
-                  label="الحالة الوظيفية"
-                  value={profile.employment.statusLabel}
-                  icon={ShieldCheck}
-                  badge={
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        "rounded-full shadow-none",
-                        statusBadgeClass
-                      )}
-                    >
-                      {profile.employment.statusLabel}
-                    </Badge>
-                  }
-                />
-                {profile.employment.employeeCode !== EMPLOYEE_EMPTY_VALUE ? (
-                  <EmploymentTile
-                    label="الرقم الوظيفي"
-                    value={profile.employment.employeeCode}
+                <div className="grid gap-4 md:grid-cols-2">
+                  <ReadonlyField
+                    label="الاسم"
+                    value={profile.personal.name}
                     icon={UserRound}
                   />
-                ) : null}
-              </div>
-
-              <div className="space-y-4 rounded-[24px] border border-slate-200 bg-slate-50/70 p-5">
-                <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
-                  <Clock3 className="h-4 w-4" />
-                  جدول الدوام
-                </div>
-
-                <div className="grid gap-4 sm:grid-cols-3">
-                  <EmploymentTile
-                    label="وقت الدوام"
-                    value={formatWorkScheduleRange({
-                      startTime: profile.employment.shiftStartTime,
-                      endTime: profile.employment.shiftEndTime,
-                    })}
-                    icon={Clock3}
+                  <ReadonlyField
+                    label="البريد الإلكتروني"
+                    value={profile.personal.email}
+                    icon={Mail}
                     dir="ltr"
                   />
+                </div>
+
+                <div className="rounded-[24px] border border-slate-200/80 bg-slate-50/75 p-5 shadow-sm">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                        <Phone className="h-3.5 w-3.5" />
+                        رقم الجوال
+                      </div>
+                      <p className="text-sm leading-7 text-slate-600">
+                        يمكنك تحديث رقم الجوال المرتبط بحسابك لاستخدامه في
+                        التواصل.
+                      </p>
+                    </div>
+                    <Badge
+                      variant="outline"
+                      className="rounded-full border-emerald-200 bg-emerald-50 text-emerald-700 shadow-none"
+                    >
+                      قابل للتعديل
+                    </Badge>
+                  </div>
+
+                  <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-center">
+                    <Input
+                      dir="ltr"
+                      value={phoneInput}
+                      onChange={event => setPhoneInput(event.target.value)}
+                      placeholder="05xxxxxxxx"
+                      className="h-12 rounded-2xl border-slate-200 bg-white text-left shadow-none"
+                    />
+                    <Button
+                      type="button"
+                      className="h-12 rounded-2xl bg-slate-950 px-6 text-white hover:bg-[#15233c]"
+                      disabled={savingPhone || !phoneDirty || !phoneValid}
+                      onClick={handleSavePhone}
+                    >
+                      {savingPhone ? (
+                        <Loader2 className="ml-2 h-4 w-4 animate-spin" />
+                      ) : null}
+                      حفظ رقم الجوال
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="rounded-[28px] border border-slate-200/80 bg-white/95 shadow-[0_24px_70px_-42px_rgba(15,23,42,0.22)]">
+              <CardHeader className="space-y-3">
+                <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                  <KeyRound className="h-4 w-4" />
+                  أمان الحساب
+                </div>
+                <CardTitle className="text-xl font-semibold text-slate-950">
+                  تغيير كلمة المرور
+                </CardTitle>
+                <CardDescription className="text-sm leading-7 text-slate-600">
+                  يمكنك تغيير كلمة المرور الخاصة بحسابك فقط. لن يؤثر ذلك على أي
+                  إعدادات إدارية أخرى.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-4">
+                <Input
+                  type="password"
+                  value={currentPassword}
+                  onChange={event => setCurrentPassword(event.target.value)}
+                  placeholder="كلمة المرور الحالية"
+                  className="h-12 rounded-2xl border-slate-200 bg-slate-50/80 shadow-none"
+                />
+                <Input
+                  type="password"
+                  value={newPassword}
+                  onChange={event => setNewPassword(event.target.value)}
+                  placeholder="كلمة المرور الجديدة"
+                  className="h-12 rounded-2xl border-slate-200 bg-slate-50/80 shadow-none"
+                />
+                <Input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={event => setConfirmPassword(event.target.value)}
+                  placeholder="تأكيد كلمة المرور الجديدة"
+                  className="h-12 rounded-2xl border-slate-200 bg-slate-50/80 shadow-none"
+                />
+                <div className="flex justify-start">
+                  <Button
+                    type="button"
+                    className="h-12 rounded-2xl bg-[#F2B705] px-6 text-slate-950 hover:bg-[#dfaa00]"
+                    disabled={changingPassword}
+                    onClick={handleChangePassword}
+                  >
+                    {changingPassword ? (
+                      <Loader2 className="ml-2 h-4 w-4 animate-spin" />
+                    ) : null}
+                    تغيير كلمة المرور
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </section>
+
+          <section
+            className={cn("space-y-6", activeView !== "employment" && "hidden")}
+          >
+            <EmployeePortalViewHeader
+              title="البيانات الوظيفية"
+              description="بيانات العمل المعروضة من المصدر الحالي بدون تعديل."
+              onBack={backToDashboard}
+            />
+
+            <SectionHeading
+              icon={BriefcaseBusiness}
+              title="بيانات العمل"
+              description="هذه البيانات مرتبطة بوظيفتك داخل الشركة، وهي للعرض فقط في هذه المرحلة. تعديلها سيكون لاحقًا من جهة الإدارة أو الموارد البشرية."
+            />
+
+            <Card className="rounded-[28px] border border-slate-200/80 bg-white/95 shadow-[0_24px_70px_-42px_rgba(15,23,42,0.22)]">
+              <CardContent className="space-y-5 p-6 sm:p-8">
+                <div className="grid gap-4 sm:grid-cols-2">
                   <EmploymentTile
-                    label="أيام الراحة"
-                    value={profile.employment.weeklyOffDaysLabel}
+                    label="المسمى الوظيفي"
+                    value={profile.employment.title}
+                    icon={BriefcaseBusiness}
+                  />
+                  <EmploymentTile
+                    label="القسم / الإدارة"
+                    value={profile.employment.department}
+                    icon={Building2}
+                  />
+                  <EmploymentTile
+                    label="تاريخ بداية العمل"
+                    value={
+                      profile.employment.startDate
+                        ? formatDateEN(profile.employment.startDate)
+                        : EMPLOYEE_EMPTY_VALUE
+                    }
                     icon={CalendarDays}
                   />
                   <EmploymentTile
-                    label="نطاق الحضور"
-                    value={profile.employment.attendanceZoneLabel}
-                    icon={MapPin}
+                    label="رقم البصمة"
+                    value={profile.employment.fingerprintNumber}
+                    icon={UserRound}
+                    dir="ltr"
                   />
+                  <EmploymentTile
+                    label="رصيد الإجازات"
+                    value={profile.employment.leaveBalanceLabel}
+                    icon={BadgeCheck}
+                  />
+                  <EmploymentTile
+                    label="الحالة الوظيفية"
+                    value={profile.employment.statusLabel}
+                    icon={ShieldCheck}
+                    badge={
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "rounded-full shadow-none",
+                          statusBadgeClass
+                        )}
+                      >
+                        {profile.employment.statusLabel}
+                      </Badge>
+                    }
+                  />
+                  {profile.employment.employeeCode !== EMPLOYEE_EMPTY_VALUE ? (
+                    <EmploymentTile
+                      label="الرقم الوظيفي"
+                      value={profile.employment.employeeCode}
+                      icon={UserRound}
+                    />
+                  ) : null}
                 </div>
-              </div>
 
-              <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50/60 p-4 text-sm leading-7 text-slate-600">
-                بيانات العمل هنا للعرض فقط. لا يمكنك تعديل المسمى الوظيفي أو
-                رصيد الإجازات أو الحالة الوظيفية بنفسك من هذه الصفحة.
-              </div>
-
-              <div className="space-y-4 rounded-[24px] border border-slate-200 bg-slate-50/70 p-5">
-                <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
-                  <FileText className="h-4 w-4" />
-                  المستندات الرسمية
-                </div>
-
-                <div className="text-sm leading-7 text-slate-600">
-                  ارفع أي مستند رسمي يخص الموظف، وسيظهر داخل بياناته الوظيفية.
-                </div>
-
-                {employeeFilesLoading ? (
-                  <div className="rounded-[18px] border border-dashed border-slate-200 bg-white px-4 py-6 text-center text-sm text-slate-500">
-                    جاري تحميل المستندات الرسمية...
+                <div className="hidden space-y-4 rounded-[24px] border border-slate-200 bg-slate-50/70 p-5">
+                  <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                    <Clock3 className="h-4 w-4" />
+                    جدول الدوام
                   </div>
-                ) : (
-                  employeeOfficialFiles.length ? (
+
+                  <div className="grid gap-4 sm:grid-cols-3">
+                    <EmploymentTile
+                      label="وقت الدوام"
+                      value={formatWorkScheduleRange({
+                        startTime: profile.employment.shiftStartTime,
+                        endTime: profile.employment.shiftEndTime,
+                      })}
+                      icon={Clock3}
+                      dir="ltr"
+                    />
+                    <EmploymentTile
+                      label="أيام الراحة"
+                      value={profile.employment.weeklyOffDaysLabel}
+                      icon={CalendarDays}
+                    />
+                    <EmploymentTile
+                      label="نطاق الحضور"
+                      value={profile.employment.attendanceZoneLabel}
+                      icon={MapPin}
+                    />
+                  </div>
+                </div>
+
+                <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50/60 p-4 text-sm leading-7 text-slate-600">
+                  بيانات العمل هنا للعرض فقط. لا يمكنك تعديل المسمى الوظيفي أو
+                  رصيد الإجازات أو الحالة الوظيفية بنفسك من هذه الصفحة.
+                </div>
+
+                <div className="space-y-4 rounded-[24px] border border-slate-200 bg-slate-50/70 p-5">
+                  <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                    <FileText className="h-4 w-4" />
+                    المستندات الرسمية
+                  </div>
+
+                  <div className="text-sm leading-7 text-slate-600">
+                    ارفع أي مستند رسمي يخص الموظف، وسيظهر داخل بياناته الوظيفية.
+                  </div>
+
+                  {employeeFilesLoading ? (
+                    <div className="rounded-[18px] border border-dashed border-slate-200 bg-white px-4 py-6 text-center text-sm text-slate-500">
+                      جاري تحميل المستندات الرسمية...
+                    </div>
+                  ) : employeeOfficialFiles.length ? (
                     <div className="grid gap-4">
                       {employeeOfficialFiles.map(file => (
                         <div
@@ -2775,19 +2843,25 @@ export default function EmployeeProfilePage() {
 
                           <div className="grid gap-3 text-sm text-slate-600 md:grid-cols-2 xl:grid-cols-4">
                             <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-4 py-3">
-                              <div className="text-xs text-slate-500">اسم الملف</div>
+                              <div className="text-xs text-slate-500">
+                                اسم الملف
+                              </div>
                               <div className="mt-1 font-semibold text-slate-900">
                                 {file.fileName}
                               </div>
                             </div>
                             <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-4 py-3">
-                              <div className="text-xs text-slate-500">الحجم</div>
+                              <div className="text-xs text-slate-500">
+                                الحجم
+                              </div>
                               <div className="mt-1 font-semibold text-slate-900">
                                 {formatFileSizeEN(file.fileSize ?? null)}
                               </div>
                             </div>
                             <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-4 py-3 md:col-span-2 xl:col-span-2">
-                              <div className="text-xs text-slate-500">تاريخ الرفع</div>
+                              <div className="text-xs text-slate-500">
+                                تاريخ الرفع
+                              </div>
                               <div className="mt-1 font-semibold text-slate-900">
                                 {file.uploadedAtDate
                                   ? formatDateTimeEN(file.uploadedAtDate)
@@ -2799,7 +2873,11 @@ export default function EmployeeProfilePage() {
                           <div className="flex flex-wrap gap-2">
                             {file.viewUrl ? (
                               <Button asChild type="button" variant="outline">
-                                <a href={file.viewUrl} target="_blank" rel="noreferrer">
+                                <a
+                                  href={file.viewUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                >
                                   <Eye className="ml-2 h-4 w-4" />
                                   فتح الملف
                                 </a>
@@ -2826,27 +2904,62 @@ export default function EmployeeProfilePage() {
                     <div className="rounded-[16px] border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
                       لا توجد مستندات رسمية مرفوعة حتى الآن.
                     </div>
-                  )
-                )}
-              </div>
-
-            </CardContent>
-          </Card>
-        </section>
-      </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </section>
+        </div>
       ) : null}
 
-      {activeView === "salary" ? (
+      {activeView === "work-schedule" ? (
         <section className="space-y-6">
           <EmployeePortalViewHeader
-            title="الراتب والتفاصيل المالية"
-            description="الراتب الأساسي، الخصومات، التأمينات وسجل رواتب نهاية الشهر."
+            title="جدول الدوام"
+            description="مصدر الحضور والغياب والتأخير واستثناء أيام الراحة من الغياب."
             onBack={backToDashboard}
           />
 
           <EmployeeCard
-            title="التفاصيل المالية الأساسية"
-            subtitle="هذه القيم من بيانات الموظف وتستخدم كمرجع لاحتساب الرواتب المقفلة."
+            title="جدول الدوام ونطاق الحضور"
+            subtitle="هذه القيم للعرض من ملف الموظف وتعتمد عليها صفحات الحضور والراتب."
+          >
+            <div className="grid gap-4 md:grid-cols-3">
+              <EmploymentTile
+                label="وقت الدوام"
+                value={formatWorkScheduleRange({
+                  startTime: profile.employment.shiftStartTime,
+                  endTime: profile.employment.shiftEndTime,
+                })}
+                icon={Clock3}
+                dir="ltr"
+              />
+              <EmploymentTile
+                label="أيام الراحة الأسبوعية"
+                value={profile.employment.weeklyOffDaysLabel}
+                icon={CalendarDays}
+              />
+              <EmploymentTile
+                label="نطاق الحضور"
+                value={profile.employment.attendanceZoneLabel}
+                icon={MapPin}
+              />
+            </div>
+          </EmployeeCard>
+        </section>
+      ) : null}
+
+      {activeView === "salary-settings" ? (
+        <section className="space-y-6">
+          <EmployeePortalViewHeader
+            title="بيانات الراتب"
+            description="إعدادات الراتب الثابتة المحفوظة في ملف الموظف، وليست سجل قفل نهاية الشهر."
+            onBack={backToDashboard}
+          />
+
+          <EmployeeCard
+            title="بيانات الراتب الثابتة"
+            subtitle="تستخدم هذه القيم كمرجع أساسي عند احتساب راتب نهاية الشهر."
           >
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               <EmploymentTile
@@ -2857,6 +2970,34 @@ export default function EmployeeProfilePage() {
                     : formatCurrencyValue(profile.employment.baseSalary)
                 }
                 icon={BadgeCheck}
+              />
+              <EmploymentTile
+                label="بدل السكن"
+                value={formatOptionalCurrencyValue(
+                  profile.employment.housingAllowance
+                )}
+                icon={Plus}
+              />
+              <EmploymentTile
+                label="بدل المواصلات"
+                value={formatOptionalCurrencyValue(
+                  profile.employment.transportationAllowance
+                )}
+                icon={Plus}
+              />
+              <EmploymentTile
+                label="بدلات ثابتة أخرى"
+                value={formatOptionalCurrencyValue(
+                  profile.employment.otherAllowances
+                )}
+                icon={Plus}
+              />
+              <EmploymentTile
+                label="إجمالي البدلات"
+                value={formatOptionalCurrencyValue(
+                  profile.employment.allowances
+                )}
+                icon={Plus}
               />
               <EmploymentTile
                 label="التأمينات"
@@ -2870,11 +3011,6 @@ export default function EmployeeProfilePage() {
                 value={formatOptionalCurrencyValue(fixedDeductionsTotal)}
                 icon={Minus}
               />
-              <EmploymentTile
-                label="البدلات"
-                value={formatOptionalCurrencyValue(profile.employment.allowances)}
-                icon={Plus}
-              />
             </div>
 
             {profile.employment.salaryDeductions.length ? (
@@ -2883,23 +3019,98 @@ export default function EmployeeProfilePage() {
                   تفاصيل الخصومات الثابتة
                 </div>
                 <div className="grid gap-3 md:grid-cols-2">
-                  {profile.employment.salaryDeductions.map((deduction, index) => (
-                    <div
-                      key={deduction.id || `${deduction.title}-${index}`}
-                      className="rounded-[18px] border border-slate-200 bg-white px-4 py-3"
-                    >
-                      <div className="text-xs text-slate-500">
-                        {deduction.title}
+                  {profile.employment.salaryDeductions.map(
+                    (deduction, index) => (
+                      <div
+                        key={deduction.id || `${deduction.title}-${index}`}
+                        className="rounded-[18px] border border-slate-200 bg-white px-4 py-3"
+                      >
+                        <div className="text-xs text-slate-500">
+                          {deduction.title}
+                        </div>
+                        <div className="mt-1 text-base font-semibold text-slate-950">
+                          {formatCurrencyValue(deduction.amount)}
+                        </div>
                       </div>
-                      <div className="mt-1 text-base font-semibold text-slate-950">
-                        {formatCurrencyValue(deduction.amount)}
-                      </div>
-                    </div>
-                  ))}
+                    )
+                  )}
                 </div>
               </div>
             ) : null}
           </EmployeeCard>
+        </section>
+      ) : null}
+
+      {activeView === "salary" ? (
+        <section className="space-y-6">
+          <EmployeePortalViewHeader
+            title="الراتب والتفاصيل المالية"
+            description="سجل رواتب نهاية الشهر المحسوب من الحضور والغياب والتأخير والأوفر تايم."
+            onBack={backToDashboard}
+          />
+
+          <div className="hidden">
+            <EmployeeCard
+              title="التفاصيل المالية الأساسية"
+              subtitle="هذه القيم من بيانات الموظف وتستخدم كمرجع لاحتساب الرواتب المقفلة."
+            >
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                <EmploymentTile
+                  label="الراتب الأساسي"
+                  value={
+                    profile.employment.baseSalary === null
+                      ? EMPLOYEE_EMPTY_VALUE
+                      : formatCurrencyValue(profile.employment.baseSalary)
+                  }
+                  icon={BadgeCheck}
+                />
+                <EmploymentTile
+                  label="التأمينات"
+                  value={formatOptionalCurrencyValue(
+                    profile.employment.insuranceDeduction
+                  )}
+                  icon={ShieldCheck}
+                />
+                <EmploymentTile
+                  label="الخصومات الثابتة"
+                  value={formatOptionalCurrencyValue(fixedDeductionsTotal)}
+                  icon={Minus}
+                />
+                <EmploymentTile
+                  label="البدلات"
+                  value={formatOptionalCurrencyValue(
+                    profile.employment.allowances
+                  )}
+                  icon={Plus}
+                />
+              </div>
+
+              {profile.employment.salaryDeductions.length ? (
+                <div className="mt-5 rounded-[24px] border border-slate-200 bg-slate-50/70 p-5">
+                  <div className="mb-4 text-sm font-semibold text-slate-900">
+                    تفاصيل الخصومات الثابتة
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {profile.employment.salaryDeductions.map(
+                      (deduction, index) => (
+                        <div
+                          key={deduction.id || `${deduction.title}-${index}`}
+                          className="rounded-[18px] border border-slate-200 bg-white px-4 py-3"
+                        >
+                          <div className="text-xs text-slate-500">
+                            {deduction.title}
+                          </div>
+                          <div className="mt-1 text-base font-semibold text-slate-950">
+                            {formatCurrencyValue(deduction.amount)}
+                          </div>
+                        </div>
+                      )
+                    )}
+                  </div>
+                </div>
+              ) : null}
+            </EmployeeCard>
+          </div>
 
           <EmployeeCard
             title="آخر راتب مقفل"
@@ -3017,7 +3228,9 @@ export default function EmployeeProfilePage() {
                         {latestPayrollRecord.mudadDocumentDownloadUrl ? (
                           <Button asChild type="button" variant="outline">
                             <a
-                              href={latestPayrollRecord.mudadDocumentDownloadUrl}
+                              href={
+                                latestPayrollRecord.mudadDocumentDownloadUrl
+                              }
                               rel="noreferrer"
                               download={
                                 latestPayrollAttachment.fileName || true
@@ -3124,7 +3337,9 @@ export default function EmployeeProfilePage() {
                               <a
                                 href={record.mudadDocumentDownloadUrl}
                                 rel="noreferrer"
-                                download={record.mudadDocument?.fileName || true}
+                                download={
+                                  record.mudadDocument?.fileName || true
+                                }
                               >
                                 <Download className="ml-2 h-4 w-4" />
                                 تنزيل
@@ -3154,7 +3369,10 @@ export default function EmployeeProfilePage() {
             onBack={backToDashboard}
           />
 
-          <EmployeeCard title="العقود الحالية والمنتهية" subtitle="TODO: Placeholder حتى تتوفر بيانات العقود من المصدر الحالي.">
+          <EmployeeCard
+            title="العقود الحالية والمنتهية"
+            subtitle="TODO: Placeholder حتى تتوفر بيانات العقود من المصدر الحالي."
+          >
             <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50 px-5 py-10 text-center text-sm text-slate-500">
               لا توجد بيانات عقود متاحة حالياً.
             </div>
@@ -3366,7 +3584,12 @@ export default function EmployeeProfilePage() {
             title="المستندات الرسمية"
             subtitle="يعرض ما هو محمل مسبقاً من بيانات الملفات الحالية فقط."
             action={
-              <Button asChild type="button" variant="outline" className="rounded-2xl border-slate-200 bg-white">
+              <Button
+                asChild
+                type="button"
+                variant="outline"
+                className="rounded-2xl border-slate-200 bg-white"
+              >
                 <a href="/employee/files">فتح صفحة الملفات</a>
               </Button>
             }
@@ -3392,8 +3615,17 @@ export default function EmployeeProfilePage() {
                         </div>
                       </div>
                       {file.viewUrl ? (
-                        <Button asChild type="button" variant="outline" size="sm">
-                          <a href={file.viewUrl} target="_blank" rel="noreferrer">
+                        <Button
+                          asChild
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                        >
+                          <a
+                            href={file.viewUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
                             فتح
                           </a>
                         </Button>
@@ -3412,377 +3644,377 @@ export default function EmployeeProfilePage() {
       ) : null}
 
       {activeView === "leave-request" ? (
-      <section className="space-y-6">
-        <EmployeePortalViewHeader
-          title="طلب إجازة"
-          description="إنشاء طلب إجازة باستخدام منطق الإرسال الحالي نفسه."
-          onBack={backToDashboard}
-        />
+        <section className="space-y-6">
+          <EmployeePortalViewHeader
+            title="طلب إجازة"
+            description="إنشاء طلب إجازة باستخدام منطق الإرسال الحالي نفسه."
+            onBack={backToDashboard}
+          />
 
-        <SectionHeading
-          icon={CalendarDays}
-          title="الإجازات"
-          description="هنا يمكنك متابعة رصيد الإجازات ورفع طلب جديد والاطلاع على آخر إجازة وسجل الطلبات السابقة."
-        />
+          <SectionHeading
+            icon={CalendarDays}
+            title="الإجازات"
+            description="هنا يمكنك متابعة رصيد الإجازات ورفع طلب جديد والاطلاع على آخر إجازة وسجل الطلبات السابقة."
+          />
 
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,0.95fr)]">
-          <Card className="rounded-[28px] border border-slate-200/80 bg-white/95 shadow-[0_24px_70px_-42px_rgba(15,23,42,0.22)]">
-            <CardHeader className="space-y-3">
-              <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
-                <Clock3 className="h-4 w-4" />
-                آخر إجازة معتمدة
-              </div>
-              <CardTitle className="text-xl font-semibold text-slate-950">
-                ملخص الإجازات الحالية
-              </CardTitle>
-              <CardDescription className="text-sm leading-7 text-slate-600">
-                الرصيد الحالي وآخر إجازة معتمدة يظهران هنا بشكل مباشر وسريع.
-              </CardDescription>
-            </CardHeader>
-
-            <CardContent className="space-y-5">
-              <div className="grid gap-4 md:grid-cols-3">
-                <LeaveSummaryCard
-                  label="الرصيد الحالي"
-                  value={profile.employment.leaveBalanceLabel}
-                  icon={BadgeCheck}
-                  accent="text-[#B98500]"
-                />
-                <LeaveSummaryCard
-                  label="حالة آخر إجازة معتمدة"
-                  value={
-                    latestApprovedLeaveRequest
-                      ? getLeaveStatusMeta(latestApprovedLeaveRequest.status)
-                        .label
-                      : "لا توجد إجازات"
-                  }
-                  icon={
-                    latestApprovedLeaveRequest?.status === "approved"
-                      ? CheckCircle2
-                      : latestApprovedLeaveRequest?.status === "rejected"
-                        ? XCircle
-                        : Clock3
-                  }
-                />
-                <LeaveSummaryCard
-                  label="عدد الأيام"
-                  value={
-                    latestApprovedLeaveRequest
-                      ? formatLeaveDaysLabel(
-                        latestApprovedLeaveRequest.daysCount
-                      )
-                      : "—"
-                  }
-                  icon={CalendarDays}
-                />
-              </div>
-
-              {latestApprovedLeaveRequest ? (
-                <div className="rounded-[24px] border border-slate-200/80 bg-slate-50/75 p-5 shadow-sm">
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                    <div className="space-y-3">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge
-                          variant="outline"
-                          className="rounded-full border-[#F2B705]/35 bg-[#F2B705]/10 text-[#8b6700] shadow-none"
-                        >
-                          {getLeaveTypeLabel(
-                            latestApprovedLeaveRequest.leaveType
-                          )}
-                        </Badge>
-                        <LeaveStatusBadge
-                          status={latestApprovedLeaveRequest.status}
-                        />
-                      </div>
-
-                      <div className="grid gap-2 text-sm text-slate-600">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-semibold text-slate-900">
-                            الفترة:
-                          </span>
-                          <span>
-                            {formatLeaveDateRange(
-                              latestApprovedLeaveRequest.startDate,
-                              latestApprovedLeaveRequest.endDate
-                            )}
-                          </span>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-semibold text-slate-900">
-                            تاريخ الطلب:
-                          </span>
-                          <span>
-                            {formatDateTimeEN(
-                              latestApprovedLeaveRequest.createdAt
-                            )}
-                          </span>
-                        </div>
-                        {latestApprovedLeaveRequest.employeeNote ? (
-                          <div className="rounded-2xl border border-slate-200 bg-white/80 px-4 py-3 leading-7 text-slate-600">
-                            <span className="font-semibold text-slate-900">
-                              ملاحظتك:
-                            </span>{" "}
-                            {latestApprovedLeaveRequest.employeeNote}
-                          </div>
-                        ) : null}
-                        {latestApprovedLeaveRequest.hrNote ? (
-                          <div className="rounded-2xl border border-emerald-200/80 bg-emerald-50/70 px-4 py-3 leading-7 text-emerald-800">
-                            <span className="font-semibold">ملاحظة HR:</span>{" "}
-                            {latestApprovedLeaveRequest.hrNote}
-                          </div>
-                        ) : null}
-                      </div>
-                    </div>
-
-                    <div className="rounded-[22px] border border-dashed border-slate-200 bg-white/80 px-4 py-4 text-center">
-                      <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-500">
-                        آخر إجازة معتمدة
-                      </div>
-                      <div className="mt-2 text-lg font-semibold text-slate-950">
-                        {formatLeaveDaysLabel(
-                          latestApprovedLeaveRequest.daysCount
-                        )}
-                      </div>
-                    </div>
-                  </div>
+          <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,0.95fr)]">
+            <Card className="rounded-[28px] border border-slate-200/80 bg-white/95 shadow-[0_24px_70px_-42px_rgba(15,23,42,0.22)]">
+              <CardHeader className="space-y-3">
+                <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                  <Clock3 className="h-4 w-4" />
+                  آخر إجازة معتمدة
                 </div>
-              ) : (
-                <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50/70 px-5 py-10 text-center text-sm text-slate-500">
-                  لا توجد أي إجازات مسجلة لك حتى الآن.
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                <CardTitle className="text-xl font-semibold text-slate-950">
+                  ملخص الإجازات الحالية
+                </CardTitle>
+                <CardDescription className="text-sm leading-7 text-slate-600">
+                  الرصيد الحالي وآخر إجازة معتمدة يظهران هنا بشكل مباشر وسريع.
+                </CardDescription>
+              </CardHeader>
 
-          <Card className="rounded-[28px] border border-slate-200/80 bg-white/95 shadow-[0_24px_70px_-42px_rgba(15,23,42,0.22)]">
-            <CardHeader className="space-y-3">
-              <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
-                <Send className="h-4 w-4" />
-                طلب جديد
-              </div>
-              <CardTitle className="text-xl font-semibold text-slate-950">
-                رفع طلب إجازة
-              </CardTitle>
-              <CardDescription className="text-sm leading-7 text-slate-600">
-                أدخل تفاصيل الإجازة المطلوبة، وسيصل الطلب للموارد البشرية
-                للمراجعة والاعتماد أو الرفض.
-              </CardDescription>
-            </CardHeader>
-
-            <CardContent className="space-y-5">
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label className="text-sm font-semibold text-slate-800">
-                    نوع الإجازة
-                  </Label>
-                  <Select
-                    value={leaveForm.leaveType}
-                    onValueChange={value =>
-                      handleLeaveFormChange("leaveType", value)
+              <CardContent className="space-y-5">
+                <div className="grid gap-4 md:grid-cols-3">
+                  <LeaveSummaryCard
+                    label="الرصيد الحالي"
+                    value={profile.employment.leaveBalanceLabel}
+                    icon={BadgeCheck}
+                    accent="text-[#B98500]"
+                  />
+                  <LeaveSummaryCard
+                    label="حالة آخر إجازة معتمدة"
+                    value={
+                      latestApprovedLeaveRequest
+                        ? getLeaveStatusMeta(latestApprovedLeaveRequest.status)
+                            .label
+                        : "لا توجد إجازات"
                     }
-                    disabled={submittingLeaveRequest}
-                  >
-                    <SelectTrigger className="h-12 rounded-2xl border-slate-200 bg-slate-50/80">
-                      <SelectValue placeholder="اختر نوع الإجازة" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {EMPLOYEE_LEAVE_TYPE_OPTIONS.map(option => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label className="text-sm font-semibold text-slate-800">
-                    عدد الأيام
-                  </Label>
-                  <div className="flex h-12 items-center rounded-2xl border border-slate-200 bg-slate-50/80 px-4 text-sm font-semibold text-slate-900">
-                    {requestedLeaveDays
-                      ? formatLeaveDaysLabel(requestedLeaveDays)
-                      : "حدّد تاريخ البداية والنهاية"}
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label className="text-sm font-semibold text-slate-800">
-                    تاريخ البداية
-                  </Label>
-                  <Input
-                    type="date"
-                    value={leaveForm.startDate}
-                    onChange={event =>
-                      handleLeaveFormChange("startDate", event.target.value)
+                    icon={
+                      latestApprovedLeaveRequest?.status === "approved"
+                        ? CheckCircle2
+                        : latestApprovedLeaveRequest?.status === "rejected"
+                          ? XCircle
+                          : Clock3
                     }
-                    className="h-12 rounded-2xl border-slate-200 bg-slate-50/80 shadow-none"
-                    disabled={submittingLeaveRequest}
+                  />
+                  <LeaveSummaryCard
+                    label="عدد الأيام"
+                    value={
+                      latestApprovedLeaveRequest
+                        ? formatLeaveDaysLabel(
+                            latestApprovedLeaveRequest.daysCount
+                          )
+                        : "—"
+                    }
+                    icon={CalendarDays}
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <Label className="text-sm font-semibold text-slate-800">
-                    تاريخ النهاية
-                  </Label>
-                  <Input
-                    type="date"
-                    value={leaveForm.endDate}
-                    onChange={event =>
-                      handleLeaveFormChange("endDate", event.target.value)
-                    }
-                    className="h-12 rounded-2xl border-slate-200 bg-slate-50/80 shadow-none"
-                    disabled={submittingLeaveRequest}
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-sm font-semibold text-slate-800">
-                  ملاحظة / سبب الطلب
-                </Label>
-                <Textarea
-                  value={leaveForm.employeeNote}
-                  onChange={event =>
-                    handleLeaveFormChange("employeeNote", event.target.value)
-                  }
-                  placeholder="اكتب ملاحظة توضح سبب الإجازة إذا رغبت"
-                  className="min-h-32 rounded-[22px] border-slate-200 bg-slate-50/80 shadow-none"
-                  disabled={submittingLeaveRequest}
-                />
-              </div>
-
-              <div className="rounded-[22px] border border-slate-200 bg-slate-50/80 px-4 py-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="text-sm text-slate-500">
-                    لن يتم خصم الرصيد إلا بعد اعتماد الطلب من الموارد البشرية.
-                  </div>
-                  <Button
-                    type="button"
-                    className="h-11 rounded-2xl bg-slate-950 px-5 text-white hover:bg-[#15233c]"
-                    disabled={
-                      submittingLeaveRequest ||
-                      !leaveForm.leaveType ||
-                      !leaveForm.startDate ||
-                      !leaveForm.endDate ||
-                      !requestedLeaveDays
-                    }
-                    onClick={() => void handleSubmitLeaveRequest()}
-                  >
-                    {submittingLeaveRequest ? (
-                      <Loader2 className="ml-2 h-4 w-4 animate-spin" />
-                    ) : (
-                      <Send className="ml-2 h-4 w-4" />
-                    )}
-                    رفع طلب الإجازة
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        <Card className="rounded-[28px] border border-slate-200/80 bg-white/95 shadow-[0_24px_70px_-42px_rgba(15,23,42,0.22)]">
-          <CardHeader className="space-y-3">
-            <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
-              <CalendarDays className="h-4 w-4" />
-              سجل الإجازات
-            </div>
-            <CardTitle className="text-xl font-semibold text-slate-950">
-              الطلبات السابقة
-            </CardTitle>
-            <CardDescription className="text-sm leading-7 text-slate-600">
-              جميع طلبات الإجازة السابقة تظهر هنا مع حالتها وتواريخها وأي
-              ملاحظات مضافة.
-            </CardDescription>
-          </CardHeader>
-
-          <CardContent className="space-y-4">
-            {leaveRequestsLoading ? (
-              <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50/70 px-5 py-10 text-center text-sm text-slate-500">
-                جاري تحميل طلبات الإجازة...
-              </div>
-            ) : leaveRequests.length ? (
-              leaveRequests.map((request, index) => (
-                <div
-                  key={request.id}
-                  className={cn(
-                    "rounded-[24px] border p-5 shadow-sm",
-                    index === 0
-                      ? "border-[#F2B705]/35 bg-[#F2B705]/[0.08]"
-                      : "border-slate-200/80 bg-slate-50/70"
-                  )}
-                >
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                    <div className="space-y-3">
-                      <div className="flex flex-wrap items-center gap-2">
-                        {index === 0 ? (
+                {latestApprovedLeaveRequest ? (
+                  <div className="rounded-[24px] border border-slate-200/80 bg-slate-50/75 p-5 shadow-sm">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="space-y-3">
+                        <div className="flex flex-wrap items-center gap-2">
                           <Badge
                             variant="outline"
                             className="rounded-full border-[#F2B705]/35 bg-[#F2B705]/10 text-[#8b6700] shadow-none"
                           >
-                            أحدث طلب
+                            {getLeaveTypeLabel(
+                              latestApprovedLeaveRequest.leaveType
+                            )}
                           </Badge>
-                        ) : null}
-                        <Badge variant="outline" className="rounded-full">
-                          {getLeaveTypeLabel(request.leaveType)}
-                        </Badge>
-                        <LeaveStatusBadge status={request.status} />
+                          <LeaveStatusBadge
+                            status={latestApprovedLeaveRequest.status}
+                          />
+                        </div>
+
+                        <div className="grid gap-2 text-sm text-slate-600">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-semibold text-slate-900">
+                              الفترة:
+                            </span>
+                            <span>
+                              {formatLeaveDateRange(
+                                latestApprovedLeaveRequest.startDate,
+                                latestApprovedLeaveRequest.endDate
+                              )}
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-semibold text-slate-900">
+                              تاريخ الطلب:
+                            </span>
+                            <span>
+                              {formatDateTimeEN(
+                                latestApprovedLeaveRequest.createdAt
+                              )}
+                            </span>
+                          </div>
+                          {latestApprovedLeaveRequest.employeeNote ? (
+                            <div className="rounded-2xl border border-slate-200 bg-white/80 px-4 py-3 leading-7 text-slate-600">
+                              <span className="font-semibold text-slate-900">
+                                ملاحظتك:
+                              </span>{" "}
+                              {latestApprovedLeaveRequest.employeeNote}
+                            </div>
+                          ) : null}
+                          {latestApprovedLeaveRequest.hrNote ? (
+                            <div className="rounded-2xl border border-emerald-200/80 bg-emerald-50/70 px-4 py-3 leading-7 text-emerald-800">
+                              <span className="font-semibold">ملاحظة HR:</span>{" "}
+                              {latestApprovedLeaveRequest.hrNote}
+                            </div>
+                          ) : null}
+                        </div>
                       </div>
 
-                      <div className="grid gap-2 text-sm text-slate-600">
-                        <div>
-                          <span className="font-semibold text-slate-900">
-                            الفترة:
-                          </span>{" "}
-                          {formatLeaveDateRange(
-                            request.startDate,
-                            request.endDate
+                      <div className="rounded-[22px] border border-dashed border-slate-200 bg-white/80 px-4 py-4 text-center">
+                        <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                          آخر إجازة معتمدة
+                        </div>
+                        <div className="mt-2 text-lg font-semibold text-slate-950">
+                          {formatLeaveDaysLabel(
+                            latestApprovedLeaveRequest.daysCount
                           )}
                         </div>
-                        <div>
-                          <span className="font-semibold text-slate-900">
-                            عدد الأيام:
-                          </span>{" "}
-                          {formatLeaveDaysLabel(request.daysCount)}
-                        </div>
-                        <div>
-                          <span className="font-semibold text-slate-900">
-                            تاريخ الطلب:
-                          </span>{" "}
-                          {formatDateTimeEN(request.createdAt)}
-                        </div>
                       </div>
                     </div>
+                  </div>
+                ) : (
+                  <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50/70 px-5 py-10 text-center text-sm text-slate-500">
+                    لا توجد أي إجازات مسجلة لك حتى الآن.
+                  </div>
+                )}
+              </CardContent>
+            </Card>
 
-                    <div className="min-w-[220px] space-y-2 text-sm text-slate-600">
-                      {request.employeeNote ? (
-                        <div className="rounded-2xl border border-slate-200 bg-white/80 px-4 py-3 leading-7">
-                          <span className="font-semibold text-slate-900">
-                            ملاحظتك:
-                          </span>{" "}
-                          {request.employeeNote}
-                        </div>
-                      ) : null}
+            <Card className="rounded-[28px] border border-slate-200/80 bg-white/95 shadow-[0_24px_70px_-42px_rgba(15,23,42,0.22)]">
+              <CardHeader className="space-y-3">
+                <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                  <Send className="h-4 w-4" />
+                  طلب جديد
+                </div>
+                <CardTitle className="text-xl font-semibold text-slate-950">
+                  رفع طلب إجازة
+                </CardTitle>
+                <CardDescription className="text-sm leading-7 text-slate-600">
+                  أدخل تفاصيل الإجازة المطلوبة، وسيصل الطلب للموارد البشرية
+                  للمراجعة والاعتماد أو الرفض.
+                </CardDescription>
+              </CardHeader>
 
-                      {request.hrNote ? (
-                        <div className="rounded-2xl border border-emerald-200/80 bg-emerald-50/70 px-4 py-3 leading-7 text-emerald-800">
-                          <span className="font-semibold">ملاحظة HR:</span>{" "}
-                          {request.hrNote}
-                        </div>
-                      ) : null}
+              <CardContent className="space-y-5">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label className="text-sm font-semibold text-slate-800">
+                      نوع الإجازة
+                    </Label>
+                    <Select
+                      value={leaveForm.leaveType}
+                      onValueChange={value =>
+                        handleLeaveFormChange("leaveType", value)
+                      }
+                      disabled={submittingLeaveRequest}
+                    >
+                      <SelectTrigger className="h-12 rounded-2xl border-slate-200 bg-slate-50/80">
+                        <SelectValue placeholder="اختر نوع الإجازة" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {EMPLOYEE_LEAVE_TYPE_OPTIONS.map(option => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-sm font-semibold text-slate-800">
+                      عدد الأيام
+                    </Label>
+                    <div className="flex h-12 items-center rounded-2xl border border-slate-200 bg-slate-50/80 px-4 text-sm font-semibold text-slate-900">
+                      {requestedLeaveDays
+                        ? formatLeaveDaysLabel(requestedLeaveDays)
+                        : "حدّد تاريخ البداية والنهاية"}
                     </div>
                   </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-sm font-semibold text-slate-800">
+                      تاريخ البداية
+                    </Label>
+                    <Input
+                      type="date"
+                      value={leaveForm.startDate}
+                      onChange={event =>
+                        handleLeaveFormChange("startDate", event.target.value)
+                      }
+                      className="h-12 rounded-2xl border-slate-200 bg-slate-50/80 shadow-none"
+                      disabled={submittingLeaveRequest}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-sm font-semibold text-slate-800">
+                      تاريخ النهاية
+                    </Label>
+                    <Input
+                      type="date"
+                      value={leaveForm.endDate}
+                      onChange={event =>
+                        handleLeaveFormChange("endDate", event.target.value)
+                      }
+                      className="h-12 rounded-2xl border-slate-200 bg-slate-50/80 shadow-none"
+                      disabled={submittingLeaveRequest}
+                    />
+                  </div>
                 </div>
-              ))
-            ) : (
-              <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50/70 px-5 py-10 text-center text-sm text-slate-500">
-                لم يتم رفع أي طلب إجازة حتى الآن.
+
+                <div className="space-y-2">
+                  <Label className="text-sm font-semibold text-slate-800">
+                    ملاحظة / سبب الطلب
+                  </Label>
+                  <Textarea
+                    value={leaveForm.employeeNote}
+                    onChange={event =>
+                      handleLeaveFormChange("employeeNote", event.target.value)
+                    }
+                    placeholder="اكتب ملاحظة توضح سبب الإجازة إذا رغبت"
+                    className="min-h-32 rounded-[22px] border-slate-200 bg-slate-50/80 shadow-none"
+                    disabled={submittingLeaveRequest}
+                  />
+                </div>
+
+                <div className="rounded-[22px] border border-slate-200 bg-slate-50/80 px-4 py-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="text-sm text-slate-500">
+                      لن يتم خصم الرصيد إلا بعد اعتماد الطلب من الموارد البشرية.
+                    </div>
+                    <Button
+                      type="button"
+                      className="h-11 rounded-2xl bg-slate-950 px-5 text-white hover:bg-[#15233c]"
+                      disabled={
+                        submittingLeaveRequest ||
+                        !leaveForm.leaveType ||
+                        !leaveForm.startDate ||
+                        !leaveForm.endDate ||
+                        !requestedLeaveDays
+                      }
+                      onClick={() => void handleSubmitLeaveRequest()}
+                    >
+                      {submittingLeaveRequest ? (
+                        <Loader2 className="ml-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Send className="ml-2 h-4 w-4" />
+                      )}
+                      رفع طلب الإجازة
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card className="rounded-[28px] border border-slate-200/80 bg-white/95 shadow-[0_24px_70px_-42px_rgba(15,23,42,0.22)]">
+            <CardHeader className="space-y-3">
+              <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+                <CalendarDays className="h-4 w-4" />
+                سجل الإجازات
               </div>
-            )}
-          </CardContent>
-        </Card>
-      </section>
+              <CardTitle className="text-xl font-semibold text-slate-950">
+                الطلبات السابقة
+              </CardTitle>
+              <CardDescription className="text-sm leading-7 text-slate-600">
+                جميع طلبات الإجازة السابقة تظهر هنا مع حالتها وتواريخها وأي
+                ملاحظات مضافة.
+              </CardDescription>
+            </CardHeader>
+
+            <CardContent className="space-y-4">
+              {leaveRequestsLoading ? (
+                <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50/70 px-5 py-10 text-center text-sm text-slate-500">
+                  جاري تحميل طلبات الإجازة...
+                </div>
+              ) : leaveRequests.length ? (
+                leaveRequests.map((request, index) => (
+                  <div
+                    key={request.id}
+                    className={cn(
+                      "rounded-[24px] border p-5 shadow-sm",
+                      index === 0
+                        ? "border-[#F2B705]/35 bg-[#F2B705]/[0.08]"
+                        : "border-slate-200/80 bg-slate-50/70"
+                    )}
+                  >
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="space-y-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          {index === 0 ? (
+                            <Badge
+                              variant="outline"
+                              className="rounded-full border-[#F2B705]/35 bg-[#F2B705]/10 text-[#8b6700] shadow-none"
+                            >
+                              أحدث طلب
+                            </Badge>
+                          ) : null}
+                          <Badge variant="outline" className="rounded-full">
+                            {getLeaveTypeLabel(request.leaveType)}
+                          </Badge>
+                          <LeaveStatusBadge status={request.status} />
+                        </div>
+
+                        <div className="grid gap-2 text-sm text-slate-600">
+                          <div>
+                            <span className="font-semibold text-slate-900">
+                              الفترة:
+                            </span>{" "}
+                            {formatLeaveDateRange(
+                              request.startDate,
+                              request.endDate
+                            )}
+                          </div>
+                          <div>
+                            <span className="font-semibold text-slate-900">
+                              عدد الأيام:
+                            </span>{" "}
+                            {formatLeaveDaysLabel(request.daysCount)}
+                          </div>
+                          <div>
+                            <span className="font-semibold text-slate-900">
+                              تاريخ الطلب:
+                            </span>{" "}
+                            {formatDateTimeEN(request.createdAt)}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="min-w-[220px] space-y-2 text-sm text-slate-600">
+                        {request.employeeNote ? (
+                          <div className="rounded-2xl border border-slate-200 bg-white/80 px-4 py-3 leading-7">
+                            <span className="font-semibold text-slate-900">
+                              ملاحظتك:
+                            </span>{" "}
+                            {request.employeeNote}
+                          </div>
+                        ) : null}
+
+                        {request.hrNote ? (
+                          <div className="rounded-2xl border border-emerald-200/80 bg-emerald-50/70 px-4 py-3 leading-7 text-emerald-800">
+                            <span className="font-semibold">ملاحظة HR:</span>{" "}
+                            {request.hrNote}
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50/70 px-5 py-10 text-center text-sm text-slate-500">
+                  لم يتم رفع أي طلب إجازة حتى الآن.
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </section>
       ) : null}
 
       <Dialog

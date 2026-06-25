@@ -18,6 +18,7 @@ type EmployeePayrollDeductionInput = {
 
 export type EmployeePayrollComputation = {
   baseSalary: number;
+  allowances: number;
   expectedWorkDays?: number | null;
   dailySalary: number;
   hourlyRate: number;
@@ -71,7 +72,9 @@ function normalizePayrollDocument(raw: any) {
 
   const filePath = String(raw.filePath || raw.path || "").trim();
   const fileUrl = String(
-    raw.fileUrl || raw.url || (filePath ? buildR2DownloadUrl(filePath, false) : "")
+    raw.fileUrl ||
+      raw.url ||
+      (filePath ? buildR2DownloadUrl(filePath, false) : "")
   ).trim();
 
   return {
@@ -101,7 +104,12 @@ export function parseEmployeePayrollMonth(value: string) {
   const [, yearRaw, monthRaw] = match;
   const year = Number(yearRaw);
   const month = Number(monthRaw);
-  if (!Number.isFinite(year) || !Number.isFinite(month) || month < 1 || month > 12) {
+  if (
+    !Number.isFinite(year) ||
+    !Number.isFinite(month) ||
+    month < 1 ||
+    month > 12
+  ) {
     return null;
   }
 
@@ -121,7 +129,10 @@ export function parseEmployeePayrollMonth(value: string) {
   };
 }
 
-export function buildEmployeePayrollRecordId(employeeId: string, payrollMonth: string) {
+export function buildEmployeePayrollRecordId(
+  employeeId: string,
+  payrollMonth: string
+) {
   const normalizedEmployeeId = String(employeeId || "")
     .trim()
     .replace(/[\\/#?\[\]]/g, "_");
@@ -131,6 +142,7 @@ export function buildEmployeePayrollRecordId(employeeId: string, payrollMonth: s
 
 export function computeEmployeePayroll(input: {
   baseSalary?: number | null;
+  allowances?: number | null;
   expectedWorkDays?: number | null;
   expectedWorkHours?: number | null;
   attendanceExpectedHours?: number | null;
@@ -144,30 +156,53 @@ export function computeEmployeePayroll(input: {
   absences?: Array<Pick<EmployeeAbsenceDoc, "date" | "type" | "note">> | null;
 }): EmployeePayrollComputation {
   const baseSalary = Math.max(0, toFiniteNumber(input.baseSalary));
+  const allowances = Math.max(0, toFiniteNumber(input.allowances));
   const expectedWorkDays = Math.max(0, toFiniteNumber(input.expectedWorkDays));
-  const expectedWorkHours = Math.max(0, toFiniteNumber(input.expectedWorkHours));
+  const expectedWorkHours = Math.max(
+    0,
+    toFiniteNumber(input.expectedWorkHours)
+  );
   const attendanceExpectedHours = Math.max(
     0,
-    input.attendanceExpectedHours === null || input.attendanceExpectedHours === undefined
+    input.attendanceExpectedHours === null ||
+      input.attendanceExpectedHours === undefined
       ? expectedWorkHours
       : toFiniteNumber(input.attendanceExpectedHours)
   );
-  const attendanceAbsentDays = Math.max(0, toFiniteNumber(input.attendanceAbsentDays));
+  const attendanceAbsentDays = Math.max(
+    0,
+    toFiniteNumber(input.attendanceAbsentDays)
+  );
   const explicitMissingHours =
-    input.attendanceMissingHours === null || input.attendanceMissingHours === undefined
+    input.attendanceMissingHours === null ||
+    input.attendanceMissingHours === undefined
       ? null
       : Math.max(0, toFiniteNumber(input.attendanceMissingHours));
   const explicitOvertimeHours =
-    input.attendanceOvertimeHours === null || input.attendanceOvertimeHours === undefined
+    input.attendanceOvertimeHours === null ||
+    input.attendanceOvertimeHours === undefined
       ? null
       : Math.max(0, toFiniteNumber(input.attendanceOvertimeHours));
-  const actualWorkedHours = Math.max(0, toFiniteNumber(input.actualWorkedHours));
-  const overtimeHourlyRate = Math.max(0, toFiniteNumber(input.overtimeHourlyRate));
-  const insuranceDeduction = Math.max(0, toFiniteNumber(input.insuranceDeduction));
-  const normalizedSalaryDeductions = normalizeSalaryDeductions(input.salaryDeductions);
+  const actualWorkedHours = Math.max(
+    0,
+    toFiniteNumber(input.actualWorkedHours)
+  );
+  const overtimeHourlyRate = Math.max(
+    0,
+    toFiniteNumber(input.overtimeHourlyRate)
+  );
+  const insuranceDeduction = Math.max(
+    0,
+    toFiniteNumber(input.insuranceDeduction)
+  );
+  const normalizedSalaryDeductions = normalizeSalaryDeductions(
+    input.salaryDeductions
+  );
 
   const hourlyRate =
-    baseSalary > 0 && expectedWorkHours > 0 ? baseSalary / expectedWorkHours : 0;
+    baseSalary > 0 && expectedWorkHours > 0
+      ? baseSalary / expectedWorkHours
+      : 0;
   const derivedHoursDifference = actualWorkedHours - attendanceExpectedHours;
   const overtimeHours =
     explicitOvertimeHours === null
@@ -195,14 +230,16 @@ export function computeEmployeePayroll(input: {
     0
   );
   const dailySalary =
-    baseSalary > 0 && expectedWorkDays > 0
-      ? baseSalary / expectedWorkDays
-      : 0;
+    baseSalary > 0 && expectedWorkDays > 0 ? baseSalary / expectedWorkDays : 0;
   const attendanceAbsenceDeduction = attendanceAbsentDays * dailySalary;
   const absenceDeduction = absenceDays * dailySalary;
   const grossSalary = Math.max(
     0,
-    baseSalary + overtimeBonus - delayDeduction - attendanceAbsenceDeduction
+    baseSalary +
+      allowances +
+      overtimeBonus -
+      delayDeduction -
+      attendanceAbsenceDeduction
   );
   const finalSalary = Math.max(
     0,
@@ -211,6 +248,7 @@ export function computeEmployeePayroll(input: {
 
   return {
     baseSalary,
+    allowances,
     dailySalary,
     hourlyRate,
     hoursDifference,
@@ -245,21 +283,22 @@ export function normalizeEmployeePayrollRecord(
   );
   const absenceEntries = Array.isArray(raw.absenceEntries)
     ? raw.absenceEntries
-      .map(item => ({
-        date: String(item?.date || "").trim(),
-        type: String(item?.type || "full_day").trim(),
-        note: String(item?.note || "").trim() || null,
-      }))
-      .filter(item => item.date)
+        .map(item => ({
+          date: String(item?.date || "").trim(),
+          type: String(item?.type || "full_day").trim(),
+          note: String(item?.note || "").trim() || null,
+        }))
+        .filter(item => item.date)
     : null;
   const mudadDocument = normalizePayrollDocument(raw.mudadDocument);
   const mudadDocumentViewUrl =
     mudadDocument?.fileUrl ||
-    (mudadDocument?.filePath ? buildR2DownloadUrl(mudadDocument.filePath, false) : "");
-  const mudadDocumentDownloadUrl =
-    mudadDocument?.filePath
-      ? buildR2DownloadUrl(mudadDocument.filePath, true)
-      : mudadDocumentViewUrl;
+    (mudadDocument?.filePath
+      ? buildR2DownloadUrl(mudadDocument.filePath, false)
+      : "");
+  const mudadDocumentDownloadUrl = mudadDocument?.filePath
+    ? buildR2DownloadUrl(mudadDocument.filePath, true)
+    : mudadDocumentViewUrl;
 
   return {
     id,
@@ -268,6 +307,10 @@ export function normalizeEmployeePayrollRecord(
     payrollMonth: String(raw.payrollMonth || "").trim(),
     monthStart: String(raw.monthStart || "").trim(),
     monthEnd: String(raw.monthEnd || "").trim(),
+    calculationStartDate:
+      String(raw.calculationStartDate || raw.monthStart || "").trim() || null,
+    calculationEndDate:
+      String(raw.calculationEndDate || raw.monthEnd || "").trim() || null,
     baseSalary: Math.max(0, toFiniteNumber(raw.baseSalary)),
     absenceDays: Math.max(0, toFiniteNumber(raw.absenceDays)),
     absenceDeduction: Math.max(0, toFiniteNumber(raw.absenceDeduction)),
@@ -284,23 +327,28 @@ export function normalizeEmployeePayrollRecord(
         ? null
         : Math.max(0, toFiniteNumber(raw.attendanceLateHours)),
     attendanceMissingHours:
-      raw.attendanceMissingHours === null || raw.attendanceMissingHours === undefined
+      raw.attendanceMissingHours === null ||
+      raw.attendanceMissingHours === undefined
         ? null
         : Math.max(0, toFiniteNumber(raw.attendanceMissingHours)),
     attendanceOvertimeHours:
-      raw.attendanceOvertimeHours === null || raw.attendanceOvertimeHours === undefined
+      raw.attendanceOvertimeHours === null ||
+      raw.attendanceOvertimeHours === undefined
         ? null
         : Math.max(0, toFiniteNumber(raw.attendanceOvertimeHours)),
     attendanceCompleteDays:
-      raw.attendanceCompleteDays === null || raw.attendanceCompleteDays === undefined
+      raw.attendanceCompleteDays === null ||
+      raw.attendanceCompleteDays === undefined
         ? null
         : Math.max(0, toFiniteNumber(raw.attendanceCompleteDays)),
     attendanceIncompleteDays:
-      raw.attendanceIncompleteDays === null || raw.attendanceIncompleteDays === undefined
+      raw.attendanceIncompleteDays === null ||
+      raw.attendanceIncompleteDays === undefined
         ? null
         : Math.max(0, toFiniteNumber(raw.attendanceIncompleteDays)),
     attendanceAbsentDays:
-      raw.attendanceAbsentDays === null || raw.attendanceAbsentDays === undefined
+      raw.attendanceAbsentDays === null ||
+      raw.attendanceAbsentDays === undefined
         ? null
         : Math.max(0, toFiniteNumber(raw.attendanceAbsentDays)),
     attendanceAbsenceDeduction:
@@ -333,7 +381,8 @@ export function normalizeEmployeePayrollRecord(
         : Math.max(0, toFiniteNumber(raw.insuranceDeduction)),
     salaryDeductions: normalizedSalaryDeductions,
     totalSalaryDeductions:
-      raw.totalSalaryDeductions === null || raw.totalSalaryDeductions === undefined
+      raw.totalSalaryDeductions === null ||
+      raw.totalSalaryDeductions === undefined
         ? null
         : Math.max(0, toFiniteNumber(raw.totalSalaryDeductions)),
     absenceEntries,
@@ -348,7 +397,9 @@ export function normalizeEmployeePayrollRecord(
   };
 }
 
-export function sortEmployeePayrollRecords<T extends EmployeePayrollRecordDoc>(records: T[]) {
+export function sortEmployeePayrollRecords<T extends EmployeePayrollRecordDoc>(
+  records: T[]
+) {
   return [...records].sort((left, right) => {
     const byMonth = String(right.payrollMonth || "").localeCompare(
       String(left.payrollMonth || "")

@@ -21,6 +21,15 @@ export type AttendanceDayComputation = {
   isComplete: boolean;
 };
 
+export type AttendanceStatus =
+  | "present"
+  | "partial"
+  | "absent"
+  | "leave"
+  | "off_day"
+  | "future"
+  | "today_pending";
+
 export type AttendancePayrollSummary = {
   expectedHours: number;
   actualHours: number;
@@ -29,7 +38,17 @@ export type AttendancePayrollSummary = {
   overtimeHours: number;
   completeDays: number;
   incompleteDays: number;
+  absentDays: number;
+  absentDateKeys: string[];
   days: AttendanceDayComputation[];
+};
+
+export type AttendancePayrollSummaryOptions = {
+  workDateKeys?: Iterable<string>;
+  todayDateKey?: string;
+  approvedLeaveDateKeys?: Iterable<string>;
+  holidayDateKeys?: Iterable<string>;
+  absenceDateKeys?: Iterable<string>;
 };
 
 function roundHours(value: number) {
@@ -79,6 +98,56 @@ function buildRiyadhDateTimeMs(dateKey: string, time?: string | null) {
   const month = Number(dateMatch[2]);
   const day = Number(dateMatch[3]);
   return Date.UTC(year, month - 1, day, parts.hours - 3, parts.minutes, 0, 0);
+}
+
+export function getAttendanceDayStatus(input: {
+  date: string;
+  hasAttendance: boolean;
+  checkOut?: AttendanceRecord | null;
+  computation?: AttendanceDayComputation | null;
+  todayDateKey: string;
+  weeklyOffDays?: WorkScheduleWeekday[] | string[] | null;
+  approvedLeaveDateKeys?: Set<string> | Iterable<string>;
+  holidayDateKeys?: Set<string> | Iterable<string>;
+  absenceDateKeys?: Set<string> | Iterable<string>;
+}): AttendanceStatus {
+  const approvedLeaveDateKeys =
+    input.approvedLeaveDateKeys instanceof Set
+      ? input.approvedLeaveDateKeys
+      : new Set(input.approvedLeaveDateKeys || []);
+  const holidayDateKeys =
+    input.holidayDateKeys instanceof Set
+      ? input.holidayDateKeys
+      : new Set(input.holidayDateKeys || []);
+  const absenceDateKeys =
+    input.absenceDateKeys instanceof Set
+      ? input.absenceDateKeys
+      : new Set(input.absenceDateKeys || []);
+
+  if (approvedLeaveDateKeys.has(input.date)) return "leave";
+  if (absenceDateKeys.has(input.date)) return "absent";
+
+  if (input.hasAttendance) {
+    if (
+      !input.computation?.isComplete ||
+      input.computation.lateHours > 0 ||
+      (input.checkOut && input.computation.missingHours > 0)
+    ) {
+      return "partial";
+    }
+    return "present";
+  }
+
+  if (
+    isWeeklyOffDateKey(input.date, input.weeklyOffDays) ||
+    holidayDateKeys.has(input.date)
+  ) {
+    return "off_day";
+  }
+
+  if (input.date < input.todayDateKey) return "absent";
+  if (input.date === input.todayDateKey) return "today_pending";
+  return "future";
 }
 
 export function getShiftExpectedHours(schedule: ShiftSchedule) {
@@ -153,7 +222,8 @@ export function computeAttendanceDay(
 
 export function summarizeAttendanceForPayroll(
   records: AttendanceRecord[],
-  schedule: ShiftSchedule
+  schedule: ShiftSchedule,
+  options: AttendancePayrollSummaryOptions = {}
 ): AttendancePayrollSummary {
   const grouped = new Map<string, AttendanceRecord[]>();
   for (const record of records) {
@@ -167,9 +237,49 @@ export function summarizeAttendanceForPayroll(
   const days = Array.from(grouped.entries())
     .map(([date, dayRecords]) => computeAttendanceDay(date, dayRecords, schedule))
     .sort((left, right) => left.date.localeCompare(right.date));
+  const dayMap = new Map(days.map(day => [day.date, day]));
+  const todayDateKey = options.todayDateKey || riyadhDateKey(new Date().toISOString());
+  const approvedLeaveDateKeys = new Set(options.approvedLeaveDateKeys || []);
+  const holidayDateKeys = new Set(options.holidayDateKeys || []);
+  const absenceDateKeys = new Set(options.absenceDateKeys || []);
+  const absentDateKeys = Array.from(
+    new Set(Array.from(options.workDateKeys || []))
+  )
+    .filter(date => {
+      const day = dayMap.get(date) || null;
+      return (
+        getAttendanceDayStatus({
+          date,
+          hasAttendance: Boolean(day?.checkIn || day?.checkOut),
+          checkOut: day?.checkOut || null,
+          computation: day,
+          todayDateKey,
+          weeklyOffDays: schedule.weeklyOffDays,
+          approvedLeaveDateKeys,
+          holidayDateKeys,
+          absenceDateKeys,
+        }) === "absent"
+      );
+    })
+    .sort((left, right) => left.localeCompare(right));
 
-  return days.reduce<AttendancePayrollSummary>(
+  const summary = days.reduce<AttendancePayrollSummary>(
     (summary, day) => {
+      const status = getAttendanceDayStatus({
+        date: day.date,
+        hasAttendance: Boolean(day.checkIn || day.checkOut),
+        checkOut: day.checkOut,
+        computation: day,
+        todayDateKey,
+        weeklyOffDays: schedule.weeklyOffDays,
+        approvedLeaveDateKeys,
+        holidayDateKeys,
+        absenceDateKeys,
+      });
+      if (status === "absent") {
+        return summary;
+      }
+
       const countsAsWorkDay = !isWeeklyOffDateKey(
         day.date,
         schedule.weeklyOffDays
@@ -200,7 +310,13 @@ export function summarizeAttendanceForPayroll(
       overtimeHours: 0,
       completeDays: 0,
       incompleteDays: 0,
+      absentDays: 0,
+      absentDateKeys: [],
       days: [],
     }
   );
+
+  summary.absentDateKeys = absentDateKeys;
+  summary.absentDays = absentDateKeys.length;
+  return summary;
 }

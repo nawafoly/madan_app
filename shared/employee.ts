@@ -66,53 +66,57 @@ export type EmployeeWorkScheduleDoc = {
   weeklyOffDays?: string[] | null;
 };
 
-  export type EmployeeEmploymentDoc = {
-    title?: string | null;
-    jobTitle?: string | null;
-    department?: string | null;
-    startDate?: unknown;
-    leaveBalance?: number | null;
-  
-    baseSalary?: number | null;
-    expectedWorkDays?: number | null;
-    expectedWorkHours?: number | null;
-    actualWorkedHours?: number | null;
-    workSchedule?: EmployeeWorkScheduleDoc | null;
-    shiftStartTime?: string | null;
-    shiftEndTime?: string | null;
+export type EmployeeEmploymentDoc = {
+  title?: string | null;
+  jobTitle?: string | null;
+  department?: string | null;
+  startDate?: unknown;
+  leaveBalance?: number | null;
 
-    calculatedDailyRate?: number | null;
-    
-    hoursDifference?: number | null;
-    overtimeHours?: number | null;
-    missingHours?: number | null;
-    
-    overtimeHourlyRate?: number | null;
-    calculatedHourlyRate?: number | null;
-    calculatedOvertimeAmount?: number | null;
-    calculatedMissingDeduction?: number | null;
-    
-    insuranceDeduction?: number | null;
-    totalSalaryDeductions?: number | null;
-    calculatedGrossSalary?: number | null;
-    calculatedNetSalary?: number | null;
-    
-    salaryDeductions?: Array<{
-      id?: string;
-      title?: string;
-      amount?: number;
-    }> | null;
-  
-    status?: EmployeeEmploymentStatus | null;
-    employmentStatus?: EmployeeEmploymentStatus | null;
-    employeeCode?: string | null;
-    fingerprintNumber?: string | null;
-    allowedZoneIds?: string[] | null;
-    adminNotes?: string | null;
-    updatedAt?: unknown;
-    updatedByUid?: string | null;
-    updatedByEmail?: string | null;
-  };
+  baseSalary?: number | null;
+  housingAllowance?: number | null;
+  transportationAllowance?: number | null;
+  otherAllowances?: number | null;
+  allowances?: number | null;
+  expectedWorkDays?: number | null;
+  expectedWorkHours?: number | null;
+  actualWorkedHours?: number | null;
+  workSchedule?: EmployeeWorkScheduleDoc | null;
+  shiftStartTime?: string | null;
+  shiftEndTime?: string | null;
+
+  calculatedDailyRate?: number | null;
+
+  hoursDifference?: number | null;
+  overtimeHours?: number | null;
+  missingHours?: number | null;
+
+  overtimeHourlyRate?: number | null;
+  calculatedHourlyRate?: number | null;
+  calculatedOvertimeAmount?: number | null;
+  calculatedMissingDeduction?: number | null;
+
+  insuranceDeduction?: number | null;
+  totalSalaryDeductions?: number | null;
+  calculatedGrossSalary?: number | null;
+  calculatedNetSalary?: number | null;
+
+  salaryDeductions?: Array<{
+    id?: string;
+    title?: string;
+    amount?: number;
+  }> | null;
+
+  status?: EmployeeEmploymentStatus | null;
+  employmentStatus?: EmployeeEmploymentStatus | null;
+  employeeCode?: string | null;
+  fingerprintNumber?: string | null;
+  allowedZoneIds?: string[] | null;
+  adminNotes?: string | null;
+  updatedAt?: unknown;
+  updatedByUid?: string | null;
+  updatedByEmail?: string | null;
+};
 
 export type EmployeeProfileDoc = {
   personal?: EmployeePersonalDoc | null;
@@ -120,11 +124,15 @@ export type EmployeeProfileDoc = {
 };
 
 export type EmployeeFileType = (typeof EMPLOYEE_FILE_TYPES)[number] | string;
-export type EmployeeFileStatus = (typeof EMPLOYEE_FILE_STATUSES)[number] | string;
+export type EmployeeFileStatus =
+  | (typeof EMPLOYEE_FILE_STATUSES)[number]
+  | string;
 export type EmployeeConversationType =
   | (typeof EMPLOYEE_CONVERSATION_TYPES)[number]
   | string;
-export type EmployeeMessageType = (typeof EMPLOYEE_MESSAGE_TYPES)[number] | string;
+export type EmployeeMessageType =
+  | (typeof EMPLOYEE_MESSAGE_TYPES)[number]
+  | string;
 export type EmployeeMessageRole = "employee" | "hr" | "system" | string;
 export type EmployeeMessageStatus = "sent" | "read" | string;
 export type EmployeeNotificationType =
@@ -241,7 +249,13 @@ export type EmployeePayrollRecordDoc = {
   payrollMonth: string;
   monthStart: string;
   monthEnd: string;
+  calculationStartDate?: string | null;
+  calculationEndDate?: string | null;
   baseSalary: number;
+  housingAllowance?: number | null;
+  transportationAllowance?: number | null;
+  otherAllowances?: number | null;
+  allowances?: number | null;
   absenceDays: number;
   absenceDeduction: number;
   expectedWorkHours?: number | null;
@@ -284,10 +298,7 @@ export type EmployeePayrollRecordDoc = {
   createdByEmail?: string | null;
 };
 
-export type EmployeeLeaveRequestStatus =
-  | "pending"
-  | "approved"
-  | "rejected";
+export type EmployeeLeaveRequestStatus = "pending" | "approved" | "rejected";
 
 export type EmployeeLeaveType =
   | "annual"
@@ -323,10 +334,7 @@ export type EmployeeLeaveRequestDoc = {
   updatedAt?: unknown;
 };
 
-export type EmployeeServiceRequestStatus =
-  | "pending"
-  | "approved"
-  | "rejected";
+export type EmployeeServiceRequestStatus = "pending" | "approved" | "rejected";
 
 export type EmployeeServiceRequestType =
   | "attendance_correction"

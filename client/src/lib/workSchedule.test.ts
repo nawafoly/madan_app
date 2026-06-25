@@ -19,18 +19,18 @@ describe("work schedule helpers", () => {
   });
 
   it("detects weekly off dates by date key", () => {
-    expect(isWeeklyOffDateKey("2026-06-26", ["friday"])).toBe(true);
-    expect(isWeeklyOffDateKey("2026-06-25", ["friday"])).toBe(false);
+    expect(isWeeklyOffDateKey("2024-01-05", ["friday"])).toBe(true);
+    expect(isWeeklyOffDateKey("2024-01-04", ["friday"])).toBe(false);
   });
 
   it("builds work dates after excluding weekly off days and approved leave dates", () => {
     expect(
       buildWorkDateKeysInRange({
-        fromDate: "2026-06-25",
-        toDate: "2026-06-29",
+        fromDate: "2024-01-04",
+        toDate: "2024-01-08",
         weeklyOffDays: ["friday", "saturday"],
-        excludedDateKeys: ["2026-06-28"],
+        excludedDateKeys: ["2024-01-07"],
       })
-    ).toEqual(["2026-06-25", "2026-06-29"]);
+    ).toEqual(["2024-01-04", "2024-01-08"]);
   });
 });

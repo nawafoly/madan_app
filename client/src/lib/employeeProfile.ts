@@ -70,6 +70,9 @@ export type EmployeeProfileViewModel = {
     attendanceZoneLabel: string;
     baseSalary: number | null;
     insuranceDeduction: number | null;
+    housingAllowance: number | null;
+    transportationAllowance: number | null;
+    otherAllowances: number | null;
     allowances: number | null;
     salaryDeductions: Array<{
       id?: string | null;
@@ -163,9 +166,7 @@ function normalizeEmploymentStatus(input: {
     .trim()
     .toLowerCase();
 
-  const resolved =
-    normalized ||
-    (input.isActive ? "active" : "inactive");
+  const resolved = normalized || (input.isActive ? "active" : "inactive");
 
   const map: Record<
     string,
@@ -213,10 +214,9 @@ export function normalizeEmployeeProfile(
     string,
     any
   >;
-  const employment = (employeeProfile.employment || user.employment || {}) as Record<
-    string,
-    any
-  >;
+  const employment = (employeeProfile.employment ||
+    user.employment ||
+    {}) as Record<string, any>;
   const accountStatus = resolveUserAccountStatus(user);
 
   const name =
@@ -231,8 +231,12 @@ export function normalizeEmployeeProfile(
     ) || EMPTY_VALUE;
 
   const email =
-    pickText(user.email, personal.email, user.profile?.email, authFallback?.email) ||
-    EMPTY_VALUE;
+    pickText(
+      user.email,
+      personal.email,
+      user.profile?.email,
+      authFallback?.email
+    ) || EMPTY_VALUE;
 
   const phone =
     pickText(
@@ -321,10 +325,25 @@ export function normalizeEmployeeProfile(
         }))
         .filter(item => item.amount > 0)
     : [];
+  const housingAllowance = toNullableNumber(employment.housingAllowance);
+  const transportationAllowance = toNullableNumber(
+    employment.transportationAllowance
+  );
+  const otherAllowances = toNullableNumber(employment.otherAllowances);
+  const calculatedAllowances: number = [
+    housingAllowance,
+    transportationAllowance,
+    otherAllowances,
+  ].reduce<number>((sum, value) => {
+    return sum + (typeof value === "number" ? Math.max(0, value) : 0);
+  }, 0);
 
   const employmentStatus = normalizeEmploymentStatus({
     rawStatus:
-      (employment.employmentStatus as EmployeeEmploymentStatus | null | undefined) ??
+      (employment.employmentStatus as
+        | EmployeeEmploymentStatus
+        | null
+        | undefined) ??
       (employment.status as EmployeeEmploymentStatus | null | undefined) ??
       user.status,
     isActive: accountStatus.isActive,
@@ -356,7 +375,12 @@ export function normalizeEmployeeProfile(
       attendanceZoneLabel,
       baseSalary: toNullableNumber(employment.baseSalary),
       insuranceDeduction: toNullableNumber(employment.insuranceDeduction),
-      allowances: toNullableNumber(employment.allowances),
+      housingAllowance,
+      transportationAllowance,
+      otherAllowances,
+      allowances:
+        toNullableNumber(employment.allowances) ??
+        (calculatedAllowances > 0 ? calculatedAllowances : null),
       salaryDeductions,
       isActive: accountStatus.isActive,
     },
