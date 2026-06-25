@@ -254,6 +254,17 @@ type EmployeePortalView =
   | "leaves"
   | "documents";
 
+type EmployeeProfileSource = {
+  collectionName: "employees" | "users";
+  docId: string;
+  entityId: string;
+};
+
+type EmployeeRecordScope = {
+  authUid: string;
+  employeeDocId: string | null;
+};
+
 const EMPLOYEE_PORTAL_VIEW_TITLES: Record<EmployeePortalView, string> = {
   dashboard: "بوابة الموظف",
   attendance: "الحضور",
@@ -326,6 +337,60 @@ const SERVICE_REQUEST_VIEW_TO_TYPE: Partial<
   "exit-reentry-request": "exit_reentry",
   "letter-request": "letter",
 };
+
+function normalizeScopeValue(value: unknown) {
+  const text = String(value ?? "").trim();
+  return text && text !== "undefined" && text !== "null" ? text : "";
+}
+
+function buildEmployeeRecordScope(
+  authUid: string | null | undefined,
+  source: EmployeeProfileSource | null
+): EmployeeRecordScope | null {
+  const normalizedAuthUid = normalizeScopeValue(authUid);
+  if (!normalizedAuthUid || !source) return null;
+
+  return {
+    authUid: normalizedAuthUid,
+    employeeDocId:
+      source.collectionName === "employees"
+        ? normalizeScopeValue(source.docId) || null
+        : null,
+  };
+}
+
+function employeeRecordBelongsToScope(
+  record: {
+    employeeUid?: string | null;
+    userId?: string | null;
+    employeeId?: string | null;
+    employeeDocId?: string | null;
+  },
+  scope: EmployeeRecordScope | null
+) {
+  if (!scope) return false;
+
+  const recordAuthIds = [
+    normalizeScopeValue(record.employeeUid),
+    normalizeScopeValue(record.userId),
+  ].filter(Boolean);
+  const recordEmployeeDocId = normalizeScopeValue(
+    record.employeeDocId || record.employeeId
+  );
+
+  if (scope.employeeDocId) {
+    if (recordEmployeeDocId) {
+      return recordEmployeeDocId === scope.employeeDocId;
+    }
+
+    return (
+      scope.employeeDocId === scope.authUid &&
+      recordAuthIds.includes(scope.authUid)
+    );
+  }
+
+  return recordAuthIds.includes(scope.authUid);
+}
 
 function getEmployeePortalViewFromHash(): EmployeePortalView {
   if (typeof window === "undefined") return "dashboard";
@@ -994,11 +1059,8 @@ export default function EmployeeProfilePage() {
   >([]);
   const [employeePayrollRecordsLoading, setEmployeePayrollRecordsLoading] =
     useState(true);
-  const [employeeProfileSource, setEmployeeProfileSource] = useState<{
-    collectionName: "employees" | "users";
-    docId: string;
-    entityId: string;
-  } | null>(null);
+  const [employeeProfileSource, setEmployeeProfileSource] =
+    useState<EmployeeProfileSource | null>(null);
 
   useEffect(() => {
     const syncViewFromHash = () => {
@@ -1117,6 +1179,10 @@ export default function EmployeeProfilePage() {
       }),
     [user?.displayName, user?.email, user?.firebaseUser?.photoURL, userDoc]
   );
+  const employeeRecordScope = useMemo(
+    () => buildEmployeeRecordScope(user?.uid, employeeProfileSource),
+    [employeeProfileSource, user?.uid]
+  );
   const avatarCropMetrics = useMemo(
     () =>
       avatarCropDraft
@@ -1233,6 +1299,8 @@ export default function EmployeeProfilePage() {
               docSnapshot.id,
               (docSnapshot.data() as Record<string, any>) || {}
             )
+          ).filter(record =>
+            employeeRecordBelongsToScope(record, employeeRecordScope)
           )
         );
         setEmployeeFiles(rows);
@@ -1246,7 +1314,7 @@ export default function EmployeeProfilePage() {
     );
 
     return () => unsubscribe();
-  }, [user?.uid]);
+  }, [employeeRecordScope, user?.uid]);
 
   useEffect(() => {
     if (!user?.uid) {
@@ -1285,7 +1353,11 @@ export default function EmployeeProfilePage() {
           );
         });
         setEmployeePayrollRecords(
-          sortEmployeePayrollRecords(Array.from(rowsById.values()))
+          sortEmployeePayrollRecords(
+            Array.from(rowsById.values()).filter(record =>
+              employeeRecordBelongsToScope(record, employeeRecordScope)
+            )
+          )
         );
         setEmployeePayrollRecordsLoading(false);
       },
@@ -1297,7 +1369,7 @@ export default function EmployeeProfilePage() {
     );
 
     return () => unsubscribe();
-  }, [user?.linkedEmployeeId, user?.uid]);
+  }, [employeeRecordScope, user?.linkedEmployeeId, user?.uid]);
 
   useEffect(() => {
     if (!user?.uid) {
@@ -1322,6 +1394,8 @@ export default function EmployeeProfilePage() {
               docSnapshot.id,
               (docSnapshot.data() as Record<string, any>) || {}
             )
+          ).filter(request =>
+            employeeRecordBelongsToScope(request, employeeRecordScope)
           )
         );
         setLeaveRequests(rows);
@@ -1335,7 +1409,7 @@ export default function EmployeeProfilePage() {
     );
 
     return () => unsubscribe();
-  }, [user?.uid]);
+  }, [employeeRecordScope, user?.uid]);
 
   useEffect(() => {
     if (!user?.uid) {
@@ -1357,6 +1431,8 @@ export default function EmployeeProfilePage() {
               docSnapshot.id,
               (docSnapshot.data() as Record<string, any>) || {}
             )
+          ).filter(request =>
+            employeeRecordBelongsToScope(request, employeeRecordScope)
           )
         );
         setServiceRequests(rows);
@@ -1370,7 +1446,7 @@ export default function EmployeeProfilePage() {
     );
 
     return () => unsubscribe();
-  }, [user?.uid]);
+  }, [employeeRecordScope, user?.uid]);
 
   useEffect(() => {
     setPhoneInput(profile.personal.phone || "");
@@ -2223,7 +2299,7 @@ export default function EmployeeProfilePage() {
       ) : null}
 
       {activeView === "attendance" ? (
-        <section className="mx-auto max-w-[760px]">
+        <section className="w-full">
           <EmployeeTodayAttendancePanel
             employeeUid={employeeUidForAttendance}
             title="الحضور"
@@ -2237,7 +2313,7 @@ export default function EmployeeProfilePage() {
       ) : null}
 
       {activeView === "requests" ? (
-        <section dir="rtl" className="mx-auto max-w-[760px] space-y-7">
+        <section dir="rtl" className="w-full space-y-7">
           <h1 className="text-center text-3xl font-medium text-slate-950">
             الطلبات
           </h1>
@@ -2491,7 +2567,7 @@ export default function EmployeeProfilePage() {
       ) : null}
 
       {activeView === "hr-info" || activeView === "employment" ? (
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
+        <div className="w-full space-y-6">
           <section
             className={cn("space-y-6", activeView !== "hr-info" && "hidden")}
           >

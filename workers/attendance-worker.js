@@ -211,13 +211,33 @@ async function listAttendanceRecords(url, db, directoryDb) {
         .prepare(
           `
           SELECT
-            SUM(CASE WHEN result = 'allowed' AND type = 'check_in' THEN 1 ELSE 0 END) AS check_ins,
-            SUM(CASE WHEN result = 'allowed' AND type = 'check_out' THEN 1 ELSE 0 END) AS check_outs,
+            SUM(CASE WHEN type = 'check_in' THEN 1 ELSE 0 END) AS check_ins,
+            SUM(CASE WHEN type = 'check_out' THEN 1 ELSE 0 END) AS check_outs,
             SUM(CASE WHEN result = 'rejected' THEN 1 ELSE 0 END) AS rejected,
-            SUM(CASE WHEN result = 'allowed' AND json_extract(device_info, '$.deviceChanged') = 1 THEN 1 ELSE 0 END) AS new_devices,
-            AVG(location_accuracy) AS average_accuracy
+            AVG(CASE WHEN location_accuracy > 0 THEN location_accuracy ELSE NULL END) AS average_accuracy
           FROM attendance_records
           WHERE server_time >= ? AND server_time < ?
+        `
+        )
+        .bind(today.start, today.end),
+      db
+        .prepare(
+          `
+          SELECT COUNT(*) AS new_devices
+          FROM (
+            SELECT
+              trim(json_extract(device_info, '$.deviceId')) AS device_id,
+              MIN(
+                COALESCE(
+                  NULLIF(trim(json_extract(device_info, '$.firstSeenAt')), ''),
+                  server_time
+                )
+              ) AS first_seen_at
+            FROM attendance_records
+            WHERE length(trim(coalesce(json_extract(device_info, '$.deviceId'), ''))) > 0
+            GROUP BY trim(json_extract(device_info, '$.deviceId'))
+            HAVING first_seen_at >= ? AND first_seen_at < ?
+          )
         `
         )
         .bind(today.start, today.end),
@@ -230,13 +250,23 @@ async function listAttendanceRecords(url, db, directoryDb) {
       directoryDb,
       pageRows.map(row => row.employee_uid)
     );
+    const sharedDeviceUsage = await loadSharedDeviceUsage(
+      db,
+      directoryDb,
+      pageRows.map(row => safeJsonObject(row.device_info)?.deviceId)
+    );
     const lastRow = pageRows[pageRows.length - 1] || null;
     const summary = results[2]?.results?.[0] || {};
+    const deviceSummary = results[3]?.results?.[0] || {};
 
     return json(200, {
       ok: true,
       records: pageRows.map(row =>
-        mapAttendanceRecordRow(row, employeeNames.get(row.employee_uid))
+        mapAttendanceRecordRow(
+          row,
+          employeeNames.get(row.employee_uid),
+          sharedDeviceUsage.get(normalizeText(safeJsonObject(row.device_info)?.deviceId))
+        )
       ),
       total: Number(results[1]?.results?.[0]?.total || 0),
       page: parsed.value.page,
@@ -249,7 +279,7 @@ async function listAttendanceRecords(url, db, directoryDb) {
         checkIns: Number(summary.check_ins || 0),
         checkOuts: Number(summary.check_outs || 0),
         rejected: Number(summary.rejected || 0),
-        newDevices: Number(summary.new_devices || 0),
+        newDevices: Number(deviceSummary.new_devices || 0),
         averageAccuracy:
           summary.average_accuracy == null
             ? null
@@ -260,6 +290,74 @@ async function listAttendanceRecords(url, db, directoryDb) {
   } catch (error) {
     return serverError("attendance_records_query_failed", error);
   }
+}
+
+async function loadSharedDeviceUsage(db, directoryDb, rawDeviceIds) {
+  const deviceIds = Array.from(
+    new Set((rawDeviceIds || []).map(normalizeText).filter(Boolean))
+  );
+  const usage = new Map();
+  if (!deviceIds.length) return usage;
+
+  const placeholders = deviceIds.map(() => "?").join(",");
+
+  try {
+    const result = await db
+      .prepare(
+        `
+        SELECT
+          trim(json_extract(device_info, '$.deviceId')) AS device_id,
+          employee_uid,
+          MAX(server_time) AS last_seen_at,
+          MIN(server_time) AS first_seen_at,
+          COUNT(*) AS records_count
+        FROM attendance_records
+        WHERE trim(json_extract(device_info, '$.deviceId')) IN (${placeholders})
+          AND length(trim(coalesce(employee_uid, ''))) > 0
+        GROUP BY trim(json_extract(device_info, '$.deviceId')), employee_uid
+        ORDER BY device_id ASC, last_seen_at DESC
+      `
+      )
+      .bind(...deviceIds)
+      .all();
+
+    const rows = result.results || [];
+    const employeeNames = await loadAttendanceEmployeeNames(
+      directoryDb,
+      rows.map(row => row.employee_uid)
+    );
+
+    for (const row of rows) {
+      const deviceId = normalizeText(row.device_id);
+      const employeeUid = normalizeText(row.employee_uid);
+      if (!deviceId || !employeeUid) continue;
+
+      const current =
+        usage.get(deviceId) || {
+          employeeCount: 0,
+          employees: [],
+        };
+      current.employees.push({
+        uid: employeeUid,
+        name: employeeNames.get(employeeUid) || null,
+        firstSeenAt: row.first_seen_at || null,
+        lastSeenAt: row.last_seen_at || null,
+        recordsCount: Number(row.records_count || 0),
+      });
+      current.employeeCount = current.employees.length;
+      usage.set(deviceId, current);
+    }
+
+    for (const [deviceId, current] of usage.entries()) {
+      if (current.employeeCount <= 1) {
+        usage.delete(deviceId);
+      }
+    }
+  } catch (error) {
+    console.warn("[attendance] shared device usage lookup failed", error);
+  }
+
+  return usage;
 }
 
 export function parseAttendanceRecordsQuery(searchParams) {
@@ -420,7 +518,7 @@ async function loadAttendanceEmployeeNames(directoryDb, employeeUids) {
   return names;
 }
 
-function mapAttendanceRecordRow(row, employeeName) {
+function mapAttendanceRecordRow(row, employeeName, sharedDeviceUsage = null) {
   const deviceInfo = safeJsonObject(row.device_info);
   return {
     id: row.id,
@@ -443,7 +541,15 @@ function mapAttendanceRecordRow(row, employeeName) {
       row.distance_meters == null ? null : Number(row.distance_meters),
     rejectionReason: row.rejection_reason || null,
     accuracyAccepted: Number(row.accuracy_accepted) === 1,
-    deviceInfo,
+    deviceInfo: {
+      ...deviceInfo,
+      sharedDevice: sharedDeviceUsage
+        ? {
+            employeeCount: sharedDeviceUsage.employeeCount,
+            employees: sharedDeviceUsage.employees,
+          }
+        : null,
+    },
     createdByEmail: row.created_by_email || null,
     createdByRole: row.created_by_role || null,
   };
@@ -1206,6 +1312,62 @@ export function evaluateDeviceChange(currentDeviceId, previousDeviceId) {
     deviceChanged,
     previousDeviceId: deviceChanged ? previous : null,
   };
+}
+
+function riyadhDateKey(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Riyadh",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+function pickRecordDeviceId(record) {
+  const snakeDeviceInfo =
+    typeof record?.device_info === "string"
+      ? safeJsonObject(record.device_info)
+      : record?.device_info;
+  return normalizeText(
+    record?.deviceId ||
+      record?.deviceInfo?.deviceId ||
+      snakeDeviceInfo?.deviceId
+  );
+}
+
+function pickRecordServerTime(record) {
+  return normalizeText(record?.serverTime || record?.server_time);
+}
+
+export function isDeviceFirstSeenToday(device, records = [], todayDateKey) {
+  const deviceId = normalizeText(device?.deviceId || device?.id || device);
+  if (!deviceId) return false;
+
+  const today = normalizeText(todayDateKey) || riyadhDateKey(new Date());
+  const explicitFirstSeen = normalizeText(
+    device?.firstSeenAt || device?.first_seen_at
+  );
+  if (explicitFirstSeen) {
+    return riyadhDateKey(explicitFirstSeen) === today;
+  }
+
+  let firstSeenMs = Infinity;
+  let firstSeenValue = "";
+  for (const record of records || []) {
+    if (pickRecordDeviceId(record) !== deviceId) continue;
+    const serverTime = pickRecordServerTime(record);
+    const serverTimeMs = Date.parse(serverTime);
+    if (Number.isFinite(serverTimeMs) && serverTimeMs < firstSeenMs) {
+      firstSeenMs = serverTimeMs;
+      firstSeenValue = serverTime;
+    }
+  }
+
+  return Boolean(firstSeenValue) && riyadhDateKey(firstSeenValue) === today;
 }
 
 export function calculateDistanceMeters(left, right) {

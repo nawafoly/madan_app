@@ -312,7 +312,7 @@ export default function EmployeeLayout({
       className="min-h-screen bg-[linear-gradient(180deg,#f8f4ea_0%,#ffffff_20%,#f8fafc_100%)] text-slate-950"
     >
       <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/92 shadow-sm shadow-slate-950/[0.03] backdrop-blur-xl">
-        <div className="container flex min-h-16 items-center justify-between gap-3 py-2.5">
+        <div className="mx-auto flex min-h-16 w-full max-w-none items-center justify-between gap-3 px-4 py-2.5 sm:px-6 lg:px-8 2xl:px-10">
           <div className="flex min-w-0 flex-1 items-center gap-2.5 text-slate-950 sm:gap-3">
             <HrBrandMark
               alt={tr(language, "شعار معدن", "MAEDIN logo")}
@@ -391,7 +391,7 @@ export default function EmployeeLayout({
       </header>
 
       <main className="pb-36 pt-8">
-        <div className="container space-y-8">
+        <div className="mx-auto w-full max-w-none space-y-8 px-4 sm:px-6 lg:px-8 2xl:px-10">
           {children}
         </div>
       </main>

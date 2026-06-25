@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Activity,
   AlertTriangle,
   CalendarCheck2,
   CheckCircle2,
+  Clock3,
   Download,
   Eye,
   EyeOff,
@@ -10,10 +12,12 @@ import {
   Filter,
   LogIn,
   LogOut,
+  MapPin,
   Navigation,
   RefreshCw,
   SearchX,
   ShieldX,
+  SlidersHorizontal,
   Smartphone,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -21,7 +25,6 @@ import { toast } from "sonner";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -50,6 +53,7 @@ import {
 } from "@/lib/attendanceRecords";
 import { fetchEmployeeDirectoryFromWorker } from "@/lib/employeeDirectoryWorker";
 import { languageDir, tr } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 50;
 
@@ -62,6 +66,8 @@ type FilterState = {
   deviceChanged: boolean;
 };
 
+type MetricTone = "emerald" | "sky" | "rose" | "amber" | "violet";
+
 const EMPTY_FILTERS: FilterState = {
   employeeUid: "all",
   fromDate: "",
@@ -69,6 +75,22 @@ const EMPTY_FILTERS: FilterState = {
   type: "all",
   result: "all",
   deviceChanged: false,
+};
+
+const metricToneClass: Record<MetricTone, string> = {
+  emerald: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  sky: "border-sky-200 bg-sky-50 text-sky-700",
+  rose: "border-rose-200 bg-rose-50 text-rose-700",
+  amber: "border-amber-200 bg-amber-50 text-amber-700",
+  violet: "border-violet-200 bg-violet-50 text-violet-700",
+};
+
+const metricAccentClass: Record<MetricTone, string> = {
+  emerald: "bg-emerald-500",
+  sky: "bg-sky-500",
+  rose: "bg-rose-500",
+  amber: "bg-amber-500",
+  violet: "bg-violet-500",
 };
 
 function toRequestFilters(filters: FilterState): AttendanceRecordsFilters {
@@ -89,12 +111,17 @@ function toRequestFilters(filters: FilterState): AttendanceRecordsFilters {
   };
 }
 
-function formatDateTime(value: string, language: "ar" | "en") {
+function formatDateTime(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value || "-";
-  return new Intl.DateTimeFormat(language === "ar" ? "ar-SA" : "en-GB", {
-    dateStyle: "medium",
-    timeStyle: "short",
+  return new Intl.DateTimeFormat("en-GB", {
+    calendar: "gregory",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
     timeZone: "Asia/Riyadh",
   }).format(date);
 }
@@ -117,6 +144,13 @@ function shortDeviceId(value: string | null | undefined) {
   return `...${value.slice(-8)}`;
 }
 
+function formatMeters(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    return "-";
+  }
+  return `${Math.round(value)} m`;
+}
+
 function csvCell(value: unknown) {
   return `"${String(value ?? "").replace(/"/g, '""')}"`;
 }
@@ -136,6 +170,8 @@ function exportCsv(records: AttendanceRecord[]) {
     "device_id",
     "device_changed",
     "previous_device_id",
+    "shared_device_employee_count",
+    "shared_device_employees",
     "rejection_reason",
   ];
   const rows = records.map(record => [
@@ -152,6 +188,10 @@ function exportCsv(records: AttendanceRecord[]) {
     record.deviceInfo.deviceId || "",
     Boolean(record.deviceInfo.deviceChanged),
     record.deviceInfo.previousDeviceId || "",
+    record.deviceInfo.sharedDevice?.employeeCount ?? "",
+    record.deviceInfo.sharedDevice?.employees
+      ?.map(employee => employee.name || employee.uid)
+      .join(" | ") || "",
     record.rejectionReason || "",
   ]);
   const csv = [headers, ...rows]
@@ -164,6 +204,370 @@ function exportCsv(records: AttendanceRecord[]) {
   anchor.download = `attendance-${new Date().toISOString().slice(0, 10)}.csv`;
   anchor.click();
   URL.revokeObjectURL(url);
+}
+
+function TypeBadge({
+  record,
+  language,
+}: {
+  record: AttendanceRecord;
+  language: "ar" | "en";
+}) {
+  const isCheckIn = record.type === "check_in";
+  const Icon = isCheckIn ? LogIn : LogOut;
+
+  return (
+    <Badge
+      variant="outline"
+      className={cn(
+        "h-7 rounded-full px-2.5 text-xs font-semibold",
+        isCheckIn
+          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+          : "border-sky-200 bg-sky-50 text-sky-700"
+      )}
+    >
+      <Icon className="h-3.5 w-3.5" />
+      {isCheckIn
+        ? tr(language, "حضور", "Check-in")
+        : tr(language, "انصراف", "Check-out")}
+    </Badge>
+  );
+}
+
+function ResultBadge({
+  record,
+  language,
+}: {
+  record: AttendanceRecord;
+  language: "ar" | "en";
+}) {
+  const allowed = record.result === "allowed";
+  const Icon = allowed ? CheckCircle2 : ShieldX;
+
+  return (
+    <Badge
+      className={cn(
+        "h-7 rounded-full px-2.5 text-xs font-semibold shadow-none",
+        allowed
+          ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-100"
+          : "bg-rose-100 text-rose-800 hover:bg-rose-100"
+      )}
+    >
+      <Icon className="h-3.5 w-3.5" />
+      {allowed ? tr(language, "مسموح", "Allowed") : tr(language, "مرفوض", "Rejected")}
+    </Badge>
+  );
+}
+
+function MetricCard({
+  label,
+  value,
+  icon: Icon,
+  tone,
+}: {
+  label: string;
+  value: number | string;
+  icon: typeof LogIn;
+  tone: MetricTone;
+}) {
+  return (
+    <div className="group relative min-h-[112px] overflow-hidden rounded-[1.35rem] border border-white/80 bg-white p-4 shadow-sm shadow-slate-200/80 transition duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-slate-200/80">
+      <span className={cn("absolute inset-x-0 top-0 h-1", metricAccentClass[tone])} />
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-3xl font-semibold tracking-normal text-slate-950">
+            {value}
+          </div>
+          <div className="mt-2 text-xs font-semibold leading-5 text-slate-500">
+            {label}
+          </div>
+        </div>
+        <span
+          className={cn(
+            "flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border",
+            metricToneClass[tone]
+          )}
+        >
+          <Icon className="h-5 w-5" />
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function DeviceBlock({
+  record,
+  language,
+  visibleDeviceIds,
+  onToggleDevice,
+}: {
+  record: AttendanceRecord;
+  language: "ar" | "en";
+  visibleDeviceIds: Set<string>;
+  onToggleDevice: (key: string) => void;
+}) {
+  const deviceKey = `${record.id}:device`;
+  const previousDeviceKey = `${record.id}:previous-device`;
+  const hasDevice = Boolean(record.deviceInfo.deviceId);
+  const sharedDevice = record.deviceInfo.sharedDevice;
+  const isSharedDevice = Boolean(
+    sharedDevice && Number(sharedDevice.employeeCount || 0) > 1
+  );
+  const deviceLabel = hasDevice
+    ? visibleDeviceIds.has(deviceKey)
+      ? record.deviceInfo.deviceId
+      : shortDeviceId(record.deviceInfo.deviceId)
+    : "-";
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <span
+          className={cn(
+            "inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs font-semibold",
+            isSharedDevice
+              ? "border-rose-200 bg-rose-50 text-rose-800"
+              : record.deviceInfo.deviceChanged
+              ? "border-amber-200 bg-amber-50 text-amber-800"
+              : hasDevice
+                ? "border-slate-200 bg-slate-50 text-slate-700"
+                : "border-slate-200 bg-slate-100 text-slate-500"
+          )}
+        >
+          {isSharedDevice || record.deviceInfo.deviceChanged ? (
+            <AlertTriangle className="h-3.5 w-3.5" />
+          ) : (
+            <Smartphone className="h-3.5 w-3.5" />
+          )}
+          {isSharedDevice
+            ? tr(language, "جهاز مشترك", "Shared device")
+            : record.deviceInfo.deviceChanged
+            ? tr(language, "تغيير جهاز", "Changed")
+            : hasDevice
+              ? tr(language, "جهاز موثق", "Device")
+              : tr(language, "لا يوجد جهاز", "No device")}
+        </span>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <code
+          dir="ltr"
+          className={cn(
+            "min-w-0 max-w-[190px] truncate rounded-lg px-2.5 py-1 font-mono text-xs",
+            hasDevice
+              ? "bg-slate-100 text-slate-700"
+              : "bg-slate-50 text-slate-400"
+          )}
+          title={record.deviceInfo.deviceId || undefined}
+        >
+          {deviceLabel}
+        </code>
+        {hasDevice ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-sm"
+            className="h-7 w-7 shrink-0 rounded-full border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+            onClick={() => onToggleDevice(deviceKey)}
+            title={
+              visibleDeviceIds.has(deviceKey)
+                ? tr(language, "إخفاء رقم الجهاز", "Hide device ID")
+                : tr(language, "إظهار رقم الجهاز", "Show device ID")
+            }
+          >
+            {visibleDeviceIds.has(deviceKey) ? (
+              <EyeOff className="h-3.5 w-3.5" />
+            ) : (
+              <Eye className="h-3.5 w-3.5" />
+            )}
+          </Button>
+        ) : null}
+      </div>
+
+      {isSharedDevice ? (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2">
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-[11px] font-semibold text-rose-800">
+              {tr(language, "تنبيه جهاز مستخدم من أكثر من موظف", "Device used by multiple employees")}
+            </div>
+            <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold text-rose-700">
+              {sharedDevice?.employeeCount || 0}
+            </span>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {(sharedDevice?.employees || []).slice(0, 4).map(employee => (
+              <span
+                key={employee.uid}
+                className="max-w-[160px] truncate rounded-full border border-rose-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-rose-800"
+                title={employee.uid}
+              >
+                {employee.name || employee.uid}
+              </span>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {record.deviceInfo.deviceChanged ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
+          <div className="text-[11px] font-semibold text-amber-800">
+            {tr(language, "الجهاز السابق", "Previous device")}
+          </div>
+          <div className="mt-1 flex items-center gap-2">
+            <code
+              dir="ltr"
+              className="max-w-[150px] truncate font-mono text-[11px] text-amber-900"
+              title={record.deviceInfo.previousDeviceId || undefined}
+            >
+              {record.deviceInfo.previousDeviceId
+                ? visibleDeviceIds.has(previousDeviceKey)
+                  ? record.deviceInfo.previousDeviceId
+                  : shortDeviceId(record.deviceInfo.previousDeviceId)
+                : "-"}
+            </code>
+            {record.deviceInfo.previousDeviceId ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="icon-sm"
+                className="h-7 w-7 rounded-full border-amber-200 bg-white/80 text-amber-800 hover:bg-white"
+                onClick={() => onToggleDevice(previousDeviceKey)}
+                title={
+                  visibleDeviceIds.has(previousDeviceKey)
+                    ? tr(language, "إخفاء رقم الجهاز السابق", "Hide previous device ID")
+                    : tr(language, "إظهار رقم الجهاز السابق", "Show previous device ID")
+                }
+              >
+                {visibleDeviceIds.has(previousDeviceKey) ? (
+                  <EyeOff className="h-3.5 w-3.5" />
+                ) : (
+                  <Eye className="h-3.5 w-3.5" />
+                )}
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function LocationBlock({
+  record,
+  language,
+  compact = false,
+}: {
+  record: AttendanceRecord;
+  language: "ar" | "en";
+  compact?: boolean;
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white px-3 py-3 shadow-sm shadow-slate-100">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <MapPin className="h-4 w-4 shrink-0 text-slate-400" />
+            <span className="truncate text-sm font-semibold text-slate-900">
+              {record.zoneName || "-"}
+            </span>
+          </div>
+          <div
+            dir="ltr"
+            className="mt-1 truncate font-mono text-[11px] text-slate-500"
+            title={`${record.location.lat}, ${record.location.lng}`}
+          >
+            {record.location.lat.toFixed(5)}, {record.location.lng.toFixed(5)}
+          </div>
+        </div>
+        <a
+          href={`https://www.google.com/maps?q=${record.location.lat},${record.location.lng}`}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-slate-700 transition hover:bg-white"
+          title={tr(language, "فتح الخريطة", "Open map")}
+        >
+          <ExternalLink className="h-4 w-4" />
+        </a>
+      </div>
+      <div
+        className={cn(
+          "mt-3 flex flex-wrap gap-1.5 text-[11px]",
+          compact && "mt-2"
+        )}
+      >
+        <span className="rounded-full bg-slate-100 px-2 py-0.5 font-semibold text-slate-700">
+          GPS {formatMeters(record.location.accuracy)}
+        </span>
+        <span className="rounded-full bg-slate-100 px-2 py-0.5 font-semibold text-slate-700">
+          {tr(language, "المسافة", "Distance")} {formatMeters(record.distanceMeters)}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function AttendanceMobileCard({
+  record,
+  language,
+  visibleDeviceIds,
+  onToggleDevice,
+}: {
+  record: AttendanceRecord;
+  language: "ar" | "en";
+  visibleDeviceIds: Set<string>;
+  onToggleDevice: (key: string) => void;
+}) {
+  return (
+    <article className="relative overflow-hidden rounded-[1.75rem] border border-slate-200 bg-[linear-gradient(135deg,#ffffff_0%,#f8fbff_100%)] p-4 shadow-sm shadow-slate-200/80">
+      <span className="absolute inset-x-0 top-0 h-1 bg-slate-950" />
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="truncate text-sm font-semibold text-slate-950">
+            {record.employeeName || record.employeeUid}
+          </div>
+          <div
+            dir="ltr"
+            className="mt-1 truncate font-mono text-[11px] text-slate-500"
+            title={record.employeeUid}
+          >
+            {record.employeeUid}
+          </div>
+        </div>
+        <div className="flex shrink-0 flex-col items-end gap-1.5">
+          <TypeBadge record={record} language={language} />
+          <ResultBadge record={record} language={language} />
+        </div>
+      </div>
+
+      <div className="mt-4 rounded-2xl bg-slate-50 px-3 py-3">
+        <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
+          <Clock3 className="h-4 w-4" />
+          {tr(language, "التاريخ والوقت", "Date and time")}
+        </div>
+        <div dir="ltr" className="mt-1 text-sm font-semibold text-slate-950">
+          {formatDateTime(record.serverTime)}
+        </div>
+      </div>
+
+      <div className="mt-3 space-y-3">
+        <LocationBlock record={record} language={language} compact />
+        <div className="rounded-2xl border border-slate-200 bg-white px-3 py-3">
+          <DeviceBlock
+            record={record}
+            language={language}
+            visibleDeviceIds={visibleDeviceIds}
+            onToggleDevice={onToggleDevice}
+          />
+        </div>
+        {record.rejectionReason ? (
+          <div className="rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">
+            {tr(language, "سبب الرفض", "Rejection")}:{" "}
+            {rejectionLabel(record.rejectionReason, language)}
+          </div>
+        ) : null}
+      </div>
+    </article>
+  );
 }
 
 export default function HrAttendancePage() {
@@ -261,29 +665,25 @@ export default function HrAttendancePage() {
       label: tr(language, "حضور اليوم", "Today's check-ins"),
       value: data?.summary.checkIns ?? 0,
       icon: LogIn,
-      tone: "text-emerald-700 bg-emerald-50 border-emerald-200",
-      accent: "bg-emerald-500",
+      tone: "emerald" as const,
     },
     {
       label: tr(language, "انصراف اليوم", "Today's check-outs"),
       value: data?.summary.checkOuts ?? 0,
       icon: LogOut,
-      tone: "text-sky-700 bg-sky-50 border-sky-200",
-      accent: "bg-sky-500",
+      tone: "sky" as const,
     },
     {
       label: tr(language, "المرفوض اليوم", "Rejected today"),
       value: data?.summary.rejected ?? 0,
       icon: ShieldX,
-      tone: "text-rose-700 bg-rose-50 border-rose-200",
-      accent: "bg-rose-500",
+      tone: "rose" as const,
     },
     {
       label: tr(language, "أجهزة جديدة اليوم", "New devices today"),
       value: data?.summary.newDevices ?? 0,
       icon: Smartphone,
-      tone: "text-amber-700 bg-amber-50 border-amber-200",
-      accent: "bg-amber-500",
+      tone: "amber" as const,
     },
     {
       label: tr(language, "متوسط دقة GPS", "Average GPS accuracy"),
@@ -292,8 +692,7 @@ export default function HrAttendancePage() {
           ? "-"
           : `${Math.round(data.summary.averageAccuracy)} m`,
       icon: Navigation,
-      tone: "text-violet-700 bg-violet-50 border-violet-200",
-      accent: "bg-violet-500",
+      tone: "violet" as const,
     },
   ];
 
@@ -365,98 +764,90 @@ export default function HrAttendancePage() {
     <DashboardLayout area="hr">
       <main
         dir={languageDir(language)}
-        className="min-h-screen bg-[#f6f8fb] px-3 py-4 text-slate-950 sm:px-5 lg:px-7"
+        className="min-h-screen bg-[linear-gradient(180deg,#f8fafc_0%,#eef4ff_42%,#f8fafc_100%)] px-3 py-4 text-slate-950 sm:px-5 lg:px-7"
       >
         <div className="mx-auto flex w-full max-w-[1680px] flex-col gap-5">
-          <header className="flex flex-col gap-4 border-b border-slate-200/80 pb-5 lg:flex-row lg:items-end lg:justify-between">
-            <div className="space-y-2">
-              <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
-                <CalendarCheck2 className="h-4 w-4" />
-                {tr(language, "الموارد البشرية", "Human Resources")}
+          <header className="overflow-hidden rounded-[2rem] border border-slate-200/80 bg-white shadow-[0_24px_70px_rgba(15,23,42,0.08)]">
+            <div className="grid gap-5 bg-[linear-gradient(135deg,#ffffff_0%,#f8fbff_52%,#eefdf8_100%)] px-5 py-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center lg:px-6">
+              <div className="min-w-0">
+                <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                  <CalendarCheck2 className="h-4 w-4" />
+                  {tr(language, "الموارد البشرية", "Human Resources")}
+                </div>
+                <div className="mt-4 flex flex-wrap items-end gap-x-4 gap-y-2">
+                  <h1 className="text-3xl font-semibold tracking-normal text-slate-950 sm:text-4xl">
+                    {tr(language, "الحضور والانصراف", "Attendance")}
+                  </h1>
+                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                    {tr(
+                      language,
+                      `${data?.total || 0} سجل مطابق`,
+                      `${data?.total || 0} matching records`
+                    )}
+                  </span>
+                </div>
               </div>
-              <div className="space-y-1">
-                <h1 className="text-2xl font-semibold tracking-normal text-slate-950 sm:text-3xl">
-                  {tr(language, "الحضور والانصراف", "Attendance")}
-                </h1>
-                <p className="text-sm text-slate-500">
-                  {tr(
-                    language,
-                    `${data?.total || 0} سجل مطابق`,
-                    `${data?.total || 0} matching records`
-                  )}
-                </p>
+
+              <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+                <Button
+                  variant="outline"
+                  className="h-11 rounded-2xl border-slate-200 bg-white px-4 shadow-sm hover:bg-slate-50"
+                  onClick={() => void loadRecords()}
+                  disabled={loading}
+                >
+                  <RefreshCw
+                    className={cn("h-4 w-4", loading && "animate-spin")}
+                  />
+                  {tr(language, "تحديث", "Refresh")}
+                </Button>
+                <Button
+                  className="h-11 rounded-2xl bg-slate-950 px-4 shadow-sm hover:bg-slate-800"
+                  onClick={() => void handleExport()}
+                  disabled={exporting || !data?.total}
+                >
+                  <Download className="h-4 w-4" />
+                  {tr(language, "تصدير CSV", "Export CSV")}
+                </Button>
               </div>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                variant="outline"
-                className="h-10 rounded-full border-slate-200 bg-white px-4 shadow-sm hover:bg-slate-50"
-                onClick={() => void loadRecords()}
-                disabled={loading}
-              >
-                <RefreshCw
-                  className={`h-4 w-4 ${loading ? "animate-spin" : ""}`}
+
+            <div className="grid grid-cols-2 gap-px border-t border-slate-100 bg-slate-100 p-px md:grid-cols-5">
+              {summaryCards.map(card => (
+                <MetricCard
+                  key={card.label}
+                  label={card.label}
+                  value={card.value}
+                  icon={card.icon}
+                  tone={card.tone}
                 />
-                {tr(language, "تحديث", "Refresh")}
-              </Button>
-              <Button
-                className="h-10 rounded-full bg-slate-950 px-4 shadow-sm hover:bg-slate-800"
-                onClick={() => void handleExport()}
-                disabled={exporting || !data?.total}
-              >
-                <Download className="h-4 w-4" />
-                {tr(language, "تصدير CSV", "Export CSV")}
-              </Button>
+              ))}
             </div>
           </header>
 
-          <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-            {summaryCards.map(card => (
-              <Card
-                key={card.label}
-                className="overflow-hidden rounded-xl border-slate-200/80 bg-white shadow-sm shadow-slate-200/60"
-              >
-                <CardContent className="relative flex min-h-28 items-center justify-between gap-4 p-5">
-                  <span
-                    className={`absolute inset-y-0 start-0 w-1 ${card.accent}`}
-                  />
-                  <div className="min-w-0 space-y-1">
-                    <div className="text-2xl font-semibold leading-none text-slate-950">
-                      {card.value}
-                    </div>
-                    <div className="text-xs font-medium leading-5 text-slate-500">
-                      {card.label}
-                    </div>
-                  </div>
-                  <div
-                    className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full border ${card.tone}`}
-                  >
-                    <card.icon className="h-5 w-5" />
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </section>
-
-          <section className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm shadow-slate-200/60">
+          <section className="rounded-[2rem] border border-slate-200 bg-white p-4 shadow-[0_18px_50px_rgba(15,23,42,0.06)]">
             <div className="mb-4 flex flex-col gap-3 border-b border-slate-100 pb-4 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h2 className="text-sm font-semibold text-slate-950">
-                  {tr(language, "تصفية السجلات", "Filter records")}
-                </h2>
-                <p className="mt-1 text-xs text-slate-500">
-                  {tr(
-                    language,
-                    activeFiltersCount
-                      ? `${activeFiltersCount} فلتر نشط`
-                      : "لا توجد فلاتر نشطة",
-                    activeFiltersCount
-                      ? `${activeFiltersCount} active filters`
-                      : "No active filters"
-                  )}
-                </p>
+              <div className="flex items-start gap-3">
+                <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-950 text-white">
+                  <SlidersHorizontal className="h-5 w-5" />
+                </span>
+                <div>
+                  <h2 className="text-sm font-semibold text-slate-950">
+                    {tr(language, "تصفية السجلات", "Filter records")}
+                  </h2>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {tr(
+                      language,
+                      activeFiltersCount
+                        ? `${activeFiltersCount} فلتر نشط`
+                        : "لا توجد فلاتر نشطة",
+                      activeFiltersCount
+                        ? `${activeFiltersCount} active filters`
+                        : "No active filters"
+                    )}
+                  </p>
+                </div>
               </div>
-              <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700">
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700">
                 <Checkbox
                   checked={filters.deviceChanged}
                   onCheckedChange={checked =>
@@ -469,7 +860,8 @@ export default function HrAttendancePage() {
                 {tr(language, "جهاز جديد فقط", "New device only")}
               </label>
             </div>
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
               <div className="space-y-2 xl:col-span-2">
                 <Label className="text-xs font-semibold text-slate-600">
                   {tr(language, "الموظف", "Employee")}
@@ -480,7 +872,7 @@ export default function HrAttendancePage() {
                     setFilters(current => ({ ...current, employeeUid: value }))
                   }
                 >
-                  <SelectTrigger className="h-10 rounded-lg border-slate-200 bg-slate-50/70">
+                  <SelectTrigger className="h-11 rounded-2xl border-slate-200 bg-slate-50/70">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -495,6 +887,7 @@ export default function HrAttendancePage() {
                   </SelectContent>
                 </Select>
               </div>
+
               <div className="space-y-2">
                 <Label
                   htmlFor="attendance-from"
@@ -505,7 +898,7 @@ export default function HrAttendancePage() {
                 <Input
                   id="attendance-from"
                   type="date"
-                  className="h-10 rounded-lg border-slate-200 bg-slate-50/70"
+                  className="h-11 rounded-2xl border-slate-200 bg-slate-50/70"
                   value={filters.fromDate}
                   onChange={event =>
                     setFilters(current => ({
@@ -515,6 +908,7 @@ export default function HrAttendancePage() {
                   }
                 />
               </div>
+
               <div className="space-y-2">
                 <Label
                   htmlFor="attendance-to"
@@ -525,7 +919,7 @@ export default function HrAttendancePage() {
                 <Input
                   id="attendance-to"
                   type="date"
-                  className="h-10 rounded-lg border-slate-200 bg-slate-50/70"
+                  className="h-11 rounded-2xl border-slate-200 bg-slate-50/70"
                   value={filters.toDate}
                   onChange={event =>
                     setFilters(current => ({
@@ -535,6 +929,7 @@ export default function HrAttendancePage() {
                   }
                 />
               </div>
+
               <div className="space-y-2">
                 <Label className="text-xs font-semibold text-slate-600">
                   {tr(language, "نوع العملية", "Type")}
@@ -545,7 +940,7 @@ export default function HrAttendancePage() {
                     setFilters(current => ({ ...current, type: value }))
                   }
                 >
-                  <SelectTrigger className="h-10 rounded-lg border-slate-200 bg-slate-50/70">
+                  <SelectTrigger className="h-11 rounded-2xl border-slate-200 bg-slate-50/70">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -561,6 +956,7 @@ export default function HrAttendancePage() {
                   </SelectContent>
                 </Select>
               </div>
+
               <div className="space-y-2">
                 <Label className="text-xs font-semibold text-slate-600">
                   {tr(language, "النتيجة", "Result")}
@@ -571,7 +967,7 @@ export default function HrAttendancePage() {
                     setFilters(current => ({ ...current, result: value }))
                   }
                 >
-                  <SelectTrigger className="h-10 rounded-lg border-slate-200 bg-slate-50/70">
+                  <SelectTrigger className="h-11 rounded-2xl border-slate-200 bg-slate-50/70">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -588,16 +984,17 @@ export default function HrAttendancePage() {
                 </Select>
               </div>
             </div>
-            <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+
+            <div className="mt-4 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:justify-end">
               <Button
                 variant="ghost"
-                className="h-10 rounded-full px-4"
+                className="h-10 rounded-2xl px-4"
                 onClick={handleResetFilters}
               >
                 {tr(language, "مسح", "Clear")}
               </Button>
               <Button
-                className="h-10 rounded-full bg-slate-950 px-4 hover:bg-slate-800"
+                className="h-10 rounded-2xl bg-slate-950 px-4 hover:bg-slate-800"
                 onClick={handleApplyFilters}
               >
                 <Filter className="h-4 w-4" />
@@ -606,19 +1003,24 @@ export default function HrAttendancePage() {
             </div>
           </section>
 
-          <Card className="overflow-hidden rounded-xl border-slate-200/80 bg-white shadow-sm shadow-slate-200/60">
-            <div className="flex flex-col gap-2 border-b border-slate-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h2 className="text-sm font-semibold text-slate-950">
-                  {tr(language, "سجل العمليات", "Attendance log")}
-                </h2>
-                <p className="mt-1 text-xs text-slate-500">
-                  {tr(
-                    language,
-                    "تفاصيل الموقع والجهاز لكل عملية حضور أو انصراف",
-                    "Location and device details for every check-in or check-out"
-                  )}
-                </p>
+          <section className="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.06)]">
+            <div className="flex flex-col gap-3 border-b border-slate-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3">
+                <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
+                  <Activity className="h-5 w-5" />
+                </span>
+                <div>
+                  <h2 className="text-sm font-semibold text-slate-950">
+                    {tr(language, "سجل العمليات", "Attendance log")}
+                  </h2>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {tr(
+                      language,
+                      "عرض مدمج للموقع والجهاز والنتيجة لكل عملية",
+                      "A compact view of location, device and result for each event"
+                    )}
+                  </p>
+                </div>
               </div>
               <Badge
                 variant="outline"
@@ -631,57 +1033,60 @@ export default function HrAttendancePage() {
                 )}
               </Badge>
             </div>
-            <CardContent className="p-0">
-              {loading ? (
-                <div className="space-y-3 p-5">
-                  {Array.from({ length: 6 }, (_, index) => (
-                    <Skeleton key={index} className="h-12 w-full" />
+
+            {loading ? (
+              <div className="space-y-3 p-5">
+                {Array.from({ length: 6 }, (_, index) => (
+                  <Skeleton key={index} className="h-16 w-full rounded-2xl" />
+                ))}
+              </div>
+            ) : error ? (
+              <div className="flex min-h-64 flex-col items-center justify-center gap-3 p-8 text-center">
+                <AlertTriangle className="h-8 w-8 text-rose-600" />
+                <p className="text-sm text-slate-700">{error}</p>
+                <Button variant="outline" onClick={() => void loadRecords()}>
+                  {tr(language, "إعادة المحاولة", "Retry")}
+                </Button>
+              </div>
+            ) : !data?.records.length ? (
+              <div className="flex min-h-64 flex-col items-center justify-center gap-3 p-8 text-center text-slate-500">
+                <SearchX className="h-8 w-8" />
+                <p className="text-sm">
+                  {tr(language, "لا توجد سجلات مطابقة.", "No matching records.")}
+                </p>
+              </div>
+            ) : (
+              <>
+                <div className="space-y-3 p-3 md:hidden">
+                  {data.records.map(record => (
+                    <AttendanceMobileCard
+                      key={record.id}
+                      record={record}
+                      language={language}
+                      visibleDeviceIds={visibleDeviceIds}
+                      onToggleDevice={toggleDeviceVisibility}
+                    />
                   ))}
                 </div>
-              ) : error ? (
-                <div className="flex min-h-64 flex-col items-center justify-center gap-3 p-8 text-center">
-                  <AlertTriangle className="h-8 w-8 text-rose-600" />
-                  <p className="text-sm text-slate-700">{error}</p>
-                  <Button variant="outline" onClick={() => void loadRecords()}>
-                    {tr(language, "إعادة المحاولة", "Retry")}
-                  </Button>
-                </div>
-              ) : !data?.records.length ? (
-                <div className="flex min-h-64 flex-col items-center justify-center gap-3 p-8 text-center text-slate-500">
-                  <SearchX className="h-8 w-8" />
-                  <p className="text-sm">
-                    {tr(
-                      language,
-                      "لا توجد سجلات مطابقة.",
-                      "No matching records."
-                    )}
-                  </p>
-                </div>
-              ) : (
-                <div className="max-h-[62vh] overflow-auto">
-                  <Table className="min-w-[1120px]">
+
+                <div className="hidden max-h-[62vh] overflow-auto md:block">
+                  <Table className="min-w-[1000px]">
                     <TableHeader>
                       <TableRow className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50/95 backdrop-blur">
                         <TableHead className="h-12 w-[230px] px-5 text-xs font-semibold text-slate-500">
                           {tr(language, "الموظف", "Employee")}
                         </TableHead>
-                        <TableHead className="h-12 w-[190px] px-4 text-xs font-semibold text-slate-500">
-                          {tr(language, "الحالة", "Status")}
+                        <TableHead className="h-12 w-[250px] px-4 text-xs font-semibold text-slate-500">
+                          {tr(language, "العملية والنتيجة", "Operation")}
                         </TableHead>
-                        <TableHead className="h-12 w-[180px] px-4 text-xs font-semibold text-slate-500">
+                        <TableHead className="h-12 w-[170px] px-4 text-xs font-semibold text-slate-500">
                           {tr(language, "التاريخ والوقت", "Date and time")}
                         </TableHead>
-                        <TableHead className="h-12 w-[150px] px-4 text-xs font-semibold text-slate-500">
-                          {tr(language, "النطاق", "Zone")}
-                        </TableHead>
-                        <TableHead className="h-12 w-[260px] px-4 text-xs font-semibold text-slate-500">
+                        <TableHead className="h-12 w-[285px] px-4 text-xs font-semibold text-slate-500">
                           {tr(language, "الموقع", "Location")}
                         </TableHead>
-                        <TableHead className="h-12 w-[220px] px-4 text-xs font-semibold text-slate-500">
+                        <TableHead className="h-12 w-[240px] px-5 text-xs font-semibold text-slate-500">
                           {tr(language, "الجهاز", "Device")}
-                        </TableHead>
-                        <TableHead className="h-12 w-[150px] px-5 text-xs font-semibold text-slate-500">
-                          {tr(language, "سبب الرفض", "Rejection")}
                         </TableHead>
                       </TableRow>
                     </TableHeader>
@@ -689,13 +1094,14 @@ export default function HrAttendancePage() {
                       {data.records.map(record => (
                         <TableRow
                           key={record.id}
-                          className="border-0 odd:bg-white even:bg-slate-50/35 hover:bg-slate-100/70"
+                          className="border-0 bg-white transition hover:bg-slate-50"
                         >
                           <TableCell className="px-5 py-4">
                             <div className="text-sm font-semibold text-slate-950">
                               {record.employeeName || record.employeeUid}
                             </div>
                             <div
+                              dir="ltr"
                               className="mt-1 max-w-52 truncate font-mono text-[11px] leading-5 text-slate-500"
                               title={record.employeeUid}
                             >
@@ -703,246 +1109,48 @@ export default function HrAttendancePage() {
                             </div>
                           </TableCell>
                           <TableCell className="px-4 py-4">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <Badge
-                                variant="outline"
-                                className={
-                                  record.type === "check_in"
-                                    ? "rounded-full border-emerald-200 bg-emerald-50 text-emerald-700"
-                                    : "rounded-full border-sky-200 bg-sky-50 text-sky-700"
-                                }
-                              >
-                                {record.type === "check_in" ? (
-                                  <LogIn className="h-3.5 w-3.5" />
-                                ) : (
-                                  <LogOut className="h-3.5 w-3.5" />
-                                )}
-                                {record.type === "check_in"
-                                  ? tr(language, "حضور", "Check-in")
-                                  : tr(language, "انصراف", "Check-out")}
-                              </Badge>
-                              <Badge
-                                className={
-                                  record.result === "allowed"
-                                    ? "rounded-full bg-emerald-100 text-emerald-800 shadow-sm shadow-emerald-100 hover:bg-emerald-100"
-                                    : "rounded-full bg-rose-100 text-rose-800 shadow-sm shadow-rose-100 hover:bg-rose-100"
-                                }
-                              >
-                                {record.result === "allowed" ? (
-                                  <CheckCircle2 className="h-3.5 w-3.5" />
-                                ) : (
-                                  <ShieldX className="h-3.5 w-3.5" />
-                                )}
-                                {record.result === "allowed"
-                                  ? tr(language, "مسموح", "Allowed")
-                                  : tr(language, "مرفوض", "Rejected")}
-                              </Badge>
-                            </div>
-                          </TableCell>
-                          <TableCell className="whitespace-nowrap px-4 py-4 text-sm font-medium text-slate-700">
-                            {formatDateTime(record.serverTime, language)}
-                          </TableCell>
-                          <TableCell className="px-4 py-4">
-                            <div className="w-fit rounded-md bg-slate-100 px-2.5 py-1 text-sm font-medium text-slate-700">
-                              {record.zoneName || "-"}
-                            </div>
-                          </TableCell>
-                          <TableCell className="px-4 py-4">
                             <div className="space-y-2">
-                              <div className="flex flex-wrap items-center gap-2 text-xs">
-                                <span className="rounded-md bg-slate-100 px-2 py-1 font-medium text-slate-700">
-                                  {tr(language, "المسافة", "Distance")}:{" "}
-                                  {record.distanceMeters == null
-                                    ? "-"
-                                    : `${record.distanceMeters} m`}
-                                </span>
-                                <span className="rounded-md bg-slate-100 px-2 py-1 font-medium text-slate-700">
-                                  GPS: {Math.round(record.location.accuracy)} m
-                                </span>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <TypeBadge record={record} language={language} />
+                                <ResultBadge record={record} language={language} />
                               </div>
-                              <div
-                                dir="ltr"
-                                className="max-w-56 truncate font-mono text-xs text-slate-500"
-                                title={`${record.location.lat}, ${record.location.lng}`}
-                              >
-                                {record.location.lat.toFixed(5)},{" "}
-                                {record.location.lng.toFixed(5)}
-                              </div>
-                              <a
-                                href={`https://www.google.com/maps?q=${record.location.lat},${record.location.lng}`}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 hover:text-slate-950"
-                              >
-                                <ExternalLink className="h-3.5 w-3.5" />
-                                {tr(language, "فتح الخريطة", "Open map")}
-                              </a>
-                            </div>
-                          </TableCell>
-                          <TableCell className="px-4 py-4">
-                            <div className="space-y-2">
-                              <div
-                                className={
-                                  record.deviceInfo.deviceChanged
-                                    ? "inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-800"
-                                    : record.deviceInfo.deviceId
-                                      ? "inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-800"
-                                      : "inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-500"
-                                }
-                              >
-                                {record.deviceInfo.deviceChanged ? (
-                                  <AlertTriangle className="h-3.5 w-3.5" />
-                                ) : record.deviceInfo.deviceId ? (
-                                  <CheckCircle2 className="h-3.5 w-3.5" />
-                                ) : (
-                                  <Smartphone className="h-3.5 w-3.5" />
-                                )}
-                                {record.deviceInfo.deviceChanged
-                                  ? tr(
-                                      language,
-                                      "تم تغيير الجهاز",
-                                      "Device changed"
-                                    )
-                                  : record.deviceInfo.deviceId
-                                    ? tr(language, "جهاز معروف", "Known device")
-                                    : tr(language, "لا يوجد جهاز", "No device")}
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <div
-                                  dir="ltr"
-                                  className={
-                                    record.deviceInfo.deviceId
-                                      ? "max-w-48 truncate rounded-md bg-slate-100 px-2.5 py-1 font-mono text-xs text-slate-700"
-                                      : "rounded-md bg-slate-50 px-2.5 py-1 text-xs text-slate-400"
-                                  }
-                                >
-                                  {record.deviceInfo.deviceId
-                                    ? visibleDeviceIds.has(
-                                        `${record.id}:device`
-                                      )
-                                      ? record.deviceInfo.deviceId
-                                      : "••••••••"
-                                    : "-"}
-                                </div>
-                                {record.deviceInfo.deviceId ? (
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="icon-sm"
-                                    className="h-7 w-7 rounded-full border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-                                    onClick={() =>
-                                      toggleDeviceVisibility(
-                                        `${record.id}:device`
-                                      )
-                                    }
-                                    title={
-                                      visibleDeviceIds.has(
-                                        `${record.id}:device`
-                                      )
-                                        ? tr(
-                                            language,
-                                            "إخفاء رقم الجهاز",
-                                            "Hide device ID"
-                                          )
-                                        : tr(
-                                            language,
-                                            "إظهار رقم الجهاز",
-                                            "Show device ID"
-                                          )
-                                    }
-                                  >
-                                    {visibleDeviceIds.has(
-                                      `${record.id}:device`
-                                    ) ? (
-                                      <EyeOff className="h-3.5 w-3.5" />
-                                    ) : (
-                                      <Eye className="h-3.5 w-3.5" />
+                              {record.rejectionReason ? (
+                                <div className="inline-flex max-w-full rounded-xl border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-700">
+                                  <span className="truncate">
+                                    {rejectionLabel(
+                                      record.rejectionReason,
+                                      language
                                     )}
-                                  </Button>
-                                ) : null}
-                              </div>
-                              {record.deviceInfo.deviceChanged ? (
-                                <div className="space-y-1 rounded-lg border border-amber-100 bg-amber-50/60 px-3 py-2">
-                                  <div className="text-[11px] font-semibold text-amber-800">
-                                    {tr(
-                                      language,
-                                      "الجهاز السابق",
-                                      "Previous device"
-                                    )}
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <div
-                                      dir="ltr"
-                                      className="max-w-40 truncate font-mono text-[11px] text-amber-900"
-                                    >
-                                      {record.deviceInfo.previousDeviceId
-                                        ? visibleDeviceIds.has(
-                                            `${record.id}:previous-device`
-                                          )
-                                          ? record.deviceInfo.previousDeviceId
-                                          : "••••••••"
-                                        : "-"}
-                                    </div>
-                                    {record.deviceInfo.previousDeviceId ? (
-                                      <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="icon-sm"
-                                        className="h-7 w-7 rounded-full border-amber-200 bg-white/80 text-amber-800 hover:bg-white"
-                                        onClick={() =>
-                                          toggleDeviceVisibility(
-                                            `${record.id}:previous-device`
-                                          )
-                                        }
-                                        title={
-                                          visibleDeviceIds.has(
-                                            `${record.id}:previous-device`
-                                          )
-                                            ? tr(
-                                                language,
-                                                "إخفاء رقم الجهاز السابق",
-                                                "Hide previous device ID"
-                                              )
-                                            : tr(
-                                                language,
-                                                "إظهار رقم الجهاز السابق",
-                                                "Show previous device ID"
-                                              )
-                                        }
-                                      >
-                                        {visibleDeviceIds.has(
-                                          `${record.id}:previous-device`
-                                        ) ? (
-                                          <EyeOff className="h-3.5 w-3.5" />
-                                        ) : (
-                                          <Eye className="h-3.5 w-3.5" />
-                                        )}
-                                      </Button>
-                                    ) : null}
-                                  </div>
+                                  </span>
                                 </div>
                               ) : null}
                             </div>
                           </TableCell>
-                          <TableCell className="px-5 py-4 text-sm">
-                            <span
-                              className={
-                                record.rejectionReason
-                                  ? "text-rose-700"
-                                  : "text-slate-400"
-                              }
-                            >
-                              {rejectionLabel(record.rejectionReason, language)}
-                            </span>
+                          <TableCell
+                            dir="ltr"
+                            className="whitespace-nowrap px-4 py-4 text-sm font-semibold text-slate-800"
+                          >
+                            {formatDateTime(record.serverTime)}
+                          </TableCell>
+                          <TableCell className="px-4 py-4">
+                            <LocationBlock record={record} language={language} />
+                          </TableCell>
+                          <TableCell className="px-5 py-4">
+                            <DeviceBlock
+                              record={record}
+                              language={language}
+                              visibleDeviceIds={visibleDeviceIds}
+                              onToggleDevice={toggleDeviceVisibility}
+                            />
                           </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
                   </Table>
                 </div>
-              )}
-            </CardContent>
-          </Card>
+              </>
+            )}
+          </section>
 
           <footer className="flex flex-wrap items-center justify-between gap-3 pb-4">
             <span className="text-sm text-slate-500">
@@ -955,7 +1163,7 @@ export default function HrAttendancePage() {
             <div className="flex gap-2">
               <Button
                 variant="outline"
-                className="h-10 rounded-full border-slate-200 bg-white px-4 shadow-sm"
+                className="h-10 rounded-2xl border-slate-200 bg-white px-4 shadow-sm"
                 disabled={page <= 1 || loading}
                 onClick={() => setPage(current => Math.max(1, current - 1))}
               >
@@ -963,7 +1171,7 @@ export default function HrAttendancePage() {
               </Button>
               <Button
                 variant="outline"
-                className="h-10 rounded-full border-slate-200 bg-white px-4 shadow-sm"
+                className="h-10 rounded-2xl border-slate-200 bg-white px-4 shadow-sm"
                 disabled={page >= totalPages || loading}
                 onClick={() => setPage(current => current + 1)}
               >
@@ -976,3 +1184,4 @@ export default function HrAttendancePage() {
     </DashboardLayout>
   );
 }
+

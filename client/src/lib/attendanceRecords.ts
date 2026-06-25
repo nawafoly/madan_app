@@ -28,6 +28,16 @@ export type AttendanceRecord = {
     platform?: string | null;
     language?: string | null;
     timeZone?: string | null;
+    sharedDevice?: {
+      employeeCount: number;
+      employees: Array<{
+        uid: string;
+        name?: string | null;
+        firstSeenAt?: string | null;
+        lastSeenAt?: string | null;
+        recordsCount?: number;
+      }>;
+    } | null;
   };
   createdByEmail: string | null;
   createdByRole: string | null;

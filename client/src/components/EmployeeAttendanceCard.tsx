@@ -175,6 +175,16 @@ export default function EmployeeAttendanceCard({
     const type = todayState.nextType;
     if (pendingType || !type) return;
 
+    if (
+      type === "check_out" &&
+      typeof window !== "undefined" &&
+      !window.confirm(
+        "تأكيد تسجيل الانصراف؟\n\nلن يتم تسجيل الانصراف إلا بعد موافقتك."
+      )
+    ) {
+      return;
+    }
+
     setPendingType(type);
     try {
       const response = await submitEmployeeAttendance({
@@ -239,6 +249,7 @@ export default function EmployeeAttendanceCard({
   const checkOutTime = formatDisplayTime(todayState.checkOut?.serverTime);
   const attendanceDone = Boolean(todayState.checkIn);
   const checkoutDone = Boolean(todayState.checkOut);
+  const nextActionIsCheckout = todayState.nextType === "check_out";
 
   return (
     <Card
@@ -291,9 +302,11 @@ export default function EmployeeAttendanceCard({
               type="button"
               className={cn(
                 "flex h-24 w-24 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-[0_18px_40px_-28px_rgba(15,23,42,0.55)] transition",
-                todayState.nextType
-                  ? "hover:border-emerald-200 hover:text-emerald-700"
-                  : "text-emerald-700",
+                nextActionIsCheckout
+                  ? "border-rose-200 bg-rose-50 text-rose-700 hover:border-rose-300 hover:bg-rose-100 hover:text-rose-800"
+                  : todayState.nextType
+                    ? "hover:border-emerald-200 hover:text-emerald-700"
+                    : "text-emerald-700",
                 pendingType && "cursor-wait"
               )}
               disabled={!!pendingType || loadingToday || !todayState.nextType}
@@ -306,7 +319,12 @@ export default function EmployeeAttendanceCard({
                 <Fingerprint className="h-11 w-11 stroke-[1.9]" />
               )}
             </button>
-            <div className="mt-3 text-center text-sm font-semibold text-slate-600">
+            <div
+              className={cn(
+                "mt-3 text-center text-sm font-semibold",
+                nextActionIsCheckout ? "text-rose-700" : "text-slate-600"
+              )}
+            >
               {todayState.actionLabel}
             </div>
           </div>
@@ -335,6 +353,40 @@ export default function EmployeeAttendanceCard({
         <div className="rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-center text-sm font-semibold text-slate-600">
           {loadingToday ? "جاري تحديث حالة اليوم..." : todayState.statusLabel}
         </div>
+
+        {todayState.checkIn || todayState.checkOut ? (
+          <div className="grid gap-3 rounded-[22px] border border-slate-200 bg-white px-4 py-4 text-sm shadow-sm shadow-slate-100 sm:grid-cols-2">
+            <div className="rounded-[18px] border border-emerald-100 bg-emerald-50/70 px-4 py-3">
+              <div className="flex items-center justify-between gap-3">
+                <span className="font-semibold text-emerald-800">
+                  سجل الحضور
+                </span>
+                <span dir="ltr" className="font-bold text-emerald-700">
+                  {checkInTime}
+                </span>
+              </div>
+              <div className="mt-1 text-xs text-emerald-700/80">
+                {todayState.checkIn ? "موجود في سجلات اليوم" : "لا يوجد سجل حضور"}
+              </div>
+            </div>
+
+            <div className="rounded-[18px] border border-rose-100 bg-rose-50/70 px-4 py-3">
+              <div className="flex items-center justify-between gap-3">
+                <span className="font-semibold text-rose-800">
+                  سجل الانصراف
+                </span>
+                <span dir="ltr" className="font-bold text-rose-700">
+                  {checkOutTime}
+                </span>
+              </div>
+              <div className="mt-1 text-xs text-rose-700/80">
+                {todayState.checkOut
+                  ? "موجود في سجلات اليوم"
+                  : "لا يوجد سجل انصراف"}
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         {showLocationPermissionHelp ? (
           <div className="rounded-[22px] border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-7 text-amber-900">

@@ -2,6 +2,7 @@ import { auth } from "@/_core/firebase";
 import { buildDocumentWorkerUrl } from "@/lib/documentUploadService";
 
 const ATTENDANCE_DEVICE_ID_STORAGE_KEY = "maedin_attendance_device_id";
+const ATTENDANCE_DEVICE_ID_PREFIX = "maedin-web";
 
 export type AttendanceType = "check_in" | "check_out";
 export type AttendanceResult = "allowed" | "rejected";
@@ -45,18 +46,59 @@ export function getAttendanceDeviceId() {
     const existing = window.localStorage
       .getItem(ATTENDANCE_DEVICE_ID_STORAGE_KEY)
       ?.trim();
-    if (existing) return existing;
+    if (existing && existing.startsWith(`${ATTENDANCE_DEVICE_ID_PREFIX}-`)) {
+      return existing;
+    }
   } catch {
     // Storage can be unavailable in privacy-restricted browser contexts.
   }
 
-  const deviceId = globalThis.crypto.randomUUID();
+  const deviceId = buildStableAttendanceDeviceId();
   try {
     window.localStorage.setItem(ATTENDANCE_DEVICE_ID_STORAGE_KEY, deviceId);
   } catch {
     // The current request can still carry the generated ID.
   }
   return deviceId;
+}
+
+function hashText(value: string) {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
+function buildStableAttendanceDeviceId() {
+  const screenInfo =
+    typeof window !== "undefined" && window.screen
+      ? [
+          window.screen.width,
+          window.screen.height,
+          window.screen.colorDepth,
+          window.devicePixelRatio || 1,
+        ].join("x")
+      : "";
+  const nav =
+    typeof navigator !== "undefined"
+      ? [
+          navigator.userAgent || "",
+          navigator.platform || "",
+          navigator.language || "",
+          navigator.hardwareConcurrency || "",
+          (navigator as Navigator & { deviceMemory?: number }).deviceMemory ||
+            "",
+          navigator.maxTouchPoints || "",
+        ].join("|")
+      : "";
+  const timeZone =
+    typeof Intl !== "undefined"
+      ? Intl.DateTimeFormat().resolvedOptions().timeZone || ""
+      : "";
+  const raw = [nav, timeZone, screenInfo].join("|");
+  return `${ATTENDANCE_DEVICE_ID_PREFIX}-${hashText(raw)}-${hashText(raw.split("").reverse().join(""))}`;
 }
 
 async function recordAttendance(requestBody: AttendanceRequest) {

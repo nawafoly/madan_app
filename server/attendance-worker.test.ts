@@ -9,6 +9,7 @@ const {
   evaluateDeviceChange,
   evaluateLocationDecision,
   evaluateStateTransition,
+  isDeviceFirstSeenToday,
   parseAttendanceRecordsQuery,
   parseRiyadhDateBoundary,
 } = attendanceWorker;
@@ -158,6 +159,36 @@ describe("attendance device tracking", () => {
       deviceChanged: false,
       previousDeviceId: null,
     });
+  });
+
+  it("does not count an old device as new today", () => {
+    const records = [
+      {
+        serverTime: "2026-06-24T09:00:00.000Z",
+        deviceInfo: { deviceId: "device-old" },
+      },
+      {
+        serverTime: "2026-06-25T09:00:00.000Z",
+        deviceInfo: { deviceId: "device-old" },
+      },
+    ];
+
+    expect(
+      isDeviceFirstSeenToday({ deviceId: "device-old" }, records, "2026-06-25")
+    ).toBe(false);
+  });
+
+  it("counts a device as new only when its first appearance is today", () => {
+    const records = [
+      {
+        serverTime: "2026-06-25T09:00:00.000Z",
+        deviceInfo: { deviceId: "device-new" },
+      },
+    ];
+
+    expect(
+      isDeviceFirstSeenToday({ deviceId: "device-new" }, records, "2026-06-25")
+    ).toBe(true);
   });
 });
 
