@@ -167,7 +167,13 @@ function toForm(report: WeeklyReportRecord): WeeklyReportFormState {
   };
 }
 
-export function WeeklyReportTab({ user }: { user: AppUser }) {
+export function WeeklyReportTab({
+  user,
+  mode = "employee",
+}: {
+  user: AppUser;
+  mode?: "employee" | "admin";
+}) {
   const [profileDefaults, setProfileDefaults] = useState({ name: "", title: "" });
   const [ownReports, setOwnReports] = useState<WeeklyReportRecord[]>([]);
   const [receivedReports, setReceivedReports] = useState<WeeklyReportRecord[]>([]);
@@ -179,12 +185,12 @@ export function WeeklyReportTab({ user }: { user: AppUser }) {
     buildInitialForm(user)
   );
 
-  const isReceiver = user.uid === WEEKLY_REPORT_RECEIVER.uid;
-  const canWriteManagerNotes = hasPermission(
-    user,
-    WEEKLY_REPORT_MANAGER_NOTES_PERMISSION
-  );
-  const canReviewWeeklyReports = isReceiver || canWriteManagerNotes;
+  const isAdminMode = mode === "admin";
+  const isReceiver = isAdminMode && user.uid === WEEKLY_REPORT_RECEIVER.uid;
+  const canWriteManagerNotes =
+    isAdminMode &&
+    hasPermission(user, WEEKLY_REPORT_MANAGER_NOTES_PERMISSION);
+  const canReviewWeeklyReports = isAdminMode && (isReceiver || canWriteManagerNotes);
   const selectedReport = useMemo(
     () =>
       [...ownReports, ...receivedReports].find(report => report.id === form.id) ||
@@ -476,7 +482,7 @@ export function WeeklyReportTab({ user }: { user: AppUser }) {
           type: "message",
           relatedId: selectedReport.id,
           relatedTo: "weekly_report",
-          relatedPath: "/hr/weekly-reports",
+          relatedPath: "/employee/weekly-reports",
         }).catch(error => {
           console.error("weekly_report_manager_note_notification_failed", error);
         });

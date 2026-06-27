@@ -47,6 +47,7 @@ import EmployeeWeeklyReportsPage from "@/pages/employee/WeeklyReports";
 import CreateStaffAccount from "@/pages/admin/CreateStaffAccount";
 import StaffPortalPage from "@/pages/hr/StaffPortal";
 import HrAttendancePage from "@/pages/hr/Attendance";
+import HrWeeklyReportsPage from "@/pages/hr/WeeklyReports";
 
 // ✅ Client pages
 import ClientDashboard from "@/pages/client/MyInvestments";
@@ -301,6 +302,12 @@ function Router() {
           </RequireRole>
         </Route>
 
+        <Route path="/hr/weekly-reports">
+          <RequireAdminPermission permission="weekly_reports.manager_notes" area="staff">
+            <HrWeeklyReportsPage />
+          </RequireAdminPermission>
+        </Route>
+
         <Route path="/hr">
           <StaffPortalPage />
         </Route>
@@ -351,10 +358,6 @@ function Router() {
 
         <Route path="/hr/messages">
           <Redirect to="/employee/messages" />
-        </Route>
-
-        <Route path="/hr/weekly-reports">
-          <Redirect to="/employee/weekly-reports" />
         </Route>
 
         <Route path="/employee/profile">

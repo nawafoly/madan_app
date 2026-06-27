@@ -61,7 +61,7 @@ export default function EmployeeWeeklyReportsPage() {
         "Submit and review weekly work reports with manager notes separated from internal messages."
       )}
     >
-      <WeeklyReportTab user={user} />
+      <WeeklyReportTab user={user} mode="employee" />
     </EmployeeLayout>
   );
 }

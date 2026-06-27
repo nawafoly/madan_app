@@ -194,7 +194,7 @@ const hrMenuItems: MenuItem[] = [
     label: "التقارير الأسبوعية",
     path: "/hr/weekly-reports",
     allow: ["owner", "hr"],
-    authOnly: true,
+    permission: "weekly_reports.manager_notes",
   },
   {
     icon: Settings,

@@ -162,6 +162,7 @@ import {
   type ContractExportCandidate,
   type ContractExportSummary,
 } from "@/lib/contractExport";
+import { resolveUserAccountStatus } from "@/lib/userAccountStatus";
 import {
   addDoc,
   collection,
@@ -298,7 +299,9 @@ type AdminUserDoc = {
   displayName: string;
   email: string;
   roleKey: string;
+  adminDirectorySource?: "admin_users" | "users";
   title?: string;
+  active?: boolean;
   isActive: boolean;
   linkedUserUid?: string;
   employeeProfileEnabled?: boolean;
@@ -918,12 +921,37 @@ function normalizeAdminRoleKey(roleKey: unknown): AdminRoleKey {
   return isAdminRoleKey(roleKey) ? roleKey : "admin";
 }
 
+function normalizeDirectoryAdminRoleKey(roleKey: unknown): AdminRoleKey {
+  const normalized = String(roleKey || "")
+    .trim()
+    .toLowerCase();
+
+  if (normalized === "employee") return "staff";
+  if (
+    normalized === "human_resources" ||
+    normalized === "human-resources" ||
+    normalized === "human resources"
+  ) {
+    return "hr";
+  }
+
+  return normalizeAdminRoleKey(normalized);
+}
+
 function isRoleVisibleInSettingsArea(roleKey: unknown, area: SettingsArea) {
   if (!isAdminRoleKey(roleKey)) return false;
   const normalizedRoleKey = roleKey;
   const allowedRoleKeys =
     area === "staff" ? STAFF_ADMIN_ROLE_KEYS : INVESTMENT_ADMIN_ROLE_KEYS;
   return (allowedRoleKeys as readonly string[]).includes(normalizedRoleKey);
+}
+
+function normalizeAdminDirectoryText(...values: unknown[]) {
+  for (const value of values) {
+    const text = String(value ?? "").trim();
+    if (text && text !== "undefined" && text !== "null") return text;
+  }
+  return "";
 }
 
 function isKnownPermission(
@@ -1016,6 +1044,137 @@ function getEffectivePermissionKeys(
     permissionsAllow,
     permissionsDeny,
   });
+}
+
+function hasSettingsAreaPermissionSignal(
+  roleKey: string,
+  permissionsAllow: string[] = [],
+  permissionsDeny: string[] = [],
+  area: SettingsArea
+) {
+  const visiblePermissionKeys = new Set(
+    (area === "staff"
+      ? STAFF_PERMISSION_DEFINITIONS
+      : INVESTMENT_PERMISSION_DEFINITIONS
+    ).map(permission => permission.key)
+  );
+
+  return getEffectivePermissionKeys(
+    roleKey,
+    permissionsAllow,
+    permissionsDeny
+  ).some(permissionKey => visiblePermissionKeys.has(permissionKey));
+}
+
+function normalizeAdminDirectoryRow(
+  id: string,
+  raw: Record<string, any>,
+  area: SettingsArea,
+  source: "admin_users" | "users"
+): AdminUserDoc | null {
+  const roleKey = normalizeDirectoryAdminRoleKey(raw.roleKey ?? raw.role);
+  const normalizedOverrides = normalizePermissionOverrides(
+    Array.isArray(raw.permissionsAllow) ? raw.permissionsAllow : [],
+    Array.isArray(raw.permissionsDeny) ? raw.permissionsDeny : []
+  );
+
+  if (
+    !isRoleVisibleInSettingsArea(roleKey, area) &&
+    !hasSettingsAreaPermissionSignal(
+      roleKey,
+      normalizedOverrides.permissionsAllow,
+      normalizedOverrides.permissionsDeny,
+      area
+    )
+  ) {
+    return null;
+  }
+
+  const email = normalizeAdminDirectoryText(raw.email, id).toLowerCase();
+  const displayName =
+    normalizeAdminDirectoryText(raw.displayName, raw.name, raw.fullName, email) ||
+    id;
+  const accountStatus =
+    source === "admin_users" &&
+    Object.prototype.hasOwnProperty.call(raw, "isActive")
+      ? resolveUserAccountStatus({ isActive: raw.isActive })
+      : resolveUserAccountStatus(raw);
+  const linkedUserUid =
+    source === "users"
+      ? id
+      : normalizeAdminDirectoryText(raw.linkedUserUid, raw.uid, raw.userId);
+  const linkedEmployeeId =
+    normalizeAdminDirectoryText(
+      raw.linkedEmployeeId,
+      raw.employeeId,
+      raw.employeeProfile?.linkedEmployeeId
+    ) || null;
+
+  return {
+    id: source === "users" ? email || id : id,
+    adminDirectorySource: source,
+    includeInEmployeeManagement:
+      typeof raw.includeInEmployeeManagement === "boolean"
+        ? raw.includeInEmployeeManagement
+        : area === "staff",
+    displayName,
+    email,
+    roleKey,
+    title:
+      normalizeAdminDirectoryText(
+        raw.title,
+        raw.jobTitle,
+        raw.employeeProfile?.employment?.title,
+        raw.employeeProfile?.employment?.jobTitle
+      ) || "",
+    active: accountStatus.isActive,
+    isActive: accountStatus.isActive,
+    linkedUserUid: linkedUserUid || undefined,
+    employeeProfileEnabled:
+      typeof raw.employeeProfileEnabled === "boolean"
+        ? raw.employeeProfileEnabled
+        : area === "staff",
+    linkedEmployeeId,
+    notes: normalizeAdminDirectoryText(raw.notes),
+    permissionsAllow: normalizedOverrides.permissionsAllow,
+    permissionsDeny: normalizedOverrides.permissionsDeny,
+    createdAt: raw.createdAt,
+    updatedAt: raw.updatedAt,
+  };
+}
+
+function mergeAdminDirectoryRows(
+  adminRows: AdminUserDoc[],
+  userRows: AdminUserDoc[]
+) {
+  const rowsByEmail = new Map<string, AdminUserDoc>();
+
+  for (const row of userRows) {
+    const key = (row.email || row.id || "").trim().toLowerCase();
+    if (key) rowsByEmail.set(key, row);
+  }
+
+  for (const row of adminRows) {
+    const key = (row.email || row.id || "").trim().toLowerCase();
+    if (!key) continue;
+
+    const userRow = rowsByEmail.get(key);
+    rowsByEmail.set(key, {
+      ...userRow,
+      ...row,
+      adminDirectorySource: "admin_users",
+      linkedUserUid: row.linkedUserUid || userRow?.linkedUserUid,
+      linkedEmployeeId: row.linkedEmployeeId || userRow?.linkedEmployeeId || null,
+      employeeProfileEnabled:
+        row.employeeProfileEnabled || userRow?.employeeProfileEnabled || false,
+      includeInEmployeeManagement:
+        row.includeInEmployeeManagement ||
+        userRow?.includeInEmployeeManagement ||
+        false,
+    });
+  }
+
+  return Array.from(rowsByEmail.values());
 }
 
 function buildOverridesFromEffectiveSelection(
@@ -1126,7 +1285,10 @@ export default function Settings({
 
   // NEW: roles / admin users / labels / flags / content
   const [roles, setRoles] = useState<RoleDoc[]>([]);
-  const [adminUsers, setAdminUsers] = useState<AdminUserDoc[]>([]);
+  const [adminUserDocs, setAdminUserDocs] = useState<AdminUserDoc[]>([]);
+  const [adminUserCandidates, setAdminUserCandidates] = useState<
+    AdminUserDoc[]
+  >([]);
   const [adminAccountSearch, setAdminAccountSearch] = useState("");
   const [adminAccountRoleFilter, setAdminAccountRoleFilter] = useState<
     "all" | AdminRoleKey
@@ -1477,6 +1639,10 @@ export default function Settings({
   );
   const visibleRoles = roles.filter(role =>
     isRoleVisibleInSettingsArea(role.key, area)
+  );
+  const adminUsers = useMemo(
+    () => mergeAdminDirectoryRows(adminUserDocs, adminUserCandidates),
+    [adminUserCandidates, adminUserDocs]
   );
   const activeRolesCount = visibleRoles.filter(role => role.isActive).length;
   const systemRolesCount = visibleRoles.filter(role => role.isSystem).length;
@@ -1902,16 +2068,40 @@ export default function Settings({
       collection(db, "admin_users"),
       snap => {
         const rows = snap.docs
-          .map(d => ({
-            id: d.id,
-            ...(d.data() as any),
-          }))
-          .filter(row => isRoleVisibleInSettingsArea(row.roleKey, area)) as AdminUserDoc[];
-        setAdminUsers(rows);
+          .map(d =>
+            normalizeAdminDirectoryRow(
+              d.id,
+              (d.data() as Record<string, any>) || {},
+              area,
+              "admin_users"
+            )
+          )
+          .filter((row): row is AdminUserDoc => !!row);
+        setAdminUserDocs(rows);
       },
       err => {
         console.error("admin_users snapshot error:", err);
         setError("تعذر تحميل بيانات حسابات الإدارة (صلاحيات/اتصال).");
+      }
+    );
+
+    const unsubUserAccounts = onSnapshot(
+      collection(db, "users"),
+      snap => {
+        const rows = snap.docs
+          .map(userDoc =>
+            normalizeAdminDirectoryRow(
+              userDoc.id,
+              (userDoc.data() as Record<string, any>) || {},
+              area,
+              "users"
+            )
+          )
+          .filter((row): row is AdminUserDoc => !!row);
+        setAdminUserCandidates(rows);
+      },
+      err => {
+        console.error("users admin directory snapshot error:", err);
       }
     );
 
@@ -1964,6 +2154,7 @@ export default function Settings({
 
     return () => {
       unsubAdmins();
+      unsubUserAccounts();
       unsubEmployees();
       unsubInvites();
     };
@@ -2772,6 +2963,7 @@ export default function Settings({
     email,
     roleKey,
     title: title || "",
+    active: isActive,
     isActive,
     employeeProfileEnabled,
     linkedEmployeeId,
@@ -2815,6 +3007,7 @@ export default function Settings({
     permissionsAllow,
     permissionsDeny,
     active: isActive,
+    isActive,
     updatedAt: serverTimestamp(),
   });
 
@@ -3089,12 +3282,26 @@ export default function Settings({
     try {
       const id = (u.email || u.id || "").trim().toLowerCase(); // ✅ canonical
       const nextIsActive = !u.isActive;
-      await auditedUpdateDoc({
+      await auditedSetDoc({
         ref: doc(db, "admin_users", id),
         data: {
+          displayName: u.displayName || id,
+          email: id,
+          roleKey: normalizeAdminRoleKey(u.roleKey),
+          title: u.title || "",
+          active: nextIsActive,
           isActive: nextIsActive,
+          linkedUserUid: u.linkedUserUid || null,
+          employeeProfileEnabled: !!u.employeeProfileEnabled,
+          linkedEmployeeId: u.linkedEmployeeId || null,
+          includeInEmployeeManagement: !!u.includeInEmployeeManagement,
+          notes: u.notes || "",
+          permissionsAllow: u.permissionsAllow || [],
+          permissionsDeny: u.permissionsDeny || [],
+          createdAt: u.createdAt ?? serverTimestamp(),
           updatedAt: serverTimestamp(),
         },
+        options: { merge: true },
         action: u.isActive
           ? AUDIT_ACTIONS.USER_DISABLED
           : AUDIT_ACTIONS.USER_ENABLED,
@@ -3116,6 +3323,7 @@ export default function Settings({
           data: {
             uid: linkedUserDoc.id,
             active: nextIsActive,
+            isActive: nextIsActive,
             updatedAt: serverTimestamp(),
           },
           options: { merge: true },
@@ -3146,6 +3354,11 @@ export default function Settings({
   };
 
   const handleDeleteAdmin = async (u: AdminUserDoc) => {
+    if (u.adminDirectorySource === "users") {
+      toast.info("هذا الحساب ظاهر من users. عدله أولا لإنشاء سجل إداري قبل الحذف.");
+      return;
+    }
+
     try {
       const id = (u.email || u.id || "").trim().toLowerCase(); // ✅ canonical
       const linkedUserDocs = await resolveLinkedUserDocs(id, u.linkedUserUid);
@@ -4663,6 +4876,8 @@ export default function Settings({
                         )
                           .trim()
                           .slice(0, 1);
+                        const isUserDirectoryCandidate =
+                          u.adminDirectorySource === "users";
 
                         return (
                           <div
@@ -4692,6 +4907,14 @@ export default function Settings({
                                   >
                                     {roleLabel}
                                   </Badge>
+                                  {isUserDirectoryCandidate ? (
+                                    <Badge
+                                      variant="outline"
+                                      className="rounded-full border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] text-amber-700"
+                                    >
+                                      من users
+                                    </Badge>
+                                  ) : null}
                                   {u.employeeProfileEnabled ? (
                                     <Badge
                                       variant="outline"
@@ -4810,6 +5033,7 @@ export default function Settings({
                               >
                                 {u.isActive ? "تعطيل" : "تفعيل"}
                               </Button>
+                              {!isUserDirectoryCandidate ? (
                               <Button
                                 variant="destructive"
                                 className="h-10 rounded-xl"
@@ -4818,6 +5042,7 @@ export default function Settings({
                                 <Trash2 className="h-4 w-4 ml-2" />
                                 حذف
                               </Button>
+                              ) : null}
                             </div>
                           </div>
                         );

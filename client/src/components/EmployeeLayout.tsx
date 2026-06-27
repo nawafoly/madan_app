@@ -53,10 +53,11 @@ export default function EmployeeLayout({
   const canOpenHrPortal = user
     ? hasStaffAdminPermission(user, "recruitment.manage") ||
       hasStaffAdminPermission(user, "employees.manage") ||
+      hasStaffAdminPermission(user, "weekly_reports.manager_notes") ||
       hasStaffAdminPermission(user, "settings.manage")
     : false;
   const employeeReturnPath = "/hr";
-  const employeeReturnLabel = tr(language, "لوحة HR", "HR Dashboard");
+  const employeeReturnLabel = tr(language, "بوابة HR", "HR Portal");
   const handleLogout = async () => {
     await logout();
     setLocation("/login");
@@ -357,10 +358,10 @@ export default function EmployeeLayout({
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="h-10 rounded-full border-slate-200 bg-white px-3 text-sm shadow-sm sm:px-4"
+                  className="h-10 rounded-full border-amber-200 bg-amber-50 px-3 text-sm font-semibold text-slate-900 shadow-sm shadow-amber-100/50 hover:border-amber-300 hover:bg-amber-100 sm:px-4"
                   aria-label={employeeReturnLabel}
                 >
-                  <Home className="h-4 w-4 shrink-0" />
+                  <Home className="h-4 w-4 shrink-0 text-amber-600" />
                   <span className="hidden sm:inline">{employeeReturnLabel}</span>
                 </Button>
               </Link>

@@ -603,6 +603,10 @@ export function getStaffHomePathForUser(
     return "/hr/settings";
   }
 
+  if (hasStaffAdminPermission(user, "weekly_reports.manager_notes")) {
+    return "/hr/weekly-reports";
+  }
+
   if (user.role === "staff" || canAccessEmployeeProfile(user)) {
     return "/employee/profile";
   }

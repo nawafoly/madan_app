@@ -287,20 +287,14 @@ export default function StaffPortalPage() {
       },
       {
         title: tr(language, "التقارير الأسبوعية", "Weekly Reports"),
-        description: canWriteWeeklyReportNotes
-          ? tr(
-              language,
-              "مراجعة تقارير الموظفين وكتابة ملاحظات المدير.",
-              "Review staff reports and add manager notes."
-            )
-          : tr(
-              language,
-              "إرسال تقرير العمل ومراجعة ملاحظات المدير.",
-              "Submit work reports and review manager notes."
-            ),
+        description: tr(
+          language,
+          "مراجعة تقارير الموظفين وكتابة ملاحظات المدير.",
+          "Review staff reports and add manager notes."
+        ),
         href: "/hr/weekly-reports",
         icon: ClipboardList,
-        canEnter: !!user,
+        canEnter: canWriteWeeklyReportNotes,
       },
       {
         title: tr(language, "إعدادات الإدارة", "Administration Settings"),
@@ -313,7 +307,7 @@ export default function StaffPortalPage() {
         icon: Settings,
         canEnter: !!user && hasStaffAdminPermission(user, "settings.manage"),
       },
-    ],
+    ].filter(item => item.href !== "/hr/weekly-reports" || item.canEnter),
     [canWriteWeeklyReportNotes, language, user]
   );
 

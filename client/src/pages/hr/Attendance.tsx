@@ -320,7 +320,7 @@ function DeviceBlock({
     : "-";
 
   return (
-    <div className="space-y-2">
+    <div className="min-w-0 space-y-2">
       <div className="flex items-center gap-2">
         <span
           className={cn(
@@ -349,11 +349,11 @@ function DeviceBlock({
         </span>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex min-w-0 items-center gap-2">
         <code
           dir="ltr"
           className={cn(
-            "min-w-0 max-w-[190px] truncate rounded-lg px-2.5 py-1 font-mono text-xs",
+            "min-w-0 flex-1 truncate rounded-lg px-2.5 py-1 font-mono text-xs",
             hasDevice
               ? "bg-slate-100 text-slate-700"
               : "bg-slate-50 text-slate-400"
@@ -394,11 +394,11 @@ function DeviceBlock({
               {sharedDevice?.employeeCount || 0}
             </span>
           </div>
-          <div className="mt-2 flex flex-wrap gap-1.5">
+          <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
             {(sharedDevice?.employees || []).slice(0, 4).map(employee => (
               <span
                 key={employee.uid}
-                className="max-w-[160px] truncate rounded-full border border-rose-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-rose-800"
+                className="max-w-full truncate rounded-full border border-rose-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-rose-800"
                 title={employee.uid}
               >
                 {employee.name || employee.uid}
@@ -413,10 +413,10 @@ function DeviceBlock({
           <div className="text-[11px] font-semibold text-amber-800">
             {tr(language, "الجهاز السابق", "Previous device")}
           </div>
-          <div className="mt-1 flex items-center gap-2">
+          <div className="mt-1 flex min-w-0 items-center gap-2">
             <code
               dir="ltr"
-              className="max-w-[150px] truncate font-mono text-[11px] text-amber-900"
+              className="min-w-0 flex-1 truncate font-mono text-[11px] text-amber-900"
               title={record.deviceInfo.previousDeviceId || undefined}
             >
               {record.deviceInfo.previousDeviceId
@@ -430,7 +430,7 @@ function DeviceBlock({
                 type="button"
                 variant="outline"
                 size="icon-sm"
-                className="h-7 w-7 rounded-full border-amber-200 bg-white/80 text-amber-800 hover:bg-white"
+                className="h-7 w-7 shrink-0 rounded-full border-amber-200 bg-white/80 text-amber-800 hover:bg-white"
                 onClick={() => onToggleDevice(previousDeviceKey)}
                 title={
                   visibleDeviceIds.has(previousDeviceKey)
@@ -462,12 +462,12 @@ function LocationBlock({
   compact?: boolean;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white px-3 py-3 shadow-sm shadow-slate-100">
+    <div className="min-w-0 rounded-2xl border border-slate-200 bg-white px-3 py-3 shadow-sm shadow-slate-100">
       <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 items-center gap-2">
             <MapPin className="h-4 w-4 shrink-0 text-slate-400" />
-            <span className="truncate text-sm font-semibold text-slate-900">
+            <span className="min-w-0 truncate text-sm font-semibold text-slate-900">
               {record.zoneName || "-"}
             </span>
           </div>
@@ -1057,7 +1057,7 @@ export default function HrAttendancePage() {
               </div>
             ) : (
               <>
-                <div className="space-y-3 p-3 md:hidden">
+                <div className="space-y-3 p-3 xl:hidden">
                   {data.records.map(record => (
                     <AttendanceMobileCard
                       key={record.id}
@@ -1069,23 +1069,23 @@ export default function HrAttendancePage() {
                   ))}
                 </div>
 
-                <div className="hidden max-h-[62vh] overflow-auto md:block">
-                  <Table className="min-w-[1000px]">
+                <div className="hidden max-h-[62vh] overflow-x-hidden overflow-y-auto xl:block">
+                  <Table className="w-full table-fixed">
                     <TableHeader>
                       <TableRow className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50/95 backdrop-blur">
-                        <TableHead className="h-12 w-[230px] px-5 text-xs font-semibold text-slate-500">
+                        <TableHead className="h-12 w-[20%] px-5 text-xs font-semibold text-slate-500">
                           {tr(language, "الموظف", "Employee")}
                         </TableHead>
-                        <TableHead className="h-12 w-[250px] px-4 text-xs font-semibold text-slate-500">
+                        <TableHead className="h-12 w-[22%] px-4 text-xs font-semibold text-slate-500">
                           {tr(language, "العملية والنتيجة", "Operation")}
                         </TableHead>
-                        <TableHead className="h-12 w-[170px] px-4 text-xs font-semibold text-slate-500">
+                        <TableHead className="h-12 w-[16%] px-4 text-xs font-semibold text-slate-500">
                           {tr(language, "التاريخ والوقت", "Date and time")}
                         </TableHead>
-                        <TableHead className="h-12 w-[285px] px-4 text-xs font-semibold text-slate-500">
+                        <TableHead className="h-12 w-[24%] px-4 text-xs font-semibold text-slate-500">
                           {tr(language, "الموقع", "Location")}
                         </TableHead>
-                        <TableHead className="h-12 w-[240px] px-5 text-xs font-semibold text-slate-500">
+                        <TableHead className="h-12 w-[18%] px-5 text-xs font-semibold text-slate-500">
                           {tr(language, "الجهاز", "Device")}
                         </TableHead>
                       </TableRow>
@@ -1096,19 +1096,19 @@ export default function HrAttendancePage() {
                           key={record.id}
                           className="border-0 bg-white transition hover:bg-slate-50"
                         >
-                          <TableCell className="px-5 py-4">
-                            <div className="text-sm font-semibold text-slate-950">
+                          <TableCell className="px-5 py-4 align-top">
+                            <div className="truncate text-sm font-semibold text-slate-950">
                               {record.employeeName || record.employeeUid}
                             </div>
                             <div
                               dir="ltr"
-                              className="mt-1 max-w-52 truncate font-mono text-[11px] leading-5 text-slate-500"
+                              className="mt-1 max-w-full truncate font-mono text-[11px] leading-5 text-slate-500"
                               title={record.employeeUid}
                             >
                               {record.employeeUid}
                             </div>
                           </TableCell>
-                          <TableCell className="px-4 py-4">
+                          <TableCell className="px-4 py-4 align-top">
                             <div className="space-y-2">
                               <div className="flex flex-wrap items-center gap-2">
                                 <TypeBadge record={record} language={language} />
@@ -1128,14 +1128,14 @@ export default function HrAttendancePage() {
                           </TableCell>
                           <TableCell
                             dir="ltr"
-                            className="whitespace-nowrap px-4 py-4 text-sm font-semibold text-slate-800"
+                            className="px-4 py-4 align-top text-sm font-semibold text-slate-800"
                           >
                             {formatDateTime(record.serverTime)}
                           </TableCell>
-                          <TableCell className="px-4 py-4">
+                          <TableCell className="px-4 py-4 align-top">
                             <LocationBlock record={record} language={language} />
                           </TableCell>
-                          <TableCell className="px-5 py-4">
+                          <TableCell className="px-5 py-4 align-top">
                             <DeviceBlock
                               record={record}
                               language={language}
