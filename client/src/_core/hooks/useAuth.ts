@@ -40,6 +40,7 @@ export const ALL_PERMISSION_KEYS = [
   "recruitment.manage",
   "employees.view",
   "employees.manage",
+  "attendance.view",
   "weekly_reports.manager_notes",
   "reports.view",
   "financial.view",
@@ -64,6 +65,7 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   "recruitment.manage": "إدارة طلبات التوظيف",
   "employees.view": "عرض الموظفين",
   "employees.manage": "إدارة الموظفين",
+  "attendance.view": "عرض الحضور والانصراف",
   "weekly_reports.manager_notes": "كتابة ملاحظات المدير في التقرير الأسبوعي",
   "reports.view": "عرض التقارير",
   "financial.view": "عرض المالية",
@@ -95,6 +97,7 @@ export const ROLE_DEFAULT_PERMS: Record<AppRole, Permission[]> = {
     "recruitment.manage",
     "employees.view",
     "employees.manage",
+    "attendance.view",
     "weekly_reports.manager_notes",
     "reports.view",
     "financial.view",
@@ -128,6 +131,7 @@ export const ROLE_DEFAULT_PERMS: Record<AppRole, Permission[]> = {
     "recruitment.manage",
     "employees.view",
     "employees.manage",
+    "attendance.view",
   ],
   staff: [],
   client: ["projects.view"],
@@ -605,6 +609,10 @@ export function getStaffHomePathForUser(
 
   if (hasStaffAdminPermission(user, "weekly_reports.manager_notes")) {
     return "/hr/weekly-reports";
+  }
+
+  if (hasPermission(user, "attendance.view")) {
+    return "/hr/attendance";
   }
 
   if (user.role === "staff" || canAccessEmployeeProfile(user)) {

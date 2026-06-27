@@ -832,6 +832,7 @@ const DEFAULT_PERMISSIONS: Array<{ key: string; label: string }> = [
   { key: "recruitment.manage", label: "إدارة طلبات التوظيف" },
   { key: "employees.view", label: "عرض الموظفين" },
   { key: "employees.manage", label: "إدارة الموظفين" },
+  { key: "attendance.view", label: "عرض الحضور والانصراف" },
   {
     key: "weekly_reports.manager_notes",
     label: "كتابة ملاحظات المدير في التقرير الأسبوعي",
@@ -887,6 +888,7 @@ const HR_ONLY_PERMISSION_KEYS = new Set<Permission>([
   "recruitment.manage",
   "employees.view",
   "employees.manage",
+  "attendance.view",
   "weekly_reports.manager_notes",
 ]);
 
@@ -895,6 +897,7 @@ const STAFF_PERMISSION_KEYS = new Set<Permission>([
   "recruitment.manage",
   "employees.view",
   "employees.manage",
+  "attendance.view",
   "weekly_reports.manager_notes",
   "settings.manage",
 ]);

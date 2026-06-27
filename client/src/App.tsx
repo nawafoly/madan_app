@@ -297,9 +297,9 @@ function Router() {
         </Route>
 
         <Route path="/hr/attendance">
-          <RequireRole allow={["owner", "admin", "hr"]}>
+          <RequireAdminPermission permission="attendance.view" area="staff" directPermission>
             <HrAttendancePage />
-          </RequireRole>
+          </RequireAdminPermission>
         </Route>
 
         <Route path="/hr/weekly-reports">

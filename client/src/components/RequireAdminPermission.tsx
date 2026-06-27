@@ -2,6 +2,7 @@ import { useEffect, type ReactNode } from "react";
 import { useLocation } from "wouter";
 import {
   getHomePathForUser,
+  hasPermission,
   hasInvestmentAdminPermission,
   hasStaffAdminPermission,
   useAuth,
@@ -11,12 +12,14 @@ import {
 type Props = {
   permission: Permission;
   area?: "investment" | "staff";
+  directPermission?: boolean;
   children: ReactNode;
 };
 
 export default function RequireAdminPermission({
   permission,
   area = "investment",
+  directPermission = false,
   children,
 }: Props) {
   const { user, loading } = useAuth();
@@ -24,7 +27,11 @@ export default function RequireAdminPermission({
 
   const allowed =
     !!user &&
-    (area === "staff"
+    (directPermission
+      ? user.role !== "client" &&
+        user.role !== "guest" &&
+        hasPermission(user, permission)
+      : area === "staff"
       ? hasStaffAdminPermission(user, permission)
       : hasInvestmentAdminPermission(user, permission));
 

@@ -27,6 +27,7 @@ import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { auth, db } from "@/_core/firebase";
 import {
   getHomePathForUser,
+  hasPermission,
   hasStaffAdminPermission,
   hasStaffAreaPermission,
   useAuth,
@@ -283,7 +284,11 @@ export default function StaffPortalPage() {
         ),
         href: "/hr/attendance",
         icon: CalendarCheck2,
-        canEnter: !!user && ["owner", "admin", "hr"].includes(user.role || ""),
+        canEnter:
+          !!user &&
+          user.role !== "client" &&
+          user.role !== "guest" &&
+          hasPermission(user, "attendance.view"),
       },
       {
         title: tr(language, "التقارير الأسبوعية", "Weekly Reports"),

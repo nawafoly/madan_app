@@ -1,4 +1,5 @@
 import {
+  hasPermission,
   hasInvestmentAdminPermission,
   hasStaffAdminPermission,
   isOpsRole,
@@ -67,7 +68,7 @@ import {
 import { NotificationBell } from "@/components/NotificationBell";
 import { cn } from "@/lib/utils";
 
-type RoleKey = "owner" | "admin" | "accountant" | "hr";
+type RoleKey = "owner" | "admin" | "accountant" | "hr" | "staff";
 
 type MenuItem = {
   icon: any;
@@ -75,6 +76,7 @@ type MenuItem = {
   path: string;
   allow: RoleKey[]; // الأدوار المسموح بها
   permission?: Permission;
+  directPermission?: boolean;
   authOnly?: boolean;
 };
 
@@ -179,8 +181,9 @@ const hrMenuItems: MenuItem[] = [
     icon: CalendarCheck2,
     label: "الحضور والانصراف",
     path: "/hr/attendance",
-    allow: ["owner", "admin", "hr"],
-    authOnly: true,
+    allow: ["owner", "admin", "hr", "staff"],
+    permission: "attendance.view",
+    directPermission: true,
   },
   {
     icon: UserPlus,
@@ -586,6 +589,9 @@ function DashboardLayoutContent({
       return hrMenuItems.filter(item => {
         if (!item.allow.includes(role as RoleKey)) return false;
         if (item.authOnly) return true;
+        if (item.directPermission) {
+          return !!item.permission && hasPermission(user, item.permission);
+        }
         return (
           !!item.permission && hasStaffAdminPermission(user, item.permission)
         );
