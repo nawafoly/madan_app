@@ -19,6 +19,7 @@ import {
   Plus,
   Save,
   Send,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -183,9 +184,13 @@ export function DailyTaskTab({
   const [loadingReceived, setLoadingReceived] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savingManagerNotes, setSavingManagerNotes] = useState(false);
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [cameraStarting, setCameraStarting] = useState(false);
+  const [cameraError, setCameraError] = useState("");
   const [form, setForm] = useState<DailyTaskFormState>(() => buildInitialForm(user));
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const cameraInputRef = useRef<HTMLInputElement | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const cameraStreamRef = useRef<MediaStream | null>(null);
 
   const isAdminMode = mode === "admin";
   const canWriteManagerNotes =
@@ -243,6 +248,65 @@ export function DailyTaskTab({
       setForm(toForm(nextTask));
     }
   }, [canWriteManagerNotes, form.id, managerPendingTasks, sentReceivedTasks]);
+
+  const stopCameraStream = () => {
+    cameraStreamRef.current?.getTracks().forEach(track => track.stop());
+    cameraStreamRef.current = null;
+    if (videoRef.current) videoRef.current.srcObject = null;
+  };
+
+  useEffect(() => {
+    if (!cameraOpen) {
+      stopCameraStream();
+      return;
+    }
+
+    let cancelled = false;
+    setCameraStarting(true);
+    setCameraError("");
+
+    const startCamera = async () => {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setCameraError("الكاميرا غير مدعومة داخل هذا المتصفح. اختر صورة من الجهاز.");
+        setCameraStarting(false);
+        return;
+      }
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 1280 },
+            height: { ideal: 960 },
+          },
+        });
+
+        if (cancelled) {
+          stream.getTracks().forEach(track => track.stop());
+          return;
+        }
+
+        cameraStreamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play().catch(() => undefined);
+        }
+      } catch (error) {
+        console.error("daily_task_camera_start_failed", error);
+        setCameraError("تعذر تشغيل الكاميرا. تأكد من السماح للتطبيق باستخدام الكاميرا.");
+      } finally {
+        if (!cancelled) setCameraStarting(false);
+      }
+    };
+
+    void startCamera();
+
+    return () => {
+      cancelled = true;
+      stopCameraStream();
+    };
+  }, [cameraOpen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -328,7 +392,6 @@ export function DailyTaskTab({
   const resetForm = () => {
     setForm(buildInitialForm(user, profileDefaults));
     if (fileInputRef.current) fileInputRef.current.value = "";
-    if (cameraInputRef.current) cameraInputRef.current.value = "";
   };
 
   const handleFileSelected = (file: File | null) => {
@@ -338,6 +401,52 @@ export function DailyTaskTab({
       return;
     }
     setForm(current => ({ ...current, pendingFile: file }));
+  };
+
+  const openCameraCapture = () => {
+    setCameraOpen(true);
+  };
+
+  const closeCameraCapture = () => {
+    setCameraOpen(false);
+    stopCameraStream();
+  };
+
+  const captureCameraPhoto = () => {
+    const video = videoRef.current;
+    if (!video || !video.videoWidth || !video.videoHeight) {
+      toast.error("الكاميرا غير جاهزة، حاول مرة أخرى.");
+      return;
+    }
+
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const context = canvas.getContext("2d");
+    if (!context) {
+      toast.error("تعذر تجهيز الصورة.");
+      return;
+    }
+
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob(
+      blob => {
+        if (!blob) {
+          toast.error("تعذر التقاط الصورة.");
+          return;
+        }
+
+        const file = new File([blob], `daily-task-photo-${Date.now()}.jpg`, {
+          type: "image/jpeg",
+          lastModified: Date.now(),
+        });
+        setForm(current => ({ ...current, pendingFile: file }));
+        closeCameraCapture();
+        toast.success("تم إرفاق الصورة.");
+      },
+      "image/jpeg",
+      0.9
+    );
   };
 
   const uploadAttachmentIfNeeded = async (taskId: string) => {
@@ -406,7 +515,6 @@ export function DailyTaskTab({
         pendingFile: null,
       }));
       if (fileInputRef.current) fileInputRef.current.value = "";
-      if (cameraInputRef.current) cameraInputRef.current.value = "";
 
       if (status === "sent") {
         await createInAppNotification({
@@ -716,6 +824,66 @@ export function DailyTaskTab({
 
   return (
     <div className="grid gap-5 xl:grid-cols-[320px_minmax(0,1fr)]" dir="rtl">
+      {cameraOpen ? (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/85 p-4">
+          <div className="w-full max-w-lg overflow-hidden rounded-[24px] border border-white/10 bg-slate-950 text-white shadow-2xl">
+            <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
+              <div>
+                <h3 className="text-base font-semibold">تصوير مباشر</h3>
+                <p className="mt-1 text-xs text-slate-300">
+                  التقط الصورة من داخل التطبيق بدون الخروج من الصفحة.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 rounded-full text-white hover:bg-white/10 hover:text-white"
+                onClick={closeCameraCapture}
+              >
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+
+            <div className="bg-black">
+              <video
+                ref={videoRef}
+                className="aspect-[3/4] max-h-[70vh] w-full bg-black object-contain"
+                playsInline
+                muted
+                autoPlay
+              />
+            </div>
+
+            {cameraStarting || cameraError ? (
+              <div className="px-4 pt-3 text-center text-sm text-slate-200">
+                {cameraStarting ? "جاري تشغيل الكاميرا..." : cameraError}
+              </div>
+            ) : null}
+
+            <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-4">
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-full border-white/20 bg-white/10 px-5 text-white hover:bg-white/20 hover:text-white"
+                onClick={closeCameraCapture}
+              >
+                إلغاء
+              </Button>
+              <Button
+                type="button"
+                className="rounded-full bg-[#F2B705] px-6 text-slate-950 hover:bg-[#e0ab00]"
+                disabled={cameraStarting || Boolean(cameraError)}
+                onClick={captureCameraPhoto}
+              >
+                <Camera className="h-4 w-4" />
+                التقاط الصورة
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <aside className="space-y-4 xl:sticky xl:top-24 xl:self-start">
         <Button
           type="button"
@@ -811,14 +979,6 @@ export function DailyTaskTab({
               {!isReadOnly ? (
                 <div className="flex flex-wrap justify-end gap-2">
                   <input
-                    ref={cameraInputRef}
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    className="hidden"
-                    onChange={event => handleFileSelected(event.target.files?.[0] || null)}
-                  />
-                  <input
                     ref={fileInputRef}
                     type="file"
                     accept="image/*"
@@ -829,7 +989,7 @@ export function DailyTaskTab({
                     type="button"
                     variant="outline"
                     className="rounded-full border-slate-200 bg-white"
-                    onClick={() => cameraInputRef.current?.click()}
+                    onClick={openCameraCapture}
                   >
                     <Camera className="h-4 w-4" />
                     تصوير
