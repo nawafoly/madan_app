@@ -128,7 +128,7 @@ function formatDateTime(value: string) {
 
 function rejectionLabel(reason: string | null, language: "ar" | "en") {
   const labels: Record<string, { ar: string; en: string }> = {
-    poor_accuracy: { ar: "دقة الموقع ضعيفة", en: "Poor GPS accuracy" },
+    poor_accuracy: { ar: "خارج النطاق", en: "Outside range" },
     outside_zone: { ar: "خارج النطاق", en: "Outside work zone" },
     duplicate_check_in: { ar: "حضور مكرر", en: "Duplicate check-in" },
     not_checked_in: { ar: "لا يوجد حضور مفتوح", en: "No open check-in" },
