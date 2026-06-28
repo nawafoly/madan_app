@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CheckCircle2,
   Loader2,
   LocateFixed,
   MapPin,
+  Minus,
   Pencil,
   Plus,
   Radar,
@@ -13,7 +14,6 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { MapView } from "@/components/Map";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -46,6 +46,10 @@ type AttendanceZoneForm = {
 };
 
 const DEFAULT_CENTER = { lat: 24.7136, lng: 46.6753 };
+const TILE_SIZE = 256;
+const EARTH_RADIUS_METERS = 6378137;
+const MIN_MAP_ZOOM = 2;
+const MAX_MAP_ZOOM = 19;
 
 const createEmptyForm = (): AttendanceZoneForm => ({
   name: "",
@@ -62,6 +66,50 @@ function parseFiniteNumber(value: string) {
 
 function formatCoordinate(value: number) {
   return Number(value.toFixed(7)).toString();
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function latLngToPixel(
+  point: { lat: number; lng: number },
+  zoom: number
+) {
+  const scale = TILE_SIZE * 2 ** zoom;
+  const lat = clamp(point.lat, -85.05112878, 85.05112878);
+  const sinLat = Math.sin((lat * Math.PI) / 180);
+
+  return {
+    x: ((point.lng + 180) / 360) * scale,
+    y:
+      (0.5 -
+        Math.log((1 + sinLat) / (1 - sinLat)) / (4 * Math.PI)) *
+      scale,
+  };
+}
+
+function pixelToLatLng(pixel: { x: number; y: number }, zoom: number) {
+  const scale = TILE_SIZE * 2 ** zoom;
+  const lng = (pixel.x / scale) * 360 - 180;
+  const n = Math.PI - (2 * Math.PI * pixel.y) / scale;
+  const lat = (180 / Math.PI) * Math.atan(Math.sinh(n));
+
+  return { lat, lng };
+}
+
+function metersPerPixel(lat: number, zoom: number) {
+  return (
+    (Math.cos((lat * Math.PI) / 180) * 2 * Math.PI * EARTH_RADIUS_METERS) /
+    (TILE_SIZE * 2 ** zoom)
+  );
+}
+
+function getTileUrl(x: number, y: number, zoom: number) {
+  const maxTile = 2 ** zoom;
+  const wrappedX = ((x % maxTile) + maxTile) % maxTile;
+  const server = ["a", "b", "c"][Math.abs(wrappedX + y) % 3];
+  return `https://${server}.tile.openstreetmap.org/${zoom}/${wrappedX}/${y}.png`;
 }
 
 function getCurrentGpsPosition() {
@@ -88,86 +136,249 @@ function ZonePointPicker({
   radiusMeters: number;
   onCenterChange: (center: { lat: number; lng: number }) => void;
 }) {
-  const mapRef = useRef<google.maps.Map | null>(null);
-  const markerRef = useRef<any>(null);
-  const circleRef = useRef<google.maps.Circle | null>(null);
-  const clickListenerRef = useRef<google.maps.MapsEventListener | null>(null);
-
-  const handleMapReady = (map: google.maps.Map) => {
-    mapRef.current = map;
-    clickListenerRef.current?.remove();
-    clickListenerRef.current = map.addListener(
-      "click",
-      (event: google.maps.MapMouseEvent) => {
-        const point = event.latLng;
-        if (!point) return;
-        onCenterChange({
-          lat: point.lat(),
-          lng: point.lng(),
-        });
-      }
-    );
-  };
+  const mapRef = useRef<HTMLDivElement | null>(null);
+  const dragRef = useRef<{
+    moved: boolean;
+    pointerId: number;
+    startCenterPixel: { x: number; y: number };
+    startClientX: number;
+    startClientY: number;
+  } | null>(null);
+  const [mapSize, setMapSize] = useState({ width: 0, height: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [zoom, setZoom] = useState(15);
 
   useEffect(() => {
-    const map = mapRef.current;
-    const googleMaps = window.google?.maps;
-    if (!map || !googleMaps) return;
+    const node = mapRef.current;
+    if (!node) return;
 
-    map.setCenter(center);
-
-    if (!circleRef.current) {
-      circleRef.current = new googleMaps.Circle({
-        map,
-        center,
-        radius: radiusMeters,
-        strokeColor: "#0f766e",
-        strokeOpacity: 0.85,
-        strokeWeight: 2,
-        fillColor: "#14b8a6",
-        fillOpacity: 0.12,
+    const resizeObserver = new ResizeObserver(entries => {
+      const rect = entries[0]?.contentRect;
+      if (!rect) return;
+      setMapSize({
+        width: rect.width,
+        height: rect.height,
       });
-    } else {
-      circleRef.current.setCenter(center);
-      circleRef.current.setRadius(radiusMeters);
-    }
+    });
 
-    const MarkerCtor =
-      (googleMaps.marker as any)?.AdvancedMarkerElement ||
-      (googleMaps as any).Marker;
-
-    if (!markerRef.current && MarkerCtor) {
-      markerRef.current = new MarkerCtor({
-        map,
-        position: center,
-        title: "مركز منطقة العمل",
-      });
-    } else if (markerRef.current) {
-      markerRef.current.position = center;
-      if (typeof markerRef.current.setPosition === "function") {
-        markerRef.current.setPosition(center);
-      }
-    }
-  }, [center, radiusMeters]);
-
-  useEffect(() => {
-    return () => {
-      clickListenerRef.current?.remove();
-      markerRef.current?.setMap?.(null);
-      circleRef.current?.setMap(null);
-    };
+    resizeObserver.observe(node);
+    return () => resizeObserver.disconnect();
   }, []);
 
+  const centerPixel = useMemo(() => latLngToPixel(center, zoom), [center, zoom]);
+  const topLeftPixel = useMemo(
+    () => ({
+      x: centerPixel.x - mapSize.width / 2,
+      y: centerPixel.y - mapSize.height / 2,
+    }),
+    [centerPixel.x, centerPixel.y, mapSize.height, mapSize.width]
+  );
+  const tiles = useMemo(() => {
+    if (!mapSize.width || !mapSize.height) return [];
+
+    const minTileX = Math.floor(topLeftPixel.x / TILE_SIZE);
+    const maxTileX = Math.floor((topLeftPixel.x + mapSize.width) / TILE_SIZE);
+    const minTileY = Math.floor(topLeftPixel.y / TILE_SIZE);
+    const maxTileY = Math.floor((topLeftPixel.y + mapSize.height) / TILE_SIZE);
+    const maxTileIndex = 2 ** zoom - 1;
+    const nextTiles: Array<{
+      key: string;
+      url: string;
+      left: number;
+      top: number;
+    }> = [];
+
+    for (let x = minTileX; x <= maxTileX; x += 1) {
+      for (
+        let y = clamp(minTileY, 0, maxTileIndex);
+        y <= clamp(maxTileY, 0, maxTileIndex);
+        y += 1
+      ) {
+        nextTiles.push({
+          key: `${zoom}-${x}-${y}`,
+          url: getTileUrl(x, y, zoom),
+          left: x * TILE_SIZE - topLeftPixel.x,
+          top: y * TILE_SIZE - topLeftPixel.y,
+        });
+      }
+    }
+
+    return nextTiles;
+  }, [mapSize.height, mapSize.width, topLeftPixel.x, topLeftPixel.y, zoom]);
+  const radiusPixels =
+    radiusMeters / Math.max(metersPerPixel(center.lat, zoom), 0.000001);
+
+  const setCenterFromClientPoint = (
+    clientX: number,
+    clientY: number,
+    element: HTMLDivElement
+  ) => {
+    const rect = element.getBoundingClientRect();
+    const x = topLeftPixel.x + clientX - rect.left;
+    const y = topLeftPixel.y + clientY - rect.top;
+    const nextCenter = pixelToLatLng({ x, y }, zoom);
+
+    onCenterChange({
+      lat: clamp(nextCenter.lat, -90, 90),
+      lng: clamp(nextCenter.lng, -180, 180),
+    });
+  };
+
+  const handleMapPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+
+    event.currentTarget.setPointerCapture(event.pointerId);
+    dragRef.current = {
+      moved: false,
+      pointerId: event.pointerId,
+      startCenterPixel: centerPixel,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+    };
+    setIsDragging(true);
+    event.preventDefault();
+  };
+
+  const handleMapPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+
+    const deltaX = event.clientX - drag.startClientX;
+    const deltaY = event.clientY - drag.startClientY;
+    if (Math.abs(deltaX) + Math.abs(deltaY) > 3) {
+      drag.moved = true;
+    }
+
+    const nextCenter = pixelToLatLng(
+      {
+        x: drag.startCenterPixel.x - deltaX,
+        y: drag.startCenterPixel.y - deltaY,
+      },
+      zoom
+    );
+
+    onCenterChange({
+      lat: clamp(nextCenter.lat, -90, 90),
+      lng: clamp(nextCenter.lng, -180, 180),
+    });
+  };
+
+  const finishMapPointer = (event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+
+    event.currentTarget.releasePointerCapture(event.pointerId);
+    dragRef.current = null;
+    setIsDragging(false);
+
+    if (!drag.moved) {
+      setCenterFromClientPoint(event.clientX, event.clientY, event.currentTarget);
+    }
+  };
+
+  const handleMapWheel = useCallback((event: WheelEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    setZoom(current =>
+      clamp(
+        current + (event.deltaY < 0 ? 1 : -1),
+        MIN_MAP_ZOOM,
+        MAX_MAP_ZOOM
+      )
+    );
+  }, []);
+
+  useEffect(() => {
+    const node = mapRef.current;
+    if (!node) return;
+
+    node.addEventListener("wheel", handleMapWheel, { passive: false });
+    return () => {
+      node.removeEventListener("wheel", handleMapWheel);
+    };
+  }, [handleMapWheel]);
+
   return (
-    <div className="overflow-hidden rounded-[22px] border border-slate-200 bg-slate-100">
-      <MapView
-        className="h-[360px]"
-        initialCenter={center}
-        initialZoom={15}
-        onMapReady={handleMapReady}
+    <div
+      ref={mapRef}
+      role="button"
+      tabIndex={0}
+      className={cn(
+        "relative h-[360px] touch-none overflow-hidden rounded-[22px] border border-slate-200 bg-slate-100",
+        isDragging ? "cursor-grabbing" : "cursor-grab"
+      )}
+      onPointerCancel={finishMapPointer}
+      onPointerDown={handleMapPointerDown}
+      onPointerMove={handleMapPointerMove}
+      onPointerUp={finishMapPointer}
+      onKeyDown={event => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        onCenterChange(center);
+      }}
+    >
+      {tiles.map(tile => (
+        <img
+          key={tile.key}
+          src={tile.url}
+          alt=""
+          className="absolute h-64 w-64 select-none"
+          draggable={false}
+          style={{
+            left: tile.left,
+            top: tile.top,
+          }}
+        />
+      ))}
+
+      <div
+        className="pointer-events-none absolute rounded-full border-2 border-emerald-700/80 bg-emerald-500/15 shadow-[0_0_0_1px_rgba(255,255,255,0.7)]"
+        style={{
+          width: radiusPixels * 2,
+          height: radiusPixels * 2,
+          left: "50%",
+          top: "50%",
+          transform: "translate(-50%, -50%)",
+        }}
       />
+      <div className="pointer-events-none absolute left-1/2 top-1/2 flex h-9 w-9 -translate-x-1/2 -translate-y-full items-center justify-center rounded-full bg-slate-950 text-white shadow-lg">
+        <MapPin className="h-5 w-5" />
+      </div>
+
+      <div
+        className="absolute left-3 top-3 flex overflow-hidden rounded-2xl border border-slate-200 bg-white/95 shadow-sm"
+        onClick={event => event.stopPropagation()}
+        onPointerDown={event => event.stopPropagation()}
+      >
+        <button
+          type="button"
+          className="flex h-9 w-9 items-center justify-center text-slate-700 transition-colors hover:bg-slate-50"
+          onClick={() =>
+            setZoom(current => clamp(current + 1, MIN_MAP_ZOOM, MAX_MAP_ZOOM))
+          }
+          aria-label="Zoom in"
+        >
+          <Plus className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          className="flex h-9 w-9 items-center justify-center border-l border-slate-200 text-slate-700 transition-colors hover:bg-slate-50"
+          onClick={() =>
+            setZoom(current => clamp(current - 1, MIN_MAP_ZOOM, MAX_MAP_ZOOM))
+          }
+          aria-label="Zoom out"
+        >
+          <Minus className="h-4 w-4" />
+        </button>
+      </div>
+
+      <div className="pointer-events-none absolute bottom-3 right-3 rounded-full border border-slate-200 bg-white/95 px-3 py-1 text-xs font-semibold text-slate-600 shadow-sm">
+        lat {center.lat.toFixed(5)} | lng {center.lng.toFixed(5)}
+      </div>
     </div>
   );
+
 }
 
 export default function SettingsAttendanceTab() {
