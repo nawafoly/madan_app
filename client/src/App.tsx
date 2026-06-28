@@ -43,10 +43,12 @@ import Vip from "./pages/admin/Vip";
 import EmployeeProfilePage from "@/pages/employee/Profile";
 import EmployeeFilesPage from "@/pages/employee/Files";
 import EmployeeMessagesPage from "@/pages/employee/Messages";
+import EmployeeDailyTasksPage from "@/pages/employee/DailyTasks";
 import EmployeeWeeklyReportsPage from "@/pages/employee/WeeklyReports";
 import CreateStaffAccount from "@/pages/admin/CreateStaffAccount";
 import StaffPortalPage from "@/pages/hr/StaffPortal";
 import HrAttendancePage from "@/pages/hr/Attendance";
+import HrDailyTasksPage from "@/pages/hr/DailyTasks";
 import HrWeeklyReportsPage from "@/pages/hr/WeeklyReports";
 
 // ✅ Client pages
@@ -68,6 +70,7 @@ function isEmployeeSelfServicePath(pathname: string) {
     path === "/employee/profile" ||
     path === "/employee/files" ||
     path === "/employee/messages" ||
+    path === "/employee/daily-tasks" ||
     path === "/employee/weekly-reports"
   );
 }
@@ -308,6 +311,12 @@ function Router() {
           </RequireAdminPermission>
         </Route>
 
+        <Route path="/hr/daily-tasks">
+          <RequireAdminPermission permission="weekly_reports.manager_notes" area="staff">
+            <HrDailyTasksPage />
+          </RequireAdminPermission>
+        </Route>
+
         <Route path="/hr">
           <StaffPortalPage />
         </Route>
@@ -378,6 +387,12 @@ function Router() {
           </RequireEmployeeProfileAccess>
         </Route>
 
+        <Route path="/employee/daily-tasks">
+          <RequireEmployeeProfileAccess allowStaffAdmin>
+            <EmployeeDailyTasksPage />
+          </RequireEmployeeProfileAccess>
+        </Route>
+
         <Route path="/employee/weekly-reports">
           <RequireEmployeeProfileAccess allowStaffAdmin>
             <EmployeeWeeklyReportsPage />
@@ -399,6 +414,10 @@ function Router() {
 
         <Route path="/staff/messages">
           <Redirect to="/employee/messages" />
+        </Route>
+
+        <Route path="/staff/daily-tasks">
+          <Redirect to="/employee/daily-tasks" />
         </Route>
 
         <Route path="/staff/weekly-reports">

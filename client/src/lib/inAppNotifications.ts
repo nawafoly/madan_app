@@ -70,6 +70,9 @@ export function resolveNotificationTargetPath(
   if (pickText(notification?.relatedTo) === "weekly_report") {
     return "/employee/weekly-reports";
   }
+  if (pickText(notification?.relatedTo) === "daily_task") {
+    return "/employee/daily-tasks";
+  }
   if (normalizedType === "message") return "/employee/messages";
   if (normalizedType === "file") return "/employee/files";
   return "/employee/profile";

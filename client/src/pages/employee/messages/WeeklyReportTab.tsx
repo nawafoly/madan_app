@@ -55,6 +55,7 @@ const EMPTY_TASK: WeeklyReportTask = {
   managerName: WEEKLY_REPORT_DIRECT_MANAGER_NAME,
   progress: "",
 };
+const DEFAULT_WEEKLY_TASK_COUNT = 4;
 
 type WeeklyReportStatus = "draft" | "sent";
 
@@ -110,7 +111,7 @@ function timestampMillis(value: unknown) {
 }
 
 function normalizeTasks(tasks: unknown): WeeklyReportTask[] {
-  if (!Array.isArray(tasks) || tasks.length === 0) return [{ ...EMPTY_TASK }];
+  if (!Array.isArray(tasks) || tasks.length === 0) return createEmptyTasks();
   return tasks.map((task, index) => {
     const row = (task || {}) as Record<string, unknown>;
     return {
@@ -121,6 +122,13 @@ function normalizeTasks(tasks: unknown): WeeklyReportTask[] {
       progress: cleanText(row.progress),
     };
   });
+}
+
+function createEmptyTasks(count = DEFAULT_WEEKLY_TASK_COUNT): WeeklyReportTask[] {
+  return Array.from({ length: count }, (_, index) => ({
+    ...EMPTY_TASK,
+    index: index + 1,
+  }));
 }
 
 function normalizeReport(id: string, data: Record<string, unknown>): WeeklyReportRecord {
@@ -149,7 +157,7 @@ function buildInitialForm(user: AppUser, profile?: { name?: string; title?: stri
     createdByName: cleanText(profile?.name) || cleanText(user.displayName) || cleanText(user.email),
     jobTitle: cleanText(profile?.title) || cleanText(user.title),
     reportDate: todayInputValue(),
-    tasks: [{ ...EMPTY_TASK }],
+    tasks: createEmptyTasks(),
     managerNotes: "",
     status: "draft" as WeeklyReportStatus,
   };
@@ -1035,8 +1043,8 @@ export function WeeklyReportTab({
           </div>
 
           <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[920px] border-collapse text-right">
+            <div className="overflow-x-hidden">
+              <table className="hidden w-full min-w-[920px] border-collapse text-right md:table">
                 <thead>
                   <tr className="bg-slate-950 text-sm text-white">
                     <th className="w-14 border border-slate-800 p-3 text-center">
@@ -1121,6 +1129,90 @@ export function WeeklyReportTab({
                   ))}
                 </tbody>
               </table>
+            </div>
+
+            <div className="space-y-3 p-3 md:hidden">
+              {form.tasks.map((task, index) => (
+                <div
+                  key={index}
+                  className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm"
+                >
+                  <div className="mb-3 flex items-center justify-between gap-2">
+                    <Badge
+                      variant="outline"
+                      className="rounded-full bg-slate-50 px-3 text-slate-600"
+                    >
+                      مهمة {index + 1}
+                    </Badge>
+                    {!isReadOnly ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        className="h-9 w-9 rounded-full border-rose-200 bg-white text-rose-600 shadow-sm hover:bg-rose-50"
+                        onClick={() => removeTask(index)}
+                        aria-label="حذف المهمة"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    ) : null}
+                  </div>
+
+                  <div className="space-y-3">
+                    <label className="block">
+                      <span className="mb-1.5 block text-sm font-semibold text-slate-900">
+                        المهام اليومية
+                      </span>
+                      <Input
+                        value={task.title}
+                        onChange={event =>
+                          updateTask(index, "title", event.target.value)
+                        }
+                        disabled={isReadOnly}
+                        className="h-11 rounded-xl border-slate-200 bg-slate-50/70 text-right focus-visible:ring-[#F2B705]/35"
+                      />
+                    </label>
+
+                    <label className="block">
+                      <span className="mb-1.5 block text-sm font-semibold text-slate-900">
+                        الوصف
+                      </span>
+                      <Textarea
+                        value={task.description}
+                        onChange={event =>
+                          updateTask(index, "description", event.target.value)
+                        }
+                        disabled={isReadOnly}
+                        className="min-h-[110px] resize-y rounded-xl border-slate-200 bg-slate-50/70 text-right leading-7 focus-visible:ring-[#F2B705]/35"
+                      />
+                    </label>
+
+                    <div>
+                      <span className="mb-1.5 block text-sm font-semibold text-slate-900">
+                        الموظف المسؤول / المدير المباشر
+                      </span>
+                      <div className="flex min-h-11 items-center justify-center rounded-xl border border-slate-200 bg-slate-50/80 px-3 text-center text-sm font-semibold text-slate-800">
+                        {WEEKLY_REPORT_DIRECT_MANAGER_NAME}
+                      </div>
+                    </div>
+
+                    <label className="block">
+                      <span className="mb-1.5 block text-sm font-semibold text-slate-900">
+                        معدل الإنجاز
+                      </span>
+                      <Input
+                        value={task.progress}
+                        onChange={event =>
+                          updateTask(index, "progress", event.target.value)
+                        }
+                        placeholder="85%"
+                        disabled={isReadOnly}
+                        className="h-11 rounded-xl border-slate-200 bg-slate-50/70 text-center focus-visible:ring-[#F2B705]/35"
+                      />
+                    </label>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
 

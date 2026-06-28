@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import {
   CalendarCheck2,
+  CalendarDays,
   ClipboardList,
   FileText,
   Globe,
@@ -147,6 +148,12 @@ export default function EmployeeLayout({
       href: "/employee/messages?tab=hr",
       icon: Mail,
       active: currentPath === "/employee/messages",
+    },
+    {
+      label: tr(language, "المهام اليومية", "Daily Tasks"),
+      href: "/employee/daily-tasks",
+      icon: CalendarDays,
+      active: currentPath === "/employee/daily-tasks",
     },
     {
       label: tr(language, "تقرير العمل الأسبوعي", "Weekly Report"),

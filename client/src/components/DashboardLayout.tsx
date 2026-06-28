@@ -200,6 +200,13 @@ const hrMenuItems: MenuItem[] = [
     permission: "weekly_reports.manager_notes",
   },
   {
+    icon: CalendarCheck2,
+    label: "المهام اليومية",
+    path: "/hr/daily-tasks",
+    allow: ["owner", "admin", "hr", "staff"],
+    permission: "weekly_reports.manager_notes",
+  },
+  {
     icon: Settings,
     label: "إعدادات الإدارة",
     path: "/hr/settings",
@@ -222,6 +229,7 @@ const HR_MENU_LABELS: Record<string, { ar: string; en: string }> = {
   "/hr/employees": { ar: "إدارة الموظفين", en: "Employees" },
   "/hr/attendance": { ar: "الحضور والانصراف", en: "Attendance" },
   "/hr/create-staff": { ar: "إنشاء حساب موظف", en: "Create Staff" },
+  "/hr/daily-tasks": { ar: "المهام اليومية", en: "Daily Tasks" },
   "/hr/weekly-reports": { ar: "التقارير الأسبوعية", en: "Weekly Reports" },
   "/hr/settings": { ar: "إعدادات الإدارة", en: "Settings" },
 };

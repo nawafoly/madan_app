@@ -849,6 +849,28 @@ service cloud.firestore {
       return hasStaffAreaPermission("weekly_reports.manager_notes");
     }
 
+    function dailyTaskOwnerUid(data) {
+      return (("createdByUid" in data) && (data.createdByUid is string))
+        ? data.createdByUid
+        : "";
+    }
+
+    function dailyTaskReceiverUid(data) {
+      return (("receiverUid" in data) && (data.receiverUid is string))
+        ? data.receiverUid
+        : "";
+    }
+
+    function dailyTaskStatusValue(data) {
+      return (("status" in data) && (data.status is string))
+        ? lower(data.status)
+        : "";
+    }
+
+    function canWriteDailyTaskManagerNotes() {
+      return canWriteWeeklyReportManagerNotes();
+    }
+
     function isValidWeeklyReportWrite() {
       return signedIn()
         && request.resource.data.createdByUid is string
@@ -897,6 +919,66 @@ service cloud.firestore {
         && weeklyReportStatusValue(request.resource.data) == weeklyReportStatusValue(resource.data)
         && weeklyReportOwnerUid(request.resource.data) == weeklyReportOwnerUid(resource.data)
         && weeklyReportReceiverUid(request.resource.data) == weeklyReportReceiverUid(resource.data)
+        && request.resource.data.managerNotes is string
+        && (!keys.hasAny(["managerNotesUpdatedByUid"]) || request.resource.data.managerNotesUpdatedByUid == request.auth.uid)
+        && keys.hasOnly([
+          "managerNotes",
+          "managerNotesUpdatedAt",
+          "managerNotesUpdatedByUid",
+          "managerNotesUpdatedByEmail",
+          "managerNotesUpdatedByName",
+          "updatedAt"
+        ]);
+    }
+
+    function isValidDailyTaskWrite() {
+      return signedIn()
+        && request.resource.data.createdByUid is string
+        && request.resource.data.createdByUid == request.auth.uid
+        && request.resource.data.receiverUid is string
+        && request.resource.data.receiverUid == "7DMxQMSqKOgtNYYZYRWHMXUH2Bt2"
+        && request.resource.data.receiverEmail is string
+        && lower(request.resource.data.receiverEmail) == "shahd.zaini@madanalbena.com"
+        && request.resource.data.receiverName is string
+        && request.resource.data.receiverName.size() > 0
+        && request.resource.data.createdByName is string
+        && request.resource.data.createdByName.size() > 0
+        && request.resource.data.taskDate is string
+        && request.resource.data.message is string
+        && request.resource.data.message.size() > 0
+        && request.resource.data.managerNotes is string
+        && dailyTaskStatusValue(request.resource.data) in ["draft", "sent"];
+    }
+
+    function isValidDailyTaskUpdate() {
+      return signedIn()
+        && dailyTaskOwnerUid(resource.data) == request.auth.uid
+        && dailyTaskStatusValue(resource.data) != "sent"
+        && dailyTaskOwnerUid(request.resource.data) == dailyTaskOwnerUid(resource.data)
+        && dailyTaskReceiverUid(request.resource.data) == dailyTaskReceiverUid(resource.data)
+        && isValidDailyTaskWrite()
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly([
+          "createdByEmail",
+          "createdByName",
+          "jobTitle",
+          "taskDate",
+          "message",
+          "managerNotes",
+          "status",
+          "attachment",
+          "updatedAt",
+          "sentAt"
+        ]);
+    }
+
+    function isValidDailyTaskManagerNotesUpdate() {
+      let keys = request.resource.data.diff(resource.data).affectedKeys();
+      return signedIn()
+        && canWriteDailyTaskManagerNotes()
+        && dailyTaskStatusValue(resource.data) == "sent"
+        && dailyTaskStatusValue(request.resource.data) == dailyTaskStatusValue(resource.data)
+        && dailyTaskOwnerUid(request.resource.data) == dailyTaskOwnerUid(resource.data)
+        && dailyTaskReceiverUid(request.resource.data) == dailyTaskReceiverUid(resource.data)
         && request.resource.data.managerNotes is string
         && (!keys.hasAny(["managerNotesUpdatedByUid"]) || request.resource.data.managerNotesUpdatedByUid == request.auth.uid)
         && keys.hasOnly([
@@ -1145,6 +1227,30 @@ service cloud.firestore {
           || (
             canWriteWeeklyReportManagerNotes()
             && notificationOwnerUid(request.resource.data) == weeklyReportOwnerUid(reportData)
+          )
+        );
+    }
+
+    function isValidDailyTaskNotificationCreate() {
+      let taskPath = /databases/$(database)/documents/daily_tasks/$(request.resource.data.relatedId);
+      let taskData = get(taskPath).data;
+      return signedIn()
+        && request.resource.data.relatedId is string
+        && request.resource.data.relatedId.size() > 0
+        && request.resource.data.relatedTo is string
+        && request.resource.data.relatedTo == "daily_task"
+        && request.resource.data.type is string
+        && lower(request.resource.data.type) == "message"
+        && exists(taskPath)
+        && dailyTaskStatusValue(taskData) == "sent"
+        && (
+          (
+            dailyTaskOwnerUid(taskData) == request.auth.uid
+            && notificationOwnerUid(request.resource.data) == dailyTaskReceiverUid(taskData)
+          )
+          || (
+            canWriteDailyTaskManagerNotes()
+            && notificationOwnerUid(request.resource.data) == dailyTaskOwnerUid(taskData)
           )
         );
     }
@@ -1648,6 +1754,26 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    match /daily_tasks/{id} {
+      allow read: if signedIn()
+        && (
+          dailyTaskOwnerUid(resource.data) == request.auth.uid
+          || (
+            dailyTaskReceiverUid(resource.data) == request.auth.uid
+            && dailyTaskStatusValue(resource.data) == "sent"
+          )
+          || (
+            canWriteDailyTaskManagerNotes()
+            && dailyTaskStatusValue(resource.data) == "sent"
+          )
+        );
+
+      allow create: if isValidDailyTaskWrite();
+      allow update: if isValidDailyTaskUpdate()
+        || isValidDailyTaskManagerNotesUpdate();
+      allow delete: if false;
+    }
+
     /* =========================
        messages
     ========================= */
@@ -1716,7 +1842,8 @@ service cloud.firestore {
         || hasStaffAdminPermission("settings.manage")
         || canManageEmployeesAdmin()
         || isValidEmployeeMessageNotificationCreate()
-        || isValidWeeklyReportNotificationCreate());
+        || isValidWeeklyReportNotificationCreate()
+        || isValidDailyTaskNotificationCreate());
       allow update: if isValidNotificationReadUpdate()
         || canManageMessagesAdmin()
         || canManageInvestmentsAdmin()

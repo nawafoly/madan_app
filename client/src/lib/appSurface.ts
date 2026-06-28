@@ -75,6 +75,10 @@ export function mapLegacyStaffPath(pathWithSearch: string) {
     return `/employee/messages${suffix}`;
   }
 
+  if (path === "/staff/daily-tasks") {
+    return `/employee/daily-tasks${suffix}`;
+  }
+
   if (path === "/hr/weekly-reports" || path === "/staff/weekly-reports") {
     return `/employee/weekly-reports${suffix}`;
   }

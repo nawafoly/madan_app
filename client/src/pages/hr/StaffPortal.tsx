@@ -94,6 +94,7 @@ function resolvePortalNotificationBucket(data: Record<string, unknown>) {
     .toLowerCase();
 
   if (relatedTo === "weekly_report") return "reports";
+  if (relatedTo === "daily_task") return "reports";
   if (relatedTo === "employee_message" || type === "message") return "messages";
   if (relatedTo === "employee_file" || type === "file") return "files";
   if (relatedTo.includes("leave") || type.includes("leave")) return "leave";
@@ -302,6 +303,17 @@ export default function StaffPortalPage() {
         canEnter: canWriteWeeklyReportNotes,
       },
       {
+        title: tr(language, "المهام اليومية", "Daily Tasks"),
+        description: tr(
+          language,
+          "متابعة تحديثات الموظفين اليومية والصور المرفقة عند الحاجة.",
+          "Review daily staff updates and optional photos."
+        ),
+        href: "/hr/daily-tasks",
+        icon: CalendarDays,
+        canEnter: canWriteWeeklyReportNotes,
+      },
+      {
         title: tr(language, "إعدادات الإدارة", "Administration Settings"),
         description: tr(
           language,
@@ -312,7 +324,11 @@ export default function StaffPortalPage() {
         icon: Settings,
         canEnter: !!user && hasStaffAdminPermission(user, "settings.manage"),
       },
-    ].filter(item => item.href !== "/hr/weekly-reports" || item.canEnter),
+    ].filter(
+      item =>
+        !["/hr/weekly-reports", "/hr/daily-tasks"].includes(item.href) ||
+        item.canEnter
+    ),
     [canWriteWeeklyReportNotes, language, user]
   );
 
