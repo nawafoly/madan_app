@@ -259,6 +259,138 @@ function ResultBadge({
   );
 }
 
+function EmployeeIdentity({ record }: { record: AttendanceRecord }) {
+  return (
+    <div className="min-w-0 rounded-2xl border border-slate-200 bg-slate-50/70 px-3 py-3">
+      <div className="truncate text-sm font-semibold text-slate-950">
+        {record.employeeName || record.employeeUid}
+      </div>
+      <div
+        dir="ltr"
+        className="mt-1 max-w-full truncate font-mono text-[11px] leading-5 text-slate-500"
+        title={record.employeeUid}
+      >
+        {record.employeeUid}
+      </div>
+    </div>
+  );
+}
+
+function TimeBlock({
+  record,
+  language,
+}: {
+  record: AttendanceRecord;
+  language: "ar" | "en";
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-slate-50/70 px-3 py-3">
+      <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
+        <Clock3 className="h-4 w-4 text-slate-400" />
+        {tr(language, "الوقت", "Time")}
+      </div>
+      <div dir="ltr" className="mt-2 text-sm font-semibold leading-6 text-slate-900">
+        {formatDateTime(record.serverTime)}
+      </div>
+    </div>
+  );
+}
+
+function OperationBlock({
+  record,
+  language,
+}: {
+  record: AttendanceRecord;
+  language: "ar" | "en";
+}) {
+  return (
+    <div
+      className={cn(
+        "rounded-2xl border px-3 py-3",
+        record.result === "allowed"
+          ? "border-emerald-100 bg-emerald-50/40"
+          : "border-rose-100 bg-rose-50/50"
+      )}
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        <TypeBadge record={record} language={language} />
+        <ResultBadge record={record} language={language} />
+      </div>
+      {record.rejectionReason ? (
+        <div className="mt-3 rounded-xl border border-rose-200 bg-white/80 px-3 py-2">
+          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-rose-600">
+            <AlertTriangle className="h-3.5 w-3.5" />
+            {tr(language, "سبب الرفض", "Rejection reason")}
+          </div>
+          <div className="mt-1 text-xs font-semibold leading-5 text-rose-800">
+            {rejectionLabel(record.rejectionReason, language)}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function AttendanceEventBlock({
+  record,
+  language,
+}: {
+  record: AttendanceRecord;
+  language: "ar" | "en";
+}) {
+  return (
+    <div
+      className={cn(
+        "rounded-2xl border px-3 py-3",
+        record.result === "allowed"
+          ? "border-emerald-100 bg-emerald-50/30"
+          : "border-rose-100 bg-rose-50/40"
+      )}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="truncate text-sm font-semibold text-slate-950">
+            {record.employeeName || record.employeeUid}
+          </div>
+          <div
+            dir="ltr"
+            className="mt-1 max-w-full truncate font-mono text-[11px] leading-5 text-slate-500"
+            title={record.employeeUid}
+          >
+            {record.employeeUid}
+          </div>
+        </div>
+        <div className="shrink-0 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-left shadow-sm">
+          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500">
+            <Clock3 className="h-3.5 w-3.5" />
+            {tr(language, "الوقت", "Time")}
+          </div>
+          <div dir="ltr" className="mt-1 text-xs font-semibold text-slate-900">
+            {formatDateTime(record.serverTime)}
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <TypeBadge record={record} language={language} />
+        <ResultBadge record={record} language={language} />
+      </div>
+
+      {record.rejectionReason ? (
+        <div className="mt-3 rounded-xl border border-rose-200 bg-white/85 px-3 py-2">
+          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-rose-600">
+            <AlertTriangle className="h-3.5 w-3.5" />
+            {tr(language, "سبب الرفض", "Rejection reason")}
+          </div>
+          <div className="mt-1 text-xs font-semibold leading-5 text-rose-800">
+            {rejectionLabel(record.rejectionReason, language)}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function MetricCard({
   label,
   value,
@@ -320,8 +452,8 @@ function DeviceBlock({
     : "-";
 
   return (
-    <div className="min-w-0 space-y-2">
-      <div className="flex items-center gap-2">
+    <div className="min-w-0 space-y-2.5 rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <span
           className={cn(
             "inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs font-semibold",
@@ -330,7 +462,7 @@ function DeviceBlock({
               : record.deviceInfo.deviceChanged
               ? "border-amber-200 bg-amber-50 text-amber-800"
               : hasDevice
-                ? "border-slate-200 bg-slate-50 text-slate-700"
+                ? "border-sky-200 bg-sky-50 text-sky-800"
                 : "border-slate-200 bg-slate-100 text-slate-500"
           )}
         >
@@ -340,55 +472,62 @@ function DeviceBlock({
             <Smartphone className="h-3.5 w-3.5" />
           )}
           {isSharedDevice
-            ? tr(language, "جهاز مشترك", "Shared device")
+            ? tr(language, "جهاز مكرر", "Repeated device")
             : record.deviceInfo.deviceChanged
-            ? tr(language, "تغيير جهاز", "Changed")
+            ? tr(language, "جهاز جديد", "New device")
             : hasDevice
-              ? tr(language, "جهاز موثق", "Device")
+              ? tr(language, "جهاز موثق", "Verified device")
               : tr(language, "لا يوجد جهاز", "No device")}
         </span>
       </div>
 
-      <div className="flex min-w-0 items-center gap-2">
-        <code
-          dir="ltr"
-          className={cn(
-            "min-w-0 flex-1 truncate rounded-lg px-2.5 py-1 font-mono text-xs",
-            hasDevice
-              ? "bg-slate-100 text-slate-700"
-              : "bg-slate-50 text-slate-400"
-          )}
-          title={record.deviceInfo.deviceId || undefined}
-        >
-          {deviceLabel}
-        </code>
-        {hasDevice ? (
-          <Button
-            type="button"
-            variant="outline"
-            size="icon-sm"
-            className="h-7 w-7 shrink-0 rounded-full border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-            onClick={() => onToggleDevice(deviceKey)}
-            title={
-              visibleDeviceIds.has(deviceKey)
-                ? tr(language, "إخفاء رقم الجهاز", "Hide device ID")
-                : tr(language, "إظهار رقم الجهاز", "Show device ID")
-            }
-          >
-            {visibleDeviceIds.has(deviceKey) ? (
-              <EyeOff className="h-3.5 w-3.5" />
-            ) : (
-              <Eye className="h-3.5 w-3.5" />
+      <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+        <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold text-slate-500">
+          <Smartphone className="h-3.5 w-3.5" />
+          {tr(language, "الجهاز الحالي", "Current device")}
+        </div>
+        <div className="flex min-w-0 items-center gap-2">
+          <code
+            dir="ltr"
+            className={cn(
+              "min-w-0 flex-1 truncate rounded-lg px-2.5 py-1.5 font-mono text-xs",
+              hasDevice
+                ? "bg-slate-100 text-slate-700"
+                : "bg-slate-50 text-slate-400"
             )}
-          </Button>
-        ) : null}
+            title={record.deviceInfo.deviceId || undefined}
+          >
+            {deviceLabel}
+          </code>
+          {hasDevice ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="icon-sm"
+              className="h-8 w-8 shrink-0 rounded-full border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+              onClick={() => onToggleDevice(deviceKey)}
+              title={
+                visibleDeviceIds.has(deviceKey)
+                  ? tr(language, "إخفاء رقم الجهاز", "Hide device ID")
+                  : tr(language, "إظهار رقم الجهاز", "Show device ID")
+              }
+            >
+              {visibleDeviceIds.has(deviceKey) ? (
+                <EyeOff className="h-3.5 w-3.5" />
+              ) : (
+                <Eye className="h-3.5 w-3.5" />
+              )}
+            </Button>
+          ) : null}
+        </div>
       </div>
 
       {isSharedDevice ? (
-        <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2">
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5">
           <div className="flex items-center justify-between gap-2">
-            <div className="text-[11px] font-semibold text-rose-800">
-              {tr(language, "تنبيه جهاز مستخدم من أكثر من موظف", "Device used by multiple employees")}
+            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-rose-800">
+              <AlertTriangle className="h-3.5 w-3.5" />
+              {tr(language, "الجهاز مستخدم من أكثر من موظف", "Device used by multiple employees")}
             </div>
             <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold text-rose-700">
               {sharedDevice?.employeeCount || 0}
@@ -409,8 +548,9 @@ function DeviceBlock({
       ) : null}
 
       {record.deviceInfo.deviceChanged ? (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
-          <div className="text-[11px] font-semibold text-amber-800">
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5">
+          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-800">
+            <AlertTriangle className="h-3.5 w-3.5" />
             {tr(language, "الجهاز السابق", "Previous device")}
           </div>
           <div className="mt-1 flex min-w-0 items-center gap-2">
@@ -462,45 +602,70 @@ function LocationBlock({
   compact?: boolean;
 }) {
   return (
-    <div className="min-w-0 rounded-2xl border border-slate-200 bg-white px-3 py-3 shadow-sm shadow-slate-100">
+    <div className="min-w-0 rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-2">
-            <MapPin className="h-4 w-4 shrink-0 text-slate-400" />
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-white text-slate-700 shadow-sm shadow-slate-200">
+              <MapPin className="h-4 w-4" />
+            </span>
             <span className="min-w-0 truncate text-sm font-semibold text-slate-900">
               {record.zoneName || "-"}
             </span>
-          </div>
-          <div
-            dir="ltr"
-            className="mt-1 truncate font-mono text-[11px] text-slate-500"
-            title={`${record.location.lat}, ${record.location.lng}`}
-          >
-            {record.location.lat.toFixed(5)}, {record.location.lng.toFixed(5)}
           </div>
         </div>
         <a
           href={`https://www.google.com/maps?q=${record.location.lat},${record.location.lng}`}
           target="_blank"
           rel="noreferrer"
-          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-slate-700 transition hover:bg-white"
+          className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
           title={tr(language, "فتح الخريطة", "Open map")}
         >
           <ExternalLink className="h-4 w-4" />
+          <span className="hidden 2xl:inline">{tr(language, "فتح", "Open")}</span>
         </a>
       </div>
       <div
         className={cn(
-          "mt-3 flex flex-wrap gap-1.5 text-[11px]",
+          "mt-3 grid gap-2 text-[11px] sm:grid-cols-2",
           compact && "mt-2"
         )}
       >
-        <span className="rounded-full bg-slate-100 px-2 py-0.5 font-semibold text-slate-700">
-          GPS {formatMeters(record.location.accuracy)}
-        </span>
-        <span className="rounded-full bg-slate-100 px-2 py-0.5 font-semibold text-slate-700">
-          {tr(language, "المسافة", "Distance")} {formatMeters(record.distanceMeters)}
-        </span>
+        <div className="rounded-xl border border-slate-200 bg-white px-2.5 py-2 sm:col-span-2">
+          <div className="text-slate-500">{tr(language, "الإحداثيات", "Coordinates")}</div>
+          <div
+            dir="ltr"
+            className="mt-1 truncate font-mono font-semibold text-slate-700"
+            title={`${record.location.lat}, ${record.location.lng}`}
+          >
+            {record.location.lat.toFixed(5)}, {record.location.lng.toFixed(5)}
+          </div>
+        </div>
+        <div
+          className={cn(
+            "rounded-xl border px-2.5 py-2",
+            record.location.accuracy > 100
+              ? "border-amber-200 bg-amber-50"
+              : "border-slate-200 bg-white"
+          )}
+        >
+          <div className="flex items-center gap-1.5 text-slate-500">
+            <Activity className="h-3.5 w-3.5" />
+            GPS
+          </div>
+          <div className="mt-1 font-semibold text-slate-800">
+            {formatMeters(record.location.accuracy)}
+          </div>
+        </div>
+        <div className="rounded-xl border border-slate-200 bg-white px-2.5 py-2">
+          <div className="flex items-center gap-1.5 text-slate-500">
+            <Navigation className="h-3.5 w-3.5" />
+            {tr(language, "المسافة", "Distance")}
+          </div>
+          <div className="mt-1 font-semibold text-slate-800">
+            {formatMeters(record.distanceMeters)}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -1069,73 +1234,46 @@ export default function HrAttendancePage() {
                   ))}
                 </div>
 
-                <div className="hidden max-h-[62vh] overflow-x-hidden overflow-y-auto xl:block">
-                  <Table className="w-full table-fixed">
+                <div className="hidden max-h-[62vh] overflow-x-hidden overflow-y-auto bg-slate-50/60 px-3 pb-3 xl:block">
+                  <Table className="w-full table-fixed border-separate border-spacing-y-3">
                     <TableHeader>
-                      <TableRow className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50/95 backdrop-blur">
-                        <TableHead className="h-12 w-[20%] px-5 text-xs font-semibold text-slate-500">
+                      <TableRow className="sticky top-0 z-10 border-0 bg-slate-50/95 backdrop-blur">
+                        <TableHead className="h-12 w-[34%] px-5 text-xs font-semibold text-slate-500">
                           {tr(language, "الموظف", "Employee")}
                         </TableHead>
-                        <TableHead className="h-12 w-[22%] px-4 text-xs font-semibold text-slate-500">
+                        <TableHead className="hidden">
                           {tr(language, "العملية والنتيجة", "Operation")}
                         </TableHead>
-                        <TableHead className="h-12 w-[16%] px-4 text-xs font-semibold text-slate-500">
+                        <TableHead className="hidden">
                           {tr(language, "التاريخ والوقت", "Date and time")}
                         </TableHead>
-                        <TableHead className="h-12 w-[24%] px-4 text-xs font-semibold text-slate-500">
+                        <TableHead className="h-12 w-[28%] px-4 text-xs font-semibold text-slate-500">
                           {tr(language, "الموقع", "Location")}
                         </TableHead>
-                        <TableHead className="h-12 w-[18%] px-5 text-xs font-semibold text-slate-500">
+                        <TableHead className="h-12 w-[38%] px-5 text-xs font-semibold text-slate-500">
                           {tr(language, "الجهاز", "Device")}
                         </TableHead>
                       </TableRow>
                     </TableHeader>
-                    <TableBody className="divide-y divide-slate-100">
+                    <TableBody>
                       {data.records.map(record => (
                         <TableRow
                           key={record.id}
-                          className="border-0 bg-white transition hover:bg-slate-50"
+                          className="group border-0 transition"
                         >
-                          <TableCell className="px-5 py-4 align-top">
-                            <div className="truncate text-sm font-semibold text-slate-950">
-                              {record.employeeName || record.employeeUid}
-                            </div>
-                            <div
-                              dir="ltr"
-                              className="mt-1 max-w-full truncate font-mono text-[11px] leading-5 text-slate-500"
-                              title={record.employeeUid}
-                            >
-                              {record.employeeUid}
-                            </div>
+                          <TableCell className="rounded-r-[1.25rem] border-y border-r border-slate-200 bg-white px-3 py-3 align-top shadow-sm shadow-slate-200/60 transition group-hover:bg-slate-50/60">
+                            <AttendanceEventBlock record={record} language={language} />
                           </TableCell>
-                          <TableCell className="px-4 py-4 align-top">
-                            <div className="space-y-2">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <TypeBadge record={record} language={language} />
-                                <ResultBadge record={record} language={language} />
-                              </div>
-                              {record.rejectionReason ? (
-                                <div className="inline-flex max-w-full rounded-xl border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-700">
-                                  <span className="truncate">
-                                    {rejectionLabel(
-                                      record.rejectionReason,
-                                      language
-                                    )}
-                                  </span>
-                                </div>
-                              ) : null}
-                            </div>
+                          <TableCell className="hidden">
+                            <OperationBlock record={record} language={language} />
                           </TableCell>
-                          <TableCell
-                            dir="ltr"
-                            className="px-4 py-4 align-top text-sm font-semibold text-slate-800"
-                          >
-                            {formatDateTime(record.serverTime)}
+                          <TableCell className="hidden">
+                            <TimeBlock record={record} language={language} />
                           </TableCell>
-                          <TableCell className="px-4 py-4 align-top">
+                          <TableCell className="border-y border-slate-200 bg-white px-3 py-3 align-top shadow-sm shadow-slate-200/60 transition group-hover:bg-slate-50/60">
                             <LocationBlock record={record} language={language} />
                           </TableCell>
-                          <TableCell className="px-5 py-4 align-top">
+                          <TableCell className="rounded-l-[1.25rem] border-y border-l border-slate-200 bg-white px-3 py-3 align-top shadow-sm shadow-slate-200/60 transition group-hover:bg-slate-50/60">
                             <DeviceBlock
                               record={record}
                               language={language}

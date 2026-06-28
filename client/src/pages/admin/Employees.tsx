@@ -1859,8 +1859,10 @@ export default function EmployeesManagementPage() {
   const employeeLeaveSectionRef = useRef<HTMLDivElement | null>(null);
   const employeeMessagesSectionRef = useRef<HTMLDivElement | null>(null);
   const employeeFilesSectionRef = useRef<HTMLDivElement | null>(null);
+  const employeeDetailsTopRef = useRef<HTMLDivElement | null>(null);
   const employeeWorkspaceScrollTargetRef =
     useRef<EmployeeWorkspaceSectionKey | null>(null);
+  const shouldScrollEmployeeDetailsTopRef = useRef(false);
   const handledEmployeeSearchRef = useRef("");
   const handledMessageSearchRef = useRef("");
   const handledSectionNavigationRef = useRef("");
@@ -3310,6 +3312,23 @@ export default function EmployeesManagementPage() {
   }, [activeEmployeeWorkspaceSection, selectedEmployeeId]);
 
   useEffect(() => {
+    if (!selectedEmployeeId || !shouldScrollEmployeeDetailsTopRef.current) {
+      return;
+    }
+
+    const target = employeeDetailsTopRef.current;
+    if (!target) return;
+
+    shouldScrollEmployeeDetailsTopRef.current = false;
+    window.requestAnimationFrame(() => {
+      target.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+  }, [selectedEmployeeId]);
+
+  useEffect(() => {
     if (!requestedPanel) {
       handledSectionNavigationRef.current = "";
       return;
@@ -3339,7 +3358,16 @@ export default function EmployeesManagementPage() {
   ]);
 
   const handleSelectEmployee = (employeeId: string) => {
+    shouldScrollEmployeeDetailsTopRef.current = true;
+    employeeWorkspaceScrollTargetRef.current = null;
+    setActiveEmployeeWorkspaceSection("profile");
     setSelectedEmployeeId(employeeId);
+    window.requestAnimationFrame(() => {
+      employeeDetailsTopRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
   };
 
   const handleCloseEmployeeDetails = () => {
@@ -6338,6 +6366,7 @@ export default function EmployeesManagementPage() {
 
           <div className="flex min-w-0 max-w-full flex-col gap-6 overflow-x-hidden">
             <Card
+              ref={employeeDetailsTopRef}
               className={cn(
                 "w-full max-w-full gap-0 overflow-hidden border-slate-200/80 bg-white/95 py-0 shadow-sm",
                 !selectedEmployee && "hidden"
