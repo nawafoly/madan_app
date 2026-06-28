@@ -46,6 +46,7 @@ export const ALL_PERMISSION_KEYS = [
   "financial.view",
   "financial.edit",
   "settings.manage",
+  "admin_accounts.manage",
 ] as const;
 
 export type Permission = (typeof ALL_PERMISSION_KEYS)[number];
@@ -71,6 +72,7 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   "financial.view": "عرض المالية",
   "financial.edit": "تعديل المالية",
   "settings.manage": "إدارة الإعدادات",
+  "admin_accounts.manage": "إدارة حسابات الإدارة",
 };
 
 export const PERMISSION_DEFINITIONS: ReadonlyArray<{
@@ -103,6 +105,7 @@ export const ROLE_DEFAULT_PERMS: Record<AppRole, Permission[]> = {
     "financial.view",
     "financial.edit",
     "settings.manage",
+    "admin_accounts.manage",
   ],
   admin: [
     "dashboard.view",
@@ -144,7 +147,7 @@ export const INVESTMENT_ADMIN_ROLES: AppRole[] = [
   "admin",
   "accountant",
 ];
-export const STAFF_ADMIN_ROLES: AppRole[] = ["owner", "hr"];
+export const STAFF_ADMIN_ROLES: AppRole[] = ["owner", "admin", "hr", "staff"];
 
 export type AppUser = {
   uid: string;

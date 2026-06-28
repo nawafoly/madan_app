@@ -178,7 +178,7 @@ export default function StaffPortalPage() {
     return Boolean(projectId && apiKey);
   }, []);
 
-  const homePath = user ? getHomePathForUser(user, "staff") : "/login";
+  const homePath = user ? getHomePathForUser(user, "staff") : "/hr";
   const hasInternalAccess = user && homePath !== "/login";
   const canWriteWeeklyReportNotes =
     !!user &&

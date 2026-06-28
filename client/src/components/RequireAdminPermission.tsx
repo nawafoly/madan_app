@@ -1,5 +1,6 @@
 import { useEffect, type ReactNode } from "react";
 import { useLocation } from "wouter";
+import { getLoginUrl } from "@/const";
 import {
   getHomePathForUser,
   hasPermission,
@@ -39,7 +40,8 @@ export default function RequireAdminPermission({
     if (loading) return;
 
     if (!user) {
-      if (location !== "/login") setLocation("/login");
+      const target = area === "staff" ? getLoginUrl(location) : "/login";
+      if (location !== target) setLocation(target);
       return;
     }
 

@@ -167,14 +167,14 @@ const hrMenuItems: MenuItem[] = [
     icon: BriefcaseBusiness,
     label: "طلبات التوظيف",
     path: "/hr/recruitment",
-    allow: ["owner", "hr"],
+    allow: ["owner", "admin", "hr", "staff"],
     permission: "recruitment.view",
   },
   {
     icon: Users,
     label: "إدارة الموظفين",
     path: "/hr/employees",
-    allow: ["owner", "hr"],
+    allow: ["owner", "admin", "hr", "staff"],
     permission: "employees.view",
   },
   {
@@ -189,21 +189,21 @@ const hrMenuItems: MenuItem[] = [
     icon: UserPlus,
     label: "إنشاء حساب موظف",
     path: "/hr/create-staff",
-    allow: ["owner", "hr"],
+    allow: ["owner", "admin", "hr", "staff"],
     permission: "employees.manage",
   },
   {
     icon: ClipboardList,
     label: "التقارير الأسبوعية",
     path: "/hr/weekly-reports",
-    allow: ["owner", "hr"],
+    allow: ["owner", "admin", "hr", "staff"],
     permission: "weekly_reports.manager_notes",
   },
   {
     icon: Settings,
     label: "إعدادات الإدارة",
     path: "/hr/settings",
-    allow: ["owner", "hr"],
+    allow: ["owner", "admin", "hr", "staff"],
     permission: "settings.manage",
   },
 ];
@@ -262,6 +262,7 @@ const HR_SETTINGS_SUB_ITEMS = [
       ar: "الترقيات والدعوات والحسابات",
       en: "Upgrades, invites, and accounts",
     },
+    permission: "admin_accounts.manage" as Permission,
   },
   {
     value: "labels",
@@ -610,9 +611,23 @@ function DashboardLayoutContent({
     () => new URLSearchParams(search),
     [search]
   );
+  const visibleHrSettingsSubItems = useMemo(
+    () =>
+      HR_SETTINGS_SUB_ITEMS.filter(subItem => {
+        const permission = subItem.permission;
+        return !permission || hasStaffAdminPermission(user, permission);
+      }),
+    [user]
+  );
+  const defaultHrSettingsTab =
+    visibleHrSettingsSubItems[0]?.value || HR_SETTINGS_SUB_ITEMS[0].value;
   const isHrSettingsRoute = area === "hr" && location === "/hr/settings";
   const activeHrSettingsTab = isHrSettingsRoute
-    ? settingsSearchParams.get("tab") || HR_SETTINGS_SUB_ITEMS[0].value
+    ? visibleHrSettingsSubItems.some(
+        subItem => subItem.value === settingsSearchParams.get("tab")
+      )
+      ? settingsSearchParams.get("tab") || defaultHrSettingsTab
+      : defaultHrSettingsTab
     : "";
 
   const getMenuLabel = (item: MenuItem) => {
@@ -991,7 +1006,7 @@ function DashboardLayoutContent({
                           if (!canAccessItem) return;
                           if (isCollapsed) {
                             setLocation(
-                              `${item.path}?tab=${HR_SETTINGS_SUB_ITEMS[0].value}`
+                              `${item.path}?tab=${defaultHrSettingsTab}`
                             );
                             return;
                           }
@@ -1045,7 +1060,7 @@ function DashboardLayoutContent({
 
                       {!isCollapsed && canAccessItem && isSettingsMenuOpen ? (
                         <div className="space-y-1 py-1 ltr:pl-7 rtl:pr-7">
-                          {HR_SETTINGS_SUB_ITEMS.map(subItem => {
+                          {visibleHrSettingsSubItems.map(subItem => {
                             const SubIcon = subItem.icon;
                             const isSubActive =
                               isHrSettingsRoute &&

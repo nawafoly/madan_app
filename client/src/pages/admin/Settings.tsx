@@ -181,8 +181,10 @@ import {
 import {
   ALL_PERMISSION_KEYS as CENTRAL_PERMISSION_KEYS,
   getEffectivePermissions,
+  hasPermission,
   PERMISSION_DEFINITIONS as CENTRAL_PERMISSION_DEFINITIONS,
   ROLE_DEFAULT_PERMS,
+  useAuth,
   type Permission,
 } from "@/_core/hooks/useAuth";
 import {
@@ -841,6 +843,7 @@ const DEFAULT_PERMISSIONS: Array<{ key: string; label: string }> = [
   { key: "financial.view", label: "عرض المالية" },
   { key: "financial.edit", label: "تعديل المالية" },
   { key: "settings.manage", label: "إدارة الإعدادات" },
+  { key: "admin_accounts.manage", label: "إدارة حسابات الإدارة" },
 ];
 
 // ✅ ruols
@@ -883,6 +886,9 @@ const ALL_PERMISSION_KEYS = DEFAULT_PERMISSIONS.map(
   ({ key }) => key as Permission
 );
 
+const ADMIN_ACCOUNTS_MANAGE_PERMISSION: Permission =
+  "admin_accounts.manage";
+
 const HR_ONLY_PERMISSION_KEYS = new Set<Permission>([
   "recruitment.view",
   "recruitment.manage",
@@ -890,6 +896,7 @@ const HR_ONLY_PERMISSION_KEYS = new Set<Permission>([
   "employees.manage",
   "attendance.view",
   "weekly_reports.manager_notes",
+  "admin_accounts.manage",
 ]);
 
 const STAFF_PERMISSION_KEYS = new Set<Permission>([
@@ -900,6 +907,7 @@ const STAFF_PERMISSION_KEYS = new Set<Permission>([
   "attendance.view",
   "weekly_reports.manager_notes",
   "settings.manage",
+  "admin_accounts.manage",
 ]);
 
 const INVESTMENT_PERMISSION_DEFINITIONS =
@@ -1195,6 +1203,7 @@ export default function Settings({
   const [, setLocation] = useLocation();
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(initialActiveTab);
+  const { user } = useAuth();
 
   // Existing docs
   const [app, setApp] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
@@ -1568,6 +1577,10 @@ export default function Settings({
     area === "staff"
       ? STAFF_PERMISSION_DEFINITIONS
       : INVESTMENT_PERMISSION_DEFINITIONS;
+  const canManageAdminAccounts = hasPermission(
+    user,
+    ADMIN_ACCOUNTS_MANAGE_PERMISSION
+  );
   const visiblePermissionKeySet = new Set<Permission>(
     visiblePermissionDefinitions.map(permission => permission.key)
   );
@@ -4058,7 +4071,8 @@ export default function Settings({
   const allowedSettingsTabs =
     area === "staff" ? STAFF_SETTINGS_TABS : INVESTMENT_SETTINGS_TABS;
   const settingsTabs = allSettingsTabs.filter(tab =>
-    allowedSettingsTabs.has(tab.value)
+    allowedSettingsTabs.has(tab.value) &&
+    (tab.value !== "admins" || canManageAdminAccounts)
   );
   const visibleTabValues = new Set<string>(settingsTabs.map(tab => tab.value));
   const settingsSearchParams = useMemo(
@@ -4476,7 +4490,8 @@ export default function Settings({
         {/* =========================
               Admin Accounts
           ========================= */}
-        <TabsContent value="admins" className="space-y-6">
+        {canManageAdminAccounts ? (
+          <TabsContent value="admins" className="space-y-6">
           <SettingsTabHero
             eyebrow="وصول الإدارة"
             title="حسابات الإدارة"
@@ -4963,6 +4978,7 @@ export default function Settings({
             </div>
           </SettingsSectionCard>
         </TabsContent>
+        ) : null}
 
         {/* =========================
               Labels

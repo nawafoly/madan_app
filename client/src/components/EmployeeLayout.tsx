@@ -22,6 +22,7 @@ import RequestBottomSheet, {
   type EmployeeRequestType,
 } from "@/components/employee-portal/RequestBottomSheet";
 import { Button } from "@/components/ui/button";
+import { getLoginUrl } from "@/const";
 import { hasStaffAdminPermission, useAuth } from "@/_core/hooks/useAuth";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { tr } from "@/lib/i18n";
@@ -60,7 +61,7 @@ export default function EmployeeLayout({
   const employeeReturnLabel = tr(language, "بوابة HR", "HR Portal");
   const handleLogout = async () => {
     await logout();
-    setLocation("/login");
+    setLocation(getLoginUrl(currentPath));
   };
 
   const navigateToEmployeeAnchor = (anchor: string) => {

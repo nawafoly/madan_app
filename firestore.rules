@@ -83,7 +83,8 @@ service cloud.firestore {
             "reports.view",
             "financial.view",
             "financial.edit",
-            "settings.manage"
+            "settings.manage",
+            "admin_accounts.manage"
           ]
         : myRole() == "admin"
           ? [
@@ -147,6 +148,10 @@ service cloud.firestore {
     function canManageUsersAdmin() {
       return hasInvestmentAdminPermission("users.manage")
         || hasInvestmentAdminPermission("settings.manage");
+    }
+
+    function canManageAdminAccounts() {
+      return hasStaffAdminPermission("admin_accounts.manage");
     }
 
     function myAdminUserDocId() {
@@ -217,7 +222,8 @@ service cloud.firestore {
             "reports.view",
             "financial.view",
             "financial.edit",
-            "settings.manage"
+            "settings.manage",
+            "admin_accounts.manage"
           ]
         : adminUserRoleValue() == "admin"
           ? [
@@ -282,7 +288,7 @@ service cloud.firestore {
     }
 
     function isStaffAdminRoleValue(role) {
-      return role in ["owner", "hr"];
+      return role in ["owner", "admin", "hr", "staff"];
     }
 
     function hasInvestmentUserPermission(permission) {
@@ -387,14 +393,12 @@ service cloud.firestore {
     }
 
     function canReadAdminUserData(data) {
-      return (hasInvestmentAdminPermission("settings.manage") && isInvestmentAdminData(data))
-        || (hasStaffAdminPermission("settings.manage") && isStaffAdminData(data))
+      return (canManageAdminAccounts() && (isInvestmentAdminData(data) || isStaffAdminData(data)))
         || (canManageEmployeesAdmin() && adminRoleFromData(data) == "staff");
     }
 
     function canWriteAdminUserData(data) {
-      return (hasInvestmentAdminPermission("settings.manage") && isInvestmentAdminData(data))
-        || (hasStaffAdminPermission("settings.manage") && isStaffAdminData(data))
+      return (canManageAdminAccounts() && (isInvestmentAdminData(data) || isStaffAdminData(data)))
         || (canManageEmployeesAdmin() && adminRoleFromData(data) == "staff");
     }
 
@@ -406,8 +410,7 @@ service cloud.firestore {
 
     function canAccessRoleInviteData(data) {
       let role = roleInviteRoleFromData(data);
-      return (hasInvestmentAdminPermission("settings.manage") && isInvestmentAdminRoleValue(role))
-        || (hasStaffAdminPermission("settings.manage") && role in ["hr", "staff"]);
+      return canManageAdminAccounts() && role in ["owner", "admin", "accountant", "hr", "staff"];
     }
 
     function isStaffUserDoc(data) {

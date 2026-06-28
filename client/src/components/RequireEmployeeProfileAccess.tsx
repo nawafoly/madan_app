@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useLocation } from "wouter";
 import { doc, getDoc } from "firebase/firestore";
+import { getLoginUrl } from "@/const";
 
 import {
   canAccessEmployeeProfile,
@@ -62,12 +63,15 @@ export default function RequireEmployeeProfileAccess({
   const canOpenEmployeeProfile = hasDirectAccess || hasLinkedEmployeeRecord === true;
 
   useEffect(() => {
-    if (loading || hasLinkedEmployeeRecord === null) return;
+    if (loading) return;
 
     if (!user) {
-      if (location !== "/login") setLocation("/login");
+      const target = getLoginUrl(location);
+      if (location !== target) setLocation(target);
       return;
     }
+
+    if (hasLinkedEmployeeRecord === null) return;
 
     if (!canOpenEmployeeProfile) {
       const target = getHomePathForUser(user);

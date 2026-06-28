@@ -96,7 +96,7 @@ function PlatformBoundary({ children }: { children: ReactNode }) {
     if (surface === "staff" && !staffPathAllowed) {
       if (loading) return;
 
-      const target = user ? getHomePathForUser(user, "staff") : "/login";
+      const target = user ? getHomePathForUser(user, "staff") : "/hr";
       if (location !== target) setLocation(target);
       return;
     }

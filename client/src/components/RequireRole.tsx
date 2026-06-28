@@ -1,6 +1,7 @@
 // client/src/components/RequireRole.tsx
 import { useEffect, useMemo, type ReactNode } from "react";
 import { useLocation } from "wouter";
+import { getLoginUrl } from "@/const";
 import {
   getHomePathForUser,
   useAuth,
@@ -25,7 +26,8 @@ export default function RequireRole({ allow, children }: Props) {
 
     // ✅ not logged in -> login
     if (!user) {
-      if (location !== "/login") setLocation("/login");
+      const target = getLoginUrl(location);
+      if (location !== target) setLocation(target);
       return;
     }
 
