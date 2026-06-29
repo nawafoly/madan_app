@@ -8,7 +8,7 @@ const ATTENDANCE_ALLOWED_ROLES = new Set([
 const ATTENDANCE_TYPES = new Set(["check_in", "check_out"]);
 const ATTENDANCE_RESULTS = new Set(["allowed", "rejected"]);
 const ATTENDANCE_ADMIN_ROLES = new Set(["owner", "admin", "hr"]);
-const ATTENDANCE_BASE_MAX_ACCURACY_METERS = 100;
+const ATTENDANCE_BASE_MAX_ACCURACY_METERS = 150;
 const ATTENDANCE_MAX_ACCURACY_METERS = 200;
 const ATTENDANCE_RECORDS_DEFAULT_LIMIT = 50;
 const ATTENDANCE_RECORDS_MAX_LIMIT = 200;
@@ -823,6 +823,7 @@ async function recordAttendance({
 }) {
   const input = await readJsonBody(request);
   if (!input.ok) return input.response;
+  const debugRequest = normalizeAttendanceDebug(input.data?.debug);
 
   const type = normalizeText(input.data?.type);
   const location = normalizeLocation(
@@ -879,6 +880,22 @@ async function recordAttendance({
     zoneError: zoneResolution.error,
     zoneCheck,
   });
+  const attendanceDebug = buildAttendanceDebug({
+    debugRequest,
+    requester,
+    requestedEmployeeId,
+    linkedEmployeeId,
+    employeeDocId,
+    employeeFound: Boolean(employeeResult.found),
+    allowedZoneIds,
+    zoneResolution,
+    zoneCheck,
+    location,
+    locationDecision,
+  });
+  if (attendanceDebug) {
+    console.log("attendance_debug", attendanceDebug);
+  }
   const initialResult = locationDecision.result;
   const initialReason = locationDecision.rejectionReason;
 
@@ -917,6 +934,7 @@ async function recordAttendance({
         distanceMeters: zoneCheck.distanceMeters,
         previousStatus: currentState?.status || null,
         currentStatus: currentState?.status || null,
+        debug: attendanceDebug,
       });
     }
 
@@ -1064,6 +1082,7 @@ async function recordAttendance({
       distanceMeters: zoneCheck.distanceMeters,
       previousStatus,
       currentStatus,
+      debug: attendanceDebug,
     });
   } catch (error) {
     return serverError("attendance_record_failed", error);
@@ -1210,7 +1229,14 @@ async function readLastSuccessfulDeviceId(db, employeeUid) {
 }
 
 async function resolveZones(db, allowedZoneIds) {
-  if (!allowedZoneIds.length) return { zones: [], error: "zone_not_found" };
+  if (!allowedZoneIds.length)
+    return {
+      zones: [],
+      error: "zone_not_found",
+      requestedZoneIds: [],
+      resolvedZoneIds: [],
+      missingZoneIds: [],
+    };
   const placeholders = allowedZoneIds.map(() => "?").join(", ");
   const result = await db
     .prepare(
@@ -1223,14 +1249,41 @@ async function resolveZones(db, allowedZoneIds) {
     .bind(...allowedZoneIds)
     .all();
   const rows = result.results || [];
-  if (rows.length !== allowedZoneIds.length)
-    return { zones: [], error: "zone_not_found" };
+  const resolvedZoneIds = rows.map(row => normalizeText(row.id)).filter(Boolean);
+  const resolvedZoneIdSet = new Set(resolvedZoneIds);
+  const missingZoneIds = allowedZoneIds.filter(id => !resolvedZoneIdSet.has(id));
+  if (!rows.length)
+    return {
+      zones: [],
+      error: "zone_not_found",
+      requestedZoneIds: allowedZoneIds,
+      resolvedZoneIds,
+      missingZoneIds,
+    };
   const zones = rows.map(mapWorkZoneRow);
   if (zones.some(zone => zone.type !== "radius"))
-    return { zones: [], error: "unsupported_zone_type" };
+    return {
+      zones: [],
+      error: "unsupported_zone_type",
+      requestedZoneIds: allowedZoneIds,
+      resolvedZoneIds,
+      missingZoneIds: [],
+    };
   if (zones.some(zone => !zone.active || zone.radiusMeters <= 0))
-    return { zones: [], error: "zone_invalid" };
-  return { zones, error: "" };
+    return {
+      zones: [],
+      error: "zone_invalid",
+      requestedZoneIds: allowedZoneIds,
+      resolvedZoneIds,
+      missingZoneIds: [],
+    };
+  return {
+    zones,
+    error: "",
+    requestedZoneIds: allowedZoneIds,
+    resolvedZoneIds,
+    missingZoneIds: [],
+  };
 }
 
 export function evaluateAttendanceZones(location, zones) {
@@ -1543,6 +1596,92 @@ function mapWorkZoneRow(row) {
   };
 }
 
+function normalizeAttendanceDebug(value) {
+  const info = value && typeof value === "object" ? value : {};
+  const requestId = clampText(info.requestId, 120) || null;
+  const enabled = value === true || info.enabled === true || Boolean(requestId);
+  if (!enabled) return null;
+  return {
+    requestId,
+    startedAt: clampText(info.startedAt, 80) || null,
+    pageUrl: clampText(info.pageUrl, 500) || null,
+  };
+}
+
+function buildAttendanceZoneDebug(zone, distanceMeters = null) {
+  if (!zone) return null;
+  return {
+    id: zone.id || null,
+    name: zone.name || null,
+    type: zone.type || null,
+    active: zone.active ?? null,
+    radiusMeters: zone.radiusMeters ?? null,
+    allowedAccuracyMeters: getAllowedAccuracyMeters(zone),
+    distanceMeters,
+    center: zone.center || null,
+  };
+}
+
+function buildAttendanceDebug({
+  debugRequest,
+  requester,
+  requestedEmployeeId,
+  linkedEmployeeId,
+  employeeDocId,
+  employeeFound,
+  allowedZoneIds,
+  zoneResolution,
+  zoneCheck,
+  location,
+  locationDecision,
+}) {
+  if (!debugRequest) return null;
+  return {
+    requestId: debugRequest.requestId,
+    generatedAt: new Date().toISOString(),
+    pageUrl: debugRequest.pageUrl || null,
+    requester: {
+      uid: requester.uid || null,
+      email: requester.email || null,
+      role: requester.runtime?.role || null,
+    },
+    employee: {
+      requestedEmployeeId: requestedEmployeeId || null,
+      linkedEmployeeId: linkedEmployeeId || null,
+      employeeDocId: employeeDocId || null,
+      employeeFound,
+    },
+    zones: {
+      allowedZoneIds,
+      allowedZoneIdsCount: allowedZoneIds.length,
+      resolutionError: zoneResolution.error || null,
+      requestedZoneIds: zoneResolution.requestedZoneIds || allowedZoneIds,
+      resolvedZoneIds: zoneResolution.resolvedZoneIds || [],
+      missingZoneIds: zoneResolution.missingZoneIds || [],
+      resolvedZoneCount: zoneResolution.zones?.length || 0,
+      resolvedZones: (zoneResolution.zones || []).map(zone =>
+        buildAttendanceZoneDebug(zone)
+      ),
+      selectedZone: buildAttendanceZoneDebug(
+        zoneCheck.zone,
+        zoneCheck.distanceMeters
+      ),
+      withinZone: Boolean(zoneCheck.withinZone),
+      distanceMeters: zoneCheck.distanceMeters,
+      allowedAccuracyMeters: zoneCheck.allowedAccuracyMeters ?? null,
+    },
+    location: {
+      lat: location.lat,
+      lng: location.lng,
+      accuracy: location.accuracy,
+    },
+    decision: {
+      result: locationDecision.result,
+      rejectionReason: locationDecision.rejectionReason || null,
+    },
+  };
+}
+
 function attendanceResponse({
   recordId,
   type,
@@ -1553,8 +1692,9 @@ function attendanceResponse({
   distanceMeters,
   previousStatus,
   currentStatus,
+  debug,
 }) {
-  return json(200, {
+  const body = {
     ok: result === "allowed",
     id: recordId,
     result,
@@ -1566,7 +1706,9 @@ function attendanceResponse({
     allowedRadiusMeters: zone?.radiusMeters ?? null,
     previousStatus: previousStatus || null,
     currentStatus: currentStatus || null,
-  });
+  };
+  if (debug) body.debug = debug;
+  return json(200, body);
 }
 
 async function readJsonBody(request) {

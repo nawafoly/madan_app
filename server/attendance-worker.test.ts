@@ -57,8 +57,19 @@ describe("attendance location validation", () => {
     ).toBe("outside_zone");
   });
 
-  it("rejects GPS accuracy greater than 100 meters", () => {
-    const location = { ...center, accuracy: 101 };
+  it("accepts moderate GPS accuracy inside a standard assigned zone", () => {
+    const location = { ...center, accuracy: 110 };
+    const zoneCheck = evaluateAttendanceZones(location, [zone]);
+    expect(
+      evaluateLocationDecision({ location, zoneError: "", zoneCheck })
+    ).toEqual({
+      result: "allowed",
+      rejectionReason: null,
+    });
+  });
+
+  it("rejects very weak GPS accuracy inside a standard assigned zone", () => {
+    const location = { ...center, accuracy: 151 };
     const zoneCheck = evaluateAttendanceZones(location, [zone]);
     expect(
       evaluateLocationDecision({ location, zoneError: "", zoneCheck })
@@ -80,7 +91,7 @@ describe("attendance location validation", () => {
   });
 
   it("uses a wider overlapping zone when a smaller nearby zone cannot accept GPS accuracy", () => {
-    const location = { lat: center.lat, lng: center.lng, accuracy: 131 };
+    const location = { lat: center.lat, lng: center.lng, accuracy: 180 };
     const zoneCheck = evaluateAttendanceZones(location, [
       { ...zone, id: "small-office", radiusMeters: 50 },
       { ...zone, id: "wide-office", radiusMeters: 200 },

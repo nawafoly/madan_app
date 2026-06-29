@@ -24,6 +24,7 @@ import {
   getAttendanceTypeLabel,
   isGeolocationPositionError,
   isGeolocationPermissionDenied,
+  logAttendanceDebug,
   submitEmployeeAttendance,
   type AttendanceResponse,
   type AttendanceType,
@@ -108,6 +109,20 @@ function getTodayAttendanceState(records: AttendanceRecord[]) {
   };
 }
 
+function summarizeAttendanceRecordForDebug(record: AttendanceRecord | null) {
+  if (!record) return null;
+  return {
+    id: record.id,
+    type: record.type,
+    result: record.result,
+    rejectionReason: record.rejectionReason || null,
+    serverTime: record.serverTime || null,
+    zoneId: record.zoneId || null,
+    distanceMeters: record.distanceMeters ?? null,
+    accuracy: record.accuracy ?? null,
+  };
+}
+
 export default function EmployeeAttendanceCard({
   employeeId,
   employeeUid,
@@ -173,7 +188,31 @@ export default function EmployeeAttendanceCard({
 
   const handleAttendance = async () => {
     const type = todayState.nextType;
-    if (pendingType || !type) return;
+    logAttendanceDebug("button-pressed", {
+      employeeId: employeeId || null,
+      employeeUid: employeeUid || null,
+      todayKey,
+      nextType: type,
+      pendingType,
+      todayRecordsCount: todayRecords.length,
+      todayState: {
+        checkIn: summarizeAttendanceRecordForDebug(todayState.checkIn),
+        checkOut: summarizeAttendanceRecordForDebug(todayState.checkOut),
+        nextType: todayState.nextType,
+        statusLabel: todayState.statusLabel,
+      },
+    });
+
+    if (pendingType || !type) {
+      logAttendanceDebug("button-ignored", {
+        employeeId: employeeId || null,
+        employeeUid: employeeUid || null,
+        reason: pendingType ? "request_already_pending" : "no_next_type",
+        pendingType,
+        nextType: type,
+      });
+      return;
+    }
 
     if (
       type === "check_out" &&
@@ -182,6 +221,11 @@ export default function EmployeeAttendanceCard({
         "تأكيد تسجيل الانصراف؟\n\nلن يتم تسجيل الانصراف إلا بعد موافقتك."
       )
     ) {
+      logAttendanceDebug("button-checkout-cancelled", {
+        employeeId: employeeId || null,
+        employeeUid: employeeUid || null,
+        type,
+      });
       return;
     }
 
@@ -194,6 +238,12 @@ export default function EmployeeAttendanceCard({
       const locationFeedback = buildAttendanceLocationFeedback(response);
       setLastResponse(response);
       setLastLocationFeedback(locationFeedback);
+      logAttendanceDebug("button-response-applied", {
+        employeeId: employeeId || null,
+        employeeUid: employeeUid || null,
+        response,
+        locationFeedback,
+      });
       onRecorded?.(response);
       setShowLocationPermissionHelp(false);
 
@@ -211,6 +261,13 @@ export default function EmployeeAttendanceCard({
       const locationFeedback = buildGeolocationErrorFeedback(error);
       setLastLocationFeedback(locationFeedback);
       if (locationFeedback) setLastResponse(null);
+      logAttendanceDebug("button-error", {
+        employeeId: employeeId || null,
+        employeeUid: employeeUid || null,
+        type,
+        error,
+        locationFeedback,
+      });
       if (!isGeolocationPositionError(error)) {
         console.error("employee_attendance_submit_failed", error);
       }

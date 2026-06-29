@@ -3,6 +3,8 @@ import { buildDocumentWorkerUrl } from "@/lib/documentUploadService";
 
 const ATTENDANCE_DEVICE_ID_STORAGE_KEY = "maedin_attendance_device_id";
 const ATTENDANCE_DEVICE_ID_PREFIX = "maedin-web";
+const ATTENDANCE_DEVICE_ID_VERSION_PREFIX = `${ATTENDANCE_DEVICE_ID_PREFIX}-v2-`;
+const ATTENDANCE_DEBUG_PREFIX = "[attendance-debug]";
 
 export type AttendanceType = "check_in" | "check_out";
 export type AttendanceResult = "allowed" | "rejected";
@@ -19,12 +21,21 @@ export type AttendanceResponse = {
   allowedRadiusMeters?: number | null;
   previousStatus?: string | null;
   currentStatus?: string | null;
+  debug?: Record<string, unknown> | null;
+};
+
+type AttendanceDebugPayload = {
+  enabled: true;
+  requestId: string;
+  startedAt: string;
+  pageUrl?: string | null;
 };
 
 type AttendanceRequest = {
   employeeId?: string | null;
   type: AttendanceType;
   clientTime: string;
+  debug?: AttendanceDebugPayload;
   location: {
     lat: number;
     lng: number;
@@ -39,6 +50,75 @@ type AttendanceRequest = {
   };
 };
 
+type AttendanceDebugData =
+  | Record<string, unknown>
+  | unknown[]
+  | string
+  | number
+  | boolean
+  | null
+  | undefined;
+
+export function logAttendanceDebug(stage: string, data?: AttendanceDebugData) {
+  if (typeof console === "undefined") return;
+  const label = `${ATTENDANCE_DEBUG_PREFIX} ${stage}`;
+  if (data === undefined) {
+    console.log(label);
+    return;
+  }
+  console.log(label, data);
+}
+
+function serializeAttendanceError(error: unknown) {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+      stack: error.stack || null,
+      code: (error as Error & { code?: unknown }).code ?? null,
+      status: (error as Error & { status?: unknown }).status ?? null,
+      payload: (error as Error & { payload?: unknown }).payload ?? null,
+    };
+  }
+
+  if (error && typeof error === "object") {
+    const maybeGeoError = error as Partial<GeolocationPositionError>;
+    return {
+      value: error,
+      code: maybeGeoError.code ?? null,
+      message: maybeGeoError.message ?? null,
+    };
+  }
+
+  return { value: String(error) };
+}
+
+function createAttendanceDebugRequestId() {
+  const randomPart =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID().slice(0, 8)
+      : Math.random().toString(36).slice(2, 10);
+  return `attendance-${Date.now().toString(36)}-${randomPart}`;
+}
+
+function getDebugPageUrl() {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.location.href;
+  } catch {
+    return null;
+  }
+}
+
+function getSafeWorkerUrlLabel(value: string) {
+  try {
+    const url = new URL(value);
+    return `${url.origin}${url.pathname}`;
+  } catch {
+    return value;
+  }
+}
+
 export function getAttendanceDeviceId() {
   if (typeof window === "undefined") return "";
 
@@ -46,7 +126,7 @@ export function getAttendanceDeviceId() {
     const existing = window.localStorage
       .getItem(ATTENDANCE_DEVICE_ID_STORAGE_KEY)
       ?.trim();
-    if (existing && existing.startsWith(`${ATTENDANCE_DEVICE_ID_PREFIX}-`)) {
+    if (existing && existing.startsWith(ATTENDANCE_DEVICE_ID_VERSION_PREFIX)) {
       return existing;
     }
   } catch {
@@ -62,43 +142,13 @@ export function getAttendanceDeviceId() {
   return deviceId;
 }
 
-function hashText(value: string) {
-  let hash = 2166136261;
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return (hash >>> 0).toString(16).padStart(8, "0");
-}
-
 function buildStableAttendanceDeviceId() {
-  const screenInfo =
-    typeof window !== "undefined" && window.screen
-      ? [
-          window.screen.width,
-          window.screen.height,
-          window.screen.colorDepth,
-          window.devicePixelRatio || 1,
-        ].join("x")
-      : "";
-  const nav =
-    typeof navigator !== "undefined"
-      ? [
-          navigator.userAgent || "",
-          navigator.platform || "",
-          navigator.language || "",
-          navigator.hardwareConcurrency || "",
-          (navigator as Navigator & { deviceMemory?: number }).deviceMemory ||
-            "",
-          navigator.maxTouchPoints || "",
-        ].join("|")
-      : "";
-  const timeZone =
-    typeof Intl !== "undefined"
-      ? Intl.DateTimeFormat().resolvedOptions().timeZone || ""
-      : "";
-  const raw = [nav, timeZone, screenInfo].join("|");
-  return `${ATTENDANCE_DEVICE_ID_PREFIX}-${hashText(raw)}-${hashText(raw.split("").reverse().join(""))}`;
+  const randomId =
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+
+  return `${ATTENDANCE_DEVICE_ID_VERSION_PREFIX}${randomId}`;
 }
 
 async function recordAttendance(requestBody: AttendanceRequest) {
@@ -107,6 +157,28 @@ async function recordAttendance(requestBody: AttendanceRequest) {
 
   const requestUrl = buildDocumentWorkerUrl("/attendance/record");
   if (!requestUrl) throw new Error("Attendance worker URL is not configured.");
+  const requestId = requestBody.debug?.requestId || "no-debug-request-id";
+  const deviceInfo = requestBody.deviceInfo;
+
+  logAttendanceDebug("worker-request", {
+    requestId,
+    url: getSafeWorkerUrlLabel(requestUrl),
+    employeeId: requestBody.employeeId || null,
+    type: requestBody.type,
+    clientTime: requestBody.clientTime,
+    location: requestBody.location,
+    deviceInfo: {
+      deviceId: deviceInfo.deviceId,
+      platform: deviceInfo.platform,
+      language: deviceInfo.language,
+      timeZone: deviceInfo.timeZone,
+      userAgent: deviceInfo.userAgent,
+    },
+    currentUser: {
+      uid: currentUser.uid,
+      email: currentUser.email || null,
+    },
+  });
 
   const response = await fetch(requestUrl, {
     method: "POST",
@@ -121,6 +193,13 @@ async function recordAttendance(requestBody: AttendanceRequest) {
     | (AttendanceResponse & { message?: string; detail?: string })
     | null;
 
+  logAttendanceDebug("worker-response", {
+    requestId,
+    httpStatus: response.status,
+    httpOk: response.ok,
+    payload,
+  });
+
   if (!response.ok || !payload) {
     const error = new Error(
       String(
@@ -129,6 +208,10 @@ async function recordAttendance(requestBody: AttendanceRequest) {
     ) as Error & { status?: number; payload?: unknown };
     error.status = response.status;
     error.payload = payload;
+    logAttendanceDebug("worker-error", {
+      requestId,
+      error: serializeAttendanceError(error),
+    });
     throw error;
   }
 
@@ -278,18 +361,78 @@ export async function submitEmployeeAttendance(input: {
   employeeId?: string | null;
   type: AttendanceType;
 }) {
-  const position = await getCurrentGpsPosition();
+  const requestId = createAttendanceDebugRequestId();
+
+  logAttendanceDebug("submit-start", {
+    requestId,
+    employeeId: input.employeeId || null,
+    type: input.type,
+    isSecureContext:
+      typeof window !== "undefined" ? window.isSecureContext : null,
+    geolocationAvailable:
+      typeof navigator !== "undefined" && Boolean(navigator.geolocation),
+    online: typeof navigator !== "undefined" ? navigator.onLine : null,
+    pageUrl: getDebugPageUrl(),
+  });
+
+  let position: GeolocationPosition;
+  try {
+    logAttendanceDebug("gps-request", { requestId });
+    position = await getCurrentGpsPosition();
+    logAttendanceDebug("gps-success", {
+      requestId,
+      timestamp: position.timestamp,
+      location: {
+        lat: position.coords.latitude,
+        lng: position.coords.longitude,
+        accuracy: position.coords.accuracy,
+        altitude: position.coords.altitude,
+        altitudeAccuracy: position.coords.altitudeAccuracy,
+        heading: position.coords.heading,
+        speed: position.coords.speed,
+      },
+    });
+  } catch (error) {
+    logAttendanceDebug("gps-error", {
+      requestId,
+      error: serializeAttendanceError(error),
+    });
+    throw error;
+  }
+
   const location = {
     lat: position.coords.latitude,
     lng: position.coords.longitude,
     accuracy: position.coords.accuracy,
   };
+  const debug: AttendanceDebugPayload = {
+    enabled: true,
+    requestId,
+    startedAt: new Date().toISOString(),
+    pageUrl: getDebugPageUrl(),
+  };
 
-  return recordAttendance({
-    employeeId: input.employeeId || null,
-    type: input.type,
-    clientTime: new Date().toISOString(),
-    location,
-    deviceInfo: getDeviceInfo(),
-  });
+  try {
+    const response = await recordAttendance({
+      employeeId: input.employeeId || null,
+      type: input.type,
+      clientTime: new Date().toISOString(),
+      debug,
+      location,
+      deviceInfo: getDeviceInfo(),
+    });
+    logAttendanceDebug("submit-complete", {
+      requestId,
+      result: response.result,
+      rejectionReason: response.rejectionReason || null,
+      response,
+    });
+    return response;
+  } catch (error) {
+    logAttendanceDebug("submit-error", {
+      requestId,
+      error: serializeAttendanceError(error),
+    });
+    throw error;
+  }
 }
