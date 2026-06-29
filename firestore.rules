@@ -472,6 +472,51 @@ service cloud.firestore {
       return hasStaffAdminPermission("employees.manage");
     }
 
+    // Keep this list aligned with the HR Employees save payload.
+    function employeeAdminEditableEmploymentKeys() {
+      return [
+        "title",
+        "jobTitle",
+        "department",
+        "startDate",
+        "leaveBalance",
+        "baseSalary",
+        "housingAllowance",
+        "transportationAllowance",
+        "otherAllowances",
+        "allowances",
+        "expectedWorkDays",
+        "expectedWorkHours",
+        "actualWorkedHours",
+        "workSchedule",
+        "shiftStartTime",
+        "shiftEndTime",
+        "hoursDifference",
+        "overtimeHours",
+        "missingHours",
+        "overtimeHourlyRate",
+        "calculatedDailyRate",
+        "calculatedHourlyRate",
+        "calculatedOvertimeAmount",
+        "calculatedMissingDeduction",
+        "insuranceDeduction",
+        "salaryDeductions",
+        "totalSalaryDeductions",
+        "calculatedGrossSalary",
+        "calculatedNetSalary",
+        "status",
+        "employmentStatus",
+        "employeeCode",
+        "fingerprintNumber",
+        "allowedZoneIds",
+        "adminNotes",
+        "leaveBalanceAdjustmentMeta",
+        "updatedAt",
+        "updatedByUid",
+        "updatedByEmail"
+      ];
+    }
+
     function isEmployeeManagedUserDoc(data) {
       return !(("role" in data) && lower(data.role) in ["guest", "client"]);
     }
@@ -549,8 +594,7 @@ service cloud.firestore {
             "isInvestor",
             "vipStatus",
             "linkedUserUid",
-            "uid",
-            "photoURL"
+            "uid"
           ])
         && keys.hasOnly([
             "displayName",
@@ -558,35 +602,20 @@ service cloud.firestore {
             "fullName",
             "email",
             "phone",
+            "photoURL",
             "profile",
             "title",
             "department",
             "startDate",
             "leaveBalance",
+            "allowedZoneIds",
             "employment",
             "employeeProfile",
             "updatedAt"
           ])
         && (
           !keys.hasAny(["employment"])
-          || employmentMap(request.resource.data).diff(employmentMap(resource.data)).changedKeys().hasOnly([
-            "title",
-            "jobTitle",
-            "department",
-            "startDate",
-            "leaveBalance",
-            "workSchedule",
-            "shiftStartTime",
-            "shiftEndTime",
-            "status",
-            "employmentStatus",
-            "employeeCode",
-            "fingerprintNumber",
-            "adminNotes",
-            "updatedAt",
-            "updatedByUid",
-            "updatedByEmail"
-          ])
+          || employmentMap(request.resource.data).diff(employmentMap(resource.data)).changedKeys().hasOnly(employeeAdminEditableEmploymentKeys())
         )
         && (
           !keys.hasAny(["profile"])
@@ -594,7 +623,9 @@ service cloud.firestore {
             "name",
             "displayName",
             "email",
-            "phone"
+            "phone",
+            "photoURL",
+            "avatar"
           ])
         )
         && (
@@ -612,24 +643,7 @@ service cloud.firestore {
               || employeeEmploymentMap(request.resource.data)
                 .diff(employeeEmploymentMap(resource.data))
                 .changedKeys()
-                .hasOnly([
-                  "title",
-                  "jobTitle",
-                  "department",
-                  "startDate",
-                  "leaveBalance",
-                  "workSchedule",
-                  "shiftStartTime",
-                  "shiftEndTime",
-                  "status",
-                  "employmentStatus",
-                  "employeeCode",
-                  "fingerprintNumber",
-                  "adminNotes",
-                  "updatedAt",
-                  "updatedByUid",
-                  "updatedByEmail"
-                ])
+                .hasOnly(employeeAdminEditableEmploymentKeys())
             )
             && (
               !employeeProfileMap(request.resource.data)
@@ -642,7 +656,8 @@ service cloud.firestore {
                 .hasOnly([
                   "name",
                   "email",
-                  "phone"
+                  "phone",
+                  "avatar"
                 ])
             )
           )
