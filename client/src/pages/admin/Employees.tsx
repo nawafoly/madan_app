@@ -3750,6 +3750,65 @@ export default function EmployeesManagementPage() {
     }
   };
 
+  const persistAllowedZoneForSelectedEmployee = async (zoneId: string) => {
+    const normalizedZoneId = String(zoneId || "").trim();
+    const nextAllowedZoneIds = normalizeAllowedZoneIds(
+      normalizedZoneId
+        ? [...form.allowedZoneIds, normalizedZoneId]
+        : form.allowedZoneIds
+    );
+
+    setForm(current => ({
+      ...current,
+      allowedZoneIds: normalizeAllowedZoneIds(
+        normalizedZoneId
+          ? [...current.allowedZoneIds, normalizedZoneId]
+          : current.allowedZoneIds
+      ),
+    }));
+
+    if (!selectedEmployee || !normalizedZoneId) {
+      return nextAllowedZoneIds;
+    }
+
+    const linkedEmployeeId =
+      String(selectedEmployee.linkedEmployeeId || "").trim() ||
+      selectedEmployee.id;
+    const zonePatch = {
+      allowedZoneIds: nextAllowedZoneIds,
+      employment: {
+        allowedZoneIds: nextAllowedZoneIds,
+        updatedAt: serverTimestamp(),
+      },
+      employeeProfile: {
+        employment: {
+          allowedZoneIds: nextAllowedZoneIds,
+          updatedAt: serverTimestamp(),
+        },
+      },
+      updatedAt: serverTimestamp(),
+    };
+
+    if (linkedEmployeeId) {
+      await setDoc(doc(db, "employees", linkedEmployeeId), zonePatch, {
+        merge: true,
+      });
+    }
+
+    try {
+      await setDoc(doc(db, "users", selectedEmployee.id), zonePatch, {
+        merge: true,
+      });
+    } catch (error) {
+      console.warn("employee_work_zone_user_link_best_effort_failed", {
+        userId: selectedEmployee.id,
+        error,
+      });
+    }
+
+    return nextAllowedZoneIds;
+  };
+
   const handleSaveWorkZoneFromEmployee = async () => {
     const name = newWorkZoneForm.name.trim();
     const lat = parseFiniteNumber(newWorkZoneForm.lat);
@@ -3793,7 +3852,7 @@ export default function EmployeesManagementPage() {
       setWorkZones(nextZones);
 
       if (savedZone?.id) {
-        handleToggleAllowedZone(savedZone.id, true);
+        await persistAllowedZoneForSelectedEmployee(savedZone.id);
       }
 
       resetWorkZoneForm();
