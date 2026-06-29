@@ -5,6 +5,7 @@ import * as attendanceWorker from "../workers/attendance-worker.js";
 
 const {
   calculateDistanceMeters,
+  clearAttendanceRecordsForDay,
   evaluateAttendanceZones,
   evaluateDeviceChange,
   evaluateLocationDecision,
@@ -13,6 +14,113 @@ const {
   parseAttendanceRecordsQuery,
   parseRiyadhDateBoundary,
 } = attendanceWorker;
+
+function createAttendanceClearFakeDb() {
+  const records = new Map<string, Record<string, any>>();
+  const state = new Map<string, Record<string, any>>();
+
+  const db = {
+    records,
+    state,
+    prepare(sql: string) {
+      const normalizedSql = sql.replace(/\s+/g, " ").trim().toUpperCase();
+      return {
+        bind(...bindings: any[]) {
+          return {
+            async all() {
+              if (
+                normalizedSql.includes("SELECT ID FROM ATTENDANCE_RECORDS") &&
+                normalizedSql.includes("SERVER_TIME IN")
+              ) {
+                const [employeeUid, ...serverTimes] = bindings;
+                const timeSet = new Set(serverTimes);
+                return {
+                  results: Array.from(records.values())
+                    .filter(
+                      record =>
+                        record.employee_uid === employeeUid &&
+                        timeSet.has(record.server_time)
+                    )
+                    .map(record => ({ id: record.id })),
+                };
+              }
+
+              if (
+                normalizedSql.includes("SELECT ID FROM ATTENDANCE_RECORDS") &&
+                normalizedSql.includes("SERVER_TIME >=")
+              ) {
+                const [employeeUid, dayStart, dayEnd] = bindings;
+                return {
+                  results: Array.from(records.values())
+                    .filter(
+                      record =>
+                        record.employee_uid === employeeUid &&
+                        record.server_time >= dayStart &&
+                        record.server_time < dayEnd
+                    )
+                    .map(record => ({ id: record.id })),
+                };
+              }
+
+              return { results: [] };
+            },
+            async run() {
+              if (
+                normalizedSql.startsWith("UPDATE ATTENDANCE_STATE") &&
+                normalizedSql.includes("LAST_RECORD_ID = NULL")
+              ) {
+                const [updatedAt, employeeUid, ...recordIds] = bindings;
+                const currentState = state.get(employeeUid);
+                if (
+                  currentState &&
+                  recordIds.includes(currentState.last_record_id)
+                ) {
+                  currentState.last_record_id = null;
+                  currentState.last_type = null;
+                  currentState.last_server_time = null;
+                  currentState.last_location_lat = null;
+                  currentState.last_location_lng = null;
+                  currentState.last_location_accuracy = null;
+                  currentState.last_zone_id = null;
+                  currentState.status = "checked_out";
+                  currentState.updated_at = updatedAt;
+                  return { meta: { changes: 1 } };
+                }
+                return { meta: { changes: 0 } };
+              }
+
+              if (
+                normalizedSql.startsWith("DELETE FROM ATTENDANCE_RECORDS")
+              ) {
+                const [employeeUid, ...recordIds] = bindings;
+                let changes = 0;
+                for (const recordId of recordIds) {
+                  for (const row of state.values()) {
+                    if (row.last_record_id === recordId) {
+                      throw new Error(
+                        "D1_ERROR: FOREIGN KEY constraint failed: SQLITE_CONSTRAINT_FOREIGNKEY"
+                      );
+                    }
+                  }
+                  const record = records.get(recordId);
+                  if (record?.employee_uid === employeeUid) {
+                    records.delete(recordId);
+                    changes += 1;
+                  }
+                }
+                return { meta: { changes } };
+              }
+
+              return { meta: { changes: 0 } };
+            },
+          };
+        },
+      };
+    },
+  };
+
+  return db;
+}
 
 const center = { lat: 24.7136, lng: 46.6753 };
 const zone = {
@@ -229,6 +337,64 @@ describe("attendance device tracking", () => {
     expect(
       isDeviceFirstSeenToday({ deviceId: "device-new" }, records, "2026-06-25")
     ).toBe(true);
+  });
+});
+
+describe("attendance clear action", () => {
+  it("clears attendance_state last_record_id before deleting referenced records", async () => {
+    const db = createAttendanceClearFakeDb();
+    const employeeUid = "employee-1";
+    const recordId = "attendance-record-1";
+
+    db.records.set(recordId, {
+      id: recordId,
+      employee_uid: employeeUid,
+      server_time: "2026-06-29T19:18:00.000Z",
+    });
+    db.state.set(employeeUid, {
+      employee_uid: employeeUid,
+      employee_doc_id: employeeUid,
+      status: "checked_in",
+      last_type: "check_in",
+      last_record_id: recordId,
+      last_server_time: "2026-06-29T19:18:00.000Z",
+      last_location_lat: 24.4356,
+      last_location_lng: 39.6757,
+      last_location_accuracy: 25,
+      last_zone_id: "home-zone",
+      updated_at: "2026-06-29T19:18:00.000Z",
+    });
+
+    const response = await clearAttendanceRecordsForDay({
+      db,
+      requester: {
+        uid: "hr-admin",
+        email: "hr@example.com",
+      },
+      employeeUid,
+      date: "2026-06-29",
+      recordIds: [recordId],
+      note: "test clear",
+    });
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload).toMatchObject({
+      ok: true,
+      action: "clear",
+      clearedRecords: 1,
+    });
+    expect(db.records.has(recordId)).toBe(false);
+    expect(db.state.get(employeeUid)).toMatchObject({
+      status: "checked_out",
+      last_record_id: null,
+      last_type: null,
+      last_server_time: null,
+      last_location_lat: null,
+      last_location_lng: null,
+      last_location_accuracy: null,
+      last_zone_id: null,
+    });
   });
 });
 

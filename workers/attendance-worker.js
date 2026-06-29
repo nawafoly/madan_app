@@ -727,7 +727,7 @@ async function adjustAttendanceRecords(request, db, requester) {
   }
 }
 
-async function clearAttendanceRecordsForDay({
+export async function clearAttendanceRecordsForDay({
   db,
   requester,
   employeeUid,
@@ -752,43 +752,81 @@ async function clearAttendanceRecordsForDay({
   try {
     const normalizedRecordIds = normalizeTextList(recordIds);
     const normalizedServerTimes = normalizeTextList(serverTimes);
-    let result = null;
+    let idsToClear = normalizedRecordIds;
 
-    if (normalizedRecordIds.length) {
-      const placeholders = normalizedRecordIds.map(() => "?").join(", ");
-      result = await db
-        .prepare(
-          `
-            DELETE FROM attendance_records
-            WHERE employee_uid = ? AND id IN (${placeholders})
-          `
-        )
-        .bind(employeeUid, ...normalizedRecordIds)
-        .run();
-    } else if (normalizedServerTimes.length) {
+    if (!idsToClear.length && normalizedServerTimes.length) {
       const placeholders = normalizedServerTimes.map(() => "?").join(", ");
-      result = await db
+      const result = await db
         .prepare(
           `
-            DELETE FROM attendance_records
+            SELECT id
+            FROM attendance_records
             WHERE employee_uid = ? AND server_time IN (${placeholders})
           `
         )
         .bind(employeeUid, ...normalizedServerTimes)
-        .run();
-    } else {
-      result = await db
+        .all();
+      idsToClear = (result.results || [])
+        .map(row => normalizeText(row.id))
+        .filter(Boolean);
+    }
+
+    if (!idsToClear.length && !normalizedServerTimes.length) {
+      const result = await db
         .prepare(
           `
-            DELETE FROM attendance_records
+            SELECT id
+            FROM attendance_records
             WHERE employee_uid = ? AND server_time >= ? AND server_time < ?
           `
         )
         .bind(employeeUid, dayStart, dayEnd)
-        .run();
+        .all();
+      idsToClear = (result.results || [])
+        .map(row => normalizeText(row.id))
+        .filter(Boolean);
     }
 
-    await rebuildAttendanceState(db, employeeUid);
+    if (!idsToClear.length) {
+      return json(200, {
+        ok: true,
+        action: "clear",
+        date,
+        clearedRecords: 0,
+        source: safeJsonObject(source),
+      });
+    }
+
+    const idPlaceholders = idsToClear.map(() => "?").join(", ");
+    await db
+      .prepare(
+        `
+          UPDATE attendance_state
+          SET last_record_id = NULL,
+              last_type = NULL,
+              last_server_time = NULL,
+              last_location_lat = NULL,
+              last_location_lng = NULL,
+              last_location_accuracy = NULL,
+              last_zone_id = NULL,
+              status = 'checked_out',
+              updated_at = ?
+          WHERE employee_uid = ? AND last_record_id IN (${idPlaceholders})
+        `
+      )
+      .bind(new Date().toISOString(), employeeUid, ...idsToClear)
+      .run();
+
+    const result = await db
+      .prepare(
+        `
+          DELETE FROM attendance_records
+          WHERE employee_uid = ? AND id IN (${idPlaceholders})
+        `
+      )
+      .bind(employeeUid, ...idsToClear)
+      .run();
+
     return json(200, {
       ok: true,
       action: "clear",
