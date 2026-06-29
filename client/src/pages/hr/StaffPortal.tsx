@@ -37,6 +37,7 @@ import { Badge } from "@/components/ui/badge";
 import { HrBrandMark } from "@/components/HrBrandMark";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { resolveEmployeeAvatarUrl } from "@/lib/defaultEmployeeAvatars";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { languageDir, tr } from "@/lib/i18n";
 import { WEEKLY_REPORT_MANAGER_NOTES_PERMISSION } from "@/lib/weeklyReportConfig";
@@ -340,8 +341,18 @@ export default function StaffPortalPage() {
     tr(language, "حساب الموارد البشرية", "HR Account");
   const accountEmail =
     user?.email || user?.firebaseUser?.email || auth.currentUser?.email || "";
-  const accountPhotoUrl =
-    user?.firebaseUser?.photoURL || auth.currentUser?.photoURL || "";
+  const accountPhotoUrl = resolveEmployeeAvatarUrl(
+    (user as any)?.photoURL ||
+      (user as any)?.avatarUrl ||
+      user?.firebaseUser?.photoURL ||
+      auth.currentUser?.photoURL,
+    {
+      uid: (user as any)?.uid,
+      name: accountDisplayName,
+      email: accountEmail,
+      gender: (user as any)?.gender,
+    }
+  );
   const accountRoleLabel = useMemo(() => {
     if (!user?.role) {
       return tr(language, "بوابة الموظفين", "Staff Portal");

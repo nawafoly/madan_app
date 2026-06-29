@@ -2,6 +2,7 @@ import {
   fetchEmployeeDirectoryFromWorker,
   type EmployeeDirectoryWorkerEmployee,
 } from "@/lib/employeeDirectoryWorker";
+import { resolveEmployeeAvatarUrl } from "@/lib/defaultEmployeeAvatars";
 
 export type EmployeeCoworkerOption = EmployeeDirectoryWorkerEmployee;
 
@@ -13,7 +14,12 @@ export async function fetchActiveEmployeeCoworkers() {
       uid: String(employee?.uid || "").trim(),
       name: String(employee?.name || "").trim(),
       email: String(employee?.email || "").trim() || null,
-      avatarUrl: String(employee?.avatarUrl || "").trim() || null,
+      avatarUrl:
+        resolveEmployeeAvatarUrl(employee?.avatarUrl, {
+          uid: employee?.uid,
+          name: employee?.name,
+          email: employee?.email,
+        }) || null,
       title: String(employee?.title || "").trim() || null,
       department: String(employee?.department || "").trim() || null,
       statusKey: String(employee?.statusKey || "").trim() || "active",

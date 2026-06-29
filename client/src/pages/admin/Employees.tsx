@@ -5354,6 +5354,9 @@ export default function EmployeesManagementPage() {
       const linkedUserUid =
         String(selectedEmployee.uid || selectedEmployee.id || "").trim() ||
         selectedEmployee.id;
+      const linkedEmployeeId =
+        String(selectedEmployee.linkedEmployeeId || "").trim() ||
+        selectedEmployee.id;
       const nextPersonal = {
         ...currentPersonal,
         name: normalizedFullName,
@@ -5421,6 +5424,9 @@ export default function EmployeesManagementPage() {
             "profile.phone": normalizedPhone || null,
             title: form.jobTitle.trim() || null,
             department: form.department.trim() || null,
+            employeeProfileEnabled: true,
+            includeInEmployeeManagement: true,
+            linkedEmployeeId,
             allowedZoneIds,
             startDate: form.startDate || null,
             leaveBalance,
@@ -5482,10 +5488,10 @@ export default function EmployeesManagementPage() {
         throw error;
       }
 
-      if (selectedEmployee.linkedEmployeeId) {
+      if (linkedEmployeeId) {
         try {
           await setDoc(
-            doc(db, "employees", selectedEmployee.linkedEmployeeId),
+            doc(db, "employees", linkedEmployeeId),
             {
               uid: linkedUserUid,
               linkedUserUid: linkedUserUid,
@@ -5516,7 +5522,7 @@ export default function EmployeesManagementPage() {
           );
         } catch (error) {
           console.error("save_employee_profile_employee_update_error", {
-            employeeDocId: selectedEmployee.linkedEmployeeId,
+            employeeDocId: linkedEmployeeId,
             error,
           });
           throw error;

@@ -1,4 +1,5 @@
 import { buildR2DownloadUrl } from "@/lib/documentUploadService";
+import { getDefaultEmployeeAvatarUrl } from "@/lib/defaultEmployeeAvatars";
 import { formatNumberEN, toDateSafe } from "@/lib/formatters";
 import { resolveUserAccountStatus } from "@/lib/userAccountStatus";
 import {
@@ -209,6 +210,7 @@ export function normalizeEmployeeProfile(
   }
 ): EmployeeProfileViewModel {
   const user = source || {};
+  const rawUser = user as Record<string, any>;
   const employeeProfile = user.employeeProfile || {};
   const personal = (employeeProfile.personal || user.personal || {}) as Record<
     string,
@@ -248,10 +250,35 @@ export function normalizeEmployeeProfile(
       user.profile?.phone
     ) || "";
 
-  const { avatar, avatarUrl } = normalizeAvatar(
+  const normalizedAvatar = normalizeAvatar(
     personal.avatar ?? user.profile?.avatar ?? user.photoURL,
     authFallback?.photoURL
   );
+  const avatar = normalizedAvatar.avatar;
+  const avatarUrl =
+    normalizedAvatar.avatarUrl ||
+    getDefaultEmployeeAvatarUrl({
+      id: pickText(
+        rawUser.linkedEmployeeId,
+        rawUser.employeeId,
+        rawUser.uid,
+        rawUser.id,
+        email
+      ),
+      uid: rawUser.uid,
+      name,
+      displayName: rawUser.displayName,
+      email,
+      gender: pickText(
+        personal.gender,
+        personal.sex,
+        rawUser.gender,
+        rawUser.sex,
+        rawUser.profile?.gender,
+        rawUser.profile?.sex,
+        rawUser.employeeProfile?.gender
+      ),
+    });
 
   const title =
     pickText(

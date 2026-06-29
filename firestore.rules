@@ -472,53 +472,25 @@ service cloud.firestore {
       return hasStaffAdminPermission("employees.manage");
     }
 
-    // Keep this list aligned with the HR Employees save payload.
-    function employeeAdminEditableEmploymentKeys() {
-      return [
-        "title",
-        "jobTitle",
-        "department",
-        "startDate",
-        "leaveBalance",
-        "baseSalary",
-        "housingAllowance",
-        "transportationAllowance",
-        "otherAllowances",
-        "allowances",
-        "expectedWorkDays",
-        "expectedWorkHours",
-        "actualWorkedHours",
-        "workSchedule",
-        "shiftStartTime",
-        "shiftEndTime",
-        "hoursDifference",
-        "overtimeHours",
-        "missingHours",
-        "overtimeHourlyRate",
-        "calculatedDailyRate",
-        "calculatedHourlyRate",
-        "calculatedOvertimeAmount",
-        "calculatedMissingDeduction",
-        "insuranceDeduction",
-        "salaryDeductions",
-        "totalSalaryDeductions",
-        "calculatedGrossSalary",
-        "calculatedNetSalary",
-        "status",
-        "employmentStatus",
-        "employeeCode",
-        "fingerprintNumber",
-        "allowedZoneIds",
-        "adminNotes",
-        "leaveBalanceAdjustmentMeta",
-        "updatedAt",
-        "updatedByUid",
-        "updatedByEmail"
-      ];
+    function hasEmployeeManagementMarker(data) {
+      return (
+          ("includeInEmployeeManagement" in data)
+          && data.includeInEmployeeManagement == true
+        )
+        || (
+          ("employeeProfileEnabled" in data)
+          && data.employeeProfileEnabled == true
+        )
+        || (
+          ("linkedEmployeeId" in data)
+          && data.linkedEmployeeId is string
+          && data.linkedEmployeeId.size() > 0
+        );
     }
 
     function isEmployeeManagedUserDoc(data) {
-      return !(("role" in data) && lower(data.role) in ["guest", "client"]);
+      return !(("role" in data) && lower(data.role) in ["guest", "client"])
+        || hasEmployeeManagementMarker(data);
     }
 
     function canReadRecruitmentAdmin() {
@@ -581,10 +553,13 @@ service cloud.firestore {
         );
     }
 
-    function isValidEmployeeAdminUpdate() {
+    function isValidEmployeeAdminUpdate(userId) {
       let keys = request.resource.data.diff(resource.data).changedKeys();
-      return isEmployeeManagedUserDoc(resource.data)
-        && isEmployeeManagedUserDoc(request.resource.data)
+      return (
+          isEmployeeManagedUserDoc(resource.data)
+          || isEmployeeManagedUserDoc(request.resource.data)
+          || exists(/databases/$(database)/documents/employees/$(userId))
+        )
         && !keys.hasAny([
             "role",
             "permissionsAllow",
@@ -609,13 +584,56 @@ service cloud.firestore {
             "startDate",
             "leaveBalance",
             "allowedZoneIds",
+            "employeeProfileEnabled",
+            "includeInEmployeeManagement",
+            "linkedEmployeeId",
             "employment",
             "employeeProfile",
             "updatedAt"
           ])
         && (
           !keys.hasAny(["employment"])
-          || employmentMap(request.resource.data).diff(employmentMap(resource.data)).changedKeys().hasOnly(employeeAdminEditableEmploymentKeys())
+          || employmentMap(request.resource.data).diff(employmentMap(resource.data)).changedKeys().hasOnly([
+            "title",
+            "jobTitle",
+            "department",
+            "startDate",
+            "leaveBalance",
+            "baseSalary",
+            "housingAllowance",
+            "transportationAllowance",
+            "otherAllowances",
+            "allowances",
+            "expectedWorkDays",
+            "expectedWorkHours",
+            "actualWorkedHours",
+            "workSchedule",
+            "shiftStartTime",
+            "shiftEndTime",
+            "hoursDifference",
+            "overtimeHours",
+            "missingHours",
+            "overtimeHourlyRate",
+            "calculatedDailyRate",
+            "calculatedHourlyRate",
+            "calculatedOvertimeAmount",
+            "calculatedMissingDeduction",
+            "insuranceDeduction",
+            "salaryDeductions",
+            "totalSalaryDeductions",
+            "calculatedGrossSalary",
+            "calculatedNetSalary",
+            "status",
+            "employmentStatus",
+            "employeeCode",
+            "fingerprintNumber",
+            "allowedZoneIds",
+            "adminNotes",
+            "leaveBalanceAdjustmentMeta",
+            "updatedAt",
+            "updatedByUid",
+            "updatedByEmail"
+          ])
         )
         && (
           !keys.hasAny(["profile"])
@@ -643,7 +661,47 @@ service cloud.firestore {
               || employeeEmploymentMap(request.resource.data)
                 .diff(employeeEmploymentMap(resource.data))
                 .changedKeys()
-                .hasOnly(employeeAdminEditableEmploymentKeys())
+                .hasOnly([
+                  "title",
+                  "jobTitle",
+                  "department",
+                  "startDate",
+                  "leaveBalance",
+                  "baseSalary",
+                  "housingAllowance",
+                  "transportationAllowance",
+                  "otherAllowances",
+                  "allowances",
+                  "expectedWorkDays",
+                  "expectedWorkHours",
+                  "actualWorkedHours",
+                  "workSchedule",
+                  "shiftStartTime",
+                  "shiftEndTime",
+                  "hoursDifference",
+                  "overtimeHours",
+                  "missingHours",
+                  "overtimeHourlyRate",
+                  "calculatedDailyRate",
+                  "calculatedHourlyRate",
+                  "calculatedOvertimeAmount",
+                  "calculatedMissingDeduction",
+                  "insuranceDeduction",
+                  "salaryDeductions",
+                  "totalSalaryDeductions",
+                  "calculatedGrossSalary",
+                  "calculatedNetSalary",
+                  "status",
+                  "employmentStatus",
+                  "employeeCode",
+                  "fingerprintNumber",
+                  "allowedZoneIds",
+                  "adminNotes",
+                  "leaveBalanceAdjustmentMeta",
+                  "updatedAt",
+                  "updatedByUid",
+                  "updatedByEmail"
+                ])
             )
             && (
               !employeeProfileMap(request.resource.data)
@@ -1605,7 +1663,7 @@ service cloud.firestore {
       ) || isValidEmployeeUserCreate(userId);
 
       allow update: if canManageUsersAdmin()
-        || (canManageEmployeesAdmin() && isValidEmployeeAdminUpdate())
+        || (canManageEmployeesAdmin() && isValidEmployeeAdminUpdate(userId))
         || (canManageEmployeesAdmin() && isValidEmployeeUserStaffPromotion(userId))
         || (
           signedIn()

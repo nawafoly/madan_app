@@ -50,6 +50,7 @@ import {
   normalizeEmployeeProfile,
   type EmployeeProfileUserDoc,
 } from "@/lib/employeeProfile";
+import { resolveEmployeeAvatarUrl } from "@/lib/defaultEmployeeAvatars";
 import { createInAppNotification } from "@/lib/inAppNotifications";
 import {
   ConversationWorkspace,
@@ -355,14 +356,20 @@ export default function EmployeeMessagesScreen() {
       photoURL?: string | null;
       avatarUrl?: string | null;
       firebaseUser?: { photoURL?: string | null } | null;
+      gender?: string | null;
     } | null;
-    return (
+    return resolveEmployeeAvatarUrl(
       currentUser?.avatarUrl ||
-      currentUser?.photoURL ||
-      currentUser?.firebaseUser?.photoURL ||
-      null
+        currentUser?.photoURL ||
+        currentUser?.firebaseUser?.photoURL,
+      {
+        uid: user?.uid,
+        name: currentUserDisplayName,
+        email: user?.email,
+        gender: currentUser?.gender,
+      }
     );
-  }, [user]);
+  }, [currentUserDisplayName, user]);
   const selectedInternalRecipient = useMemo(() => {
     if (activeInternalConversation) {
       return (

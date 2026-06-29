@@ -69,6 +69,7 @@ import {
   fetchActiveEmployeeCoworkers,
   type EmployeeCoworkerOption,
 } from "@/lib/employeeCoworkers";
+import { resolveEmployeeAvatarUrl } from "@/lib/defaultEmployeeAvatars";
 import { uploadDocumentToCloudflare } from "@/lib/documentUploadService";
 import {
   buildEmployeeFileParticipants,
@@ -456,12 +457,20 @@ export default function EmployeeFilesPage() {
       photoURL?: string | null;
       avatarUrl?: string | null;
       firebaseUser?: { photoURL?: string | null } | null;
+      displayName?: string | null;
+      email?: string | null;
+      gender?: string | null;
     } | null;
-    return (
+    return resolveEmployeeAvatarUrl(
       currentUser?.avatarUrl ||
-      currentUser?.photoURL ||
-      currentUser?.firebaseUser?.photoURL ||
-      null
+        currentUser?.photoURL ||
+        currentUser?.firebaseUser?.photoURL,
+      {
+        uid: user?.uid,
+        name: currentUser?.displayName || currentUser?.email,
+        email: currentUser?.email,
+        gender: currentUser?.gender,
+      }
     );
   }, [user]);
   const currentUserDisplayName = useMemo(

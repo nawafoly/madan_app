@@ -1,3 +1,4 @@
+import { resolveEmployeeAvatarUrl } from "@/lib/defaultEmployeeAvatars";
 import { toDateSafe } from "@/lib/formatters";
 import {
   EMPLOYEE_CONVERSATION_TYPES,
@@ -254,15 +255,25 @@ export function normalizeEmployeeMessageRecord(
     fromUserId: senderUid,
     fromUserName: pickText(raw?.fromUserName) || null,
     fromUserEmail: pickText(raw?.fromUserEmail) || null,
-    fromUserPhoto:
-      pickText(raw?.fromUserPhoto, raw?.fromUserAvatar, raw?.senderPhoto) ||
-      null,
+    fromUserPhoto: resolveEmployeeAvatarUrl(
+      pickText(raw?.fromUserPhoto, raw?.fromUserAvatar, raw?.senderPhoto),
+      {
+        uid: senderUid,
+        name: raw?.fromUserName,
+        email: raw?.fromUserEmail,
+      }
+    ),
     toUserId: recipientUid,
     toUserName: pickText(raw?.toUserName) || null,
     toUserEmail: pickText(raw?.toUserEmail) || null,
-    toUserPhoto:
-      pickText(raw?.toUserPhoto, raw?.toUserAvatar, raw?.recipientPhoto) ||
-      null,
+    toUserPhoto: resolveEmployeeAvatarUrl(
+      pickText(raw?.toUserPhoto, raw?.toUserAvatar, raw?.recipientPhoto),
+      {
+        uid: recipientUid,
+        name: raw?.toUserName,
+        email: raw?.toUserEmail,
+      }
+    ),
     message,
     type: normalizedType,
     relatedTo: pickText(raw?.relatedTo) || null,
@@ -345,7 +356,11 @@ export function groupEmployeeMessageConversations(
             ? "موظف"
             : "HR"),
         counterpartyEmail: counterparty.email,
-        counterpartyPhoto: counterparty.photo,
+        counterpartyPhoto: resolveEmployeeAvatarUrl(counterparty.photo, {
+          uid: counterparty.uid,
+          name: counterparty.name,
+          email: counterparty.email,
+        }),
         messages: timeline,
         latestMessage,
         lastMessageAt: latestMessage.createdAt ?? null,

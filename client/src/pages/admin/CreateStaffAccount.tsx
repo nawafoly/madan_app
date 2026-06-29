@@ -32,6 +32,7 @@ import {
   syncEmployeeDirectoryFromWorker,
   type EmployeeDirectorySyncResult,
 } from "@/lib/employeeDirectoryWorker";
+import { buildDefaultEmployeeAvatarPatch } from "@/lib/defaultEmployeeAvatars";
 import { formatNumberEN } from "@/lib/formatters";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -160,6 +161,7 @@ export default function CreateStaffAccount() {
     phone = "",
     title = "",
     isActive = true,
+    avatarUrl = "",
   }: {
     uid: string;
     email: string;
@@ -167,30 +169,50 @@ export default function CreateStaffAccount() {
     phone?: string;
     title?: string;
     isActive?: boolean;
-  }) => ({
-    uid,
-    linkedUserUid: uid,
-    email,
-    displayName,
-    name: displayName,
-    phone,
-    title: title || null,
-    includeInEmployeeManagement: true,
-    active: isActive,
-    isActive,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-    employeeProfile: {
-      personal: {},
-      employment: {
-        employmentStatus: isActive ? "active" : "inactive",
-        status: isActive ? "active" : "inactive",
-        title: title || null,
-        jobTitle: title || null,
-        updatedAt: serverTimestamp(),
+    avatarUrl?: string;
+  }) => {
+    const avatarPatch = avatarUrl
+      ? buildDefaultEmployeeAvatarPatch({
+          uid,
+          email,
+          displayName,
+          name: displayName,
+          avatarUrl,
+        })
+      : null;
+
+    return {
+      uid,
+      linkedUserUid: uid,
+      email,
+      displayName,
+      name: displayName,
+      phone,
+      title: title || null,
+      includeInEmployeeManagement: true,
+      active: isActive,
+      isActive,
+      ...(avatarPatch
+        ? {
+            photoURL: avatarPatch.photoURL,
+            avatarUrl: avatarPatch.photoURL,
+            profile: avatarPatch.profile,
+          }
+        : {}),
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      employeeProfile: {
+        personal: avatarPatch?.employeeProfile.personal || {},
+        employment: {
+          employmentStatus: isActive ? "active" : "inactive",
+          status: isActive ? "active" : "inactive",
+          title: title || null,
+          jobTitle: title || null,
+          updatedAt: serverTimestamp(),
+        },
       },
-    },
-  });
+    };
+  };
 
   const isKnownPermission = (
     permissionKey: unknown
@@ -337,6 +359,7 @@ export default function CreateStaffAccount() {
 
       const secondaryAuth = getAuth(secondaryApp);
       let createdUid = "";
+      let createdAvatarUrl = "";
 
       try {
         const cred = await createUserWithEmailAndPassword(
@@ -344,6 +367,13 @@ export default function CreateStaffAccount() {
           normalizedEmail,
           trimmedPassword
         );
+        const defaultAvatarPatch = buildDefaultEmployeeAvatarPatch({
+          uid: cred.user.uid,
+          email: normalizedEmail,
+          displayName: name,
+          name,
+        });
+        createdAvatarUrl = defaultAvatarPatch.photoURL;
 
         await setDoc(doc(db, "users", cred.user.uid), {
           uid: cred.user.uid,
@@ -351,6 +381,7 @@ export default function CreateStaffAccount() {
           displayName: name,
           name,
           phone: phoneValue,
+          ...defaultAvatarPatch,
           role: "staff",
           roleKey: "staff",
           title: "",
@@ -370,7 +401,10 @@ export default function CreateStaffAccount() {
         authCreatedSuccessfully = true;
 
         try {
-          await updateProfile(cred.user, { displayName: name });
+          await updateProfile(cred.user, {
+            displayName: name,
+            photoURL: createdAvatarUrl || null,
+          });
         } catch {
           // تجاهل فشل تحديث displayName
         }
@@ -394,6 +428,7 @@ export default function CreateStaffAccount() {
           active: true,
           isActive: true,
           linkedUserUid: createdUid,
+          photoURL: createdAvatarUrl || null,
           employeeProfileEnabled: true,
           includeInEmployeeManagement: true,
           linkedEmployeeId: createdUid,
@@ -415,6 +450,7 @@ export default function CreateStaffAccount() {
           displayName: name,
           phone: phoneValue,
           isActive: true,
+          avatarUrl: createdAvatarUrl,
         }),
         { merge: true }
       );

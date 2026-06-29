@@ -1,4 +1,5 @@
 import { buildR2DownloadUrl } from "@/lib/documentUploadService";
+import { resolveEmployeeAvatarUrl } from "@/lib/defaultEmployeeAvatars";
 import { toDateSafe } from "@/lib/formatters";
 import {
   EMPLOYEE_DEFAULT_FILE_TYPE,
@@ -184,11 +185,19 @@ export function normalizeEmployeeFileRecord(
     senderUid: senderUid || null,
     senderName: pickText(raw?.senderName, raw?.uploadedByName) || null,
     senderEmail: pickText(raw?.senderEmail) || null,
-    senderPhoto: pickText(raw?.senderPhoto) || null,
+    senderPhoto: resolveEmployeeAvatarUrl(pickText(raw?.senderPhoto), {
+      uid: senderUid,
+      name: pickText(raw?.senderName, raw?.uploadedByName),
+      email: raw?.senderEmail,
+    }),
     receiverUid: receiverUid || null,
     receiverName: pickText(raw?.receiverName, raw?.employeeName) || null,
     receiverEmail: pickText(raw?.receiverEmail) || null,
-    receiverPhoto: pickText(raw?.receiverPhoto) || null,
+    receiverPhoto: resolveEmployeeAvatarUrl(pickText(raw?.receiverPhoto), {
+      uid: receiverUid,
+      name: pickText(raw?.receiverName, raw?.employeeName),
+      email: raw?.receiverEmail,
+    }),
     participantUids,
     title: pickText(raw?.title) || "ملف داخلي",
     description: pickText(raw?.description) || null,
