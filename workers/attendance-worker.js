@@ -1235,7 +1235,12 @@ async function resolveZones(db, allowedZoneIds) {
 
 export function evaluateAttendanceZones(location, zones) {
   if (!Array.isArray(zones) || !zones.length) {
-    return { zone: null, distanceMeters: null, withinZone: false };
+    return {
+      zone: null,
+      distanceMeters: null,
+      withinZone: false,
+      allowedAccuracyMeters: ATTENDANCE_BASE_MAX_ACCURACY_METERS,
+    };
   }
   const evaluated = zones
     .map(zone => ({
@@ -1246,11 +1251,25 @@ export function evaluateAttendanceZones(location, zones) {
   const matching = evaluated.find(
     item => item.distanceMeters <= item.zone.radiusMeters
   );
+  const matchingZones = evaluated.filter(
+    item => item.distanceMeters <= item.zone.radiusMeters
+  );
+  const accuracyAcceptedMatch =
+    matchingZones.find(
+      item => location.accuracy <= getAllowedAccuracyMeters(item.zone)
+    ) || null;
+  const selected = accuracyAcceptedMatch || matching || evaluated[0] || null;
+  const allowedAccuracyMeters = matchingZones.length
+    ? Math.max(
+        ...matchingZones.map(item => getAllowedAccuracyMeters(item.zone))
+      )
+    : ATTENDANCE_BASE_MAX_ACCURACY_METERS;
+
   return {
-    zone: matching?.zone || evaluated[0]?.zone || null,
-    distanceMeters:
-      matching?.distanceMeters ?? evaluated[0]?.distanceMeters ?? null,
+    zone: selected?.zone || null,
+    distanceMeters: selected?.distanceMeters ?? null,
     withinZone: Boolean(matching),
+    allowedAccuracyMeters,
   };
 }
 
@@ -1261,7 +1280,11 @@ export function evaluateLocationDecision({ location, zoneError, zoneCheck }) {
   if (!zoneCheck.withinZone) {
     return { result: "rejected", rejectionReason: "outside_zone" };
   }
-  if (location.accuracy > getAllowedAccuracyMeters(zoneCheck.zone)) {
+  if (
+    location.accuracy >
+    (finiteNumber(zoneCheck.allowedAccuracyMeters) ||
+      getAllowedAccuracyMeters(zoneCheck.zone))
+  ) {
     return { result: "rejected", rejectionReason: "poor_accuracy" };
   }
   return { result: "allowed", rejectionReason: null };

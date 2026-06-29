@@ -79,6 +79,22 @@ describe("attendance location validation", () => {
     });
   });
 
+  it("uses a wider overlapping zone when a smaller nearby zone cannot accept GPS accuracy", () => {
+    const location = { lat: center.lat, lng: center.lng, accuracy: 131 };
+    const zoneCheck = evaluateAttendanceZones(location, [
+      { ...zone, id: "small-office", radiusMeters: 50 },
+      { ...zone, id: "wide-office", radiusMeters: 200 },
+    ]);
+
+    expect(zoneCheck.zone?.id).toBe("wide-office");
+    expect(
+      evaluateLocationDecision({ location, zoneError: "", zoneCheck })
+    ).toEqual({
+      result: "allowed",
+      rejectionReason: null,
+    });
+  });
+
   it("rejects an employee without allowed zones", () => {
     const location = { ...center, accuracy: 10 };
     const zoneCheck = evaluateAttendanceZones(location, []);
