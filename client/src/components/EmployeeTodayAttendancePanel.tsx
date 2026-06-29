@@ -18,7 +18,10 @@ import {
   adjustAttendanceRecordsAsAdmin,
   clearAttendanceRecordsAsAdmin,
   fetchAttendanceRecords,
+  generateAttendanceMonthlySummary,
+  listAttendanceMonthlySummaries,
   type AttendanceRecord,
+  type AttendanceMonthlySummary,
 } from "@/lib/attendanceRecords";
 import {
   computeAttendanceDay,
@@ -100,6 +103,18 @@ function getRiyadhTodayMonthStart() {
   return new Date(Date.UTC(year, month - 1, 1, 12));
 }
 
+function getYearMonthFromDate(date: Date) {
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+function getYearMonthFromBounds(bounds: MonthBounds) {
+  return `${bounds.year}-${String(bounds.monthIndex + 1).padStart(2, "0")}`;
+}
+
+function isValidYearMonth(value: string) {
+  return /^\d{4}-(0[1-9]|1[0-2])$/.test(value);
+}
+
 function getMonthBounds(monthDate: Date): MonthBounds {
   const year = monthDate.getUTCFullYear();
   const monthIndex = monthDate.getUTCMonth();
@@ -155,6 +170,31 @@ function formatDisplayTime(value?: string | null) {
     minute: "2-digit",
     hour12: true,
   }).format(date);
+}
+
+function formatDisplayDateTime(value?: string | null) {
+  if (!value) return "--";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "--";
+
+  const dateLabel = new Intl.DateTimeFormat("en-CA", {
+    timeZone: RIYADH_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+  const timeLabel = new Intl.DateTimeFormat("en-US", {
+    timeZone: RIYADH_TIME_ZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  }).format(date);
+
+  return `${dateLabel} ${timeLabel}`;
+}
+
+function formatJsonArrayValue(values: string[]) {
+  return JSON.stringify(values || []);
 }
 
 function formatTimeInputValue(value?: string | null) {
@@ -467,6 +507,99 @@ function AttendanceSummaryPill({
   );
 }
 
+function MonthlySummaryField({
+  label,
+  value,
+  mono = false,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+}) {
+  return (
+    <div className="rounded-[16px] border border-slate-200 bg-white px-3 py-3 text-right">
+      <div className="text-[11px] font-semibold text-slate-400">{label}</div>
+      <div
+        className={cn(
+          "mt-2 break-words text-sm font-semibold text-slate-950",
+          mono && "font-mono text-xs leading-6"
+        )}
+        dir={mono ? "ltr" : "rtl"}
+      >
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function AttendanceMonthlySummaryCard({
+  summary,
+}: {
+  summary: AttendanceMonthlySummary;
+}) {
+  return (
+    <div className="space-y-3 rounded-[22px] border border-emerald-100 bg-emerald-50/50 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2 text-right">
+        <div>
+          <div className="text-sm font-semibold text-emerald-900">
+            ملخص الحضور الشهري
+          </div>
+          <p className="mt-1 text-xs leading-6 text-emerald-700">
+            هذه قراءة محفوظة من جدول الملخصات، وليست أرشفة أو حذف للسجلات.
+          </p>
+        </div>
+        <span className="rounded-full border border-emerald-200 bg-white px-3 py-1 text-xs font-semibold text-emerald-800">
+          {summary.yearMonth}
+        </span>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <MonthlySummaryField label="year_month" value={summary.yearMonth} />
+        <MonthlySummaryField
+          label="present_days"
+          value={formatNumberEN(summary.presentDays)}
+        />
+        <MonthlySummaryField
+          label="check_in_count"
+          value={formatNumberEN(summary.checkInCount)}
+        />
+        <MonthlySummaryField
+          label="check_out_count"
+          value={formatNumberEN(summary.checkOutCount)}
+        />
+        <MonthlySummaryField
+          label="rejected_count"
+          value={formatNumberEN(summary.rejectedCount)}
+        />
+        <MonthlySummaryField
+          label="source_records_count"
+          value={formatNumberEN(summary.sourceRecordsCount)}
+        />
+        <MonthlySummaryField
+          label="first_check_in"
+          value={formatDisplayDateTime(summary.firstCheckIn)}
+          mono
+        />
+        <MonthlySummaryField
+          label="last_check_out"
+          value={formatDisplayDateTime(summary.lastCheckOut)}
+          mono
+        />
+        <MonthlySummaryField
+          label="device_ids_json"
+          value={formatJsonArrayValue(summary.deviceIds)}
+          mono
+        />
+        <MonthlySummaryField
+          label="zone_ids_json"
+          value={formatJsonArrayValue(summary.zoneIds)}
+          mono
+        />
+      </div>
+    </div>
+  );
+}
+
 export default function EmployeeTodayAttendancePanel({
   employeeUid,
   employeeDocId,
@@ -484,6 +617,16 @@ export default function EmployeeTodayAttendancePanel({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [monthDate, setMonthDate] = useState(() => getRiyadhTodayMonthStart());
+  const [summaryMonth, setSummaryMonth] = useState(() =>
+    getYearMonthFromDate(getRiyadhTodayMonthStart())
+  );
+  const [monthlySummary, setMonthlySummary] =
+    useState<AttendanceMonthlySummary | null>(null);
+  const [monthlySummaryLoading, setMonthlySummaryLoading] = useState(false);
+  const [monthlySummaryGenerating, setMonthlySummaryGenerating] =
+    useState(false);
+  const [monthlySummaryError, setMonthlySummaryError] = useState("");
+  const [monthlySummaryRefreshKey, setMonthlySummaryRefreshKey] = useState(0);
   const [selectedDate, setSelectedDate] = useState(() => getRiyadhTodayKey());
   const [activeTab, setActiveTab] = useState<"records" | "leave">("records");
   const [summaryOpen, setSummaryOpen] = useState(false);
@@ -496,6 +639,10 @@ export default function EmployeeTodayAttendancePanel({
   const [adjustmentRefreshKey, setAdjustmentRefreshKey] = useState(0);
   const monthBounds = useMemo(() => getMonthBounds(monthDate), [monthDate]);
   const detailsRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    setSummaryMonth(getYearMonthFromBounds(monthBounds));
+  }, [monthBounds.monthIndex, monthBounds.year]);
 
   useEffect(() => {
     const uid = String(employeeUid || "").trim();
@@ -540,6 +687,44 @@ export default function EmployeeTodayAttendancePanel({
     monthBounds.toDate,
     adjustmentRefreshKey,
     refreshKey,
+  ]);
+
+  useEffect(() => {
+    const uid = String(employeeUid || "").trim();
+    if (!canManageAttendance || !uid || !isValidYearMonth(summaryMonth)) {
+      setMonthlySummary(null);
+      setMonthlySummaryLoading(false);
+      setMonthlySummaryError("");
+      return;
+    }
+
+    let active = true;
+    setMonthlySummaryLoading(true);
+    setMonthlySummaryError("");
+
+    listAttendanceMonthlySummaries(uid, summaryMonth, summaryMonth)
+      .then(summaries => {
+        if (active) setMonthlySummary(summaries[0] || null);
+      })
+      .catch(fetchError => {
+        console.error("attendance_monthly_summary_load_failed", fetchError);
+        if (active) {
+          setMonthlySummary(null);
+          setMonthlySummaryError("تعذر تحميل ملخص الحضور الشهري.");
+        }
+      })
+      .finally(() => {
+        if (active) setMonthlySummaryLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [
+    canManageAttendance,
+    employeeUid,
+    monthlySummaryRefreshKey,
+    summaryMonth,
   ]);
 
   useEffect(() => {
@@ -779,6 +964,38 @@ export default function EmployeeTodayAttendancePanel({
     }
   };
 
+  const handleGenerateMonthlySummary = async () => {
+    const uid = String(employeeUid || "").trim();
+    if (!canManageAttendance || !uid) {
+      toast.error("لا تملك صلاحية توليد ملخص الحضور الشهري.");
+      return;
+    }
+    if (!isValidYearMonth(summaryMonth)) {
+      toast.error("اختر شهرًا صحيحًا بصيغة YYYY-MM.");
+      return;
+    }
+
+    setMonthlySummaryGenerating(true);
+    setMonthlySummaryError("");
+    try {
+      await generateAttendanceMonthlySummary(uid, summaryMonth);
+      const summaries = await listAttendanceMonthlySummaries(
+        uid,
+        summaryMonth,
+        summaryMonth
+      );
+      setMonthlySummary(summaries[0] || null);
+      setMonthlySummaryRefreshKey(current => current + 1);
+      toast.success("تم توليد ملخص الحضور الشهري.");
+    } catch (summaryError) {
+      console.error("attendance_monthly_summary_generate_failed", summaryError);
+      setMonthlySummaryError("تعذر توليد ملخص الحضور الشهري.");
+      toast.error("تعذر توليد ملخص الحضور الشهري.");
+    } finally {
+      setMonthlySummaryGenerating(false);
+    }
+  };
+
   const changeMonth = (direction: "next" | "previous") => {
     setMonthDate(current => {
       const next = new Date(current);
@@ -859,6 +1076,68 @@ export default function EmployeeTodayAttendancePanel({
             value={attendanceStatusCounts.off_day}
             className="border-cyan-300 bg-cyan-100 text-cyan-800"
           />
+        </div>
+      ) : null}
+
+      {canManageAttendance ? (
+        <div className="space-y-4 rounded-[22px] border border-slate-200 bg-white p-4 shadow-[0_12px_32px_-28px_rgba(15,23,42,0.35)]">
+          <div className="flex flex-col gap-3 text-right lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <div className="text-base font-semibold text-slate-950">
+                ملخص الحضور الشهري
+              </div>
+              <p className="mt-1 text-xs leading-6 text-slate-500">
+                اختر شهرًا لتوليد أو عرض الملخص المحفوظ بدون حذف أو أرشفة
+                للسجلات.
+              </p>
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+              <label className="space-y-2 text-sm font-semibold text-slate-800">
+                الشهر
+                <input
+                  type="month"
+                  value={summaryMonth}
+                  onChange={event => setSummaryMonth(event.target.value)}
+                  className="h-11 rounded-[14px] border border-slate-200 bg-slate-50 px-3 text-center text-sm font-semibold tabular-nums outline-none transition focus:border-slate-400 focus:bg-white"
+                  disabled={monthlySummaryGenerating}
+                />
+              </label>
+              <Button
+                type="button"
+                className="h-11 rounded-full bg-slate-950 px-5 text-white hover:bg-slate-900"
+                onClick={() => void handleGenerateMonthlySummary()}
+                disabled={
+                  !employeeUid ||
+                  monthlySummaryLoading ||
+                  monthlySummaryGenerating ||
+                  !isValidYearMonth(summaryMonth)
+                }
+              >
+                {monthlySummaryGenerating ? (
+                  <Loader2 className="ml-2 h-4 w-4 animate-spin" />
+                ) : null}
+                توليد ملخص الشهر
+              </Button>
+            </div>
+          </div>
+
+          {monthlySummaryError ? (
+            <div className="rounded-[16px] border border-rose-200 bg-rose-50 px-4 py-4 text-center text-sm text-rose-700">
+              {monthlySummaryError}
+            </div>
+          ) : monthlySummaryLoading ? (
+            <div className="flex min-h-[92px] items-center justify-center rounded-[16px] border border-slate-200 bg-slate-50 text-sm text-slate-500">
+              <Loader2 className="ml-2 h-4 w-4 animate-spin" />
+              جاري تحميل ملخص الحضور الشهري...
+            </div>
+          ) : monthlySummary ? (
+            <AttendanceMonthlySummaryCard summary={monthlySummary} />
+          ) : (
+            <div className="rounded-[16px] border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-center text-sm leading-7 text-slate-500">
+              لا يوجد ملخص محفوظ لهذا الشهر بعد. اضغط "توليد ملخص الشهر"
+              لإنشاء القراءة الأولى.
+            </div>
+          )}
         </div>
       ) : null}
 
