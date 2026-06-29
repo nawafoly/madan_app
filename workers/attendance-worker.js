@@ -34,6 +34,18 @@ export async function handleAttendanceRequest({
   ) {
     return methodNotAllowed(["POST"]);
   }
+  if (
+    pathname === "/attendance/monthly-summary/generate" &&
+    request.method !== "POST"
+  ) {
+    return methodNotAllowed(["POST"]);
+  }
+  if (
+    pathname === "/attendance/monthly-summaries" &&
+    request.method !== "GET"
+  ) {
+    return methodNotAllowed(["GET"]);
+  }
   if (pathname === "/attendance/records" && request.method !== "GET") {
     return methodNotAllowed(["GET"]);
   }
@@ -49,6 +61,8 @@ export async function handleAttendanceRequest({
   if (
     pathname !== "/attendance/record" &&
     pathname !== "/attendance/admin-adjustment" &&
+    pathname !== "/attendance/monthly-summary/generate" &&
+    pathname !== "/attendance/monthly-summaries" &&
     pathname !== "/attendance/records" &&
     pathname !== "/attendance/work-zones" &&
     !zoneMatch
@@ -75,6 +89,14 @@ export async function handleAttendanceRequest({
     return listAttendanceRecords(url, db, directoryDb);
   }
 
+  if (pathname === "/attendance/monthly-summaries" && request.method === "GET") {
+    const employeeUid = normalizeText(url.searchParams.get("employeeUid"));
+    if (!canReadAttendanceRecords(requester.runtime, requester.uid, employeeUid)) {
+      return json(403, { ok: false, message: "attendance_records_forbidden" });
+    }
+    return listAttendanceMonthlySummaries(url, db);
+  }
+
   if (pathname === "/attendance/work-zones" && request.method === "POST") {
     if (!canManageAttendance(requester.runtime)) return forbidden();
     return createWorkZone(request, db, requester);
@@ -83,6 +105,14 @@ export async function handleAttendanceRequest({
   if (pathname === "/attendance/admin-adjustment" && request.method === "POST") {
     if (!canManageAttendance(requester.runtime)) return forbidden();
     return adjustAttendanceRecords(request, db, requester);
+  }
+
+  if (
+    pathname === "/attendance/monthly-summary/generate" &&
+    request.method === "POST"
+  ) {
+    if (!canManageAttendance(requester.runtime)) return forbidden();
+    return generateAttendanceMonthlySummaryRequest(request, db);
   }
 
   if (zoneMatch && request.method === "PATCH") {
@@ -361,6 +391,233 @@ async function loadSharedDeviceUsage(db, directoryDb, rawDeviceIds) {
   return usage;
 }
 
+async function generateAttendanceMonthlySummaryRequest(request, db) {
+  const input = await readJsonBody(request);
+  if (!input.ok) return input.response;
+
+  const employeeUid = normalizeText(input.data?.employeeUid);
+  const yearMonth = normalizeText(input.data?.yearMonth);
+  if (!employeeUid) {
+    return json(400, { ok: false, message: "invalid_employee" });
+  }
+  if (!isValidYearMonth(yearMonth)) {
+    return json(400, { ok: false, message: "invalid_year_month" });
+  }
+
+  try {
+    const summary = await generateAttendanceMonthlySummary(
+      db,
+      employeeUid,
+      yearMonth
+    );
+    return json(200, { ok: true, summary });
+  } catch (error) {
+    return serverError("attendance_monthly_summary_generate_failed", error);
+  }
+}
+
+async function listAttendanceMonthlySummaries(url, db) {
+  const employeeUid = normalizeText(url.searchParams.get("employeeUid"));
+  const fromMonth = normalizeText(url.searchParams.get("fromMonth"));
+  const toMonth = normalizeText(url.searchParams.get("toMonth"));
+  if (!employeeUid) {
+    return json(400, { ok: false, message: "invalid_employee" });
+  }
+  if (fromMonth && !isValidYearMonth(fromMonth)) {
+    return json(400, { ok: false, message: "invalid_from_month" });
+  }
+  if (toMonth && !isValidYearMonth(toMonth)) {
+    return json(400, { ok: false, message: "invalid_to_month" });
+  }
+
+  const filters = ["employee_uid = ?"];
+  const bindings = [employeeUid];
+  if (fromMonth) {
+    filters.push("year_month >= ?");
+    bindings.push(fromMonth);
+  }
+  if (toMonth) {
+    filters.push("year_month <= ?");
+    bindings.push(toMonth);
+  }
+
+  try {
+    const result = await db
+      .prepare(
+        `
+          SELECT
+            id, employee_uid, employee_doc_id, year_month,
+            present_days, check_in_count, check_out_count, rejected_count,
+            worked_minutes, late_minutes, early_leave_minutes,
+            overtime_minutes, shortage_minutes, device_ids_json,
+            zone_ids_json, first_check_in, last_check_out,
+            source_records_count, generated_at, updated_at
+          FROM attendance_monthly_summaries
+          WHERE ${filters.join(" AND ")}
+          ORDER BY year_month DESC
+        `
+      )
+      .bind(...bindings)
+      .all();
+
+    return json(200, {
+      ok: true,
+      summaries: (result.results || []).map(mapAttendanceMonthlySummaryRow),
+    });
+  } catch (error) {
+    return serverError("attendance_monthly_summaries_query_failed", error);
+  }
+}
+
+export async function generateAttendanceMonthlySummary(db, employeeUid, yearMonth) {
+  const uid = normalizeText(employeeUid);
+  const month = normalizeText(yearMonth);
+  const bounds = parseRiyadhMonthBoundary(month);
+  if (!uid || !bounds) {
+    throw new Error("invalid_attendance_monthly_summary_input");
+  }
+
+  const result = await db
+    .prepare(
+      `
+        SELECT
+          id, employee_uid, employee_doc_id, type, result, server_time,
+          device_info, zone_id
+        FROM attendance_records
+        WHERE employee_uid = ? AND server_time >= ? AND server_time < ?
+        ORDER BY server_time ASC, id ASC
+      `
+    )
+    .bind(uid, bounds.start, bounds.end)
+    .all();
+
+  const rows = result.results || [];
+  const allowedRows = rows.filter(row => row.result === "allowed");
+  const checkInRows = allowedRows.filter(row => row.type === "check_in");
+  const checkOutRows = allowedRows.filter(row => row.type === "check_out");
+  const presentDays = new Set(
+    checkInRows
+      .map(row => getRiyadhDateKeyFromIso(row.server_time))
+      .filter(Boolean)
+  );
+  const deviceIds = Array.from(
+    new Set(
+      rows
+        .map(row => normalizeText(safeJsonObject(row.device_info)?.deviceId))
+        .filter(Boolean)
+    )
+  ).sort();
+  const zoneIds = Array.from(
+    new Set(rows.map(row => normalizeText(row.zone_id)).filter(Boolean))
+  ).sort();
+  const now = new Date().toISOString();
+  const summaryRow = {
+    id: buildAttendanceMonthlySummaryId(uid, month),
+    employee_uid: uid,
+    employee_doc_id:
+      normalizeText(rows.find(row => normalizeText(row.employee_doc_id))?.employee_doc_id) ||
+      null,
+    year_month: month,
+    present_days: presentDays.size,
+    check_in_count: checkInRows.length,
+    check_out_count: checkOutRows.length,
+    rejected_count: rows.filter(row => row.result === "rejected").length,
+    worked_minutes: 0,
+    late_minutes: 0,
+    early_leave_minutes: 0,
+    overtime_minutes: 0,
+    shortage_minutes: 0,
+    device_ids_json: JSON.stringify(deviceIds),
+    zone_ids_json: JSON.stringify(zoneIds),
+    first_check_in: checkInRows[0]?.server_time || null,
+    last_check_out: checkOutRows[checkOutRows.length - 1]?.server_time || null,
+    source_records_count: rows.length,
+    generated_at: now,
+    updated_at: now,
+  };
+
+  await db
+    .prepare(
+      `
+        INSERT INTO attendance_monthly_summaries (
+          id, employee_uid, employee_doc_id, year_month, present_days,
+          check_in_count, check_out_count, rejected_count, worked_minutes,
+          late_minutes, early_leave_minutes, overtime_minutes,
+          shortage_minutes, device_ids_json, zone_ids_json, first_check_in,
+          last_check_out, source_records_count, generated_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(employee_uid, year_month) DO UPDATE SET
+          employee_doc_id = excluded.employee_doc_id,
+          present_days = excluded.present_days,
+          check_in_count = excluded.check_in_count,
+          check_out_count = excluded.check_out_count,
+          rejected_count = excluded.rejected_count,
+          worked_minutes = excluded.worked_minutes,
+          late_minutes = excluded.late_minutes,
+          early_leave_minutes = excluded.early_leave_minutes,
+          overtime_minutes = excluded.overtime_minutes,
+          shortage_minutes = excluded.shortage_minutes,
+          device_ids_json = excluded.device_ids_json,
+          zone_ids_json = excluded.zone_ids_json,
+          first_check_in = excluded.first_check_in,
+          last_check_out = excluded.last_check_out,
+          source_records_count = excluded.source_records_count,
+          generated_at = excluded.generated_at,
+          updated_at = excluded.updated_at
+      `
+    )
+    .bind(
+      summaryRow.id,
+      summaryRow.employee_uid,
+      summaryRow.employee_doc_id,
+      summaryRow.year_month,
+      summaryRow.present_days,
+      summaryRow.check_in_count,
+      summaryRow.check_out_count,
+      summaryRow.rejected_count,
+      summaryRow.worked_minutes,
+      summaryRow.late_minutes,
+      summaryRow.early_leave_minutes,
+      summaryRow.overtime_minutes,
+      summaryRow.shortage_minutes,
+      summaryRow.device_ids_json,
+      summaryRow.zone_ids_json,
+      summaryRow.first_check_in,
+      summaryRow.last_check_out,
+      summaryRow.source_records_count,
+      summaryRow.generated_at,
+      summaryRow.updated_at
+    )
+    .run();
+
+  return mapAttendanceMonthlySummaryRow(summaryRow);
+}
+
+function mapAttendanceMonthlySummaryRow(row) {
+  return {
+    id: row.id,
+    employeeUid: row.employee_uid,
+    employeeDocId: row.employee_doc_id || null,
+    yearMonth: row.year_month,
+    presentDays: Number(row.present_days || 0),
+    checkInCount: Number(row.check_in_count || 0),
+    checkOutCount: Number(row.check_out_count || 0),
+    rejectedCount: Number(row.rejected_count || 0),
+    workedMinutes: Number(row.worked_minutes || 0),
+    lateMinutes: Number(row.late_minutes || 0),
+    earlyLeaveMinutes: Number(row.early_leave_minutes || 0),
+    overtimeMinutes: Number(row.overtime_minutes || 0),
+    shortageMinutes: Number(row.shortage_minutes || 0),
+    deviceIds: safeJsonArray(row.device_ids_json),
+    zoneIds: safeJsonArray(row.zone_ids_json),
+    firstCheckIn: row.first_check_in || null,
+    lastCheckOut: row.last_check_out || null,
+    sourceRecordsCount: Number(row.source_records_count || 0),
+    generatedAt: row.generated_at,
+    updatedAt: row.updated_at,
+  };
+}
+
 export function parseAttendanceRecordsQuery(searchParams) {
   const filters = [];
   const bindings = [];
@@ -439,6 +696,39 @@ function invalidRecordsQuery(field) {
       field,
     }),
   };
+}
+
+function isValidYearMonth(value) {
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(normalizeText(value))) return false;
+  return Boolean(parseRiyadhMonthBoundary(value));
+}
+
+function parseRiyadhMonthBoundary(value) {
+  const match = /^(\d{4})-(\d{2})$/.exec(normalizeText(value));
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  if (!Number.isInteger(year) || month < 1 || month > 12) return null;
+
+  return {
+    start: new Date(Date.UTC(year, month - 1, 1) - 3 * 60 * 60 * 1000).toISOString(),
+    end: new Date(Date.UTC(year, month, 1) - 3 * 60 * 60 * 1000).toISOString(),
+  };
+}
+
+function buildAttendanceMonthlySummaryId(employeeUid, yearMonth) {
+  return `attendance-summary:${employeeUid}:${yearMonth}`;
+}
+
+function getRiyadhDateKeyFromIso(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const shifted = new Date(date.getTime() + 3 * 60 * 60 * 1000);
+  return [
+    shifted.getUTCFullYear(),
+    String(shifted.getUTCMonth() + 1).padStart(2, "0"),
+    String(shifted.getUTCDate()).padStart(2, "0"),
+  ].join("-");
 }
 
 export function parseRiyadhDateBoundary(value, nextDay) {
@@ -854,6 +1144,15 @@ function safeJsonObject(value) {
       : {};
   } catch {
     return {};
+  }
+}
+
+function safeJsonArray(value) {
+  try {
+    const parsed = JSON.parse(normalizeText(value) || "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
   }
 }
 

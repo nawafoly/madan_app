@@ -10,6 +10,7 @@ const {
   evaluateDeviceChange,
   evaluateLocationDecision,
   evaluateStateTransition,
+  generateAttendanceMonthlySummary,
   isDeviceFirstSeenToday,
   parseAttendanceRecordsQuery,
   parseRiyadhDateBoundary,
@@ -109,6 +110,106 @@ function createAttendanceClearFakeDb() {
                   }
                 }
                 return { meta: { changes } };
+              }
+
+              return { meta: { changes: 0 } };
+            },
+          };
+        },
+      };
+    },
+  };
+
+  return db;
+}
+
+function createAttendanceMonthlySummaryFakeDb() {
+  const records: Array<Record<string, any>> = [];
+  const summaries = new Map<string, Record<string, any>>();
+
+  const db = {
+    records,
+    summaries,
+    prepare(sql: string) {
+      const normalizedSql = sql.replace(/\s+/g, " ").trim().toUpperCase();
+      return {
+        bind(...bindings: any[]) {
+          return {
+            async all() {
+              if (
+                normalizedSql.includes("FROM ATTENDANCE_RECORDS") &&
+                normalizedSql.includes("ORDER BY SERVER_TIME ASC")
+              ) {
+                const [employeeUid, start, end] = bindings;
+                return {
+                  results: records
+                    .filter(
+                      record =>
+                        record.employee_uid === employeeUid &&
+                        record.server_time >= start &&
+                        record.server_time < end
+                    )
+                    .sort((left, right) =>
+                      `${left.server_time}:${left.id}`.localeCompare(
+                        `${right.server_time}:${right.id}`
+                      )
+                    ),
+                };
+              }
+
+              return { results: [] };
+            },
+            async run() {
+              if (
+                normalizedSql.startsWith(
+                  "INSERT INTO ATTENDANCE_MONTHLY_SUMMARIES"
+                )
+              ) {
+                const [
+                  id,
+                  employeeUid,
+                  employeeDocId,
+                  yearMonth,
+                  presentDays,
+                  checkInCount,
+                  checkOutCount,
+                  rejectedCount,
+                  workedMinutes,
+                  lateMinutes,
+                  earlyLeaveMinutes,
+                  overtimeMinutes,
+                  shortageMinutes,
+                  deviceIdsJson,
+                  zoneIdsJson,
+                  firstCheckIn,
+                  lastCheckOut,
+                  sourceRecordsCount,
+                  generatedAt,
+                  updatedAt,
+                ] = bindings;
+                summaries.set(`${employeeUid}:${yearMonth}`, {
+                  id,
+                  employee_uid: employeeUid,
+                  employee_doc_id: employeeDocId,
+                  year_month: yearMonth,
+                  present_days: presentDays,
+                  check_in_count: checkInCount,
+                  check_out_count: checkOutCount,
+                  rejected_count: rejectedCount,
+                  worked_minutes: workedMinutes,
+                  late_minutes: lateMinutes,
+                  early_leave_minutes: earlyLeaveMinutes,
+                  overtime_minutes: overtimeMinutes,
+                  shortage_minutes: shortageMinutes,
+                  device_ids_json: deviceIdsJson,
+                  zone_ids_json: zoneIdsJson,
+                  first_check_in: firstCheckIn,
+                  last_check_out: lastCheckOut,
+                  source_records_count: sourceRecordsCount,
+                  generated_at: generatedAt,
+                  updated_at: updatedAt,
+                });
+                return { meta: { changes: 1 } };
               }
 
               return { meta: { changes: 0 } };
@@ -395,6 +496,113 @@ describe("attendance clear action", () => {
       last_location_accuracy: null,
       last_zone_id: null,
     });
+  });
+});
+
+describe("attendance monthly summaries", () => {
+  it("generates and upserts a monthly summary without deleting source records", async () => {
+    const db = createAttendanceMonthlySummaryFakeDb();
+    db.records.push(
+      {
+        id: "june-check-in-1",
+        employee_uid: "employee-1",
+        employee_doc_id: "employee-doc-1",
+        type: "check_in",
+        result: "allowed",
+        server_time: "2026-06-01T05:00:00.000Z",
+        device_info: JSON.stringify({ deviceId: "device-a" }),
+        zone_id: "main-office",
+      },
+      {
+        id: "june-check-out-1",
+        employee_uid: "employee-1",
+        employee_doc_id: "employee-doc-1",
+        type: "check_out",
+        result: "allowed",
+        server_time: "2026-06-01T14:00:00.000Z",
+        device_info: JSON.stringify({ deviceId: "device-a" }),
+        zone_id: "main-office",
+      },
+      {
+        id: "june-check-in-2",
+        employee_uid: "employee-1",
+        employee_doc_id: "employee-doc-1",
+        type: "check_in",
+        result: "allowed",
+        server_time: "2026-06-02T05:10:00.000Z",
+        device_info: JSON.stringify({ deviceId: "device-b" }),
+        zone_id: "project-zone",
+      },
+      {
+        id: "june-check-out-2",
+        employee_uid: "employee-1",
+        employee_doc_id: "employee-doc-1",
+        type: "check_out",
+        result: "allowed",
+        server_time: "2026-06-02T14:10:00.000Z",
+        device_info: JSON.stringify({ deviceId: "device-b" }),
+        zone_id: "project-zone",
+      },
+      {
+        id: "june-rejected",
+        employee_uid: "employee-1",
+        employee_doc_id: "employee-doc-1",
+        type: "check_in",
+        result: "rejected",
+        server_time: "2026-06-03T05:00:00.000Z",
+        device_info: JSON.stringify({ deviceId: "device-rejected" }),
+        zone_id: "main-office",
+      },
+      {
+        id: "july-check-in",
+        employee_uid: "employee-1",
+        employee_doc_id: "employee-doc-1",
+        type: "check_in",
+        result: "allowed",
+        server_time: "2026-07-01T05:00:00.000Z",
+        device_info: JSON.stringify({ deviceId: "device-july" }),
+        zone_id: "main-office",
+      }
+    );
+    const sourceCount = db.records.length;
+
+    const summary = await generateAttendanceMonthlySummary(
+      db,
+      "employee-1",
+      "2026-06"
+    );
+    const repeatedSummary = await generateAttendanceMonthlySummary(
+      db,
+      "employee-1",
+      "2026-06"
+    );
+
+    expect(summary).toMatchObject({
+      employeeUid: "employee-1",
+      employeeDocId: "employee-doc-1",
+      yearMonth: "2026-06",
+      presentDays: 2,
+      checkInCount: 2,
+      checkOutCount: 2,
+      rejectedCount: 1,
+      workedMinutes: 0,
+      lateMinutes: 0,
+      earlyLeaveMinutes: 0,
+      overtimeMinutes: 0,
+      shortageMinutes: 0,
+      firstCheckIn: "2026-06-01T05:00:00.000Z",
+      lastCheckOut: "2026-06-02T14:10:00.000Z",
+      sourceRecordsCount: 5,
+    });
+    expect(summary.deviceIds).toEqual([
+      "device-a",
+      "device-b",
+      "device-rejected",
+    ]);
+    expect(summary.zoneIds).toEqual(["main-office", "project-zone"]);
+    expect(repeatedSummary.id).toBe(summary.id);
+    expect(db.summaries.size).toBe(1);
+    expect(db.records).toHaveLength(sourceCount);
   });
 });
 
