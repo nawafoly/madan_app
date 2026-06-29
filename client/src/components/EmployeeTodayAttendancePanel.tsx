@@ -10,11 +10,13 @@ import {
   Menu,
   MoreVertical,
   SlidersHorizontal,
+  Trash2,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
   adjustAttendanceRecordsAsAdmin,
+  clearAttendanceRecordsAsAdmin,
   fetchAttendanceRecords,
   type AttendanceRecord,
 } from "@/lib/attendanceRecords";
@@ -490,6 +492,7 @@ export default function EmployeeTodayAttendancePanel({
   const [adjustmentCheckOutTime, setAdjustmentCheckOutTime] = useState("");
   const [adjustmentNote, setAdjustmentNote] = useState("");
   const [savingAdjustment, setSavingAdjustment] = useState(false);
+  const [clearingAttendance, setClearingAttendance] = useState(false);
   const [adjustmentRefreshKey, setAdjustmentRefreshKey] = useState(0);
   const monthBounds = useMemo(() => getMonthBounds(monthDate), [monthDate]);
   const detailsRef = useRef<HTMLDivElement | null>(null);
@@ -723,6 +726,56 @@ export default function EmployeeTodayAttendancePanel({
       toast.error("تعذر تعديل بصمة الموظف.");
     } finally {
       setSavingAdjustment(false);
+    }
+  };
+
+  const handleClearAttendance = async () => {
+    const uid = String(employeeUid || "").trim();
+    const docId = String(employeeDocId || employeeUid || "").trim();
+    const recordsToClear = (selectedDay?.records || []).filter(record =>
+      String(record.id || "").trim()
+    );
+    if (!canManageAttendance || !uid || !docId) {
+      toast.error("لا تملك صلاحية مسح بصمة الموظف.");
+      return;
+    }
+    if (!recordsToClear.length) {
+      toast.error("لا توجد بصمة مسجلة لهذا اليوم.");
+      return;
+    }
+    if (
+      typeof window !== "undefined" &&
+      !window.confirm(
+        `مسح بصمة يوم ${formatArabicDate(selectedDate)}؟\n\nسيتم حذف سجلات الحضور والانصراف لهذا اليوم وإعادة تصفير حالة الموظف.`
+      )
+    ) {
+      return;
+    }
+
+    setClearingAttendance(true);
+    try {
+      const clearedRecords = await clearAttendanceRecordsAsAdmin({
+        employeeUid: uid,
+        employeeDocId: docId,
+        date: selectedDate,
+        recordIds: recordsToClear.map(record => record.id),
+        serverTimes: recordsToClear
+          .map(record => record.serverTime)
+          .filter(Boolean),
+        note: "Cleared from HR attendance panel",
+      });
+      toast.success(
+        clearedRecords > 0
+          ? `تم مسح ${formatNumberEN(clearedRecords)} سجل بصمة.`
+          : "لا توجد سجلات بصمة لمسحها."
+      );
+      setAdjustmentOpen(false);
+      setAdjustmentRefreshKey(current => current + 1);
+    } catch (clearError) {
+      console.error("admin_attendance_clear_failed", clearError);
+      toast.error("تعذر مسح بصمة الموظف.");
+    } finally {
+      setClearingAttendance(false);
     }
   };
 
@@ -986,16 +1039,39 @@ export default function EmployeeTodayAttendancePanel({
             ) : null}
             <span className="sr-only">عدد سجلات اليوم المحدد</span>
             {canManageAttendance && !isRestOrLeaveSelectedDay ? (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="mr-auto rounded-full border-slate-200 bg-white px-4 text-slate-950"
-                onClick={openAttendanceAdjustment}
-                disabled={!employeeUid || savingAdjustment}
-              >
-                تعديل البصمة
-              </Button>
+              <div className="mr-auto flex flex-wrap items-center gap-2">
+                {hasSelectedRecord ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="rounded-full border-rose-200 bg-white px-4 text-rose-700 hover:bg-rose-50 hover:text-rose-800"
+                    onClick={() => void handleClearAttendance()}
+                    disabled={
+                      !employeeUid || savingAdjustment || clearingAttendance
+                    }
+                  >
+                    {clearingAttendance ? (
+                      <Loader2 className="ml-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="ml-2 h-4 w-4" />
+                    )}
+                    مسح البصمة
+                  </Button>
+                ) : null}
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="rounded-full border-slate-200 bg-white px-4 text-slate-950"
+                  onClick={openAttendanceAdjustment}
+                  disabled={
+                    !employeeUid || savingAdjustment || clearingAttendance
+                  }
+                >
+                  تعديل البصمة
+                </Button>
+              </div>
             ) : null}
           </div>
 

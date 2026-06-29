@@ -595,12 +595,27 @@ async function adjustAttendanceRecords(request, db, requester) {
   const date = normalizeText(input.data?.date);
   const checkInTime = normalizeText(input.data?.checkInTime);
   const checkOutTime = normalizeText(input.data?.checkOutTime);
+  const clearRequested =
+    input.data?.clear === true || normalizeText(input.data?.action) === "clear";
+  const clearRecordIds = normalizeTextList(input.data?.recordIds);
+  const clearServerTimes = normalizeTextList(input.data?.serverTimes);
   const note = clampText(input.data?.note, 500);
   if (!employeeUid || !employeeDocId) {
     return json(400, { ok: false, message: "invalid_employee" });
   }
   if (!parseRiyadhDateBoundary(date, false)) {
     return json(400, { ok: false, message: "invalid_attendance_date" });
+  }
+  if (clearRequested) {
+    return clearAttendanceRecordsForDay({
+      db,
+      requester,
+      employeeUid,
+      date,
+      recordIds: clearRecordIds,
+      serverTimes: clearServerTimes,
+      note,
+    });
   }
   if (!checkInTime && !checkOutTime) {
     return json(400, { ok: false, message: "missing_attendance_time" });
@@ -710,6 +725,87 @@ async function adjustAttendanceRecords(request, db, requester) {
   } catch (error) {
     return serverError("attendance_admin_adjustment_failed", error);
   }
+}
+
+async function clearAttendanceRecordsForDay({
+  db,
+  requester,
+  employeeUid,
+  date,
+  recordIds = [],
+  serverTimes = [],
+  note,
+}) {
+  const dayStart = parseRiyadhDateBoundary(date, false);
+  const dayEnd = parseRiyadhDateBoundary(date, true);
+  const source = JSON.stringify({
+    area: "hr",
+    page: "hr_employees",
+    route: "worker.attendance.admin-adjustment",
+    method: "clear_attendance_day",
+    note: note || null,
+    clearedByUid: requester.uid,
+    clearedByEmail: requester.email || null,
+    clearedAt: new Date().toISOString(),
+  });
+
+  try {
+    const normalizedRecordIds = normalizeTextList(recordIds);
+    const normalizedServerTimes = normalizeTextList(serverTimes);
+    let result = null;
+
+    if (normalizedRecordIds.length) {
+      const placeholders = normalizedRecordIds.map(() => "?").join(", ");
+      result = await db
+        .prepare(
+          `
+            DELETE FROM attendance_records
+            WHERE employee_uid = ? AND id IN (${placeholders})
+          `
+        )
+        .bind(employeeUid, ...normalizedRecordIds)
+        .run();
+    } else if (normalizedServerTimes.length) {
+      const placeholders = normalizedServerTimes.map(() => "?").join(", ");
+      result = await db
+        .prepare(
+          `
+            DELETE FROM attendance_records
+            WHERE employee_uid = ? AND server_time IN (${placeholders})
+          `
+        )
+        .bind(employeeUid, ...normalizedServerTimes)
+        .run();
+    } else {
+      result = await db
+        .prepare(
+          `
+            DELETE FROM attendance_records
+            WHERE employee_uid = ? AND server_time >= ? AND server_time < ?
+          `
+        )
+        .bind(employeeUid, dayStart, dayEnd)
+        .run();
+    }
+
+    await rebuildAttendanceState(db, employeeUid);
+    return json(200, {
+      ok: true,
+      action: "clear",
+      date,
+      clearedRecords: Number(result.meta?.changes || 0),
+      source: safeJsonObject(source),
+    });
+  } catch (error) {
+    return serverError("attendance_admin_clear_failed", error);
+  }
+}
+
+function normalizeTextList(value) {
+  if (!Array.isArray(value)) return [];
+  return Array.from(
+    new Set(value.map(item => normalizeText(item)).filter(Boolean))
+  );
 }
 
 function safeJsonObject(value) {
@@ -1171,7 +1267,13 @@ async function rebuildAttendanceState(db, employeeUid) {
     .bind(employeeUid)
     .first();
 
-  if (!latest) return;
+  if (!latest) {
+    await db
+      .prepare("DELETE FROM attendance_state WHERE employee_uid = ?")
+      .bind(employeeUid)
+      .run();
+    return;
+  }
 
   await db
     .prepare(
