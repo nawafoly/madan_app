@@ -66,6 +66,19 @@ describe("attendance location validation", () => {
     ).toBe("poor_accuracy");
   });
 
+  it("accepts moderate GPS accuracy inside a wider assigned zone", () => {
+    const location = { ...center, accuracy: 131 };
+    const zoneCheck = evaluateAttendanceZones(location, [
+      { ...zone, radiusMeters: 200 },
+    ]);
+    expect(
+      evaluateLocationDecision({ location, zoneError: "", zoneCheck })
+    ).toEqual({
+      result: "allowed",
+      rejectionReason: null,
+    });
+  });
+
   it("rejects an employee without allowed zones", () => {
     const location = { ...center, accuracy: 10 };
     const zoneCheck = evaluateAttendanceZones(location, []);

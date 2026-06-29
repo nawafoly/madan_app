@@ -8,7 +8,8 @@ const ATTENDANCE_ALLOWED_ROLES = new Set([
 const ATTENDANCE_TYPES = new Set(["check_in", "check_out"]);
 const ATTENDANCE_RESULTS = new Set(["allowed", "rejected"]);
 const ATTENDANCE_ADMIN_ROLES = new Set(["owner", "admin", "hr"]);
-const ATTENDANCE_MAX_ACCURACY_METERS = 100;
+const ATTENDANCE_BASE_MAX_ACCURACY_METERS = 100;
+const ATTENDANCE_MAX_ACCURACY_METERS = 200;
 const ATTENDANCE_RECORDS_DEFAULT_LIMIT = 50;
 const ATTENDANCE_RECORDS_MAX_LIMIT = 200;
 const EARTH_RADIUS_METERS = 6371008.8;
@@ -1099,7 +1100,7 @@ function buildRecordInsert(db, values) {
       values.distanceMeters,
       values.result,
       values.rejectionReason,
-      values.location.accuracy <= ATTENDANCE_MAX_ACCURACY_METERS ? 1 : 0,
+      values.location.accuracy <= getAllowedAccuracyMeters(values.zone) ? 1 : 0,
       JSON.stringify(values.deviceInfo),
       values.source ||
         JSON.stringify({
@@ -1260,10 +1261,19 @@ export function evaluateLocationDecision({ location, zoneError, zoneCheck }) {
   if (!zoneCheck.withinZone) {
     return { result: "rejected", rejectionReason: "outside_zone" };
   }
-  if (location.accuracy > ATTENDANCE_MAX_ACCURACY_METERS) {
+  if (location.accuracy > getAllowedAccuracyMeters(zoneCheck.zone)) {
     return { result: "rejected", rejectionReason: "poor_accuracy" };
   }
   return { result: "allowed", rejectionReason: null };
+}
+
+function getAllowedAccuracyMeters(zone) {
+  const radiusMeters = finiteNumber(zone?.radiusMeters);
+  if (!radiusMeters || radiusMeters <= 0) return ATTENDANCE_BASE_MAX_ACCURACY_METERS;
+  return Math.max(
+    ATTENDANCE_BASE_MAX_ACCURACY_METERS,
+    Math.min(radiusMeters, ATTENDANCE_MAX_ACCURACY_METERS)
+  );
 }
 
 function isServerTimeWithinBounds(serverTime, bounds) {

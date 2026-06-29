@@ -34,7 +34,7 @@ describe("attendance location feedback", () => {
   it("prioritizes missing radius setup before out-of-range and low accuracy", () => {
     const feedback = buildAttendanceLocationFeedback({
       result: "rejected",
-      rejectionReason: "poor_accuracy",
+      rejectionReason: "zone_invalid",
       distanceMeters: 10601,
       allowedRadiusMeters: 0,
       accuracy: 116,
@@ -50,6 +50,23 @@ describe("attendance location feedback", () => {
       allowedRadiusLabel: null,
       accuracyLabel: "116 م",
     });
+  });
+
+  it("does not report missing radius when the worker rejected only GPS accuracy", () => {
+    const feedback = buildAttendanceLocationFeedback({
+      result: "rejected",
+      rejectionReason: "poor_accuracy",
+      distanceMeters: 80,
+      allowedRadiusMeters: null,
+      accuracy: 131,
+    });
+
+    expect(feedback).toMatchObject({
+      type: "low_accuracy",
+      allowedRadiusLabel: null,
+    });
+    expect(feedback?.distanceLabel).toContain("80");
+    expect(feedback?.accuracyLabel).toContain("131");
   });
 
   it("treats a missing radius value as an attendance setup issue for location failures", () => {

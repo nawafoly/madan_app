@@ -68,11 +68,13 @@ export function buildAttendanceLocationFeedback(
     response.rejectionReason === "zone_invalid" ||
     response.rejectionReason === "outside_zone" ||
     response.rejectionReason === "poor_accuracy";
+  const isPoorAccuracyRejection = response.rejectionReason === "poor_accuracy";
   const isMissingAttendanceRadius =
-    response.rejectionReason === "zone_not_found" ||
-    response.rejectionReason === "zone_invalid" ||
-    (isLocationRejection && allowedRadius === null) ||
-    (allowedRadius !== null && allowedRadius <= 0);
+    !isPoorAccuracyRejection &&
+    (response.rejectionReason === "zone_not_found" ||
+      response.rejectionReason === "zone_invalid" ||
+      (isLocationRejection && allowedRadius === null) ||
+      (allowedRadius !== null && allowedRadius <= 0));
   const isOutOfRange =
     response.rejectionReason === "outside_zone" ||
     (distance !== null &&
