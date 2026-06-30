@@ -206,6 +206,72 @@ function exportCsv(records: AttendanceRecord[]) {
   URL.revokeObjectURL(url);
 }
 
+function normalizeLookupKey(value: string | null | undefined) {
+  return String(value || "").trim();
+}
+
+function buildEmployeeNameMap(employees: Array<{ uid: string; name: string }>) {
+  const names = new Map<string, string>();
+  for (const employee of employees) {
+    const uid = normalizeLookupKey(employee.uid);
+    const name = normalizeLookupKey(employee.name);
+    if (uid && name) names.set(uid, name);
+  }
+  return names;
+}
+
+function resolveAttendanceEmployeeName(
+  record: AttendanceRecord,
+  employeeNames: Map<string, string>
+) {
+  return (
+    normalizeLookupKey(record.employeeName) ||
+    employeeNames.get(normalizeLookupKey(record.employeeUid)) ||
+    employeeNames.get(normalizeLookupKey(record.employeeDocId)) ||
+    null
+  );
+}
+
+function enrichAttendanceRecordsWithNames(
+  records: AttendanceRecord[],
+  employeeNames: Map<string, string>
+) {
+  if (!employeeNames.size) return records;
+
+  return records.map(record => {
+    const employeeName = resolveAttendanceEmployeeName(record, employeeNames);
+    const sharedDevice = record.deviceInfo.sharedDevice;
+    const sharedEmployees = sharedDevice?.employees?.map(employee => ({
+      ...employee,
+      name:
+        normalizeLookupKey(employee.name) ||
+        employeeNames.get(normalizeLookupKey(employee.uid)) ||
+        null,
+    }));
+
+    if (
+      employeeName === record.employeeName &&
+      sharedEmployees === sharedDevice?.employees
+    ) {
+      return record;
+    }
+
+    return {
+      ...record,
+      employeeName,
+      deviceInfo: {
+        ...record.deviceInfo,
+        sharedDevice: sharedDevice
+          ? {
+              ...sharedDevice,
+              employees: sharedEmployees || sharedDevice.employees,
+            }
+          : sharedDevice,
+      },
+    };
+  });
+}
+
 function TypeBadge({
   record,
   language,
@@ -806,11 +872,19 @@ export default function HrAttendancePage() {
     };
   }, []);
 
+  const employeeNameMap = useMemo(() => buildEmployeeNameMap(employees), [
+    employees,
+  ]);
+  const displayRecords = useMemo(
+    () => enrichAttendanceRecordsWithNames(data?.records || [], employeeNameMap),
+    [data?.records, employeeNameMap]
+  );
+
   const employeeOptions = useMemo(() => {
     const options = new Map(
       employees.map(employee => [employee.uid, employee.name])
     );
-    for (const record of data?.records || []) {
+    for (const record of displayRecords) {
       if (!options.has(record.employeeUid)) {
         options.set(
           record.employeeUid,
@@ -822,7 +896,7 @@ export default function HrAttendancePage() {
       (left, right) =>
         left.name.localeCompare(right.name, language === "ar" ? "ar" : "en")
     );
-  }, [data?.records, employees, language]);
+  }, [displayRecords, employees, language]);
 
   const totalPages = Math.max(1, Math.ceil((data?.total || 0) / PAGE_SIZE));
   const summaryCards = [
@@ -907,7 +981,7 @@ export default function HrAttendancePage() {
         collected.push(...response.records);
         cursor = response.nextCursor || undefined;
       } while (cursor && collected.length < 10000);
-      exportCsv(collected);
+      exportCsv(enrichAttendanceRecordsWithNames(collected, employeeNameMap));
       toast.success(
         tr(
           language,
@@ -1193,8 +1267,8 @@ export default function HrAttendancePage() {
               >
                 {tr(
                   language,
-                  `${data?.records.length || 0} سجل في الصفحة`,
-                  `${data?.records.length || 0} records on this page`
+                  `${displayRecords.length} سجل في الصفحة`,
+                  `${displayRecords.length} records on this page`
                 )}
               </Badge>
             </div>
@@ -1213,7 +1287,7 @@ export default function HrAttendancePage() {
                   {tr(language, "إعادة المحاولة", "Retry")}
                 </Button>
               </div>
-            ) : !data?.records.length ? (
+            ) : !displayRecords.length ? (
               <div className="flex min-h-64 flex-col items-center justify-center gap-3 p-8 text-center text-slate-500">
                 <SearchX className="h-8 w-8" />
                 <p className="text-sm">
@@ -1223,7 +1297,7 @@ export default function HrAttendancePage() {
             ) : (
               <>
                 <div className="space-y-3 p-3 xl:hidden">
-                  {data.records.map(record => (
+                  {displayRecords.map(record => (
                     <AttendanceMobileCard
                       key={record.id}
                       record={record}
@@ -1256,7 +1330,7 @@ export default function HrAttendancePage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {data.records.map(record => (
+                      {displayRecords.map(record => (
                         <TableRow
                           key={record.id}
                           className="group border-0 transition"

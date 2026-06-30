@@ -33,6 +33,12 @@ import {
   type EmployeeDirectorySyncResult,
 } from "@/lib/employeeDirectoryWorker";
 import { buildDefaultEmployeeAvatarPatch } from "@/lib/defaultEmployeeAvatars";
+import {
+  buildAdminEmailFromUsername,
+  buildAdminUsernameSeed,
+  isValidAdminUsername,
+  normalizeAdminUsername,
+} from "@/lib/adminUsername";
 import { formatNumberEN } from "@/lib/formatters";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -110,6 +116,7 @@ export default function CreateStaffAccount() {
   const [localInfo, setLocalInfo] = useState<string | null>(null);
 
   const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [fullName, setFullName] = useState("");
@@ -141,6 +148,84 @@ export default function CreateStaffAccount() {
   }, []);
 
   const normalizeEmail = (value: string) => value.trim().toLowerCase();
+  const isAdminEmailInUse = async (targetEmail: string) => {
+    const normalizedEmail = normalizeEmail(targetEmail);
+    if (!normalizedEmail) return false;
+
+    const [adminSnap, usersSnap] = await Promise.all([
+      getDoc(doc(db, "admin_users", normalizedEmail)),
+      getDocs(
+        query(
+          collection(db, "users"),
+          where("email", "==", normalizedEmail),
+          limit(1)
+        )
+      ),
+    ]);
+
+    return adminSnap.exists() || !usersSnap.empty;
+  };
+
+  const isAdminUsernameInUse = async (targetUsername: string) => {
+    const normalizedUsername = normalizeAdminUsername(targetUsername);
+    if (!normalizedUsername) return false;
+
+    const usernameSnap = await getDoc(
+      doc(db, "admin_usernames", normalizedUsername)
+    );
+    return usernameSnap.exists();
+  };
+
+  const generateAvailableIdentity = async () => {
+    const seed = buildAdminUsernameSeed(username, fullName, email.split("@")[0]);
+    if (!seed) {
+      setLocalError(
+        tr(
+          language,
+          "اكتب اسم المستخدم أو الاسم الكامل أولًا لتوليد البريد.",
+          "Enter a username or full name first to generate an email."
+        )
+      );
+      return;
+    }
+
+    setBusy(true);
+    resetTransientState();
+    try {
+      for (let index = 0; index < 50; index += 1) {
+        const candidateUsername = index === 0 ? seed : `${seed}${index + 1}`;
+        const candidateEmail = buildAdminEmailFromUsername(candidateUsername);
+        const [usernameTaken, emailTaken] = await Promise.all([
+          isAdminUsernameInUse(candidateUsername),
+          isAdminEmailInUse(candidateEmail),
+        ]);
+
+        if (!usernameTaken && !emailTaken) {
+          setUsername(candidateUsername);
+          setEmail(candidateEmail);
+          setLocalInfo(
+            tr(
+              language,
+              "تم توليد بريد متاح. يمكنك تعديله قبل إنشاء الحساب.",
+              "Available email generated. You can edit it before creating the account."
+            )
+          );
+          return;
+        }
+      }
+
+      setLocalError(
+        tr(
+          language,
+          "تعذر إيجاد اسم مستخدم وبريد متاحين تلقائيًا. جرّب اسمًا آخر.",
+          "Could not find an available username and email automatically. Try another username."
+        )
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const formatSyncDateTime = (value?: string | null) => {
     if (!value) return "لم تُنفذ المزامنة من داخل النظام بعد.";
     const date = new Date(value);
@@ -298,6 +383,7 @@ export default function CreateStaffAccount() {
     resetTransientState();
 
     const normalizedEmail = normalizeEmail(email);
+    const normalizedUsername = normalizeAdminUsername(username);
     const trimmedPassword = password;
     const name = fullName.trim();
     const phoneValue = phone.trim();
@@ -311,6 +397,20 @@ export default function CreateStaffAccount() {
     if (!phoneValue) {
       setBusy(false);
       setLocalError("فضلًا اكتب رقم الجوال.");
+      return;
+    }
+
+    if (!normalizedUsername) {
+      setBusy(false);
+      setLocalError("فضلًا اكتب اسم المستخدم.");
+      return;
+    }
+
+    if (!isValidAdminUsername(normalizedUsername)) {
+      setBusy(false);
+      setLocalError(
+        "اسم المستخدم يجب أن يكون 3 إلى 32 حرفًا بالإنجليزية أو أرقامًا أو نقاطًا أو شرطات."
+      );
       return;
     }
 
@@ -347,6 +447,12 @@ export default function CreateStaffAccount() {
     let authCreatedSuccessfully = false;
 
     try {
+      const usernameTaken = await isAdminUsernameInUse(normalizedUsername);
+      if (usernameTaken) {
+        setLocalError("اسم المستخدم مستخدم مسبقًا. اختر اسمًا آخر.");
+        return;
+      }
+
       const secondaryApp = initializeApp(
         {
           apiKey: import.meta.env.VITE_FB_API_KEY,
@@ -370,6 +476,7 @@ export default function CreateStaffAccount() {
         const defaultAvatarPatch = buildDefaultEmployeeAvatarPatch({
           uid: cred.user.uid,
           email: normalizedEmail,
+          username: normalizedUsername,
           displayName: name,
           name,
         });
@@ -422,6 +529,7 @@ export default function CreateStaffAccount() {
         {
           displayName: name,
           email: normalizedEmail,
+          username: normalizedUsername,
           role: "staff",
           roleKey: "staff",
           title: "",
@@ -443,6 +551,19 @@ export default function CreateStaffAccount() {
       );
 
       await setDoc(
+        doc(db, "admin_usernames", normalizedUsername),
+        {
+          username: normalizedUsername,
+          email: normalizedEmail,
+          uid: createdUid,
+          roleKey: "staff",
+          updatedAt: serverTimestamp(),
+          createdAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      await setDoc(
         doc(db, "employees", createdUid),
         buildDefaultEmployeePayload({
           uid: createdUid,
@@ -458,6 +579,7 @@ export default function CreateStaffAccount() {
       setFullName("");
       setPhone("");
       setEmail("");
+      setUsername("");
       setPassword("");
       setConfirmPassword("");
       setShowPassword(false);
@@ -498,6 +620,7 @@ export default function CreateStaffAccount() {
       .trim()
       .toLowerCase();
     const roleKey = effectivePromoteRoleKey;
+    const formUsername = normalizeAdminUsername(username);
 
     if (!normalizedTargetEmail || !normalizedTargetEmail.includes("@")) {
       toast.error("البريد غير صحيح");
@@ -532,6 +655,36 @@ export default function CreateStaffAccount() {
         ? beforeAdminSnap.data()
         : null;
 
+      const existingUsername = normalizeAdminUsername(
+        beforeAdminData?.username || userData?.username || ""
+      );
+      const normalizedUsername = formUsername || existingUsername;
+
+      if (!normalizedUsername) {
+        toast.error("اسم المستخدم مطلوب");
+        return;
+      }
+
+      if (!isValidAdminUsername(normalizedUsername)) {
+        toast.error(
+          "اسم المستخدم يجب أن يكون 3 إلى 32 حرفًا بالإنجليزية أو أرقامًا أو نقاطًا أو شرطات."
+        );
+        return;
+      }
+
+      const usernameSnap = await getDoc(
+        doc(db, "admin_usernames", normalizedUsername)
+      );
+      if (
+        usernameSnap.exists() &&
+        String(usernameSnap.data()?.email || "").toLowerCase() !==
+          normalizedTargetEmail &&
+        String(usernameSnap.data()?.uid || "") !== userDoc.id
+      ) {
+        toast.error("اسم المستخدم مستخدم مسبقًا. اختر اسمًا آخر.");
+        return;
+      }
+
       const { permissionsAllow, permissionsDeny } =
         normalizePermissionOverrides(
           beforeAdminData?.permissionsAllow || [],
@@ -561,6 +714,7 @@ export default function CreateStaffAccount() {
       await updateDoc(doc(db, "users", userDoc.id), {
         role: roleKey,
         roleKey,
+        username: normalizedUsername,
         active: isActive,
         isActive,
         displayName: displayName || null,
@@ -579,6 +733,7 @@ export default function CreateStaffAccount() {
         {
           displayName: displayName || "",
           email: normalizedTargetEmail,
+          username: normalizedUsername,
           roleKey,
           title,
           isActive,
@@ -591,6 +746,19 @@ export default function CreateStaffAccount() {
           permissionsDeny,
           updatedAt: serverTimestamp(),
           createdAt: userData?.createdAt ?? serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      await setDoc(
+        doc(db, "admin_usernames", normalizedUsername),
+        {
+          username: normalizedUsername,
+          email: normalizedTargetEmail,
+          uid: userDoc.id,
+          roleKey,
+          updatedAt: serverTimestamp(),
+          createdAt: serverTimestamp(),
         },
         { merge: true }
       );
@@ -655,6 +823,7 @@ export default function CreateStaffAccount() {
       setPromoteDialogOpen(false);
       setCreatedEmailForPromote("");
       setCreatedNameForPromote("");
+      setUsername("");
       setPromoteRoleKey("staff");
     } catch (e) {
       console.error(e);
@@ -854,6 +1023,21 @@ export default function CreateStaffAccount() {
                   </div>
 
                   <div>
+                    <FieldLabel>{tr(language, "اسم المستخدم", "Username")}</FieldLabel>
+                    <Input
+                      value={username}
+                      onChange={event =>
+                        setUsername(normalizeAdminUsername(event.target.value))
+                      }
+                      placeholder="username"
+                      autoComplete="username"
+                      dir="ltr"
+                      disabled={busy}
+                      className="h-12 rounded-2xl border-slate-200/80 bg-slate-50/80 px-4 text-base shadow-none"
+                    />
+                  </div>
+
+                  <div>
                     <FieldLabel>{tr(language, "البريد الإلكتروني", "Email Address")}</FieldLabel>
                     <Input
                       value={email}
@@ -866,6 +1050,20 @@ export default function CreateStaffAccount() {
                       className="h-12 rounded-2xl border-slate-200/80 bg-slate-50/80 px-4 text-base shadow-none"
                     />
                   </div>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-12 rounded-2xl border-slate-200 bg-white px-4 text-sm font-semibold shadow-none"
+                    disabled={busy}
+                    onClick={() => void generateAvailableIdentity()}
+                  >
+                    {tr(
+                      language,
+                      "توليد البريد الإلكتروني تلقائيًا",
+                      "Auto-generate email"
+                    )}
+                  </Button>
 
                   <div>
                     <FieldLabel>{tr(language, "كلمة المرور", "Password")}</FieldLabel>

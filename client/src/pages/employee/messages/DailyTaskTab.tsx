@@ -25,12 +25,14 @@ import { toast } from "sonner";
 
 import { db } from "@/_core/firebase";
 import { hasPermission, type AppUser } from "@/_core/hooks/useAuth";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { createInAppNotification } from "@/lib/inAppNotifications";
 import { uploadDocumentToCloudflare } from "@/lib/documentUploadService";
+import { languageDir, tr } from "@/lib/i18n";
 import {
   WEEKLY_REPORT_MANAGER_NOTES_PERMISSION,
 } from "@/lib/weeklyReportConfig";
@@ -177,6 +179,8 @@ export function DailyTaskTab({
   user: AppUser;
   mode?: "employee" | "admin";
 }) {
+  const { language } = useLanguage();
+  const dir = languageDir(language);
   const [profileDefaults, setProfileDefaults] = useState({ name: "", title: "" });
   const [ownTasks, setOwnTasks] = useState<DailyTaskRecord[]>([]);
   const [receivedTasks, setReceivedTasks] = useState<DailyTaskRecord[]>([]);
@@ -189,6 +193,7 @@ export function DailyTaskTab({
   const [cameraError, setCameraError] = useState("");
   const [form, setForm] = useState<DailyTaskFormState>(() => buildInitialForm(user));
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const formSectionRef = useRef<HTMLElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const cameraStreamRef = useRef<MediaStream | null>(null);
 
@@ -200,6 +205,18 @@ export function DailyTaskTab({
     () => [...ownTasks, ...receivedTasks].find(task => task.id === form.id) || null,
     [form.id, ownTasks, receivedTasks]
   );
+
+  const openTask = (task: DailyTaskRecord) => {
+    setForm(toForm(task));
+    window.requestAnimationFrame(() => {
+      if (window.matchMedia("(max-width: 1279px)").matches) {
+        formSectionRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      }
+    });
+  };
   const isReadOnly = selectedTask
     ? selectedTask.createdByUid !== user.uid || selectedTask.status === "sent"
     : false;
@@ -595,43 +612,76 @@ export function DailyTaskTab({
 
       <div className="space-y-2">
         {loading ? (
-          <p className="text-sm text-slate-500">جاري التحميل...</p>
+          <p className="text-sm text-slate-500">{tr(language, "جاري التحميل...", "Loading...")}</p>
         ) : tasks.length ? (
-          tasks.map(task => (
-            <button
-              key={task.id}
-              type="button"
-              className="block w-full rounded-[18px] border border-slate-200 bg-white p-3 text-right shadow-sm transition hover:-translate-y-0.5 hover:border-[#F2B705]/50 hover:shadow-md"
-              onClick={() => setForm(toForm(task))}
-            >
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <div className="truncate text-sm font-semibold text-slate-950">
-                    {task.createdByName || "موظف"}
+          tasks.map(task => {
+            const isSelected = form.id === task.id;
+
+            return (
+              <button
+                key={task.id}
+                type="button"
+                aria-pressed={isSelected}
+                className={[
+                  "group block w-full rounded-[20px] border p-3.5 text-start shadow-sm outline-none transition-all duration-200",
+                  "hover:-translate-y-0.5 hover:border-[#F2B705] hover:bg-amber-50/35 hover:shadow-lg hover:shadow-slate-200/80",
+                  "active:translate-y-0 active:scale-[0.99] focus-visible:ring-4 focus-visible:ring-[#F2B705]/25",
+                  isSelected
+                    ? "border-[#F2B705] bg-[#FFF8DF] shadow-[0_18px_45px_-32px_rgba(15,23,42,0.45)] ring-2 ring-[#F2B705]/25"
+                    : "border-slate-200 bg-white",
+                ].join(" ")}
+                onClick={() => openTask(task)}
+              >
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold text-slate-950 underline-offset-4 group-hover:underline">
+                      {task.createdByName || tr(language, "موظف", "Employee")}
+                    </div>
+                    <div className="mt-1 text-xs font-medium text-slate-500">
+                      {task.taskDate || tr(language, "بدون تاريخ", "No date")}
+                    </div>
                   </div>
-                  <div className="mt-1 text-xs text-slate-500">{task.taskDate || "بدون تاريخ"}</div>
+                  <div className="flex items-center gap-1.5">
+                    {isSelected ? (
+                      <Badge className="rounded-full bg-slate-950 text-white hover:bg-slate-950">
+                        {tr(language, "مفتوحة", "Open")}
+                      </Badge>
+                    ) : null}
+                    <Badge
+                      className={
+                        task.status === "sent"
+                          ? "rounded-full bg-emerald-100 text-emerald-700 hover:bg-emerald-100"
+                          : "rounded-full bg-amber-100 text-amber-700 hover:bg-amber-100"
+                      }
+                    >
+                      {task.status === "sent" ? tr(language, "مرسلة", "Sent") : tr(language, "مسودة", "Draft")}
+                    </Badge>
+                  </div>
                 </div>
-                <Badge
-                  className={
-                    task.status === "sent"
-                      ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-100"
-                      : "bg-amber-100 text-amber-700 hover:bg-amber-100"
-                  }
-                >
-                  {task.status === "sent" ? "مرسلة" : "مسودة"}
-                </Badge>
-              </div>
-              <p className="mt-3 line-clamp-2 text-xs leading-6 text-slate-500">
-                {task.message || "بدون رسالة"}
-              </p>
-              {task.attachment ? (
-                <span className="mt-3 inline-flex items-center gap-1 rounded-full bg-slate-50 px-2.5 py-1 text-xs text-slate-600">
-                  <ImageIcon className="h-3.5 w-3.5" />
-                  صورة مرفقة
-                </span>
-              ) : null}
-            </button>
-          ))
+
+                <p className="mt-3 line-clamp-2 text-xs leading-6 text-slate-600">
+                  {task.message || tr(language, "بدون رسالة", "No message")}
+                </p>
+
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
+                  {task.attachment ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-600 ring-1 ring-slate-200">
+                      <ImageIcon className="h-3.5 w-3.5" />
+                      {tr(language, "صورة مرفقة", "Image attached")}
+                    </span>
+                  ) : (
+                    <span />
+                  )}
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 ring-1 ring-slate-200 transition group-hover:bg-slate-950 group-hover:text-white group-hover:ring-slate-950">
+                    <Eye className="h-3.5 w-3.5" />
+                    {isSelected
+                      ? tr(language, "مفتوحة الآن", "Opened")
+                      : tr(language, "فتح", "Open")}
+                  </span>
+                </div>
+              </button>
+            );
+          })
         ) : (
           <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm leading-7 text-slate-500">
             {emptyText}
@@ -645,12 +695,12 @@ export function DailyTaskTab({
     const activeTask = managerActiveTask;
 
     return (
-      <div className="space-y-6" dir="rtl">
+      <div className="space-y-6" dir={dir}>
         <div className="grid gap-4 md:grid-cols-3">
           <div className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-sm text-slate-500">إجمالي المهام المستلمة</p>
+                <p className="text-sm text-slate-500">{tr(language, "إجمالي المهام المستلمة", "Total Received Tasks")}</p>
                 <p className="mt-3 text-3xl font-semibold text-slate-950">
                   {sentReceivedTasks.length}
                 </p>
@@ -663,7 +713,7 @@ export function DailyTaskTab({
           <div className="rounded-[24px] border border-amber-200 bg-amber-50/60 p-5 shadow-sm">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-sm text-amber-700">بانتظار ملاحظتك</p>
+                <p className="text-sm text-amber-700">{tr(language, "بانتظار ملاحظتك", "Awaiting Your Note")}</p>
                 <p className="mt-3 text-3xl font-semibold text-slate-950">
                   {managerPendingTasks.length}
                 </p>
@@ -676,7 +726,7 @@ export function DailyTaskTab({
           <div className="rounded-[24px] border border-emerald-200 bg-emerald-50/70 p-5 shadow-sm">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-sm text-emerald-700">تمت مراجعتها</p>
+                <p className="text-sm text-emerald-700">{tr(language, "تمت مراجعتها", "Reviewed")}</p>
                 <p className="mt-3 text-3xl font-semibold text-slate-950">
                   {managerReviewedTasks.length}
                 </p>
@@ -696,13 +746,13 @@ export function DailyTaskTab({
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <Badge className="rounded-full bg-[#F2B705] text-slate-950 hover:bg-[#F2B705]">
-                        مهمة يومية مرسلة
+                        {tr(language, "مهمة يومية مرسلة", "Submitted Daily Task")}
                       </Badge>
                       <h2 className="mt-4 text-3xl font-semibold">
-                        {activeTask.createdByName || "موظف"}
+                        {activeTask.createdByName || tr(language, "موظف", "Employee")}
                       </h2>
                       <p className="mt-2 text-sm text-slate-300">
-                        {activeTask.jobTitle || "بدون مسمى"} - {activeTask.taskDate || "بدون تاريخ"}
+                        {activeTask.jobTitle || tr(language, "بدون مسمى", "No title")} - {activeTask.taskDate || tr(language, "بدون تاريخ", "No date")}
                       </p>
                     </div>
                     {activeTask.attachment ? (
@@ -713,7 +763,7 @@ export function DailyTaskTab({
                         className="inline-flex h-10 items-center gap-2 rounded-full bg-white px-4 text-sm font-semibold text-slate-950 hover:bg-slate-100"
                       >
                         <Eye className="h-4 w-4" />
-                        عرض الصورة
+                        {tr(language, "عرض الصورة", "View Image")}
                       </a>
                     ) : null}
                   </div>
@@ -722,32 +772,32 @@ export function DailyTaskTab({
                 <div className="space-y-5 bg-slate-50/40 p-5 md:p-6">
                   <div className="grid overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm md:grid-cols-3">
                     <div className="border-b border-slate-200 p-4 md:border-b-0 md:border-l">
-                      <span className="mb-2 block text-sm font-semibold text-slate-500">الموظف</span>
+                      <span className="mb-2 block text-sm font-semibold text-slate-500">{tr(language, "الموظف", "Employee")}</span>
                       <p className="font-semibold text-slate-950">{activeTask.createdByName || "-"}</p>
                     </div>
                     <div className="border-b border-slate-200 p-4 md:border-b-0 md:border-l">
-                      <span className="mb-2 block text-sm font-semibold text-slate-500">المسمى الوظيفي</span>
+                      <span className="mb-2 block text-sm font-semibold text-slate-500">{tr(language, "المسمى الوظيفي", "Job Title")}</span>
                       <p className="font-semibold text-slate-950">{activeTask.jobTitle || "-"}</p>
                     </div>
                     <div className="p-4">
-                      <span className="mb-2 block text-sm font-semibold text-slate-500">التاريخ</span>
+                      <span className="mb-2 block text-sm font-semibold text-slate-500">{tr(language, "التاريخ", "Date")}</span>
                       <p className="font-semibold text-slate-950">{activeTask.taskDate || "-"}</p>
                     </div>
                   </div>
 
                   <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                     <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-950">
-                      التحديث اليومي
+                      {tr(language, "التحديث اليومي", "Daily Update")}
                     </div>
-                    <p className="min-h-[160px] whitespace-pre-wrap px-4 py-4 text-right text-sm leading-8 text-slate-700">
-                      {activeTask.message || "لا توجد رسالة."}
+                    <p className="min-h-[160px] whitespace-pre-wrap px-4 py-4 text-start text-sm leading-8 text-slate-700">
+                      {activeTask.message || tr(language, "لا توجد رسالة.", "No message.")}
                     </p>
                   </div>
 
                   {activeTask.attachment ? (
                     <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                       <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-950">
-                        الصورة المرفقة
+                        {tr(language, "الصورة المرفقة", "Attached Image")}
                       </div>
                       <a href={activeTask.attachment.fileUrl} target="_blank" rel="noreferrer">
                         <img
@@ -761,7 +811,7 @@ export function DailyTaskTab({
 
                   <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                     <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3">
-                      <span className="text-sm font-semibold text-slate-950">ملاحظة المدير</span>
+                      <span className="text-sm font-semibold text-slate-950">{tr(language, "ملاحظة المدير", "Manager Note")}</span>
                       <MessageSquare className="h-4 w-4 text-slate-500" />
                     </div>
                     <div className="p-4">
@@ -770,8 +820,9 @@ export function DailyTaskTab({
                         onChange={event =>
                           setForm(current => ({ ...current, managerNotes: event.target.value }))
                         }
-                        className="min-h-[150px] resize-y rounded-2xl border-slate-200 bg-slate-50/70 text-right leading-8"
-                        placeholder="اكتب ملاحظة قصيرة على المهمة اليومية..."
+                        className="min-h-[150px] resize-y rounded-2xl border-slate-200 bg-slate-50/70 text-start leading-8"
+                        placeholder={tr(language, "اكتب ملاحظة قصيرة على المهمة اليومية...", "Write a short note on the daily task...")}
+                        dir={dir}
                       />
                       <div className="mt-4 flex justify-end">
                         <Button
@@ -781,7 +832,9 @@ export function DailyTaskTab({
                           onClick={() => void saveManagerNotes()}
                         >
                           <Save className="h-4 w-4" />
-                          {savingManagerNotes ? "جاري الحفظ..." : "حفظ ملاحظة المدير"}
+                          {savingManagerNotes
+                            ? tr(language, "جاري الحفظ...", "Saving...")
+                            : tr(language, "حفظ ملاحظة المدير", "Save Manager Note")}
                         </Button>
                       </div>
                     </div>
@@ -794,9 +847,9 @@ export function DailyTaskTab({
                   <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-950 text-[#F2B705]">
                     <MessageSquare className="h-6 w-6" />
                   </div>
-                  <h3 className="text-lg font-semibold text-slate-950">لا توجد مهام يومية مرسلة حاليًا</h3>
+                  <h3 className="text-lg font-semibold text-slate-950">{tr(language, "لا توجد مهام يومية مرسلة حاليًا", "No submitted daily tasks yet")}</h3>
                   <p className="mt-2 text-sm leading-7 text-slate-500">
-                    عند إرسال الموظفين تحديثاتهم اليومية ستظهر هنا للاستلام والمراجعة.
+                    {tr(language, "عند إرسال الموظفين تحديثاتهم اليومية ستظهر هنا للاستلام والمراجعة.", "When employees submit daily updates, they will appear here for review.")}
                   </p>
                 </div>
               </div>
@@ -805,16 +858,16 @@ export function DailyTaskTab({
 
           <aside className="space-y-4 xl:col-start-1 xl:row-start-1 xl:sticky xl:top-24 xl:self-start">
             {renderTaskList(
-              "مهام تحتاج ملاحظة",
+              tr(language, "مهام تحتاج ملاحظة", "Tasks Needing Notes"),
               managerPendingTasks,
               loadingReceived,
-              "لا توجد مهام يومية بانتظار الملاحظة."
+              tr(language, "لا توجد مهام يومية بانتظار الملاحظة.", "No daily tasks are waiting for a note.")
             )}
             {renderTaskList(
-              "مهام تمت مراجعتها",
+              tr(language, "مهام تمت مراجعتها", "Reviewed Tasks"),
               managerReviewedTasks,
               loadingReceived,
-              "لم تتم مراجعة أي مهمة يومية بعد."
+              tr(language, "لم تتم مراجعة أي مهمة يومية بعد.", "No daily tasks have been reviewed yet.")
             )}
           </aside>
         </div>
@@ -823,15 +876,17 @@ export function DailyTaskTab({
   }
 
   return (
-    <div className="grid gap-5 xl:grid-cols-[320px_minmax(0,1fr)]" dir="rtl">
+    <div className="grid gap-5 xl:grid-cols-[320px_minmax(0,1fr)]" dir={dir}>
       {cameraOpen ? (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/85 p-4">
           <div className="w-full max-w-lg overflow-hidden rounded-[24px] border border-white/10 bg-slate-950 text-white shadow-2xl">
             <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
               <div>
-                <h3 className="text-base font-semibold">تصوير مباشر</h3>
+                <h3 className="text-base font-semibold">
+                  {tr(language, "تصوير مباشر", "Live Camera")}
+                </h3>
                 <p className="mt-1 text-xs text-slate-300">
-                  التقط الصورة من داخل التطبيق بدون الخروج من الصفحة.
+                  {tr(language, "التقط الصورة من داخل التطبيق بدون الخروج من الصفحة.", "Capture a photo inside the app without leaving the page.")}
                 </p>
               </div>
               <Button
@@ -857,7 +912,7 @@ export function DailyTaskTab({
 
             {cameraStarting || cameraError ? (
               <div className="px-4 pt-3 text-center text-sm text-slate-200">
-                {cameraStarting ? "جاري تشغيل الكاميرا..." : cameraError}
+                {cameraStarting ? tr(language, "جاري تشغيل الكاميرا...", "Starting camera...") : cameraError}
               </div>
             ) : null}
 
@@ -868,7 +923,7 @@ export function DailyTaskTab({
                 className="rounded-full border-white/20 bg-white/10 px-5 text-white hover:bg-white/20 hover:text-white"
                 onClick={closeCameraCapture}
               >
-                إلغاء
+                {tr(language, "إلغاء", "Cancel")}
               </Button>
               <Button
                 type="button"
@@ -877,7 +932,7 @@ export function DailyTaskTab({
                 onClick={captureCameraPhoto}
               >
                 <Camera className="h-4 w-4" />
-                التقاط الصورة
+                {tr(language, "التقاط الصورة", "Capture Photo")}
               </Button>
             </div>
           </div>
@@ -891,89 +946,99 @@ export function DailyTaskTab({
           onClick={resetForm}
         >
           <Plus className="h-4 w-4" />
-          مهمة يومية جديدة
+          {tr(language, "مهمة يومية جديدة", "New Daily Task")}
         </Button>
 
         {canReviewDailyTasks
           ? renderTaskList(
-              "المهام اليومية المستلمة",
+              tr(language, "المهام اليومية المستلمة", "Received Daily Tasks"),
               sentReceivedTasks,
               loadingReceived,
-              "لا توجد مهام يومية مرسلة حاليًا."
+              tr(language, "لا توجد مهام يومية مرسلة حاليًا.", "No submitted daily tasks yet.")
             )
           : null}
 
         {renderTaskList(
-          "سجل مهامي اليومية",
+          tr(language, "سجل مهامي اليومية", "My Daily Task Log"),
           visibleOwnTasks,
           loadingOwn,
-          "لم يتم حفظ أي مهمة يومية بعد."
+          tr(language, "لم يتم حفظ أي مهمة يومية بعد.", "No daily task has been saved yet.")
         )}
       </aside>
 
-      <section className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-xl shadow-slate-200/60">
+      <section
+        ref={formSectionRef}
+        data-open-target="true"
+        className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-xl shadow-slate-200/60"
+      >
         <div className="border-b border-slate-200 bg-gradient-to-l from-slate-950 via-slate-900 to-slate-800 px-5 py-5 text-center">
           <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/10 text-[#F2B705]">
             <MessageSquare className="h-6 w-6" />
           </div>
-          <h2 className="text-2xl font-bold text-white">مهمة يومية</h2>
+          <h2 className="text-2xl font-bold text-white">
+            {tr(language, "مهمة يومية", "Daily Task")}
+          </h2>
           <p className="mt-2 text-sm text-slate-300">
-            رسالة بسيطة عن عمل اليوم، مع صورة عند الحاجة.
+            {tr(language, "رسالة بسيطة عن عمل اليوم، مع صورة عند الحاجة.", "A simple update about today's work, with an optional image.")}
           </p>
         </div>
 
         <div className="space-y-5 bg-slate-50/40 p-5 md:p-6">
           <div className="grid overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm md:grid-cols-3">
             <label className="border-b border-slate-200 p-4 md:border-b-0 md:border-l">
-              <span className="mb-2 block text-sm font-semibold text-slate-900">اسم الموظف</span>
+              <span className="mb-2 block text-sm font-semibold text-slate-900">{tr(language, "اسم الموظف", "Employee Name")}</span>
               <Input
                 value={form.createdByName}
                 onChange={event => setForm(current => ({ ...current, createdByName: event.target.value }))}
                 disabled={isReadOnly}
-                className="h-11 rounded-xl border-slate-200 bg-slate-50/80 text-right"
+                className="h-11 rounded-xl border-slate-200 bg-slate-50/80 text-start"
+                dir={dir}
               />
             </label>
             <label className="border-b border-slate-200 p-4 md:border-b-0 md:border-l">
-              <span className="mb-2 block text-sm font-semibold text-slate-900">المسمى الوظيفي</span>
+              <span className="mb-2 block text-sm font-semibold text-slate-900">{tr(language, "المسمى الوظيفي", "Job Title")}</span>
               <Input
                 value={form.jobTitle}
                 onChange={event => setForm(current => ({ ...current, jobTitle: event.target.value }))}
                 disabled={isReadOnly}
-                className="h-11 rounded-xl border-slate-200 bg-slate-50/80 text-right"
+                className="h-11 rounded-xl border-slate-200 bg-slate-50/80 text-start"
+                dir={dir}
               />
             </label>
             <label className="p-4">
-              <span className="mb-2 block text-sm font-semibold text-slate-900">تاريخ اليوم</span>
+              <span className="mb-2 block text-sm font-semibold text-slate-900">{tr(language, "تاريخ اليوم", "Today's Date")}</span>
               <Input
                 type="date"
                 value={form.taskDate}
                 onChange={event => setForm(current => ({ ...current, taskDate: event.target.value }))}
                 disabled={isReadOnly}
-                className="h-11 rounded-xl border-slate-200 bg-slate-50/80 text-right"
+                className="h-11 rounded-xl border-slate-200 bg-slate-50/80 text-start"
+                dir={dir}
               />
             </label>
           </div>
 
           <label className="block overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <span className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-950">
-              وش المهمة أو التحديث اليومي؟
+              {tr(language, "وش المهمة أو التحديث اليومي؟", "What is the daily task or update?")}
               <MessageSquare className="h-4 w-4 text-slate-500" />
             </span>
             <Textarea
               value={form.message}
               onChange={event => setForm(current => ({ ...current, message: event.target.value }))}
               disabled={isReadOnly}
-              placeholder="اكتب رسالة قصيرة عن المهمة اليومية أو الشيء اللي تم إنجازه..."
-              className="min-h-[180px] resize-y rounded-none border-0 bg-white text-right leading-8 focus-visible:ring-0"
+              placeholder={tr(language, "اكتب رسالة قصيرة عن المهمة اليومية أو الشيء اللي تم إنجازه...", "Write a short update about the daily task or what was completed...")}
+              className="min-h-[180px] resize-y rounded-none border-0 bg-white text-start leading-8 focus-visible:ring-0"
+              dir={dir}
             />
           </label>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h3 className="text-sm font-semibold text-slate-950">صورة اختيارية</h3>
+                <h3 className="text-sm font-semibold text-slate-950">{tr(language, "صورة اختيارية", "Optional Image")}</h3>
                 <p className="mt-1 text-xs leading-6 text-slate-500">
-                  استخدم الكاميرا مباشرة أو اختر صورة من الجوال عند الحاجة.
+                  {tr(language, "استخدم الكاميرا مباشرة أو اختر صورة من الجوال عند الحاجة.", "Use the camera directly or choose an image from your device if needed.")}
                 </p>
               </div>
               {!isReadOnly ? (
@@ -992,7 +1057,7 @@ export function DailyTaskTab({
                     onClick={openCameraCapture}
                   >
                     <Camera className="h-4 w-4" />
-                    تصوير
+                    {tr(language, "تصوير", "Camera")}
                   </Button>
                   <Button
                     type="button"
@@ -1001,7 +1066,7 @@ export function DailyTaskTab({
                     onClick={() => fileInputRef.current?.click()}
                   >
                     <ImageIcon className="h-4 w-4" />
-                    اختيار صورة
+                    {tr(language, "اختيار صورة", "Choose Image")}
                   </Button>
                 </div>
               ) : null}
@@ -1011,7 +1076,7 @@ export function DailyTaskTab({
               <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-slate-800">
                 <span>{form.pendingFile.name}</span>
                 <Badge className="rounded-full bg-white text-slate-700 hover:bg-white">
-                  جاهزة للرفع
+                  {tr(language, "جاهزة للرفع", "Ready to Upload")}
                 </Badge>
               </div>
             ) : form.attachment ? (
@@ -1032,7 +1097,7 @@ export function DailyTaskTab({
                     className="inline-flex h-9 items-center gap-2 rounded-full border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
                   >
                     <Eye className="h-4 w-4" />
-                    عرض الصورة
+                    {tr(language, "عرض الصورة", "View Image")}
                   </a>
                 </div>
               </div>
@@ -1042,7 +1107,7 @@ export function DailyTaskTab({
           {selectedTask?.status === "sent" || canWriteManagerNotes ? (
             <label className="block overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
               <span className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-950">
-                ملاحظة المدير
+                {tr(language, "ملاحظة المدير", "Manager Note")}
                 <CheckCircle2 className="h-4 w-4 text-slate-500" />
               </span>
               <Textarea
@@ -1051,10 +1116,11 @@ export function DailyTaskTab({
                 disabled={!canEditManagerNotes}
                 placeholder={
                   canWriteManagerNotes
-                    ? "اكتب ملاحظة قصيرة على المهمة اليومية..."
-                    : "تظهر هنا ملاحظة المدير عند إضافتها."
+                    ? tr(language, "اكتب ملاحظة قصيرة على المهمة اليومية...", "Write a short note on the daily task...")
+                    : tr(language, "تظهر هنا ملاحظة المدير عند إضافتها.", "The manager note will appear here once added.")
                 }
-                className="min-h-[120px] resize-y rounded-none border-0 bg-white text-right leading-8 focus-visible:ring-0"
+                className="min-h-[120px] resize-y rounded-none border-0 bg-white text-start leading-8 focus-visible:ring-0"
+                dir={dir}
               />
             </label>
           ) : null}
@@ -1062,7 +1128,7 @@ export function DailyTaskTab({
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
             <div className="flex items-center gap-2 rounded-full bg-slate-50 px-3 py-2 text-sm text-slate-600">
               <Clock3 className="h-4 w-4" />
-              المستلم: {WEEKLY_REPORT_RECEIVER.displayName}
+              {tr(language, "المستلم:", "Recipient:")} {WEEKLY_REPORT_RECEIVER.displayName}
             </div>
             <div className="flex flex-wrap justify-end gap-2">
               {canEditManagerNotes ? (
@@ -1073,7 +1139,9 @@ export function DailyTaskTab({
                   onClick={() => void saveManagerNotes()}
                 >
                   <Save className="h-4 w-4" />
-                  {savingManagerNotes ? "جاري الحفظ..." : "حفظ ملاحظة المدير"}
+                  {savingManagerNotes
+                    ? tr(language, "جاري الحفظ...", "Saving...")
+                    : tr(language, "حفظ ملاحظة المدير", "Save Manager Note")}
                 </Button>
               ) : null}
 
@@ -1087,7 +1155,7 @@ export function DailyTaskTab({
                     onClick={() => void saveTask("draft")}
                   >
                     <Save className="h-4 w-4" />
-                    حفظ مسودة
+                    {tr(language, "حفظ مسودة", "Save Draft")}
                   </Button>
                   <Button
                     type="button"
@@ -1096,7 +1164,7 @@ export function DailyTaskTab({
                     onClick={() => void saveTask("sent")}
                   >
                     <Send className="h-4 w-4" />
-                    إرسال المهمة
+                    {tr(language, "إرسال المهمة", "Send Task")}
                   </Button>
                 </>
               ) : null}

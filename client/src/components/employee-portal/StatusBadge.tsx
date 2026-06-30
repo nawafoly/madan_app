@@ -1,4 +1,6 @@
 import { cn } from "@/lib/utils";
+import type { Language } from "@/contexts/LanguageContext";
+import { tr } from "@/lib/i18n";
 
 export type EmployeePortalStatusTone =
   | "pending"
@@ -12,6 +14,7 @@ type StatusBadgeProps = {
   status?: unknown;
   label?: string;
   className?: string;
+  language?: Language;
 };
 
 function normalizeStatus(value: unknown): EmployeePortalStatusTone {
@@ -38,20 +41,20 @@ function normalizeStatus(value: unknown): EmployeePortalStatusTone {
   return "neutral";
 }
 
-function getDefaultStatusLabel(tone: EmployeePortalStatusTone) {
+function getDefaultStatusLabel(tone: EmployeePortalStatusTone, language: Language) {
   switch (tone) {
     case "pending":
-      return "قيد المراجعة";
+      return tr(language, "قيد المراجعة", "Under Review");
     case "approved":
-      return "مقبول";
+      return tr(language, "مقبول", "Approved");
     case "rejected":
-      return "مرفوض";
+      return tr(language, "مرفوض", "Rejected");
     case "active":
-      return "فعال";
+      return tr(language, "فعال", "Active");
     case "inactive":
-      return "غير فعال";
+      return tr(language, "غير فعال", "Inactive");
     default:
-      return "غير محدد";
+      return tr(language, "غير محدد", "Not Set");
   }
 }
 
@@ -59,6 +62,7 @@ export default function StatusBadge({
   status,
   label,
   className,
+  language = "ar",
 }: StatusBadgeProps) {
   const tone = normalizeStatus(status);
 
@@ -75,7 +79,7 @@ export default function StatusBadge({
         className
       )}
     >
-      {label || getDefaultStatusLabel(tone)}
+      {label || getDefaultStatusLabel(tone, language)}
     </span>
   );
 }

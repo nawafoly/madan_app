@@ -16,13 +16,13 @@ import {
   UserRound,
   Users,
 } from "lucide-react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import {
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signOut,
 } from "firebase/auth";
-import { collection, onSnapshot, query, where } from "firebase/firestore";
+import { collection, doc, getDoc, onSnapshot, query, where } from "firebase/firestore";
 
 import { auth, db } from "@/_core/firebase";
 import {
@@ -38,6 +38,7 @@ import { HrBrandMark } from "@/components/HrBrandMark";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { resolveEmployeeAvatarUrl } from "@/lib/defaultEmployeeAvatars";
+import { normalizeAdminUsername } from "@/lib/adminUsername";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { languageDir, tr } from "@/lib/i18n";
 import { WEEKLY_REPORT_MANAGER_NOTES_PERMISSION } from "@/lib/weeklyReportConfig";
@@ -66,6 +67,19 @@ function PortalAlert({
 
 function normalizeEmail(value: string) {
   return value.trim().toLowerCase();
+}
+
+async function resolveStaffLoginEmail(value: string) {
+  const normalized = normalizeEmail(value);
+  if (!normalized || normalized.includes("@")) return normalized;
+
+  const username = normalizeAdminUsername(normalized);
+  if (!username) return normalized;
+
+  const usernameSnap = await getDoc(doc(db, "admin_usernames", username));
+  if (!usernameSnap.exists()) return normalized;
+
+  return normalizeEmail(usernameSnap.data()?.email || normalized);
 }
 
 type PortalNotificationCounts = {
@@ -164,6 +178,7 @@ function friendlyAuthError(code: string | undefined, language: "ar" | "en") {
 export default function StaffPortalPage() {
   const { language, toggleLanguage } = useLanguage();
   const { user, loading } = useAuth();
+  const [location, setLocation] = useLocation();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -185,6 +200,12 @@ export default function StaffPortalPage() {
   const canWriteWeeklyReportNotes =
     !!user &&
     hasStaffAreaPermission(user, WEEKLY_REPORT_MANAGER_NOTES_PERMISSION);
+
+  useEffect(() => {
+    if (loading || !hasInternalAccess) return;
+    if (location !== "/hr") return;
+    setLocation(homePath);
+  }, [hasInternalAccess, homePath, loading, location, setLocation]);
 
   useEffect(() => {
     if (!user?.uid) {
@@ -485,11 +506,17 @@ export default function StaffPortalPage() {
     setError(null);
     setInfo(null);
 
-    const normalizedEmail = normalizeEmail(email);
+    const normalizedEmail = await resolveStaffLoginEmail(email);
 
     if (!normalizedEmail) {
       setBusy(false);
-      setError(tr(language, "اكتب البريد الإلكتروني.", "Enter your email."));
+      setError(
+        tr(
+          language,
+          "اكتب اسم المستخدم أو البريد الإلكتروني.",
+          "Enter your username or email."
+        )
+      );
       return;
     }
 
@@ -511,13 +538,13 @@ export default function StaffPortalPage() {
   const handleForgotPassword = async () => {
     if (!firebaseConfigured || busy) return;
 
-    const normalizedEmail = normalizeEmail(email);
+    const normalizedEmail = await resolveStaffLoginEmail(email);
     if (!normalizedEmail) {
       setError(
         tr(
           language,
-          "اكتب بريدك الإلكتروني أولًا لاستعادة كلمة المرور.",
-          "Enter your email first to reset your password."
+          "اكتب اسم المستخدم أو البريد الإلكتروني أولًا لاستعادة كلمة المرور.",
+          "Enter your username or email first to reset your password."
         )
       );
       return;
@@ -950,14 +977,14 @@ export default function StaffPortalPage() {
                   >
                     <div className="space-y-2">
                       <label className="text-sm font-semibold text-slate-700">
-                        {tr(language, "البريد الإلكتروني", "Email")}
+                        {tr(language, "اسم المستخدم أو البريد الإلكتروني", "Username or Email")}
                       </label>
                       <Input
                         value={email}
                         onChange={event => setEmail(event.target.value)}
                         placeholder="employee@maedin.com"
-                        inputMode="email"
-                        autoComplete="email"
+                        inputMode="text"
+                        autoComplete="username"
                         dir="ltr"
                         disabled={busy}
                         className="h-12 rounded-2xl border-slate-200 bg-slate-50 px-4 text-base shadow-none"

@@ -2029,6 +2029,15 @@ service cloud.firestore {
       allow delete: if canWriteAdminUserData(resource.data);
     }
 
+    match /admin_usernames/{username} {
+      allow get: if true;
+      allow list: if false;
+      allow create: if canWriteAdminUserData(request.resource.data);
+      allow update: if canWriteAdminUserData(resource.data)
+        && canWriteAdminUserData(request.resource.data);
+      allow delete: if canWriteAdminUserData(resource.data);
+    }
+
     match /role_invites/{docId} {
       allow read: if canAccessRoleInviteData(resource.data);
       allow create: if canAccessRoleInviteData(request.resource.data);

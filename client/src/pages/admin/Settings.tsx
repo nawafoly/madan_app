@@ -153,6 +153,10 @@ import {
   type EmployeeDirectorySyncResult,
 } from "@/lib/employeeDirectoryWorker";
 import {
+  isValidAdminUsername,
+  normalizeAdminUsername,
+} from "@/lib/adminUsername";
+import {
   generateBusinessExcelExport,
   type BusinessExcelExportSummary,
 } from "@/lib/businessExcelExport";
@@ -300,6 +304,7 @@ type AdminUserDoc = {
   id: string;
   displayName: string;
   email: string;
+  username?: string;
   roleKey: string;
   title?: string;
   active?: boolean;
@@ -1072,6 +1077,7 @@ function normalizeAdminDirectoryRow(
   }
 
   const email = normalizeAdminDirectoryText(raw.email, id).toLowerCase();
+  const username = normalizeAdminUsername(raw.username);
   const displayName =
     normalizeAdminDirectoryText(raw.displayName, raw.name, raw.fullName, email) ||
     id;
@@ -1098,6 +1104,7 @@ function normalizeAdminDirectoryRow(
         : area === "staff",
     displayName,
     email,
+    username,
     roleKey,
     title:
       normalizeAdminDirectoryText(
@@ -1361,11 +1368,13 @@ export default function Settings({
   // Admin user dialog
   const [isAdminDialogOpen, setIsAdminDialogOpen] = useState(false);
   const [editingAdminId, setEditingAdminId] = useState<string | null>(null);
+  const [editingAdminUsername, setEditingAdminUsername] = useState<string>("");
   const [adminEmployeeLinkMode, setAdminEmployeeLinkMode] =
     useState<EmployeeLinkMode>("create");
   const [adminForm, setAdminForm] = useState<Omit<AdminUserDoc, "id">>({
     displayName: "",
     email: "",
+    username: "",
     roleKey: "admin",
     title: "",
     isActive: true,
@@ -1679,6 +1688,7 @@ export default function Settings({
         const searchableText = [
           row.user.displayName,
           row.user.email,
+          row.user.username,
           row.user.id,
           row.user.title,
           row.roleLabel,
@@ -2858,6 +2868,7 @@ export default function Settings({
   const buildAdminUserPayload = ({
     displayName,
     email,
+    username,
     roleKey,
     title,
     isActive,
@@ -2870,6 +2881,7 @@ export default function Settings({
   }: {
     displayName: string;
     email: string;
+    username: string;
     roleKey: AdminRoleKey;
     title: string;
     isActive: boolean;
@@ -2882,6 +2894,7 @@ export default function Settings({
   }) => ({
     displayName,
     email,
+    username,
     roleKey,
     title: title || "",
     active: isActive,
@@ -2897,6 +2910,7 @@ export default function Settings({
   const buildUserSyncPayload = ({
     displayName,
     email,
+    username,
     roleKey,
     title,
     isActive,
@@ -2908,6 +2922,7 @@ export default function Settings({
   }: {
     displayName: string;
     email: string;
+    username: string;
     roleKey: AdminRoleKey;
     title: string;
     isActive: boolean;
@@ -2918,6 +2933,7 @@ export default function Settings({
     permissionsDeny: Permission[];
   }) => ({
     email,
+    username,
     role: roleKey,
     displayName: displayName || null,
     name: displayName || null,
@@ -2965,12 +2981,14 @@ export default function Settings({
 
   const openCreateAdmin = () => {
     setEditingAdminId(null);
+    setEditingAdminUsername("");
     setAdminEmployeeLinkMode("create");
     const isStaffSettings = area === "staff";
     setAdminForm({
       includeInEmployeeManagement: isStaffSettings,
       displayName: "",
       email: "",
+      username: "",
       roleKey: isStaffSettings ? "staff" : "admin",
       title: "",
       isActive: true,
@@ -2986,6 +3004,7 @@ export default function Settings({
 
   const openEditAdmin = (u: AdminUserDoc) => {
     setEditingAdminId((u.email || "").trim().toLowerCase());
+    setEditingAdminUsername(normalizeAdminUsername(u.username));
     setAdminEmployeeLinkMode(
       String(u.linkedEmployeeId || "").trim() ? "existing" : "create"
     );
@@ -2993,6 +3012,7 @@ export default function Settings({
       includeInEmployeeManagement: !!u.includeInEmployeeManagement,
       displayName: String(u.displayName || "").trim(),
       email: u.email || "",
+      username: normalizeAdminUsername(u.username),
       roleKey: normalizeAdminRoleKey(u.roleKey),
       title: String(u.title || "").trim(),
       isActive: !!u.isActive,
@@ -3011,6 +3031,7 @@ export default function Settings({
     const displayName = String(adminForm.displayName || "").trim();
     const title = String(adminForm.title || "").trim();
     const email = adminForm.email.trim().toLowerCase();
+    const username = normalizeAdminUsername(adminForm.username);
     const employeeProfileEnabled = !!adminForm.employeeProfileEnabled;
     const includeInEmployeeManagement = !!adminForm.includeInEmployeeManagement;
     const requestedLinkedEmployeeId =
@@ -3021,6 +3042,12 @@ export default function Settings({
       !requestedLinkedEmployeeId;
 
     if (!displayName) return toast.error("اسم الحساب مطلوب");
+    if (!username) return toast.error("اسم المستخدم مطلوب");
+    if (!isValidAdminUsername(username)) {
+      return toast.error(
+        "اسم المستخدم يجب أن يكون 3 إلى 32 حرفًا بالإنجليزية أو أرقامًا أو نقاطًا أو شرطات."
+      );
+    }
     if (!email || !email.includes("@")) return toast.error("البريد غير صحيح");
     if (!roleKey) return toast.error("اختر الدور");
 
@@ -3054,6 +3081,15 @@ export default function Settings({
     }
 
     try {
+      const usernameSnap = await getDoc(doc(db, "admin_usernames", username));
+      if (
+        usernameSnap.exists() &&
+        String(usernameSnap.data()?.email || "").toLowerCase() !== email &&
+        String(usernameSnap.data()?.uid || "") !== adminForm.linkedUserUid
+      ) {
+        return toast.error("اسم المستخدم مستخدم مسبقًا. اختر اسمًا آخر.");
+      }
+
       // ✅ ALWAYS upsert by emailLower (docId = email)
       const linkedUserDocs = await resolveLinkedUserDocs(
         email,
@@ -3078,6 +3114,7 @@ export default function Settings({
           ...buildAdminUserPayload({
             displayName,
             email,
+            username,
             roleKey,
             title,
             isActive: adminForm.isActive,
@@ -3130,6 +3167,7 @@ export default function Settings({
             ...buildUserSyncPayload({
               displayName,
               email,
+              username,
               roleKey,
               title,
               isActive: adminForm.isActive,
@@ -3162,6 +3200,25 @@ export default function Settings({
           },
           ignoreFields: ["updatedAt"],
         });
+      }
+
+      await setDoc(
+        doc(db, "admin_usernames", username),
+        {
+          username,
+          email,
+          uid: linkedUserUid || null,
+          roleKey,
+          updatedAt: serverTimestamp(),
+          createdAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      if (editingAdminUsername && editingAdminUsername !== username) {
+        await deleteDoc(doc(db, "admin_usernames", editingAdminUsername)).catch(
+          () => undefined
+        );
       }
 
       if (editingAdminId && editingAdminId !== email) {
@@ -3208,6 +3265,7 @@ export default function Settings({
         data: {
           displayName: u.displayName || id,
           email: id,
+          username: normalizeAdminUsername(u.username),
           roleKey: normalizeAdminRoleKey(u.roleKey),
           title: u.title || "",
           active: nextIsActive,
@@ -3297,6 +3355,13 @@ export default function Settings({
           targetUserEmail: id,
         },
       });
+
+      const username = normalizeAdminUsername(u.username);
+      if (username) {
+        await deleteDoc(doc(db, "admin_usernames", username)).catch(
+          () => undefined
+        );
+      }
 
       for (const linkedUserDoc of linkedUserDocs) {
         await auditedSetDoc({
@@ -4851,6 +4916,14 @@ export default function Settings({
                                   >
                                     {u.email}
                                   </div>
+                                  {u.username ? (
+                                    <div
+                                      dir="ltr"
+                                      className="mt-1 break-all text-right text-xs font-medium text-slate-500"
+                                    >
+                                      @{u.username}
+                                    </div>
+                                  ) : null}
                                   <div
                                     dir="ltr"
                                     className="mt-1 break-all text-right text-xs text-slate-400"
@@ -5925,7 +5998,7 @@ export default function Settings({
                         بيانات الحساب
                       </h3>
                       <p className="mt-1 text-sm leading-6 text-slate-500">
-                        الاسم والبريد والدور هي البيانات الأساسية التي تظهر في الدليل وتحدد الوصول.
+                        الاسم واسم المستخدم والبريد والدور هي البيانات الأساسية التي تظهر في الدليل وتحدد الوصول.
                       </p>
                     </div>
                   </div>
@@ -5959,6 +6032,25 @@ export default function Settings({
                           setAdminForm(p => ({ ...p, email: e.target.value }))
                         }
                         placeholder="name@example.com"
+                        className="h-12 rounded-xl border-slate-200 bg-white text-left shadow-none"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="text-[13px] font-semibold text-slate-900">
+                        اسم المستخدم
+                      </Label>
+                      <Input
+                        dir="ltr"
+                        value={adminForm.username || ""}
+                        onChange={e =>
+                          setAdminForm(p => ({
+                            ...p,
+                            username: normalizeAdminUsername(e.target.value),
+                          }))
+                        }
+                        placeholder="username"
+                        autoComplete="username"
                         className="h-12 rounded-xl border-slate-200 bg-white text-left shadow-none"
                       />
                     </div>

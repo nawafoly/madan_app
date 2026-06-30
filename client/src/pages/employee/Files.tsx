@@ -65,6 +65,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { db } from "@/_core/firebase";
 import { useAuth } from "@/_core/hooks/useAuth";
+import { useLanguage } from "@/contexts/LanguageContext";
 import {
   fetchActiveEmployeeCoworkers,
   type EmployeeCoworkerOption,
@@ -84,6 +85,7 @@ import {
 } from "@/lib/employeeFiles";
 import { formatDateTimeEN, formatFileSizeEN } from "@/lib/formatters";
 import { createInAppNotification } from "@/lib/inAppNotifications";
+import { languageDir, tr } from "@/lib/i18n";
 import {
   initialsFromName,
   MessagesStat,
@@ -91,6 +93,7 @@ import {
 } from "@/pages/employee/messages/ConversationUi";
 import { cn } from "@/lib/utils";
 import { type EmployeeFileDoc } from "@shared/employee";
+import type { Language } from "@/contexts/LanguageContext";
 
 type FilesTabKey = "incoming" | "sent";
 
@@ -114,6 +117,52 @@ function getActionStatus(file: EmployeeFileRecord) {
   return file.createdAtDate || file.uploadedAtDate || file.readAtDate || null;
 }
 
+function formatFileDateTime(value: Date | null, language: Language) {
+  if (!value) return "";
+  if (language === "ar") return formatDateTimeEN(value);
+  return new Intl.DateTimeFormat("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(value);
+}
+
+function getFileTypeLabel(file: EmployeeFileRecord, language: Language) {
+  if (language === "ar") return file.fileTypeLabel;
+  const normalized = String(file.fileType || "general").toLowerCase();
+  const labels: Record<string, string> = {
+    general: "General",
+    contract: "Contract",
+    warning: "Warning",
+    letter: "Letter",
+    cv: "CV",
+    education_certificate: "Certificates",
+    approval: "Approval",
+  };
+  return labels[normalized] || normalized || "General";
+}
+
+function getFileStatusLabel(file: EmployeeFileRecord, language: Language) {
+  if (language === "ar") return file.statusLabel;
+  return file.active ? "Current Version" : "Replaced";
+}
+
+function getReadStatusLabel(file: EmployeeFileRecord, language: Language) {
+  if (language === "ar") {
+    return file.direction === "outgoing"
+      ? file.isRead
+        ? "تم فتحه"
+        : "لم يتم فتحه بعد"
+      : file.readStatusLabel;
+  }
+  if (file.direction === "outgoing") {
+    return file.isRead ? "Opened" : "Not Opened Yet";
+  }
+  return file.isRead ? "Read" : "New";
+}
+
 function FileMetaPill({ value }: { value: string }) {
   return (
     <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5">
@@ -124,22 +173,27 @@ function FileMetaPill({ value }: { value: string }) {
 
 function EmployeeFileCard({
   file,
+  language,
   opening,
   counterpartAvatarUrl,
   onOpen,
   onDownload,
 }: {
   file: EmployeeFileRecord;
+  language: Language;
   opening: boolean;
   counterpartAvatarUrl: string | null;
   onOpen: (file: EmployeeFileRecord) => Promise<void>;
   onDownload: (file: EmployeeFileRecord) => Promise<void>;
 }) {
   const actionDate = getActionStatus(file);
-  const counterpartLabel = file.direction === "outgoing" ? "المستلم" : "المرسل";
+  const counterpartLabel =
+    file.direction === "outgoing"
+      ? tr(language, "المستلم", "Recipient")
+      : tr(language, "المرسل", "Sender");
   const counterpartName =
     file.direction === "outgoing"
-      ? file.receiverName || file.receiverEmail || "موظف"
+      ? file.receiverName || file.receiverEmail || tr(language, "موظف", "Employee")
       : file.senderName || file.senderEmail || file.uploadedByName || "HR";
   const counterpartEmail =
     file.direction === "outgoing" ? file.receiverEmail : file.senderEmail;
@@ -160,7 +214,7 @@ function EmployeeFileCard({
                       : "border-slate-200 bg-slate-100 text-slate-700"
                   )}
                 >
-                  {file.statusLabel}
+                  {getFileStatusLabel(file, language)}
                 </Badge>
                 <Badge
                   variant="outline"
@@ -171,18 +225,14 @@ function EmployeeFileCard({
                       : "border-amber-200 bg-amber-50 text-amber-700"
                   )}
                 >
-                  {file.direction === "outgoing"
-                    ? file.isRead
-                      ? "تم فتحه"
-                      : "لم يتم فتحه بعد"
-                    : file.readStatusLabel}
+                  {getReadStatusLabel(file, language)}
                 </Badge>
                 {!file.isInternalTransfer ? (
                   <Badge
                     variant="outline"
                     className="rounded-full bg-slate-50 shadow-none"
                   >
-                    {file.fileTypeLabel}
+                    {getFileTypeLabel(file, language)}
                   </Badge>
                 ) : null}
                 {file.isInternalTransfer ? (
@@ -190,7 +240,7 @@ function EmployeeFileCard({
                     variant="outline"
                     className="rounded-full border-sky-200 bg-sky-50 text-sky-700 shadow-none"
                   >
-                    ملف داخلي
+                    {tr(language, "ملف داخلي", "Internal File")}
                   </Badge>
                 ) : null}
               </div>
@@ -199,8 +249,8 @@ function EmployeeFileCard({
                 <div className="text-lg font-semibold text-slate-950">{file.title}</div>
                 <div className="mt-1 text-sm text-slate-500">
                   {actionDate
-                    ? `تاريخ الإرسال: ${formatDateTimeEN(actionDate)}`
-                    : "تاريخ الإرسال غير متوفر"}
+                    ? `${tr(language, "تاريخ الإرسال:", "Sent:")} ${formatFileDateTime(actionDate, language)}`
+                    : tr(language, "تاريخ الإرسال غير متوفر", "Sent date unavailable")}
                 </div>
               </div>
 
@@ -211,12 +261,12 @@ function EmployeeFileCard({
                   </div>
                   <div className="mt-2 font-semibold text-slate-950">{counterpartName}</div>
                   <div className="mt-1 text-xs text-slate-500">
-                    {counterpartEmail || "البريد غير متوفر"}
+                    {counterpartEmail || tr(language, "البريد غير متوفر", "Email unavailable")}
                   </div>
                 </div>
 
                 <div className="rounded-[20px] border border-slate-200/80 bg-slate-50/80 p-4 text-sm leading-7 text-slate-700">
-                  {file.description || "لا يوجد وصف لهذا الملف."}
+                  {file.description || tr(language, "لا يوجد وصف لهذا الملف.", "No description for this file.")}
                 </div>
               </div>
 
@@ -224,7 +274,7 @@ function EmployeeFileCard({
                 <FileMetaPill value={file.fileName} />
                 <FileMetaPill value={formatFileSizeEN(file.fileSize ?? null)} />
                 <FileMetaPill
-                  value={file.mimeType || file.contentType || "بدون نوع"}
+                  value={file.mimeType || file.contentType || tr(language, "بدون نوع", "No type")}
                 />
               </div>
 
@@ -236,15 +286,17 @@ function EmployeeFileCard({
                   )}
                 >
                   {file.isRead && file.readAtDate
-                    ? `تم فتح الملف في ${formatDateTimeEN(file.readAtDate)}`
-                    : "لم يقم المستلم بفتح الملف بعد."}
+                    ? `${tr(language, "تم فتح الملف في", "Opened on")} ${formatFileDateTime(file.readAtDate, language)}`
+                    : tr(language, "لم يقم المستلم بفتح الملف بعد.", "The recipient has not opened the file yet.")}
                 </div>
               ) : file.isRead && file.readAtDate ? (
                 <div className="text-xs text-emerald-700">
-                  تمت القراءة في {formatDateTimeEN(file.readAtDate)}
+                  {tr(language, "تمت القراءة في", "Read on")} {formatFileDateTime(file.readAtDate, language)}
                 </div>
               ) : (
-                <div className="text-xs text-amber-700">لم يتم فتح الملف بعد.</div>
+                <div className="text-xs text-amber-700">
+                  {tr(language, "لم يتم فتح الملف بعد.", "File has not been opened yet.")}
+                </div>
               )}
             </div>
 
@@ -256,7 +308,7 @@ function EmployeeFileCard({
                 onClick={() => void onOpen(file)}
               >
                 <Eye className="ml-2 h-4 w-4" />
-                فتح الملف
+                {tr(language, "فتح الملف", "Open File")}
               </Button>
 
               {file.downloadUrl ? (
@@ -266,14 +318,16 @@ function EmployeeFileCard({
                   onClick={() => void onDownload(file)}
                 >
                   <Download className="ml-2 h-4 w-4" />
-                  تحميل
+                  {tr(language, "تحميل", "Download")}
                 </Button>
               ) : null}
             </div>
           </div>
 
           {opening ? (
-            <div className="px-2 pt-3 text-xs text-slate-500">جارٍ تنفيذ الطلب...</div>
+            <div className="px-2 pt-3 text-xs text-slate-500">
+              {tr(language, "جارٍ تنفيذ الطلب...", "Processing request...")}
+            </div>
           ) : null}
         </div>
 
@@ -294,6 +348,8 @@ function EmployeeFileCard({
 
 export default function EmployeeFilesPage() {
   const { user } = useAuth();
+  const { language } = useLanguage();
+  const dir = languageDir(language);
   const search = useSearch();
   const searchParams = useMemo(() => new URLSearchParams(search), [search]);
   const initialTab = searchParams.get("tab") === "sent" ? "sent" : "incoming";
@@ -474,8 +530,8 @@ export default function EmployeeFilesPage() {
     );
   }, [user]);
   const currentUserDisplayName = useMemo(
-    () => user?.displayName || user?.email || "أنت",
-    [user?.displayName, user?.email]
+    () => user?.displayName || user?.email || tr(language, "أنت", "You"),
+    [language, user?.displayName, user?.email]
   );
 
   const resetSendForm = () => {
@@ -703,23 +759,33 @@ export default function EmployeeFilesPage() {
 
   return (
     <EmployeeLayout
-      title="ملفاتي"
-      description="هنا تظهر الملفات الرسمية القديمة والملفات الداخلية بين الموظفين. يمكنك استقبال الملفات وإرسالها، ويفترض النظام حالة الفتح والقراءة تلقائيًا."
+      title={tr(language, "ملفاتي", "My Files")}
+      description={tr(
+        language,
+        "هنا تظهر الملفات الرسمية القديمة والملفات الداخلية بين الموظفين. يمكنك استقبال الملفات وإرسالها، ويفترض النظام حالة الفتح والقراءة تلقائيًا.",
+        "Official files and internal employee transfers appear here. You can receive and send files, with read and open status tracked automatically."
+      )}
     >
       <section className="space-y-6">
         <div className="grid gap-4 md:grid-cols-4">
-          <MessagesStat label="إجمالي الملفات الواردة" value={String(incomingFiles.length)} />
           <MessagesStat
-            label="ملفات جديدة غير مقروءة"
+            label={tr(language, "إجمالي الملفات الواردة", "Total Incoming Files")}
+            value={String(incomingFiles.length)}
+          />
+          <MessagesStat
+            label={tr(language, "ملفات جديدة غير مقروءة", "New Unread Files")}
             value={String(incomingUnreadCount)}
             tone="warning"
           />
           <MessagesStat
-            label="ملفات مقروءة"
+            label={tr(language, "ملفات مقروءة", "Read Files")}
             value={String(incomingReadCount)}
             tone="success"
           />
-          <MessagesStat label="الملفات المرسلة" value={String(sentFiles.length)} />
+          <MessagesStat
+            label={tr(language, "الملفات المرسلة", "Sent Files")}
+            value={String(sentFiles.length)}
+          />
         </div>
 
         <Card className="rounded-[28px] border-slate-200/80 bg-white/95 shadow-[0_28px_80px_-52px_rgba(15,23,42,0.28)]">
@@ -728,14 +794,18 @@ export default function EmployeeFilesPage() {
               <div className="space-y-3">
                 <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
                   <FileText className="h-4 w-4" />
-                  الملفات الداخلية
+                  {tr(language, "الملفات الداخلية", "Internal Files")}
                 </div>
                 <div>
                   <CardTitle className="text-xl font-semibold text-slate-950">
-                    الملفات الواردة والمرسلة
+                    {tr(language, "الملفات الواردة والمرسلة", "Incoming and Sent Files")}
                   </CardTitle>
                   <CardDescription className="mt-2 text-sm leading-7 text-slate-600">
-                    احتفظنا بعرض الملفات الرسمية كما هو، وأضاف النظام الآن طبقة إرسال داخلي بين الموظفين بنفس أسلوب الرسائل.
+                    {tr(
+                      language,
+                      "احتفظنا بعرض الملفات الرسمية كما هو، وأضاف النظام الآن طبقة إرسال داخلي بين الموظفين بنفس أسلوب الرسائل.",
+                      "Official files stay visible here, with an internal file-sending layer between employees."
+                    )}
                   </CardDescription>
                 </div>
               </div>
@@ -746,7 +816,7 @@ export default function EmployeeFilesPage() {
                 onClick={() => setSendDialogOpen(true)}
               >
                 <Send className="ml-2 h-4 w-4" />
-                إرسال ملف
+                {tr(language, "إرسال ملف", "Send File")}
               </Button>
             </div>
           </CardHeader>
@@ -754,14 +824,18 @@ export default function EmployeeFilesPage() {
           <CardContent className="space-y-5">
             {incomingArchivedCount > 0 ? (
               <div className="rounded-[20px] border border-slate-200/80 bg-slate-50/80 px-5 py-4 text-sm text-slate-600">
-                يتم عرض النسخة الحالية فقط لكل ملف. تم إخفاء {incomingArchivedCount} من النسخ المستبدلة من قائمة الوارد.
+                {tr(language, "يتم عرض النسخة الحالية فقط لكل ملف. تم إخفاء", "Only current versions are shown.")}
+                {" "}
+                {incomingArchivedCount}
+                {" "}
+                {tr(language, "من النسخ المستبدلة من قائمة الوارد.", "replaced versions are hidden from incoming files.")}
               </div>
             ) : null}
 
             <Tabs
               value={activeTab}
               onValueChange={value => setActiveTab(value as FilesTabKey)}
-              dir="rtl"
+              dir={dir}
               className="space-y-6"
             >
               <TabsList className="grid h-auto w-full grid-cols-1 gap-3 rounded-none bg-transparent p-0 md:grid-cols-2">
@@ -776,10 +850,10 @@ export default function EmployeeFilesPage() {
                       </span>
                       <span className="min-w-0 text-start">
                         <span className="block text-sm font-semibold text-slate-950">
-                          الملفات الواردة
+                          {tr(language, "الملفات الواردة", "Incoming Files")}
                         </span>
                         <span className="mt-1 block text-xs leading-5 text-slate-500">
-                          ملفات وصلت لك وتحتاج مراجعة
+                          {tr(language, "ملفات وصلت لك وتحتاج مراجعة", "Files received for your review")}
                         </span>
                       </span>
                     </span>
@@ -802,10 +876,10 @@ export default function EmployeeFilesPage() {
                       </span>
                       <span className="min-w-0 text-start">
                         <span className="block text-sm font-semibold text-slate-950">
-                          الملفات المرسلة
+                          {tr(language, "الملفات المرسلة", "Sent Files")}
                         </span>
                         <span className="mt-1 block text-xs leading-5 text-slate-500">
-                          ملفات أرسلتها للزملاء
+                          {tr(language, "ملفات أرسلتها للزملاء", "Files you sent to coworkers")}
                         </span>
                       </span>
                     </span>
@@ -816,13 +890,14 @@ export default function EmployeeFilesPage() {
               <TabsContent value="incoming" className="mt-0 space-y-4">
                 {loading ? (
                   <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50/70 px-5 py-10 text-center text-sm text-slate-500">
-                    جارٍ تحميل الملفات...
+                    {tr(language, "جارٍ تحميل الملفات...", "Loading files...")}
                   </div>
                 ) : incomingFiles.length ? (
                   incomingFiles.map(file => (
                     <EmployeeFileCard
                       key={file.id}
                       file={file}
+                      language={language}
                       opening={openingFileId === file.id}
                       counterpartAvatarUrl={getCounterpartAvatarUrl(file)}
                       onOpen={async currentFile => handleFileAction(currentFile, "open")}
@@ -838,9 +913,13 @@ export default function EmployeeFilesPage() {
                       >
                         <Inbox className="size-5" />
                       </EmptyMedia>
-                      <EmptyTitle>لا توجد ملفات واردة حاليًا</EmptyTitle>
+                      <EmptyTitle>{tr(language, "لا توجد ملفات واردة حاليًا", "No incoming files")}</EmptyTitle>
                       <EmptyDescription>
-                        عندما يرسل HR أو أحد الموظفين ملفًا إليك سيظهر هنا مع حالة الفتح والقراءة.
+                        {tr(
+                          language,
+                          "عندما يرسل HR أو أحد الموظفين ملفًا إليك سيظهر هنا مع حالة الفتح والقراءة.",
+                          "When HR or another employee sends you a file, it will appear here with open and read status."
+                        )}
                       </EmptyDescription>
                     </EmptyHeader>
                   </Empty>
@@ -850,13 +929,14 @@ export default function EmployeeFilesPage() {
               <TabsContent value="sent" className="mt-0 space-y-4">
                 {loading ? (
                   <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50/70 px-5 py-10 text-center text-sm text-slate-500">
-                    جارٍ تحميل الملفات المرسلة...
+                    {tr(language, "جارٍ تحميل الملفات المرسلة...", "Loading sent files...")}
                   </div>
                 ) : sentFiles.length ? (
                   sentFiles.map(file => (
                     <EmployeeFileCard
                       key={file.id}
                       file={file}
+                      language={language}
                       opening={openingFileId === file.id}
                       counterpartAvatarUrl={getCounterpartAvatarUrl(file)}
                       onOpen={async currentFile => handleFileAction(currentFile, "open")}
@@ -869,9 +949,13 @@ export default function EmployeeFilesPage() {
                       <EmptyMedia variant="icon" className="bg-sky-100 text-sky-700">
                         <Send className="size-5" />
                       </EmptyMedia>
-                      <EmptyTitle>لا توجد ملفات مرسلة بعد</EmptyTitle>
+                      <EmptyTitle>{tr(language, "لا توجد ملفات مرسلة بعد", "No sent files yet")}</EmptyTitle>
                       <EmptyDescription>
-                        ابدأ بإرسال ملف إلى أحد زملائك وسيظهر هنا مع حالة فتح المستلم للملف.
+                        {tr(
+                          language,
+                          "ابدأ بإرسال ملف إلى أحد زملائك وسيظهر هنا مع حالة فتح المستلم للملف.",
+                          "Send a file to a coworker and it will appear here with the recipient open status."
+                        )}
                       </EmptyDescription>
                     </EmptyHeader>
                   </Empty>
@@ -888,10 +972,14 @@ export default function EmployeeFilesPage() {
             ) : (
               <CheckCircle2 className="h-4 w-4 text-emerald-600" />
             )}
-            حالة القراءة
+            {tr(language, "حالة القراءة", "Read Status")}
           </div>
           <p className="mt-3">
-            الملفات الواردة التي لم تفتحها بعد تظهر بحالة "جديد"، وعند فتحها أو تحميلها يتم تحديث `readAt`. أما في الملفات المرسلة فسترى هل فتح المستلم الملف أم لا.
+            {tr(
+              language,
+              'الملفات الواردة التي لم تفتحها بعد تظهر بحالة "جديد"، وعند فتحها أو تحميلها يتم تحديث حالة القراءة. أما في الملفات المرسلة فسترى هل فتح المستلم الملف أم لا.',
+              'Incoming files you have not opened appear as "New". Opening or downloading a file updates its read status. Sent files show whether the recipient opened the file.'
+            )}
           </p>
         </div>
       </section>
@@ -904,12 +992,16 @@ export default function EmployeeFilesPage() {
       }}>
         <DialogContent
           className="w-[min(96vw,48rem)] max-w-3xl overflow-hidden"
-          dir="rtl"
+          dir={dir}
         >
           <DialogHeader>
-            <DialogTitle>إرسال ملف</DialogTitle>
+            <DialogTitle>{tr(language, "إرسال ملف", "Send File")}</DialogTitle>
             <DialogDescription>
-              اختر الموظف المستلم، ثم أرفق الملف المراد إرساله داخل البوابة.
+              {tr(
+                language,
+                "اختر الموظف المستلم، ثم أرفق الملف المراد إرساله داخل البوابة.",
+                "Choose the recipient, then attach the file you want to send inside the portal."
+              )}
             </DialogDescription>
           </DialogHeader>
 
@@ -931,7 +1023,9 @@ export default function EmployeeFilesPage() {
 
             <div className="grid items-start gap-4 md:grid-cols-2">
               <div className="space-y-2">
-                <div className="text-sm font-semibold text-slate-900">عنوان الملف</div>
+                <div className="text-sm font-semibold text-slate-900">
+                  {tr(language, "عنوان الملف", "File Title")}
+                </div>
                 <Input
                   value={sendForm.title}
                   onChange={event =>
@@ -940,13 +1034,15 @@ export default function EmployeeFilesPage() {
                       title: event.target.value,
                     }))
                   }
-                  placeholder="مثال: عرض سعر محدث"
+                  placeholder={tr(language, "مثال: عرض سعر محدث", "Example: Updated quotation")}
                   disabled={sendingFile}
                 />
               </div>
 
               <div className="space-y-2">
-                <div className="text-sm font-semibold text-slate-900">نوع الملف</div>
+                <div className="text-sm font-semibold text-slate-900">
+                  {tr(language, "نوع الملف", "File Type")}
+                </div>
                 <Select
                   value={sendForm.fileType}
                   onValueChange={value =>
@@ -958,14 +1054,16 @@ export default function EmployeeFilesPage() {
                   disabled={sendingFile}
                 >
                   <SelectTrigger className="w-full bg-white">
-                    <SelectValue placeholder="اختر نوع الملف" />
+                    <SelectValue placeholder={tr(language, "اختر نوع الملف", "Choose file type")} />
                   </SelectTrigger>
                   <SelectContent>
                     {EMPLOYEE_FILE_TYPE_OPTIONS.filter(
                       option => !["cv", "education_certificate"].includes(option.value)
                     ).map(option => (
                       <SelectItem key={option.value} value={option.value}>
-                        {option.label}
+                        {language === "ar"
+                          ? option.label
+                          : getFileTypeLabel({ fileType: option.value, fileTypeLabel: option.label } as EmployeeFileRecord, language)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -974,7 +1072,9 @@ export default function EmployeeFilesPage() {
             </div>
 
             <div className="space-y-2">
-              <div className="text-sm font-semibold text-slate-900">وصف الملف (اختياري)</div>
+              <div className="text-sm font-semibold text-slate-900">
+                {tr(language, "وصف الملف (اختياري)", "File Description (Optional)")}
+              </div>
               <Textarea
                 value={sendForm.description}
                 onChange={event =>
@@ -983,14 +1083,20 @@ export default function EmployeeFilesPage() {
                     description: event.target.value,
                   }))
                 }
-                placeholder="أضف وصفًا مختصرًا يساعد المستلم على فهم الملف"
+                placeholder={tr(
+                  language,
+                  "أضف وصفًا مختصرًا يساعد المستلم على فهم الملف",
+                  "Add a short description to help the recipient understand the file"
+                )}
                 className="min-h-28"
                 disabled={sendingFile}
               />
             </div>
 
             <div className="space-y-2">
-              <div className="text-sm font-semibold text-slate-900">ملف الإرسال</div>
+              <div className="text-sm font-semibold text-slate-900">
+                {tr(language, "ملف الإرسال", "File Attachment")}
+              </div>
               <Input
                 id="employee-send-file-input"
                 ref={sendFileInputRef}
@@ -1025,15 +1131,21 @@ export default function EmployeeFilesPage() {
                 {sendForm.file ? (
                   <div className="space-y-1">
                     <div className="font-semibold text-slate-900">{sendForm.file.name}</div>
-                    <div>الحجم: {formatFileSizeEN(sendForm.file.size)}</div>
-                    <div>النوع: {sendForm.file.type || "غير محدد"}</div>
+                    <div>{tr(language, "الحجم:", "Size:")} {formatFileSizeEN(sendForm.file.size)}</div>
+                    <div>{tr(language, "النوع:", "Type:")} {sendForm.file.type || tr(language, "غير محدد", "Not specified")}</div>
                   </div>
                 ) : (
                   <div className="space-y-1">
                     <div className="font-semibold text-slate-900">
-                      اسحب الملف هنا أو انقر للاختيار
+                      {tr(language, "اسحب الملف هنا أو انقر للاختيار", "Drop the file here or click to choose")}
                     </div>
-                    <div>سيتم إرفاق الملف وإرساله إلى الموظف المحدد.</div>
+                    <div>
+                      {tr(
+                        language,
+                        "سيتم إرفاق الملف وإرساله إلى الموظف المحدد.",
+                        "The file will be attached and sent to the selected employee."
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
@@ -1049,12 +1161,12 @@ export default function EmployeeFilesPage() {
                 {sendingFile ? (
                   <>
                     <Upload className="ml-2 h-4 w-4" />
-                    جارٍ إرسال الملف...
+                    {tr(language, "جارٍ إرسال الملف...", "Sending file...")}
                   </>
                 ) : (
                   <>
                     <Send className="ml-2 h-4 w-4" />
-                    إرسال
+                    {tr(language, "إرسال", "Send")}
                   </>
                 )}
               </Button>

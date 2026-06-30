@@ -41,6 +41,8 @@ import {
   type AttendanceLocationFeedback,
 } from "@/lib/attendanceLocationFeedback";
 import { cn } from "@/lib/utils";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { languageDir, tr } from "@/lib/i18n";
 
 type EmployeeAttendanceCardProps = {
   employeeId?: string | null;
@@ -75,7 +77,7 @@ function formatDisplayTime(value?: string | null) {
   }).format(date);
 }
 
-function getTodayAttendanceState(records: AttendanceRecord[]) {
+function getTodayAttendanceState(records: AttendanceRecord[], language: "ar" | "en") {
   const sorted = [...records].sort(
     (left, right) =>
       Date.parse(left.serverTime || "") - Date.parse(right.serverTime || "")
@@ -91,15 +93,15 @@ function getTodayAttendanceState(records: AttendanceRecord[]) {
     checkOut,
     nextType: isComplete ? null : isCheckedIn ? "check_out" : "check_in",
     statusLabel: isComplete
-      ? "تم تسجيل حضور وانصراف اليوم"
+      ? tr(language, "تم تسجيل حضور وانصراف اليوم", "Today's check-in and check-out are recorded")
       : isCheckedIn
-        ? "تم تسجيل الحضور"
-        : "لم يتم تسجيل الحضور",
+        ? tr(language, "تم تسجيل الحضور", "Check-in recorded")
+        : tr(language, "لم يتم تسجيل الحضور", "No check-in recorded"),
     actionLabel: isComplete
-      ? "تم اكتمال الدوام"
+      ? tr(language, "تم اكتمال الدوام", "Shift Complete")
       : isCheckedIn
-        ? "تسجيل انصراف"
-        : "تسجيل حضور",
+        ? tr(language, "تسجيل انصراف", "Check Out")
+        : tr(language, "تسجيل حضور", "Check In"),
   } satisfies {
     checkIn: AttendanceRecord | null;
     checkOut: AttendanceRecord | null;
@@ -129,6 +131,7 @@ export default function EmployeeAttendanceCard({
   onRecorded,
   className,
 }: EmployeeAttendanceCardProps) {
+  const { language } = useLanguage();
   const [pendingType, setPendingType] = useState<AttendanceType | null>(null);
   const [lastResponse, setLastResponse] = useState<AttendanceResponse | null>(
     null
@@ -142,8 +145,8 @@ export default function EmployeeAttendanceCard({
 
   const [todayKey, setTodayKey] = useState(() => getRiyadhTodayKey());
   const todayState = useMemo(
-    () => getTodayAttendanceState(todayRecords),
-    [todayRecords]
+    () => getTodayAttendanceState(todayRecords, language),
+    [language, todayRecords]
   );
 
   const loadTodayRecords = useCallback(async () => {
@@ -218,7 +221,11 @@ export default function EmployeeAttendanceCard({
       type === "check_out" &&
       typeof window !== "undefined" &&
       !window.confirm(
-        "تأكيد تسجيل الانصراف؟\n\nلن يتم تسجيل الانصراف إلا بعد موافقتك."
+        tr(
+          language,
+          "تأكيد تسجيل الانصراف؟\n\nلن يتم تسجيل الانصراف إلا بعد موافقتك.",
+          "Confirm check-out?\n\nCheck-out will only be recorded after your approval."
+        )
       )
     ) {
       logAttendanceDebug("button-checkout-cancelled", {
@@ -310,7 +317,7 @@ export default function EmployeeAttendanceCard({
 
   return (
     <Card
-      dir="rtl"
+      dir={languageDir(language)}
       className={cn(
         "rounded-[28px] border border-slate-200/80 bg-white/95 shadow-[0_24px_70px_-42px_rgba(15,23,42,0.22)]",
         className
@@ -320,7 +327,7 @@ export default function EmployeeAttendanceCard({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
             <Clock3 className="h-4 w-4" />
-            الحضور والانصراف
+            {tr(language, "الحضور والانصراف", "Attendance")}
           </div>
           <Badge
             variant="outline"
@@ -330,14 +337,16 @@ export default function EmployeeAttendanceCard({
           </Badge>
         </div>
         <CardTitle className="text-xl font-semibold text-slate-950">
-          تسجيل الدوام
+          {tr(language, "تسجيل الدوام", "Attendance Log")}
         </CardTitle>
       </CardHeader>
 
       <CardContent className="space-y-4">
         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 rounded-[24px] border border-slate-200 bg-slate-50/80 px-3 py-4 sm:px-5">
           <div className="min-w-0 text-center">
-            <div className="text-sm font-semibold text-slate-500">الحضور</div>
+            <div className="text-sm font-semibold text-slate-500">
+              {tr(language, "الحضور", "Check-in")}
+            </div>
             <div className="mt-2 text-xl font-bold text-emerald-600">
               {checkInTime}
             </div>
@@ -350,7 +359,9 @@ export default function EmployeeAttendanceCard({
               )}
             >
               {attendanceDone ? <CheckCircle2 className="h-4 w-4" /> : null}
-              {attendanceDone ? "تم الحضور" : "لم يتم الحضور"}
+              {attendanceDone
+                ? tr(language, "تم الحضور", "Checked in")
+                : tr(language, "لم يتم الحضور", "Not checked in")}
             </div>
           </div>
 
@@ -388,7 +399,7 @@ export default function EmployeeAttendanceCard({
 
           <div className="min-w-0 text-center">
             <div className="text-sm font-semibold text-slate-500">
-              الانصراف
+              {tr(language, "الانصراف", "Check-out")}
             </div>
             <div className="mt-2 text-xl font-bold text-slate-950">
               {checkOutTime}
@@ -402,13 +413,17 @@ export default function EmployeeAttendanceCard({
               )}
             >
               {checkoutDone ? <CheckCircle2 className="h-4 w-4" /> : null}
-              {checkoutDone ? "تم الانصراف" : "لم يتم الانصراف"}
+              {checkoutDone
+                ? tr(language, "تم الانصراف", "Checked out")
+                : tr(language, "لم يتم الانصراف", "Not checked out")}
             </div>
           </div>
         </div>
 
         <div className="rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-center text-sm font-semibold text-slate-600">
-          {loadingToday ? "جاري تحديث حالة اليوم..." : todayState.statusLabel}
+          {loadingToday
+            ? tr(language, "جاري تحديث حالة اليوم...", "Updating today's status...")
+            : todayState.statusLabel}
         </div>
 
         {todayState.checkIn || todayState.checkOut ? (
@@ -416,21 +431,23 @@ export default function EmployeeAttendanceCard({
             <div className="rounded-[18px] border border-emerald-100 bg-emerald-50/70 px-4 py-3">
               <div className="flex items-center justify-between gap-3">
                 <span className="font-semibold text-emerald-800">
-                  سجل الحضور
+                  {tr(language, "سجل الحضور", "Check-in Record")}
                 </span>
                 <span dir="ltr" className="font-bold text-emerald-700">
                   {checkInTime}
                 </span>
               </div>
               <div className="mt-1 text-xs text-emerald-700/80">
-                {todayState.checkIn ? "موجود في سجلات اليوم" : "لا يوجد سجل حضور"}
+                {todayState.checkIn
+                  ? tr(language, "موجود في سجلات اليوم", "Found in today's records")
+                  : tr(language, "لا يوجد سجل حضور", "No check-in record")}
               </div>
             </div>
 
             <div className="rounded-[18px] border border-rose-100 bg-rose-50/70 px-4 py-3">
               <div className="flex items-center justify-between gap-3">
                 <span className="font-semibold text-rose-800">
-                  سجل الانصراف
+                  {tr(language, "سجل الانصراف", "Check-out Record")}
                 </span>
                 <span dir="ltr" className="font-bold text-rose-700">
                   {checkOutTime}
@@ -438,8 +455,8 @@ export default function EmployeeAttendanceCard({
               </div>
               <div className="mt-1 text-xs text-rose-700/80">
                 {todayState.checkOut
-                  ? "موجود في سجلات اليوم"
-                  : "لا يوجد سجل انصراف"}
+                  ? tr(language, "موجود في سجلات اليوم", "Found in today's records")
+                  : tr(language, "لا يوجد سجل انصراف", "No check-out record")}
               </div>
             </div>
           </div>
@@ -449,12 +466,16 @@ export default function EmployeeAttendanceCard({
           <div className="rounded-[22px] border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-7 text-amber-900">
             <div className="flex items-start gap-2 font-semibold">
               <AlertCircle className="mt-1 h-4 w-4 shrink-0" />
-              <span>صلاحية الموقع مرفوضة من المتصفح</span>
+              <span>
+                {tr(language, "صلاحية الموقع مرفوضة من المتصفح", "Location permission is blocked")}
+              </span>
             </div>
             <p className="mt-2 text-xs leading-6 text-amber-800">
-              افتح أيقونة القفل بجانب رابط الموقع، ثم إعدادات الموقع، واجعل
-              الموقع على السماح. بعد ذلك حدث الصفحة وحاول تسجيل الدوام مرة
-              أخرى.
+              {tr(
+                language,
+                "افتح أيقونة القفل بجانب رابط الموقع، ثم إعدادات الموقع، واجعل الموقع على السماح. بعد ذلك حدث الصفحة وحاول تسجيل الدوام مرة أخرى.",
+                "Open the lock icon next to the site URL, go to site settings, and allow location access. Then refresh the page and try again."
+              )}
             </p>
           </div>
         ) : null}
@@ -484,21 +505,21 @@ export default function EmployeeAttendanceCard({
               {hasLocationFailure ? (
                 <div className="grid gap-2 text-xs font-semibold sm:grid-cols-2">
                   <Badge variant="outline" className="rounded-full bg-white/75">
-                    الحالة: {lastLocationFeedback?.statusLabel}
+                    {tr(language, "الحالة:", "Status:")} {lastLocationFeedback?.statusLabel}
                   </Badge>
                   {lastDistance ? (
                     <Badge variant="outline" className="rounded-full bg-white/75">
-                      المسافة: {lastDistance}
+                      {tr(language, "المسافة:", "Distance:")} {lastDistance}
                     </Badge>
                   ) : null}
                   {lastAllowedRadius ? (
                     <Badge variant="outline" className="rounded-full bg-white/75">
-                      النطاق المسموح: {lastAllowedRadius}
+                      {tr(language, "النطاق المسموح:", "Allowed Radius:")} {lastAllowedRadius}
                     </Badge>
                   ) : null}
                   {lastAccuracy ? (
                     <Badge variant="outline" className="rounded-full bg-white/75">
-                      دقة GPS: {lastAccuracy}
+                      {tr(language, "دقة GPS:", "GPS Accuracy:")} {lastAccuracy}
                     </Badge>
                   ) : null}
                 </div>
@@ -509,12 +530,12 @@ export default function EmployeeAttendanceCard({
                   </Badge>
                   {lastAccuracy ? (
                     <Badge variant="outline" className="rounded-full bg-white/75">
-                      الدقة: {lastAccuracy}
+                      {tr(language, "الدقة:", "Accuracy:")} {lastAccuracy}
                     </Badge>
                   ) : null}
                   {lastDistance ? (
                     <Badge variant="outline" className="rounded-full bg-white/75">
-                      المسافة: {lastDistance}
+                      {tr(language, "المسافة:", "Distance:")} {lastDistance}
                     </Badge>
                   ) : null}
                 </div>
@@ -530,12 +551,16 @@ export default function EmployeeAttendanceCard({
                   onClick={() => void handleAttendance()}
                 >
                   {pendingType ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                  إعادة فحص الموقع
+                  {tr(language, "إعادة فحص الموقع", "Recheck Location")}
                 </Button>
               ) : null}
             </div>
           ) : (
-            "اضغط البصمة لتسجيل الحضور، والضغطة التالية في نفس اليوم تسجل الانصراف تلقائيًا."
+            tr(
+              language,
+              "اضغط البصمة لتسجيل الحضور، والضغطة التالية في نفس اليوم تسجل الانصراف تلقائيًا.",
+              "Tap the fingerprint to check in. The next tap on the same day records check-out automatically."
+            )
           )}
         </div>
       </CardContent>

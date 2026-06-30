@@ -15,6 +15,7 @@ import {
   Clock3,
   Mail,
   MessageSquare,
+  Search,
   Users,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -23,15 +24,14 @@ import { useLocation, useSearch } from "wouter";
 import { db } from "@/_core/firebase";
 import { useAuth } from "@/_core/hooks/useAuth";
 import EmployeeLayout from "@/components/EmployeeLayout";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
   fetchActiveEmployeeCoworkers,
@@ -52,10 +52,13 @@ import {
 } from "@/lib/employeeProfile";
 import { resolveEmployeeAvatarUrl } from "@/lib/defaultEmployeeAvatars";
 import { createInAppNotification } from "@/lib/inAppNotifications";
+import { languageDir, tr } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
 import {
-  ConversationWorkspace,
+  MessageBubble,
   MessagesStat,
   RecipientPicker,
+  initialsFromName,
   type MessageSenderProfile,
 } from "@/pages/employee/messages/ConversationUi";
 import {
@@ -64,6 +67,7 @@ import {
 } from "@shared/employee";
 
 type ConversationSectionKey = "hr" | "internal";
+type InboxFilterKey = "all" | "unread" | "hr" | "internal";
 
 function mergeMessageCollections(collections: EmployeeMessageRecord[][]) {
   const byId = new Map<string, EmployeeMessageRecord>();
@@ -79,7 +83,7 @@ function buildRecipientFromConversation(
   if (!conversation?.counterpartyUid) return null;
   return {
     uid: conversation.counterpartyUid,
-    name: conversation.counterpartyName || "موظف",
+    name: conversation.counterpartyName || "Employee",
     email: conversation.counterpartyEmail,
     avatarUrl: conversation.counterpartyPhoto,
     title: null,
@@ -88,8 +92,20 @@ function buildRecipientFromConversation(
   } satisfies EmployeeCoworkerOption;
 }
 
+function formatInboxDate(value: Date | null, language: "ar" | "en") {
+  if (!value) return "";
+  return new Intl.DateTimeFormat(language === "ar" ? "ar-SA" : "en-US", {
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(value);
+}
+
 export default function EmployeeMessagesScreen() {
   const { user } = useAuth();
+  const { language } = useLanguage();
+  const dir = languageDir(language);
   const [, setLocation] = useLocation();
   const search = useSearch();
 
@@ -124,6 +140,8 @@ export default function EmployeeMessagesScreen() {
   const [recipientPickerOpen, setRecipientPickerOpen] = useState(false);
   const [selectedInternalRecipientUid, setSelectedInternalRecipientUid] =
     useState("");
+  const [inboxFilter, setInboxFilter] = useState<InboxFilterKey>("all");
+  const [conversationSearch, setConversationSearch] = useState("");
   const handledMessageSearchRef = useRef("");
 
   const searchParams = useMemo(() => new URLSearchParams(search), [search]);
@@ -270,6 +288,50 @@ export default function EmployeeMessagesScreen() {
       ),
     [conversations]
   );
+  const sortedConversations = useMemo(
+    () =>
+      [...conversations].sort(
+        (left, right) =>
+          (right.lastMessageAtDate?.getTime() || 0) -
+          (left.lastMessageAtDate?.getTime() || 0)
+      ),
+    [conversations]
+  );
+  const mixedLatestMessages = useMemo(
+    () =>
+      conversations
+        .flatMap(conversation =>
+          conversation.messages.map(message => ({ conversation, message }))
+        )
+        .sort(
+          (left, right) =>
+            (right.message.createdAtDate?.getTime() || 0) -
+            (left.message.createdAtDate?.getTime() || 0)
+        )
+        .slice(0, 60),
+    [conversations]
+  );
+  const filteredConversations = useMemo(() => {
+    const normalizedSearch = conversationSearch.trim().toLocaleLowerCase();
+    return sortedConversations.filter(conversation => {
+      const isInternal =
+        conversation.conversationType === "employee_to_employee";
+      if (inboxFilter === "hr" && isInternal) return false;
+      if (inboxFilter === "internal" && !isInternal) return false;
+      if (inboxFilter === "unread" && conversation.unreadCount <= 0) return false;
+      if (!normalizedSearch) return true;
+
+      return [
+        conversation.counterpartyName,
+        conversation.counterpartyEmail,
+        conversation.latestMessage.preview,
+        conversation.conversationTypeLabel,
+      ]
+        .join(" ")
+        .toLocaleLowerCase()
+        .includes(normalizedSearch);
+    });
+  }, [conversationSearch, inboxFilter, sortedConversations]);
   const requestedConversationId = useMemo(
     () =>
       messages.find(message => message.id === requestedMessageId)
@@ -348,8 +410,8 @@ export default function EmployeeMessagesScreen() {
     [coworkers]
   );
   const currentUserDisplayName = useMemo(
-    () => user?.displayName || user?.email || "أنت",
-    [user?.displayName, user?.email]
+    () => user?.displayName || user?.email || tr(language, "أنت", "You"),
+    [language, user?.displayName, user?.email]
   );
   const currentUserAvatarUrl = useMemo(() => {
     const currentUser = user as {
@@ -390,19 +452,19 @@ export default function EmployeeMessagesScreen() {
     if (!selectedInternalRecipient) return null;
 
     return (
-      <div className="min-h-[420px] rounded-[24px] border border-sky-100 bg-sky-50/40 p-6 text-right">
+      <div className="min-h-[420px] rounded-[24px] border border-sky-100 bg-sky-50/40 p-6 text-start" dir={dir}>
         <div className="flex flex-wrap items-center gap-2">
           <Badge
             variant="outline"
             className="rounded-full border-sky-200 bg-white text-sky-700 shadow-none"
           >
-            محادثة داخلية جديدة
+            {tr(language, "محادثة داخلية جديدة", "New Internal Conversation")}
           </Badge>
           <Badge
             variant="outline"
             className="rounded-full border-slate-200 bg-white text-slate-600 shadow-none"
           >
-            لم تبدأ الرسائل بعد
+            {tr(language, "لم تبدأ الرسائل بعد", "No messages yet")}
           </Badge>
         </div>
 
@@ -411,15 +473,18 @@ export default function EmployeeMessagesScreen() {
             {selectedInternalRecipient.name}
           </div>
           <p className="text-sm leading-7 text-slate-600">
-            تم اختيار هذا الموظف كمستلم. اكتب الرسالة الأولى بالأسفل وسيتم إنشاء
-            المحادثة مباشرة داخل السجل الداخلي.
+            {tr(
+              language,
+              "تم اختيار هذا الموظف كمستلم. اكتب الرسالة الأولى بالأسفل وسيتم إنشاء المحادثة مباشرة داخل السجل الداخلي.",
+              "This employee has been selected as the recipient. Write the first message below to create the internal conversation."
+            )}
           </p>
         </div>
 
         <div className="mt-5 grid gap-3 md:grid-cols-3">
           <div className="rounded-[20px] border border-slate-200 bg-white px-4 py-3">
             <div className="text-xs font-semibold tracking-[0.14em] text-slate-500">
-              المستلم
+              {tr(language, "المستلم", "Recipient")}
             </div>
             <div className="mt-2 text-sm font-semibold text-slate-950">
               {selectedInternalRecipient.name}
@@ -428,16 +493,16 @@ export default function EmployeeMessagesScreen() {
 
           <div className="rounded-[20px] border border-slate-200 bg-white px-4 py-3">
             <div className="text-xs font-semibold tracking-[0.14em] text-slate-500">
-              البريد
+              {tr(language, "البريد", "Email")}
             </div>
             <div className="mt-2 text-sm font-semibold text-slate-950">
-              {selectedInternalRecipient.email || "غير متوفر"}
+              {selectedInternalRecipient.email || tr(language, "غير متوفر", "Unavailable")}
             </div>
           </div>
 
           <div className="rounded-[20px] border border-slate-200 bg-white px-4 py-3">
             <div className="text-xs font-semibold tracking-[0.14em] text-slate-500">
-              القسم / المسمى
+              {tr(language, "القسم / المسمى", "Department / Title")}
             </div>
             <div className="mt-2 text-sm font-semibold text-slate-950">
               {[
@@ -445,7 +510,7 @@ export default function EmployeeMessagesScreen() {
                 selectedInternalRecipient.department,
               ]
                 .filter(Boolean)
-                .join(" - ") || "غير متوفر"}
+                .join(" - ") || tr(language, "غير متوفر", "Unavailable")}
             </div>
           </div>
         </div>
@@ -453,7 +518,9 @@ export default function EmployeeMessagesScreen() {
     );
   }, [
     coworkersError,
+    dir,
     internalMessageBody,
+    language,
     selectedInternalRecipient,
     sendingInternalMessage,
   ]);
@@ -609,6 +676,26 @@ export default function EmployeeMessagesScreen() {
         current === conversation.id ? null : current
       );
     }
+  };
+
+  const selectConversation = (conversation: EmployeeMessageConversationRecord) => {
+    if (conversation.conversationType === "employee_to_employee") {
+      setActiveSection("internal");
+      setActiveInternalConversationId(conversation.id);
+      setSelectedInternalRecipientUid(conversation.counterpartyUid);
+    } else {
+      setActiveSection("hr");
+      setActiveHrConversationId(conversation.id);
+    }
+    void markConversationAsRead(conversation);
+  };
+
+  const closeConversation = () => {
+    setActiveHrConversationId(null);
+    setActiveInternalConversationId(null);
+    setSelectedInternalRecipientUid("");
+    setHrReplyBody("");
+    setInternalMessageBody("");
   };
 
   useEffect(() => {
@@ -815,320 +902,400 @@ export default function EmployeeMessagesScreen() {
 
   return (
     <EmployeeLayout
-      title="رسائلي الداخلية"
-      description="تابع رسائل HR ومحادثات الزملاء من نفس المسار، مع فصل واضح بين الرسائل الإدارية والمحادثات الداخلية بين الموظفين."
+      title={tr(language, "رسائلي الداخلية", "My Messages")}
+      description={tr(
+        language,
+        "تابع رسائل HR ومحادثات الزملاء من نفس المسار، مع فصل واضح بين الرسائل الإدارية والمحادثات الداخلية بين الموظفين.",
+        "Follow HR messages and coworker conversations in one place, with a clear split between administrative messages and internal chats."
+      )}
     >
       <section className="space-y-6">
         <div className="grid gap-4 md:grid-cols-4">
           <MessagesStat
-            label="إجمالي الرسائل"
+            label={tr(language, "إجمالي الرسائل", "Total Messages")}
             value={String(messages.length)}
           />
           <MessagesStat
-            label="رسائل HR"
+            label={tr(language, "رسائل HR", "HR Messages")}
             value={String(hrConversations.length)}
           />
           <MessagesStat
-            label="محادثات داخلية"
+            label={tr(language, "محادثات داخلية", "Internal Chats")}
             value={String(internalConversations.length)}
           />
           <MessagesStat
-            label="غير مقروءة"
+            label={tr(language, "غير مقروءة", "Unread")}
             value={String(unreadMessagesCount)}
             tone="warning"
           />
         </div>
 
-        <Card className="rounded-[28px] border-slate-200/80 bg-white/95 shadow-[0_28px_80px_-52px_rgba(15,23,42,0.28)]">
-          <CardHeader className="space-y-4">
-            <CardTitle className="text-xl font-semibold text-slate-950">
-              <span className="flex items-center gap-2">
-                <MessageSquare className="h-4 w-4" />
-                رسائل HR والمحادثات الداخلية
-              </span>
-            </CardTitle>
-          </CardHeader>
-
-          <CardContent>
-            <Tabs
-              value={activeSection}
-              onValueChange={value =>
-                setActiveSection(value as ConversationSectionKey)
-              }
-              dir="rtl"
-              className="space-y-6"
-            >
-              <TabsList className="grid h-auto w-full grid-cols-1 gap-3 rounded-none bg-transparent p-0 md:grid-cols-2">
-                <TabsTrigger
-                  value="hr"
-                  className="group h-auto justify-start rounded-[24px] border border-slate-200/80 bg-slate-50/70 px-4 py-4 text-start shadow-none transition-all data-[state=active]:border-[#F2B705]/70 data-[state=active]:bg-white data-[state=active]:shadow-[0_18px_45px_-34px_rgba(15,23,42,0.34)]"
-                >
-                  <span className="flex w-full items-center justify-between gap-4">
-                    <span className="flex min-w-0 items-center gap-3">
-                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white text-slate-700 shadow-sm ring-1 ring-slate-200 transition group-data-[state=active]:bg-[#030640] group-data-[state=active]:text-[#F2B705] group-data-[state=active]:ring-[#030640]">
-                        <Mail className="h-4 w-4" />
-                      </span>
-                      <span className="min-w-0 text-start">
-                        <span className="block text-sm font-semibold text-slate-950">
-                          رسائل HR
-                        </span>
-                        <span className="mt-1 block text-xs leading-5 text-slate-500">
-                          رسائل الإدارة والتنبيهات الرسمية
-                        </span>
-                      </span>
-                    </span>
-                    {hrUnreadCount > 0 ? (
-                      <Badge className="shrink-0 rounded-full bg-[#F2B705] px-2.5 text-slate-950 hover:bg-[#F2B705]">
-                        {hrUnreadCount}
-                      </Badge>
-                    ) : null}
-                  </span>
-                </TabsTrigger>
-
-                <TabsTrigger
-                  value="internal"
-                  className="group h-auto justify-start rounded-[24px] border border-slate-200/80 bg-slate-50/70 px-4 py-4 text-start shadow-none transition-all data-[state=active]:border-sky-200 data-[state=active]:bg-white data-[state=active]:shadow-[0_18px_45px_-34px_rgba(15,23,42,0.34)]"
-                >
-                  <span className="flex w-full items-center justify-between gap-4">
-                    <span className="flex min-w-0 items-center gap-3">
-                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white text-slate-700 shadow-sm ring-1 ring-slate-200 transition group-data-[state=active]:bg-sky-700 group-data-[state=active]:text-white group-data-[state=active]:ring-sky-700">
-                        <Users className="h-4 w-4" />
-                      </span>
-                      <span className="min-w-0 text-start">
-                        <span className="block text-sm font-semibold text-slate-950">
-                          محادثة داخلية
-                        </span>
-                        <span className="mt-1 block text-xs leading-5 text-slate-500">
-                          تواصل مباشر بين الموظفين
-                        </span>
-                      </span>
-                    </span>
-                    {internalUnreadCount > 0 ? (
-                      <Badge className="shrink-0 rounded-full bg-sky-600 px-2.5 text-white hover:bg-sky-600">
-                        {internalUnreadCount}
-                      </Badge>
-                    ) : null}
-                  </span>
-                </TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="hr" className="mt-0">
-                <ConversationWorkspace
-                  sectionLabel="HR"
-                  listLabel="سجل رسائل HR"
-                  listDescription="هذه القائمة مخصصة فقط للرسائل الإدارية مع HR."
-                  conversations={loading ? [] : hrConversations}
-                  activeConversation={activeHrConversation}
-                  activeConversationId={activeHrConversationId}
-                  openingConversationId={openingConversationId}
-                  currentUserUid={user.uid}
-                  currentUserDisplayName={currentUserDisplayName}
-                  currentUserAvatarUrl={currentUserAvatarUrl}
-                  messageSenderLookup={messageSenderLookup}
-                  onSelectConversation={conversation => {
-                    setActiveSection("hr");
-                    setActiveHrConversationId(conversation.id);
-                    void markConversationAsRead(conversation);
-                  }}
-                  onCloseConversation={() => setActiveHrConversationId(null)}
-                  emptyListTitle={
-                    loading
-                      ? "جارٍ تحميل الرسائل..."
-                      : "لا توجد رسائل HR حاليًا"
-                  }
-                  emptyListDescription={
-                    loading
-                      ? "لحظات قليلة..."
-                      : "عندما تصلك رسالة أو تنبيه من HR سيظهر هنا مباشرة."
-                  }
-                  emptyConversationTitle="اختر محادثة HR من القائمة"
-                  emptyConversationDescription="ستظهر تفاصيل المحادثة هنا بمجرد اختيار أي سجل من القائمة الجانبية."
-                  composer={
-                    <div className="rounded-[24px] border border-slate-200/70 bg-slate-50/60 p-5">
-                      <div className="mb-4 space-y-1">
-                        <div className="text-sm font-semibold text-slate-900">
-                          الرد داخل نفس محادثة HR
-                        </div>
-                        <p className="text-sm leading-6 text-slate-500">
-                          يذهب الرد إلى HR داخل نفس السجل الحالي مع الحفاظ على
-                          التسلسل الزمني وحالة القراءة.
-                        </p>
-                      </div>
-
-                      <Textarea
-                        value={hrReplyBody}
-                        onChange={event => setHrReplyBody(event.target.value)}
-                        placeholder={
-                          activeHrConversation
-                            ? "اكتب ردك هنا"
-                            : "اختر محادثة HR أولًا حتى تتمكن من الرد"
-                        }
-                        className="min-h-36 resize-y bg-white text-right leading-7 [direction:rtl]"
-                        disabled={!activeHrConversation || sendingHrReply}
-                      />
-                      <div className="mt-4 border-t border-slate-200 pt-4">
-                        <div className="flex w-full items-center justify-end gap-2">
-                          <Button
-                            type="button"
-                            className="bg-[#F2B705] text-slate-950 hover:bg-[#e0ab00]"
-                            onClick={() => void handleSendHrReply()}
-                            disabled={!activeHrConversation || sendingHrReply}
-                          >
-                            {sendingHrReply ? "جارٍ الإرسال..." : "إرسال الرد"}
-                          </Button>
-
-                          <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => setHrReplyBody("")}
-                            disabled={sendingHrReply || !hrReplyBody.trim()}
-                          >
-                            إعادة ضبط
-                          </Button>
-                        </div>
-                      </div>
+        <Card className="overflow-hidden rounded-[30px] border-slate-200/80 bg-white shadow-[0_28px_80px_-56px_rgba(15,23,42,0.32)]">
+          <CardContent className="p-0">
+            <div className="grid min-h-[680px] xl:grid-cols-[390px_minmax(0,1fr)]">
+              <aside className="border-b border-slate-200 bg-slate-50/70 p-4 xl:border-b-0 xl:border-e">
+                <div className="mb-4 flex items-start justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2 text-base font-semibold text-slate-950">
+                      <MessageSquare className="h-4 w-4" />
+                      {tr(language, "صندوق الرسائل", "Message Inbox")}
                     </div>
-                  }
-                />
-              </TabsContent>
-
-              <TabsContent value="internal" className="mt-0 space-y-6">
-                <div className="rounded-[24px] border border-slate-200/70 bg-slate-50/60 p-5">
-                  <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-                    <div className="space-y-1">
-                    </div>
+                    <p className="mt-1 text-xs leading-5 text-slate-500">
+                      {tr(language, "آخر المحادثات من HR والزملاء في مكان واحد.", "Latest HR and coworker conversations in one place.")}
+                    </p>
                   </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="rounded-full bg-slate-950 px-3 text-white hover:bg-slate-800"
+                    onClick={() => setRecipientPickerOpen(current => !current)}
+                  >
+                    <Users className="h-4 w-4" />
+                    {tr(language, "جديد", "New")}
+                  </Button>
+                </div>
 
-                  <div className="space-y-4">
-                    <div className="flex justify-end">
-                      <div className="w-full">
-                        <RecipientPicker
-                          options={coworkers}
-                          selectedRecipient={selectedInternalRecipient}
-                          unreadCountsByUid={internalUnreadCountsByUid}
-                          loading={coworkersLoading}
-                          disabled={coworkersLoading || sendingInternalMessage}
-                          open={recipientPickerOpen}
-                          onOpenChange={setRecipientPickerOpen}
-                          onSelect={uid => {
-                            setActiveSection("internal");
-                            setSelectedInternalRecipientUid(uid);
-                            const existingConversation =
-                              internalConversations.find(
-                                conversation =>
-                                  conversation.counterpartyUid === uid
-                              ) || null;
-                            setActiveInternalConversationId(
-                              existingConversation?.id || null
-                            );
-                            if (existingConversation) {
-                              void markConversationAsRead(existingConversation);
-                            }
-                          }}
-                        />
-                      </div>
-                    </div>
+                <div className="relative">
+                  <Search className="pointer-events-none absolute end-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <Input
+                    value={conversationSearch}
+                    onChange={event => setConversationSearch(event.target.value)}
+                    placeholder={tr(language, "ابحث في المحادثات", "Search conversations")}
+                    className="h-11 rounded-2xl border-slate-200 bg-white pe-10 text-start shadow-sm"
+                    dir={dir}
+                  />
+                </div>
 
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  {([
+                    ["all", tr(language, "الكل", "All"), sortedConversations.length],
+                    ["unread", tr(language, "غير مقروء", "Unread"), unreadMessagesCount],
+                    ["hr", "HR", hrConversations.length],
+                    ["internal", tr(language, "داخلي", "Internal"), internalConversations.length],
+                  ] as Array<[InboxFilterKey, string, number]>).map(([key, label, count]) => (
+                    <button
+                      key={key}
+                      type="button"
+                      aria-pressed={inboxFilter === key}
+                      onClick={() => setInboxFilter(key)}
+                      className={cn(
+                        "flex h-10 items-center justify-between rounded-2xl border px-3 text-xs font-semibold transition",
+                        inboxFilter === key
+                          ? "border-slate-950 bg-slate-950 text-white"
+                          : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-950"
+                      )}
+                    >
+                      <span>{label}</span>
+                      <span className={cn("rounded-full px-2 py-0.5", inboxFilter === key ? "bg-white/15" : "bg-slate-100")}>
+                        {count}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+
+                {recipientPickerOpen ? (
+                  <div className="mt-4">
+                    <RecipientPicker
+                      options={coworkers}
+                      selectedRecipient={selectedInternalRecipient}
+                      unreadCountsByUid={internalUnreadCountsByUid}
+                      language={language}
+                      loading={coworkersLoading}
+                      disabled={coworkersLoading || sendingInternalMessage}
+                      open={recipientPickerOpen}
+                      onOpenChange={setRecipientPickerOpen}
+                      onSelect={uid => {
+                        setActiveSection("internal");
+                        setSelectedInternalRecipientUid(uid);
+                        const existingConversation =
+                          internalConversations.find(
+                            conversation => conversation.counterpartyUid === uid
+                          ) || null;
+                        if (existingConversation) {
+                          selectConversation(existingConversation);
+                        } else {
+                          setActiveHrConversationId(null);
+                          setActiveInternalConversationId(null);
+                        }
+                      }}
+                    />
                     {coworkersError ? (
-                      <p className="text-xs leading-6 text-rose-600">
+                      <p className="mt-2 text-xs leading-6 text-rose-600">
                         {coworkersError}
                       </p>
                     ) : null}
-
                   </div>
-                </div>
+                ) : null}
 
-                <ConversationWorkspace
-                  sectionLabel="الموظف"
-                  hideConversationList
-                  listLabel="المحادثات الداخلية"
-                  listDescription="هذه القائمة مخصصة لتواصل الموظفين مع بعضهم داخل النظام."
-                  conversations={loading ? [] : internalConversations}
-                  activeConversation={activeInternalConversation}
-                  activeConversationId={activeInternalConversationId}
-                  openingConversationId={openingConversationId}
-                  currentUserUid={user.uid}
-                  currentUserDisplayName={currentUserDisplayName}
-                  currentUserAvatarUrl={currentUserAvatarUrl}
-                  messageSenderLookup={messageSenderLookup}
-                  onSelectConversation={conversation => {
-                    setActiveSection("internal");
-                    setActiveInternalConversationId(conversation.id);
-                    setSelectedInternalRecipientUid(
-                      conversation.counterpartyUid
-                    );
-                    void markConversationAsRead(conversation);
-                  }}
-                  onCloseConversation={() => {
-                    setActiveInternalConversationId(null);
-                    setSelectedInternalRecipientUid("");
-                  }}
-                  emptyListTitle={
-                    loading
-                      ? "جارٍ تحميل المحادثات..."
-                      : "لا توجد محادثات داخلية بعد"
-                  }
-                  emptyListDescription={
-                    loading
-                      ? "لحظات قليلة..."
-                      : "ابدأ رسالة جديدة إلى أحد زملائك وسيظهر السجل هنا مباشرة."
-                  }
-                  emptyConversationTitle="اختر محادثة داخلية أو ابدأ رسالة جديدة"
-                  emptyConversationDescription="يمكنك فتح أي محادثة داخلية من القائمة أو اختيار موظف جديد من قسم الإرسال بالأعلى."
-                  emptyConversationContent={internalEmptyConversationContent}
-                  composer={
-                    <div
-                      className="rounded-[22px] border border-slate-200 bg-white p-4"
-                      dir="rtl"
-                    >
+                <div className="mt-4 max-h-[500px] space-y-2 overflow-y-auto pe-1">
+                  {loading ? (
+                    Array.from({ length: 5 }).map((_, index) => (
+                      <div key={index} className="h-24 animate-pulse rounded-2xl bg-white" />
+                    ))
+                  ) : filteredConversations.length ? (
+                    filteredConversations.map(conversation => {
+                      const isInternal =
+                        conversation.conversationType === "employee_to_employee";
+                      const isSelected = activeConversation?.id === conversation.id;
+                      const title =
+                        conversation.counterpartyName ||
+                        (isInternal ? tr(language, "موظف", "Employee") : "HR");
+
+                      return (
+                        <button
+                          key={conversation.id}
+                          type="button"
+                          aria-pressed={isSelected}
+                          onClick={() => selectConversation(conversation)}
+                          className={cn(
+                            "group w-full rounded-2xl border p-3 text-start shadow-sm transition-all",
+                            isSelected
+                              ? "border-[#F2B705] bg-[#fff8df] ring-2 ring-[#F2B705]/20"
+                              : "border-slate-200 bg-white hover:border-[#F2B705]/70 hover:bg-white"
+                          )}
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className={cn(
+                              "flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-xs font-bold text-white shadow-sm",
+                              isInternal ? "bg-sky-700" : "bg-slate-950"
+                            )}>
+                              {initialsFromName(title, conversation.counterpartyEmail)}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <div className="truncate text-sm font-semibold text-slate-950">
+                                    {title}
+                                  </div>
+                                  <div className="mt-1 text-[11px] font-medium text-slate-500">
+                                    {isInternal ? tr(language, "محادثة داخلية", "Internal chat") : "HR"}
+                                  </div>
+                                </div>
+                                <div className="shrink-0 text-[10px] text-slate-400">
+                                  {formatInboxDate(conversation.lastMessageAtDate, language)}
+                                </div>
+                              </div>
+                              <p className="mt-2 line-clamp-2 text-xs leading-5 text-slate-600">
+                                {conversation.latestMessage.preview ||
+                                  tr(language, "لا يوجد نص محفوظ لهذه الرسالة.", "No message text saved.")}
+                              </p>
+                              <div className="mt-3 flex items-center justify-between gap-2">
+                                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
+                                  {conversation.messages.length} {tr(language, "رسالة", "messages")}
+                                </span>
+                                {conversation.unreadCount > 0 ? (
+                                  <span className="rounded-full bg-[#F2B705] px-2.5 py-1 text-[11px] font-bold text-slate-950">
+                                    {conversation.unreadCount}
+                                  </span>
+                                ) : null}
+                              </div>
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })
+                  ) : (
+                    <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-500">
+                      {tr(language, "لا توجد محادثات مطابقة.", "No matching conversations.")}
+                    </div>
+                  )}
+                </div>
+              </aside>
+
+              <div className="flex min-h-[680px] flex-col bg-white">
+                {activeConversation ? (
+                  <>
+                    <div className="border-b border-slate-200 bg-white px-5 py-4">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                            {activeConversation.conversationType === "employee_to_employee"
+                              ? tr(language, "محادثة داخلية", "Internal Conversation")
+                              : "HR"}
+                          </div>
+                          <h2 className="mt-1 truncate text-xl font-semibold text-slate-950">
+                            {activeConversation.counterpartyName || (activeConversation.conversationType === "employee_to_employee" ? tr(language, "موظف", "Employee") : "HR")}
+                          </h2>
+                          <p className="mt-1 text-sm text-slate-500">
+                            {activeConversation.counterpartyEmail ||
+                              tr(language, "سجل المحادثة المحددة", "Selected conversation thread")}
+                          </p>
+                        </div>
+                        <Button type="button" variant="outline" className="rounded-full" onClick={closeConversation}>
+                          {tr(language, "عرض كل الرسائل", "All Messages")}
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="flex-1 space-y-4 overflow-y-auto bg-slate-50/60 px-5 py-5">
+                      {activeConversation.messages.map(message => {
+                        const ownMessage = message.fromUserId === user.uid;
+                        const senderId = message.fromUserId || message.senderUid || "";
+                        const senderProfile = senderId ? messageSenderLookup[senderId] : null;
+                        return (
+                          <MessageBubble
+                            key={message.id}
+                            message={message}
+                            ownMessage={ownMessage}
+                            senderName={
+                              senderProfile?.name ||
+                              message.fromUserName ||
+                              (ownMessage ? currentUserDisplayName : activeConversation.counterpartyName || "HR")
+                            }
+                            senderEmail={senderProfile?.email || message.fromUserEmail || null}
+                            avatarUrl={
+                              senderProfile?.avatarUrl ||
+                              message.fromUserPhoto ||
+                              (ownMessage ? currentUserAvatarUrl : activeConversation.counterpartyPhoto)
+                            }
+                            viewerName={currentUserDisplayName}
+                            conversationType={activeConversation.conversationType}
+                            language={language}
+                          />
+                        );
+                      })}
+                    </div>
+
+                    <div className="border-t border-slate-200 bg-white p-4">
+                      <Textarea
+                        value={activeConversation.conversationType === "employee_to_employee" ? internalMessageBody : hrReplyBody}
+                        onChange={event =>
+                          activeConversation.conversationType === "employee_to_employee"
+                            ? setInternalMessageBody(event.target.value)
+                            : setHrReplyBody(event.target.value)
+                        }
+                        onKeyDown={activeConversation.conversationType === "employee_to_employee" ? handleInternalMessageKeyDown : undefined}
+                        placeholder={tr(language, "اكتب رسالتك هنا...", "Write your message here...")}
+                        className="min-h-24 resize-y rounded-2xl bg-slate-50 text-start leading-7"
+                        dir={dir}
+                        disabled={sendingHrReply || sendingInternalMessage}
+                      />
+                      <div className="mt-3 flex justify-end gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="rounded-full"
+                          onClick={() =>
+                            activeConversation.conversationType === "employee_to_employee"
+                              ? setInternalMessageBody("")
+                              : setHrReplyBody("")
+                          }
+                        >
+                          {tr(language, "مسح", "Clear")}
+                        </Button>
+                        <Button
+                          type="button"
+                          className="rounded-full bg-slate-950 px-5 text-white hover:bg-slate-800"
+                          disabled={sendingHrReply || sendingInternalMessage}
+                          onClick={() =>
+                            activeConversation.conversationType === "employee_to_employee"
+                              ? void handleSendInternalMessage()
+                              : void handleSendHrReply()
+                          }
+                        >
+                          {tr(language, "إرسال", "Send")}
+                        </Button>
+                      </div>
+                    </div>
+                  </>
+                ) : selectedInternalRecipient ? (
+                  <div className="flex flex-1 flex-col">
+                    <div className="border-b border-slate-200 px-5 py-4">
+                      <h2 className="text-xl font-semibold text-slate-950">
+                        {selectedInternalRecipient.name}
+                      </h2>
+                      <p className="mt-1 text-sm text-slate-500">
+                        {tr(language, "محادثة داخلية جديدة", "New internal conversation")}
+                      </p>
+                    </div>
+                    <div className="flex flex-1 items-center justify-center bg-slate-50/60 p-6 text-center text-sm text-slate-500">
+                      {tr(language, "اكتب أول رسالة بالأسفل لإنشاء المحادثة.", "Write the first message below to create the conversation.")}
+                    </div>
+                    <div className="border-t border-slate-200 bg-white p-4">
                       <Textarea
                         value={internalMessageBody}
                         onChange={event => setInternalMessageBody(event.target.value)}
                         onKeyDown={handleInternalMessageKeyDown}
-                        placeholder={
-                          selectedInternalRecipient
-                            ? `اكتب رسالتك إلى ${selectedInternalRecipient.name}`
-                            : "اختر الموظف المستلم أولًا ثم اكتب الرسالة"
-                        }
-                        className="min-h-[172px] resize-y rounded-[20px] border border-slate-200 bg-slate-50/60 px-4 py-3 text-right leading-8 shadow-sm placeholder:text-right placeholder:text-slate-400 focus-visible:border-sky-300 focus-visible:bg-white focus-visible:ring-4 focus-visible:ring-sky-100 [direction:rtl]"
-                        disabled={!selectedInternalRecipient || sendingInternalMessage}
-                        dir="rtl"
+                        placeholder={`${tr(language, "اكتب رسالتك إلى", "Write your message to")} ${selectedInternalRecipient.name}`}
+                        className="min-h-28 resize-y rounded-2xl bg-slate-50 text-start leading-7"
+                        dir={dir}
+                        disabled={sendingInternalMessage}
                       />
-
-                      <div className="mt-4 border-t border-slate-200 pt-4 text-right">
-                        <div className="inline-flex items-center gap-2">
-                          <Button
-                            type="button"
-                            className="h-10 rounded-xl bg-sky-700 px-5 text-white shadow-sm hover:bg-sky-800"
-                            onClick={() => void handleSendInternalMessage()}
-                            disabled={
-                              !selectedInternalRecipient ||
-                              sendingInternalMessage ||
-                              Boolean(coworkersError)
-                            }
-                          >
-                            {sendingInternalMessage
-                              ? "جارٍ الإرسال..."
-                              : "إرسال الرسالة الداخلية"}
-                          </Button>
-
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="h-10 rounded-xl border-slate-300 bg-white px-4 text-slate-700 hover:bg-slate-50"
-                            onClick={() => setInternalMessageBody("")}
-                            disabled={sendingInternalMessage || !internalMessageBody.trim()}
-                          >
-                            إعادة ضبط
-                          </Button>
-                        </div>
+                      <div className="mt-3 flex justify-end gap-2">
+                        <Button type="button" variant="outline" className="rounded-full" onClick={closeConversation}>
+                          {tr(language, "إلغاء", "Cancel")}
+                        </Button>
+                        <Button type="button" className="rounded-full bg-slate-950 px-5 text-white hover:bg-slate-800" onClick={() => void handleSendInternalMessage()} disabled={sendingInternalMessage || !internalMessageBody.trim()}>
+                          {tr(language, "إرسال", "Send")}
+                        </Button>
                       </div>
                     </div>
-                  }
-                />
-              </TabsContent>
-
-            </Tabs>
+                  </div>
+                ) : (
+                  <div className="flex flex-1 flex-col">
+                    <div className="border-b border-slate-200 px-5 py-4">
+                      <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                        {tr(language, "كل الرسائل", "All Messages")}
+                      </div>
+                      <h2 className="mt-1 text-xl font-semibold text-slate-950">
+                        {tr(language, "آخر الرسائل", "Latest Messages")}
+                      </h2>
+                      <p className="mt-1 text-sm text-slate-500">
+                        {tr(language, "عرض مدمج لآخر الرسائل من كل المحادثات.", "A mixed stream of the latest messages from every conversation.")}
+                      </p>
+                    </div>
+                    <div className="flex-1 space-y-3 overflow-y-auto bg-slate-50/60 p-5">
+                      {loading ? (
+                        Array.from({ length: 6 }).map((_, index) => (
+                          <div key={index} className="h-24 animate-pulse rounded-2xl bg-white" />
+                        ))
+                      ) : mixedLatestMessages.length ? (
+                        mixedLatestMessages.map(({ conversation, message }) => {
+                          const isInternal = conversation.conversationType === "employee_to_employee";
+                          const title = conversation.counterpartyName || (isInternal ? tr(language, "موظف", "Employee") : "HR");
+                          return (
+                            <button
+                              key={message.id}
+                              type="button"
+                              className="w-full rounded-2xl border border-slate-200 bg-white p-4 text-start shadow-sm transition hover:border-[#F2B705]/70 hover:shadow-md"
+                              onClick={() => selectConversation(conversation)}
+                            >
+                              <div className="flex items-start gap-3">
+                                <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-xs font-bold text-white", isInternal ? "bg-sky-700" : "bg-slate-950")}>
+                                  {initialsFromName(title, conversation.counterpartyEmail)}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div>
+                                      <div className="font-semibold text-slate-950">{title}</div>
+                                      <div className="mt-0.5 text-xs text-slate-500">
+                                        {isInternal ? tr(language, "محادثة داخلية", "Internal chat") : "HR"} · {formatInboxDate(message.createdAtDate, language)}
+                                      </div>
+                                    </div>
+                                    {conversation.unreadCount > 0 ? (
+                                      <Badge className="rounded-full bg-[#F2B705] text-slate-950 hover:bg-[#F2B705]">
+                                        {conversation.unreadCount}
+                                      </Badge>
+                                    ) : null}
+                                  </div>
+                                  <p className="mt-3 line-clamp-2 text-sm leading-6 text-slate-600">
+                                    {message.preview || message.body || tr(language, "لا يوجد نص محفوظ لهذه الرسالة.", "No message text saved.")}
+                                  </p>
+                                </div>
+                              </div>
+                            </button>
+                          );
+                        })
+                      ) : (
+                        <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-5 py-10 text-center text-sm text-slate-500">
+                          {tr(language, "لا توجد رسائل حالياً.", "No messages yet.")}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </CardContent>
         </Card>
 
@@ -1139,15 +1306,19 @@ export default function EmployeeMessagesScreen() {
             ) : (
               <CheckCircle2 className="h-4 w-4 text-emerald-600" />
             )}
-            حالة الرسائل
+            {tr(language, "حالة الرسائل", "Message Status")}
           </div>
           <p className="mt-3">
-            عند فتح أي محادثة يتم تحديث الرسائل الواردة لك كمقروءة، وتبقى
-            المحادثات الداخلية منفصلة بصريًا ووظيفيًا عن رسائل HR.
+            {tr(
+              language,
+              "عند فتح أي محادثة يتم تحديث الرسائل الواردة لك كمقروءة، وتبقى المحادثات الداخلية منفصلة بصريًا ووظيفيًا عن رسائل HR.",
+              "Opening a conversation marks incoming messages as read. Internal conversations remain visually and functionally separate from HR messages."
+            )}
           </p>
           <p className="mt-2">
-            تمت القراءة: {readMessagesCount} رسالة، وغير المقروءة:{" "}
-            {unreadMessagesCount} رسالة.
+            {tr(language, "تمت القراءة:", "Read:")} {readMessagesCount}{" "}
+            {tr(language, "رسالة، وغير المقروءة:", "messages, unread:")}{" "}
+            {unreadMessagesCount} {tr(language, "رسالة.", "messages.")}
           </p>
         </div>
       </section>

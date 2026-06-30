@@ -18,6 +18,8 @@ type SelectBottomSheetProps = {
   onOpenChange: (open: boolean) => void;
   onSelect: (value: string) => void;
   className?: string;
+  dir?: "rtl" | "ltr";
+  closeLabel?: string;
 };
 
 export default function SelectBottomSheet({
@@ -28,15 +30,17 @@ export default function SelectBottomSheet({
   onOpenChange,
   onSelect,
   className,
+  dir = "rtl",
+  closeLabel = "Close",
 }: SelectBottomSheetProps) {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[90]" dir="rtl" role="presentation">
+    <div className="fixed inset-0 z-[90]" dir={dir} role="presentation">
       <button
         type="button"
         className="absolute inset-0 bg-slate-950/60"
-        aria-label="إغلاق"
+        aria-label={closeLabel}
         onClick={() => onOpenChange(false)}
       />
 
@@ -54,7 +58,7 @@ export default function SelectBottomSheet({
             type="button"
             onClick={() => onOpenChange(false)}
             className="flex h-11 w-11 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-50 hover:text-slate-950"
-            aria-label="إغلاق"
+            aria-label={closeLabel}
           >
             <X className="h-7 w-7" />
           </button>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   collection,
   doc,
@@ -13,6 +13,7 @@ import {
   CheckCircle2,
   Clock3,
   Download,
+  Eye,
   FileSpreadsheet,
   FileText,
   MessageSquare,
@@ -25,11 +26,13 @@ import { toast } from "sonner";
 
 import { db } from "@/_core/firebase";
 import { hasPermission, type AppUser } from "@/_core/hooks/useAuth";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { createInAppNotification } from "@/lib/inAppNotifications";
+import { languageDir, tr } from "@/lib/i18n";
 import {
   WEEKLY_REPORT_DIRECT_MANAGER_NAME,
   WEEKLY_REPORT_MANAGER_NOTES_PERMISSION,
@@ -182,6 +185,8 @@ export function WeeklyReportTab({
   user: AppUser;
   mode?: "employee" | "admin";
 }) {
+  const { language } = useLanguage();
+  const dir = languageDir(language);
   const [profileDefaults, setProfileDefaults] = useState({ name: "", title: "" });
   const [ownReports, setOwnReports] = useState<WeeklyReportRecord[]>([]);
   const [receivedReports, setReceivedReports] = useState<WeeklyReportRecord[]>([]);
@@ -192,6 +197,7 @@ export function WeeklyReportTab({
   const [form, setForm] = useState<WeeklyReportFormState>(() =>
     buildInitialForm(user)
   );
+  const formSectionRef = useRef<HTMLDivElement | null>(null);
 
   const isAdminMode = mode === "admin";
   const isReceiver = isAdminMode && user.uid === WEEKLY_REPORT_RECEIVER.uid;
@@ -208,6 +214,18 @@ export function WeeklyReportTab({
   const isReadOnly = selectedReport
     ? selectedReport.createdByUid !== user.uid || selectedReport.status === "sent"
     : false;
+
+  const openReport = (report: WeeklyReportRecord) => {
+    setForm(toForm(report));
+    window.requestAnimationFrame(() => {
+      if (window.matchMedia("(max-width: 1279px)").matches) {
+        formSectionRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      }
+    });
+  };
   const canEditSelectedManagerNotes =
     Boolean(selectedReport?.id) &&
     selectedReport?.status === "sent" &&
@@ -539,67 +557,118 @@ export function WeeklyReportTab({
 
       <div className="space-y-2">
         {loading ? (
-          <p className="text-sm text-slate-500">جاري تحميل التقارير...</p>
+          <p className="text-sm text-slate-500">{tr(language, "جاري تحميل التقارير...", "Loading reports...")}</p>
         ) : reports.length ? (
-          reports.map(report => (
-            <div
-              key={report.id}
-              className="rounded-[18px] border border-slate-200 bg-white p-3 text-right shadow-sm transition hover:-translate-y-0.5 hover:border-[#F2B705]/50 hover:shadow-md"
-            >
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div>
-                  <div className="text-sm font-semibold text-slate-950">
-                    {report.createdByName || "موظف"}
+          reports.map(report => {
+            const isSelected = form.id === report.id;
+
+            return (
+              <div
+                key={report.id}
+                role="button"
+                tabIndex={0}
+                aria-pressed={isSelected}
+                className={[
+                  "cursor-pointer",
+                  "group block w-full rounded-[20px] border p-3.5 text-start shadow-sm outline-none transition-all duration-200",
+                  "hover:-translate-y-0.5 hover:border-[#F2B705] hover:bg-amber-50/35 hover:shadow-lg hover:shadow-slate-200/80",
+                  "active:translate-y-0 active:scale-[0.99] focus-visible:ring-4 focus-visible:ring-[#F2B705]/25",
+                  isSelected
+                    ? "border-[#F2B705] bg-[#FFF8DF] shadow-[0_18px_45px_-32px_rgba(15,23,42,0.45)] ring-2 ring-[#F2B705]/25"
+                    : "border-slate-200 bg-white",
+                ].join(" ")}
+                onClick={() => openReport(report)}
+                onKeyDown={event => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    openReport(report);
+                  }
+                }}
+              >
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold text-slate-950 underline-offset-4 group-hover:underline">
+                      {report.createdByName || tr(language, "موظف", "Employee")}
+                    </div>
+                    <div className="mt-1 text-xs font-medium text-slate-500">
+                      {formatDateLabel(report.reportDate)}
+                    </div>
                   </div>
-                  <div className="mt-1 text-xs text-slate-500">
-                    {formatDateLabel(report.reportDate)}
+                  <div className="flex items-center gap-1.5">
+                    {isSelected ? (
+                      <Badge className="rounded-full bg-slate-950 text-white hover:bg-slate-950">
+                        {tr(language, "مفتوح", "Open")}
+                      </Badge>
+                    ) : null}
+                    <Badge
+                      className={
+                        report.status === "sent"
+                          ? "rounded-full bg-emerald-100 text-emerald-700 hover:bg-emerald-100"
+                          : "rounded-full bg-amber-100 text-amber-700 hover:bg-amber-100"
+                      }
+                    >
+                      {report.status === "sent" ? tr(language, "مرسل", "Sent") : tr(language, "مسودة", "Draft")}
+                    </Badge>
                   </div>
                 </div>
-                <Badge
-                  className={
-                    report.status === "sent"
-                      ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-100"
-                      : "bg-amber-100 text-amber-700 hover:bg-amber-100"
-                  }
-                >
-                  {report.status === "sent" ? "مرسل" : "مسودة"}
-                </Badge>
-              </div>
-              <div className="mt-3 flex flex-wrap justify-end gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="rounded-full border-slate-200 bg-white px-4"
-                  onClick={() => setForm(toForm(report))}
-                >
-                  عرض التقرير
-                </Button>
+
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
+                  <span className="text-xs font-medium text-slate-500">
+                    {tr(language, "اضغط لفتح التقرير في النموذج", "Tap to open this report in the form")}
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 ring-1 ring-slate-200 transition group-hover:bg-slate-950 group-hover:text-white group-hover:ring-slate-950">
+                    <Eye className="h-3.5 w-3.5" />
+                    {isSelected
+                      ? tr(language, "مفتوح الآن", "Opened")
+                      : tr(language, "فتح", "Open")}
+                  </span>
+                </div>
+
                 {canReviewWeeklyReports && report.status === "sent" ? (
-                  <>
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="rounded-full bg-slate-950 px-4 text-white hover:bg-slate-800"
-                      onClick={() => void downloadCurrentReport(report)}
+                  <div className="mt-3 flex flex-wrap justify-end gap-2">
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      className="inline-flex h-8 items-center gap-1.5 rounded-full bg-slate-950 px-3 text-xs font-semibold text-white hover:bg-slate-800"
+                      onClick={event => {
+                        event.stopPropagation();
+                        void downloadCurrentReport(report);
+                      }}
+                      onKeyDown={event => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          void downloadCurrentReport(report);
+                        }
+                      }}
                     >
-                      <Download className="h-4 w-4" />
+                      <Download className="h-3.5 w-3.5" />
                       Word
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="rounded-full bg-emerald-600 px-4 text-white hover:bg-emerald-700"
-                      onClick={() => void downloadCurrentReportExcel(report)}
+                    </span>
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      className="inline-flex h-8 items-center gap-1.5 rounded-full bg-emerald-600 px-3 text-xs font-semibold text-white hover:bg-emerald-700"
+                      onClick={event => {
+                        event.stopPropagation();
+                        void downloadCurrentReportExcel(report);
+                      }}
+                      onKeyDown={event => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          void downloadCurrentReportExcel(report);
+                        }
+                      }}
                     >
-                      <FileSpreadsheet className="h-4 w-4" />
+                      <FileSpreadsheet className="h-3.5 w-3.5" />
                       Excel
-                    </Button>
-                  </>
+                    </span>
+                  </div>
                 ) : null}
               </div>
-            </div>
-          ))
+            );
+          })
         ) : (
           <p className="text-sm leading-7 text-slate-500">{emptyText}</p>
         )}
@@ -626,7 +695,7 @@ export function WeeklyReportTab({
       <div className="space-y-3">
         {loadingReceived ? (
           <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50/80 px-4 py-8 text-center text-sm text-slate-500">
-            جاري تحميل التقارير...
+            {tr(language, "جاري تحميل التقارير...", "Loading reports...")}
           </div>
         ) : reports.length ? (
           reports.map(report => {
@@ -637,7 +706,7 @@ export function WeeklyReportTab({
                 type="button"
                 onClick={() => setForm(toForm(report))}
                 className={[
-                  "w-full rounded-[22px] border p-4 text-right transition-all",
+                  "w-full rounded-[22px] border p-4 text-start transition-all",
                   isActive
                     ? "border-[#F2B705]/80 bg-amber-50/60 shadow-[0_20px_45px_-34px_rgba(15,23,42,0.38)]"
                     : "border-slate-200/80 bg-white hover:border-slate-300 hover:bg-slate-50/80",
@@ -646,10 +715,10 @@ export function WeeklyReportTab({
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="truncate text-sm font-semibold text-slate-950">
-                      {report.createdByName || "موظف"}
+                      {report.createdByName || tr(language, "موظف", "Employee")}
                     </div>
                     <div className="mt-1 text-xs text-slate-500">
-                      {report.jobTitle || "المسمى غير محدد"}
+                      {report.jobTitle || tr(language, "المسمى غير محدد", "Title not set")}
                     </div>
                   </div>
                   <Badge
@@ -659,15 +728,17 @@ export function WeeklyReportTab({
                         : "shrink-0 rounded-full bg-[#F2B705] text-slate-950 hover:bg-[#F2B705]"
                     }
                   >
-                    {cleanText(report.managerNotes) ? "تمت المراجعة" : "بانتظار ملاحظة"}
+                    {cleanText(report.managerNotes)
+                      ? tr(language, "تمت المراجعة", "Reviewed")
+                      : tr(language, "بانتظار ملاحظة", "Waiting for Note")}
                   </Badge>
                 </div>
                 <div className="mt-4 grid grid-cols-2 gap-2 text-xs text-slate-500">
                   <div className="rounded-2xl bg-slate-50 px-3 py-2">
-                    التاريخ: {formatDateLabel(report.reportDate)}
+                    {tr(language, "التاريخ:", "Date:")} {formatDateLabel(report.reportDate)}
                   </div>
                   <div className="rounded-2xl bg-slate-50 px-3 py-2">
-                    المهام: {normalizeTasks(report.tasks).length}
+                    {tr(language, "المهام:", "Tasks:")} {normalizeTasks(report.tasks).length}
                   </div>
                 </div>
               </button>
@@ -682,13 +753,13 @@ export function WeeklyReportTab({
     );
 
     return (
-      <div className="space-y-6" dir="rtl">
+      <div className="space-y-6" dir={dir}>
         <div className="grid gap-4 md:grid-cols-3">
           <div className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <div className="text-xs font-semibold text-slate-500">
-                  إجمالي التقارير المستلمة
+                  {tr(language, "إجمالي التقارير المستلمة", "Total Received Reports")}
                 </div>
                 <div className="mt-3 text-3xl font-semibold text-slate-950">
                   {sentReceivedReports.length}
@@ -704,7 +775,7 @@ export function WeeklyReportTab({
             <div className="flex items-center justify-between gap-3">
               <div>
                 <div className="text-xs font-semibold text-amber-700">
-                  بانتظار ملاحظتك
+                  {tr(language, "بانتظار ملاحظتك", "Awaiting Your Note")}
                 </div>
                 <div className="mt-3 text-3xl font-semibold text-slate-950">
                   {managerPendingReports.length}
@@ -720,7 +791,7 @@ export function WeeklyReportTab({
             <div className="flex items-center justify-between gap-3">
               <div>
                 <div className="text-xs font-semibold text-emerald-700">
-                  تمت مراجعتها
+                  {tr(language, "تمت مراجعتها", "Reviewed")}
                 </div>
                 <div className="mt-3 text-3xl font-semibold text-slate-950">
                   {managerReviewedReports.length}
@@ -739,10 +810,10 @@ export function WeeklyReportTab({
               <div className="mb-4 flex items-center justify-between gap-3">
                 <div>
                   <h3 className="text-base font-semibold text-slate-950">
-                    تقارير تحتاج ملاحظة
+                    {tr(language, "تقارير تحتاج ملاحظة", "Reports Needing Notes")}
                   </h3>
                   <p className="mt-1 text-xs leading-6 text-slate-500">
-                    تظهر هنا التقارير المرسلة ولم تضف عليها ملاحظة المدير بعد.
+                    {tr(language, "تظهر هنا التقارير المرسلة ولم تضف عليها ملاحظة المدير بعد.", "Submitted reports without manager notes appear here.")}
                   </p>
                 </div>
                 <Badge className="rounded-full bg-[#F2B705] text-slate-950 hover:bg-[#F2B705]">
@@ -751,7 +822,7 @@ export function WeeklyReportTab({
               </div>
               {renderManagerReportCards(
                 managerPendingReports,
-                "لا توجد تقارير بانتظار الملاحظة الآن."
+                tr(language, "لا توجد تقارير بانتظار الملاحظة الآن.", "No reports are waiting for notes.")
               )}
             </div>
 
@@ -759,10 +830,10 @@ export function WeeklyReportTab({
               <div className="mb-4 flex items-center justify-between gap-3">
                 <div>
                   <h3 className="text-base font-semibold text-slate-950">
-                    تقارير تمت مراجعتها
+                    {tr(language, "تقارير تمت مراجعتها", "Reviewed Reports")}
                   </h3>
                   <p className="mt-1 text-xs leading-6 text-slate-500">
-                    تقارير أضفت عليها ملاحظة ويمكن الرجوع لها أو تعديلها.
+                    {tr(language, "تقارير أضفت عليها ملاحظة ويمكن الرجوع لها أو تعديلها.", "Reports with notes can be reopened or edited.")}
                   </p>
                 </div>
                 <Badge
@@ -774,7 +845,7 @@ export function WeeklyReportTab({
               </div>
               {renderManagerReportCards(
                 managerReviewedReports,
-                "لا توجد تقارير مراجعة محفوظة بعد."
+                tr(language, "لا توجد تقارير مراجعة محفوظة بعد.", "No reviewed reports have been saved yet.")
               )}
             </div>
           </aside>
@@ -786,13 +857,13 @@ export function WeeklyReportTab({
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                     <div>
                       <Badge className="mb-3 rounded-full bg-white/10 text-white shadow-none hover:bg-white/10">
-                        تقرير مرسل للمراجعة
+                        {tr(language, "تقرير مرسل للمراجعة", "Report Submitted for Review")}
                       </Badge>
                       <h2 className="text-2xl font-semibold tracking-tight">
-                        {managerActiveReport.createdByName || "تقرير موظف"}
+                        {managerActiveReport.createdByName || tr(language, "تقرير موظف", "Employee Report")}
                       </h2>
                       <p className="mt-2 text-sm leading-7 text-white/62">
-                        {managerActiveReport.jobTitle || "المسمى غير محدد"} -{" "}
+                        {managerActiveReport.jobTitle || tr(language, "المسمى غير محدد", "Title not set")} -{" "}
                         {formatDateLabel(managerActiveReport.reportDate)}
                       </p>
                     </div>
@@ -821,23 +892,23 @@ export function WeeklyReportTab({
                   <div className="grid gap-4 md:grid-cols-3">
                     <div className="rounded-[22px] border border-slate-200 bg-white p-4">
                       <div className="text-xs font-semibold text-slate-500">
-                        الموظف
+                        {tr(language, "الموظف", "Employee")}
                       </div>
                       <div className="mt-2 text-sm font-semibold text-slate-950">
-                        {managerActiveReport.createdByName || "غير محدد"}
+                        {managerActiveReport.createdByName || tr(language, "غير محدد", "Not set")}
                       </div>
                     </div>
                     <div className="rounded-[22px] border border-slate-200 bg-white p-4">
                       <div className="text-xs font-semibold text-slate-500">
-                        المسمى الوظيفي
+                        {tr(language, "المسمى الوظيفي", "Job Title")}
                       </div>
                       <div className="mt-2 text-sm font-semibold text-slate-950">
-                        {managerActiveReport.jobTitle || "غير محدد"}
+                        {managerActiveReport.jobTitle || tr(language, "غير محدد", "Not set")}
                       </div>
                     </div>
                     <div className="rounded-[22px] border border-slate-200 bg-white p-4">
                       <div className="text-xs font-semibold text-slate-500">
-                        تاريخ التقرير
+                        {tr(language, "تاريخ التقرير", "Report Date")}
                       </div>
                       <div className="mt-2 text-sm font-semibold text-slate-950">
                         {formatDateLabel(managerActiveReport.reportDate)}
@@ -849,14 +920,14 @@ export function WeeklyReportTab({
                     <div className="mb-4 flex items-center justify-between gap-3">
                       <div>
                         <h3 className="text-lg font-semibold text-slate-950">
-                          مهام التقرير
+                          {tr(language, "مهام التقرير", "Report Tasks")}
                         </h3>
                         <p className="mt-1 text-sm leading-6 text-slate-500">
-                          قراءة مرتبة للمهام والوصف ونسبة الإنجاز.
+                          {tr(language, "قراءة مرتبة للمهام والوصف ونسبة الإنجاز.", "A structured view of tasks, descriptions, and progress.")}
                         </p>
                       </div>
                       <Badge variant="outline" className="rounded-full bg-slate-50">
-                        {activeTasks.length} مهمة
+                        {activeTasks.length} {tr(language, "مهمة", "tasks")}
                       </Badge>
                     </div>
 
@@ -873,15 +944,15 @@ export function WeeklyReportTab({
                                   {task.index}
                                 </span>
                                 <div className="font-semibold text-slate-950">
-                                  {task.title || "مهمة بدون عنوان"}
+                                  {task.title || tr(language, "مهمة بدون عنوان", "Untitled task")}
                                 </div>
                               </div>
                               <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-7 text-slate-600">
-                                {task.description || "لا يوجد وصف مرفق لهذه المهمة."}
+                                {task.description || tr(language, "لا يوجد وصف مرفق لهذه المهمة.", "No description attached to this task.")}
                               </p>
                             </div>
                             <Badge className="w-fit shrink-0 rounded-full bg-white px-3 py-1.5 text-slate-700 shadow-none ring-1 ring-slate-200 hover:bg-white">
-                              الإنجاز: {task.progress || "-"}
+                              {tr(language, "الإنجاز:", "Progress:")} {task.progress || "-"}
                             </Badge>
                           </div>
                         </div>
@@ -893,10 +964,10 @@ export function WeeklyReportTab({
                     <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-5 py-4">
                       <div>
                         <h3 className="text-lg font-semibold text-slate-950">
-                          ملاحظات المدير
+                          {tr(language, "ملاحظات المدير", "Manager Notes")}
                         </h3>
                         <p className="mt-1 text-sm leading-6 text-slate-500">
-                          عند الحفظ سيصل تنبيه للموظف بوجود ملاحظة جديدة.
+                          {tr(language, "عند الحفظ سيصل تنبيه للموظف بوجود ملاحظة جديدة.", "Saving will notify the employee that a new note was added.")}
                         </p>
                       </div>
                       <MessageSquare className="h-5 w-5 text-slate-400" />
@@ -910,8 +981,9 @@ export function WeeklyReportTab({
                             managerNotes: event.target.value,
                           }))
                         }
-                        className="min-h-[180px] resize-y rounded-[20px] border-slate-200 bg-slate-50/70 text-right leading-8 focus-visible:ring-[#F2B705]/30"
-                        placeholder="اكتب ملاحظة المدير على التقرير المحدد..."
+                        className="min-h-[180px] resize-y rounded-[20px] border-slate-200 bg-slate-50/70 text-start leading-8 focus-visible:ring-[#F2B705]/30"
+                        placeholder={tr(language, "اكتب ملاحظة المدير على التقرير المحدد...", "Write the manager note for the selected report...")}
+                        dir={dir}
                       />
                       <div className="mt-4 flex justify-end">
                         <Button
@@ -922,8 +994,8 @@ export function WeeklyReportTab({
                         >
                           <Save className="h-4 w-4" />
                           {savingManagerNotes
-                            ? "جاري حفظ الملاحظة..."
-                            : "حفظ ملاحظة المدير"}
+                            ? tr(language, "جاري حفظ الملاحظة...", "Saving note...")
+                            : tr(language, "حفظ ملاحظة المدير", "Save Manager Note")}
                         </Button>
                       </div>
                     </div>
@@ -937,10 +1009,10 @@ export function WeeklyReportTab({
                     <FileText className="h-6 w-6" />
                   </div>
                   <h3 className="text-lg font-semibold text-slate-950">
-                    لا توجد تقارير مرسلة حاليًا
+                    {tr(language, "لا توجد تقارير مرسلة حاليًا", "No submitted reports yet")}
                   </h3>
                   <p className="mt-2 text-sm leading-7 text-slate-500">
-                    عند إرسال الموظفين تقاريرهم الأسبوعية ستظهر هنا للمراجعة وكتابة ملاحظات المدير.
+                    {tr(language, "عند إرسال الموظفين تقاريرهم الأسبوعية ستظهر هنا للمراجعة وكتابة ملاحظات المدير.", "When employees submit weekly reports, they will appear here for review and manager notes.")}
                   </p>
                 </div>
               </div>
@@ -952,7 +1024,7 @@ export function WeeklyReportTab({
   }
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]" dir="rtl">
+    <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]" dir={dir}>
       <aside className="space-y-4 xl:sticky xl:top-24 xl:self-start">
         <Button
           type="button"
@@ -960,35 +1032,39 @@ export function WeeklyReportTab({
           onClick={resetForm}
         >
           <Plus className="h-4 w-4" />
-          تقرير جديد
+          {tr(language, "تقرير جديد", "New Report")}
         </Button>
 
         {canReviewWeeklyReports
           ? renderReportList(
               canWriteManagerNotes
-                ? "تقارير بانتظار ملاحظات المدير"
-                : "التقارير المستلمة",
+                ? tr(language, "تقارير بانتظار ملاحظات المدير", "Reports Waiting for Manager Notes")
+                : tr(language, "التقارير المستلمة", "Received Reports"),
               sentReceivedReports,
               loadingReceived,
-              "لا توجد تقارير أسبوعية مرسلة حاليًا."
+              tr(language, "لا توجد تقارير أسبوعية مرسلة حاليًا.", "No submitted weekly reports yet.")
             )
           : null}
 
         {renderReportList(
-          "سجل تقاريري",
+          tr(language, "سجل تقاريري", "My Reports Log"),
           visibleOwnReports,
           loadingOwn,
-          "لم يتم حفظ أي تقرير أسبوعي بعد."
+          tr(language, "لم يتم حفظ أي تقرير أسبوعي بعد.", "No weekly report has been saved yet.")
         )}
       </aside>
 
-      <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-xl shadow-slate-200/60">
+      <div
+        ref={formSectionRef}
+        data-open-target="true"
+        className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-xl shadow-slate-200/60"
+      >
         <div className="border-b border-slate-200 bg-gradient-to-l from-slate-950 via-slate-900 to-slate-800 px-6 py-6 text-center">
           <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/10 text-[#F2B705]">
             <FileText className="h-6 w-6" />
           </div>
           <h2 className="text-2xl font-bold text-white md:text-3xl">
-            نموذج تقرير عمل اسبوعي
+            {tr(language, "نموذج تقرير عمل اسبوعي", "Weekly Work Report Form")}
           </h2>
         </div>
 
@@ -996,7 +1072,7 @@ export function WeeklyReportTab({
           <div className="grid overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm md:grid-cols-3">
             <label className="border-b border-slate-200 p-4 md:border-b-0 md:border-l">
               <span className="mb-2 block text-sm font-semibold text-slate-900">
-                اسم الموظف
+                {tr(language, "اسم الموظف", "Employee Name")}
               </span>
               <Input
                 value={form.createdByName}
@@ -1007,12 +1083,13 @@ export function WeeklyReportTab({
                   }))
                 }
                 disabled={isReadOnly}
-                className="h-11 rounded-xl border-slate-200 bg-slate-50/80 text-right shadow-inner shadow-slate-100/70 focus-visible:ring-[#F2B705]/35"
+                className="h-11 rounded-xl border-slate-200 bg-slate-50/80 text-start shadow-inner shadow-slate-100/70 focus-visible:ring-[#F2B705]/35"
+                dir={dir}
               />
             </label>
             <label className="border-b border-slate-200 p-4 md:border-b-0 md:border-l">
               <span className="mb-2 block text-sm font-semibold text-slate-900">
-                المسمى الوظيفي
+                {tr(language, "المسمى الوظيفي", "Job Title")}
               </span>
               <Input
                 value={form.jobTitle}
@@ -1020,12 +1097,13 @@ export function WeeklyReportTab({
                   setForm(current => ({ ...current, jobTitle: event.target.value }))
                 }
                 disabled={isReadOnly}
-                className="h-11 rounded-xl border-slate-200 bg-slate-50/80 text-right shadow-inner shadow-slate-100/70 focus-visible:ring-[#F2B705]/35"
+                className="h-11 rounded-xl border-slate-200 bg-slate-50/80 text-start shadow-inner shadow-slate-100/70 focus-visible:ring-[#F2B705]/35"
+                dir={dir}
               />
             </label>
             <label className="p-4">
               <span className="mb-2 block text-sm font-semibold text-slate-900">
-                التاريخ
+                {tr(language, "التاريخ", "Date")}
               </span>
               <Input
                 type="date"
@@ -1037,7 +1115,8 @@ export function WeeklyReportTab({
                   }))
                 }
                 disabled={isReadOnly}
-                className="h-11 rounded-xl border-slate-200 bg-slate-50/80 text-right shadow-inner shadow-slate-100/70 focus-visible:ring-[#F2B705]/35"
+                className="h-11 rounded-xl border-slate-200 bg-slate-50/80 text-start shadow-inner shadow-slate-100/70 focus-visible:ring-[#F2B705]/35"
+                dir={dir}
               />
             </label>
           </div>
@@ -1048,21 +1127,21 @@ export function WeeklyReportTab({
                 <thead>
                   <tr className="bg-slate-950 text-sm text-white">
                     <th className="w-14 border border-slate-800 p-3 text-center">
-                      رقم
+                      {tr(language, "رقم", "No.")}
                     </th>
                     <th className="w-48 border border-slate-800 p-3">
-                      المهام اليومية
+                      {tr(language, "المهام اليومية", "Daily Tasks")}
                     </th>
-                    <th className="border border-slate-800 p-3">الوصف</th>
+                    <th className="border border-slate-800 p-3">{tr(language, "الوصف", "Description")}</th>
                     <th className="w-56 border border-slate-800 p-3">
-                      الموظف المسؤول/المدير المباشر
+                      {tr(language, "الموظف المسؤول/المدير المباشر", "Responsible Employee / Direct Manager")}
                     </th>
                     <th className="w-36 border border-slate-800 p-3">
-                      معدل الإنجاز
+                      {tr(language, "معدل الإنجاز", "Progress")}
                     </th>
                     {!isReadOnly ? (
                       <th className="w-20 border border-slate-800 p-3 text-center">
-                        حذف
+                        {tr(language, "حذف", "Delete")}
                       </th>
                     ) : null}
                   </tr>
@@ -1083,7 +1162,8 @@ export function WeeklyReportTab({
                             updateTask(index, "title", event.target.value)
                           }
                           disabled={isReadOnly}
-                          className="h-11 rounded-xl border-slate-200 bg-slate-50/70 text-right focus-visible:ring-[#F2B705]/35"
+                          className="h-11 rounded-xl border-slate-200 bg-slate-50/70 text-start focus-visible:ring-[#F2B705]/35"
+                          dir={dir}
                         />
                       </td>
                       <td className="border border-slate-200 p-2">
@@ -1093,7 +1173,8 @@ export function WeeklyReportTab({
                             updateTask(index, "description", event.target.value)
                           }
                           disabled={isReadOnly}
-                          className="min-h-[112px] resize-y rounded-xl border-slate-200 bg-slate-50/70 text-right leading-7 focus-visible:ring-[#F2B705]/35"
+                          className="min-h-[112px] resize-y rounded-xl border-slate-200 bg-slate-50/70 text-start leading-7 focus-visible:ring-[#F2B705]/35"
+                          dir={dir}
                         />
                       </td>
                       <td className="border border-slate-200 p-2">
@@ -1142,7 +1223,7 @@ export function WeeklyReportTab({
                       variant="outline"
                       className="rounded-full bg-slate-50 px-3 text-slate-600"
                     >
-                      مهمة {index + 1}
+                      {tr(language, "مهمة", "Task")} {index + 1}
                     </Badge>
                     {!isReadOnly ? (
                       <Button
@@ -1151,7 +1232,7 @@ export function WeeklyReportTab({
                         size="icon"
                         className="h-9 w-9 rounded-full border-rose-200 bg-white text-rose-600 shadow-sm hover:bg-rose-50"
                         onClick={() => removeTask(index)}
-                        aria-label="حذف المهمة"
+                        aria-label={tr(language, "حذف المهمة", "Delete task")}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -1161,7 +1242,7 @@ export function WeeklyReportTab({
                   <div className="space-y-3">
                     <label className="block">
                       <span className="mb-1.5 block text-sm font-semibold text-slate-900">
-                        المهام اليومية
+                        {tr(language, "المهام اليومية", "Daily Tasks")}
                       </span>
                       <Input
                         value={task.title}
@@ -1169,13 +1250,14 @@ export function WeeklyReportTab({
                           updateTask(index, "title", event.target.value)
                         }
                         disabled={isReadOnly}
-                        className="h-11 rounded-xl border-slate-200 bg-slate-50/70 text-right focus-visible:ring-[#F2B705]/35"
+                          className="h-11 rounded-xl border-slate-200 bg-slate-50/70 text-start focus-visible:ring-[#F2B705]/35"
+                          dir={dir}
                       />
                     </label>
 
                     <label className="block">
                       <span className="mb-1.5 block text-sm font-semibold text-slate-900">
-                        الوصف
+                        {tr(language, "الوصف", "Description")}
                       </span>
                       <Textarea
                         value={task.description}
@@ -1183,13 +1265,14 @@ export function WeeklyReportTab({
                           updateTask(index, "description", event.target.value)
                         }
                         disabled={isReadOnly}
-                        className="min-h-[110px] resize-y rounded-xl border-slate-200 bg-slate-50/70 text-right leading-7 focus-visible:ring-[#F2B705]/35"
+                        className="min-h-[110px] resize-y rounded-xl border-slate-200 bg-slate-50/70 text-start leading-7 focus-visible:ring-[#F2B705]/35"
+                        dir={dir}
                       />
                     </label>
 
                     <div>
                       <span className="mb-1.5 block text-sm font-semibold text-slate-900">
-                        الموظف المسؤول / المدير المباشر
+                        {tr(language, "الموظف المسؤول / المدير المباشر", "Responsible Employee / Direct Manager")}
                       </span>
                       <div className="flex min-h-11 items-center justify-center rounded-xl border border-slate-200 bg-slate-50/80 px-3 text-center text-sm font-semibold text-slate-800">
                         {WEEKLY_REPORT_DIRECT_MANAGER_NAME}
@@ -1198,7 +1281,7 @@ export function WeeklyReportTab({
 
                     <label className="block">
                       <span className="mb-1.5 block text-sm font-semibold text-slate-900">
-                        معدل الإنجاز
+                        {tr(language, "معدل الإنجاز", "Progress")}
                       </span>
                       <Input
                         value={task.progress}
@@ -1224,13 +1307,13 @@ export function WeeklyReportTab({
               onClick={addTask}
             >
               <Plus className="h-4 w-4" />
-              إضافة مهمة
+              {tr(language, "إضافة مهمة", "Add Task")}
             </Button>
           ) : null}
 
           <label className="block overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <span className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-950">
-              ملاحظات المدير المباشر
+              {tr(language, "ملاحظات المدير المباشر", "Direct Manager Notes")}
               <FileText className="h-4 w-4 text-slate-500" />
             </span>
             <Textarea
@@ -1243,20 +1326,20 @@ export function WeeklyReportTab({
               }
               disabled={!canEditSelectedManagerNotes}
               placeholder={
-                canWriteManagerNotes
-                  ? "اكتب ملاحظة المدير المباشر على التقرير المحدد."
-                  : "هذه الخانة مخصصة للمدير المباشر فقط."
+                  canWriteManagerNotes
+                  ? tr(language, "اكتب ملاحظة المدير المباشر على التقرير المحدد.", "Write the direct manager note for the selected report.")
+                  : tr(language, "هذه الخانة مخصصة للمدير المباشر فقط.", "This field is reserved for the direct manager only.")
               }
-              className="min-h-[160px] resize-y rounded-none border-0 bg-white text-right leading-8 focus-visible:ring-0"
+              className="min-h-[160px] resize-y rounded-none border-0 bg-white text-start leading-8 focus-visible:ring-0"
+              dir={dir}
             />
             {!canWriteManagerNotes ? (
               <div className="border-t border-slate-100 bg-slate-50 px-4 py-3 text-sm text-slate-500">
-                ملاحظات المدير لا يمكن تعديلها إلا من حساب يملك صلاحية كتابة
-                ملاحظات التقرير الأسبوعي.
+                {tr(language, "ملاحظات المدير لا يمكن تعديلها إلا من حساب يملك صلاحية كتابة ملاحظات التقرير الأسبوعي.", "Manager notes can only be edited by an account with weekly report note permission.")}
               </div>
             ) : !selectedReport?.id ? (
               <div className="border-t border-slate-100 bg-slate-50 px-4 py-3 text-sm text-slate-500">
-                اختر تقريرًا مرسلًا من القائمة حتى تتمكن من كتابة ملاحظة المدير.
+                {tr(language, "اختر تقريرًا مرسلًا من القائمة حتى تتمكن من كتابة ملاحظة المدير.", "Choose a submitted report from the list to write a manager note.")}
               </div>
             ) : null}
           </label>
@@ -1264,7 +1347,7 @@ export function WeeklyReportTab({
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
             <div className="flex items-center gap-2 rounded-full bg-slate-50 px-3 py-2 text-sm text-slate-600">
               <FileText className="h-4 w-4" />
-              المستلم الثابت: {WEEKLY_REPORT_RECEIVER.displayName}
+              {tr(language, "المستلم الثابت:", "Fixed Recipient:")} {WEEKLY_REPORT_RECEIVER.displayName}
             </div>
             <div className="flex flex-wrap justify-end gap-2">
               {canReviewWeeklyReports && selectedReport?.status === "sent" ? (
@@ -1275,7 +1358,7 @@ export function WeeklyReportTab({
                     onClick={() => void downloadCurrentReport(form)}
                   >
                     <Download className="h-4 w-4" />
-                    تحميل Word
+                    {tr(language, "تحميل Word", "Download Word")}
                   </Button>
                   <Button
                     type="button"
@@ -1283,7 +1366,7 @@ export function WeeklyReportTab({
                     onClick={() => void downloadCurrentReportExcel(form)}
                   >
                     <FileSpreadsheet className="h-4 w-4" />
-                    تحميل Excel
+                    {tr(language, "تحميل Excel", "Download Excel")}
                   </Button>
                 </>
               ) : null}
@@ -1296,8 +1379,8 @@ export function WeeklyReportTab({
                 >
                   <Save className="h-4 w-4" />
                   {savingManagerNotes
-                    ? "جارٍ حفظ الملاحظة..."
-                    : "حفظ ملاحظة المدير"}
+                    ? tr(language, "جارٍ حفظ الملاحظة...", "Saving note...")
+                    : tr(language, "حفظ ملاحظة المدير", "Save Manager Note")}
                 </Button>
               ) : null}
               {!(canReviewWeeklyReports && selectedReport?.status === "sent") ? (
@@ -1308,7 +1391,7 @@ export function WeeklyReportTab({
                   onClick={() => void downloadCurrentReportExcel(form)}
                 >
                   <FileSpreadsheet className="h-4 w-4" />
-                  تصدير Excel
+                  {tr(language, "تصدير Excel", "Export Excel")}
                 </Button>
               ) : null}
 
@@ -1322,7 +1405,7 @@ export function WeeklyReportTab({
                     onClick={() => void saveReport("draft")}
                   >
                     <Save className="h-4 w-4" />
-                    حفظ مسودة
+                    {tr(language, "حفظ مسودة", "Save Draft")}
                   </Button>
                   <Button
                     type="button"
@@ -1331,7 +1414,7 @@ export function WeeklyReportTab({
                     onClick={() => void saveReport("sent")}
                   >
                     <Send className="h-4 w-4" />
-                    إرسال التقرير
+                    {tr(language, "إرسال التقرير", "Send Report")}
                   </Button>
                 </>
               ) : null}

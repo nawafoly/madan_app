@@ -13,7 +13,9 @@ import {
 } from "@/components/ui/empty";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import type { Language } from "@/contexts/LanguageContext";
 import { formatDateTimeEN } from "@/lib/formatters";
+import { languageDir, tr } from "@/lib/i18n";
 import type { EmployeeCoworkerOption } from "@/lib/employeeCoworkers";
 import type {
   EmployeeMessageConversationRecord,
@@ -27,6 +29,37 @@ export type MessageSenderProfile = {
   name: string;
   email: string | null;
 };
+
+function formatMessageDate(value: Date | null, language: Language) {
+  if (!value) return "";
+  if (language === "ar") return formatDateTimeEN(value);
+  return new Intl.DateTimeFormat("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(value);
+}
+
+function messageTypeLabel(value: string, language: Language) {
+  if (language === "ar") return value;
+  const normalized = String(value || "").trim();
+  const labels: Record<string, string> = {
+    "رسالة": "Message",
+    "رد": "Reply",
+    "تنبيه": "Alert",
+    "مهمة يومية": "Daily Task",
+    "تقرير أسبوعي": "Weekly Report",
+    "ملف": "File",
+  };
+  return labels[normalized] || normalized || "Message";
+}
+
+function conversationTypeLabel(value: string, isInternal: boolean, language: Language) {
+  if (language === "ar") return value;
+  return isInternal ? "Internal Conversation" : "HR Message";
+}
 
 export function initialsFromName(name: string, email?: string | null) {
   const source = String(name || email || "").trim();
@@ -159,6 +192,7 @@ export function RecipientPicker({
   options,
   selectedRecipient,
   unreadCountsByUid = {},
+  language = "ar",
   loading,
   disabled,
   open,
@@ -168,6 +202,7 @@ export function RecipientPicker({
   options: EmployeeCoworkerOption[];
   selectedRecipient: EmployeeCoworkerOption | null;
   unreadCountsByUid?: Record<string, number>;
+  language?: Language;
   loading: boolean;
   disabled?: boolean;
   open: boolean;
@@ -206,12 +241,12 @@ export function RecipientPicker({
   return (
     <div
       className="min-w-0 max-w-full space-y-4 overflow-hidden rounded-[24px] border border-slate-200/90 bg-white p-4 shadow-sm"
-      dir="rtl"
+      dir={languageDir(language)}
     >
       <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
         <div className="space-y-1 text-right">
           <div className="text-sm font-semibold text-slate-950">
-            اختر الموظف
+            {tr(language, "اختر الموظف", "Choose Employee")}
           </div>
         </div>
 
@@ -220,19 +255,19 @@ export function RecipientPicker({
           className="rounded-full border-slate-200 bg-slate-50 text-slate-600 shadow-none"
         >
           {searchQuery
-            ? `${filteredOptions.length} نتيجة`
-            : `${options.length} موظف`}
+            ? `${filteredOptions.length} ${tr(language, "نتيجة", "results")}`
+            : `${options.length} ${tr(language, "موظف", "employees")}`}
         </Badge>
       </div>
 
       <div className="relative min-w-0">
-        <Search className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+        <Search className="pointer-events-none absolute end-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
         <Input
           value={searchQuery}
           onChange={event => setSearchQuery(event.target.value)}
-          placeholder="ابحث بالاسم أو البريد أو المسمى أو القسم"
-          className="h-11 rounded-2xl border-slate-200 bg-slate-50 pr-11 text-right shadow-none placeholder:text-slate-400 focus-visible:border-sky-300 focus-visible:ring-sky-100"
-          dir="rtl"
+          placeholder={tr(language, "ابحث بالاسم أو البريد أو المسمى أو القسم", "Search by name, email, title, or department")}
+          className="h-11 rounded-2xl border-slate-200 bg-slate-50 ps-11 text-start shadow-none placeholder:text-slate-400 focus-visible:border-sky-300 focus-visible:ring-sky-100"
+          dir={languageDir(language)}
           disabled={disabled}
         />
       </div>
@@ -272,10 +307,10 @@ export function RecipientPicker({
       ) : (
         <div className="rounded-[20px] border border-dashed border-slate-200 bg-slate-50/60 px-5 py-8 text-center">
           <div className="text-sm font-semibold text-slate-900">
-            لا توجد نتائج مطابقة
+            {tr(language, "لا توجد نتائج مطابقة", "No matching results")}
           </div>
           <p className="mt-2 text-sm leading-7 text-slate-500">
-            جرّب البحث باسم مختلف أو بالبريد أو بالقسم للعثور على الموظف.
+            {tr(language, "جرّب البحث باسم مختلف أو بالبريد أو بالقسم للعثور على الموظف.", "Try another name, email, or department to find the employee.")}
           </p>
         </div>
       )}
@@ -288,19 +323,21 @@ export function ConversationListItem({
   isActive,
   viewerUid,
   isOpening,
+  language = "ar",
   onClick,
 }: {
   conversation: EmployeeMessageConversationRecord;
   isActive: boolean;
   viewerUid: string;
   isOpening: boolean;
+  language?: Language;
   onClick: () => void;
 }) {
   const latestMessage = conversation.latestMessage;
   const latestFromViewer = latestMessage.fromUserId === viewerUid;
   const isInternal = conversation.conversationType === "employee_to_employee";
   const counterpartyName =
-    conversation.counterpartyName || (isInternal ? "موظف" : "HR");
+    conversation.counterpartyName || (isInternal ? tr(language, "موظف", "Employee") : "HR");
 
   return (
     <button
@@ -312,7 +349,7 @@ export function ConversationListItem({
           ? "border-sky-200 bg-sky-50/80 shadow-[0_18px_38px_-30px_rgba(2,132,199,0.28)]"
           : "border-slate-200/80 bg-white hover:border-slate-300 hover:bg-slate-50/90"
       )}
-      dir="rtl"
+      dir={languageDir(language)}
     >
       <div className="space-y-3">
         <div className="flex items-start justify-between gap-3">
@@ -356,14 +393,14 @@ export function ConversationListItem({
                       : "border-amber-200 bg-amber-50 text-amber-700"
                   )}
                 >
-                  {conversation.conversationTypeLabel}
+                  {conversationTypeLabel(conversation.conversationTypeLabel, isInternal, language)}
                 </Badge>
 
                 <Badge
                   variant="outline"
                   className="rounded-full border-slate-200 bg-slate-50 text-slate-600 shadow-none"
                 >
-                  {latestMessage.typeLabel}
+                  {messageTypeLabel(latestMessage.typeLabel, language)}
                 </Badge>
 
                 {isActive ? (
@@ -371,7 +408,7 @@ export function ConversationListItem({
                     variant="outline"
                     className="rounded-full border-sky-200 bg-white text-sky-700 shadow-none"
                   >
-                    الحالية
+                    {tr(language, "الحالية", "Current")}
                   </Badge>
                 ) : null}
               </div>
@@ -380,30 +417,30 @@ export function ConversationListItem({
 
           <div className="shrink-0 whitespace-nowrap pt-1 text-[11px] text-slate-500">
             {conversation.lastMessageAtDate
-              ? formatDateTimeEN(conversation.lastMessageAtDate)
-              : "تاريخ غير متوفر"}
+              ? formatMessageDate(conversation.lastMessageAtDate, language)
+              : tr(language, "تاريخ غير متوفر", "Date unavailable")}
           </div>
         </div>
 
         <div className="rounded-[18px] border border-slate-200 bg-slate-50/70 px-3 py-2.5">
           <div className="min-w-0 text-[13px] leading-6 text-slate-600 line-clamp-2 whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
-            {latestMessage.preview || "لا يوجد نص محفوظ لهذه الرسالة."}
+            {latestMessage.preview || tr(language, "لا يوجد نص محفوظ لهذه الرسالة.", "No text saved for this message.")}
           </div>
 
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500">
             <span className="truncate">
               {latestFromViewer
-                ? "آخر تحديث منك"
-                : `آخر تحديث من ${counterpartyName}`}
+                ? tr(language, "آخر تحديث منك", "Last update from you")
+                : `${tr(language, "آخر تحديث من", "Last update from")} ${counterpartyName}`}
             </span>
 
             <div className="flex flex-wrap items-center gap-2">
               <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-600">
-                {conversation.messages.length} رسالة
+                {conversation.messages.length} {tr(language, "رسالة", "messages")}
               </span>
 
               {isOpening ? (
-                <span className="text-sky-700">جارٍ تحديث القراءة...</span>
+                <span className="text-sky-700">{tr(language, "جارٍ تحديث القراءة...", "Updating read status...")}</span>
               ) : null}
             </div>
           </div>
@@ -421,6 +458,7 @@ export function MessageBubble({
   avatarUrl,
   viewerName,
   conversationType,
+  language = "ar",
 }: {
   message: EmployeeMessageRecord;
   ownMessage: boolean;
@@ -429,6 +467,7 @@ export function MessageBubble({
   avatarUrl: string | null;
   viewerName: string;
   conversationType: EmployeeConversationType;
+  language?: Language;
 }) {
   const isInternal = conversationType === "employee_to_employee";
   const incomingAccentClass = isInternal
@@ -460,7 +499,7 @@ export function MessageBubble({
         <>
           <div
             className="max-w-[72%] ml-auto rounded-2xl border border-slate-200 bg-white px-4 py-3 text-right text-slate-800 shadow-[0_18px_40px_-32px_rgba(15,23,42,0.32)]"
-            dir="rtl"
+            dir={languageDir(language)}
           >
             <div className="flex flex-wrap items-center gap-2">
               <Badge
@@ -473,30 +512,32 @@ export function MessageBubble({
                 variant="outline"
                 className="rounded-full border-slate-200 bg-white text-slate-500 shadow-none"
               >
-                {isInternal ? "رسالة داخلية" : "رسالة موظف"}
+                {isInternal
+                  ? tr(language, "رسالة داخلية", "Internal Message")
+                  : tr(language, "رسالة موظف", "Employee Message")}
               </Badge>
               <Badge
                 variant="outline"
                 className="rounded-full border-slate-200 bg-white text-slate-500 shadow-none"
               >
-                {message.typeLabel}
+                {messageTypeLabel(message.typeLabel, language)}
               </Badge>
             </div>
 
             <div className="mt-3 whitespace-pre-wrap break-words text-[0.97rem] leading-8 text-slate-800 [overflow-wrap:anywhere]">
-              {message.body || "لا يوجد نص محفوظ لهذه الرسالة."}
+              {message.body || tr(language, "لا يوجد نص محفوظ لهذه الرسالة.", "No text saved for this message.")}
             </div>
 
             <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200/80 pt-3 text-xs text-slate-500">
               <span>
                 {message.createdAtDate
-                  ? formatDateTimeEN(message.createdAtDate)
-                  : "تاريخ غير متوفر"}
+                  ? formatMessageDate(message.createdAtDate, language)
+                  : tr(language, "تاريخ غير متوفر", "Date unavailable")}
               </span>
               <span>
                 {message.isRead && message.readAtDate
-                  ? `تمت القراءة في ${formatDateTimeEN(message.readAtDate)}`
-                  : "بانتظار القراءة"}
+                  ? `${tr(language, "تمت القراءة في", "Read on")} ${formatMessageDate(message.readAtDate, language)}`
+                  : tr(language, "بانتظار القراءة", "Pending read")}
               </span>
             </div>
           </div>
@@ -510,7 +551,7 @@ export function MessageBubble({
               "max-w-[72%] rounded-2xl border px-4 py-3 text-right shadow-[0_18px_40px_-32px_rgba(15,23,42,0.32)]",
               incomingAccentClass
             )}
-            dir="rtl"
+            dir={languageDir(language)}
           >
             <div className="flex flex-wrap items-center gap-2">
               <Badge
@@ -533,27 +574,29 @@ export function MessageBubble({
                     : "border-[#E7D8AA] bg-[#F8F2DD] text-[#8b6700]"
                 )}
               >
-                {isInternal ? "محادثة داخلية" : "رسالة HR"}
+                {isInternal
+                  ? tr(language, "محادثة داخلية", "Internal Conversation")
+                  : tr(language, "رسالة HR", "HR Message")}
               </Badge>
               <Badge
                 variant="outline"
                 className="rounded-full border-slate-200 bg-white text-slate-500 shadow-none"
               >
-                {message.typeLabel}
+                {messageTypeLabel(message.typeLabel, language)}
               </Badge>
             </div>
 
             <div className="mt-3 whitespace-pre-wrap break-words text-[0.97rem] leading-8 text-slate-800 [overflow-wrap:anywhere]">
-              {message.body || "لا يوجد نص محفوظ لهذه الرسالة."}
+              {message.body || tr(language, "لا يوجد نص محفوظ لهذه الرسالة.", "No text saved for this message.")}
             </div>
 
             <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200/80 pt-3 text-xs text-slate-500">
               <span>
                 {message.createdAtDate
-                  ? formatDateTimeEN(message.createdAtDate)
-                  : "تاريخ غير متوفر"}
+                  ? formatMessageDate(message.createdAtDate, language)
+                  : tr(language, "تاريخ غير متوفر", "Date unavailable")}
               </span>
-              <span>{isInternal ? "واردة من الموظف" : "واردة من HR"}</span>
+              <span>{isInternal ? tr(language, "واردة من الموظف", "From Employee") : tr(language, "واردة من HR", "From HR")}</span>
             </div>
           </div>
         </>
@@ -569,6 +612,7 @@ function ConversationListSection({
   activeConversationId,
   openingConversationId,
   currentUserUid,
+  language = "ar",
   onSelectConversation,
   emptyListTitle,
   emptyListDescription,
@@ -579,6 +623,7 @@ function ConversationListSection({
   activeConversationId: string | null;
   openingConversationId: string | null;
   currentUserUid: string;
+  language?: Language;
   onSelectConversation: (
     conversation: EmployeeMessageConversationRecord
   ) => void;
@@ -586,7 +631,7 @@ function ConversationListSection({
   emptyListDescription: string;
 }) {
   return (
-    <section dir="rtl" className="space-y-4 text-right">
+    <section dir={languageDir(language)} className="space-y-4 text-start">
       <div className="border-b border-slate-200/80 pb-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="space-y-1">
@@ -602,7 +647,7 @@ function ConversationListSection({
               variant="outline"
               className="rounded-full border-slate-200 bg-white text-slate-600 shadow-none"
             >
-              {conversations.length} سجل
+              {conversations.length} {tr(language, "سجل", "records")}
             </Badge>
           ) : null}
         </div>
@@ -618,6 +663,7 @@ function ConversationListSection({
                 isActive={conversation.id === activeConversationId}
                 viewerUid={currentUserUid}
                 isOpening={openingConversationId === conversation.id}
+                language={language}
                 onClick={() => onSelectConversation(conversation)}
               />
             ))}
@@ -646,6 +692,7 @@ export function ConversationWorkspace({
   currentUserDisplayName,
   currentUserAvatarUrl,
   messageSenderLookup,
+  language = "ar",
   onSelectConversation,
   onCloseConversation,
   emptyListTitle,
@@ -667,6 +714,7 @@ export function ConversationWorkspace({
   currentUserDisplayName: string;
   currentUserAvatarUrl: string | null;
   messageSenderLookup: Record<string, MessageSenderProfile>;
+  language?: Language;
   onSelectConversation: (
     conversation: EmployeeMessageConversationRecord
   ) => void;
@@ -695,6 +743,7 @@ export function ConversationWorkspace({
           activeConversationId={activeConversationId}
           openingConversationId={openingConversationId}
           currentUserUid={currentUserUid}
+          language={language}
           onSelectConversation={onSelectConversation}
           emptyListTitle={emptyListTitle}
           emptyListDescription={emptyListDescription}
@@ -706,9 +755,9 @@ export function ConversationWorkspace({
           "space-y-4",
           hideConversationList ? "" : "xl:border-l xl:border-slate-200/70 xl:pl-6"
         )}
-        dir="rtl"
+        dir={languageDir(language)}
       >
-        <div className="space-y-5 text-right">
+        <div className="space-y-5 text-start">
           {activeConversation ? (
             <div className="space-y-5">
               <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-200/80 pb-4">
@@ -718,10 +767,10 @@ export function ConversationWorkspace({
                       variant="outline"
                       className="rounded-full border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-medium text-slate-600 shadow-none"
                     >
-                      آخر تحديث:{" "}
+                      {tr(language, "آخر تحديث:", "Last Update:")}{" "}
                       {activeConversation.lastMessageAtDate
-                        ? formatDateTimeEN(activeConversation.lastMessageAtDate)
-                        : "غير متوفر"}
+                        ? formatMessageDate(activeConversation.lastMessageAtDate, language)
+                        : tr(language, "غير متوفر", "Unavailable")}
                     </Badge>
                   </div>
 
@@ -733,8 +782,8 @@ export function ConversationWorkspace({
                       {activeConversation.counterpartyEmail ||
                         (activeConversation.conversationType ===
                           "employee_to_employee"
-                          ? "سجل المحادثة الداخلية الحالي بينك وبين الموظف المحدد."
-                          : "هذا السجل مخصص للرسائل الرسمية مع HR داخل نفس المسار.")}
+                          ? tr(language, "سجل المحادثة الداخلية الحالي بينك وبين الموظف المحدد.", "Current internal conversation record between you and the selected employee.")
+                          : tr(language, "هذا السجل مخصص للرسائل الرسمية مع HR داخل نفس المسار.", "This record is for official HR messages in this thread."))}
                     </p>
                   </div>
 
@@ -749,17 +798,21 @@ export function ConversationWorkspace({
                           : "border-[#F2B705]/35 bg-[#F2B705]/10 text-[#8b6700]"
                       )}
                     >
-                      {activeConversation.conversationTypeLabel}
+                      {conversationTypeLabel(
+                        activeConversation.conversationTypeLabel,
+                        activeConversation.conversationType === "employee_to_employee",
+                        language
+                      )}
                     </Badge>
                     <Badge
                       variant="outline"
                       className="rounded-full border-slate-200 bg-white text-slate-600 shadow-none"
                     >
-                      {activeConversation.latestMessage.typeLabel}
+                      {messageTypeLabel(activeConversation.latestMessage.typeLabel, language)}
                     </Badge>
                     {activeConversation.unreadCount > 0 ? (
                       <Badge className="rounded-full bg-[#F2B705] text-slate-950 hover:bg-[#F2B705]">
-                        {activeConversation.unreadCount} جديد
+                        {activeConversation.unreadCount} {tr(language, "جديد", "new")}
                       </Badge>
                     ) : null}
                   </div>
@@ -770,7 +823,7 @@ export function ConversationWorkspace({
                   variant="outline"
                   onClick={onCloseConversation}
                 >
-                  إغلاق
+                  {tr(language, "إغلاق", "Close")}
                 </Button>
               </div>
 
@@ -808,6 +861,7 @@ export function ConversationWorkspace({
                       avatarUrl={avatarUrl}
                       viewerName={currentUserDisplayName}
                       conversationType={activeConversation.conversationType}
+                      language={language}
                     />
                   );
                 })}

@@ -16,6 +16,8 @@ export type EmployeeBottomNavItem = {
 type AppBottomNavProps = {
   items: EmployeeBottomNavItem[];
   className?: string;
+  dir?: "rtl" | "ltr";
+  ariaLabel?: string;
 };
 
 function BottomNavContent({ item }: { item: EmployeeBottomNavItem }) {
@@ -48,15 +50,20 @@ function BottomNavContent({ item }: { item: EmployeeBottomNavItem }) {
   );
 }
 
-export default function AppBottomNav({ items, className }: AppBottomNavProps) {
+export default function AppBottomNav({
+  items,
+  className,
+  dir = "rtl",
+  ariaLabel = "Employee portal navigation",
+}: AppBottomNavProps) {
   return (
     <nav
-      dir="rtl"
+      dir={dir}
       className={cn(
         "fixed inset-x-0 bottom-0 z-40 border-t border-slate-100 bg-white/95 px-3 pb-[max(0.6rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-18px_38px_-28px_rgba(15,23,42,0.4)] backdrop-blur",
         className
       )}
-      aria-label="تنقل بوابة الموظف"
+      aria-label={ariaLabel}
     >
       <div className="mx-auto flex max-w-[520px] items-center justify-between gap-1">
         {items.map(item => {

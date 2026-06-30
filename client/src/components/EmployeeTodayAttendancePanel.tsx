@@ -37,6 +37,8 @@ import {
   type WorkScheduleWeekday,
 } from "@/lib/workSchedule";
 import { toast } from "sonner";
+import { useLanguage, type Language } from "@/contexts/LanguageContext";
+import { languageDir, tr } from "@/lib/i18n";
 
 type ApprovedLeaveLike = {
   status?: unknown;
@@ -115,18 +117,19 @@ function isValidYearMonth(value: string) {
   return /^\d{4}-(0[1-9]|1[0-2])$/.test(value);
 }
 
-function getMonthBounds(monthDate: Date): MonthBounds {
+function getMonthBounds(monthDate: Date, language: "ar" | "en"): MonthBounds {
   const year = monthDate.getUTCFullYear();
   const monthIndex = monthDate.getUTCMonth();
   const month = String(monthIndex + 1).padStart(2, "0");
   const daysInMonth = new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate();
   const firstDayIndex = new Date(Date.UTC(year, monthIndex, 1)).getUTCDay();
   const labelDate = new Date(Date.UTC(year, monthIndex, 15, 12));
-  const monthName = new Intl.DateTimeFormat("ar-SA-u-ca-gregory", {
+  const locale = language === "ar" ? "ar-SA-u-ca-gregory" : "en-US";
+  const monthName = new Intl.DateTimeFormat(locale, {
     timeZone: RIYADH_TIME_ZONE,
     month: "long",
   }).format(labelDate);
-  const yearLabel = new Intl.DateTimeFormat("ar-SA-u-ca-gregory", {
+  const yearLabel = new Intl.DateTimeFormat(locale, {
     timeZone: RIYADH_TIME_ZONE,
     year: "numeric",
   }).format(labelDate);
@@ -212,11 +215,11 @@ function formatTimeInputValue(value?: string | null) {
   return `${values.hour}:${values.minute}`;
 }
 
-function formatArabicDate(value: string) {
+function formatLocalizedDate(value: string, language: "ar" | "en") {
   const date = new Date(`${value}T12:00:00+03:00`);
   if (Number.isNaN(date.getTime())) return value;
 
-  return new Intl.DateTimeFormat("ar-SA-u-ca-gregory", {
+  return new Intl.DateTimeFormat(language === "ar" ? "ar-SA-u-ca-gregory" : "en-US", {
     timeZone: RIYADH_TIME_ZONE,
     weekday: "long",
     day: "2-digit",
@@ -224,7 +227,7 @@ function formatArabicDate(value: string) {
   }).format(date);
 }
 
-function formatDurationFromMs(value: number | null) {
+function formatDurationFromMs(value: number | null, language: "ar" | "en") {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
     return "--";
   }
@@ -233,13 +236,18 @@ function formatDurationFromMs(value: number | null) {
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
 
-  if (hours && minutes)
-    return `${formatNumberEN(hours)} ساعة ${formatNumberEN(minutes)} دقيقة`;
-  if (hours) return `${formatNumberEN(hours)} ساعة`;
-  return `${formatNumberEN(minutes)} دقيقة`;
+  if (hours && minutes) {
+    return tr(
+      language,
+      `${formatNumberEN(hours)} ساعة ${formatNumberEN(minutes)} دقيقة`,
+      `${formatNumberEN(hours)}h ${formatNumberEN(minutes)}m`
+    );
+  }
+  if (hours) return tr(language, `${formatNumberEN(hours)} ساعة`, `${formatNumberEN(hours)}h`);
+  return tr(language, `${formatNumberEN(minutes)} دقيقة`, `${formatNumberEN(minutes)}m`);
 }
 
-function formatDurationFromHours(value: number | null | undefined) {
+function formatDurationFromHours(value: number | null | undefined, language: "ar" | "en") {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
     return "--";
   }
@@ -249,10 +257,14 @@ function formatDurationFromHours(value: number | null | undefined) {
   const minutes = totalMinutes % 60;
 
   if (hours && minutes) {
-    return `${formatNumberEN(hours)} ساعة ${formatNumberEN(minutes)} دقيقة`;
+    return tr(
+      language,
+      `${formatNumberEN(hours)} ساعة ${formatNumberEN(minutes)} دقيقة`,
+      `${formatNumberEN(hours)}h ${formatNumberEN(minutes)}m`
+    );
   }
-  if (hours) return `${formatNumberEN(hours)} ساعة`;
-  return `${formatNumberEN(minutes)} دقيقة`;
+  if (hours) return tr(language, `${formatNumberEN(hours)} ساعة`, `${formatNumberEN(hours)}h`);
+  return tr(language, `${formatNumberEN(minutes)} دقيقة`, `${formatNumberEN(minutes)}m`);
 }
 
 function getAttendanceStatus(
@@ -280,23 +292,23 @@ function getAttendanceStatus(
   });
 }
 
-function getAttendanceStatusLabel(status: AttendanceStatus) {
+function getAttendanceStatusLabel(status: AttendanceStatus, language: "ar" | "en") {
   switch (status) {
     case "present":
-      return "حضور مكتمل";
+      return tr(language, "حضور مكتمل", "Complete Attendance");
     case "partial":
-      return "حضور يحتاج مراجعة";
+      return tr(language, "حضور يحتاج مراجعة", "Needs Review");
     case "absent":
-      return "غياب";
+      return tr(language, "غياب", "Absent");
     case "leave":
-      return "إجازة معتمدة";
+      return tr(language, "إجازة معتمدة", "Approved Leave");
     case "off_day":
-      return "يوم راحة أسبوعية";
+      return tr(language, "يوم راحة أسبوعية", "Weekly Day Off");
     case "today_pending":
-      return "بانتظار تسجيل اليوم";
+      return tr(language, "بانتظار تسجيل اليوم", "Pending Today");
     case "future":
     default:
-      return "يوم قادم";
+      return tr(language, "يوم قادم", "Upcoming Day");
   }
 }
 
@@ -534,18 +546,20 @@ function MonthlySummaryField({
 
 function AttendanceMonthlySummaryCard({
   summary,
+  language,
 }: {
   summary: AttendanceMonthlySummary;
+  language: Language;
 }) {
   return (
     <div className="space-y-3 rounded-[22px] border border-emerald-100 bg-emerald-50/50 p-4">
       <div className="flex flex-wrap items-center justify-between gap-2 text-right">
         <div>
           <div className="text-sm font-semibold text-emerald-900">
-            ملخص الحضور الشهري
+            {tr(language, "ملخص الحضور الشهري", "Monthly Attendance Summary")}
           </div>
           <p className="mt-1 text-xs leading-6 text-emerald-700">
-            هذه قراءة محفوظة من جدول الملخصات، وليست أرشفة أو حذف للسجلات.
+            {tr(language, "هذه قراءة محفوظة من جدول الملخصات، وليست أرشفة أو حذف للسجلات.", "This is a saved summary record, not an archive or deletion of attendance records.")}
           </p>
         </div>
         <span className="rounded-full border border-emerald-200 bg-white px-3 py-1 text-xs font-semibold text-emerald-800">
@@ -613,6 +627,7 @@ export default function EmployeeTodayAttendancePanel({
   absenceDateKeys = [],
   canManageAttendance = false,
 }: EmployeeTodayAttendancePanelProps) {
+  const { language } = useLanguage();
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -637,7 +652,10 @@ export default function EmployeeTodayAttendancePanel({
   const [savingAdjustment, setSavingAdjustment] = useState(false);
   const [clearingAttendance, setClearingAttendance] = useState(false);
   const [adjustmentRefreshKey, setAdjustmentRefreshKey] = useState(0);
-  const monthBounds = useMemo(() => getMonthBounds(monthDate), [monthDate]);
+  const monthBounds = useMemo(
+    () => getMonthBounds(monthDate, language),
+    [language, monthDate]
+  );
   const detailsRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -806,7 +824,7 @@ export default function EmployeeTodayAttendancePanel({
     weeklyOffDays,
   ]);
   const workDurationMs = getWorkDurationMs(selectedDay);
-  const workDurationLabel = formatDurationFromMs(workDurationMs);
+  const workDurationLabel = formatDurationFromMs(workDurationMs, language);
   const attendanceComputation = selectedDay
     ? computeAttendanceDay(selectedDay.date, selectedDay.records, {
         startTime: shiftStartTime,
@@ -825,25 +843,25 @@ export default function EmployeeTodayAttendancePanel({
     }
   );
   const lateHoursLabel = attendanceComputation?.lateHours
-    ? formatDurationFromHours(attendanceComputation.lateHours)
+    ? formatDurationFromHours(attendanceComputation.lateHours, language)
     : "--";
   const overtimeHoursLabel = attendanceComputation?.overtimeHours
-    ? formatDurationFromHours(attendanceComputation.overtimeHours)
+    ? formatDurationFromHours(attendanceComputation.overtimeHours, language)
     : "--";
   const missingHoursLabel =
     attendanceComputation?.missingHours && selectedDay?.checkOut
-      ? formatDurationFromHours(attendanceComputation.missingHours)
+      ? formatDurationFromHours(attendanceComputation.missingHours, language)
       : "--";
   const differenceLabel = attendanceComputation
     ? attendanceComputation.lateHours > 0
-      ? `-${formatDurationFromHours(attendanceComputation.lateHours)}`
+      ? `-${formatDurationFromHours(attendanceComputation.lateHours, language)}`
       : attendanceComputation.overtimeHours > 0
-        ? `+${formatDurationFromHours(attendanceComputation.overtimeHours)}`
+        ? `+${formatDurationFromHours(attendanceComputation.overtimeHours, language)}`
         : attendanceComputation.missingHours > 0 && selectedDay?.checkOut
-          ? `-${formatDurationFromHours(attendanceComputation.missingHours)}`
+          ? `-${formatDurationFromHours(attendanceComputation.missingHours, language)}`
           : "0"
     : "--";
-  const selectedStatusLabel = getAttendanceStatusLabel(selectedStatus);
+  const selectedStatusLabel = getAttendanceStatusLabel(selectedStatus, language);
   const isRestOrLeaveSelectedDay =
     selectedStatus === "leave" || selectedStatus === "off_day";
   const selectedRecordsCount = selectedDay?.records.length || 0;
@@ -931,7 +949,11 @@ export default function EmployeeTodayAttendancePanel({
     if (
       typeof window !== "undefined" &&
       !window.confirm(
-        `مسح بصمة يوم ${formatArabicDate(selectedDate)}؟\n\nسيتم حذف سجلات الحضور والانصراف لهذا اليوم وإعادة تصفير حالة الموظف.`
+        tr(
+          language,
+          `مسح بصمة يوم ${formatLocalizedDate(selectedDate, language)}؟\n\nسيتم حذف سجلات الحضور والانصراف لهذا اليوم وإعادة تصفير حالة الموظف.`,
+          `Clear attendance for ${formatLocalizedDate(selectedDate, language)}?\n\nThis will delete check-in and check-out records for this day and reset the employee status.`
+        )
       )
     ) {
       return;
@@ -1017,7 +1039,7 @@ export default function EmployeeTodayAttendancePanel({
 
   return (
     <section
-      dir="rtl"
+      dir={languageDir(language)}
       className={cn(
         "w-full max-w-none space-y-6 rounded-[28px] bg-[#fbfbfc] px-4 pb-10 pt-2 text-slate-950 sm:px-6 xl:px-8",
         className
@@ -1028,12 +1050,12 @@ export default function EmployeeTodayAttendancePanel({
           type="button"
           className="flex h-11 w-11 items-center justify-center rounded-full text-slate-800 transition hover:bg-slate-100"
           onClick={openRecordsList}
-          aria-label="عرض سجلات اليوم المحدد"
+          aria-label={tr(language, "عرض سجلات اليوم المحدد", "Show selected day records")}
         >
           <Menu className="h-7 w-7" />
         </button>
         <h1 className="text-center text-2xl font-medium tracking-normal text-slate-950">
-          الحضور
+          {tr(language, "الحضور", "Attendance")}
         </h1>
         <button
           type="button"
@@ -1043,7 +1065,7 @@ export default function EmployeeTodayAttendancePanel({
           )}
           onClick={() => setSummaryOpen(open => !open)}
           aria-pressed={summaryOpen}
-          aria-label="عرض ملخص حالات الشهر"
+          aria-label={tr(language, "عرض ملخص حالات الشهر", "Show monthly status summary")}
         >
           <SlidersHorizontal className="h-6 w-6" />
         </button>
@@ -1052,27 +1074,27 @@ export default function EmployeeTodayAttendancePanel({
       {summaryOpen ? (
         <div className="grid gap-2 rounded-[18px] border border-slate-200 bg-white px-3 py-3 text-sm shadow-sm sm:grid-cols-3">
           <AttendanceSummaryPill
-            label="حضور"
+            label={tr(language, "حضور", "Present")}
             value={attendanceStatusCounts.present}
             className="border-emerald-200 bg-emerald-50 text-emerald-700"
           />
           <AttendanceSummaryPill
-            label="ناقص"
+            label={tr(language, "ناقص", "Partial")}
             value={attendanceStatusCounts.partial}
             className="border-orange-200 bg-orange-50 text-orange-700"
           />
           <AttendanceSummaryPill
-            label="غياب"
+            label={tr(language, "غياب", "Absent")}
             value={attendanceStatusCounts.absent}
             className="border-rose-200 bg-rose-50 text-rose-700"
           />
           <AttendanceSummaryPill
-            label="إجازة"
+            label={tr(language, "إجازة", "Leave")}
             value={attendanceStatusCounts.leave}
             className="border-violet-300 bg-violet-100 text-violet-800"
           />
           <AttendanceSummaryPill
-            label="راحة"
+            label={tr(language, "راحة", "Off")}
             value={attendanceStatusCounts.off_day}
             className="border-cyan-300 bg-cyan-100 text-cyan-800"
           />
@@ -1084,16 +1106,19 @@ export default function EmployeeTodayAttendancePanel({
           <div className="flex flex-col gap-3 text-right lg:flex-row lg:items-end lg:justify-between">
             <div>
               <div className="text-base font-semibold text-slate-950">
-                ملخص الحضور الشهري
+                {tr(language, "ملخص الحضور الشهري", "Monthly Attendance Summary")}
               </div>
               <p className="mt-1 text-xs leading-6 text-slate-500">
-                اختر شهرًا لتوليد أو عرض الملخص المحفوظ بدون حذف أو أرشفة
-                للسجلات.
+                {tr(
+                  language,
+                  "اختر شهرًا لتوليد أو عرض الملخص المحفوظ بدون حذف أو أرشفة للسجلات.",
+                  "Choose a month to generate or view the saved summary without deleting or archiving records."
+                )}
               </p>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
               <label className="space-y-2 text-sm font-semibold text-slate-800">
-                الشهر
+                {tr(language, "الشهر", "Month")}
                 <input
                   type="month"
                   value={summaryMonth}
@@ -1116,7 +1141,7 @@ export default function EmployeeTodayAttendancePanel({
                 {monthlySummaryGenerating ? (
                   <Loader2 className="ml-2 h-4 w-4 animate-spin" />
                 ) : null}
-                توليد ملخص الشهر
+                {tr(language, "توليد ملخص الشهر", "Generate Month Summary")}
               </Button>
             </div>
           </div>
@@ -1128,14 +1153,17 @@ export default function EmployeeTodayAttendancePanel({
           ) : monthlySummaryLoading ? (
             <div className="flex min-h-[92px] items-center justify-center rounded-[16px] border border-slate-200 bg-slate-50 text-sm text-slate-500">
               <Loader2 className="ml-2 h-4 w-4 animate-spin" />
-              جاري تحميل ملخص الحضور الشهري...
+              {tr(language, "جاري تحميل ملخص الحضور الشهري...", "Loading monthly attendance summary...")}
             </div>
           ) : monthlySummary ? (
-            <AttendanceMonthlySummaryCard summary={monthlySummary} />
+            <AttendanceMonthlySummaryCard summary={monthlySummary} language={language} />
           ) : (
             <div className="rounded-[16px] border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-center text-sm leading-7 text-slate-500">
-              لا يوجد ملخص محفوظ لهذا الشهر بعد. اضغط "توليد ملخص الشهر"
-              لإنشاء القراءة الأولى.
+              {tr(
+                language,
+                "لا يوجد ملخص محفوظ لهذا الشهر بعد. اضغط \"توليد ملخص الشهر\" لإنشاء القراءة الأولى.",
+                "No saved summary exists for this month yet. Click \"Generate Month Summary\" to create the first reading."
+              )}
             </div>
           )}
         </div>
@@ -1147,7 +1175,7 @@ export default function EmployeeTodayAttendancePanel({
             type="button"
             className="flex h-11 w-11 items-center justify-center rounded-full text-slate-950 transition hover:bg-slate-100"
             onClick={() => changeMonth("next")}
-            aria-label="الشهر التالي"
+            aria-label={tr(language, "الشهر التالي", "Next Month")}
           >
             <ChevronRight className="h-8 w-8" />
           </button>
@@ -1165,7 +1193,7 @@ export default function EmployeeTodayAttendancePanel({
             type="button"
             className="flex h-11 w-11 items-center justify-center rounded-full text-slate-950 transition hover:bg-slate-100"
             onClick={() => changeMonth("previous")}
-            aria-label="الشهر السابق"
+            aria-label={tr(language, "الشهر السابق", "Previous Month")}
           >
             <ChevronLeft className="h-8 w-8" />
           </button>
@@ -1217,7 +1245,7 @@ export default function EmployeeTodayAttendancePanel({
                           "text-slate-900 hover:bg-cyan-50"
                       )
                 )}
-                aria-label={`${formatArabicDate(day.date)} - ${getAttendanceStatusLabel(attendanceStatus)}`}
+                aria-label={`${formatLocalizedDate(day.date, language)} - ${getAttendanceStatusLabel(attendanceStatus, language)}`}
               >
                 {indicatorClass ? (
                   <span
@@ -1244,7 +1272,7 @@ export default function EmployeeTodayAttendancePanel({
 
                 {attendanceStatus === "leave" ? (
                   <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 rounded-full bg-violet-700 px-1.5 py-0.5 text-[9px] font-bold leading-none text-white">
-                    إ
+                    {tr(language, "إ", "L")}
                   </span>
                 ) : null}
               </button>
@@ -1262,7 +1290,7 @@ export default function EmployeeTodayAttendancePanel({
             activeTab === "records" ? "text-slate-950" : "text-slate-300"
           )}
         >
-          السجلات
+          {tr(language, "السجلات", "Records")}
           <span
             className={cn(
               "mx-auto mt-5 block h-1.5 w-full max-w-[330px] rounded-full",
@@ -1278,7 +1306,7 @@ export default function EmployeeTodayAttendancePanel({
             activeTab === "leave" ? "text-slate-950" : "text-slate-300"
           )}
         >
-          إجازتي
+          {tr(language, "إجازتي", "My Leave")}
           <span
             className={cn(
               "mx-auto mt-5 block h-1.5 w-full max-w-[330px] rounded-full",
@@ -1335,7 +1363,7 @@ export default function EmployeeTodayAttendancePanel({
                     ) : (
                       <Trash2 className="ml-2 h-4 w-4" />
                     )}
-                    مسح البصمة
+                    {tr(language, "مسح البصمة", "Clear Attendance")}
                   </Button>
                 ) : null}
                 <Button
@@ -1348,7 +1376,7 @@ export default function EmployeeTodayAttendancePanel({
                     !employeeUid || savingAdjustment || clearingAttendance
                   }
                 >
-                  تعديل البصمة
+                  {tr(language, "تعديل البصمة", "Adjust Attendance")}
                 </Button>
               </div>
             ) : null}
@@ -1358,17 +1386,24 @@ export default function EmployeeTodayAttendancePanel({
             <div className="rounded-[20px] border border-slate-200 bg-white p-4 shadow-[0_12px_32px_-28px_rgba(15,23,42,0.35)]">
               <div className="flex flex-col gap-1 text-right">
                 <div className="text-sm font-semibold text-slate-950">
-                  تعديل بصمة يوم {formatArabicDate(selectedDate)}
+                  {tr(
+                    language,
+                    `تعديل بصمة يوم ${formatLocalizedDate(selectedDate, language)}`,
+                    `Adjust attendance for ${formatLocalizedDate(selectedDate, language)}`
+                  )}
                 </div>
                 <p className="text-xs leading-6 text-slate-500">
-                  يستخدم عند اعتماد طلب تصحيح أو وجود مشكلة موقع أو نسيان
-                  البصمة.
+                  {tr(
+                    language,
+                    "يستخدم عند اعتماد طلب تصحيح أو وجود مشكلة موقع أو نسيان البصمة.",
+                    "Use this when approving a correction request, handling a location issue, or fixing a missed punch."
+                  )}
                 </p>
               </div>
 
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 <label className="space-y-2 text-sm font-semibold text-slate-800">
-                  وقت الحضور
+                  {tr(language, "وقت الحضور", "Check-in Time")}
                   <input
                     type="time"
                     dir="ltr"
@@ -1382,7 +1417,7 @@ export default function EmployeeTodayAttendancePanel({
                 </label>
 
                 <label className="space-y-2 text-sm font-semibold text-slate-800">
-                  وقت الانصراف
+                  {tr(language, "وقت الانصراف", "Check-out Time")}
                   <input
                     type="time"
                     dir="ltr"
@@ -1397,11 +1432,11 @@ export default function EmployeeTodayAttendancePanel({
               </div>
 
               <label className="mt-3 block space-y-2 text-sm font-semibold text-slate-800">
-                سبب التعديل
+                {tr(language, "سبب التعديل", "Adjustment Reason")}
                 <textarea
                   value={adjustmentNote}
                   onChange={event => setAdjustmentNote(event.target.value)}
-                  placeholder="مثال: تم اعتماد طلب التصحيح بعد مراجعة HR"
+                  placeholder={tr(language, "مثال: تم اعتماد طلب التصحيح بعد مراجعة HR", "Example: correction request approved after HR review")}
                   className="min-h-20 w-full resize-none rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-normal outline-none transition focus:border-slate-400 focus:bg-white"
                   disabled={savingAdjustment}
                 />
@@ -1415,7 +1450,7 @@ export default function EmployeeTodayAttendancePanel({
                   onClick={() => setAdjustmentOpen(false)}
                   disabled={savingAdjustment}
                 >
-                  إلغاء
+                  {tr(language, "إلغاء", "Cancel")}
                 </Button>
                 <Button
                   type="button"
@@ -1426,7 +1461,7 @@ export default function EmployeeTodayAttendancePanel({
                   {savingAdjustment ? (
                     <Loader2 className="ml-2 h-4 w-4 animate-spin" />
                   ) : null}
-                  حفظ تعديل البصمة
+                  {tr(language, "حفظ تعديل البصمة", "Save Attendance Adjustment")}
                 </Button>
               </div>
             </div>
@@ -1439,7 +1474,7 @@ export default function EmployeeTodayAttendancePanel({
           ) : loading ? (
             <div className="flex min-h-[220px] items-center justify-center rounded-[20px] border border-slate-200 bg-white text-slate-500">
               <Loader2 className="ml-2 h-5 w-5 animate-spin" />
-              جاري تحميل سجل الحضور...
+              {tr(language, "جاري تحميل سجل الحضور...", "Loading attendance records...")}
             </div>
           ) : (
             <>
@@ -1507,26 +1542,26 @@ export default function EmployeeTodayAttendancePanel({
                   <div className="mt-3 text-lg font-semibold">
                     {selectedStatus === "absent"
                       ? absenceDateKeySet.has(selectedDate)
-                        ? "غياب مسجل من الموارد البشرية"
-                        : "غياب - لا يوجد سجل حضور"
+                        ? tr(language, "غياب مسجل من الموارد البشرية", "Absence recorded by HR")
+                        : tr(language, "غياب - لا يوجد سجل حضور", "Absent - no check-in record")
                       : selectedStatus === "leave"
-                        ? "إجازة معتمدة لهذا اليوم"
+                        ? tr(language, "إجازة معتمدة لهذا اليوم", "Approved leave for this day")
                         : selectedStatus === "off_day"
-                          ? "يوم راحة أسبوعية"
+                          ? tr(language, "يوم راحة أسبوعية", "Weekly day off")
                           : selectedStatus === "today_pending"
-                            ? "لم يتم تسجيل حضور لهذا اليوم حتى الآن"
-                            : "لا يوجد سجل"}
+                            ? tr(language, "لم يتم تسجيل حضور لهذا اليوم حتى الآن", "No check-in has been recorded for today yet")
+                            : tr(language, "لا يوجد سجل", "No record")}
                   </div>
                   <p className="mt-2 text-sm leading-6 text-slate-400">
                     {selectedStatus === "absent"
                       ? absenceDateKeySet.has(selectedDate)
-                        ? "هذا اليوم مسجل في سجل الغياب، ويظهر في التقويم كغياب محسوب."
-                        : "هذا يوم عمل سابق بلا سجلات حضور، ويُعامل كغياب محسوب."
+                        ? tr(language, "هذا اليوم مسجل في سجل الغياب، ويظهر في التقويم كغياب محسوب.", "This day is recorded as an absence and appears in the calendar as counted absence.")
+                        : tr(language, "هذا يوم عمل سابق بلا سجلات حضور، ويُعامل كغياب محسوب.", "This is a past workday without attendance records and is treated as counted absence.")
                       : selectedStatus === "leave"
-                        ? "هذا اليوم مستثنى بسبب إجازة معتمدة للموظف."
+                        ? tr(language, "هذا اليوم مستثنى بسبب إجازة معتمدة للموظف.", "This day is excluded because the employee has approved leave.")
                         : selectedStatus === "off_day"
-                          ? `هذا اليوم ضمن أيام الراحة الأسبوعية: ${weeklyOffDaysLabel}.`
-                          : "لا توجد بيانات حضور فعلية لليوم المحدد."}
+                          ? tr(language, `هذا اليوم ضمن أيام الراحة الأسبوعية: ${weeklyOffDaysLabel}.`, `This day is part of the weekly days off: ${weeklyOffDaysLabel}.`)
+                          : tr(language, "لا توجد بيانات حضور فعلية لليوم المحدد.", "No actual attendance data exists for the selected day.")}
                   </p>
                 </div>
               )}
@@ -1535,19 +1570,19 @@ export default function EmployeeTodayAttendancePanel({
                 <>
                   <div className="grid grid-cols-2 gap-4">
                     <AttendanceMetric
-                      label="أول حضور"
+                      label={tr(language, "أول حضور", "First Check-in")}
                       value={firstCheckInLabel}
                     />
                     <AttendanceMetric
-                      label="آخر انصراف"
+                      label={tr(language, "آخر انصراف", "Last Check-out")}
                       value={lastCheckOutLabel}
                     />
                     <AttendanceMetric
-                      label="مدة العمل"
+                      label={tr(language, "مدة العمل", "Work Duration")}
                       value={workDurationLabel}
                     />
                     <AttendanceMetric
-                      label="الفرق"
+                      label={tr(language, "الفرق", "Difference")}
                       value={differenceLabel}
                       valueClassName={cn(
                         "text-2xl",
@@ -1566,7 +1601,7 @@ export default function EmployeeTodayAttendancePanel({
                   >
                     <div>
                       <div className="text-sm font-medium text-slate-400">
-                        الأوفر تايم
+                        {tr(language, "الأوفر تايم", "Overtime")}
                       </div>
                       <div className="mt-8 text-base font-semibold text-blue-700">
                         {overtimeHoursLabel}
@@ -1574,7 +1609,7 @@ export default function EmployeeTodayAttendancePanel({
                     </div>
                     <div>
                       <div className="text-sm font-medium text-slate-400">
-                        التأخير
+                        {tr(language, "التأخير", "Late")}
                       </div>
                       <div className="mt-8 text-base font-semibold text-orange-700">
                         {lateHoursLabel}
@@ -1582,7 +1617,7 @@ export default function EmployeeTodayAttendancePanel({
                     </div>
                     <div>
                       <div className="text-sm font-medium text-slate-400">
-                        نقص الساعات
+                        {tr(language, "نقص الساعات", "Missing Hours")}
                       </div>
                       <div className="mt-8 text-base font-semibold text-rose-700">
                         {missingHoursLabel}
@@ -1598,17 +1633,20 @@ export default function EmployeeTodayAttendancePanel({
         <div className="min-h-[220px] rounded-[20px] border border-dashed border-slate-200 bg-white px-5 py-10 text-center">
           <CalendarDays className="mx-auto h-10 w-10 text-slate-300" />
           <div className="mt-4 text-lg font-semibold text-slate-950">
-            لا توجد بيانات إجازات هنا
+            {tr(language, "لا توجد بيانات إجازات هنا", "No leave data here")}
           </div>
           <p className="mx-auto mt-2 max-w-sm text-sm leading-7 text-slate-400">
-            TODO: تبويب إجازتي واجهة مكانية فقط داخل شاشة الحضور حتى يتم ربطه
-            بمصدر الإجازات الحالي عند الحاجة.
+            {tr(
+              language,
+              "تبويب إجازتي واجهة مكانية فقط داخل شاشة الحضور حتى يتم ربطه بمصدر الإجازات الحالي عند الحاجة.",
+              "The My Leave tab is a placeholder inside attendance until it is connected to the current leave source when needed."
+            )}
           </p>
         </div>
       )}
 
       <div className="text-center text-xs text-slate-300">
-        {monthBounds.monthLabel} · أيام بها حضور:{" "}
+        {monthBounds.monthLabel} · {tr(language, "أيام بها حضور:", "Days with attendance:")}{" "}
         {formatNumberEN(attendanceDaysCount)}
       </div>
     </section>

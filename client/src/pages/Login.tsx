@@ -6,7 +6,7 @@ import {
   signInWithEmailAndPassword,
   updateProfile,
 } from "firebase/auth";
-import { doc, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, serverTimestamp } from "firebase/firestore";
 import { Eye, EyeOff } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,7 @@ import {
 } from "@/lib/auditLog";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { languageDir, textAlignClass, tr } from "@/lib/i18n";
+import { normalizeAdminUsername } from "@/lib/adminUsername";
 type AuthMode = "login" | "register";
 
 function FieldLabel({ children }: { children: ReactNode }) {
@@ -92,6 +93,20 @@ export default function LoginPage() {
   }, [loading, location, setLocation, user]);
 
   const normalizeEmail = (value: string) => value.trim().toLowerCase();
+  const resolveLoginEmail = async (value: string) => {
+    const input = value.trim().toLowerCase();
+    if (input.includes("@")) return input;
+
+    const username = normalizeAdminUsername(input);
+    if (!username) return input;
+
+    const usernameSnap = await getDoc(doc(db, "admin_usernames", username));
+    const resolvedEmail = usernameSnap.exists()
+      ? String(usernameSnap.data()?.email || "").trim().toLowerCase()
+      : "";
+
+    return resolvedEmail || input;
+  };
 
   const friendlyAuthError = (code?: string) => {
     switch (code) {
@@ -187,7 +202,8 @@ export default function LoginPage() {
     setBusy(true);
     resetTransientState();
 
-    const normalizedEmail = normalizeEmail(email);
+    const normalizedEmail =
+      mode === "login" ? await resolveLoginEmail(email) : normalizeEmail(email);
     const trimmedPassword = password;
 
     if (!normalizedEmail) {
@@ -331,7 +347,7 @@ export default function LoginPage() {
 
     resetTransientState();
 
-    const normalizedEmail = normalizeEmail(email);
+    const normalizedEmail = await resolveLoginEmail(email);
 
     if (!normalizedEmail) {
       setLocalError(
@@ -453,13 +469,21 @@ export default function LoginPage() {
                   ) : null}
 
                   <div>
-                    <FieldLabel>{tr(language, "البريد الإلكتروني", "Email")}</FieldLabel>
+                    <FieldLabel>
+                      {mode === "login"
+                        ? tr(
+                            language,
+                            "اسم المستخدم أو البريد الإلكتروني",
+                            "Username or Email"
+                          )
+                        : tr(language, "البريد الإلكتروني", "Email")}
+                    </FieldLabel>
                     <Input
                       value={email}
                       onChange={event => setEmail(event.target.value)}
                       placeholder="example@gmail.com"
-                      autoComplete="email"
-                      inputMode="email"
+                      autoComplete={mode === "login" ? "username" : "email"}
+                      inputMode={mode === "login" ? "text" : "email"}
                       dir="ltr"
                       disabled={busy}
                       className="h-12 rounded-2xl border-slate-200/80 bg-slate-50/80 px-4 text-base shadow-none"

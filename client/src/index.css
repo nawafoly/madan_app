@@ -1764,3 +1764,108 @@ html[dir="rtl"] .text-left {
   border-color: #ecfdf5 !important;
   color: #065f46 !important;
 }
+
+/* =========================
+   Employee Portal Motion
+========================= */
+@keyframes employee-page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.995);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes employee-selected-glow {
+  0% {
+    box-shadow:
+      0 0 0 0 rgba(242, 183, 5, 0.28),
+      0 18px 45px -34px rgba(15, 23, 42, 0.45);
+  }
+  100% {
+    box-shadow:
+      0 0 0 8px rgba(242, 183, 5, 0),
+      0 18px 45px -34px rgba(15, 23, 42, 0.45);
+  }
+}
+
+@layer components {
+  .employee-shell {
+    --employee-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+    --employee-gold: #f2b705;
+    --employee-navy: #030640;
+  }
+
+  .employee-shell .employee-page-motion > div > * {
+    animation: employee-page-enter 280ms var(--employee-ease) both;
+  }
+
+  .employee-shell :is(button, [role="button"], a[href]) {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    transition:
+      transform 160ms var(--employee-ease),
+      box-shadow 180ms var(--employee-ease),
+      border-color 180ms var(--employee-ease),
+      background-color 180ms var(--employee-ease),
+      color 180ms var(--employee-ease),
+      opacity 180ms var(--employee-ease);
+  }
+
+  .employee-shell :is(button, [role="button"], a[href]):not(:disabled):not([aria-disabled="true"]):active {
+    transform: translateY(1px) scale(0.985);
+  }
+
+  .employee-shell :is(button, [role="button"], a[href]):focus-visible {
+    outline: none;
+    box-shadow:
+      0 0 0 3px rgba(242, 183, 5, 0.28),
+      0 0 0 1px rgba(3, 6, 64, 0.18);
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .employee-shell :is(button, [role="button"], a[href]):not(:disabled):not([aria-disabled="true"]):hover {
+      transform: translateY(-1px);
+    }
+  }
+
+  .employee-shell [aria-pressed="true"] {
+    animation: employee-selected-glow 420ms var(--employee-ease) both;
+    position: relative;
+  }
+
+  .employee-shell [aria-pressed="true"]::after {
+    content: "";
+    position: absolute;
+    inset-inline-start: 14px;
+    inset-inline-end: 14px;
+    bottom: -1px;
+    height: 3px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, transparent, var(--employee-gold), transparent);
+    opacity: 0.95;
+  }
+
+  .employee-shell [data-open-target="true"] {
+    scroll-margin-top: 92px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .employee-shell .employee-page-motion > div > *,
+  .employee-shell [aria-pressed="true"] {
+    animation: none;
+  }
+
+  .employee-shell :is(button, [role="button"], a[href]) {
+    transition: none;
+  }
+
+  .employee-shell :is(button, [role="button"], a[href]):not(:disabled):not([aria-disabled="true"]):active,
+  .employee-shell :is(button, [role="button"], a[href]):not(:disabled):not([aria-disabled="true"]):hover {
+    transform: none;
+  }
+}

@@ -135,8 +135,11 @@ import {
   formatDateTimeEN,
   formatFileSizeEN,
   formatNumberEN,
+  toDateSafe,
 } from "@/lib/formatters";
 import { cn } from "@/lib/utils";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { languageDir, tr } from "@/lib/i18n";
 import {
   Select,
   SelectContent,
@@ -265,26 +268,38 @@ type EmployeeRecordScope = {
   employeeDocId: string | null;
 };
 
-const EMPLOYEE_PORTAL_VIEW_TITLES: Record<EmployeePortalView, string> = {
-  dashboard: "بوابة الموظف",
-  attendance: "الحضور",
-  requests: "الطلبات",
-  "leave-request": "طلب إجازة",
-  "permission-request": "طلب استئذان",
-  "attendance-correction-request": "طلب تصحيح",
-  "overtime-request": "طلب أوفرتايم",
-  "salary-advance-request": "صرف معجل للراتب",
-  "resignation-request": "طلب استقالة",
-  "exit-reentry-request": "طلب خروج وعودة",
-  "letter-request": "الخطابات",
-  "hr-info": "معلومات الموارد البشرية",
-  employment: "البيانات الوظيفية",
-  "work-schedule": "جدول الدوام",
-  "salary-settings": "بيانات الراتب",
-  salary: "الراتب والتفاصيل المالية",
-  contracts: "العقود",
-  leaves: "الإجازات",
-  documents: "المستندات",
+const EMPLOYEE_PORTAL_VIEW_TITLES: Record<
+  EmployeePortalView,
+  { ar: string; en: string }
+> = {
+  dashboard: { ar: "بوابة الموظف", en: "Employee Portal" },
+  attendance: { ar: "الحضور", en: "Attendance" },
+  requests: { ar: "الطلبات", en: "Requests" },
+  "leave-request": { ar: "طلب إجازة", en: "Leave Request" },
+  "permission-request": { ar: "طلب استئذان", en: "Permission Request" },
+  "attendance-correction-request": {
+    ar: "طلب تصحيح",
+    en: "Correction Request",
+  },
+  "overtime-request": { ar: "طلب أوفرتايم", en: "Overtime Request" },
+  "salary-advance-request": {
+    ar: "صرف معجل للراتب",
+    en: "Salary Advance",
+  },
+  "resignation-request": { ar: "طلب استقالة", en: "Resignation Request" },
+  "exit-reentry-request": {
+    ar: "طلب خروج وعودة",
+    en: "Exit/Re-entry Request",
+  },
+  "letter-request": { ar: "الخطابات", en: "Letters" },
+  "hr-info": { ar: "معلومات الموارد البشرية", en: "HR Information" },
+  employment: { ar: "البيانات الوظيفية", en: "Employment Details" },
+  "work-schedule": { ar: "جدول الدوام", en: "Work Schedule" },
+  "salary-settings": { ar: "بيانات الراتب", en: "Salary Details" },
+  salary: { ar: "الراتب والتفاصيل المالية", en: "Payroll And Finance" },
+  contracts: { ar: "العقود", en: "Contracts" },
+  leaves: { ar: "الإجازات", en: "Leaves" },
+  documents: { ar: "المستندات", en: "Documents" },
 };
 
 const EMPLOYEE_PORTAL_HASH_TO_VIEW: Record<string, EmployeePortalView> = {
@@ -659,6 +674,8 @@ function ReadonlyField({
   icon: typeof UserRound;
   dir?: "rtl" | "ltr";
 }) {
+  const { language } = useLanguage();
+
   return (
     <div className="rounded-2xl border border-slate-200/80 bg-slate-50/80 p-4 shadow-sm">
       <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
@@ -676,7 +693,7 @@ function ReadonlyField({
           variant="outline"
           className="rounded-full border-slate-200 bg-white/80 text-slate-500 shadow-none"
         >
-          عرض فقط
+          {tr(language, "عرض فقط", "Read Only")}
         </Badge>
       </div>
     </div>
@@ -718,7 +735,96 @@ function EmploymentTile({
   );
 }
 
-function LeaveStatusBadge({ status }: { status: unknown }) {
+function getLocalizedLeaveStatusLabel(status: unknown, language: "ar" | "en") {
+  const normalized = String(status || "")
+    .trim()
+    .toLowerCase();
+  if (normalized === "approved") return tr(language, "معتمد", "Approved");
+  if (normalized === "rejected") return tr(language, "مرفوض", "Rejected");
+  if (normalized === "pending") return tr(language, "بانتظار المراجعة", "Pending Review");
+  return tr(language, String(status || "غير محدد").trim() || "غير محدد", "Not Set");
+}
+
+function formatDateTimeByLanguage(value: unknown, language: "ar" | "en") {
+  if (language === "ar") return formatDateTimeEN(value);
+  const date = toDateSafe(value);
+  if (!date) return "—";
+
+  return new Intl.DateTimeFormat("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function formatDateByLanguage(value: unknown, language: "ar" | "en") {
+  if (language === "ar") return formatDateEN(value);
+  const date = toDateSafe(value);
+  if (!date) return "—";
+
+  return new Intl.DateTimeFormat("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+  }).format(date);
+}
+
+function getLocalizedServiceRequestTypeLabel(
+  value: unknown,
+  language: "ar" | "en"
+) {
+  const normalized = String(value || "").trim();
+  const labels: Record<string, { ar: string; en: string }> = {
+    attendance_correction: { ar: "طلب تصحيح", en: "Correction Request" },
+    permission: { ar: "طلب استئذان", en: "Permission Request" },
+    overtime: { ar: "طلب أوفرتايم", en: "Overtime Request" },
+    salary_advance: { ar: "صرف معجل للراتب", en: "Salary Advance" },
+    resignation: { ar: "طلب استقالة", en: "Resignation Request" },
+    exit_reentry: { ar: "طلب خروج وعودة", en: "Exit/Re-entry Request" },
+    letter: { ar: "الخطابات", en: "Letters" },
+  };
+  const label = labels[normalized];
+  if (label) return tr(language, label.ar, label.en);
+  return tr(language, "طلب موظف", "Employee Request");
+}
+
+function getLocalizedServiceRequestStatusLabel(
+  value: unknown,
+  language: "ar" | "en"
+) {
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase();
+  if (normalized === "approved") return tr(language, "معتمد", "Approved");
+  if (normalized === "rejected") return tr(language, "مرفوض", "Rejected");
+  return tr(language, "قيد المراجعة", "Under Review");
+}
+
+function getLocalizedLeaveTypeLabel(value: unknown, language: "ar" | "en") {
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase();
+  const labels: Record<string, { ar: string; en: string }> = {
+    annual: { ar: "إجازة سنوية", en: "Annual Leave" },
+    sick: { ar: "إجازة مرضية", en: "Sick Leave" },
+    emergency: { ar: "إجازة اضطرارية", en: "Emergency Leave" },
+    unpaid: { ar: "إجازة بدون راتب", en: "Unpaid Leave" },
+    other: { ar: "أخرى", en: "Other" },
+  };
+  const label = labels[normalized];
+  if (label) return tr(language, label.ar, label.en);
+  return tr(language, "غير محدد", "Not Set");
+}
+
+function LeaveStatusBadge({
+  status,
+  language = "ar",
+}: {
+  status: unknown;
+  language?: "ar" | "en";
+}) {
   const meta = getLeaveStatusMeta(status);
 
   return (
@@ -735,7 +841,7 @@ function LeaveStatusBadge({ status }: { status: unknown }) {
               : "border-slate-200 bg-slate-100 text-slate-600"
       )}
     >
-      {meta.label}
+      {getLocalizedLeaveStatusLabel(status, language)}
     </Badge>
   );
 }
@@ -762,7 +868,7 @@ function LeaveSummaryCard({
   );
 }
 
-function getRequestStatusPresentation(status: unknown) {
+function getRequestStatusPresentation(status: unknown, language: "ar" | "en") {
   const meta = getLeaveStatusMeta(status);
   const normalized = String(status || "")
     .trim()
@@ -774,7 +880,7 @@ function getRequestStatusPresentation(status: unknown) {
     normalized === "approve"
   ) {
     return {
-      label: meta.label || "مقبول",
+      label: getLocalizedLeaveStatusLabel(status, language) || meta.label || tr(language, "مقبول", "Approved"),
       dotClassName: "bg-emerald-500",
       badgeClassName: "bg-emerald-50 text-emerald-700",
     };
@@ -782,14 +888,14 @@ function getRequestStatusPresentation(status: unknown) {
 
   if (normalized === "rejected" || normalized === "declined") {
     return {
-      label: meta.label || "مرفوض",
+      label: getLocalizedLeaveStatusLabel(status, language) || meta.label || tr(language, "مرفوض", "Rejected"),
       dotClassName: "bg-red-500",
       badgeClassName: "bg-red-50 text-red-700",
     };
   }
 
   return {
-    label: meta.label || "قيد المراجعة",
+    label: getLocalizedLeaveStatusLabel(status, language) || meta.label || tr(language, "قيد المراجعة", "Under Review"),
     dotClassName: "bg-amber-500",
     badgeClassName: "bg-amber-50 text-amber-700",
   };
@@ -822,14 +928,44 @@ function RequestInfoRow({
   value: string;
 }) {
   return (
-    <div className="flex items-center justify-end gap-4 text-right">
-      <div className="min-w-0">
-        <div className="text-lg font-medium text-slate-500">{label}</div>
-        <div className="mt-2 text-base font-semibold text-slate-950">
+    <div className="flex min-h-[96px] items-start gap-3 rounded-[18px] border border-slate-200/80 bg-slate-50/70 p-4 text-start">
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white text-slate-500 ring-1 ring-slate-200/80">
+        <Icon className="h-5 w-5" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+          {label}
+        </div>
+        <div className="mt-2 break-words text-base font-semibold text-slate-950">
           {value}
         </div>
       </div>
-      <Icon className="h-9 w-9 shrink-0 text-slate-400" />
+    </div>
+  );
+}
+
+function RequestNote({
+  label,
+  value,
+  tone = "neutral",
+}: {
+  label: string;
+  value: string;
+  tone?: "neutral" | "success";
+}) {
+  return (
+    <div
+      className={cn(
+        "rounded-[18px] border px-4 py-3 text-sm leading-7",
+        tone === "success"
+          ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+          : "border-slate-200 bg-slate-50 text-slate-700"
+      )}
+    >
+      <div className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] opacity-70">
+        {label}
+      </div>
+      {value}
     </div>
   );
 }
@@ -837,51 +973,64 @@ function RequestInfoRow({
 function EmployeeRequestCard({
   request,
   index,
+  language,
 }: {
   request: EmployeeLeaveRequestRecord;
   index: number;
+  language: "ar" | "en";
 }) {
-  const status = getRequestStatusPresentation(request.status);
+  const status = getRequestStatusPresentation(request.status, language);
   const requestNumber = getRequestNumber(request, index);
   const dateRange = formatLeaveDateRange(request.startDate, request.endDate);
 
   return (
-    <article className="rounded-[20px] bg-white px-7 py-7 text-right shadow-[0_14px_34px_-26px_rgba(15,23,42,0.42)] ring-1 ring-slate-100">
-      <div className="flex items-start justify-between gap-6">
+    <article className="overflow-hidden rounded-[24px] border border-slate-200/80 bg-white shadow-[0_22px_65px_-48px_rgba(15,23,42,0.32)]">
+      <div className="flex flex-col gap-4 border-b border-slate-100 bg-slate-50/70 px-5 py-5 sm:flex-row sm:items-start sm:justify-between">
         <div
           className={cn(
-            "rounded-full px-5 py-3 text-base font-medium",
+            "inline-flex w-fit rounded-full px-4 py-2 text-sm font-semibold",
             status.badgeClassName
           )}
         >
           {status.label}
         </div>
 
-        <div className="space-y-2">
-          <h3 className="text-2xl font-medium text-slate-950">طلب إجازة</h3>
+        <div className="min-w-0 space-y-1 text-start sm:text-end">
+          <h3 className="text-xl font-semibold text-slate-950">
+            {tr(language, "طلب إجازة", "Leave Request")}
+          </h3>
           <div className="text-sm text-slate-400">
-            {formatDateTimeEN(request.createdAt)}
+            {formatDateTimeByLanguage(request.createdAt, language)}
           </div>
         </div>
       </div>
 
-      <div className="mt-10 grid gap-8">
+      <div className="grid gap-3 p-5 md:grid-cols-3">
         <RequestInfoRow
           icon={FileText}
-          label="نوع الطلب"
-          value={getLeaveTypeLabel(request.leaveType)}
+          label={tr(language, "نوع الطلب", "Request Type")}
+          value={getLocalizedLeaveTypeLabel(request.leaveType, language)}
         />
         <RequestInfoRow
           icon={CalendarDays}
-          label="التاريخ المرتبط"
+          label={tr(language, "التاريخ المرتبط", "Related Date")}
           value={dateRange}
         />
-        <RequestInfoRow icon={Hash} label="رقم الطلب" value={requestNumber} />
+        <RequestInfoRow
+          icon={Hash}
+          label={tr(language, "رقم الطلب", "Request Number")}
+          value={requestNumber}
+        />
       </div>
 
-      <div className="mt-10 flex items-center justify-end gap-3 text-lg text-slate-500">
-        <span>{status.label}</span>
-        <span className={cn("h-3 w-3 rounded-full", status.dotClassName)} />
+      <div className="flex items-center justify-between gap-3 border-t border-slate-100 px-5 py-4 text-sm text-slate-500">
+        <span className="font-medium">
+          {tr(language, "حالة الطلب", "Request Status")}
+        </span>
+        <span className="inline-flex items-center gap-2 font-semibold">
+          <span className={cn("h-2.5 w-2.5 rounded-full", status.dotClassName)} />
+          {status.label}
+        </span>
       </div>
     </article>
   );
@@ -890,70 +1039,103 @@ function EmployeeRequestCard({
 function EmployeeServiceRequestCard({
   request,
   index,
+  language,
 }: {
   request: EmployeeServiceRequestRecord;
   index: number;
+  language: "ar" | "en";
 }) {
-  const status = getRequestStatusPresentation(request.status);
+  const status = getRequestStatusPresentation(request.status, language);
   const requestNumber = getServiceRequestNumber(request, index);
   const dateValue =
     request.startDate && request.endDate
-      ? `${request.startDate} إلى ${request.endDate}`
+      ? `${request.startDate} ${tr(language, "إلى", "to")} ${request.endDate}`
       : request.requestDate || request.startDate || "--";
   const timeValue =
     request.startTime || request.endTime
       ? `${request.startTime || "--"} - ${request.endTime || "--"}`
       : request.amount
-        ? `${formatNumberEN(request.amount)} ر.س`
+        ? `${formatNumberEN(request.amount)} ${tr(language, "ر.س", "SAR")}`
         : request.letterType || "--";
 
   return (
-    <article className="rounded-[20px] bg-white px-7 py-7 text-right shadow-[0_14px_34px_-26px_rgba(15,23,42,0.42)] ring-1 ring-slate-100">
-      <div className="flex items-start justify-between gap-6">
+    <article className="overflow-hidden rounded-[24px] border border-slate-200/80 bg-white shadow-[0_22px_65px_-48px_rgba(15,23,42,0.32)]">
+      <div className="flex flex-col gap-4 border-b border-slate-100 bg-slate-50/70 px-5 py-5 sm:flex-row sm:items-start sm:justify-between">
         <div
           className={cn(
-            "rounded-full px-5 py-3 text-base font-medium",
+            "inline-flex w-fit rounded-full px-4 py-2 text-sm font-semibold",
             status.badgeClassName
           )}
         >
           {status.label}
         </div>
 
-        <div className="space-y-2">
-          <h3 className="text-2xl font-medium text-slate-950">
-            {getEmployeeServiceRequestTypeLabel(request.requestType)}
+        <div className="min-w-0 space-y-1 text-start sm:text-end">
+          <h3 className="text-xl font-semibold text-slate-950">
+            {getLocalizedServiceRequestTypeLabel(
+              request.requestType,
+              language
+            )}
           </h3>
           <div className="text-sm text-slate-400">
-            {formatDateTimeEN(request.createdAt)}
+            {formatDateTimeByLanguage(request.createdAt, language)}
           </div>
         </div>
       </div>
 
-      <div className="mt-10 grid gap-8">
+      <div className="grid gap-3 p-5 md:grid-cols-2 xl:grid-cols-4">
         <RequestInfoRow
           icon={FileText}
-          label="نوع الطلب"
-          value={getEmployeeServiceRequestTypeLabel(request.requestType)}
+          label={tr(language, "نوع الطلب", "Request Type")}
+          value={getLocalizedServiceRequestTypeLabel(
+            request.requestType,
+            language
+          )}
         />
-        <RequestInfoRow icon={CalendarDays} label="التاريخ" value={dateValue} />
-        <RequestInfoRow icon={Clock3} label="التفاصيل" value={timeValue} />
-        <RequestInfoRow icon={Hash} label="رقم الطلب" value={requestNumber} />
+        <RequestInfoRow
+          icon={CalendarDays}
+          label={tr(language, "التاريخ", "Date")}
+          value={dateValue}
+        />
+        <RequestInfoRow
+          icon={Clock3}
+          label={tr(language, "التفاصيل", "Details")}
+          value={timeValue}
+        />
+        <RequestInfoRow
+          icon={Hash}
+          label={tr(language, "رقم الطلب", "Request Number")}
+          value={requestNumber}
+        />
       </div>
 
       {request.employeeNote || request.hrNote ? (
-        <div className="mt-8 space-y-3 text-sm leading-7">
+        <div className="space-y-3 border-t border-slate-100 px-5 pb-5 pt-0">
           {request.employeeNote ? (
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-600">
-              {request.employeeNote}
-            </div>
+            <RequestNote
+              label={tr(language, "ملاحظة الموظف", "Employee Note")}
+              value={request.employeeNote}
+            />
           ) : null}
           {request.hrNote ? (
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-800">
-              {request.hrNote}
-            </div>
+            <RequestNote
+              label={tr(language, "ملاحظة HR", "HR Note")}
+              value={request.hrNote}
+              tone="success"
+            />
           ) : null}
         </div>
       ) : null}
+
+      <div className="flex items-center justify-between gap-3 border-t border-slate-100 px-5 py-4 text-sm text-slate-500">
+        <span className="font-medium">
+          {tr(language, "حالة الطلب", "Request Status")}
+        </span>
+        <span className="inline-flex items-center gap-2 font-semibold">
+          <span className={cn("h-2.5 w-2.5 rounded-full", status.dotClassName)} />
+          {status.label}
+        </span>
+      </div>
     </article>
   );
 }
@@ -961,10 +1143,12 @@ function EmployeeServiceRequestCard({
 function EmployeePortalViewHeader({
   title,
   description,
+  backLabel = "Back",
   onBack,
 }: {
   title: string;
   description?: string;
+  backLabel?: string;
   onBack: () => void;
 }) {
   return (
@@ -983,7 +1167,7 @@ function EmployeePortalViewHeader({
         className="h-10 rounded-2xl border-slate-200 bg-white px-4 text-slate-700"
         onClick={onBack}
       >
-        رجوع
+        {backLabel}
       </Button>
     </div>
   );
@@ -991,6 +1175,7 @@ function EmployeePortalViewHeader({
 
 export default function EmployeeProfilePage() {
   const { user } = useAuth();
+  const { language } = useLanguage();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const avatarCropViewportRef = useRef<HTMLDivElement | null>(null);
   const avatarCropDragRef = useRef<{
@@ -2064,8 +2249,14 @@ export default function EmployeeProfilePage() {
   const currentServiceRequestType =
     SERVICE_REQUEST_VIEW_TO_TYPE[activeView] || null;
   const currentServiceRequestLabel = currentServiceRequestType
-    ? getEmployeeServiceRequestTypeLabel(currentServiceRequestType)
+    ? getLocalizedServiceRequestTypeLabel(currentServiceRequestType, language)
     : "";
+  const activeViewTitle = tr(
+    language,
+    EMPLOYEE_PORTAL_VIEW_TITLES[activeView].ar,
+    EMPLOYEE_PORTAL_VIEW_TITLES[activeView].en
+  );
+  const backLabel = tr(language, "رجوع", "Back");
 
   const openEmployeeView = (view: EmployeePortalView) => {
     setActiveView(view);
@@ -2087,18 +2278,28 @@ export default function EmployeeProfilePage() {
 
   return (
     <EmployeeLayout
-      title={EMPLOYEE_PORTAL_VIEW_TITLES[activeView]}
+      title={activeViewTitle}
       description={
         activeView === "dashboard"
-          ? "لوحة مختصرة لمتابعة الحضور، الطلبات، والتنقل بين معلومات الموظف."
-          : "عرض مستقل داخل بوابة الموظف بدون تغيير مسارات النظام أو منطق البيانات."
+          ? tr(
+              language,
+              "لوحة مختصرة لمتابعة الحضور، الطلبات، والتنقل بين معلومات الموظف.",
+              "A compact dashboard for attendance, requests, and employee information."
+            )
+          : tr(
+              language,
+              "عرض مستقل داخل بوابة الموظف بدون تغيير مسارات النظام أو منطق البيانات.",
+              "A focused employee portal view using the existing system data."
+            )
       }
       hideHero={activeView === "dashboard"}
     >
       {activeView === "dashboard" ? (
         <div className="space-y-6">
-          <section className="space-y-2 text-right">
-            <p className="text-sm font-medium text-slate-500">مساء الخير</p>
+          <section className="space-y-2 text-start">
+            <p className="text-sm font-medium text-slate-500">
+              {tr(language, "مساء الخير", "Good Evening")}
+            </p>
             <h1 className="text-3xl font-semibold tracking-tight text-slate-950">
               {profile.personal.name}
             </h1>
@@ -2114,8 +2315,12 @@ export default function EmployeeProfilePage() {
           />
 
           <EmployeeCard
-            title="اختصارات سريعة"
-            subtitle="وصول سريع لأكثر الإجراءات استخداماً"
+            title={tr(language, "اختصارات سريعة", "Quick Actions")}
+            subtitle={tr(
+              language,
+              "وصول سريع لأكثر الإجراءات استخداماً",
+              "Fast access to the most used actions"
+            )}
           >
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <button
@@ -2127,7 +2332,7 @@ export default function EmployeeProfilePage() {
               >
                 <UserRound className="mx-auto h-7 w-7 text-slate-500" />
                 <span className="mt-3 block text-sm font-semibold text-slate-900">
-                  تصحيح البصمة
+                  {tr(language, "تصحيح البصمة", "Correct Attendance")}
                 </span>
               </button>
               <button
@@ -2137,7 +2342,7 @@ export default function EmployeeProfilePage() {
               >
                 <CalendarDays className="mx-auto h-7 w-7 text-slate-500" />
                 <span className="mt-3 block text-sm font-semibold text-slate-900">
-                  طلب إجازة
+                  {tr(language, "طلب إجازة", "Leave Request")}
                 </span>
               </button>
               <button
@@ -2147,75 +2352,115 @@ export default function EmployeeProfilePage() {
               >
                 <Send className="mx-auto h-7 w-7 text-slate-500" />
                 <span className="mt-3 block text-sm font-semibold text-slate-900">
-                  طلب استئذان
+                  {tr(language, "طلب استئذان", "Permission Request")}
                 </span>
               </button>
             </div>
           </EmployeeCard>
 
           <EmployeeCard
-            title="معلومات الموارد البشرية"
-            subtitle="عناصر تنقل فقط، كل قسم يفتح في صفحة داخلية مستقلة"
+            title={tr(language, "معلومات الموارد البشرية", "HR Information")}
+            subtitle={tr(
+              language,
+              "عناصر تنقل فقط، كل قسم يفتح في صفحة داخلية مستقلة",
+              "Navigation items only; each section opens in a separate internal view"
+            )}
           >
             <div className="-mx-5 -my-5 divide-y divide-slate-100">
               <InfoRow
                 icon={UserRound}
-                label="شخصي"
-                helper="المعلومات الشخصية، الهوية، العنوان"
+                label={tr(language, "شخصي", "Personal")}
+                helper={tr(
+                  language,
+                  "المعلومات الشخصية، الهوية، العنوان",
+                  "Personal information, ID, and address"
+                )}
                 onClick={() => openEmployeeView("hr-info")}
               />
               <InfoRow
                 icon={BriefcaseBusiness}
-                label="البيانات الوظيفية"
-                helper="تاريخ الالتحاق، المسمى الوظيفي، نوع التوظيف"
+                label={tr(language, "البيانات الوظيفية", "Employment Details")}
+                helper={tr(
+                  language,
+                  "تاريخ الالتحاق، المسمى الوظيفي، نوع التوظيف",
+                  "Joining date, job title, and employment type"
+                )}
                 onClick={() => openEmployeeView("employment")}
               />
               <InfoRow
                 icon={Clock3}
-                label="جدول الدوام"
-                helper="بداية ونهاية الدوام، أيام الراحة، ونطاق الحضور"
+                label={tr(language, "جدول الدوام", "Work Schedule")}
+                helper={tr(
+                  language,
+                  "بداية ونهاية الدوام، أيام الراحة، ونطاق الحضور",
+                  "Shift start/end, days off, and attendance zone"
+                )}
                 onClick={() => openEmployeeView("work-schedule")}
               />
               <InfoRow
                 icon={BadgeCheck}
-                label="بيانات الراتب"
-                helper="الراتب الأساسي، التأمينات، البدلات، والخصومات الثابتة"
+                label={tr(language, "بيانات الراتب", "Salary Details")}
+                helper={tr(
+                  language,
+                  "الراتب الأساسي، التأمينات، البدلات، والخصومات الثابتة",
+                  "Base salary, insurance, allowances, and fixed deductions"
+                )}
                 onClick={() => openEmployeeView("salary-settings")}
               />
               <InfoRow
                 icon={BadgeCheck}
-                label="الراتب والتفاصيل المالية"
-                helper="سجل رواتب نهاية الشهر والراتب النهائي المقفل"
+                label={tr(
+                  language,
+                  "الراتب والتفاصيل المالية",
+                  "Payroll And Finance"
+                )}
+                helper={tr(
+                  language,
+                  "سجل رواتب نهاية الشهر والراتب النهائي المقفل",
+                  "Month-end payroll and locked final salary"
+                )}
                 onClick={() => openEmployeeView("salary")}
               />
               <InfoRow
                 icon={FileText}
-                label="العقود"
-                helper="العقود الحالية والمنتهية"
+                label={tr(language, "العقود", "Contracts")}
+                helper={tr(language, "العقود الحالية والمنتهية", "Current and expired contracts")}
                 onClick={() => openEmployeeView("contracts")}
               />
               <InfoRow
                 icon={CalendarDays}
-                label="الإجازات"
-                helper="الرصيد، الطلبات، والإجازات المعتمدة المستثناة من الغياب"
+                label={tr(language, "الإجازات", "Leaves")}
+                helper={tr(
+                  language,
+                  "الرصيد، الطلبات، والإجازات المعتمدة المستثناة من الغياب",
+                  "Balance, requests, and approved leave excluded from absence"
+                )}
                 onClick={() => openEmployeeView("leaves")}
               />
               <InfoRow
                 icon={FileText}
-                label="مستندات"
-                helper="الإقامة، الجواز والمستندات الأخرى"
+                label={tr(language, "مستندات", "Documents")}
+                helper={tr(
+                  language,
+                  "الإقامة، الجواز والمستندات الأخرى",
+                  "Iqama, passport, and other documents"
+                )}
                 onClick={() => openEmployeeView("documents")}
               />
             </div>
           </EmployeeCard>
 
           <EmployeeCard
-            title="آخر الطلبات"
-            subtitle="آخر الطلبات المسجلة في النظام الحالي"
+            title={tr(language, "آخر الطلبات", "Latest Requests")}
+            subtitle={tr(
+              language,
+              "آخر الطلبات المسجلة في النظام الحالي",
+              "Latest requests recorded in the current system"
+            )}
           >
             {leaveRequestsLoading || serviceRequestsLoading ? (
               <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
-                جاري تحميل الطلبات...
+                {tr(language, "جاري تحميل الطلبات...", "Loading requests...")}
               </div>
             ) : latestLeaveRequestsForDashboard.length ||
               latestServiceRequestsForDashboard.length ? (
@@ -2228,19 +2473,23 @@ export default function EmployeeProfilePage() {
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <div className="text-base font-semibold text-slate-950">
-                          {getEmployeeServiceRequestTypeLabel(
-                            request.requestType
+                          {getLocalizedServiceRequestTypeLabel(
+                            request.requestType,
+                            language
                           )}
                         </div>
                         <div className="mt-1 text-xs text-slate-500">
-                          {formatDateTimeEN(request.createdAt)}
+                          {formatDateTimeByLanguage(request.createdAt, language)}
                         </div>
                       </div>
                       <Badge
                         variant="outline"
                         className="rounded-full border-slate-200 bg-white"
                       >
-                        {getEmployeeServiceRequestStatusLabel(request.status)}
+                        {getLocalizedServiceRequestStatusLabel(
+                          request.status,
+                          language
+                        )}
                       </Badge>
                     </div>
                   </div>
@@ -2253,7 +2502,10 @@ export default function EmployeeProfilePage() {
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <div className="text-base font-semibold text-slate-950">
-                          {getLeaveTypeLabel(request.leaveType)}
+                          {getLocalizedLeaveTypeLabel(
+                            request.leaveType,
+                            language
+                          )}
                         </div>
                         <div className="mt-1 text-xs text-slate-500">
                           {formatLeaveDateRange(
@@ -2262,33 +2514,46 @@ export default function EmployeeProfilePage() {
                           )}
                         </div>
                       </div>
-                      <LeaveStatusBadge status={request.status} />
+                      <LeaveStatusBadge
+                        status={request.status}
+                        language={language}
+                      />
                     </div>
                   </div>
                 ))}
               </div>
             ) : (
               <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
-                لا توجد طلبات حتى الآن.
+                {tr(language, "لا توجد طلبات حتى الآن.", "No requests yet.")}
               </div>
             )}
           </EmployeeCard>
 
           <div className="grid gap-4 md:grid-cols-2">
             <EmployeeCard
-              title="الإعلانات"
-              subtitle="TODO: Placeholder لربط إعلانات الموارد البشرية لاحقاً بدون Firebase جديد."
+              title={tr(language, "الإعلانات", "Announcements")}
+              subtitle={tr(
+                language,
+                "لا توجد إعلانات مرتبطة حالياً.",
+                "No linked announcements are available now."
+              )}
             >
               <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
-                لا توجد إعلانات حالياً.
+                {tr(language, "لا توجد إعلانات حالياً.", "No announcements now.")}
               </div>
             </EmployeeCard>
             <EmployeeCard
-              title="الرصيد المتبقي"
-              subtitle="يعرض الرصيد الحالي من بيانات الموظف الموجودة"
+              title={tr(language, "الرصيد المتبقي", "Remaining Balance")}
+              subtitle={tr(
+                language,
+                "يعرض الرصيد الحالي من بيانات الموظف الموجودة",
+                "Shows the current balance from the employee record"
+              )}
             >
               <div className="rounded-[24px] bg-slate-950 px-5 py-6 text-white">
-                <div className="text-sm text-white/65">رصيد الإجازات</div>
+                <div className="text-sm text-white/65">
+                  {tr(language, "رصيد الإجازات", "Leave Balance")}
+                </div>
                 <div className="mt-2 text-3xl font-semibold">
                   {profile.employment.leaveBalanceLabel}
                 </div>
@@ -2302,7 +2567,7 @@ export default function EmployeeProfilePage() {
         <section className="w-full">
           <EmployeeTodayAttendancePanel
             employeeUid={employeeUidForAttendance}
-            title="الحضور"
+            title={tr(language, "الحضور", "Attendance")}
             refreshKey={attendanceRefreshKey}
             shiftStartTime={profile.employment.shiftStartTime}
             shiftEndTime={profile.employment.shiftEndTime}
@@ -2313,14 +2578,14 @@ export default function EmployeeProfilePage() {
       ) : null}
 
       {activeView === "requests" ? (
-        <section dir="rtl" className="w-full space-y-7">
+        <section dir={languageDir(language)} className="w-full space-y-7">
           <h1 className="text-center text-3xl font-medium text-slate-950">
-            الطلبات
+            {tr(language, "الطلبات", "Requests")}
           </h1>
 
           {leaveRequestsLoading || serviceRequestsLoading ? (
             <div className="rounded-[24px] border border-dashed border-slate-200 bg-white px-5 py-12 text-center text-sm text-slate-500 shadow-sm">
-              جاري تحميل الطلبات...
+              {tr(language, "جاري تحميل الطلبات...", "Loading requests...")}
             </div>
           ) : leaveRequests.length || serviceRequests.length ? (
             <div className="space-y-6">
@@ -2329,6 +2594,7 @@ export default function EmployeeProfilePage() {
                   key={request.id}
                   request={request}
                   index={index}
+                  language={language}
                 />
               ))}
               {leaveRequests.map((request, index) => (
@@ -2336,6 +2602,7 @@ export default function EmployeeProfilePage() {
                   key={request.id}
                   request={request}
                   index={index}
+                  language={language}
                 />
               ))}
             </div>
@@ -2343,10 +2610,14 @@ export default function EmployeeProfilePage() {
             <div className="rounded-[24px] border border-dashed border-slate-200 bg-white px-5 py-14 text-center shadow-sm">
               <FileText className="mx-auto h-10 w-10 text-slate-300" />
               <div className="mt-4 text-xl font-semibold text-slate-950">
-                لا توجد طلبات
+                {tr(language, "لا توجد طلبات", "No Requests")}
               </div>
               <p className="mx-auto mt-2 max-w-sm text-sm leading-7 text-slate-400">
-                ستظهر هنا طلباتك الحالية وحالاتها بعد إنشائها من زر طلب جديد.
+                {tr(
+                  language,
+                  "ستظهر هنا طلباتك الحالية وحالاتها بعد إنشائها من زر طلب جديد.",
+                  "Your current requests and statuses will appear here after creating them from New Request."
+                )}
               </p>
             </div>
           )}
@@ -2357,7 +2628,12 @@ export default function EmployeeProfilePage() {
         <section className="space-y-6">
           <EmployeePortalViewHeader
             title={currentServiceRequestLabel}
-            description="ارفع الطلب وسيصل مباشرة إلى لوحة الموارد البشرية للمراجعة والاعتماد أو الرفض."
+            description={tr(
+              language,
+              "ارفع الطلب وسيصل مباشرة إلى لوحة الموارد البشرية للمراجعة والاعتماد أو الرفض.",
+              "Submit the request and it will go directly to HR for review, approval, or rejection."
+            )}
+            backLabel={backLabel}
             onBack={backToDashboard}
           />
 
@@ -2365,14 +2641,17 @@ export default function EmployeeProfilePage() {
             <CardHeader className="space-y-3">
               <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
                 <Send className="h-4 w-4" />
-                طلب جديد
+                {tr(language, "طلب جديد", "New Request")}
               </div>
               <CardTitle className="text-xl font-semibold text-slate-950">
                 {currentServiceRequestLabel}
               </CardTitle>
               <CardDescription className="text-sm leading-7 text-slate-600">
-                أدخل تفاصيل الطلب المطلوبة. لا يتم اعتماد الطلب إلا بعد مراجعة
-                HR.
+                {tr(
+                  language,
+                  "أدخل تفاصيل الطلب المطلوبة. لا يتم اعتماد الطلب إلا بعد مراجعة HR.",
+                  "Enter the required request details. Requests are approved only after HR review."
+                )}
               </CardDescription>
             </CardHeader>
 
@@ -2385,7 +2664,7 @@ export default function EmployeeProfilePage() {
               ].includes(currentServiceRequestType) ? (
                 <div className="space-y-2">
                   <Label className="text-sm font-semibold text-slate-800">
-                    تاريخ الطلب
+                    {tr(language, "تاريخ الطلب", "Request Date")}
                   </Label>
                   <Input
                     type="date"
@@ -2572,15 +2851,24 @@ export default function EmployeeProfilePage() {
             className={cn("space-y-6", activeView !== "hr-info" && "hidden")}
           >
             <EmployeePortalViewHeader
-              title="معلومات الموارد البشرية"
-              description="المعلومات الشخصية وإعدادات الحساب المتاحة حالياً."
+              title={tr(language, "معلومات الموارد البشرية", "HR Information")}
+              description={tr(
+                language,
+                "المعلومات الشخصية وإعدادات الحساب المتاحة حالياً.",
+                "Personal information and currently available account settings."
+              )}
+              backLabel={backLabel}
               onBack={backToDashboard}
             />
 
             <SectionHeading
               icon={UserRound}
-              title="البيانات الشخصية"
-              description="يعرض هذا القسم بياناتك الأساسية. يمكنك تعديل رقم الجوال والصورة الشخصية فقط، بينما الاسم والبريد للعرض فقط في هذه المرحلة."
+              title={tr(language, "البيانات الشخصية", "Personal Details")}
+              description={tr(
+                language,
+                "يعرض هذا القسم بياناتك الأساسية. يمكنك تعديل رقم الجوال والصورة الشخصية فقط، بينما الاسم والبريد للعرض فقط في هذه المرحلة.",
+                "This section shows your basic details. You can update only your mobile number and profile photo; name and email are read-only for now."
+              )}
             />
 
             <Card className="overflow-hidden rounded-[28px] border border-slate-200/80 bg-white/95 shadow-[0_24px_70px_-42px_rgba(15,23,42,0.28)]">
@@ -2612,7 +2900,7 @@ export default function EmployeeProfilePage() {
                         variant="outline"
                         className="rounded-full border-[#F2B705]/35 bg-[#F2B705]/10 text-[#8b6700] shadow-none"
                       >
-                        موظف
+                        {tr(language, "موظف", "Employee")}
                       </Badge>
                     </div>
                   </div>
@@ -2631,8 +2919,8 @@ export default function EmployeeProfilePage() {
                         <Camera className="ml-2 h-4 w-4" />
                       )}
                       {profile.personal.avatarUrl
-                        ? "تغيير الصورة"
-                        : "رفع الصورة"}
+                        ? tr(language, "تغيير الصورة", "Change Photo")
+                        : tr(language, "رفع الصورة", "Upload Photo")}
                     </Button>
                     <input
                       ref={fileInputRef}
@@ -2646,12 +2934,12 @@ export default function EmployeeProfilePage() {
 
                 <div className="grid gap-4 md:grid-cols-2">
                   <ReadonlyField
-                    label="الاسم"
+                    label={tr(language, "الاسم", "Name")}
                     value={profile.personal.name}
                     icon={UserRound}
                   />
                   <ReadonlyField
-                    label="البريد الإلكتروني"
+                    label={tr(language, "البريد الإلكتروني", "Email")}
                     value={profile.personal.email}
                     icon={Mail}
                     dir="ltr"
@@ -2663,18 +2951,21 @@ export default function EmployeeProfilePage() {
                     <div className="space-y-2">
                       <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
                         <Phone className="h-3.5 w-3.5" />
-                        رقم الجوال
+                        {tr(language, "رقم الجوال", "Mobile Number")}
                       </div>
                       <p className="text-sm leading-7 text-slate-600">
-                        يمكنك تحديث رقم الجوال المرتبط بحسابك لاستخدامه في
-                        التواصل.
+                        {tr(
+                          language,
+                          "يمكنك تحديث رقم الجوال المرتبط بحسابك لاستخدامه في التواصل.",
+                          "You can update the mobile number linked to your account for communication."
+                        )}
                       </p>
                     </div>
                     <Badge
                       variant="outline"
                       className="rounded-full border-emerald-200 bg-emerald-50 text-emerald-700 shadow-none"
                     >
-                      قابل للتعديل
+                      {tr(language, "قابل للتعديل", "Editable")}
                     </Badge>
                   </div>
 
@@ -2695,7 +2986,7 @@ export default function EmployeeProfilePage() {
                       {savingPhone ? (
                         <Loader2 className="ml-2 h-4 w-4 animate-spin" />
                       ) : null}
-                      حفظ رقم الجوال
+                      {tr(language, "حفظ رقم الجوال", "Save Mobile Number")}
                     </Button>
                   </div>
                 </div>
@@ -2706,14 +2997,17 @@ export default function EmployeeProfilePage() {
               <CardHeader className="space-y-3">
                 <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
                   <KeyRound className="h-4 w-4" />
-                  أمان الحساب
+                  {tr(language, "أمان الحساب", "Account Security")}
                 </div>
                 <CardTitle className="text-xl font-semibold text-slate-950">
-                  تغيير كلمة المرور
+                  {tr(language, "تغيير كلمة المرور", "Change Password")}
                 </CardTitle>
                 <CardDescription className="text-sm leading-7 text-slate-600">
-                  يمكنك تغيير كلمة المرور الخاصة بحسابك فقط. لن يؤثر ذلك على أي
-                  إعدادات إدارية أخرى.
+                  {tr(
+                    language,
+                    "يمكنك تغيير كلمة المرور الخاصة بحسابك فقط. لن يؤثر ذلك على أي إعدادات إدارية أخرى.",
+                    "You can change only your account password. This will not affect any other admin settings."
+                  )}
                 </CardDescription>
               </CardHeader>
               <CardContent className="grid gap-4">
@@ -2721,21 +3015,21 @@ export default function EmployeeProfilePage() {
                   type="password"
                   value={currentPassword}
                   onChange={event => setCurrentPassword(event.target.value)}
-                  placeholder="كلمة المرور الحالية"
+                  placeholder={tr(language, "كلمة المرور الحالية", "Current Password")}
                   className="h-12 rounded-2xl border-slate-200 bg-slate-50/80 shadow-none"
                 />
                 <Input
                   type="password"
                   value={newPassword}
                   onChange={event => setNewPassword(event.target.value)}
-                  placeholder="كلمة المرور الجديدة"
+                  placeholder={tr(language, "كلمة المرور الجديدة", "New Password")}
                   className="h-12 rounded-2xl border-slate-200 bg-slate-50/80 shadow-none"
                 />
                 <Input
                   type="password"
                   value={confirmPassword}
                   onChange={event => setConfirmPassword(event.target.value)}
-                  placeholder="تأكيد كلمة المرور الجديدة"
+                  placeholder={tr(language, "تأكيد كلمة المرور الجديدة", "Confirm New Password")}
                   className="h-12 rounded-2xl border-slate-200 bg-slate-50/80 shadow-none"
                 />
                 <div className="flex justify-start">
@@ -2748,7 +3042,7 @@ export default function EmployeeProfilePage() {
                     {changingPassword ? (
                       <Loader2 className="ml-2 h-4 w-4 animate-spin" />
                     ) : null}
-                    تغيير كلمة المرور
+                    {tr(language, "تغيير كلمة المرور", "Change Password")}
                   </Button>
                 </div>
               </CardContent>
@@ -2759,52 +3053,61 @@ export default function EmployeeProfilePage() {
             className={cn("space-y-6", activeView !== "employment" && "hidden")}
           >
             <EmployeePortalViewHeader
-              title="البيانات الوظيفية"
-              description="بيانات العمل المعروضة من المصدر الحالي بدون تعديل."
+              title={tr(language, "البيانات الوظيفية", "Employment Details")}
+              description={tr(
+                language,
+                "بيانات العمل المعروضة من المصدر الحالي بدون تعديل.",
+                "Work details shown from the current source without edits."
+              )}
+              backLabel={backLabel}
               onBack={backToDashboard}
             />
 
             <SectionHeading
               icon={BriefcaseBusiness}
-              title="بيانات العمل"
-              description="هذه البيانات مرتبطة بوظيفتك داخل الشركة، وهي للعرض فقط في هذه المرحلة. تعديلها سيكون لاحقًا من جهة الإدارة أو الموارد البشرية."
+              title={tr(language, "بيانات العمل", "Work Details")}
+              description={tr(
+                language,
+                "هذه البيانات مرتبطة بوظيفتك داخل الشركة، وهي للعرض فقط في هذه المرحلة. تعديلها سيكون لاحقًا من جهة الإدارة أو الموارد البشرية.",
+                "These details are linked to your role in the company and are read-only at this stage. Updates will be handled later by administration or HR."
+              )}
             />
 
             <Card className="rounded-[28px] border border-slate-200/80 bg-white/95 shadow-[0_24px_70px_-42px_rgba(15,23,42,0.22)]">
               <CardContent className="space-y-5 p-6 sm:p-8">
                 <div className="grid gap-4 sm:grid-cols-2">
                   <EmploymentTile
-                    label="المسمى الوظيفي"
+                    label={tr(language, "المسمى الوظيفي", "Job Title")}
                     value={profile.employment.title}
                     icon={BriefcaseBusiness}
                   />
                   <EmploymentTile
-                    label="القسم / الإدارة"
+                    label={tr(language, "القسم / الإدارة", "Department")}
                     value={profile.employment.department}
                     icon={Building2}
                   />
                   <EmploymentTile
-                    label="تاريخ بداية العمل"
+                    label={tr(language, "تاريخ بداية العمل", "Start Date")}
                     value={
                       profile.employment.startDate
-                        ? formatDateEN(profile.employment.startDate)
+                        ? formatDateByLanguage(profile.employment.startDate, language)
                         : EMPLOYEE_EMPTY_VALUE
                     }
                     icon={CalendarDays}
                   />
                   <EmploymentTile
-                    label="رقم البصمة"
+                    label={tr(language, "رقم البصمة", "Fingerprint ID")}
                     value={profile.employment.fingerprintNumber}
                     icon={UserRound}
                     dir="ltr"
                   />
                   <EmploymentTile
-                    label="رصيد الإجازات"
+                    label={tr(language, "رصيد الإجازات", "Leave Balance")}
                     value={profile.employment.leaveBalanceLabel}
                     icon={BadgeCheck}
                   />
                   <EmploymentTile
-                    label="الحالة الوظيفية"
+                    label={tr(language, "الحالة الوظيفية", "Employment Status")}
                     value={profile.employment.statusLabel}
                     icon={ShieldCheck}
                     badge={
@@ -2821,7 +3124,7 @@ export default function EmployeeProfilePage() {
                   />
                   {profile.employment.employeeCode !== EMPLOYEE_EMPTY_VALUE ? (
                     <EmploymentTile
-                      label="الرقم الوظيفي"
+                      label={tr(language, "الرقم الوظيفي", "Employee Number")}
                       value={profile.employment.employeeCode}
                       icon={UserRound}
                     />
@@ -2836,7 +3139,7 @@ export default function EmployeeProfilePage() {
 
                   <div className="grid gap-4 sm:grid-cols-3">
                     <EmploymentTile
-                      label="وقت الدوام"
+                      label={tr(language, "وقت الدوام", "Working Hours")}
                       value={formatWorkScheduleRange({
                         startTime: profile.employment.shiftStartTime,
                         endTime: profile.employment.shiftEndTime,
@@ -2845,12 +3148,12 @@ export default function EmployeeProfilePage() {
                       dir="ltr"
                     />
                     <EmploymentTile
-                      label="أيام الراحة"
+                      label={tr(language, "أيام الراحة", "Days Off")}
                       value={profile.employment.weeklyOffDaysLabel}
                       icon={CalendarDays}
                     />
                     <EmploymentTile
-                      label="نطاق الحضور"
+                      label={tr(language, "نطاق الحضور", "Attendance Radius")}
                       value={profile.employment.attendanceZoneLabel}
                       icon={MapPin}
                     />
@@ -2991,18 +3294,19 @@ export default function EmployeeProfilePage() {
       {activeView === "work-schedule" ? (
         <section className="space-y-6">
           <EmployeePortalViewHeader
-            title="جدول الدوام"
-            description="مصدر الحضور والغياب والتأخير واستثناء أيام الراحة من الغياب."
+            title={tr(language, "جدول الدوام", "Work Schedule")}
+            description={tr(language, "مصدر الحضور والغياب والتأخير واستثناء أيام الراحة من الغياب.", "The source for attendance, absence, delays, and excluding days off from absence.")}
+            backLabel={backLabel}
             onBack={backToDashboard}
           />
 
           <EmployeeCard
-            title="جدول الدوام ونطاق الحضور"
-            subtitle="هذه القيم للعرض من ملف الموظف وتعتمد عليها صفحات الحضور والراتب."
+            title={tr(language, "جدول الدوام ونطاق الحضور", "Work Schedule and Attendance Radius")}
+            subtitle={tr(language, "هذه القيم للعرض من ملف الموظف وتعتمد عليها صفحات الحضور والراتب.", "These values are displayed from the employee profile and used by attendance and salary pages.")}
           >
             <div className="grid gap-4 md:grid-cols-3">
               <EmploymentTile
-                label="وقت الدوام"
+                label={tr(language, "وقت الدوام", "Working Hours")}
                 value={formatWorkScheduleRange({
                   startTime: profile.employment.shiftStartTime,
                   endTime: profile.employment.shiftEndTime,
@@ -3011,12 +3315,12 @@ export default function EmployeeProfilePage() {
                 dir="ltr"
               />
               <EmploymentTile
-                label="أيام الراحة الأسبوعية"
+                label={tr(language, "أيام الراحة الأسبوعية", "Weekly Days Off")}
                 value={profile.employment.weeklyOffDaysLabel}
                 icon={CalendarDays}
               />
               <EmploymentTile
-                label="نطاق الحضور"
+                label={tr(language, "نطاق الحضور", "Attendance Radius")}
                 value={profile.employment.attendanceZoneLabel}
                 icon={MapPin}
               />
@@ -3028,18 +3332,19 @@ export default function EmployeeProfilePage() {
       {activeView === "salary-settings" ? (
         <section className="space-y-6">
           <EmployeePortalViewHeader
-            title="بيانات الراتب"
-            description="إعدادات الراتب الثابتة المحفوظة في ملف الموظف، وليست سجل قفل نهاية الشهر."
+            title={tr(language, "بيانات الراتب", "Salary Details")}
+            description={tr(language, "إعدادات الراتب الثابتة المحفوظة في ملف الموظف، وليست سجل قفل نهاية الشهر.", "Fixed salary settings saved in the employee profile, not the month-end locked payroll record.")}
+            backLabel={backLabel}
             onBack={backToDashboard}
           />
 
           <EmployeeCard
-            title="بيانات الراتب الثابتة"
-            subtitle="تستخدم هذه القيم كمرجع أساسي عند احتساب راتب نهاية الشهر."
+            title={tr(language, "بيانات الراتب الثابتة", "Fixed Salary Details")}
+            subtitle={tr(language, "تستخدم هذه القيم كمرجع أساسي عند احتساب راتب نهاية الشهر.", "These values are used as the base reference for month-end payroll calculation.")}
           >
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               <EmploymentTile
-                label="الراتب الأساسي"
+                label={tr(language, "الراتب الأساسي", "Base Salary")}
                 value={
                   profile.employment.baseSalary === null
                     ? EMPLOYEE_EMPTY_VALUE
@@ -3048,42 +3353,42 @@ export default function EmployeeProfilePage() {
                 icon={BadgeCheck}
               />
               <EmploymentTile
-                label="بدل السكن"
+                label={tr(language, "بدل السكن", "Housing Allowance")}
                 value={formatOptionalCurrencyValue(
                   profile.employment.housingAllowance
                 )}
                 icon={Plus}
               />
               <EmploymentTile
-                label="بدل المواصلات"
+                label={tr(language, "بدل المواصلات", "Transportation Allowance")}
                 value={formatOptionalCurrencyValue(
                   profile.employment.transportationAllowance
                 )}
                 icon={Plus}
               />
               <EmploymentTile
-                label="بدلات ثابتة أخرى"
+                label={tr(language, "بدلات ثابتة أخرى", "Other Fixed Allowances")}
                 value={formatOptionalCurrencyValue(
                   profile.employment.otherAllowances
                 )}
                 icon={Plus}
               />
               <EmploymentTile
-                label="إجمالي البدلات"
+                label={tr(language, "إجمالي البدلات", "Total Allowances")}
                 value={formatOptionalCurrencyValue(
                   profile.employment.allowances
                 )}
                 icon={Plus}
               />
               <EmploymentTile
-                label="التأمينات"
+                label={tr(language, "التأمينات", "Insurance")}
                 value={formatOptionalCurrencyValue(
                   profile.employment.insuranceDeduction
                 )}
                 icon={ShieldCheck}
               />
               <EmploymentTile
-                label="الخصومات الثابتة"
+                label={tr(language, "الخصومات الثابتة", "Fixed Deductions")}
                 value={formatOptionalCurrencyValue(fixedDeductionsTotal)}
                 icon={Minus}
               />
@@ -3120,19 +3425,20 @@ export default function EmployeeProfilePage() {
       {activeView === "salary" ? (
         <section className="space-y-6">
           <EmployeePortalViewHeader
-            title="الراتب والتفاصيل المالية"
-            description="سجل رواتب نهاية الشهر المحسوب من الحضور والغياب والتأخير والأوفر تايم."
+            title={tr(language, "الراتب والتفاصيل المالية", "Salary and Financial Details")}
+            description={tr(language, "سجل رواتب نهاية الشهر المحسوب من الحضور والغياب والتأخير والأوفر تايم.", "Month-end payroll records calculated from attendance, absence, delays, and overtime.")}
+            backLabel={backLabel}
             onBack={backToDashboard}
           />
 
           <div className="hidden">
             <EmployeeCard
-              title="التفاصيل المالية الأساسية"
-              subtitle="هذه القيم من بيانات الموظف وتستخدم كمرجع لاحتساب الرواتب المقفلة."
+              title={tr(language, "التفاصيل المالية الأساسية", "Basic Financial Details")}
+              subtitle={tr(language, "هذه القيم من بيانات الموظف وتستخدم كمرجع لاحتساب الرواتب المقفلة.", "These values come from employee data and are used as a reference for locked payrolls.")}
             >
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <EmploymentTile
-                  label="الراتب الأساسي"
+                  label={tr(language, "الراتب الأساسي", "Base Salary")}
                   value={
                     profile.employment.baseSalary === null
                       ? EMPLOYEE_EMPTY_VALUE
@@ -3141,19 +3447,19 @@ export default function EmployeeProfilePage() {
                   icon={BadgeCheck}
                 />
                 <EmploymentTile
-                  label="التأمينات"
+                  label={tr(language, "التأمينات", "Insurance")}
                   value={formatOptionalCurrencyValue(
                     profile.employment.insuranceDeduction
                   )}
                   icon={ShieldCheck}
                 />
                 <EmploymentTile
-                  label="الخصومات الثابتة"
+                  label={tr(language, "الخصومات الثابتة", "Fixed Deductions")}
                   value={formatOptionalCurrencyValue(fixedDeductionsTotal)}
                   icon={Minus}
                 />
                 <EmploymentTile
-                  label="البدلات"
+                  label={tr(language, "البدلات", "Allowances")}
                   value={formatOptionalCurrencyValue(
                     profile.employment.allowances
                   )}
@@ -3189,8 +3495,8 @@ export default function EmployeeProfilePage() {
           </div>
 
           <EmployeeCard
-            title="آخر راتب مقفل"
-            subtitle="آخر سجل راتب نهاية شهر محفوظ للموظف، مع الراتب قبل الخصومات والراتب النهائي."
+            title={tr(language, "آخر راتب مقفل", "Latest Locked Payroll")}
+            subtitle={tr(language, "آخر سجل راتب نهاية شهر محفوظ للموظف، مع الراتب قبل الخصومات والراتب النهائي.", "The latest saved month-end payroll record, including salary before deductions and net salary.")}
           >
             {employeePayrollRecordsLoading ? (
               <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50 px-5 py-10 text-center text-sm text-slate-500">
@@ -3200,27 +3506,27 @@ export default function EmployeeProfilePage() {
               <div className="space-y-5">
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                   <EmploymentTile
-                    label="الشهر"
+                    label={tr(language, "الشهر", "Month")}
                     value={formatEmployeePayrollMonthLabel(
                       latestPayrollRecord.payrollMonth
                     )}
                     icon={CalendarDays}
                   />
                   <EmploymentTile
-                    label="الراتب قبل الخصومات"
+                    label={tr(language, "الراتب قبل الخصومات", "Salary Before Deductions")}
                     value={formatCurrencyValue(
                       latestPayrollBeforeManualDeductions
                     )}
                     icon={Clock3}
                   />
                   <EmploymentTile
-                    label="الراتب النهائي"
+                    label={tr(language, "الراتب النهائي", "Net Salary")}
                     value={formatCurrencyValue(latestPayrollRecord.finalSalary)}
                     icon={BadgeCheck}
                     valueClassName="text-emerald-700"
                   />
                   <EmploymentTile
-                    label="أيام بدون حضور"
+                    label={tr(language, "أيام بدون حضور", "Days Without Attendance")}
                     value={formatLeaveDaysCountValue(
                       latestPayrollRecord.attendanceAbsentDays || 0
                     )}
@@ -3330,8 +3636,8 @@ export default function EmployeeProfilePage() {
           </EmployeeCard>
 
           <EmployeeCard
-            title="سجل رواتب نهاية الشهر"
-            subtitle="كل راتب مقفل يظهر هنا مع المبلغ النهائي ومرفق الراتب إن وجد."
+            title={tr(language, "سجل رواتب نهاية الشهر", "Month-End Payroll Log")}
+            subtitle={tr(language, "كل راتب مقفل يظهر هنا مع المبلغ النهائي ومرفق الراتب إن وجد.", "Every locked payroll appears here with the final amount and attachment, if available.")}
           >
             {employeePayrollRecordsLoading ? (
               <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50 px-5 py-10 text-center text-sm text-slate-500">
@@ -3440,14 +3746,15 @@ export default function EmployeeProfilePage() {
       {activeView === "contracts" ? (
         <section className="space-y-6">
           <EmployeePortalViewHeader
-            title="العقود"
-            description="واجهة عرض مبدئية للعقود بدون إنشاء Collections أو منطق جديد."
+            title={tr(language, "العقود", "Contracts")}
+            description={tr(language, "واجهة عرض مبدئية للعقود بدون إنشاء Collections أو منطق جديد.", "Initial contract display view without creating new collections or logic.")}
+            backLabel={backLabel}
             onBack={backToDashboard}
           />
 
           <EmployeeCard
-            title="العقود الحالية والمنتهية"
-            subtitle="TODO: Placeholder حتى تتوفر بيانات العقود من المصدر الحالي."
+            title={tr(language, "العقود الحالية والمنتهية", "Current and Expired Contracts")}
+            subtitle={tr(language, "TODO: Placeholder حتى تتوفر بيانات العقود من المصدر الحالي.", "Placeholder until contract data is available from the current source.")}
           >
             <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50 px-5 py-10 text-center text-sm text-slate-500">
               لا توجد بيانات عقود متاحة حالياً.
@@ -3459,14 +3766,15 @@ export default function EmployeeProfilePage() {
       {activeView === "leaves" ? (
         <section className="space-y-6">
           <EmployeePortalViewHeader
-            title="الإجازات"
-            description="رصيد الإجازات، الطلبات، والإجازات المعتمدة المستثناة من الغياب واحتساب الراتب."
+            title={tr(language, "الإجازات", "Leaves")}
+            description={tr(language, "رصيد الإجازات، الطلبات، والإجازات المعتمدة المستثناة من الغياب واحتساب الراتب.", "Leave balance, requests, and approved leaves excluded from absence and payroll calculations.")}
+            backLabel={backLabel}
             onBack={backToDashboard}
           />
 
           <EmployeeCard
-            title="ملخص الإجازات"
-            subtitle="الإجازات المعتمدة تمرر لتقويم الحضور واحتساب الراتب كي لا تعتبر غياباً."
+            title={tr(language, "ملخص الإجازات", "Leave Summary")}
+            subtitle={tr(language, "الإجازات المعتمدة تمرر لتقويم الحضور واحتساب الراتب كي لا تعتبر غياباً.", "Approved leaves are passed to attendance and payroll so they are not counted as absence.")}
             action={
               <Button
                 type="button"
@@ -3480,7 +3788,7 @@ export default function EmployeeProfilePage() {
           >
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               <LeaveSummaryCard
-                label="رصيد الإجازات"
+                label={tr(language, "رصيد الإجازات", "Leave Balance")}
                 value={
                   leaveEntitlementDaysCount === null
                     ? EMPLOYEE_EMPTY_VALUE
@@ -3490,18 +3798,18 @@ export default function EmployeeProfilePage() {
                 accent="text-[#B98500]"
               />
               <LeaveSummaryCard
-                label="الإجازات المستخدمة"
+                label={tr(language, "الإجازات المستخدمة", "Used Leaves")}
                 value={formatLeaveDaysCountValue(approvedLeaveDaysCount)}
                 icon={CheckCircle2}
                 accent="text-emerald-600"
               />
               <LeaveSummaryCard
-                label="الإجازات المتبقية"
+                label={tr(language, "الإجازات المتبقية", "Remaining Leaves")}
                 value={profile.employment.leaveBalanceLabel}
                 icon={CalendarDays}
               />
               <LeaveSummaryCard
-                label="آخر إجازة"
+                label={tr(language, "آخر إجازة", "Latest Leave")}
                 value={
                   latestApprovedLeaveRequest
                     ? formatLeaveDateRange(
@@ -3516,8 +3824,8 @@ export default function EmployeeProfilePage() {
           </EmployeeCard>
 
           <EmployeeCard
-            title="الإجازات المعتمدة"
-            subtitle="هذه الأيام لا تظهر كغياب في تقويم الحضور ولا تدخل ضمن خصومات الراتب."
+            title={tr(language, "الإجازات المعتمدة", "Approved Leaves")}
+            subtitle={tr(language, "هذه الأيام لا تظهر كغياب في تقويم الحضور ولا تدخل ضمن خصومات الراتب.", "These days do not appear as absence in attendance and are not included in salary deductions.")}
           >
             {leaveRequestsLoading ? (
               <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50/70 px-5 py-10 text-center text-sm text-slate-500">
@@ -3570,7 +3878,10 @@ export default function EmployeeProfilePage() {
                           </span>
                         </div>
                       </div>
-                      <LeaveStatusBadge status={request.status} />
+                      <LeaveStatusBadge
+                        status={request.status}
+                        language={language}
+                      />
                     </div>
                   </div>
                 ))}
@@ -3583,8 +3894,8 @@ export default function EmployeeProfilePage() {
           </EmployeeCard>
 
           <EmployeeCard
-            title="طلبات الإجازة"
-            subtitle="كل طلب يظهر بنوع الإجازة وحالته: معلق، موافق، أو مرفوض."
+            title={tr(language, "طلبات الإجازة", "Leave Requests")}
+            subtitle={tr(language, "كل طلب يظهر بنوع الإجازة وحالته: معلق، موافق، أو مرفوض.", "Each request shows the leave type and status: pending, approved, or rejected.")}
           >
             {leaveRequestsLoading ? (
               <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50/70 px-5 py-10 text-center text-sm text-slate-500">
@@ -3603,7 +3914,10 @@ export default function EmployeeProfilePage() {
                           <Badge variant="outline" className="rounded-full">
                             {getLeaveTypeLabel(request.leaveType)}
                           </Badge>
-                          <LeaveStatusBadge status={request.status} />
+                          <LeaveStatusBadge
+                            status={request.status}
+                            language={language}
+                          />
                         </div>
                         <div className="grid gap-2 text-sm text-slate-600 md:grid-cols-3">
                           <span>
@@ -3630,7 +3944,7 @@ export default function EmployeeProfilePage() {
                         </div>
                         {request.hrNote ? (
                           <div className="rounded-2xl border border-emerald-200/80 bg-emerald-50/70 px-4 py-3 text-sm leading-7 text-emerald-800">
-                            <span className="font-semibold">ملاحظة HR:</span>{" "}
+                            <span className="font-semibold">{tr(language, "ملاحظة HR:", "HR Note:")}</span>{" "}
                             {request.hrNote}
                           </div>
                         ) : null}
@@ -3651,14 +3965,15 @@ export default function EmployeeProfilePage() {
       {activeView === "documents" ? (
         <section className="space-y-6">
           <EmployeePortalViewHeader
-            title="المستندات"
-            description="عرض المستندات الرسمية المتاحة حالياً مع رابط صفحة الملفات الموجودة مسبقاً."
+            title={tr(language, "المستندات", "Documents")}
+            description={tr(language, "عرض المستندات الرسمية المتاحة حالياً مع رابط صفحة الملفات الموجودة مسبقاً.", "View available official documents with a link to the existing files page.")}
+            backLabel={backLabel}
             onBack={backToDashboard}
           />
 
           <EmployeeCard
-            title="المستندات الرسمية"
-            subtitle="يعرض ما هو محمل مسبقاً من بيانات الملفات الحالية فقط."
+            title={tr(language, "المستندات الرسمية", "Official Documents")}
+            subtitle={tr(language, "يعرض ما هو محمل مسبقاً من بيانات الملفات الحالية فقط.", "Shows only documents already loaded from current file data.")}
             action={
               <Button
                 asChild
@@ -3666,7 +3981,7 @@ export default function EmployeeProfilePage() {
                 variant="outline"
                 className="rounded-2xl border-slate-200 bg-white"
               >
-                <a href="/employee/files">فتح صفحة الملفات</a>
+                <a href="/employee/files">{tr(language, "فتح صفحة الملفات", "Open Files Page")}</a>
               </Button>
             }
           >
@@ -3722,15 +4037,16 @@ export default function EmployeeProfilePage() {
       {activeView === "leave-request" ? (
         <section className="space-y-6">
           <EmployeePortalViewHeader
-            title="طلب إجازة"
-            description="إنشاء طلب إجازة باستخدام منطق الإرسال الحالي نفسه."
+            title={tr(language, "طلب إجازة", "Leave Request")}
+            description={tr(language, "إنشاء طلب إجازة باستخدام منطق الإرسال الحالي نفسه.", "Create a leave request using the existing submission flow.")}
+            backLabel={backLabel}
             onBack={backToDashboard}
           />
 
           <SectionHeading
             icon={CalendarDays}
-            title="الإجازات"
-            description="هنا يمكنك متابعة رصيد الإجازات ورفع طلب جديد والاطلاع على آخر إجازة وسجل الطلبات السابقة."
+            title={tr(language, "الإجازات", "Leaves")}
+            description={tr(language, "هنا يمكنك متابعة رصيد الإجازات ورفع طلب جديد والاطلاع على آخر إجازة وسجل الطلبات السابقة.", "Track your leave balance, submit a new request, and view your latest leave and previous requests.")}
           />
 
           <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,0.95fr)]">
@@ -3751,13 +4067,13 @@ export default function EmployeeProfilePage() {
               <CardContent className="space-y-5">
                 <div className="grid gap-4 md:grid-cols-3">
                   <LeaveSummaryCard
-                    label="الرصيد الحالي"
+                    label={tr(language, "الرصيد الحالي", "Current Balance")}
                     value={profile.employment.leaveBalanceLabel}
                     icon={BadgeCheck}
                     accent="text-[#B98500]"
                   />
                   <LeaveSummaryCard
-                    label="حالة آخر إجازة معتمدة"
+                    label={tr(language, "حالة آخر إجازة معتمدة", "Latest Approved Leave Status")}
                     value={
                       latestApprovedLeaveRequest
                         ? getLeaveStatusMeta(latestApprovedLeaveRequest.status)
@@ -3773,7 +4089,7 @@ export default function EmployeeProfilePage() {
                     }
                   />
                   <LeaveSummaryCard
-                    label="عدد الأيام"
+                    label={tr(language, "عدد الأيام", "Number of Days")}
                     value={
                       latestApprovedLeaveRequest
                         ? formatLeaveDaysLabel(
@@ -3800,6 +4116,7 @@ export default function EmployeeProfilePage() {
                           </Badge>
                           <LeaveStatusBadge
                             status={latestApprovedLeaveRequest.status}
+                            language={language}
                           />
                         </div>
 
@@ -3835,7 +4152,7 @@ export default function EmployeeProfilePage() {
                           ) : null}
                           {latestApprovedLeaveRequest.hrNote ? (
                             <div className="rounded-2xl border border-emerald-200/80 bg-emerald-50/70 px-4 py-3 leading-7 text-emerald-800">
-                              <span className="font-semibold">ملاحظة HR:</span>{" "}
+                              <span className="font-semibold">{tr(language, "ملاحظة HR:", "HR Note:")}</span>{" "}
                               {latestApprovedLeaveRequest.hrNote}
                             </div>
                           ) : null}
@@ -4035,7 +4352,10 @@ export default function EmployeeProfilePage() {
                           <Badge variant="outline" className="rounded-full">
                             {getLeaveTypeLabel(request.leaveType)}
                           </Badge>
-                          <LeaveStatusBadge status={request.status} />
+                          <LeaveStatusBadge
+                            status={request.status}
+                            language={language}
+                          />
                         </div>
 
                         <div className="grid gap-2 text-sm text-slate-600">
@@ -4075,7 +4395,7 @@ export default function EmployeeProfilePage() {
 
                         {request.hrNote ? (
                           <div className="rounded-2xl border border-emerald-200/80 bg-emerald-50/70 px-4 py-3 leading-7 text-emerald-800">
-                            <span className="font-semibold">ملاحظة HR:</span>{" "}
+                            <span className="font-semibold">{tr(language, "ملاحظة HR:", "HR Note:")}</span>{" "}
                             {request.hrNote}
                           </div>
                         ) : null}
