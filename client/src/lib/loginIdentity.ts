@@ -63,7 +63,9 @@ function getUsernameFallbackDomains() {
     .map(domain => domain.trim().toLowerCase())
     .filter(Boolean);
 
-  return Array.from(new Set([...configured, "maedin.sa", "gmail.com"]));
+  return Array.from(
+    new Set([...configured, "maedin.sa", "madanalbena.com", "gmail.com"])
+  );
 }
 
 function isCallableUnavailable(error: unknown) {
@@ -85,7 +87,15 @@ function isCallableUnavailable(error: unknown) {
 }
 
 async function resolveLoginEmailFromUsernameIndex(username: string) {
-  const usernameSnap = await getDoc(doc(db, "admin_usernames", username));
+  let usernameSnap;
+
+  try {
+    usernameSnap = await getDoc(doc(db, "admin_usernames", username));
+  } catch (error) {
+    console.warn("[HR Login] username index lookup skipped");
+    return "";
+  }
+
   if (!usernameSnap.exists()) return "";
 
   return normalizeLoginEmail(String(usernameSnap.data()?.email || ""));
