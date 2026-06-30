@@ -16,13 +16,13 @@ import {
   UserRound,
   Users,
 } from "lucide-react";
-import { Link, useLocation } from "wouter";
+import { Link } from "wouter";
 import {
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signOut,
 } from "firebase/auth";
-import { collection, doc, getDoc, onSnapshot, query, where } from "firebase/firestore";
+import { collection, onSnapshot, query, where } from "firebase/firestore";
 
 import { auth, db } from "@/_core/firebase";
 import {
@@ -38,7 +38,12 @@ import { HrBrandMark } from "@/components/HrBrandMark";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { resolveEmployeeAvatarUrl } from "@/lib/defaultEmployeeAvatars";
-import { normalizeAdminUsername } from "@/lib/adminUsername";
+import {
+  isEmailLoginInput,
+  isLoginIdentityError,
+  resolveLoginEmailCandidatesForAuth,
+  resolveLoginEmailForAuth,
+} from "@/lib/loginIdentity";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { languageDir, tr } from "@/lib/i18n";
 import { WEEKLY_REPORT_MANAGER_NOTES_PERMISSION } from "@/lib/weeklyReportConfig";
@@ -63,23 +68,6 @@ function PortalAlert({
       {children}
     </div>
   );
-}
-
-function normalizeEmail(value: string) {
-  return value.trim().toLowerCase();
-}
-
-async function resolveStaffLoginEmail(value: string) {
-  const normalized = normalizeEmail(value);
-  if (!normalized || normalized.includes("@")) return normalized;
-
-  const username = normalizeAdminUsername(normalized);
-  if (!username) return normalized;
-
-  const usernameSnap = await getDoc(doc(db, "admin_usernames", username));
-  if (!usernameSnap.exists()) return normalized;
-
-  return normalizeEmail(usernameSnap.data()?.email || normalized);
 }
 
 type PortalNotificationCounts = {
@@ -175,10 +163,28 @@ function friendlyAuthError(code: string | undefined, language: "ar" | "en") {
   }
 }
 
+function friendlyLoginIdentityError(
+  code: "username-not-found" | "email-missing",
+  language: "ar" | "en"
+) {
+  if (code === "email-missing") {
+    return tr(
+      language,
+      "هذا الحساب لا يحتوي على بريد إلكتروني صالح.",
+      "This account does not have a valid email address."
+    );
+  }
+
+  return tr(
+    language,
+    "اسم المستخدم غير موجود أو غير مرتبط ببريد إلكتروني.",
+    "Username was not found or is not linked to an email."
+  );
+}
+
 export default function StaffPortalPage() {
   const { language, toggleLanguage } = useLanguage();
   const { user, loading } = useAuth();
-  const [location, setLocation] = useLocation();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -200,12 +206,6 @@ export default function StaffPortalPage() {
   const canWriteWeeklyReportNotes =
     !!user &&
     hasStaffAreaPermission(user, WEEKLY_REPORT_MANAGER_NOTES_PERMISSION);
-
-  useEffect(() => {
-    if (loading || !hasInternalAccess) return;
-    if (location !== "/hr") return;
-    setLocation(homePath);
-  }, [hasInternalAccess, homePath, loading, location, setLocation]);
 
   useEffect(() => {
     if (!user?.uid) {
@@ -506,7 +506,33 @@ export default function StaffPortalPage() {
     setError(null);
     setInfo(null);
 
-    const normalizedEmail = await resolveStaffLoginEmail(email);
+    const loginInput = email.trim();
+    const isEmail = isEmailLoginInput(loginInput);
+    console.log("[HR Login] input type:", isEmail ? "email" : "username");
+
+    let normalizedEmail = "";
+
+    try {
+      if (!loginInput) {
+        console.log("[HR Login] resolved email:", "missing");
+        setError(
+          tr(
+            language,
+            "ط§ظƒطھط¨ ط§ط³ظ… ط§ظ„ظ…ط³طھط®ط¯ظ… ط£ظˆ ط§ظ„ط¨ط±ظٹط¯ ط§ظ„ط¥ظ„ظƒطھط±ظˆظ†ظٹ.",
+            "Enter your username or email."
+          )
+        );
+        return;
+      }
+
+      if (!password) {
+        setError(tr(language, "ط§ظƒطھط¨ ظƒظ„ظ…ط© ط§ظ„ظ…ط±ظˆط±.", "Enter your password."));
+        return;
+      }
+
+      const candidateEmails = await resolveLoginEmailCandidatesForAuth(loginInput);
+      normalizedEmail = candidateEmails[0] || "";
+      console.log("[HR Login] resolved email:", candidateEmails.length ? "found" : "missing");
 
     if (!normalizedEmail) {
       setBusy(false);
@@ -526,9 +552,38 @@ export default function StaffPortalPage() {
       return;
     }
 
-    try {
-      await signInWithEmailAndPassword(auth, normalizedEmail, password);
+      let lastSignInError: any = null;
+
+      for (const candidateEmail of candidateEmails) {
+        try {
+          await signInWithEmailAndPassword(auth, candidateEmail, password);
+          return;
+        } catch (candidateError: any) {
+          lastSignInError = candidateError;
+          const code = String(candidateError?.code || "");
+          const canTryNextCandidate =
+            !isEmail &&
+            [
+              "auth/invalid-email",
+              "auth/user-not-found",
+              "auth/wrong-password",
+              "auth/invalid-credential",
+            ].includes(code);
+
+          if (!canTryNextCandidate) {
+            throw candidateError;
+          }
+        }
+      }
+
+      throw lastSignInError;
     } catch (submitError: any) {
+      if (isLoginIdentityError(submitError)) {
+        console.log("[HR Login] resolved email:", "missing");
+        setError(friendlyLoginIdentityError(submitError.code, language));
+        return;
+      }
+
       setError(friendlyAuthError(submitError?.code, language));
     } finally {
       setBusy(false);
@@ -538,7 +593,12 @@ export default function StaffPortalPage() {
   const handleForgotPassword = async () => {
     if (!firebaseConfigured || busy) return;
 
-    const normalizedEmail = await resolveStaffLoginEmail(email);
+    setBusy(true);
+    setError(null);
+    setInfo(null);
+
+    try {
+      const normalizedEmail = await resolveLoginEmailForAuth(email);
     if (!normalizedEmail) {
       setError(
         tr(
@@ -550,11 +610,6 @@ export default function StaffPortalPage() {
       return;
     }
 
-    setBusy(true);
-    setError(null);
-    setInfo(null);
-
-    try {
       await sendPasswordResetEmail(auth, normalizedEmail);
       setInfo(
         tr(
@@ -564,6 +619,11 @@ export default function StaffPortalPage() {
         )
       );
     } catch (submitError: any) {
+      if (isLoginIdentityError(submitError)) {
+        setError(friendlyLoginIdentityError(submitError.code, language));
+        return;
+      }
+
       setError(friendlyAuthError(submitError?.code, language));
     } finally {
       setBusy(false);

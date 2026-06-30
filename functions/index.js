@@ -277,6 +277,173 @@ const pickFirstText = (...values) => {
   return "";
 };
 
+const normalizeAdminUsernameForLogin = value =>
+  String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, ".")
+    .replace(/[._-]{2,}/g, ".")
+    .replace(/^[._-]+|[._-]+$/g, "");
+
+const normalizeLoginEmailValue = value =>
+  String(value || "")
+    .trim()
+    .toLowerCase();
+
+const isUsableLoginEmail = email => normalizeLoginEmailValue(email).includes("@");
+
+const pickLoginEmailFromData = data =>
+  normalizeLoginEmailValue(
+    pickFirstText(
+      data?.email,
+      data?.emailLower,
+      data?.profile?.email,
+      data?.employeeProfile?.personal?.email,
+      data?.personal?.email
+    )
+  );
+
+const buildLoginEmailResolution = (id, source, data) => {
+  const email = pickLoginEmailFromData(data || {});
+  return {
+    found: true,
+    id,
+    source,
+    email,
+    emailMissing: !isUsableLoginEmail(email),
+  };
+};
+
+const preferUsableLoginResolution = (current, candidate) => {
+  if (!candidate) return current;
+  if (!current) return candidate;
+  if (isUsableLoginEmail(candidate.email) && !isUsableLoginEmail(current.email)) {
+    return candidate;
+  }
+  return current;
+};
+
+const findLoginEmailInSnapshot = (snapshot, source, username) => {
+  let best = null;
+
+  for (const docSnap of snapshot.docs) {
+    const data = docSnap.data() || {};
+    const docUsername = normalizeAdminUsernameForLogin(
+      data.usernameLower || data.username
+    );
+
+    if (docUsername !== username) continue;
+
+    const candidate = buildLoginEmailResolution(docSnap.id, source, data);
+    best = preferUsableLoginResolution(best, candidate);
+    if (isUsableLoginEmail(best.email)) return best;
+  }
+
+  return best;
+};
+
+const queryLoginEmailByUsernameField = async (
+  collectionName,
+  fieldName,
+  username
+) => {
+  const snapshot = await db
+    .collection(collectionName)
+    .where(fieldName, "==", username)
+    .limit(10)
+    .get();
+
+  return findLoginEmailInSnapshot(snapshot, collectionName, username);
+};
+
+const scanLoginEmailByNormalizedUsername = async (collectionName, username) => {
+  const snapshot = await db
+    .collection(collectionName)
+    .select(
+      "username",
+      "usernameLower",
+      "email",
+      "emailLower",
+      "profile",
+      "employeeProfile",
+      "personal"
+    )
+    .limit(1000)
+    .get();
+
+  return findLoginEmailInSnapshot(snapshot, collectionName, username);
+};
+
+const resolveLoginEmailByUsername = async username => {
+  const normalizedUsername = normalizeAdminUsernameForLogin(username);
+  let best = null;
+
+  if (!normalizedUsername) return null;
+
+  const usernameIndexSnap = await db
+    .doc(`admin_usernames/${normalizedUsername}`)
+    .get();
+
+  if (usernameIndexSnap.exists) {
+    best = preferUsableLoginResolution(
+      best,
+      buildLoginEmailResolution(
+        usernameIndexSnap.id,
+        "admin_usernames",
+        usernameIndexSnap.data() || {}
+      )
+    );
+    if (isUsableLoginEmail(best.email)) return best;
+  }
+
+  for (const collectionName of ["admin_users", "users"]) {
+    for (const fieldName of ["usernameLower", "username"]) {
+      best = preferUsableLoginResolution(
+        best,
+        await queryLoginEmailByUsernameField(
+          collectionName,
+          fieldName,
+          normalizedUsername
+        )
+      );
+      if (best && isUsableLoginEmail(best.email)) return best;
+    }
+  }
+
+  for (const collectionName of ["admin_users", "users"]) {
+    best = preferUsableLoginResolution(
+      best,
+      await scanLoginEmailByNormalizedUsername(collectionName, normalizedUsername)
+    );
+    if (best && isUsableLoginEmail(best.email)) return best;
+  }
+
+  return best;
+};
+
+exports.resolveLoginEmail = onCall(
+  PUBLIC_WEB_CALLABLE_OPTIONS,
+  async request => {
+    const username = normalizeAdminUsernameForLogin(request.data?.username);
+
+    if (!username) {
+      return { found: false, email: null, emailMissing: false };
+    }
+
+    const resolution = await resolveLoginEmailByUsername(username);
+
+    if (!resolution) {
+      return { found: false, email: null, emailMissing: false };
+    }
+
+    return {
+      found: true,
+      email: isUsableLoginEmail(resolution.email) ? resolution.email : null,
+      emailMissing: !isUsableLoginEmail(resolution.email),
+    };
+  }
+);
+
 const normalizeEmployeeDirectoryStatus = data => {
   const employment =
     data?.employeeProfile?.employment || data?.employment || {};

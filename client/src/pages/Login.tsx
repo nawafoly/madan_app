@@ -6,7 +6,7 @@ import {
   signInWithEmailAndPassword,
   updateProfile,
 } from "firebase/auth";
-import { doc, getDoc, serverTimestamp } from "firebase/firestore";
+import { doc, serverTimestamp } from "firebase/firestore";
 import { Eye, EyeOff } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -21,7 +21,11 @@ import {
 } from "@/lib/auditLog";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { languageDir, textAlignClass, tr } from "@/lib/i18n";
-import { normalizeAdminUsername } from "@/lib/adminUsername";
+import {
+  isEmailLoginInput,
+  isLoginIdentityError,
+  resolveLoginEmailForAuth,
+} from "@/lib/loginIdentity";
 type AuthMode = "login" | "register";
 
 function FieldLabel({ children }: { children: ReactNode }) {
@@ -93,20 +97,7 @@ export default function LoginPage() {
   }, [loading, location, setLocation, user]);
 
   const normalizeEmail = (value: string) => value.trim().toLowerCase();
-  const resolveLoginEmail = async (value: string) => {
-    const input = value.trim().toLowerCase();
-    if (input.includes("@")) return input;
-
-    const username = normalizeAdminUsername(input);
-    if (!username) return input;
-
-    const usernameSnap = await getDoc(doc(db, "admin_usernames", username));
-    const resolvedEmail = usernameSnap.exists()
-      ? String(usernameSnap.data()?.email || "").trim().toLowerCase()
-      : "";
-
-    return resolvedEmail || input;
-  };
+  const resolveLoginEmail = (value: string) => resolveLoginEmailForAuth(value);
 
   const friendlyAuthError = (code?: string) => {
     switch (code) {
@@ -143,6 +134,24 @@ export default function LoginPage() {
           "Could not complete the request. Check Firebase settings."
         );
     }
+  };
+
+  const friendlyLoginIdentityError = (
+    code: "username-not-found" | "email-missing"
+  ) => {
+    if (code === "email-missing") {
+      return tr(
+        language,
+        "هذا الحساب لا يحتوي على بريد إلكتروني صالح.",
+        "This account does not have a valid email address."
+      );
+    }
+
+    return tr(
+      language,
+      "اسم المستخدم غير موجود أو غير مرتبط ببريد إلكتروني.",
+      "Username was not found or is not linked to an email."
+    );
   };
 
   const modeCopy = useMemo(
@@ -202,9 +211,17 @@ export default function LoginPage() {
     setBusy(true);
     resetTransientState();
 
-    const normalizedEmail =
-      mode === "login" ? await resolveLoginEmail(email) : normalizeEmail(email);
     const trimmedPassword = password;
+
+    try {
+      const isEmail = isEmailLoginInput(email);
+      let normalizedEmail =
+        mode === "login" ? await resolveLoginEmail(email) : normalizeEmail(email);
+
+      if (mode === "login") {
+        console.log("[HR Login] input type:", isEmail ? "email" : "username");
+        console.log("[HR Login] resolved email:", normalizedEmail ? "found" : "missing");
+      }
 
     if (!normalizedEmail) {
       setBusy(false);
@@ -218,7 +235,6 @@ export default function LoginPage() {
       return;
     }
 
-    try {
       if (mode === "login") {
         const cred = await signInWithEmailAndPassword(
           auth,
@@ -336,6 +352,12 @@ export default function LoginPage() {
         ignoreFields: ["updatedAt"],
       });
     } catch (submitError: any) {
+      if (isLoginIdentityError(submitError)) {
+        console.log("[HR Login] resolved email:", "missing");
+        setLocalError(friendlyLoginIdentityError(submitError.code));
+        return;
+      }
+
       setLocalError(friendlyAuthError(submitError?.code));
     } finally {
       setBusy(false);
@@ -347,7 +369,10 @@ export default function LoginPage() {
 
     resetTransientState();
 
-    const normalizedEmail = await resolveLoginEmail(email);
+    setBusy(true);
+
+    try {
+      const normalizedEmail = await resolveLoginEmail(email);
 
     if (!normalizedEmail) {
       setLocalError(
@@ -360,8 +385,6 @@ export default function LoginPage() {
       return;
     }
 
-    setBusy(true);
-    try {
       await sendPasswordResetEmail(auth, normalizedEmail);
       setLocalInfo(
         tr(
@@ -371,6 +394,11 @@ export default function LoginPage() {
         )
       );
     } catch (submitError: any) {
+      if (isLoginIdentityError(submitError)) {
+        setLocalError(friendlyLoginIdentityError(submitError.code));
+        return;
+      }
+
       setLocalError(friendlyAuthError(submitError?.code));
     } finally {
       setBusy(false);
