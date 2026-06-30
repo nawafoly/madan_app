@@ -1242,6 +1242,73 @@ function Field({
   );
 }
 
+function showNativeInputPicker(input: HTMLInputElement | null) {
+  if (!input) return;
+  if (input.disabled || input.readOnly) return;
+
+  try {
+    const showPicker = (
+      input as HTMLInputElement & { showPicker?: () => void }
+    ).showPicker;
+    if (showPicker) {
+      showPicker.call(input);
+      return;
+    }
+  } catch {
+    // Some browsers only allow showPicker during trusted click events.
+  }
+
+  input.focus();
+}
+
+function NativeDatePickerInput({
+  className,
+  disabled,
+  onValueChange,
+  type = "date",
+  value,
+}: {
+  className?: string;
+  disabled?: boolean;
+  onValueChange: (value: string) => void;
+  type?: "date" | "month";
+  value: string;
+}) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const placeholder = type === "month" ? "YYYY-MM" : "YYYY-MM-DD";
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        className={cn(
+          "flex h-9 w-full cursor-pointer items-center justify-between rounded-md border border-input bg-transparent px-3 py-1 text-sm text-left tabular-nums shadow-xs transition-[color,box-shadow] outline-none [direction:ltr] [unicode-bidi:plaintext] disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50",
+          "focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
+          className
+        )}
+        disabled={disabled}
+        onClick={() => showNativeInputPicker(inputRef.current)}
+      >
+        <span className={value ? "text-slate-950" : "text-slate-400"}>
+          {value || placeholder}
+        </span>
+        <CalendarDays className="h-4 w-4 shrink-0 text-slate-500" />
+      </button>
+      <input
+        ref={inputRef}
+        type={type}
+        lang="en-GB"
+        dir="ltr"
+        value={value || ""}
+        onChange={event => onValueChange(event.target.value)}
+        className="sr-only"
+        tabIndex={-1}
+        disabled={disabled}
+      />
+    </div>
+  );
+}
+
 function ReadonlyMeta({
   icon: Icon,
   label,
@@ -1254,7 +1321,7 @@ function ReadonlyMeta({
   dir?: "rtl" | "ltr";
 }) {
   return (
-    <div className="min-w-0 rounded-[20px] border border-slate-200/80 bg-slate-50/80 px-4 py-3">
+    <div className="min-w-0 rounded-[22px] border border-slate-200/80 bg-white px-4 py-3 shadow-[0_12px_30px_-26px_rgba(15,23,42,0.42)]">
       <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
         <Icon className="h-3.5 w-3.5" />
         {label}
@@ -1264,6 +1331,36 @@ function ReadonlyMeta({
         className="mt-2 min-w-0 break-words text-sm font-semibold text-slate-950 [overflow-wrap:anywhere]"
       >
         {value || EMPLOYEE_EMPTY_VALUE}
+      </div>
+    </div>
+  );
+}
+
+function EmployeeWorkspaceSectionBreak({
+  description,
+  icon: Icon,
+  title,
+}: {
+  description: string;
+  icon: typeof ShieldCheck;
+  title: string;
+}) {
+  return (
+    <div className="relative overflow-hidden rounded-[28px] border border-dashed border-slate-300/80 bg-white/78 px-5 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.92)]">
+      <div className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-l from-transparent via-[#F2B705]/70 to-transparent" />
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-start gap-3">
+          <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-950 text-[#F2B705] shadow-[0_18px_34px_-24px_rgba(15,23,42,0.9)]">
+            <Icon className="h-5 w-5" />
+          </div>
+          <div className="min-w-0 space-y-1">
+            <div className="text-sm font-semibold text-slate-950">{title}</div>
+            <p className="max-w-3xl text-sm leading-6 text-slate-500">
+              {description}
+            </p>
+          </div>
+        </div>
+        <div className="h-px flex-1 bg-gradient-to-l from-transparent via-slate-300 to-transparent sm:max-w-[220px]" />
       </div>
     </div>
   );
@@ -1349,7 +1446,7 @@ function EmployeeFileMetaBadge({
   return (
     <span
       dir={dir}
-      className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-600"
+      className="rounded-full bg-slate-100/80 px-2.5 py-1 text-xs text-slate-500"
     >
       {label}
     </span>
@@ -6451,11 +6548,11 @@ export default function EmployeesManagementPage() {
             <Card
               ref={employeeDetailsTopRef}
               className={cn(
-                "w-full max-w-full gap-0 overflow-hidden border-slate-200/80 bg-white/95 py-0 shadow-sm",
+                "w-full max-w-full gap-0 overflow-hidden border-slate-200/80 bg-[linear-gradient(135deg,#ffffff_0%,#f8fafc_56%,#fff7df_100%)] py-0 shadow-[0_22px_54px_-38px_rgba(15,23,42,0.28)]",
                 !selectedEmployee && "hidden"
               )}
             >
-              <CardHeader className="min-w-0 border-b border-slate-100 bg-white/90 px-4 pt-5 pb-4 sm:px-6 sm:pt-6">
+              <CardHeader className="min-w-0 border-b border-slate-200/70 bg-white/70 px-4 pt-5 pb-4 backdrop-blur sm:px-6 sm:pt-6">
                 <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
                   <div
                     className={cn(
@@ -6536,10 +6633,10 @@ export default function EmployeesManagementPage() {
             </Card>
 
             {selectedEmployee && selectedEmployeeProfile ? (
-              <div className="flex min-w-0 max-w-full flex-col gap-6 overflow-x-hidden">
+              <div className="flex min-w-0 max-w-full flex-col gap-8 overflow-x-hidden rounded-[34px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(248,250,252,0.92)_0%,rgba(241,245,249,0.72)_100%)] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.95)] sm:p-4 lg:p-5">
                 <Card
                   className={cn(
-                    "order-0 sticky top-4 z-20 w-full max-w-full gap-0 overflow-hidden border-slate-200/80 bg-white/95 py-0 shadow-[0_18px_38px_-30px_rgba(15,23,42,0.28)] backdrop-blur"
+                    "order-0 sticky top-4 z-20 w-full max-w-full gap-0 overflow-hidden border-[#F2B705]/25 bg-[linear-gradient(135deg,rgba(255,255,255,0.98)_0%,rgba(255,250,235,0.96)_100%)] py-0 shadow-[0_22px_52px_-34px_rgba(242,183,5,0.32)] ring-1 ring-white/80 backdrop-blur"
                   )}
                 >
                   <CardContent className="min-w-0 px-3 py-3 sm:px-4">
@@ -6574,11 +6671,11 @@ export default function EmployeesManagementPage() {
                   id="employee-section-profile"
                   ref={employeeOverviewSectionRef}
                   className={cn(
-                    "order-10 scroll-mt-36 gap-0 overflow-hidden border-slate-200/80 bg-[linear-gradient(135deg,rgba(255,255,255,0.98)_0%,rgba(248,250,252,0.95)_100%)] py-0 shadow-sm lg:scroll-mt-44",
+                    "order-10 scroll-mt-36 gap-0 overflow-hidden border-[#F2B705]/25 bg-white py-0 shadow-[0_24px_60px_-42px_rgba(15,23,42,0.38)] ring-1 ring-white/90 lg:scroll-mt-44",
                     activeEmployeeWorkspaceSection !== "profile" && "hidden"
                   )}
                 >
-                  <CardHeader className="border-b border-white/70 bg-white/70 px-6 py-4 backdrop-blur">
+                  <CardHeader className="border-b border-[#F2B705]/20 bg-[linear-gradient(135deg,rgba(255,251,235,0.95)_0%,rgba(255,255,255,0.92)_100%)] px-6 py-5 backdrop-blur">
                     <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
                       <div className="space-y-3">
                         <div className="space-y-2">
@@ -6638,8 +6735,8 @@ export default function EmployeesManagementPage() {
                     </div>
                   </CardHeader>
 
-                  <CardContent className="p-5">
-                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  <CardContent className="bg-white p-5">
+                    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                       <ReadonlyMeta
                         icon={Mail}
                         label="البريد"
@@ -6740,7 +6837,7 @@ export default function EmployeesManagementPage() {
                       </Field>
                     </div>
 
-                    <div className="space-y-3 rounded-[20px] border border-slate-200 bg-slate-50/70 p-4">
+                    <div className="space-y-4 rounded-[24px] border border-slate-200 bg-white p-4">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="text-sm font-semibold text-slate-900">
                           أيام الراحة الأسبوعية
@@ -6892,14 +6989,10 @@ export default function EmployeesManagementPage() {
                     <CardContent className="space-y-5 p-5">
                       <div className="grid gap-4 md:grid-cols-2">
                         <Field label="تاريخ الغياب">
-                          <Input
-                            type="date"
+                          <NativeDatePickerInput
                             value={absenceForm.date}
-                            onChange={event =>
-                              handleAbsenceFormChange(
-                                "date",
-                                event.target.value
-                              )
+                            onValueChange={value =>
+                              handleAbsenceFormChange("date", value)
                             }
                             disabled={!canManageEmployees || savingAbsence}
                           />
@@ -7748,10 +7841,10 @@ export default function EmployeesManagementPage() {
                             visibleEmployeeFiles.map(file => (
                               <div
                                 key={file.id}
-                                className="rounded-[24px] border border-slate-200/80 bg-slate-50/70 p-5"
+                                className="rounded-[18px] border border-slate-200 bg-white px-4 py-3 shadow-sm"
                               >
-                                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                                  <div className="min-w-0 space-y-3">
+                                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                                  <div className="min-w-0 space-y-2.5">
                                     <div className="flex flex-wrap items-center gap-2">
                                       <EmployeeFileVersionBadge file={file} />
                                       <EmployeeFileStatusBadge file={file} />
@@ -7764,7 +7857,7 @@ export default function EmployeesManagementPage() {
                                     </div>
 
                                     <div>
-                                      <div className="text-lg font-semibold text-slate-950">
+                                      <div className="text-base font-semibold text-slate-950">
                                         {file.title}
                                       </div>
                                       <div className="mt-1 text-sm text-slate-500">
@@ -7774,12 +7867,12 @@ export default function EmployeesManagementPage() {
                                       </div>
                                     </div>
 
-                                    <p className="text-sm leading-7 text-slate-600">
+                                    <p className="text-sm leading-6 text-slate-500">
                                       {file.description ||
                                         "لا يوجد وصف لهذا الملف."}
                                     </p>
 
-                                    <div className="flex flex-wrap gap-2">
+                                    <div className="flex flex-wrap gap-1.5">
                                       <EmployeeFileMetaBadge
                                         label={file.fileName}
                                         dir="ltr"
@@ -7813,7 +7906,7 @@ export default function EmployeesManagementPage() {
                                     </div>
                                   </div>
 
-                                  <div className="flex flex-wrap gap-2 lg:justify-end">
+                                  <div className="flex flex-wrap gap-1.5 lg:justify-end">
                                     <Button
                                       type="button"
                                       variant="outline"
@@ -7980,11 +8073,11 @@ export default function EmployeesManagementPage() {
                           <div className="space-y-4">
                             <div className="max-w-xs">
                               <Field label="الشهر المستهدف">
-                                <Input
+                                <NativeDatePickerInput
                                   type="month"
                                   value={payrollMonthInput}
-                                  onChange={event =>
-                                    setPayrollMonthInput(event.target.value)
+                                  onValueChange={value =>
+                                    setPayrollMonthInput(value)
                                   }
                                   disabled={
                                     !canManageEmployees || creatingPayrollRecord
@@ -9726,13 +9819,26 @@ export default function EmployeesManagementPage() {
                   </CardContent>
                 </Card>
 
-                <Card
+                <div
                   className={cn(
-                    "order-20 gap-0 overflow-hidden border-slate-200/80 bg-white/95 py-0 shadow-sm",
+                    "order-19",
                     activeEmployeeWorkspaceSection !== "profile" && "hidden"
                   )}
                 >
-                  <CardHeader className="border-b border-slate-100 bg-white/90 px-6 pt-6 pb-4">
+                  <EmployeeWorkspaceSectionBreak
+                    icon={ShieldCheck}
+                    title="منطقة تعديل البيانات"
+                    description="هذا فاصل بصري مستقل بين ملخص الموظف والحقول القابلة للتعديل حتى لا تظهر المعلومات ككتلة واحدة."
+                  />
+                </div>
+
+                <Card
+                  className={cn(
+                    "order-20 gap-0 overflow-hidden border-slate-300/80 bg-white py-0 shadow-[0_28px_70px_-46px_rgba(15,23,42,0.42)] ring-1 ring-white/90",
+                    activeEmployeeWorkspaceSection !== "profile" && "hidden"
+                  )}
+                >
+                  <CardHeader className="border-b border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] px-6 pt-6 pb-5">
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                       <div className="space-y-1">
                         <CardTitle className="flex items-center gap-2 text-xl text-slate-950">
@@ -9759,7 +9865,7 @@ export default function EmployeesManagementPage() {
                     </div>
                   </CardHeader>
 
-                  <CardContent className="space-y-6 p-6">
+                  <CardContent className="space-y-7 bg-white p-6">
                     <div className="grid gap-5 md:grid-cols-2">
                       <Field label="اسم الموظف">
                         <Input
@@ -9843,11 +9949,10 @@ export default function EmployeesManagementPage() {
                       </Field>
 
                       <Field label="تاريخ بداية العمل">
-                        <Input
-                          type="date"
+                        <NativeDatePickerInput
                           value={form.startDate}
-                          onChange={event =>
-                            handleFormChange("startDate", event.target.value)
+                          onValueChange={value =>
+                            handleFormChange("startDate", value)
                           }
                           disabled={!canManageEmployees || saving}
                         />
@@ -9871,7 +9976,7 @@ export default function EmployeesManagementPage() {
                         />
                       </Field>
 
-                      <div className="space-y-5 rounded-[22px] border border-slate-200 bg-slate-50/70 p-4 md:col-span-2">
+                      <div className="space-y-5 rounded-[26px] border border-slate-200 bg-[linear-gradient(135deg,rgba(248,250,252,0.98)_0%,rgba(255,255,255,0.96)_100%)] p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.92)] md:col-span-2">
                         <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
                           <div className="space-y-1">
                             <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
@@ -9914,8 +10019,8 @@ export default function EmployeesManagementPage() {
                         <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
                           <Field label="الراتب الأساسي">
                             <Input
-                              type="number"
-                              dir="rtl"
+                              type="text"
+                              dir="ltr"
                               inputMode="decimal"
                               step="0.01"
                               value={form.baseSalary}
@@ -9933,8 +10038,8 @@ export default function EmployeesManagementPage() {
 
                           <Field label="بدل السكن">
                             <Input
-                              type="number"
-                              dir="rtl"
+                              type="text"
+                              dir="ltr"
                               inputMode="decimal"
                               step="0.01"
                               value={form.housingAllowance}
@@ -9952,8 +10057,8 @@ export default function EmployeesManagementPage() {
 
                           <Field label="بدل المواصلات">
                             <Input
-                              type="number"
-                              dir="rtl"
+                              type="text"
+                              dir="ltr"
                               inputMode="decimal"
                               step="0.01"
                               value={form.transportationAllowance}
@@ -9971,8 +10076,8 @@ export default function EmployeesManagementPage() {
 
                           <Field label="بدلات ثابتة أخرى">
                             <Input
-                              type="number"
-                              dir="rtl"
+                              type="text"
+                              dir="ltr"
                               inputMode="decimal"
                               step="0.01"
                               value={form.otherAllowances}
@@ -9990,8 +10095,8 @@ export default function EmployeesManagementPage() {
 
                           <Field label="عدد أيام العمل">
                             <Input
-                              type="number"
-                              dir="rtl"
+                              type="text"
+                              dir="ltr"
                               inputMode="decimal"
                               step="1"
                               value={form.expectedWorkDays}
@@ -10012,8 +10117,8 @@ export default function EmployeesManagementPage() {
                             description="تستخدم كبديل فقط إذا لم يتم تحديد وقت بداية ونهاية الدوام."
                           >
                             <Input
-                              type="number"
-                              dir="rtl"
+                              type="text"
+                              dir="ltr"
                               inputMode="decimal"
                               step="0.5"
                               value={form.expectedWorkHours}
@@ -10031,8 +10136,8 @@ export default function EmployeesManagementPage() {
 
                           <Field label="سعر ساعة الأوفر تايم">
                             <Input
-                              type="number"
-                              dir="rtl"
+                              type="text"
+                              dir="ltr"
                               inputMode="decimal"
                               step="0.01"
                               value={form.overtimeHourlyRate}
@@ -10050,8 +10155,8 @@ export default function EmployeesManagementPage() {
 
                           <Field label="خصم التأمينات">
                             <Input
-                              type="number"
-                              dir="rtl"
+                              type="text"
+                              dir="ltr"
                               inputMode="decimal"
                               step="0.01"
                               value={form.insuranceDeduction}
@@ -10472,7 +10577,7 @@ export default function EmployeesManagementPage() {
                       />
                     </Field>
 
-                    <div className="space-y-3 rounded-[20px] border border-slate-200 bg-slate-50/70 p-4">
+                    <div className="space-y-4 rounded-[24px] border border-slate-200 bg-white p-4">
                       <div className="space-y-1">
                         <div className="text-sm font-semibold text-slate-950">
                           المستندات الرسمية
@@ -10483,7 +10588,7 @@ export default function EmployeesManagementPage() {
                         </p>
                       </div>
 
-                      <div className="rounded-[18px] border border-slate-200 bg-white p-3.5 sm:p-4">
+                      <div className="rounded-[18px] border border-slate-200 bg-slate-50/50 p-3.5 sm:p-4">
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                           <div className="flex min-w-0 items-center gap-3">
                             <Avatar className="h-12 w-12 shrink-0 rounded-[18px] border border-slate-200 bg-slate-100 shadow-sm">
@@ -10523,7 +10628,7 @@ export default function EmployeesManagementPage() {
                           </Badge>
                         </div>
 
-                        <div className="mt-3 space-y-2">
+                        <div className="mt-3 space-y-3">
                           <Input
                             id="employee-avatar-upload-input"
                             ref={employeeAvatarInputRef}
@@ -10555,7 +10660,7 @@ export default function EmployeesManagementPage() {
                             onDragOver={event => event.preventDefault()}
                             onDrop={handleEmployeeAvatarDrop}
                             className={cn(
-                              "flex min-h-[92px] cursor-pointer flex-col items-center justify-center gap-2 rounded-[16px] border border-dashed border-slate-300 bg-slate-50 px-3 py-4 text-center text-xs text-slate-600 transition hover:border-[#F2B705] hover:bg-[#F2B705]/5",
+                              "flex cursor-pointer items-center justify-center gap-3 rounded-[14px] border border-slate-200 bg-white px-3 py-3 text-center text-xs text-slate-600 transition hover:border-[#F2B705]/60 hover:bg-[#F2B705]/5",
                               (!canManageEmployees ||
                                 uploadingEmployeeAvatar) &&
                                 "pointer-events-none cursor-not-allowed opacity-60"
@@ -10620,7 +10725,7 @@ export default function EmployeesManagementPage() {
                           </div>
                         </div>
 
-                        <p className="mt-2 text-[11px] leading-5 text-slate-500">
+                        <p className="hidden">
                           بعد اختيار الصورة ستظهر نافذة المعاينة والقص مثل التي
                           في البروفايل، ثم تعتمد الصورة داخل البطاقة والملف.
                         </p>
@@ -10815,8 +10920,8 @@ export default function EmployeesManagementPage() {
                         </DialogContent>
                       </Dialog>
 
-                      <div className="grid gap-5 xl:grid-cols-[minmax(0,360px)_minmax(0,1fr)]">
-                        <div className="space-y-4 rounded-[20px] border border-slate-200 bg-white p-4">
+                      <div className="grid gap-5 xl:grid-cols-[minmax(0,320px)_minmax(0,1fr)]">
+                        <div className="space-y-3 rounded-[18px] border border-slate-200 bg-slate-50/50 p-4">
                           <Field label="عنوان المستند">
                             <Input
                               value={officialDocumentForm.title}
@@ -10912,7 +11017,7 @@ export default function EmployeesManagementPage() {
                               onDragOver={event => event.preventDefault()}
                               onDrop={handleOfficialDocumentDrop}
                               className={cn(
-                                "flex cursor-pointer flex-col items-center justify-center gap-3 rounded-[16px] border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-sm text-slate-600 transition hover:border-[#F2B705] hover:bg-[#F2B705]/5",
+                                "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-[14px] border border-slate-200 bg-white px-4 py-4 text-center text-sm text-slate-600 transition hover:border-[#F2B705]/60 hover:bg-[#F2B705]/5",
                                 (!canManageEmployees ||
                                   uploadingOfficialDocument) &&
                                   "pointer-events-none cursor-not-allowed opacity-60"
@@ -10981,10 +11086,10 @@ export default function EmployeesManagementPage() {
                             employeeOfficialFiles.map(file => (
                               <div
                                 key={file.id}
-                                className="space-y-4 rounded-[20px] border border-slate-200 bg-white p-4"
+                                className="rounded-[18px] border border-slate-200 bg-white px-4 py-3 shadow-sm"
                               >
                                 <div className="flex flex-wrap items-start justify-between gap-3">
-                                  <div className="space-y-2">
+                                  <div className="space-y-1.5">
                                     <div className="text-base font-semibold text-slate-950">
                                       {file.title}
                                     </div>
@@ -11012,33 +11117,33 @@ export default function EmployeesManagementPage() {
                                 </div>
 
                                 {file.description ? (
-                                  <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-7 text-slate-600">
+                                  <div className="mt-3 text-sm leading-6 text-slate-500">
                                     {file.description}
                                   </div>
                                 ) : null}
 
-                                <div className="grid gap-3 text-sm text-slate-600 md:grid-cols-2 xl:grid-cols-4">
-                                  <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-4 py-3">
+                                <div className="mt-3 grid gap-x-5 gap-y-2 border-t border-slate-100 pt-3 text-xs text-slate-500 md:grid-cols-2 xl:grid-cols-3">
+                                  <div className="min-w-0">
                                     <div className="text-xs text-slate-500">
                                       اسم الملف
                                     </div>
-                                    <div className="mt-1 font-semibold text-slate-900">
+                                    <div className="mt-0.5 truncate font-semibold text-slate-800" dir="ltr">
                                       {file.fileName}
                                     </div>
                                   </div>
-                                  <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-4 py-3">
+                                  <div>
                                     <div className="text-xs text-slate-500">
                                       الحجم
                                     </div>
-                                    <div className="mt-1 font-semibold text-slate-900">
+                                    <div className="mt-0.5 font-semibold text-slate-800">
                                       {formatFileSizeEN(file.fileSize ?? null)}
                                     </div>
                                   </div>
-                                  <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-4 py-3 md:col-span-2 xl:col-span-2">
+                                  <div>
                                     <div className="text-xs text-slate-500">
                                       تاريخ الرفع
                                     </div>
-                                    <div className="mt-1 font-semibold text-slate-900">
+                                    <div className="mt-0.5 font-semibold text-slate-800">
                                       {file.uploadedAtDate
                                         ? formatDateTimeEN(file.uploadedAtDate)
                                         : "غير متوفر"}
