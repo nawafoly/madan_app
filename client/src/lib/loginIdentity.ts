@@ -64,7 +64,13 @@ function getUsernameFallbackDomains() {
     .filter(Boolean);
 
   return Array.from(
-    new Set([...configured, "maedin.sa", "madanalbena.com", "gmail.com"])
+    new Set([
+      "madanalbena.com",
+      ...configured,
+      "maedin.com",
+      "maedin.sa",
+      "gmail.com",
+    ])
   );
 }
 

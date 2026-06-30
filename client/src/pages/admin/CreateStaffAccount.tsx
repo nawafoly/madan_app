@@ -23,6 +23,7 @@ import {
 import { initializeApp, deleteApp } from "firebase/app";
 import {
   createUserWithEmailAndPassword,
+  fetchSignInMethodsForEmail,
   getAuth,
   updateProfile,
 } from "firebase/auth";
@@ -148,22 +149,61 @@ export default function CreateStaffAccount() {
   }, []);
 
   const normalizeEmail = (value: string) => value.trim().toLowerCase();
+
+  const isAuthEmailInUse = async (targetEmail: string) => {
+    const normalizedEmail = normalizeEmail(targetEmail);
+    if (!normalizedEmail || !normalizedEmail.includes("@")) return false;
+
+    try {
+      const methods = await fetchSignInMethodsForEmail(
+        getAuth(),
+        normalizedEmail
+      );
+      return methods.length > 0;
+    } catch {
+      console.warn("[CreateStaffAccount] Auth email availability check skipped");
+      return false;
+    }
+  };
+
   const isAdminEmailInUse = async (targetEmail: string) => {
     const normalizedEmail = normalizeEmail(targetEmail);
     if (!normalizedEmail) return false;
 
-    const [adminSnap, usersSnap] = await Promise.all([
-      getDoc(doc(db, "admin_users", normalizedEmail)),
-      getDocs(
-        query(
-          collection(db, "users"),
-          where("email", "==", normalizedEmail),
-          limit(1)
-        )
-      ),
-    ]);
+    const [adminSnap, adminEmailSnap, usersSnap, usernameEmailSnap, authTaken] =
+      await Promise.all([
+        getDoc(doc(db, "admin_users", normalizedEmail)),
+        getDocs(
+          query(
+            collection(db, "admin_users"),
+            where("email", "==", normalizedEmail),
+            limit(1)
+          )
+        ),
+        getDocs(
+          query(
+            collection(db, "users"),
+            where("email", "==", normalizedEmail),
+            limit(1)
+          )
+        ),
+        getDocs(
+          query(
+            collection(db, "admin_usernames"),
+            where("email", "==", normalizedEmail),
+            limit(1)
+          )
+        ),
+        isAuthEmailInUse(normalizedEmail),
+      ]);
 
-    return adminSnap.exists() || !usersSnap.empty;
+    return (
+      adminSnap.exists() ||
+      !adminEmailSnap.empty ||
+      !usersSnap.empty ||
+      !usernameEmailSnap.empty ||
+      authTaken
+    );
   };
 
   const isAdminUsernameInUse = async (targetUsername: string) => {
@@ -176,8 +216,18 @@ export default function CreateStaffAccount() {
     return usernameSnap.exists();
   };
 
+  const buildIdentitySeed = () => {
+    const usernameSeed = buildAdminUsernameSeed(username);
+    if (usernameSeed) return usernameSeed;
+
+    const displayNameSeed = buildAdminUsernameSeed(fullName);
+    if (displayNameSeed) return displayNameSeed;
+
+    return buildAdminUsernameSeed(email.split("@")[0]);
+  };
+
   const generateAvailableIdentity = async () => {
-    const seed = buildAdminUsernameSeed(username, fullName, email.split("@")[0]);
+    const seed = buildIdentitySeed();
     if (!seed) {
       setLocalError(
         tr(
@@ -1042,7 +1092,7 @@ export default function CreateStaffAccount() {
                     <Input
                       value={email}
                       onChange={event => setEmail(event.target.value)}
-                      placeholder="example@gmail.com"
+                      placeholder="name@madanalbena.com"
                       autoComplete="email"
                       inputMode="email"
                       dir="ltr"

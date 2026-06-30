@@ -1042,7 +1042,7 @@ export default function StaffPortalPage() {
                       <Input
                         value={email}
                         onChange={event => setEmail(event.target.value)}
-                        placeholder="employee@maedin.com"
+                        placeholder="employee@madanalbena.com"
                         inputMode="text"
                         autoComplete="username"
                         dir="ltr"
