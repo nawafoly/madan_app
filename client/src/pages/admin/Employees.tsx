@@ -5,6 +5,7 @@ import {
   useState,
   type ChangeEvent,
   type DragEvent,
+  type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
 import { useSearch } from "wouter";
@@ -238,6 +239,16 @@ type EmployeeRecord = EmployeeProfileUserDoc & {
   firebaseUser?: {
     photoURL?: string | null;
   } | null;
+};
+
+type SelectedEmployeeEmployment = {
+  title: string;
+  department: string;
+  statusLabel: string;
+  statusTone: "success" | "warning" | "neutral";
+  employeeCode: string;
+  startDate: Date | null;
+  fingerprintNumber: string;
 };
 
 type EmployeeFormValues = {
@@ -2220,31 +2231,38 @@ export default function EmployeesManagementPage() {
         : null,
     [selectedEmployee, selectedEmployeeProfile]
   );
-  const selectedEmployeeEmployment = useMemo(() => {
-    const employment = (selectedEmployeeProfile?.employment ||
-      ({
-        title: selectedEmployee?.title || EMPLOYEE_EMPTY_VALUE,
-        department: selectedEmployee?.department || EMPLOYEE_EMPTY_VALUE,
-        statusTone: "muted",
-        statusLabel: EMPLOYEE_EMPTY_VALUE,
-        employeeCode: EMPLOYEE_EMPTY_VALUE,
-        startDate: null,
-        fingerprintNumber: EMPLOYEE_EMPTY_VALUE,
-      } as Record<string, any>)) as Record<string, any>;
+  const selectedEmployeeEmployment = useMemo<SelectedEmployeeEmployment>(() => {
+    const employment = selectedEmployeeProfile?.employment;
+    const statusTone =
+      employment?.statusTone === "success"
+        ? "success"
+        : employment?.statusTone === "warning"
+          ? "warning"
+          : "neutral";
 
     return {
-      ...employment,
-      title: displayEmployeeText(language, employment.title, "Unassigned"),
+      title: displayEmployeeText(
+        language,
+        employment?.title || selectedEmployee?.title || EMPLOYEE_EMPTY_VALUE,
+        "Unassigned"
+      ),
       department: displayEmployeeText(
         language,
-        employment.department,
+        employment?.department ||
+          selectedEmployee?.department ||
+          EMPLOYEE_EMPTY_VALUE,
         "Unassigned"
       ),
       statusLabel: displayEmployeeText(
         language,
-        employment.statusLabel,
+        employment?.statusLabel || EMPLOYEE_EMPTY_VALUE,
         "Unassigned"
       ),
+      statusTone,
+      employeeCode: employment?.employeeCode || EMPLOYEE_EMPTY_VALUE,
+      startDate: employment?.startDate || null,
+      fingerprintNumber:
+        employment?.fingerprintNumber || EMPLOYEE_EMPTY_VALUE,
     };
   }, [language, selectedEmployee, selectedEmployeeProfile]);
   const selectedEmployeeShiftSchedule = useMemo(() => {

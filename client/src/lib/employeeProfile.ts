@@ -14,6 +14,8 @@ import {
   type EmployeeProfileDoc,
 } from "@shared/employee";
 
+export type { EmployeeAvatarDoc } from "@shared/employee";
+
 const EMPTY_VALUE = "غير محدد";
 
 export type EmployeeProfileUserDoc = EmployeeProfileDoc & {

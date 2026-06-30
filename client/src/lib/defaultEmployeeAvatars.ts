@@ -240,6 +240,7 @@ export function buildDefaultEmployeeAvatarPatch(input: {
   name?: unknown;
   displayName?: unknown;
   email?: unknown;
+  username?: unknown;
   gender?: unknown;
   sex?: unknown;
   avatarUrl?: unknown;
