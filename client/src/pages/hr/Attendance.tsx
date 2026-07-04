@@ -21,8 +21,10 @@ import {
   Smartphone,
 } from "lucide-react";
 import { toast } from "sonner";
+import { collection, getDocs } from "firebase/firestore";
 
 import DashboardLayout from "@/components/DashboardLayout";
+import { db } from "@/_core/firebase";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -58,6 +60,8 @@ import { cn } from "@/lib/utils";
 const PAGE_SIZE = 50;
 
 type FilterState = {
+  department: string;
+  month: string;
   employeeUid: string;
   fromDate: string;
   toDate: string;
@@ -68,7 +72,60 @@ type FilterState = {
 
 type MetricTone = "emerald" | "sky" | "rose" | "amber" | "violet";
 
+type AttendanceEmployeeOption = {
+  uid: string;
+  name: string;
+  department: string;
+};
+
+function pickText(...values: unknown[]) {
+  for (const value of values) {
+    const text = String(value ?? "").trim();
+    if (text && text !== "undefined" && text !== "null") return text;
+  }
+  return "";
+}
+
+function monthToDateRange(month: string) {
+  const match = /^(\d{4})-(\d{2})$/.exec(String(month || "").trim());
+  if (!match) return null;
+  const year = Number(match[1]);
+  const monthIndex = Number(match[2]);
+  const lastDay = new Date(year, monthIndex, 0).getDate();
+  return {
+    fromDate: `${match[1]}-${match[2]}-01`,
+    toDate: `${match[1]}-${match[2]}-${String(lastDay).padStart(2, "0")}`,
+  };
+}
+
+function summarizeFilteredRecords(
+  records: AttendanceRecord[],
+  fallbackDate: string,
+) {
+  const acceptedAccuracy = records
+    .map((record) => record.location.accuracy)
+    .filter((value) => Number.isFinite(value) && value > 0);
+  return {
+    checkIns: records.filter(
+      (record) => record.type === "check_in" && record.result === "allowed",
+    ).length,
+    checkOuts: records.filter(
+      (record) => record.type === "check_out" && record.result === "allowed",
+    ).length,
+    rejected: records.filter((record) => record.result === "rejected").length,
+    newDevices: records.filter((record) => record.deviceInfo.deviceChanged)
+      .length,
+    averageAccuracy: acceptedAccuracy.length
+      ? acceptedAccuracy.reduce((sum, value) => sum + value, 0) /
+        acceptedAccuracy.length
+      : null,
+    date: fallbackDate,
+  };
+}
+
 const EMPTY_FILTERS: FilterState = {
+  department: "all",
+  month: "",
   employeeUid: "all",
   fromDate: "",
   toDate: "",
@@ -94,11 +151,12 @@ const metricAccentClass: Record<MetricTone, string> = {
 };
 
 function toRequestFilters(filters: FilterState): AttendanceRecordsFilters {
+  const monthRange = monthToDateRange(filters.month);
   return {
     employeeUid:
       filters.employeeUid === "all" ? undefined : filters.employeeUid,
-    fromDate: filters.fromDate || undefined,
-    toDate: filters.toDate || undefined,
+    fromDate: filters.fromDate || monthRange?.fromDate || undefined,
+    toDate: filters.toDate || monthRange?.toDate || undefined,
     type:
       filters.type === "check_in" || filters.type === "check_out"
         ? filters.type
@@ -174,7 +232,7 @@ function exportCsv(records: AttendanceRecord[]) {
     "shared_device_employees",
     "rejection_reason",
   ];
-  const rows = records.map(record => [
+  const rows = records.map((record) => [
     record.employeeName || "",
     record.employeeUid,
     record.type,
@@ -190,12 +248,12 @@ function exportCsv(records: AttendanceRecord[]) {
     record.deviceInfo.previousDeviceId || "",
     record.deviceInfo.sharedDevice?.employeeCount ?? "",
     record.deviceInfo.sharedDevice?.employees
-      ?.map(employee => employee.name || employee.uid)
+      ?.map((employee) => employee.name || employee.uid)
       .join(" | ") || "",
     record.rejectionReason || "",
   ]);
   const csv = [headers, ...rows]
-    .map(row => row.map(csvCell).join(","))
+    .map((row) => row.map(csvCell).join(","))
     .join("\r\n");
   const blob = new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
@@ -210,7 +268,7 @@ function normalizeLookupKey(value: string | null | undefined) {
   return String(value || "").trim();
 }
 
-function buildEmployeeNameMap(employees: Array<{ uid: string; name: string }>) {
+function buildEmployeeNameMap(employees: AttendanceEmployeeOption[]) {
   const names = new Map<string, string>();
   for (const employee of employees) {
     const uid = normalizeLookupKey(employee.uid);
@@ -222,7 +280,7 @@ function buildEmployeeNameMap(employees: Array<{ uid: string; name: string }>) {
 
 function resolveAttendanceEmployeeName(
   record: AttendanceRecord,
-  employeeNames: Map<string, string>
+  employeeNames: Map<string, string>,
 ) {
   return (
     normalizeLookupKey(record.employeeName) ||
@@ -234,14 +292,14 @@ function resolveAttendanceEmployeeName(
 
 function enrichAttendanceRecordsWithNames(
   records: AttendanceRecord[],
-  employeeNames: Map<string, string>
+  employeeNames: Map<string, string>,
 ) {
   if (!employeeNames.size) return records;
 
-  return records.map(record => {
+  return records.map((record) => {
     const employeeName = resolveAttendanceEmployeeName(record, employeeNames);
     const sharedDevice = record.deviceInfo.sharedDevice;
-    const sharedEmployees = sharedDevice?.employees?.map(employee => ({
+    const sharedEmployees = sharedDevice?.employees?.map((employee) => ({
       ...employee,
       name:
         normalizeLookupKey(employee.name) ||
@@ -289,7 +347,7 @@ function TypeBadge({
         "h-7 rounded-full px-2.5 text-xs font-semibold",
         isCheckIn
           ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-          : "border-sky-200 bg-sky-50 text-sky-700"
+          : "border-sky-200 bg-sky-50 text-sky-700",
       )}
     >
       <Icon className="h-3.5 w-3.5" />
@@ -316,11 +374,13 @@ function ResultBadge({
         "h-7 rounded-full px-2.5 text-xs font-semibold shadow-none",
         allowed
           ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-100"
-          : "bg-rose-100 text-rose-800 hover:bg-rose-100"
+          : "bg-rose-100 text-rose-800 hover:bg-rose-100",
       )}
     >
       <Icon className="h-3.5 w-3.5" />
-      {allowed ? tr(language, "مسموح", "Allowed") : tr(language, "مرفوض", "Rejected")}
+      {allowed
+        ? tr(language, "مسموح", "Allowed")
+        : tr(language, "مرفوض", "Rejected")}
     </Badge>
   );
 }
@@ -355,7 +415,10 @@ function TimeBlock({
         <Clock3 className="h-4 w-4 text-slate-400" />
         {tr(language, "الوقت", "Time")}
       </div>
-      <div dir="ltr" className="mt-2 text-sm font-semibold leading-6 text-slate-900">
+      <div
+        dir="ltr"
+        className="mt-2 text-sm font-semibold leading-6 text-slate-900"
+      >
         {formatDateTime(record.serverTime)}
       </div>
     </div>
@@ -375,7 +438,7 @@ function OperationBlock({
         "rounded-2xl border px-3 py-3",
         record.result === "allowed"
           ? "border-emerald-100 bg-emerald-50/40"
-          : "border-rose-100 bg-rose-50/50"
+          : "border-rose-100 bg-rose-50/50",
       )}
     >
       <div className="flex flex-wrap items-center gap-2">
@@ -410,7 +473,7 @@ function AttendanceEventBlock({
         "rounded-2xl border px-3 py-3",
         record.result === "allowed"
           ? "border-emerald-100 bg-emerald-50/30"
-          : "border-rose-100 bg-rose-50/40"
+          : "border-rose-100 bg-rose-50/40",
       )}
     >
       <div className="flex items-start justify-between gap-3">
@@ -470,7 +533,9 @@ function MetricCard({
 }) {
   return (
     <div className="group relative min-h-[112px] overflow-hidden rounded-[1.35rem] border border-white/80 bg-white p-4 shadow-sm shadow-slate-200/80 transition duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-slate-200/80">
-      <span className={cn("absolute inset-x-0 top-0 h-1", metricAccentClass[tone])} />
+      <span
+        className={cn("absolute inset-x-0 top-0 h-1", metricAccentClass[tone])}
+      />
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="text-3xl font-semibold tracking-normal text-slate-950">
@@ -483,7 +548,7 @@ function MetricCard({
         <span
           className={cn(
             "flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border",
-            metricToneClass[tone]
+            metricToneClass[tone],
           )}
         >
           <Icon className="h-5 w-5" />
@@ -509,7 +574,7 @@ function DeviceBlock({
   const hasDevice = Boolean(record.deviceInfo.deviceId);
   const sharedDevice = record.deviceInfo.sharedDevice;
   const isSharedDevice = Boolean(
-    sharedDevice && Number(sharedDevice.employeeCount || 0) > 1
+    sharedDevice && Number(sharedDevice.employeeCount || 0) > 1,
   );
   const deviceLabel = hasDevice
     ? visibleDeviceIds.has(deviceKey)
@@ -526,10 +591,10 @@ function DeviceBlock({
             isSharedDevice
               ? "border-rose-200 bg-rose-50 text-rose-800"
               : record.deviceInfo.deviceChanged
-              ? "border-amber-200 bg-amber-50 text-amber-800"
-              : hasDevice
-                ? "border-sky-200 bg-sky-50 text-sky-800"
-                : "border-slate-200 bg-slate-100 text-slate-500"
+                ? "border-amber-200 bg-amber-50 text-amber-800"
+                : hasDevice
+                  ? "border-sky-200 bg-sky-50 text-sky-800"
+                  : "border-slate-200 bg-slate-100 text-slate-500",
           )}
         >
           {isSharedDevice || record.deviceInfo.deviceChanged ? (
@@ -540,10 +605,10 @@ function DeviceBlock({
           {isSharedDevice
             ? tr(language, "جهاز مكرر", "Repeated device")
             : record.deviceInfo.deviceChanged
-            ? tr(language, "جهاز جديد", "New device")
-            : hasDevice
-              ? tr(language, "جهاز موثق", "Verified device")
-              : tr(language, "لا يوجد جهاز", "No device")}
+              ? tr(language, "جهاز جديد", "New device")
+              : hasDevice
+                ? tr(language, "جهاز موثق", "Verified device")
+                : tr(language, "لا يوجد جهاز", "No device")}
         </span>
       </div>
 
@@ -559,7 +624,7 @@ function DeviceBlock({
               "min-w-0 flex-1 truncate rounded-lg px-2.5 py-1.5 font-mono text-xs",
               hasDevice
                 ? "bg-slate-100 text-slate-700"
-                : "bg-slate-50 text-slate-400"
+                : "bg-slate-50 text-slate-400",
             )}
             title={record.deviceInfo.deviceId || undefined}
           >
@@ -593,14 +658,18 @@ function DeviceBlock({
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-1.5 text-[11px] font-semibold text-rose-800">
               <AlertTriangle className="h-3.5 w-3.5" />
-              {tr(language, "الجهاز مستخدم من أكثر من موظف", "Device used by multiple employees")}
+              {tr(
+                language,
+                "الجهاز مستخدم من أكثر من موظف",
+                "Device used by multiple employees",
+              )}
             </div>
             <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold text-rose-700">
               {sharedDevice?.employeeCount || 0}
             </span>
           </div>
           <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
-            {(sharedDevice?.employees || []).slice(0, 4).map(employee => (
+            {(sharedDevice?.employees || []).slice(0, 4).map((employee) => (
               <span
                 key={employee.uid}
                 className="max-w-full truncate rounded-full border border-rose-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-rose-800"
@@ -640,8 +709,16 @@ function DeviceBlock({
                 onClick={() => onToggleDevice(previousDeviceKey)}
                 title={
                   visibleDeviceIds.has(previousDeviceKey)
-                    ? tr(language, "إخفاء رقم الجهاز السابق", "Hide previous device ID")
-                    : tr(language, "إظهار رقم الجهاز السابق", "Show previous device ID")
+                    ? tr(
+                        language,
+                        "إخفاء رقم الجهاز السابق",
+                        "Hide previous device ID",
+                      )
+                    : tr(
+                        language,
+                        "إظهار رقم الجهاز السابق",
+                        "Show previous device ID",
+                      )
                 }
               >
                 {visibleDeviceIds.has(previousDeviceKey) ? (
@@ -688,17 +765,21 @@ function LocationBlock({
           title={tr(language, "فتح الخريطة", "Open map")}
         >
           <ExternalLink className="h-4 w-4" />
-          <span className="hidden 2xl:inline">{tr(language, "فتح", "Open")}</span>
+          <span className="hidden 2xl:inline">
+            {tr(language, "فتح", "Open")}
+          </span>
         </a>
       </div>
       <div
         className={cn(
           "mt-3 grid gap-2 text-[11px] sm:grid-cols-2",
-          compact && "mt-2"
+          compact && "mt-2",
         )}
       >
         <div className="rounded-xl border border-slate-200 bg-white px-2.5 py-2 sm:col-span-2">
-          <div className="text-slate-500">{tr(language, "الإحداثيات", "Coordinates")}</div>
+          <div className="text-slate-500">
+            {tr(language, "الإحداثيات", "Coordinates")}
+          </div>
           <div
             dir="ltr"
             className="mt-1 truncate font-mono font-semibold text-slate-700"
@@ -712,7 +793,7 @@ function LocationBlock({
             "rounded-xl border px-2.5 py-2",
             record.location.accuracy > 100
               ? "border-amber-200 bg-amber-50"
-              : "border-slate-200 bg-white"
+              : "border-slate-200 bg-white",
           )}
         >
           <div className="flex items-center gap-1.5 text-slate-500">
@@ -808,13 +889,11 @@ export default function HrAttendancePage() {
     useState<FilterState>(EMPTY_FILTERS);
   const [page, setPage] = useState(1);
   const [data, setData] = useState<AttendanceRecordsResponse | null>(null);
-  const [employees, setEmployees] = useState<
-    Array<{ uid: string; name: string }>
-  >([]);
+  const [employees, setEmployees] = useState<AttendanceEmployeeOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [visibleDeviceIds, setVisibleDeviceIds] = useState<Set<string>>(
-    () => new Set()
+    () => new Set(),
   );
   const [error, setError] = useState("");
   const requestIdRef = useRef(0);
@@ -824,13 +903,53 @@ export default function HrAttendancePage() {
     setLoading(true);
     setError("");
     try {
-      const response = await fetchAttendanceRecords({
-        ...toRequestFilters(appliedFilters),
-        page,
-        limit: PAGE_SIZE,
-      });
-      if (requestId !== requestIdRef.current) return;
-      setData(response);
+      if (appliedFilters.department !== "all") {
+        const collected: AttendanceRecord[] = [];
+        let cursor: string | undefined;
+        do {
+          const response = await fetchAttendanceRecords({
+            ...toRequestFilters(appliedFilters),
+            employeeUid: undefined,
+            limit: 200,
+            cursor,
+          });
+          collected.push(...response.records);
+          cursor = response.nextCursor || undefined;
+        } while (cursor && collected.length < 10000);
+
+        const allowedUids = new Set(
+          employees
+            .filter(
+              (employee) => employee.department === appliedFilters.department,
+            )
+            .map((employee) => employee.uid),
+        );
+        const filtered = collected.filter((record) =>
+          allowedUids.has(record.employeeUid),
+        );
+        const start = (page - 1) * PAGE_SIZE;
+        if (requestId !== requestIdRef.current) return;
+        setData({
+          records: filtered.slice(start, start + PAGE_SIZE),
+          total: filtered.length,
+          page,
+          limit: PAGE_SIZE,
+          nextCursor: null,
+          summary: summarizeFilteredRecords(
+            filtered,
+            toRequestFilters(appliedFilters).toDate ||
+              new Date().toISOString().slice(0, 10),
+          ),
+        });
+      } else {
+        const response = await fetchAttendanceRecords({
+          ...toRequestFilters(appliedFilters),
+          page,
+          limit: PAGE_SIZE,
+        });
+        if (requestId !== requestIdRef.current) return;
+        setData(response);
+      }
     } catch (loadError) {
       if (requestId !== requestIdRef.current) return;
       console.error("hr_attendance_records_failed", loadError);
@@ -840,13 +959,13 @@ export default function HrAttendancePage() {
           : tr(
               language,
               "تعذر تحميل سجلات الحضور.",
-              "Could not load attendance records."
+              "Could not load attendance records.",
             );
       setError(message);
     } finally {
       if (requestId === requestIdRef.current) setLoading(false);
     }
-  }, [appliedFilters, language, page]);
+  }, [appliedFilters, employees, language, page]);
 
   useEffect(() => {
     void loadRecords();
@@ -854,16 +973,53 @@ export default function HrAttendancePage() {
 
   useEffect(() => {
     let active = true;
-    fetchEmployeeDirectoryFromWorker()
-      .then(items => {
-        if (active) {
-          setEmployees(items.map(item => ({ uid: item.uid, name: item.name })));
-        }
+    Promise.all([
+      fetchEmployeeDirectoryFromWorker(),
+      getDocs(collection(db, "users")),
+      getDocs(collection(db, "employees")),
+    ])
+      .then(([items, usersSnapshot, employeesSnapshot]) => {
+        if (!active) return;
+
+        const departmentByUid = new Map<string, string>();
+        const readDepartment = (data: Record<string, any>) =>
+          pickText(
+            data.department,
+            data.employment?.department,
+            data.employeeProfile?.employment?.department,
+          );
+
+        usersSnapshot.docs.forEach((snapshot) => {
+          const data = snapshot.data() as Record<string, any>;
+          const uid = pickText(data.uid, snapshot.id);
+          const department = readDepartment(data);
+          if (uid && department) departmentByUid.set(uid, department);
+        });
+
+        employeesSnapshot.docs.forEach((snapshot) => {
+          const data = snapshot.data() as Record<string, any>;
+          const uid = pickText(
+            data.linkedUserUid,
+            data.uid,
+            data.userId,
+            snapshot.id,
+          );
+          const department = readDepartment(data);
+          if (uid && department) departmentByUid.set(uid, department);
+        });
+
+        setEmployees(
+          items.map((item) => ({
+            uid: item.uid,
+            name: item.name,
+            department: departmentByUid.get(item.uid) || "غير محدد",
+          })),
+        );
       })
-      .catch(directoryError => {
+      .catch((directoryError) => {
         console.error(
           "hr_attendance_employee_directory_failed",
-          directoryError
+          directoryError,
         );
         if (active) setEmployees([]);
       });
@@ -872,31 +1028,62 @@ export default function HrAttendancePage() {
     };
   }, []);
 
-  const employeeNameMap = useMemo(() => buildEmployeeNameMap(employees), [
-    employees,
-  ]);
-  const displayRecords = useMemo(
-    () => enrichAttendanceRecordsWithNames(data?.records || [], employeeNameMap),
-    [data?.records, employeeNameMap]
+  const employeeNameMap = useMemo(
+    () => buildEmployeeNameMap(employees),
+    [employees],
   );
+  const displayRecords = useMemo(
+    () =>
+      enrichAttendanceRecordsWithNames(data?.records || [], employeeNameMap),
+    [data?.records, employeeNameMap],
+  );
+
+  const departmentOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          employees
+            .map((employee) => employee.department.trim())
+            .filter(Boolean),
+        ),
+      ).sort((left, right) =>
+        left.localeCompare(right, language === "ar" ? "ar" : "en"),
+      ),
+    [employees, language],
+  );
+
+  const departmentEmployeeUids = useMemo(() => {
+    if (appliedFilters.department === "all") return null;
+    return new Set(
+      employees
+        .filter((employee) => employee.department === appliedFilters.department)
+        .map((employee) => employee.uid),
+    );
+  }, [appliedFilters.department, employees]);
 
   const employeeOptions = useMemo(() => {
     const options = new Map(
-      employees.map(employee => [employee.uid, employee.name])
+      employees
+        .filter(
+          (employee) =>
+            filters.department === "all" ||
+            employee.department === filters.department,
+        )
+        .map((employee) => [employee.uid, employee.name]),
     );
     for (const record of displayRecords) {
       if (!options.has(record.employeeUid)) {
         options.set(
           record.employeeUid,
-          record.employeeName || record.employeeUid
+          record.employeeName || record.employeeUid,
         );
       }
     }
     return Array.from(options, ([uid, name]) => ({ uid, name })).sort(
       (left, right) =>
-        left.name.localeCompare(right.name, language === "ar" ? "ar" : "en")
+        left.name.localeCompare(right.name, language === "ar" ? "ar" : "en"),
     );
-  }, [displayRecords, employees, language]);
+  }, [displayRecords, employees, filters.department, language]);
 
   const totalPages = Math.max(1, Math.ceil((data?.total || 0) / PAGE_SIZE));
   const summaryCards = [
@@ -936,6 +1123,8 @@ export default function HrAttendancePage() {
   ];
 
   const activeFiltersCount = [
+    appliedFilters.department !== EMPTY_FILTERS.department,
+    Boolean(appliedFilters.month),
     appliedFilters.employeeUid !== EMPTY_FILTERS.employeeUid,
     Boolean(appliedFilters.fromDate),
     Boolean(appliedFilters.toDate),
@@ -945,6 +1134,20 @@ export default function HrAttendancePage() {
   ].filter(Boolean).length;
 
   const handleApplyFilters = () => {
+    if (
+      filters.fromDate &&
+      filters.toDate &&
+      filters.fromDate > filters.toDate
+    ) {
+      toast.error(
+        tr(
+          language,
+          "تاريخ البداية يجب أن يسبق تاريخ النهاية.",
+          "Start date must be before end date.",
+        ),
+      );
+      return;
+    }
     setPage(1);
     setAppliedFilters(filters);
   };
@@ -956,7 +1159,7 @@ export default function HrAttendancePage() {
   };
 
   const toggleDeviceVisibility = (key: string) => {
-    setVisibleDeviceIds(current => {
+    setVisibleDeviceIds((current) => {
       const next = new Set(current);
       if (next.has(key)) {
         next.delete(key);
@@ -981,18 +1184,26 @@ export default function HrAttendancePage() {
         collected.push(...response.records);
         cursor = response.nextCursor || undefined;
       } while (cursor && collected.length < 10000);
-      exportCsv(enrichAttendanceRecordsWithNames(collected, employeeNameMap));
+      const exportedRecords =
+        appliedFilters.department === "all"
+          ? collected
+          : collected.filter((record) =>
+              departmentEmployeeUids?.has(record.employeeUid),
+            );
+      exportCsv(
+        enrichAttendanceRecordsWithNames(exportedRecords, employeeNameMap),
+      );
       toast.success(
         tr(
           language,
-          `تم تصدير ${collected.length} سجل.`,
-          `Exported ${collected.length} records.`
-        )
+          `تم تصدير ${exportedRecords.length} سجل.`,
+          `Exported ${exportedRecords.length} records.`,
+        ),
       );
     } catch (exportError) {
       console.error("hr_attendance_export_failed", exportError);
       toast.error(
-        tr(language, "تعذر تصدير السجلات.", "Could not export records.")
+        tr(language, "تعذر تصدير السجلات.", "Could not export records."),
       );
     } finally {
       setExporting(false);
@@ -1021,7 +1232,7 @@ export default function HrAttendancePage() {
                     {tr(
                       language,
                       `${data?.total || 0} سجل مطابق`,
-                      `${data?.total || 0} matching records`
+                      `${data?.total || 0} matching records`,
                     )}
                   </span>
                 </div>
@@ -1051,7 +1262,7 @@ export default function HrAttendancePage() {
             </div>
 
             <div className="grid grid-cols-2 gap-px border-t border-slate-100 bg-slate-100 p-px md:grid-cols-5">
-              {summaryCards.map(card => (
+              {summaryCards.map((card) => (
                 <MetricCard
                   key={card.label}
                   label={card.label}
@@ -1081,7 +1292,7 @@ export default function HrAttendancePage() {
                         : "لا توجد فلاتر نشطة",
                       activeFiltersCount
                         ? `${activeFiltersCount} active filters`
-                        : "No active filters"
+                        : "No active filters",
                     )}
                   </p>
                 </div>
@@ -1089,8 +1300,8 @@ export default function HrAttendancePage() {
               <label className="inline-flex cursor-pointer items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700">
                 <Checkbox
                   checked={filters.deviceChanged}
-                  onCheckedChange={checked =>
-                    setFilters(current => ({
+                  onCheckedChange={(checked) =>
+                    setFilters((current) => ({
                       ...current,
                       deviceChanged: checked === true,
                     }))
@@ -1100,15 +1311,71 @@ export default function HrAttendancePage() {
               </label>
             </div>
 
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-12">
+              <div className="space-y-2 xl:col-span-2">
+                <Label className="text-xs font-semibold text-slate-600">
+                  {tr(language, "الإدارة / المشروع", "Department / Project")}
+                </Label>
+                <Select
+                  value={filters.department}
+                  onValueChange={(value) =>
+                    setFilters((current) => ({
+                      ...current,
+                      department: value,
+                      employeeUid: "all",
+                    }))
+                  }
+                >
+                  <SelectTrigger className="h-11 rounded-2xl border-slate-200 bg-slate-50/70">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">
+                      {tr(language, "جميع الإدارات", "All departments")}
+                    </SelectItem>
+                    {departmentOptions.map((department) => (
+                      <SelectItem key={department} value={department}>
+                        {department}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2 xl:col-span-2">
+                <Label
+                  htmlFor="attendance-month"
+                  className="text-xs font-semibold text-slate-600"
+                >
+                  {tr(language, "الشهر", "Month")}
+                </Label>
+                <Input
+                  id="attendance-month"
+                  type="month"
+                  className="h-11 rounded-2xl border-slate-200 bg-slate-50/70"
+                  value={filters.month}
+                  onChange={(event) =>
+                    setFilters((current) => ({
+                      ...current,
+                      month: event.target.value,
+                      fromDate: "",
+                      toDate: "",
+                    }))
+                  }
+                />
+              </div>
+
               <div className="space-y-2 xl:col-span-2">
                 <Label className="text-xs font-semibold text-slate-600">
                   {tr(language, "الموظف", "Employee")}
                 </Label>
                 <Select
                   value={filters.employeeUid}
-                  onValueChange={value =>
-                    setFilters(current => ({ ...current, employeeUid: value }))
+                  onValueChange={(value) =>
+                    setFilters((current) => ({
+                      ...current,
+                      employeeUid: value,
+                    }))
                   }
                 >
                   <SelectTrigger className="h-11 rounded-2xl border-slate-200 bg-slate-50/70">
@@ -1118,7 +1385,7 @@ export default function HrAttendancePage() {
                     <SelectItem value="all">
                       {tr(language, "جميع الموظفين", "All employees")}
                     </SelectItem>
-                    {employeeOptions.map(employee => (
+                    {employeeOptions.map((employee) => (
                       <SelectItem key={employee.uid} value={employee.uid}>
                         {employee.name}
                       </SelectItem>
@@ -1127,7 +1394,7 @@ export default function HrAttendancePage() {
                 </Select>
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-2 xl:col-span-2">
                 <Label
                   htmlFor="attendance-from"
                   className="text-xs font-semibold text-slate-600"
@@ -1139,8 +1406,8 @@ export default function HrAttendancePage() {
                   type="date"
                   className="h-11 rounded-2xl border-slate-200 bg-slate-50/70"
                   value={filters.fromDate}
-                  onChange={event =>
-                    setFilters(current => ({
+                  onChange={(event) =>
+                    setFilters((current) => ({
                       ...current,
                       fromDate: event.target.value,
                     }))
@@ -1148,7 +1415,7 @@ export default function HrAttendancePage() {
                 />
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-2 xl:col-span-2">
                 <Label
                   htmlFor="attendance-to"
                   className="text-xs font-semibold text-slate-600"
@@ -1160,8 +1427,8 @@ export default function HrAttendancePage() {
                   type="date"
                   className="h-11 rounded-2xl border-slate-200 bg-slate-50/70"
                   value={filters.toDate}
-                  onChange={event =>
-                    setFilters(current => ({
+                  onChange={(event) =>
+                    setFilters((current) => ({
                       ...current,
                       toDate: event.target.value,
                     }))
@@ -1175,8 +1442,8 @@ export default function HrAttendancePage() {
                 </Label>
                 <Select
                   value={filters.type}
-                  onValueChange={value =>
-                    setFilters(current => ({ ...current, type: value }))
+                  onValueChange={(value) =>
+                    setFilters((current) => ({ ...current, type: value }))
                   }
                 >
                   <SelectTrigger className="h-11 rounded-2xl border-slate-200 bg-slate-50/70">
@@ -1202,8 +1469,8 @@ export default function HrAttendancePage() {
                 </Label>
                 <Select
                   value={filters.result}
-                  onValueChange={value =>
-                    setFilters(current => ({ ...current, result: value }))
+                  onValueChange={(value) =>
+                    setFilters((current) => ({ ...current, result: value }))
                   }
                 >
                   <SelectTrigger className="h-11 rounded-2xl border-slate-200 bg-slate-50/70">
@@ -1256,7 +1523,7 @@ export default function HrAttendancePage() {
                     {tr(
                       language,
                       "عرض مدمج للموقع والجهاز والنتيجة لكل عملية",
-                      "A compact view of location, device and result for each event"
+                      "A compact view of location, device and result for each event",
                     )}
                   </p>
                 </div>
@@ -1268,7 +1535,7 @@ export default function HrAttendancePage() {
                 {tr(
                   language,
                   `${displayRecords.length} سجل في الصفحة`,
-                  `${displayRecords.length} records on this page`
+                  `${displayRecords.length} records on this page`,
                 )}
               </Badge>
             </div>
@@ -1291,13 +1558,17 @@ export default function HrAttendancePage() {
               <div className="flex min-h-64 flex-col items-center justify-center gap-3 p-8 text-center text-slate-500">
                 <SearchX className="h-8 w-8" />
                 <p className="text-sm">
-                  {tr(language, "لا توجد سجلات مطابقة.", "No matching records.")}
+                  {tr(
+                    language,
+                    "لا توجد سجلات مطابقة.",
+                    "No matching records.",
+                  )}
                 </p>
               </div>
             ) : (
               <>
                 <div className="space-y-3 p-3 xl:hidden">
-                  {displayRecords.map(record => (
+                  {displayRecords.map((record) => (
                     <AttendanceMobileCard
                       key={record.id}
                       record={record}
@@ -1330,22 +1601,31 @@ export default function HrAttendancePage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {displayRecords.map(record => (
+                      {displayRecords.map((record) => (
                         <TableRow
                           key={record.id}
                           className="group border-0 transition"
                         >
                           <TableCell className="rounded-r-[1.25rem] border-y border-r border-slate-200 bg-white px-3 py-3 align-top shadow-sm shadow-slate-200/60 transition group-hover:bg-slate-50/60">
-                            <AttendanceEventBlock record={record} language={language} />
+                            <AttendanceEventBlock
+                              record={record}
+                              language={language}
+                            />
                           </TableCell>
                           <TableCell className="hidden">
-                            <OperationBlock record={record} language={language} />
+                            <OperationBlock
+                              record={record}
+                              language={language}
+                            />
                           </TableCell>
                           <TableCell className="hidden">
                             <TimeBlock record={record} language={language} />
                           </TableCell>
                           <TableCell className="border-y border-slate-200 bg-white px-3 py-3 align-top shadow-sm shadow-slate-200/60 transition group-hover:bg-slate-50/60">
-                            <LocationBlock record={record} language={language} />
+                            <LocationBlock
+                              record={record}
+                              language={language}
+                            />
                           </TableCell>
                           <TableCell className="rounded-l-[1.25rem] border-y border-l border-slate-200 bg-white px-3 py-3 align-top shadow-sm shadow-slate-200/60 transition group-hover:bg-slate-50/60">
                             <DeviceBlock
@@ -1369,7 +1649,7 @@ export default function HrAttendancePage() {
               {tr(
                 language,
                 `صفحة ${page} من ${totalPages}`,
-                `Page ${page} of ${totalPages}`
+                `Page ${page} of ${totalPages}`,
               )}
             </span>
             <div className="flex gap-2">
@@ -1377,7 +1657,7 @@ export default function HrAttendancePage() {
                 variant="outline"
                 className="h-10 rounded-2xl border-slate-200 bg-white px-4 shadow-sm"
                 disabled={page <= 1 || loading}
-                onClick={() => setPage(current => Math.max(1, current - 1))}
+                onClick={() => setPage((current) => Math.max(1, current - 1))}
               >
                 {tr(language, "السابق", "Previous")}
               </Button>
@@ -1385,7 +1665,7 @@ export default function HrAttendancePage() {
                 variant="outline"
                 className="h-10 rounded-2xl border-slate-200 bg-white px-4 shadow-sm"
                 disabled={page >= totalPages || loading}
-                onClick={() => setPage(current => current + 1)}
+                onClick={() => setPage((current) => current + 1)}
               >
                 {tr(language, "التالي", "Next")}
               </Button>
@@ -1396,4 +1676,3 @@ export default function HrAttendancePage() {
     </DashboardLayout>
   );
 }
-
