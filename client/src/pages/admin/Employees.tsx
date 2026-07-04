@@ -345,7 +345,7 @@ const EMPLOYEE_WORKSPACE_SECTIONS: Array<{
 ];
 
 function resolveEmployeeWorkspaceSection(
-  panel: string,
+  panel: string
 ): EmployeeWorkspaceSectionKey | null {
   switch (
     String(panel || "")
@@ -402,7 +402,7 @@ type EmployeeWorkspaceNotificationBucket = Record<
 
 function readWorkspaceNotificationQueryValue(
   path: string | null | undefined,
-  key: string,
+  key: string
 ) {
   const normalizedPath = String(path || "").trim();
   if (!normalizedPath) return "";
@@ -412,7 +412,7 @@ function readWorkspaceNotificationQueryValue(
 
   try {
     return String(
-      new URLSearchParams(normalizedPath.slice(queryIndex + 1)).get(key) || "",
+      new URLSearchParams(normalizedPath.slice(queryIndex + 1)).get(key) || ""
     ).trim();
   } catch {
     return "";
@@ -420,20 +420,20 @@ function readWorkspaceNotificationQueryValue(
 }
 
 function resolveEmployeeWorkspaceNotificationEmployeeId(
-  notification: Pick<InAppNotificationRecord, "relatedPath">,
+  notification: Pick<InAppNotificationRecord, "relatedPath">
 ) {
   return readWorkspaceNotificationQueryValue(
     notification.relatedPath,
-    "employeeId",
+    "employeeId"
   );
 }
 
 function resolveEmployeeWorkspaceNotificationSection(
-  notification: Pick<InAppNotificationRecord, "relatedPath" | "relatedTo">,
+  notification: Pick<InAppNotificationRecord, "relatedPath" | "relatedTo">
 ) {
   const panel = readWorkspaceNotificationQueryValue(
     notification.relatedPath,
-    "panel",
+    "panel"
   );
   const resolvedPanel = resolveEmployeeWorkspaceSection(panel);
   if (resolvedPanel) return resolvedPanel;
@@ -547,14 +547,14 @@ function isValidTimeInput(value: string) {
 }
 
 function readWorkScheduleFromEmployment(
-  employment: Record<string, any> | null | undefined,
+  employment: Record<string, any> | null | undefined
 ) {
   const workSchedule = (employment?.workSchedule || {}) as Record<string, any>;
   return {
     startTime: pickText(workSchedule.startTime, employment?.shiftStartTime),
     endTime: pickText(workSchedule.endTime, employment?.shiftEndTime),
     weeklyOffDays: normalizeWeeklyOffDays(
-      workSchedule.weeklyOffDays ?? employment?.weeklyOffDays,
+      workSchedule.weeklyOffDays ?? employment?.weeklyOffDays
     ),
   };
 }
@@ -582,7 +582,7 @@ function formatWorkScheduleRange(schedule: {
 function buildApprovedLeaveDateKeys(
   requests: Array<
     Pick<EmployeeLeaveRequestRecord, "status" | "startDate" | "endDate">
-  >,
+  >
 ) {
   const dates = new Set<string>();
 
@@ -612,9 +612,7 @@ function getRiyadhTodayDateKey(date = new Date()) {
     month: "2-digit",
     day: "2-digit",
   }).formatToParts(date);
-  const values = Object.fromEntries(
-    parts.map((part) => [part.type, part.value]),
-  );
+  const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
   return `${values.year}-${values.month}-${values.day}`;
 }
 
@@ -628,7 +626,7 @@ function formatPayrollCalculationDate(dateKey: string) {
 
 function buildPayrollCalculationRange(
   month: ReturnType<typeof parseEmployeePayrollMonth> | null,
-  calculationDate = getRiyadhTodayDateKey(),
+  calculationDate = getRiyadhTodayDateKey()
 ) {
   if (!month) return null;
 
@@ -699,7 +697,7 @@ function hasValuesObject(value: unknown) {
 
 function hasEmployeeProfileSignal(
   userData: Record<string, any>,
-  employeeDoc?: Record<string, any> | null,
+  employeeDoc?: Record<string, any> | null
 ) {
   const normalizedRole = String(userData.role || "")
     .trim()
@@ -768,7 +766,7 @@ function buildMergedEmployeeRecord(input: {
         userData.uid,
         employeeData?.linkedUserUid,
         employeeData?.uid,
-        userId,
+        userId
       ) || userId,
     email:
       pickText(
@@ -776,7 +774,7 @@ function buildMergedEmployeeRecord(input: {
         employeeData?.email,
         mergedPersonal?.email,
         userEmployeeProfile.personal?.email,
-        userData.personal?.email,
+        userData.personal?.email
       ) || null,
     displayName:
       pickText(
@@ -786,7 +784,7 @@ function buildMergedEmployeeRecord(input: {
         employeeData?.displayName,
         employeeData?.name,
         employeeData?.fullName,
-        mergedPersonal?.name,
+        mergedPersonal?.name
       ) || null,
     name:
       pickText(
@@ -796,20 +794,20 @@ function buildMergedEmployeeRecord(input: {
         employeeData?.name,
         employeeData?.displayName,
         employeeData?.fullName,
-        mergedPersonal?.name,
+        mergedPersonal?.name
       ) || null,
     title:
       pickText(
         userData.title,
         employeeData?.title,
         mergedEmployment?.title,
-        mergedEmployment?.jobTitle,
+        mergedEmployment?.jobTitle
       ) || null,
     department:
       pickText(
         userData.department,
         employeeData?.department,
-        mergedEmployment?.department,
+        mergedEmployment?.department
       ) || null,
     linkedEmployeeId:
       pickText(userData.linkedEmployeeId, employeeDocId) || null,
@@ -818,7 +816,7 @@ function buildMergedEmployeeRecord(input: {
         mergedEmployment?.allowedZoneIds ||
         userData.allowedZoneIds ||
         userData.employeeProfile?.employment?.allowedZoneIds ||
-        userData.employment?.allowedZoneIds,
+        userData.employment?.allowedZoneIds
     ),
     employeeProfile: mergedEmployeeProfile,
     personal: mergedPersonal,
@@ -828,7 +826,7 @@ function buildMergedEmployeeRecord(input: {
 }
 
 function buildEmployeeFormValues(
-  employee: EmployeeRecord | null | undefined,
+  employee: EmployeeRecord | null | undefined
 ): EmployeeFormValues {
   const personal = (employee?.employeeProfile?.personal ||
     employee?.personal ||
@@ -843,20 +841,20 @@ function buildEmployeeFormValues(
       employee?.displayName,
       employee?.name,
       employee?.fullName,
-      personal.name,
+      personal.name
     ),
     email: pickText(employee?.email, personal.email),
     phone: pickText(
       personal.phone,
       employee?.phone,
       employee?.mobile,
-      employee?.phoneNumber,
+      employee?.phoneNumber
     ),
     jobTitle: pickText(employment.jobTitle, employment.title, employee?.title),
     department: pickText(employment.department, employee?.department),
     fingerprintNumber: pickText(
       employment.fingerprintNumber,
-      employee?.fingerprintNumber,
+      employee?.fingerprintNumber
     ),
     employmentStatus:
       pickText(employment.employmentStatus, employment.status) || "active",
@@ -903,7 +901,7 @@ function buildEmployeeFormValues(
         ? "0"
         : pickText(employment.insuranceDeduction),
     allowedZoneIds: normalizeAllowedZoneIds(
-      employment.allowedZoneIds || employee?.allowedZoneIds,
+      employment.allowedZoneIds || employee?.allowedZoneIds
     ),
     adminNotes: pickText(employment.adminNotes),
   };
@@ -948,7 +946,7 @@ function getEmployeeInitials(name: string, email?: string | null) {
 
   const parts = source
     .split(/\s+/)
-    .map((part) => part.trim())
+    .map(part => part.trim())
     .filter(Boolean)
     .slice(0, 2);
 
@@ -957,7 +955,7 @@ function getEmployeeInitials(name: string, email?: string | null) {
   }
 
   return parts
-    .map((part) => part.charAt(0))
+    .map(part => part.charAt(0))
     .join("")
     .toUpperCase();
 }
@@ -987,7 +985,7 @@ const EMPLOYEE_ENGLISH_TEXT_FALLBACKS: Record<string, string> = {
 function titleCaseEnglishText(value: string) {
   return value
     .split(" ")
-    .map((part) => {
+    .map(part => {
       if (!part) return part;
       return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
     })
@@ -1009,7 +1007,7 @@ function employeeNameFallbackFromEmail(email?: string | null) {
 function displayEmployeeText(
   language: "ar" | "en",
   value: unknown,
-  fallbackEn: string,
+  fallbackEn: string
 ) {
   const text = String(value ?? "").trim();
   if (language === "ar") return text || EMPLOYEE_EMPTY_VALUE;
@@ -1112,7 +1110,7 @@ function normalizeNameKey(value: string) {
 }
 
 function getEmployeeAvatarVariant(
-  employee: EmployeeRecord,
+  employee: EmployeeRecord
 ): EmployeeAvatarVariant {
   const raw = employee as Record<string, any>;
   const personal = (raw.employeeProfile?.personal ||
@@ -1136,7 +1134,7 @@ function getEmployeeAvatarVariant(
       employee.name ||
       personal.name ||
       employee.email ||
-      "",
+      ""
   ).trim();
   const firstName = normalizeNameKey(nameSource.split(/\s+/)[0] || "");
 
@@ -1209,7 +1207,7 @@ function buildEmployeeAvatarDataUrl(variant: EmployeeAvatarVariant) {
 
 function getEmployeeDisplayAvatarUrl(
   employee: EmployeeRecord,
-  avatarUrl: string | null | undefined,
+  avatarUrl: string | null | undefined
 ) {
   const resolvedAvatarUrl = String(avatarUrl || "").trim();
   if (resolvedAvatarUrl) return resolvedAvatarUrl;
@@ -1244,6 +1242,73 @@ function Field({
   );
 }
 
+function showNativeInputPicker(input: HTMLInputElement | null) {
+  if (!input) return;
+  if (input.disabled || input.readOnly) return;
+
+  try {
+    const showPicker = (
+      input as HTMLInputElement & { showPicker?: () => void }
+    ).showPicker;
+    if (showPicker) {
+      showPicker.call(input);
+      return;
+    }
+  } catch {
+    // Some browsers only allow showPicker during trusted click events.
+  }
+
+  input.focus();
+}
+
+function NativeDatePickerInput({
+  className,
+  disabled,
+  onValueChange,
+  type = "date",
+  value,
+}: {
+  className?: string;
+  disabled?: boolean;
+  onValueChange: (value: string) => void;
+  type?: "date" | "month";
+  value: string;
+}) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const placeholder = type === "month" ? "YYYY-MM" : "YYYY-MM-DD";
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        className={cn(
+          "flex h-9 w-full cursor-pointer items-center justify-between rounded-md border border-input bg-transparent px-3 py-1 text-sm text-left tabular-nums shadow-xs transition-[color,box-shadow] outline-none [direction:ltr] [unicode-bidi:plaintext] disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50",
+          "focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
+          className
+        )}
+        disabled={disabled}
+        onClick={() => showNativeInputPicker(inputRef.current)}
+      >
+        <span className={value ? "text-slate-950" : "text-slate-400"}>
+          {value || placeholder}
+        </span>
+        <CalendarDays className="h-4 w-4 shrink-0 text-slate-500" />
+      </button>
+      <input
+        ref={inputRef}
+        type={type}
+        lang="en-GB"
+        dir="ltr"
+        value={value || ""}
+        onChange={event => onValueChange(event.target.value)}
+        className="sr-only"
+        tabIndex={-1}
+        disabled={disabled}
+      />
+    </div>
+  );
+}
+
 function ReadonlyMeta({
   icon: Icon,
   label,
@@ -1256,7 +1321,7 @@ function ReadonlyMeta({
   dir?: "rtl" | "ltr";
 }) {
   return (
-    <div className="min-w-0 rounded-[20px] border border-slate-200/80 bg-slate-50/80 px-4 py-3">
+    <div className="min-w-0 rounded-[22px] border border-slate-200/80 bg-white px-4 py-3 shadow-[0_12px_30px_-26px_rgba(15,23,42,0.42)]">
       <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
         <Icon className="h-3.5 w-3.5" />
         {label}
@@ -1266,6 +1331,36 @@ function ReadonlyMeta({
         className="mt-2 min-w-0 break-words text-sm font-semibold text-slate-950 [overflow-wrap:anywhere]"
       >
         {value || EMPLOYEE_EMPTY_VALUE}
+      </div>
+    </div>
+  );
+}
+
+function EmployeeWorkspaceSectionBreak({
+  description,
+  icon: Icon,
+  title,
+}: {
+  description: string;
+  icon: typeof ShieldCheck;
+  title: string;
+}) {
+  return (
+    <div className="relative overflow-hidden rounded-[28px] border border-dashed border-slate-300/80 bg-white/78 px-5 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.92)]">
+      <div className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-l from-transparent via-[#F2B705]/70 to-transparent" />
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-start gap-3">
+          <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-950 text-[#F2B705] shadow-[0_18px_34px_-24px_rgba(15,23,42,0.9)]">
+            <Icon className="h-5 w-5" />
+          </div>
+          <div className="min-w-0 space-y-1">
+            <div className="text-sm font-semibold text-slate-950">{title}</div>
+            <p className="max-w-3xl text-sm leading-6 text-slate-500">
+              {description}
+            </p>
+          </div>
+        </div>
+        <div className="h-px flex-1 bg-gradient-to-l from-transparent via-slate-300 to-transparent sm:max-w-[220px]" />
       </div>
     </div>
   );
@@ -1292,7 +1387,7 @@ function EmployeeWorkspaceTabButton({
         "relative inline-flex h-10 min-w-[104px] shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-full border border-slate-200/90 bg-white px-4 text-sm font-semibold leading-none text-slate-600 shadow-[0_1px_0_rgba(255,255,255,0.95)] transition-all duration-200 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F2B705]/35 sm:min-w-[112px] sm:px-5",
         active
           ? "border-[#F2B705]/45 bg-[#F2B705]/12 text-[#030640] shadow-[0_12px_28px_-20px_rgba(242,183,5,0.8)]"
-          : "",
+          : ""
       )}
     >
       <Icon
@@ -1317,7 +1412,7 @@ function EmployeeFileStatusBadge({ file }: { file: EmployeeFileRecord }) {
         "rounded-full shadow-none",
         file.readStatusTone === "success"
           ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-          : "border-amber-200 bg-amber-50 text-amber-700",
+          : "border-amber-200 bg-amber-50 text-amber-700"
       )}
     >
       {file.readStatusLabel}
@@ -1333,7 +1428,7 @@ function EmployeeFileVersionBadge({ file }: { file: EmployeeFileRecord }) {
         "rounded-full shadow-none",
         file.statusTone === "success"
           ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-          : "border-slate-200 bg-slate-100 text-slate-700",
+          : "border-slate-200 bg-slate-100 text-slate-700"
       )}
     >
       {file.statusLabel}
@@ -1351,7 +1446,7 @@ function EmployeeFileMetaBadge({
   return (
     <span
       dir={dir}
-      className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-600"
+      className="rounded-full bg-slate-100/80 px-2.5 py-1 text-xs text-slate-500"
     >
       {label}
     </span>
@@ -1372,7 +1467,7 @@ function LeaveStatusBadge({ status }: { status: unknown }) {
             ? "border-amber-200 bg-amber-50 text-amber-700"
             : meta.tone === "danger"
               ? "border-rose-200 bg-rose-50 text-rose-700"
-              : "border-slate-200 bg-slate-100 text-slate-600",
+              : "border-slate-200 bg-slate-100 text-slate-600"
       )}
     >
       {meta.label}
@@ -1394,7 +1489,7 @@ function LeaveImpactBadge({ status }: { status: unknown }) {
           ? "border-emerald-200 bg-emerald-50 text-emerald-700"
           : normalizedStatus === "pending"
             ? "border-amber-200 bg-amber-50 text-amber-700"
-            : "border-rose-200 bg-rose-50 text-rose-700",
+            : "border-rose-200 bg-rose-50 text-rose-700"
       )}
     >
       {normalizedStatus === "approved"
@@ -1448,8 +1543,8 @@ function resolveEmploymentLeaveBalance(
 
 function normalizeEnglishDigits(value: string) {
   return value
-    .replace(/[٠-٩]/g, (digit) => String(digit.charCodeAt(0) - 1632))
-    .replace(/[۰-۹]/g, (digit) => String(digit.charCodeAt(0) - 1776));
+    .replace(/[٠-٩]/g, digit => String(digit.charCodeAt(0) - 1632))
+    .replace(/[۰-۹]/g, digit => String(digit.charCodeAt(0) - 1776));
 }
 
 const EMPLOYEE_AVATAR_MAX_SIZE_BYTES = 5 * 1024 * 1024;
@@ -1504,11 +1599,11 @@ function getEmployeeAvatarCropMetrics(input: {
   const zoom = clampNumber(
     input.zoom,
     EMPLOYEE_AVATAR_CROP_MIN_ZOOM,
-    EMPLOYEE_AVATAR_CROP_MAX_ZOOM,
+    EMPLOYEE_AVATAR_CROP_MAX_ZOOM
   );
   const coverScale = Math.max(
     viewportSize / naturalWidth,
-    viewportSize / naturalHeight,
+    viewportSize / naturalHeight
   );
   const width = naturalWidth * coverScale * zoom;
   const height = naturalHeight * coverScale * zoom;
@@ -1523,7 +1618,7 @@ function getEmployeeAvatarCropMetrics(input: {
 
 function clampEmployeeAvatarCropPosition(
   position: EmployeeAvatarCropPosition,
-  metrics: EmployeeAvatarCropMetrics,
+  metrics: EmployeeAvatarCropMetrics
 ): EmployeeAvatarCropPosition {
   return {
     x: clampNumber(position.x, -metrics.maxOffsetX, metrics.maxOffsetX),
@@ -1542,7 +1637,7 @@ function loadEmployeeAvatarImageElement(src: string) {
 }
 
 async function createEmployeeAvatarCropDraft(
-  file: File,
+  file: File
 ): Promise<EmployeeAvatarCropDraft> {
   const objectUrl = URL.createObjectURL(file);
 
@@ -1615,14 +1710,14 @@ async function buildEmployeeCroppedAvatarFile(input: {
     drawX,
     drawY,
     metrics.width * scale,
-    metrics.height * scale,
+    metrics.height * scale
   );
 
-  const blob = await new Promise<Blob | null>((resolve) => {
+  const blob = await new Promise<Blob | null>(resolve => {
     canvas.toBlob(
       resolve,
       outputType,
-      outputType === "image/jpeg" ? 0.92 : undefined,
+      outputType === "image/jpeg" ? 0.92 : undefined
     );
   });
 
@@ -1650,7 +1745,7 @@ function resolveEmployeeAuthUid(employee: EmployeeRecord | null | undefined) {
 }
 
 function resolveEmployeeDocumentId(
-  employee: EmployeeRecord | null | undefined,
+  employee: EmployeeRecord | null | undefined
 ) {
   return String(employee?.linkedEmployeeId || employee?.id || "").trim();
 }
@@ -1670,7 +1765,7 @@ function createEmptySalaryDeduction(): EmployeeSalaryDeductionFormValue {
 }
 
 function normalizeSalaryDeductions(
-  value: unknown,
+  value: unknown
 ): EmployeeSalaryDeductionFormValue[] {
   if (!Array.isArray(value)) return [];
   return value.map((item, index) => ({
@@ -1686,30 +1781,30 @@ function normalizeSalaryDeductions(
 }
 
 function normalizeSalaryDeductionsForPersistence(
-  value: EmployeeSalaryDeductionFormValue[],
+  value: EmployeeSalaryDeductionFormValue[]
 ) {
   return value
-    .map((item) => ({
+    .map(item => ({
       id: item.id,
       title: String(item.title || "").trim(),
       amount: Number(item.amount || 0),
     }))
     .filter(
-      (item) => item.title && Number.isFinite(item.amount) && item.amount > 0,
+      item => item.title && Number.isFinite(item.amount) && item.amount > 0
     );
 }
 
 function matchesEmployeeFileVersion(
   file: EmployeeFileRecord,
   title: string,
-  fileType: string,
+  fileType: string
 ) {
   return (
     file.active &&
     normalizeEmployeeFileMatchValue(file.title) ===
       normalizeEmployeeFileMatchValue(title) &&
     normalizeEmployeeFileMatchValue(
-      file.fileType || EMPLOYEE_DEFAULT_FILE_TYPE,
+      file.fileType || EMPLOYEE_DEFAULT_FILE_TYPE
     ) ===
       normalizeEmployeeFileMatchValue(fileType || EMPLOYEE_DEFAULT_FILE_TYPE)
   );
@@ -1727,7 +1822,7 @@ export default function EmployeesManagementPage() {
   const [workZonesLoading, setWorkZonesLoading] = useState(true);
   const [newWorkZoneOpen, setNewWorkZoneOpen] = useState(false);
   const [editingWorkZoneId, setEditingWorkZoneId] = useState<string | null>(
-    null,
+    null
   );
   const [newWorkZoneForm, setNewWorkZoneForm] =
     useState<EmployeeWorkZoneFormValues>(buildEmployeeWorkZoneFormValues);
@@ -1738,7 +1833,7 @@ export default function EmployeesManagementPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedEmployeeId, setSelectedEmployeeId] = useState("");
   const [form, setForm] = useState<EmployeeFormValues>(() =>
-    buildEmployeeFormValues(null),
+    buildEmployeeFormValues(null)
   );
   const [salaryDeductions, setSalaryDeductions] = useState<
     EmployeeSalaryDeductionFormValue[]
@@ -1748,11 +1843,11 @@ export default function EmployeesManagementPage() {
   >([]);
   const [employeeAbsencesLoading, setEmployeeAbsencesLoading] = useState(false);
   const [absenceForm, setAbsenceForm] = useState<EmployeeAbsenceFormValues>(
-    buildEmployeeAbsenceFormValues,
+    buildEmployeeAbsenceFormValues
   );
   const [savingAbsence, setSavingAbsence] = useState(false);
   const [deletingAbsenceId, setDeletingAbsenceId] = useState<string | null>(
-    null,
+    null
   );
   const [employeePayrollRecords, setEmployeePayrollRecords] = useState<
     EmployeePayrollRecord[]
@@ -1760,13 +1855,13 @@ export default function EmployeesManagementPage() {
   const [employeePayrollRecordsLoading, setEmployeePayrollRecordsLoading] =
     useState(false);
   const [payrollMonthInput, setPayrollMonthInput] = useState(
-    buildEmployeePayrollMonthInput,
+    buildEmployeePayrollMonthInput
   );
   const [payrollCalculationDateKey, setPayrollCalculationDateKey] = useState(
-    getRiyadhTodayDateKey,
+    getRiyadhTodayDateKey
   );
   const [payrollMudadDocument, setPayrollMudadDocument] = useState<File | null>(
-    null,
+    null
   );
   const [creatingPayrollRecord, setCreatingPayrollRecord] = useState(false);
   const [attendancePayrollSummary, setAttendancePayrollSummary] =
@@ -1897,22 +1992,22 @@ export default function EmployeesManagementPage() {
   const searchParams = useMemo(() => new URLSearchParams(search), [search]);
   const requestedEmployeeId = useMemo(
     () => String(searchParams.get("employeeId") || "").trim(),
-    [searchParams],
+    [searchParams]
   );
   const requestedPanel = useMemo(
     () =>
       String(searchParams.get("panel") || "")
         .trim()
         .toLowerCase(),
-    [searchParams],
+    [searchParams]
   );
   const requestedMessageId = useMemo(
     () => String(searchParams.get("messageId") || "").trim(),
-    [searchParams],
+    [searchParams]
   );
   const requestedEmployeeSection = useMemo(
     () => resolveEmployeeWorkspaceSection(requestedPanel),
-    [requestedPanel],
+    [requestedPanel]
   );
 
   const resetEmployeeFileForm = () => {
@@ -1960,10 +2055,10 @@ export default function EmployeesManagementPage() {
   useEffect(() => {
     let active = true;
     fetchWorkZones()
-      .then((zones) => {
+      .then(zones => {
         if (active) setWorkZones(zones);
       })
-      .catch((snapshotError) => {
+      .catch(snapshotError => {
         console.error("employee_work_zones_snapshot_error", snapshotError);
         if (active) setWorkZones([]);
       })
@@ -1996,7 +2091,7 @@ export default function EmployeesManagementPage() {
         const linkedUserId = pickText(
           employeeData.linkedUserUid,
           employeeData.uid,
-          employeeData.userId,
+          employeeData.userId
         );
 
         if (linkedUserId && !employeesByLinkedUserId.has(linkedUserId)) {
@@ -2051,42 +2146,42 @@ export default function EmployeesManagementPage() {
 
     const unsubscribeUsers = onSnapshot(
       collection(db, "users"),
-      (snapshot) => {
+      snapshot => {
         usersMap = new Map(
-          snapshot.docs.map((docSnapshot) => [
+          snapshot.docs.map(docSnapshot => [
             docSnapshot.id,
             docSnapshot.data() as Record<string, any>,
-          ]),
+          ])
         );
         usersReady = true;
         rebuildEmployees();
       },
-      (snapshotError) => {
+      snapshotError => {
         console.error("employees_snapshot_error", snapshotError);
         setEmployees([]);
         setError("تعذر تحميل قائمة الموظفين.");
         setLoading(false);
-      },
+      }
     );
 
     const unsubscribeEmployeeDirectory = onSnapshot(
       collection(db, "employees"),
-      (snapshot) => {
+      snapshot => {
         employeesMap = new Map(
-          snapshot.docs.map((docSnapshot) => [
+          snapshot.docs.map(docSnapshot => [
             docSnapshot.id,
             docSnapshot.data() as Record<string, any>,
-          ]),
+          ])
         );
         employeesReady = true;
         rebuildEmployees();
       },
-      (snapshotError) => {
+      snapshotError => {
         console.error("employee_directory_snapshot_error", snapshotError);
         employeesMap = new Map();
         employeesReady = true;
         rebuildEmployees();
-      },
+      }
     );
 
     return () => {
@@ -2109,7 +2204,7 @@ export default function EmployeesManagementPage() {
       requestedEmployeeId &&
       search &&
       handledEmployeeSearchRef.current !== search &&
-      employees.some((employee) => employee.id === requestedEmployeeId)
+      employees.some(employee => employee.id === requestedEmployeeId)
     ) {
       handledEmployeeSearchRef.current = search;
       employeeWorkspaceScrollTargetRef.current = "profile";
@@ -2120,7 +2215,7 @@ export default function EmployeesManagementPage() {
     }
 
     const selectedExists = employees.some(
-      (employee) => employee.id === selectedEmployeeId,
+      employee => employee.id === selectedEmployeeId
     );
     if (selectedEmployeeId && !selectedExists) {
       setSelectedEmployeeId("");
@@ -2129,7 +2224,7 @@ export default function EmployeesManagementPage() {
 
   const employeeCards = useMemo(
     () =>
-      employees.map((employee) => {
+      employees.map(employee => {
         const profile = normalizeEmployeeProfile(employee, {
           displayName: employee.displayName,
           email: employee.email,
@@ -2138,7 +2233,7 @@ export default function EmployeesManagementPage() {
         });
         const displayAvatarUrl = getEmployeeDisplayAvatarUrl(
           employee,
-          profile.personal.avatarUrl,
+          profile.personal.avatarUrl
         );
         const displayName =
           language === "ar"
@@ -2146,12 +2241,12 @@ export default function EmployeesManagementPage() {
             : displayEmployeeText(
                 language,
                 profile.personal.name,
-                employeeNameFallbackFromEmail(profile.personal.email),
+                employeeNameFallbackFromEmail(profile.personal.email)
               );
         const displayTitle = displayEmployeeText(
           language,
           profile.employment.title,
-          "Unassigned",
+          "Unassigned"
         );
 
         return {
@@ -2175,19 +2270,19 @@ export default function EmployeesManagementPage() {
             .toLowerCase(),
         };
       }),
-    [employees, language],
+    [employees, language]
   );
 
   const filteredEmployeeCards = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
     if (!normalizedQuery) return employeeCards;
-    return employeeCards.filter((card) =>
-      card.searchText.includes(normalizedQuery),
+    return employeeCards.filter(card =>
+      card.searchText.includes(normalizedQuery)
     );
   }, [employeeCards, searchQuery]);
 
   const selectedEmployee =
-    employees.find((employee) => employee.id === selectedEmployeeId) ?? null;
+    employees.find(employee => employee.id === selectedEmployeeId) ?? null;
   const selectedEmployeeAuthUid = resolveEmployeeAuthUid(selectedEmployee);
   const selectedEmployeeDocumentId =
     resolveEmployeeDocumentId(selectedEmployee);
@@ -2204,7 +2299,7 @@ export default function EmployeesManagementPage() {
               null,
           })
         : null,
-    [selectedEmployee],
+    [selectedEmployee]
   );
   const selectedEmployeeLabel = useMemo(() => {
     const rawName =
@@ -2214,7 +2309,7 @@ export default function EmployeesManagementPage() {
         : pickText(
             selectedEmployee?.displayName,
             selectedEmployee?.name,
-            selectedEmployee?.email,
+            selectedEmployee?.email
           ) || "الموظف";
 
     if (language === "ar") return rawName;
@@ -2222,8 +2317,8 @@ export default function EmployeesManagementPage() {
       language,
       rawName,
       employeeNameFallbackFromEmail(
-        selectedEmployeeProfile?.personal?.email || selectedEmployee?.email,
-      ),
+        selectedEmployeeProfile?.personal?.email || selectedEmployee?.email
+      )
     );
   }, [language, selectedEmployee, selectedEmployeeProfile]);
   const selectedEmployeeDisplayAvatarUrl = useMemo(
@@ -2231,10 +2326,10 @@ export default function EmployeesManagementPage() {
       selectedEmployee
         ? getEmployeeDisplayAvatarUrl(
             selectedEmployee,
-            selectedEmployeeProfile?.personal?.avatarUrl,
+            selectedEmployeeProfile?.personal?.avatarUrl
           )
         : null,
-    [selectedEmployee, selectedEmployeeProfile],
+    [selectedEmployee, selectedEmployeeProfile]
   );
   const selectedEmployeeEmployment = useMemo<SelectedEmployeeEmployment>(() => {
     const employment = selectedEmployeeProfile?.employment;
@@ -2249,24 +2344,25 @@ export default function EmployeesManagementPage() {
       title: displayEmployeeText(
         language,
         employment?.title || selectedEmployee?.title || EMPLOYEE_EMPTY_VALUE,
-        "Unassigned",
+        "Unassigned"
       ),
       department: displayEmployeeText(
         language,
         employment?.department ||
           selectedEmployee?.department ||
           EMPLOYEE_EMPTY_VALUE,
-        "Unassigned",
+        "Unassigned"
       ),
       statusLabel: displayEmployeeText(
         language,
         employment?.statusLabel || EMPLOYEE_EMPTY_VALUE,
-        "Unassigned",
+        "Unassigned"
       ),
       statusTone,
       employeeCode: employment?.employeeCode || EMPLOYEE_EMPTY_VALUE,
       startDate: employment?.startDate || null,
-      fingerprintNumber: employment?.fingerprintNumber || EMPLOYEE_EMPTY_VALUE,
+      fingerprintNumber:
+        employment?.fingerprintNumber || EMPLOYEE_EMPTY_VALUE,
     };
   }, [language, selectedEmployee, selectedEmployeeProfile]);
   const selectedEmployeeShiftSchedule = useMemo(() => {
@@ -2282,7 +2378,7 @@ export default function EmployeesManagementPage() {
   }, [selectedEmployee]);
   const selectedEmployeeScheduleLabel = useMemo(
     () => formatWorkScheduleRange(selectedEmployeeShiftSchedule),
-    [selectedEmployeeShiftSchedule],
+    [selectedEmployeeShiftSchedule]
   );
 
   const employeeAvatarCropMetrics = useMemo(
@@ -2299,14 +2395,14 @@ export default function EmployeesManagementPage() {
       employeeAvatarCropDraft,
       employeeAvatarCropViewportSize,
       employeeAvatarCropZoom,
-    ],
+    ]
   );
   const employeeAvatarCropImageStyle = useMemo(() => {
     if (!employeeAvatarCropMetrics) return undefined;
 
     const position = clampEmployeeAvatarCropPosition(
       employeeAvatarCropPosition,
-      employeeAvatarCropMetrics,
+      employeeAvatarCropMetrics
     );
 
     return {
@@ -2334,7 +2430,7 @@ export default function EmployeesManagementPage() {
     const scale = previewSize / Math.max(1, employeeAvatarCropViewportSize);
     const position = clampEmployeeAvatarCropPosition(
       employeeAvatarCropPosition,
-      employeeAvatarCropMetrics,
+      employeeAvatarCropMetrics
     );
 
     return {
@@ -2373,7 +2469,7 @@ export default function EmployeesManagementPage() {
     const updateViewportSize = () => {
       const nextSize = Math.max(
         240,
-        Math.round(element.getBoundingClientRect().width),
+        Math.round(element.getBoundingClientRect().width)
       );
       setEmployeeAvatarCropViewportSize(nextSize);
     };
@@ -2392,8 +2488,8 @@ export default function EmployeesManagementPage() {
 
   useEffect(() => {
     if (!employeeAvatarCropMetrics) return;
-    setEmployeeAvatarCropPosition((current) =>
-      clampEmployeeAvatarCropPosition(current, employeeAvatarCropMetrics),
+    setEmployeeAvatarCropPosition(current =>
+      clampEmployeeAvatarCropPosition(current, employeeAvatarCropMetrics)
     );
   }, [employeeAvatarCropMetrics]);
 
@@ -2406,25 +2502,25 @@ export default function EmployeesManagementPage() {
     const notificationsQuery = query(
       collection(db, EMPLOYEE_NOTIFICATIONS_COLLECTION),
       where("targetUid", "==", user.uid),
-      orderBy("createdAt", "desc"),
+      orderBy("createdAt", "desc")
     );
 
     const unsubscribe = onSnapshot(
       notificationsQuery,
-      (snapshot) => {
+      snapshot => {
         setAdminNotifications(
-          snapshot.docs.map((docSnapshot) =>
+          snapshot.docs.map(docSnapshot =>
             normalizeInAppNotificationRecord(
               docSnapshot.id,
-              (docSnapshot.data() as Record<string, any>) || {},
-            ),
-          ),
+              (docSnapshot.data() as Record<string, any>) || {}
+            )
+          )
         );
       },
-      (error) => {
+      error => {
         console.error("employee_admin_notifications_snapshot_error", error);
         setAdminNotifications([]);
-      },
+      }
     );
 
     return () => unsubscribe();
@@ -2442,25 +2538,25 @@ export default function EmployeesManagementPage() {
     const unsubscribe = onSnapshot(
       query(
         collection(db, EMPLOYEE_ABSENCES_COLLECTION),
-        where("employeeId", "==", selectedEmployeeDocumentId),
+        where("employeeId", "==", selectedEmployeeDocumentId)
       ),
-      (snapshot) => {
+      snapshot => {
         const rows = sortEmployeeAbsences(
-          snapshot.docs.map((docSnapshot) =>
+          snapshot.docs.map(docSnapshot =>
             normalizeEmployeeAbsence(
               docSnapshot.id,
-              (docSnapshot.data() as Record<string, any>) || {},
-            ),
-          ),
+              (docSnapshot.data() as Record<string, any>) || {}
+            )
+          )
         );
         setEmployeeAbsences(rows);
         setEmployeeAbsencesLoading(false);
       },
-      (error) => {
+      error => {
         console.error("employee_absences_admin_snapshot_error", error);
         setEmployeeAbsences([]);
         setEmployeeAbsencesLoading(false);
-      },
+      }
     );
 
     return () => unsubscribe();
@@ -2479,25 +2575,25 @@ export default function EmployeesManagementPage() {
     const unsubscribe = onSnapshot(
       query(
         collection(db, EMPLOYEE_PAYROLL_RECORDS_COLLECTION),
-        where("employeeId", "==", selectedEmployeeDocumentId),
+        where("employeeId", "==", selectedEmployeeDocumentId)
       ),
-      (snapshot) => {
+      snapshot => {
         const rows = sortEmployeePayrollRecords(
-          snapshot.docs.map((docSnapshot) =>
+          snapshot.docs.map(docSnapshot =>
             normalizeEmployeePayrollRecord(
               docSnapshot.id,
-              (docSnapshot.data() as Record<string, any>) || {},
-            ),
-          ),
+              (docSnapshot.data() as Record<string, any>) || {}
+            )
+          )
         );
         setEmployeePayrollRecords(rows);
         setEmployeePayrollRecordsLoading(false);
       },
-      (error) => {
+      error => {
         console.error("employee_payroll_records_admin_snapshot_error", error);
         setEmployeePayrollRecords([]);
         setEmployeePayrollRecordsLoading(false);
-      },
+      }
     );
 
     return () => unsubscribe();
@@ -2523,29 +2619,29 @@ export default function EmployeesManagementPage() {
         collection(db, EMPLOYEE_LEAVE_REQUESTS_COLLECTION),
         or(
           where("userId", "==", selectedEmployeeAuthUid),
-          where("employeeUid", "==", selectedEmployeeAuthUid),
-        ),
+          where("employeeUid", "==", selectedEmployeeAuthUid)
+        )
       ),
-      (snapshot) => {
+      snapshot => {
         const rows = sortEmployeeLeaveRequests(
-          snapshot.docs.map((docSnapshot) =>
+          snapshot.docs.map(docSnapshot =>
             normalizeEmployeeLeaveRequest(
               docSnapshot.id,
-              (docSnapshot.data() as Record<string, any>) || {},
-            ),
-          ),
+              (docSnapshot.data() as Record<string, any>) || {}
+            )
+          )
         );
         setLeaveRequests(rows);
         setLeaveRequestsLoading(false);
       },
-      (snapshotError) => {
+      snapshotError => {
         console.error(
           "employee_leave_requests_admin_snapshot_error",
-          snapshotError,
+          snapshotError
         );
         setLeaveRequests([]);
         setLeaveRequestsLoading(false);
-      },
+      }
     );
 
     return () => unsubscribe();
@@ -2563,28 +2659,28 @@ export default function EmployeesManagementPage() {
     const unsubscribe = onSnapshot(
       query(
         collection(db, EMPLOYEE_SERVICE_REQUESTS_COLLECTION),
-        where("employeeUid", "==", selectedEmployeeAuthUid),
+        where("employeeUid", "==", selectedEmployeeAuthUid)
       ),
-      (snapshot) => {
+      snapshot => {
         const rows = sortEmployeeServiceRequests(
-          snapshot.docs.map((docSnapshot) =>
+          snapshot.docs.map(docSnapshot =>
             normalizeEmployeeServiceRequest(
               docSnapshot.id,
-              (docSnapshot.data() as Record<string, any>) || {},
-            ),
-          ),
+              (docSnapshot.data() as Record<string, any>) || {}
+            )
+          )
         );
         setServiceRequests(rows);
         setServiceRequestsLoading(false);
       },
-      (snapshotError) => {
+      snapshotError => {
         console.error(
           "employee_service_requests_admin_snapshot_error",
-          snapshotError,
+          snapshotError
         );
         setServiceRequests([]);
         setServiceRequestsLoading(false);
-      },
+      }
     );
 
     return () => unsubscribe();
@@ -2602,11 +2698,11 @@ export default function EmployeesManagementPage() {
     const unsubscribe = onSnapshot(
       query(
         collection(db, EMPLOYEE_LEAVE_BALANCE_ADJUSTMENTS_COLLECTION),
-        where("employeeUid", "==", selectedEmployeeAuthUid),
+        where("employeeUid", "==", selectedEmployeeAuthUid)
       ),
-      (snapshot) => {
+      snapshot => {
         const rows = snapshot.docs
-          .map((docSnapshot) => {
+          .map(docSnapshot => {
             const data = (docSnapshot.data() as Record<string, any>) || {};
             return {
               id: docSnapshot.id,
@@ -2623,11 +2719,11 @@ export default function EmployeesManagementPage() {
         setLeaveBalanceAdjustments(rows);
         setLeaveBalanceAdjustmentsLoading(false);
       },
-      (error) => {
+      error => {
         console.error("leave_balance_adjustments_snapshot_error", error);
         setLeaveBalanceAdjustments([]);
         setLeaveBalanceAdjustmentsLoading(false);
-      },
+      }
     );
 
     return () => unsubscribe();
@@ -2667,25 +2763,25 @@ export default function EmployeesManagementPage() {
     const unsubscribe = onSnapshot(
       query(
         collection(db, EMPLOYEE_FILES_COLLECTION),
-        where("employeeUid", "==", selectedEmployeeAuthUid),
+        where("employeeUid", "==", selectedEmployeeAuthUid)
       ),
-      (snapshot) => {
+      snapshot => {
         const rows = sortEmployeeFiles(
-          snapshot.docs.map((docSnapshot) =>
+          snapshot.docs.map(docSnapshot =>
             normalizeEmployeeFileRecord(
               docSnapshot.id,
-              (docSnapshot.data() as Record<string, any>) || {},
-            ),
-          ),
+              (docSnapshot.data() as Record<string, any>) || {}
+            )
+          )
         );
         setEmployeeFiles(rows);
         setEmployeeFilesLoading(false);
       },
-      (snapshotError) => {
+      snapshotError => {
         console.error("employee_files_admin_snapshot_error", snapshotError);
         setEmployeeFiles([]);
         setEmployeeFilesLoading(false);
-      },
+      }
     );
 
     return () => unsubscribe();
@@ -2702,23 +2798,23 @@ export default function EmployeesManagementPage() {
     const unsubscribe = onSnapshot(
       query(
         collection(db, EMPLOYEE_MESSAGES_COLLECTION),
-        where("employeeUid", "==", selectedEmployeeAuthUid),
+        where("employeeUid", "==", selectedEmployeeAuthUid)
       ),
-      (snapshot) => {
-        const rows = snapshot.docs.map((docSnapshot) =>
+      snapshot => {
+        const rows = snapshot.docs.map(docSnapshot =>
           normalizeEmployeeMessageRecord(
             docSnapshot.id,
-            (docSnapshot.data() as Record<string, any>) || {},
-          ),
+            (docSnapshot.data() as Record<string, any>) || {}
+          )
         );
         setEmployeeMessages(rows);
         setEmployeeMessagesLoading(false);
       },
-      (snapshotError) => {
+      snapshotError => {
         console.error("employee_messages_admin_snapshot_error", snapshotError);
         setEmployeeMessages([]);
         setEmployeeMessagesLoading(false);
-      },
+      }
     );
 
     return () => unsubscribe();
@@ -2726,7 +2822,7 @@ export default function EmployeesManagementPage() {
 
   const initialForm = useMemo(
     () => buildEmployeeFormValues(selectedEmployee),
-    [selectedEmployee],
+    [selectedEmployee]
   );
 
   useEffect(() => {
@@ -2754,29 +2850,29 @@ export default function EmployeesManagementPage() {
       JSON.stringify(form) !== JSON.stringify(initialForm) ||
       JSON.stringify(salaryDeductions) !==
         JSON.stringify(initialSalaryDeductions),
-    [form, initialForm, salaryDeductions, initialSalaryDeductions],
+    [form, initialForm, salaryDeductions, initialSalaryDeductions]
   );
   const selectedPayrollMonthMeta = useMemo(
     () => parseEmployeePayrollMonth(payrollMonthInput),
-    [payrollMonthInput],
+    [payrollMonthInput]
   );
   const selectedPayrollCalculationRange = useMemo(
     () =>
       buildPayrollCalculationRange(
         selectedPayrollMonthMeta,
-        payrollCalculationDateKey,
+        payrollCalculationDateKey
       ),
-    [payrollCalculationDateKey, selectedPayrollMonthMeta],
+    [payrollCalculationDateKey, selectedPayrollMonthMeta]
   );
   const selectedPayrollRecord = useMemo(
     () =>
       selectedPayrollMonthMeta
         ? employeePayrollRecords.find(
-            (record) =>
-              record.payrollMonth === selectedPayrollMonthMeta.payrollMonth,
+            record =>
+              record.payrollMonth === selectedPayrollMonthMeta.payrollMonth
           ) || null
         : null,
-    [employeePayrollRecords, selectedPayrollMonthMeta],
+    [employeePayrollRecords, selectedPayrollMonthMeta]
   );
 
   useEffect(() => {
@@ -2791,16 +2887,16 @@ export default function EmployeesManagementPage() {
 
   const latestApprovedLeaveRequest = useMemo(
     () => getLatestApprovedEmployeeLeaveRequest(leaveRequests),
-    [leaveRequests],
+    [leaveRequests]
   );
 
   const approvedLeaveRequests = useMemo(
-    () => leaveRequests.filter((request) => request.status === "approved"),
-    [leaveRequests],
+    () => leaveRequests.filter(request => request.status === "approved"),
+    [leaveRequests]
   );
   const approvedLeaveDateKeys = useMemo(
     () => buildApprovedLeaveDateKeys(approvedLeaveRequests),
-    [approvedLeaveRequests],
+    [approvedLeaveRequests]
   );
   const payrollWorkingDateKeys = useMemo(() => {
     if (!selectedPayrollMonthMeta) return [];
@@ -2839,28 +2935,27 @@ export default function EmployeesManagementPage() {
   ]);
 
   const pendingLeaveRequestsCount = useMemo(
-    () =>
-      leaveRequests.filter((request) => request.status === "pending").length,
-    [leaveRequests],
+    () => leaveRequests.filter(request => request.status === "pending").length,
+    [leaveRequests]
   );
   const pendingServiceRequestsCount = useMemo(
     () =>
-      serviceRequests.filter((request) => request.status === "pending").length,
-    [serviceRequests],
+      serviceRequests.filter(request => request.status === "pending").length,
+    [serviceRequests]
   );
 
   const approvedLeaveDaysTotal = useMemo(
     () =>
       approvedLeaveRequests.reduce(
         (sum, request) => sum + (Number(request.daysCount) || 0),
-        0,
+        0
       ),
-    [approvedLeaveRequests],
+    [approvedLeaveRequests]
   );
 
   const latestDeductedLeaveRequest = useMemo(
     () => approvedLeaveRequests[0] || null,
-    [approvedLeaveRequests],
+    [approvedLeaveRequests]
   );
 
   const currentLeaveBalanceNumber = useMemo(() => {
@@ -2900,7 +2995,7 @@ export default function EmployeesManagementPage() {
       toast.error(
         error instanceof Error
           ? error.message
-          : "تعذر إنشاء تقرير Excel للموظف.",
+          : "تعذر إنشاء تقرير Excel للموظف."
       );
     } finally {
       setEmployeeReportExporting(false);
@@ -2908,7 +3003,7 @@ export default function EmployeesManagementPage() {
   };
 
   const handleExportPayrollApprovalExcel = async (
-    record: EmployeePayrollRecord,
+    record: EmployeePayrollRecord
   ) => {
     if (!selectedEmployee || !selectedEmployeeProfile) return;
 
@@ -2944,7 +3039,7 @@ export default function EmployeesManagementPage() {
         total = Math.max(0, Number(response.total || 0));
         let addedCount = 0;
 
-        response.records.forEach((attendanceRecord) => {
+        response.records.forEach(attendanceRecord => {
           const key = String(attendanceRecord.id || "").trim();
           if (key && seenRecordIds.has(key)) return;
           if (key) seenRecordIds.add(key);
@@ -2976,11 +3071,11 @@ export default function EmployeesManagementPage() {
       toast.error(
         error instanceof Error
           ? error.message
-          : "تعذر إنشاء ملف اعتماد الراتب.",
+          : "تعذر إنشاء ملف اعتماد الراتب."
       );
     } finally {
-      setPayrollReportExportingId((current) =>
-        current === record.id ? null : current,
+      setPayrollReportExportingId(current =>
+        current === record.id ? null : current
       );
     }
   };
@@ -2989,7 +3084,7 @@ export default function EmployeesManagementPage() {
     setManualLeaveBalance(
       Number.isFinite(currentLeaveBalanceNumber)
         ? String(currentLeaveBalanceNumber)
-        : "",
+        : ""
     );
     setManualLeaveBalanceOperation("add");
     setManualLeaveAdjustmentReason("");
@@ -3037,9 +3132,9 @@ export default function EmployeesManagementPage() {
   const approvedLeaveRequestIds = useMemo(
     () =>
       new Set(
-        approvedLeaveRequests.map((request) => String(request.id || "").trim()),
+        approvedLeaveRequests.map(request => String(request.id || "").trim())
       ),
-    [approvedLeaveRequests],
+    [approvedLeaveRequests]
   );
 
   const approvedLeaveDaysAfterRequest = useMemo(() => {
@@ -3047,7 +3142,7 @@ export default function EmployeesManagementPage() {
     const map = new Map<string, number>();
 
     const chronologicalApproved = [...approvedLeaveRequests]
-      .filter((request) => request.status === "approved")
+      .filter(request => request.status === "approved")
       .sort((a, b) => {
         const aTime =
           toDateSafe(a.reviewedAt || a.updatedAt || a.createdAt)?.getTime() ||
@@ -3058,7 +3153,7 @@ export default function EmployeesManagementPage() {
         return aTime - bTime;
       });
 
-    chronologicalApproved.forEach((request) => {
+    chronologicalApproved.forEach(request => {
       runningApprovedDays += Number(request.daysCount) || 0;
       map.set(String(request.id || "").trim(), runningApprovedDays);
     });
@@ -3067,7 +3162,7 @@ export default function EmployeesManagementPage() {
   }, [approvedLeaveRequests]);
 
   const getLeaveBalanceBeforeRequest = (
-    request: EmployeeLeaveRequestRecord,
+    request: EmployeeLeaveRequestRecord
   ) => {
     if (request.status !== "approved") return null;
 
@@ -3096,114 +3191,113 @@ export default function EmployeesManagementPage() {
   const visibleEmployeeFiles = useMemo(
     () =>
       filterActiveEmployeeFiles(employeeFiles).filter(
-        (file) => !isOfficialEmployeeFile(file),
+        file => !isOfficialEmployeeFile(file)
       ),
-    [employeeFiles],
+    [employeeFiles]
   );
 
   const unreadEmployeeFilesCount = useMemo(
-    () => visibleEmployeeFiles.filter((file) => !file.isRead).length,
-    [visibleEmployeeFiles],
+    () => visibleEmployeeFiles.filter(file => !file.isRead).length,
+    [visibleEmployeeFiles]
   );
   const latestEmployeeFileUpdateAt = useMemo(
     () =>
       getLatestTimestamp(
         ...employeeFiles
-          .filter((file) => !file.isRead)
-          .map((file) => file.createdAtDate || file.uploadedAtDate),
+          .filter(file => !file.isRead)
+          .map(file => file.createdAtDate || file.uploadedAtDate)
       ),
-    [employeeFiles],
+    [employeeFiles]
   );
   const archivedEmployeeFilesCount =
     employeeFiles.length - visibleEmployeeFiles.length;
   const replacingEmployeeFile = useMemo(
     () =>
-      visibleEmployeeFiles.find(
-        (file) => file.id === replacingEmployeeFileId,
-      ) || null,
-    [replacingEmployeeFileId, visibleEmployeeFiles],
+      visibleEmployeeFiles.find(file => file.id === replacingEmployeeFileId) ||
+      null,
+    [replacingEmployeeFileId, visibleEmployeeFiles]
   );
 
   const employeeOfficialFiles = useMemo(
     () =>
       filterActiveEmployeeFiles(employeeFiles).filter(isOfficialEmployeeFile),
-    [employeeFiles],
+    [employeeFiles]
   );
 
   const employeeConversations = useMemo(
     () => groupEmployeeMessageConversations(employeeMessages, user?.uid),
-    [employeeMessages, user?.uid],
+    [employeeMessages, user?.uid]
   );
   const requestedConversationId = useMemo(
     () =>
-      employeeMessages.find((message) => message.id === requestedMessageId)
+      employeeMessages.find(message => message.id === requestedMessageId)
         ?.conversationId || null,
-    [employeeMessages, requestedMessageId],
+    [employeeMessages, requestedMessageId]
   );
   const activeEmployeeConversation = useMemo(
     () =>
       employeeConversations.find(
-        (conversation) => conversation.id === activeEmployeeConversationId,
+        conversation => conversation.id === activeEmployeeConversationId
       ) || null,
-    [activeEmployeeConversationId, employeeConversations],
+    [activeEmployeeConversationId, employeeConversations]
   );
   const unreadEmployeeMessagesCount = useMemo(
-    () => employeeMessages.filter((message) => !message.isRead).length,
-    [employeeMessages],
+    () => employeeMessages.filter(message => !message.isRead).length,
+    [employeeMessages]
   );
   const latestEmployeeMessageUpdateAt = useMemo(
     () =>
       getLatestTimestamp(
         ...employeeMessages
-          .filter((message) => !message.isRead)
-          .map((message) => message.createdAtDate),
+          .filter(message => !message.isRead)
+          .map(message => message.createdAtDate)
       ),
-    [employeeMessages],
+    [employeeMessages]
   );
   const readEmployeeMessagesCount =
     employeeMessages.length - unreadEmployeeMessagesCount;
   const latestEmployeeLeaveUpdateAt = useMemo(
     () =>
       getLatestTimestamp(
-        ...leaveRequests.map((request) =>
+        ...leaveRequests.map(request =>
           toDateSafe(
             request.updatedAt ||
               request.reviewedAt ||
               request.decidedAt ||
-              request.createdAt,
-          ),
-        ),
+              request.createdAt
+          )
+        )
       ),
-    [leaveRequests],
+    [leaveRequests]
   );
   const latestEmployeeServiceRequestUpdateAt = useMemo(
     () =>
       getLatestTimestamp(
-        ...serviceRequests.map((request) =>
+        ...serviceRequests.map(request =>
           toDateSafe(
             request.updatedAt ||
               request.reviewedAt ||
               request.decidedAt ||
-              request.createdAt,
-          ),
-        ),
+              request.createdAt
+          )
+        )
       ),
-    [serviceRequests],
+    [serviceRequests]
   );
   const latestEmployeePayrollUpdateAt = useMemo(
     () => employeePayrollRecords[0]?.createdAtDate?.getTime() || 0,
-    [employeePayrollRecords],
+    [employeePayrollRecords]
   );
 
   const unreadAdminNotifications = useMemo(
-    () => adminNotifications.filter((notification) => !notification.isRead),
-    [adminNotifications],
+    () => adminNotifications.filter(notification => !notification.isRead),
+    [adminNotifications]
   );
 
   const employeeWorkspaceUnreadNotificationIndex = useMemo(() => {
     const index = new Map<string, EmployeeWorkspaceNotificationBucket>();
 
-    unreadAdminNotifications.forEach((notification) => {
+    unreadAdminNotifications.forEach(notification => {
       const employeeId =
         resolveEmployeeWorkspaceNotificationEmployeeId(notification);
       if (!employeeId) return;
@@ -3262,39 +3356,39 @@ export default function EmployeesManagementPage() {
       latestEmployeeServiceRequestUpdateAt,
       latestEmployeeMessageUpdateAt,
       latestEmployeePayrollUpdateAt,
-    ],
+    ]
   );
   const employeeWorkspaceSectionHasAlert = {
     profile: Boolean(
-      selectedEmployeeWorkspaceUnreadNotificationBucket?.profile.length,
+      selectedEmployeeWorkspaceUnreadNotificationBucket?.profile.length
     ),
     schedule: Boolean(
-      selectedEmployeeWorkspaceUnreadNotificationBucket?.schedule.length,
+      selectedEmployeeWorkspaceUnreadNotificationBucket?.schedule.length
     ),
     attendance: Boolean(
-      selectedEmployeeWorkspaceUnreadNotificationBucket?.attendance.length,
+      selectedEmployeeWorkspaceUnreadNotificationBucket?.attendance.length
     ),
     salary:
       Boolean(
-        selectedEmployeeWorkspaceUnreadNotificationBucket?.salary.length,
+        selectedEmployeeWorkspaceUnreadNotificationBucket?.salary.length
       ) ||
       employeeWorkspaceAlertState.salary.latestUpdateAt >
         employeeWorkspaceAlertState.salary.viewedAt,
     leave: Boolean(
-      selectedEmployeeWorkspaceUnreadNotificationBucket?.leave.length,
+      selectedEmployeeWorkspaceUnreadNotificationBucket?.leave.length
     ),
     requests:
       Boolean(
-        selectedEmployeeWorkspaceUnreadNotificationBucket?.requests.length,
+        selectedEmployeeWorkspaceUnreadNotificationBucket?.requests.length
       ) ||
       employeeWorkspaceAlertState.requests.latestUpdateAt >
         employeeWorkspaceAlertState.requests.viewedAt,
     messages: Boolean(
-      selectedEmployeeWorkspaceUnreadNotificationBucket?.messages.length,
+      selectedEmployeeWorkspaceUnreadNotificationBucket?.messages.length
     ),
     files:
       Boolean(
-        selectedEmployeeWorkspaceUnreadNotificationBucket?.files.length,
+        selectedEmployeeWorkspaceUnreadNotificationBucket?.files.length
       ) ||
       employeeWorkspaceAlertState.files.latestUpdateAt >
         employeeWorkspaceAlertState.files.viewedAt,
@@ -3328,7 +3422,7 @@ export default function EmployeesManagementPage() {
     if (
       activeEmployeeConversationId &&
       !employeeConversations.some(
-        (conversation) => conversation.id === activeEmployeeConversationId,
+        conversation => conversation.id === activeEmployeeConversationId
       )
     ) {
       setActiveEmployeeConversationId(null);
@@ -3342,7 +3436,7 @@ export default function EmployeesManagementPage() {
   ]);
 
   const markEmployeeWorkspaceNotificationsRead = (
-    section: EmployeeWorkspaceSectionKey,
+    section: EmployeeWorkspaceSectionKey
   ) => {
     if (!selectedEmployeeId) return;
 
@@ -3351,23 +3445,23 @@ export default function EmployeesManagementPage() {
     if (!unreadIds.length) return;
 
     const unreadIdSet = new Set(unreadIds);
-    setAdminNotifications((current) =>
-      current.map((notification) =>
+    setAdminNotifications(current =>
+      current.map(notification =>
         unreadIdSet.has(notification.id)
           ? { ...notification, isRead: true }
-          : notification,
-      ),
+          : notification
+      )
     );
-    void markInAppNotificationsRead(unreadIds).catch((error) => {
+    void markInAppNotificationsRead(unreadIds).catch(error => {
       console.error("employee_workspace_notification_mark_read_failed", error);
     });
   };
 
   const activateEmployeeWorkspaceSection = (
-    section: EmployeeWorkspaceSectionKey,
+    section: EmployeeWorkspaceSectionKey
   ) => {
     markEmployeeWorkspaceNotificationsRead(section);
-    setEmployeeWorkspaceViewedAt((current) => ({
+    setEmployeeWorkspaceViewedAt(current => ({
       ...current,
       [section]: Date.now(),
     }));
@@ -3377,10 +3471,10 @@ export default function EmployeesManagementPage() {
 
   const scrollToEmployeeWorkspaceSection = (
     section: EmployeeWorkspaceSectionKey,
-    behavior: ScrollBehavior = "smooth",
+    behavior: ScrollBehavior = "smooth"
   ) => {
     markEmployeeWorkspaceNotificationsRead(section);
-    setEmployeeWorkspaceViewedAt((current) => ({
+    setEmployeeWorkspaceViewedAt(current => ({
       ...current,
       [section]: Date.now(),
     }));
@@ -3478,19 +3572,19 @@ export default function EmployeesManagementPage() {
   };
 
   const activeEmployeesCount = employeeCards.filter(
-    (card) => card.profile.employment.statusKey === "active",
+    card => card.profile.employment.statusKey === "active"
   ).length;
   const onLeaveEmployeesCount = employeeCards.filter(
-    (card) => card.profile.employment.statusKey === "on_leave",
+    card => card.profile.employment.statusKey === "on_leave"
   ).length;
   const probationEmployeesCount = employeeCards.filter(
-    (card) => card.profile.employment.statusKey === "probation",
+    card => card.profile.employment.statusKey === "probation"
   ).length;
 
   const baseSalaryNumber = Number(form.baseSalary || 0);
   const housingAllowanceNumber = Number(form.housingAllowance || 0);
   const transportationAllowanceNumber = Number(
-    form.transportationAllowance || 0,
+    form.transportationAllowance || 0
   );
   const otherAllowancesNumber = Number(form.otherAllowances || 0);
   const totalAllowances = useMemo(() => {
@@ -3500,7 +3594,7 @@ export default function EmployeesManagementPage() {
       otherAllowancesNumber,
     ].reduce(
       (sum, value) => sum + (Number.isFinite(value) ? Math.max(0, value) : 0),
-      0,
+      0
     );
   }, [
     housingAllowanceNumber,
@@ -3520,11 +3614,11 @@ export default function EmployeesManagementPage() {
       startTime: form.shiftStartTime,
       endTime: form.shiftEndTime,
     }),
-    [form.shiftEndTime, form.shiftStartTime],
+    [form.shiftEndTime, form.shiftStartTime]
   );
   const shiftExpectedHoursNumber = useMemo(
     () => getShiftExpectedHours(shiftSchedule),
-    [shiftSchedule],
+    [shiftSchedule]
   );
   const scheduledMonthlyWorkHours = useMemo(() => {
     if (
@@ -3562,7 +3656,7 @@ export default function EmployeesManagementPage() {
         const amount = Number(item.amount || 0);
         return sum + (Number.isFinite(amount) ? amount : 0);
       }, 0),
-    [salaryDeductions],
+    [salaryDeductions]
   );
 
   const calculatedDailyRate = useMemo(() => {
@@ -3640,7 +3734,7 @@ export default function EmployeesManagementPage() {
         totalAllowances +
         calculatedOvertimeAmount -
         calculatedMissingDeduction -
-        calculatedAttendanceAbsenceDeduction,
+        calculatedAttendanceAbsenceDeduction
     );
   }, [
     baseSalaryNumber,
@@ -3655,7 +3749,7 @@ export default function EmployeesManagementPage() {
 
     return Math.max(
       0,
-      baseSalaryNumber + totalAllowances - effectiveInsuranceDeduction,
+      baseSalaryNumber + totalAllowances - effectiveInsuranceDeduction
     );
   }, [baseSalaryNumber, effectiveInsuranceDeduction, totalAllowances]);
 
@@ -3665,27 +3759,27 @@ export default function EmployeesManagementPage() {
         0,
         calculatedGrossSalary -
           totalSalaryDeductions -
-          effectiveInsuranceDeduction,
+          effectiveInsuranceDeduction
       ),
-    [calculatedGrossSalary, effectiveInsuranceDeduction, totalSalaryDeductions],
+    [calculatedGrossSalary, effectiveInsuranceDeduction, totalSalaryDeductions]
   );
 
   const handleFormChange = <K extends keyof EmployeeFormValues>(
     key: K,
-    value: EmployeeFormValues[K],
+    value: EmployeeFormValues[K]
   ) => {
-    setForm((current) => ({
+    setForm(current => ({
       ...current,
       [key]: value,
     }));
   };
 
   const handleToggleAllowedZone = (zoneId: string, checked: boolean) => {
-    setForm((current) => {
+    setForm(current => {
       const currentIds = normalizeAllowedZoneIds(current.allowedZoneIds);
       const nextIds = checked
         ? Array.from(new Set([...currentIds, zoneId]))
-        : currentIds.filter((id) => id !== zoneId);
+        : currentIds.filter(id => id !== zoneId);
 
       return {
         ...current,
@@ -3696,9 +3790,9 @@ export default function EmployeesManagementPage() {
 
   const handleToggleWeeklyOffDay = (
     day: WorkScheduleWeekday,
-    checked: boolean,
+    checked: boolean
   ) => {
-    setForm((current) => {
+    setForm(current => {
       const selected = new Set(normalizeWeeklyOffDays(current.weeklyOffDays));
       if (checked) {
         selected.add(day);
@@ -3709,8 +3803,8 @@ export default function EmployeesManagementPage() {
       return {
         ...current,
         weeklyOffDays: WORK_SCHEDULE_WEEKDAYS.map(
-          (option) => option.value,
-        ).filter((option) => selected.has(option)),
+          option => option.value
+        ).filter(option => selected.has(option)),
       };
     });
   };
@@ -3718,7 +3812,7 @@ export default function EmployeesManagementPage() {
   const buildAttendancePayrollSummary = async (
     calculationRange = buildPayrollCalculationRange(selectedPayrollMonthMeta),
     todayDateKey = getRiyadhTodayDateKey(),
-    absenceDateKeys = employeeAbsences.map((absence) => absence.date),
+    absenceDateKeys = employeeAbsences.map(absence => absence.date)
   ) => {
     if (
       !selectedEmployeeAuthUid ||
@@ -3749,7 +3843,7 @@ export default function EmployeesManagementPage() {
         todayDateKey,
         approvedLeaveDateKeys,
         absenceDateKeys,
-      },
+      }
     );
   };
 
@@ -3762,7 +3856,7 @@ export default function EmployeesManagementPage() {
     setPayrollCalculationDateKey(payrollCalculationDate);
     const payrollCalculationRange = buildPayrollCalculationRange(
       selectedPayrollMonthMeta,
-      payrollCalculationDate,
+      payrollCalculationDate
     );
     if (payrollCalculationRange?.isFutureMonth) {
       toast.error("لا يمكن احتساب الحضور لشهر مستقبلي.");
@@ -3777,7 +3871,7 @@ export default function EmployeesManagementPage() {
       !selectedEmployeeShiftSchedule.endTime
     ) {
       toast.error(
-        "يجب تحديد وقت الدوام من بيانات الموظف قبل الاحتساب من الحضور",
+        "يجب تحديد وقت الدوام من بيانات الموظف قبل الاحتساب من الحضور"
       );
       return;
     }
@@ -3786,11 +3880,11 @@ export default function EmployeesManagementPage() {
     try {
       const summary = await buildAttendancePayrollSummary(
         payrollCalculationRange,
-        payrollCalculationDate,
+        payrollCalculationDate
       );
       if (!summary) return;
       setAttendancePayrollSummary(summary);
-      setForm((current) => ({
+      setForm(current => ({
         ...current,
         actualWorkedHours: String(summary.actualHours),
       }));
@@ -3807,9 +3901,9 @@ export default function EmployeesManagementPage() {
     K extends keyof EmployeeWorkZoneFormValues,
   >(
     key: K,
-    value: EmployeeWorkZoneFormValues[K],
+    value: EmployeeWorkZoneFormValues[K]
   ) => {
-    setNewWorkZoneForm((current) => ({
+    setNewWorkZoneForm(current => ({
       ...current,
       [key]: value,
     }));
@@ -3836,7 +3930,7 @@ export default function EmployeesManagementPage() {
     setLocatingWorkZone(true);
     try {
       const position = await getCurrentGpsPosition();
-      setNewWorkZoneForm((current) => ({
+      setNewWorkZoneForm(current => ({
         ...current,
         lat: formatCoordinate(position.coords.latitude),
         lng: formatCoordinate(position.coords.longitude),
@@ -3845,7 +3939,7 @@ export default function EmployeesManagementPage() {
     } catch (error) {
       console.error("employee_work_zone_geolocation_failed", error);
       toast.error(
-        error instanceof Error ? error.message : "تعذر جلب موقع الجهاز.",
+        error instanceof Error ? error.message : "تعذر جلب موقع الجهاز."
       );
     } finally {
       setLocatingWorkZone(false);
@@ -3857,15 +3951,15 @@ export default function EmployeesManagementPage() {
     const nextAllowedZoneIds = normalizeAllowedZoneIds(
       normalizedZoneId
         ? [...form.allowedZoneIds, normalizedZoneId]
-        : form.allowedZoneIds,
+        : form.allowedZoneIds
     );
 
-    setForm((current) => ({
+    setForm(current => ({
       ...current,
       allowedZoneIds: normalizeAllowedZoneIds(
         normalizedZoneId
           ? [...current.allowedZoneIds, normalizedZoneId]
-          : current.allowedZoneIds,
+          : current.allowedZoneIds
       ),
     }));
 
@@ -3961,7 +4055,7 @@ export default function EmployeesManagementPage() {
       toast.success(
         editingWorkZoneId
           ? "تم تحديث نطاق الدوام."
-          : "تم إنشاء نطاق الدوام وتحديده للموظف.",
+          : "تم إنشاء نطاق الدوام وتحديده للموظف."
       );
     } catch (error) {
       console.error("employee_work_zone_save_failed", error);
@@ -3979,38 +4073,35 @@ export default function EmployeesManagementPage() {
   const handleSalaryDeductionChange = (
     deductionId: string,
     key: "title" | "amount",
-    value: string,
+    value: string
   ) => {
-    setSalaryDeductions((current) =>
-      current.map((item) =>
+    setSalaryDeductions(current =>
+      current.map(item =>
         item.id === deductionId
           ? {
               ...item,
               [key]: value,
             }
-          : item,
-      ),
+          : item
+      )
     );
   };
 
   const handleAddSalaryDeduction = () => {
-    setSalaryDeductions((current) => [
-      ...current,
-      createEmptySalaryDeduction(),
-    ]);
+    setSalaryDeductions(current => [...current, createEmptySalaryDeduction()]);
   };
 
   const handleRemoveSalaryDeduction = (deductionId: string) => {
-    setSalaryDeductions((current) =>
-      current.filter((item) => item.id !== deductionId),
+    setSalaryDeductions(current =>
+      current.filter(item => item.id !== deductionId)
     );
   };
 
   const handleAbsenceFormChange = <K extends keyof EmployeeAbsenceFormValues>(
     key: K,
-    value: EmployeeAbsenceFormValues[K],
+    value: EmployeeAbsenceFormValues[K]
   ) => {
-    setAbsenceForm((current) => ({
+    setAbsenceForm(current => ({
       ...current,
       [key]: value,
     }));
@@ -4090,7 +4181,7 @@ export default function EmployeesManagementPage() {
   };
 
   const handleDeleteEmployeeAbsence = async (
-    absence: EmployeeAbsenceRecord,
+    absence: EmployeeAbsenceRecord
   ) => {
     if (!selectedEmployee || !selectedEmployeeDocumentId) return;
     if (!canManageEmployees) {
@@ -4099,7 +4190,7 @@ export default function EmployeesManagementPage() {
     }
 
     const confirmed = window.confirm(
-      `سيتم حذف غياب ${formatEmployeeAbsenceDate(absence.date)} من سجل الموظف. هل تريد المتابعة؟`,
+      `سيتم حذف غياب ${formatEmployeeAbsenceDate(absence.date)} من سجل الموظف. هل تريد المتابعة؟`
     );
     if (!confirmed) return;
 
@@ -4134,8 +4225,8 @@ export default function EmployeesManagementPage() {
       console.error("employee_absence_delete_failed", error);
       toast.error("تعذر حذف الغياب.");
     } finally {
-      setDeletingAbsenceId((current) =>
-        current === absence.id ? null : current,
+      setDeletingAbsenceId(current =>
+        current === absence.id ? null : current
       );
     }
   };
@@ -4161,7 +4252,7 @@ export default function EmployeesManagementPage() {
     setPayrollCalculationDateKey(payrollCalculationDate);
     const activePayrollCalculationRange = buildPayrollCalculationRange(
       selectedPayrollMonthMeta,
-      payrollCalculationDate,
+      payrollCalculationDate
     );
 
     if (activePayrollCalculationRange?.isFutureMonth) {
@@ -4182,7 +4273,7 @@ export default function EmployeesManagementPage() {
     const insuranceDeduction = toNullableNumber(form.insuranceDeduction);
     const housingAllowance = toNullableNumber(form.housingAllowance);
     const transportationAllowance = toNullableNumber(
-      form.transportationAllowance,
+      form.transportationAllowance
     );
     const otherAllowances = toNullableNumber(form.otherAllowances);
     const allowances = [
@@ -4210,7 +4301,7 @@ export default function EmployeesManagementPage() {
 
     if (!scheduleSnapshot.startTime || !scheduleSnapshot.endTime) {
       toast.error(
-        "يجب تحديد وقت الدوام من بيانات الموظف قبل الاحتساب من الحضور",
+        "يجب تحديد وقت الدوام من بيانات الموظف قبل الاحتساب من الحضور"
       );
       return;
     }
@@ -4233,21 +4324,21 @@ export default function EmployeesManagementPage() {
       const absencesSnapshot = await getDocs(
         query(
           collection(db, EMPLOYEE_ABSENCES_COLLECTION),
-          where("employeeId", "==", selectedEmployeeDocumentId),
-        ),
+          where("employeeId", "==", selectedEmployeeDocumentId)
+        )
       );
 
       const monthlyAbsences = sortEmployeeAbsences(
-        absencesSnapshot.docs.map((docSnapshot) =>
+        absencesSnapshot.docs.map(docSnapshot =>
           normalizeEmployeeAbsence(
             docSnapshot.id,
-            (docSnapshot.data() as Record<string, any>) || {},
-          ),
-        ),
+            (docSnapshot.data() as Record<string, any>) || {}
+          )
+        )
       ).filter(
-        (absence) =>
+        absence =>
           absence.date >= payrollCalculationStartDate &&
-          absence.date <= payrollCalculationEndDate,
+          absence.date <= payrollCalculationEndDate
       );
 
       const normalizedSalaryDeductions =
@@ -4255,7 +4346,7 @@ export default function EmployeesManagementPage() {
       const attendanceSummary = await buildAttendancePayrollSummary(
         activePayrollCalculationRange,
         payrollCalculationDate,
-        monthlyAbsences.map((absence) => absence.date),
+        monthlyAbsences.map(absence => absence.date)
       );
       if (attendanceSummary) {
         setAttendancePayrollSummary(attendanceSummary);
@@ -4268,10 +4359,10 @@ export default function EmployeesManagementPage() {
         attendanceSummary?.actualHours ?? actualWorkedHours;
       const effectiveAttendanceAbsentDays = attendanceSummary?.absentDays ?? 0;
       const attendanceAbsentDateKeys = new Set(
-        attendanceSummary?.absentDateKeys || [],
+        attendanceSummary?.absentDateKeys || []
       );
       const payrollAbsences = monthlyAbsences.filter(
-        (absence) => !attendanceAbsentDateKeys.has(absence.date),
+        absence => !attendanceAbsentDateKeys.has(absence.date)
       );
       const effectiveExpectedWorkDays =
         payrollExpectedWorkDaysNumber || expectedWorkDays;
@@ -4302,8 +4393,8 @@ export default function EmployeesManagementPage() {
         EMPLOYEE_PAYROLL_RECORDS_COLLECTION,
         buildEmployeePayrollRecordId(
           selectedEmployeeDocumentId,
-          selectedPayrollMonthMeta.payrollMonth,
-        ),
+          selectedPayrollMonthMeta.payrollMonth
+        )
       );
       const uploadedMudadDocument = payrollMudadDocument
         ? await uploadDocumentToCloudflare({
@@ -4331,7 +4422,7 @@ export default function EmployeesManagementPage() {
           }
         : null;
 
-      await runTransaction(db, async (tx) => {
+      await runTransaction(db, async tx => {
         const existingRecord = await tx.get(payrollRef);
         if (existingRecord.exists()) {
           throw new Error("payroll_record_exists");
@@ -4369,7 +4460,7 @@ export default function EmployeesManagementPage() {
             payrollComputation.attendanceAbsenceDeduction,
           scheduleSnapshot,
           absenceCount: payrollAbsences.length,
-          absenceEntriesSummary: payrollAbsences.map((absence) => ({
+          absenceEntriesSummary: payrollAbsences.map(absence => ({
             date: absence.date,
             type: absence.type,
           })),
@@ -4427,7 +4518,7 @@ export default function EmployeesManagementPage() {
       }
 
       toast.success(
-        `تم إنشاء سجل راتب ${selectedPayrollMonthMeta.label} بنجاح.`,
+        `تم إنشاء سجل راتب ${selectedPayrollMonthMeta.label} بنجاح.`
       );
       resetPayrollMudadDocument();
     } catch (error) {
@@ -4447,9 +4538,9 @@ export default function EmployeesManagementPage() {
     K extends keyof Omit<EmployeeFileFormValues, "file">,
   >(
     key: K,
-    value: EmployeeFileFormValues[K],
+    value: EmployeeFileFormValues[K]
   ) => {
-    setEmployeeFileForm((current) => ({
+    setEmployeeFileForm(current => ({
       ...current,
       [key]: value,
     }));
@@ -4457,14 +4548,14 @@ export default function EmployeesManagementPage() {
 
   const handleEmployeeFileSelected = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0] || null;
-    setEmployeeFileForm((current) => ({
+    setEmployeeFileForm(current => ({
       ...current,
       file,
     }));
   };
 
   const handlePayrollMudadDocumentSelected = (
-    event: ChangeEvent<HTMLInputElement>,
+    event: ChangeEvent<HTMLInputElement>
   ) => {
     const file = event.target.files?.[0] || null;
     if (file && !isSupportedMudadPayrollDocument(file)) {
@@ -4501,7 +4592,7 @@ export default function EmployeesManagementPage() {
     const file = event.dataTransfer.files?.[0] || null;
     if (!file) return;
 
-    setEmployeeFileForm((current) => ({
+    setEmployeeFileForm(current => ({
       ...current,
       file,
     }));
@@ -4515,19 +4606,19 @@ export default function EmployeesManagementPage() {
     K extends keyof Omit<EmployeeFileFormValues, "file">,
   >(
     key: K,
-    value: EmployeeFileFormValues[K],
+    value: EmployeeFileFormValues[K]
   ) => {
-    setOfficialDocumentForm((current) => ({
+    setOfficialDocumentForm(current => ({
       ...current,
       [key]: value,
     }));
   };
 
   const handleOfficialDocumentSelected = (
-    event: ChangeEvent<HTMLInputElement>,
+    event: ChangeEvent<HTMLInputElement>
   ) => {
     const file = event.target.files?.[0] || null;
-    setOfficialDocumentForm((current) => ({
+    setOfficialDocumentForm(current => ({
       ...current,
       file,
     }));
@@ -4540,7 +4631,7 @@ export default function EmployeesManagementPage() {
     const file = event.dataTransfer.files?.[0] || null;
     if (!file) return;
 
-    setOfficialDocumentForm((current) => ({
+    setOfficialDocumentForm(current => ({
       ...current,
       file,
     }));
@@ -4551,7 +4642,7 @@ export default function EmployeesManagementPage() {
   };
 
   const handleEmployeeAvatarSelected = async (
-    event: ChangeEvent<HTMLInputElement>,
+    event: ChangeEvent<HTMLInputElement>
   ) => {
     const file = event.target.files?.[0] || null;
     event.target.value = "";
@@ -4567,7 +4658,7 @@ export default function EmployeesManagementPage() {
       setEmployeeAvatarCropOpen(true);
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "ملف الصورة غير صالح.",
+        error instanceof Error ? error.message : "ملف الصورة غير صالح."
       );
     }
   };
@@ -4588,13 +4679,13 @@ export default function EmployeesManagementPage() {
       setEmployeeAvatarCropOpen(true);
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "ملف الصورة غير صالح.",
+        error instanceof Error ? error.message : "ملف الصورة غير صالح."
       );
     }
   };
 
   const handleEmployeeAvatarCropPointerDown = (
-    event: ReactPointerEvent<HTMLDivElement>,
+    event: ReactPointerEvent<HTMLDivElement>
   ) => {
     if (!employeeAvatarCropMetrics) return;
 
@@ -4611,7 +4702,7 @@ export default function EmployeesManagementPage() {
   };
 
   const handleEmployeeAvatarCropPointerMove = (
-    event: ReactPointerEvent<HTMLDivElement>,
+    event: ReactPointerEvent<HTMLDivElement>
   ) => {
     const activeDrag = employeeAvatarCropDragRef.current;
     if (
@@ -4628,13 +4719,13 @@ export default function EmployeesManagementPage() {
           x: activeDrag.originX + (event.clientX - activeDrag.startX),
           y: activeDrag.originY + (event.clientY - activeDrag.startY),
         },
-        employeeAvatarCropMetrics,
-      ),
+        employeeAvatarCropMetrics
+      )
     );
   };
 
   const handleEmployeeAvatarCropPointerEnd = (
-    event: ReactPointerEvent<HTMLDivElement>,
+    event: ReactPointerEvent<HTMLDivElement>
   ) => {
     if (employeeAvatarCropDragRef.current?.pointerId !== event.pointerId)
       return;
@@ -4648,12 +4739,12 @@ export default function EmployeesManagementPage() {
   };
 
   const handleEmployeeAvatarCropZoomStep = (direction: "in" | "out") => {
-    setEmployeeAvatarCropZoom((current) =>
+    setEmployeeAvatarCropZoom(current =>
       clampNumber(
         current + (direction === "in" ? 0.15 : -0.15),
         EMPLOYEE_AVATAR_CROP_MIN_ZOOM,
-        EMPLOYEE_AVATAR_CROP_MAX_ZOOM,
-      ),
+        EMPLOYEE_AVATAR_CROP_MAX_ZOOM
+      )
     );
   };
 
@@ -4723,7 +4814,7 @@ export default function EmployeesManagementPage() {
           ...buildEmployeeAvatarPatch(avatarPayload),
           updatedAt: serverTimestamp(),
         },
-        { merge: true },
+        { merge: true }
       );
 
       if (employeeRef) {
@@ -4733,7 +4824,7 @@ export default function EmployeesManagementPage() {
             ...buildEmployeeAvatarPatch(avatarPayload),
             updatedAt: serverTimestamp(),
           },
-          { merge: true },
+          { merge: true }
         );
       }
 
@@ -4750,7 +4841,7 @@ export default function EmployeesManagementPage() {
         } catch (profileUpdateError) {
           console.error(
             "employee_avatar_auth_profile_update_failed",
-            profileUpdateError,
+            profileUpdateError
           );
         }
       }
@@ -4769,28 +4860,28 @@ export default function EmployeesManagementPage() {
     K extends keyof EmployeeMessageFormValues,
   >(
     key: K,
-    value: EmployeeMessageFormValues[K],
+    value: EmployeeMessageFormValues[K]
   ) => {
-    setEmployeeMessageForm((current) => ({
+    setEmployeeMessageForm(current => ({
       ...current,
       [key]: value,
     }));
   };
 
   const markEmployeeConversationAsRead = async (
-    conversation: EmployeeMessageConversationRecord,
+    conversation: EmployeeMessageConversationRecord
   ) => {
     if (!user?.uid || !canManageEmployees) return;
 
     const unreadIncomingMessages = conversation.messages.filter(
-      (message) => message.toUserId === user.uid && !message.isRead,
+      message => message.toUserId === user.uid && !message.isRead
     );
     if (!unreadIncomingMessages.length) return;
 
     setOpeningEmployeeConversationId(conversation.id);
     try {
       const batch = writeBatch(db);
-      unreadIncomingMessages.forEach((message) => {
+      unreadIncomingMessages.forEach(message => {
         batch.update(doc(db, EMPLOYEE_MESSAGES_COLLECTION, message.id), {
           isRead: true,
           readAt: serverTimestamp(),
@@ -4802,8 +4893,8 @@ export default function EmployeesManagementPage() {
     } catch (error) {
       console.error("employee_conversation_mark_read_failed", error);
     } finally {
-      setOpeningEmployeeConversationId((current) =>
-        current === conversation.id ? null : current,
+      setOpeningEmployeeConversationId(current =>
+        current === conversation.id ? null : current
       );
     }
   };
@@ -4814,7 +4905,7 @@ export default function EmployeesManagementPage() {
   }, [activeEmployeeConversation, canManageEmployees, user?.uid]);
 
   const handleSelectEmployeeConversation = (
-    conversation: EmployeeMessageConversationRecord,
+    conversation: EmployeeMessageConversationRecord
   ) => {
     if (activeEmployeeConversationId === conversation.id) {
       setActiveEmployeeConversationId(null);
@@ -4857,7 +4948,7 @@ export default function EmployeesManagementPage() {
     try {
       const messageRef = doc(collection(db, EMPLOYEE_MESSAGES_COLLECTION));
       const isReply = Boolean(
-        activeEmployeeConversation && !composeEmployeeMessageAsNew,
+        activeEmployeeConversation && !composeEmployeeMessageAsNew
       );
       const parentMessage = isReply
         ? activeEmployeeConversation?.messages[
@@ -4921,7 +5012,7 @@ export default function EmployeesManagementPage() {
         notificationFailed = true;
         console.error(
           "employee_message_notification_failed",
-          notificationError,
+          notificationError
         );
       }
 
@@ -4931,7 +5022,7 @@ export default function EmployeesManagementPage() {
       toast.success(
         notificationFailed
           ? "تم إرسال الرسالة لكن تعذر إنشاء التنبيه الداخلي."
-          : "تم إرسال الرسالة الداخلية.",
+          : "تم إرسال الرسالة الداخلية."
       );
     } catch (error) {
       console.error("employee_message_send_failed", error);
@@ -5007,12 +5098,12 @@ export default function EmployeesManagementPage() {
 
       const fileRef = doc(collection(db, EMPLOYEE_FILES_COLLECTION));
       const uploadedByName = user?.displayName || user?.email || "HR";
-      const replacedCandidates = employeeOfficialFiles.filter((file) => {
+      const replacedCandidates = employeeOfficialFiles.filter(file => {
         if (!file.active) return false;
         return matchesEmployeeFileVersion(
           file,
           normalizedTitle,
-          normalizedFileType,
+          normalizedFileType
         );
       });
 
@@ -5056,8 +5147,8 @@ export default function EmployeesManagementPage() {
         updatedAt: serverTimestamp(),
       };
 
-      await runTransaction(db, async (tx) => {
-        replacedCandidates.forEach((file) => {
+      await runTransaction(db, async tx => {
+        replacedCandidates.forEach(file => {
           tx.update(doc(db, EMPLOYEE_FILES_COLLECTION, file.id), {
             status: "replaced",
             active: false,
@@ -5102,7 +5193,7 @@ export default function EmployeesManagementPage() {
           contentType: uploaded.contentType || null,
           fileSize: uploaded.fileSize,
           officialDocument: true,
-          replacedFileIds: replacedCandidates.map((file) => file.id),
+          replacedFileIds: replacedCandidates.map(file => file.id),
         },
       });
 
@@ -5123,7 +5214,7 @@ export default function EmployeesManagementPage() {
       } catch (notificationError) {
         console.error(
           "official_employee_document_notification_failed",
-          notificationError,
+          notificationError
         );
       }
 
@@ -5132,7 +5223,7 @@ export default function EmployeesManagementPage() {
       toast.success(
         replacedCandidates.length
           ? "تم استبدال المستند الرسمي بنجاح."
-          : "تم رفع المستند الرسمي بنجاح.",
+          : "تم رفع المستند الرسمي بنجاح."
       );
     } catch (error) {
       console.error("official_employee_document_upload_failed", error);
@@ -5150,7 +5241,7 @@ export default function EmployeesManagementPage() {
     }
 
     const confirmed = window.confirm(
-      `سيتم حذف "${file.title}" من سجل الموظف. هل تريد المتابعة؟`,
+      `سيتم حذف "${file.title}" من سجل الموظف. هل تريد المتابعة؟`
     );
     if (!confirmed) return;
 
@@ -5192,8 +5283,8 @@ export default function EmployeesManagementPage() {
       console.error("employee_file_delete_failed", error);
       toast.error("تعذر حذف ملف الموظف.");
     } finally {
-      setDeletingEmployeeFileId((current) =>
-        current === file.id ? null : current,
+      setDeletingEmployeeFileId(current =>
+        current === file.id ? null : current
       );
     }
   };
@@ -5245,14 +5336,14 @@ export default function EmployeesManagementPage() {
 
       const fileRef = doc(collection(db, EMPLOYEE_FILES_COLLECTION));
       const uploadedByName = user?.displayName || user?.email || "HR";
-      const replacedCandidates = employeeFiles.filter((file) => {
+      const replacedCandidates = employeeFiles.filter(file => {
         if (!file.active) return false;
         if (replacingEmployeeFileId && file.id === replacingEmployeeFileId)
           return true;
         return matchesEmployeeFileVersion(
           file,
           normalizedTitle,
-          normalizedFileType,
+          normalizedFileType
         );
       });
 
@@ -5293,8 +5384,8 @@ export default function EmployeesManagementPage() {
         updatedAt: serverTimestamp(),
       };
 
-      await runTransaction(db, async (tx) => {
-        replacedCandidates.forEach((file) => {
+      await runTransaction(db, async tx => {
+        replacedCandidates.forEach(file => {
           tx.update(doc(db, EMPLOYEE_FILES_COLLECTION, file.id), {
             status: "replaced",
             active: false,
@@ -5338,7 +5429,7 @@ export default function EmployeesManagementPage() {
           fileType: fileDoc.fileType || EMPLOYEE_DEFAULT_FILE_TYPE,
           contentType: uploaded.contentType || null,
           fileSize: uploaded.fileSize,
-          replacedFileIds: replacedCandidates.map((file) => file.id),
+          replacedFileIds: replacedCandidates.map(file => file.id),
         },
       });
 
@@ -5364,7 +5455,7 @@ export default function EmployeesManagementPage() {
       toast.success(
         replacedCandidates.length
           ? "تم رفع النسخة المعدلة وتفعيلها."
-          : "تم رفع الملف وإرساله إلى ملف الموظف.",
+          : "تم رفع الملف وإرساله إلى ملف الموظف."
       );
     } catch (error) {
       console.error("employee_file_upload_failed", error);
@@ -5385,7 +5476,7 @@ export default function EmployeesManagementPage() {
     const normalizedEmail = form.email.trim();
     const normalizedPhone = form.phone.trim();
     const normalizedFingerprintNumber = normalizeFingerprintNumber(
-      form.fingerprintNumber,
+      form.fingerprintNumber
     );
     const leaveBalance = toNullableNumber(form.leaveBalance);
     const baseSalary = toNullableNumber(form.baseSalary);
@@ -5396,7 +5487,7 @@ export default function EmployeesManagementPage() {
     const insuranceDeduction = toNullableNumber(form.insuranceDeduction);
     const housingAllowance = toNullableNumber(form.housingAllowance);
     const transportationAllowance = toNullableNumber(
-      form.transportationAllowance,
+      form.transportationAllowance
     );
     const otherAllowances = toNullableNumber(form.otherAllowances);
     const allowances = [
@@ -5478,14 +5569,14 @@ export default function EmployeesManagementPage() {
     }
 
     if (normalizedFingerprintNumber) {
-      const duplicateEmployee = employees.find((employee) => {
+      const duplicateEmployee = employees.find(employee => {
         if (employee.id === selectedEmployee.id) return false;
 
         const employeeEmployment = (employee.employeeProfile?.employment ||
           employee.employment ||
           {}) as Record<string, any>;
         const existingFingerprintNumber = normalizeFingerprintNumber(
-          employeeEmployment.fingerprintNumber ?? employee.fingerprintNumber,
+          employeeEmployment.fingerprintNumber ?? employee.fingerprintNumber
         );
 
         return (
@@ -5500,7 +5591,7 @@ export default function EmployeesManagementPage() {
           pickText(
             duplicateEmployee.displayName,
             duplicateEmployee.name,
-            duplicateEmployee.email,
+            duplicateEmployee.email
           ) || "موظف آخر";
         toast.error(`رقم البصمة مستخدم بالفعل لدى ${duplicateEmployeeLabel}.`);
         return;
@@ -5682,7 +5773,7 @@ export default function EmployeesManagementPage() {
                 employment: nextEmployment,
               },
             },
-            { merge: true },
+            { merge: true }
           );
         } catch (error) {
           console.error("save_employee_profile_employee_update_error", {
@@ -5747,18 +5838,18 @@ export default function EmployeesManagementPage() {
 
       const userRef = doc(db, "users", selectedEmployee.id);
       const employeeDocId = String(
-        selectedEmployee.linkedEmployeeId || "",
+        selectedEmployee.linkedEmployeeId || ""
       ).trim();
       const employeeRef = employeeDocId
         ? doc(db, "employees", employeeDocId)
         : null;
 
       const adjustmentRef = doc(
-        collection(db, EMPLOYEE_LEAVE_BALANCE_ADJUSTMENTS_COLLECTION),
+        collection(db, EMPLOYEE_LEAVE_BALANCE_ADJUSTMENTS_COLLECTION)
       );
       let persistedNextBalance = manualBalanceValue;
 
-      await runTransaction(db, async (tx) => {
+      await runTransaction(db, async tx => {
         const userSnap = await tx.get(userRef);
         if (!userSnap.exists()) {
           throw new Error("employee_user_not_found");
@@ -5781,7 +5872,7 @@ export default function EmployeesManagementPage() {
 
         const previousBalance = resolveEmploymentLeaveBalance(
           userData,
-          employeeData,
+          employeeData
         );
         const nextBalance =
           operationType === "deduct"
@@ -5828,7 +5919,7 @@ export default function EmployeesManagementPage() {
               employment: nextUserEmployment,
             },
           },
-          { merge: true },
+          { merge: true }
         );
 
         if (employeeRef) {
@@ -5856,7 +5947,7 @@ export default function EmployeesManagementPage() {
                 employment: nextEmployeeEmployment,
               },
             },
-            { merge: true },
+            { merge: true }
           );
         }
 
@@ -5886,7 +5977,7 @@ export default function EmployeesManagementPage() {
         });
       });
 
-      setForm((current) => ({
+      setForm(current => ({
         ...current,
         leaveBalance: String(persistedNextBalance),
       }));
@@ -5899,8 +5990,8 @@ export default function EmployeesManagementPage() {
         tr(
           language,
           "تم تعديل رصيد الإجازات يدويًا.",
-          "Leave balance was adjusted manually.",
-        ),
+          "Leave balance was adjusted manually."
+        )
       );
     } catch (error) {
       console.error("manual_leave_balance_update_failed", error);
@@ -5908,8 +5999,8 @@ export default function EmployeesManagementPage() {
         tr(
           language,
           "تعذر تعديل رصيد الإجازات.",
-          "Could not adjust leave balance.",
-        ),
+          "Could not adjust leave balance."
+        )
       );
     } finally {
       setSavingManualLeaveBalance(false);
@@ -5917,7 +6008,7 @@ export default function EmployeesManagementPage() {
   };
 
   const handleReviewNoteChange = (requestId: string, value: string) => {
-    setReviewNotes((current) => ({
+    setReviewNotes(current => ({
       ...current,
       [requestId]: value,
     }));
@@ -5925,7 +6016,7 @@ export default function EmployeesManagementPage() {
 
   const handleReviewLeaveRequest = async (
     request: EmployeeLeaveRequestRecord,
-    nextStatus: EmployeeLeaveRequestStatus,
+    nextStatus: EmployeeLeaveRequestStatus
   ) => {
     if (!selectedEmployee || !selectedEmployeeProfile) return;
     if (!canManageEmployees) {
@@ -5933,19 +6024,19 @@ export default function EmployeesManagementPage() {
         tr(
           language,
           "لا تملك صلاحية مراجعة طلبات الإجازة.",
-          "You do not have permission to review leave requests.",
-        ),
+          "You do not have permission to review leave requests."
+        )
       );
       return;
     }
 
     setReviewingLeaveRequestId(request.id);
     try {
-      await runTransaction(db, async (tx) => {
+      await runTransaction(db, async tx => {
         const leaveRequestRef = doc(
           db,
           EMPLOYEE_LEAVE_REQUESTS_COLLECTION,
-          request.id,
+          request.id
         );
         const leaveRequestSnap = await tx.get(leaveRequestRef);
         if (!leaveRequestSnap.exists()) {
@@ -5962,14 +6053,14 @@ export default function EmployeesManagementPage() {
         }
 
         const daysCount = Number(
-          currentLeaveRequest.daysCount ?? request.daysCount ?? 0,
+          currentLeaveRequest.daysCount ?? request.daysCount ?? 0
         );
         if (!Number.isFinite(daysCount) || daysCount <= 0) {
           throw new Error("leave_request_invalid_days");
         }
 
         const hrNote = String(
-          reviewNotes[request.id] ?? request.hrNote ?? "",
+          reviewNotes[request.id] ?? request.hrNote ?? ""
         ).trim();
 
         if (nextStatus === "rejected" && !hrNote) {
@@ -5992,7 +6083,7 @@ export default function EmployeesManagementPage() {
           selectedEmployee.linkedEmployeeId ||
             currentLeaveRequest.employeeDocId ||
             currentLeaveRequest.employeeId ||
-            "",
+            ""
         ).trim();
         const employeeRef = employeeDocId
           ? doc(db, "employees", employeeDocId)
@@ -6009,7 +6100,7 @@ export default function EmployeesManagementPage() {
         if (nextStatus === "approved") {
           const currentLeaveBalance = resolveEmploymentLeaveBalance(
             userData,
-            employeeData,
+            employeeData
           );
           if (currentLeaveBalance < daysCount) {
             throw new Error("leave_balance_insufficient");
@@ -6037,7 +6128,7 @@ export default function EmployeesManagementPage() {
                 employment: nextUserEmployment,
               },
             },
-            { merge: true },
+            { merge: true }
           );
 
           if (employeeRef) {
@@ -6064,7 +6155,7 @@ export default function EmployeesManagementPage() {
                   employment: nextEmployeeEmployment,
                 },
               },
-              { merge: true },
+              { merge: true }
             );
           }
         }
@@ -6096,12 +6187,12 @@ export default function EmployeesManagementPage() {
               ? tr(
                   language,
                   "تم اعتماد طلب الإجازة الخاص بك وتحديث الرصيد وفقًا لذلك.",
-                  "Your leave request was approved and the balance was updated.",
+                  "Your leave request was approved and the balance was updated."
                 )
               : tr(
                   language,
                   "تم رفض طلب الإجازة الخاص بك. يمكنك مراجعة الملاحظة الإدارية داخل الطلب.",
-                  "Your leave request was rejected. You can review the admin note inside the request.",
+                  "Your leave request was rejected. You can review the admin note inside the request."
                 ),
           type: "leave",
           relatedId: request.id,
@@ -6112,7 +6203,7 @@ export default function EmployeesManagementPage() {
         console.error("employee_leave_notification_failed", notificationError);
       }
 
-      setReviewNotes((current) => {
+      setReviewNotes(current => {
         const next = { ...current };
         delete next[request.id];
         return next;
@@ -6123,9 +6214,9 @@ export default function EmployeesManagementPage() {
           ? tr(
               language,
               "تم اعتماد طلب الإجازة وخصم الرصيد.",
-              "Leave request approved and balance deducted.",
+              "Leave request approved and balance deducted."
             )
-          : tr(language, "تم رفض طلب الإجازة.", "Leave request rejected."),
+          : tr(language, "تم رفض طلب الإجازة.", "Leave request rejected.")
       );
     } catch (reviewError) {
       console.error("review_leave_request_error", reviewError);
@@ -6138,8 +6229,8 @@ export default function EmployeesManagementPage() {
           tr(
             language,
             "رصيد الإجازات الحالي لا يكفي لاعتماد هذا الطلب.",
-            "The current leave balance is not enough to approve this request.",
-          ),
+            "The current leave balance is not enough to approve this request."
+          )
         );
       } else if (
         reviewError instanceof Error &&
@@ -6149,8 +6240,8 @@ export default function EmployeesManagementPage() {
           tr(
             language,
             "تمت مراجعة هذا الطلب مسبقًا.",
-            "This request has already been reviewed.",
-          ),
+            "This request has already been reviewed."
+          )
         );
       } else if (
         reviewError instanceof Error &&
@@ -6160,16 +6251,16 @@ export default function EmployeesManagementPage() {
           tr(
             language,
             "يجب كتابة ملاحظة عند رفض طلب الإجازة.",
-            "A note is required when rejecting a leave request.",
-          ),
+            "A note is required when rejecting a leave request."
+          )
         );
       } else {
         toast.error(
           tr(
             language,
             "تعذر تحديث حالة طلب الإجازة.",
-            "Could not update leave request status.",
-          ),
+            "Could not update leave request status."
+          )
         );
       }
     } finally {
@@ -6179,7 +6270,7 @@ export default function EmployeesManagementPage() {
 
   const handleReviewServiceRequest = async (
     request: EmployeeServiceRequestRecord,
-    nextStatus: EmployeeServiceRequestStatus,
+    nextStatus: EmployeeServiceRequestStatus
   ) => {
     if (!canManageEmployees) {
       toast.error("لا تملك صلاحية مراجعة طلبات الموظفين.");
@@ -6187,7 +6278,7 @@ export default function EmployeesManagementPage() {
     }
 
     const hrNote = String(
-      reviewNotes[request.id] ?? request.hrNote ?? "",
+      reviewNotes[request.id] ?? request.hrNote ?? ""
     ).trim();
     if (nextStatus === "rejected" && !hrNote) {
       toast.error("يجب كتابة ملاحظة عند رفض الطلب.");
@@ -6196,11 +6287,11 @@ export default function EmployeesManagementPage() {
 
     setReviewingServiceRequestId(request.id);
     try {
-      await runTransaction(db, async (tx) => {
+      await runTransaction(db, async tx => {
         const requestRef = doc(
           db,
           EMPLOYEE_SERVICE_REQUESTS_COLLECTION,
-          request.id,
+          request.id
         );
         const requestSnap = await tx.get(requestRef);
         if (!requestSnap.exists()) {
@@ -6231,7 +6322,7 @@ export default function EmployeesManagementPage() {
 
       try {
         const requestLabel = getEmployeeServiceRequestTypeLabel(
-          request.requestType,
+          request.requestType
         );
         await createInAppNotification({
           userId: request.employeeUid,
@@ -6251,18 +6342,18 @@ export default function EmployeesManagementPage() {
       } catch (notificationError) {
         console.error(
           "employee_service_request_notification_failed",
-          notificationError,
+          notificationError
         );
       }
 
-      setReviewNotes((current) => {
+      setReviewNotes(current => {
         const next = { ...current };
         delete next[request.id];
         return next;
       });
 
       toast.success(
-        nextStatus === "approved" ? "تم اعتماد الطلب." : "تم رفض الطلب.",
+        nextStatus === "approved" ? "تم اعتماد الطلب." : "تم رفض الطلب."
       );
     } catch (reviewError) {
       console.error("review_service_request_error", reviewError);
@@ -6285,7 +6376,7 @@ export default function EmployeesManagementPage() {
         dir={pageDir}
         className={cn(
           "min-w-0 max-w-full space-y-6 overflow-x-hidden",
-          pageTextAlignClass,
+          pageTextAlignClass
         )}
       >
         {!selectedEmployee ? (
@@ -6297,7 +6388,7 @@ export default function EmployeesManagementPage() {
               {tr(
                 language,
                 "صفحة مخصصة لإدارة البيانات الوظيفية للموظفين من جهة الإدارة والموارد البشرية، مع فصل واضح بين ما يشاهده الموظف في بروفايله وما يتم تعديله من داخل اللوحة.",
-                "A dedicated page for managing employee work records from HR and administration, with a clear split between what employees see in their profiles and what is edited inside the dashboard.",
+                "A dedicated page for managing employee work records from HR and administration, with a clear split between what employees see in their profiles and what is edited inside the dashboard."
               )}
             </p>
           </div>
@@ -6317,7 +6408,7 @@ export default function EmployeesManagementPage() {
                   {tr(
                     language,
                     "إجمالي السجلات الظاهرة ضمن صفحة إدارة الموظفين.",
-                    "Total records shown in employee management.",
+                    "Total records shown in employee management."
                   )}
                 </div>
               </CardContent>
@@ -6335,7 +6426,7 @@ export default function EmployeesManagementPage() {
                   {tr(
                     language,
                     "موظفون بحالة وظيفية نشطة حاليًا.",
-                    "Employees currently marked as active.",
+                    "Employees currently marked as active."
                   )}
                 </div>
               </CardContent>
@@ -6361,7 +6452,7 @@ export default function EmployeesManagementPage() {
                   {tr(
                     language,
                     "قراءة سريعة لحالات الموظفين التشغيلية.",
-                    "A quick read of employee operating statuses.",
+                    "A quick read of employee operating statuses."
                   )}
                 </div>
               </CardContent>
@@ -6381,7 +6472,7 @@ export default function EmployeesManagementPage() {
                   {tr(
                     language,
                     "اختر موظفًا لعرض ملفه الوظيفي وإدارة بياناته من نفس الصفحة.",
-                    "Select an employee to review and manage their work profile on this page.",
+                    "Select an employee to review and manage their work profile on this page."
                   )}
                 </CardDescription>
 
@@ -6389,20 +6480,20 @@ export default function EmployeesManagementPage() {
                   <Search
                     className={cn(
                       "pointer-events-none absolute top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400",
-                      language === "ar" ? "right-3" : "left-3",
+                      language === "ar" ? "right-3" : "left-3"
                     )}
                   />
                   <Input
                     value={searchQuery}
-                    onChange={(event) => setSearchQuery(event.target.value)}
+                    onChange={event => setSearchQuery(event.target.value)}
                     placeholder={tr(
                       language,
                       "ابحث بالاسم أو البريد أو القسم",
-                      "Search by name, email, or department",
+                      "Search by name, email, or department"
                     )}
                     className={cn(
                       "h-9 text-sm",
-                      language === "ar" ? "pr-9 text-right" : "pl-9 text-left",
+                      language === "ar" ? "pr-9 text-right" : "pl-9 text-left"
                     )}
                   />
                 </div>
@@ -6415,7 +6506,7 @@ export default function EmployeesManagementPage() {
                       {tr(
                         language,
                         "جاري تحميل الموظفين...",
-                        "Loading employees...",
+                        "Loading employees..."
                       )}
                     </div>
                   ) : error ? (
@@ -6424,15 +6515,15 @@ export default function EmployeesManagementPage() {
                         ? error
                         : safeEnglishText(
                             error,
-                            "Could not load employee list.",
+                            "Could not load employee list."
                           )}
                     </div>
                   ) : filteredEmployeeCards.length ? (
-                    filteredEmployeeCards.map((card) => {
+                    filteredEmployeeCards.map(card => {
                       const isActive = card.employee.id === selectedEmployeeId;
                       const employeeCardUnreadBucket =
                         employeeWorkspaceUnreadNotificationIndex.get(
-                          card.employee.id,
+                          card.employee.id
                         );
                       const showEmployeeCardIndicator =
                         Boolean(employeeCardUnreadBucket?.all.length) ||
@@ -6448,14 +6539,14 @@ export default function EmployeesManagementPage() {
                           aria-label={tr(
                             language,
                             `فتح تفاصيل ${employeeName}`,
-                            `Open details for ${employeeName}`,
+                            `Open details for ${employeeName}`
                           )}
                           className={cn(
                             "group relative flex min-h-[96px] w-full items-center gap-3 overflow-hidden rounded-[20px] border px-3 py-3 transition-all",
                             pageTextAlignClass,
                             isActive
                               ? "border-[#F2B705]/55 bg-[linear-gradient(135deg,rgba(242,183,5,0.14)_0%,rgba(255,255,255,0.98)_70%)] shadow-[0_20px_44px_-34px_rgba(242,183,5,0.55)]"
-                              : "border-slate-200/80 bg-white hover:border-slate-300 hover:bg-slate-50/80",
+                              : "border-slate-200/80 bg-white hover:border-slate-300 hover:bg-slate-50/80"
                           )}
                         >
                           {showEmployeeCardIndicator ? (
@@ -6463,7 +6554,7 @@ export default function EmployeesManagementPage() {
                               aria-hidden="true"
                               className={cn(
                                 "absolute top-3 z-20 h-2.5 w-2.5 rounded-full bg-rose-500 shadow-[0_0_0_3px_rgba(255,255,255,0.98)] pointer-events-none",
-                                language === "ar" ? "right-3" : "left-3",
+                                language === "ar" ? "right-3" : "left-3"
                               )}
                             />
                           ) : null}
@@ -6477,7 +6568,7 @@ export default function EmployeesManagementPage() {
                               <AvatarFallback className="rounded-[16px] bg-slate-900 text-xs font-semibold text-white">
                                 {getEmployeeInitials(
                                   employeeName,
-                                  card.profile.personal.email,
+                                  card.profile.personal.email
                                 )}
                               </AvatarFallback>
                             </Avatar>
@@ -6496,7 +6587,7 @@ export default function EmployeesManagementPage() {
                             <ChevronLeft
                               className={cn(
                                 "h-4 w-4",
-                                language === "en" && "rotate-180",
+                                language === "en" && "rotate-180"
                               )}
                             />
                           </div>
@@ -6516,14 +6607,14 @@ export default function EmployeesManagementPage() {
                           {tr(
                             language,
                             "لا توجد نتائج مطابقة",
-                            "No Matching Results",
+                            "No Matching Results"
                           )}
                         </EmptyTitle>
                         <EmptyDescription>
                           {tr(
                             language,
                             "جرّب تغيير عبارة البحث أو أزل الفلتر لعرض الموظفين الحاليين.",
-                            "Try changing the search term or clearing the filter to show current employees.",
+                            "Try changing the search term or clearing the filter to show current employees."
                           )}
                         </EmptyDescription>
                       </EmptyHeader>
@@ -6538,16 +6629,16 @@ export default function EmployeesManagementPage() {
             <Card
               ref={employeeDetailsTopRef}
               className={cn(
-                "w-full max-w-full gap-0 overflow-hidden border-slate-200/80 bg-white/95 py-0 shadow-sm",
-                !selectedEmployee && "hidden",
+                "w-full max-w-full gap-0 overflow-hidden border-slate-200/80 bg-[linear-gradient(135deg,#ffffff_0%,#f8fafc_56%,#fff7df_100%)] py-0 shadow-[0_22px_54px_-38px_rgba(15,23,42,0.28)]",
+                !selectedEmployee && "hidden"
               )}
             >
-              <CardHeader className="min-w-0 border-b border-slate-100 bg-white/90 px-4 pt-5 pb-4 sm:px-6 sm:pt-6">
+              <CardHeader className="min-w-0 border-b border-slate-200/70 bg-white/70 px-4 pt-5 pb-4 backdrop-blur sm:px-6 sm:pt-6">
                 <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
                   <div
                     className={cn(
                       "flex min-w-0 items-center gap-3 sm:gap-4",
-                      pageTextAlignClass,
+                      pageTextAlignClass
                     )}
                   >
                     <Avatar className="h-16 w-16 shrink-0 rounded-[22px] border border-slate-200 bg-slate-100 shadow-sm sm:h-20 sm:w-20">
@@ -6561,7 +6652,7 @@ export default function EmployeesManagementPage() {
                           selectedEmployeeLabel,
                           selectedEmployeeProfile?.personal?.email ||
                             selectedEmployee?.email ||
-                            "",
+                            ""
                         )}
                       </AvatarFallback>
                     </Avatar>
@@ -6596,7 +6687,7 @@ export default function EmployeesManagementPage() {
                               : selectedEmployeeEmployment.statusTone ===
                                   "warning"
                                 ? "border-amber-200 bg-amber-50 text-amber-700"
-                                : "border-slate-200 bg-slate-100 text-slate-700",
+                                : "border-slate-200 bg-slate-100 text-slate-700"
                           )}
                         >
                           {selectedEmployeeEmployment.statusLabel}
@@ -6623,10 +6714,10 @@ export default function EmployeesManagementPage() {
             </Card>
 
             {selectedEmployee && selectedEmployeeProfile ? (
-              <div className="flex min-w-0 max-w-full flex-col gap-6 overflow-x-hidden">
+              <div className="flex min-w-0 max-w-full flex-col gap-8 overflow-x-hidden rounded-[34px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(248,250,252,0.92)_0%,rgba(241,245,249,0.72)_100%)] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.95)] sm:p-4 lg:p-5">
                 <Card
                   className={cn(
-                    "order-0 sticky top-4 z-20 w-full max-w-full gap-0 overflow-hidden border-slate-200/80 bg-white/95 py-0 shadow-[0_18px_38px_-30px_rgba(15,23,42,0.28)] backdrop-blur",
+                    "order-0 sticky top-4 z-20 w-full max-w-full gap-0 overflow-hidden border-[#F2B705]/25 bg-[linear-gradient(135deg,rgba(255,255,255,0.98)_0%,rgba(255,250,235,0.96)_100%)] py-0 shadow-[0_22px_52px_-34px_rgba(242,183,5,0.32)] ring-1 ring-white/80 backdrop-blur"
                   )}
                 >
                   <CardContent className="min-w-0 px-3 py-3 sm:px-4">
@@ -6636,7 +6727,7 @@ export default function EmployeesManagementPage() {
                     </div>
                     <div className="max-w-full overflow-x-auto overscroll-x-contain pb-1 pt-0.5">
                       <div className="flex w-max min-w-full justify-start gap-2 sm:gap-3.5">
-                        {EMPLOYEE_WORKSPACE_SECTIONS.map((section) => (
+                        {EMPLOYEE_WORKSPACE_SECTIONS.map(section => (
                           <EmployeeWorkspaceTabButton
                             key={section.key}
                             active={
@@ -6661,11 +6752,11 @@ export default function EmployeesManagementPage() {
                   id="employee-section-profile"
                   ref={employeeOverviewSectionRef}
                   className={cn(
-                    "order-10 scroll-mt-36 gap-0 overflow-hidden border-slate-200/80 bg-[linear-gradient(135deg,rgba(255,255,255,0.98)_0%,rgba(248,250,252,0.95)_100%)] py-0 shadow-sm lg:scroll-mt-44",
-                    activeEmployeeWorkspaceSection !== "profile" && "hidden",
+                    "order-10 scroll-mt-36 gap-0 overflow-hidden border-[#F2B705]/25 bg-white py-0 shadow-[0_24px_60px_-42px_rgba(15,23,42,0.38)] ring-1 ring-white/90 lg:scroll-mt-44",
+                    activeEmployeeWorkspaceSection !== "profile" && "hidden"
                   )}
                 >
-                  <CardHeader className="border-b border-white/70 bg-white/70 px-6 py-4 backdrop-blur">
+                  <CardHeader className="border-b border-[#F2B705]/20 bg-[linear-gradient(135deg,rgba(255,251,235,0.95)_0%,rgba(255,255,255,0.92)_100%)] px-6 py-5 backdrop-blur">
                     <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
                       <div className="space-y-3">
                         <div className="space-y-2">
@@ -6695,7 +6786,7 @@ export default function EmployeesManagementPage() {
                                 : selectedEmployeeEmployment.statusTone ===
                                     "warning"
                                   ? "border-amber-200 bg-amber-50 text-amber-700"
-                                  : "border-slate-200 bg-slate-100 text-slate-700",
+                                  : "border-slate-200 bg-slate-100 text-slate-700"
                             )}
                           >
                             {selectedEmployeeEmployment.statusLabel}
@@ -6725,8 +6816,8 @@ export default function EmployeesManagementPage() {
                     </div>
                   </CardHeader>
 
-                  <CardContent className="p-5">
-                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  <CardContent className="bg-white p-5">
+                    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                       <ReadonlyMeta
                         icon={Mail}
                         label="البريد"
@@ -6771,7 +6862,7 @@ export default function EmployeesManagementPage() {
                   ref={employeeScheduleSectionRef}
                   className={cn(
                     "order-18 scroll-mt-36 gap-0 overflow-hidden border-slate-200/80 bg-white/95 py-0 shadow-sm lg:scroll-mt-44",
-                    activeEmployeeWorkspaceSection !== "schedule" && "hidden",
+                    activeEmployeeWorkspaceSection !== "schedule" && "hidden"
                   )}
                 >
                   <CardHeader className="border-b border-slate-100 bg-white/90 px-6 pt-6 pb-4">
@@ -6802,10 +6893,10 @@ export default function EmployeesManagementPage() {
                           type="time"
                           dir="ltr"
                           value={form.shiftStartTime}
-                          onChange={(event) =>
+                          onChange={event =>
                             handleFormChange(
                               "shiftStartTime",
-                              event.target.value,
+                              event.target.value
                             )
                           }
                           className="h-11 bg-white text-center text-base font-semibold tabular-nums"
@@ -6818,7 +6909,7 @@ export default function EmployeesManagementPage() {
                           type="time"
                           dir="ltr"
                           value={form.shiftEndTime}
-                          onChange={(event) =>
+                          onChange={event =>
                             handleFormChange("shiftEndTime", event.target.value)
                           }
                           className="h-11 bg-white text-center text-base font-semibold tabular-nums"
@@ -6827,7 +6918,7 @@ export default function EmployeesManagementPage() {
                       </Field>
                     </div>
 
-                    <div className="space-y-3 rounded-[20px] border border-slate-200 bg-slate-50/70 p-4">
+                    <div className="space-y-4 rounded-[24px] border border-slate-200 bg-white p-4">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="text-sm font-semibold text-slate-900">
                           أيام الراحة الأسبوعية
@@ -6841,9 +6932,9 @@ export default function EmployeesManagementPage() {
                       </div>
 
                       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
-                        {WORK_SCHEDULE_WEEKDAYS.map((day) => {
+                        {WORK_SCHEDULE_WEEKDAYS.map(day => {
                           const checked = form.weeklyOffDays.includes(
-                            day.value,
+                            day.value
                           );
                           return (
                             <label
@@ -6852,15 +6943,15 @@ export default function EmployeesManagementPage() {
                                 "flex cursor-pointer items-center justify-center gap-2 rounded-xl border px-2 py-2 text-xs font-semibold transition-colors",
                                 checked
                                   ? "border-slate-900 bg-slate-950 text-white"
-                                  : "border-slate-200 bg-white text-slate-600",
+                                  : "border-slate-200 bg-white text-slate-600"
                               )}
                             >
                               <Checkbox
                                 checked={checked}
-                                onCheckedChange={(value) =>
+                                onCheckedChange={value =>
                                   handleToggleWeeklyOffDay(
                                     day.value,
-                                    value === true,
+                                    value === true
                                   )
                                 }
                                 disabled={!canManageEmployees || saving}
@@ -6892,9 +6983,9 @@ export default function EmployeesManagementPage() {
                         </div>
                       ) : workZones.length ? (
                         <div className="grid gap-3 md:grid-cols-2">
-                          {workZones.map((zone) => {
+                          {workZones.map(zone => {
                             const checked = form.allowedZoneIds.includes(
-                              zone.id,
+                              zone.id
                             );
                             return (
                               <label
@@ -6903,15 +6994,15 @@ export default function EmployeesManagementPage() {
                                   "flex cursor-pointer items-start gap-3 rounded-2xl border px-3 py-3 transition-colors",
                                   checked
                                     ? "border-[#F2B705]/45 bg-[#F2B705]/10"
-                                    : "border-slate-200 bg-white",
+                                    : "border-slate-200 bg-white"
                                 )}
                               >
                                 <Checkbox
                                   checked={checked}
-                                  onCheckedChange={(value) =>
+                                  onCheckedChange={value =>
                                     handleToggleAllowedZone(
                                       zone.id,
-                                      value === true,
+                                      value === true
                                     )
                                   }
                                   disabled={!canManageEmployees || saving}
@@ -6944,7 +7035,7 @@ export default function EmployeesManagementPage() {
                   ref={employeeAttendanceSectionRef}
                   className={cn(
                     "order-20 scroll-mt-36 lg:scroll-mt-44",
-                    activeEmployeeWorkspaceSection !== "attendance" && "hidden",
+                    activeEmployeeWorkspaceSection !== "attendance" && "hidden"
                   )}
                 >
                   <EmployeeTodayAttendancePanel
@@ -6955,7 +7046,7 @@ export default function EmployeesManagementPage() {
                     weeklyOffDays={selectedEmployeeShiftSchedule.weeklyOffDays}
                     approvedLeaveRequests={approvedLeaveRequests}
                     absenceDateKeys={employeeAbsences.map(
-                      (absence) => absence.date,
+                      absence => absence.date
                     )}
                     canManageAttendance={canManageEmployees}
                     title="سجل حضور الموظف الشهري"
@@ -6979,14 +7070,10 @@ export default function EmployeesManagementPage() {
                     <CardContent className="space-y-5 p-5">
                       <div className="grid gap-4 md:grid-cols-2">
                         <Field label="تاريخ الغياب">
-                          <Input
-                            type="date"
+                          <NativeDatePickerInput
                             value={absenceForm.date}
-                            onChange={(event) =>
-                              handleAbsenceFormChange(
-                                "date",
-                                event.target.value,
-                              )
+                            onValueChange={value =>
+                              handleAbsenceFormChange("date", value)
                             }
                             disabled={!canManageEmployees || savingAbsence}
                           />
@@ -6995,10 +7082,10 @@ export default function EmployeesManagementPage() {
                         <Field label="نوع الغياب">
                           <Select
                             value={absenceForm.type}
-                            onValueChange={(value) =>
+                            onValueChange={value =>
                               handleAbsenceFormChange(
                                 "type",
-                                value as EmployeeAbsenceType,
+                                value as EmployeeAbsenceType
                               )
                             }
                             disabled={!canManageEmployees || savingAbsence}
@@ -7007,7 +7094,7 @@ export default function EmployeesManagementPage() {
                               <SelectValue placeholder="اختر نوع الغياب" />
                             </SelectTrigger>
                             <SelectContent>
-                              {EMPLOYEE_ABSENCE_TYPE_OPTIONS.map((option) => (
+                              {EMPLOYEE_ABSENCE_TYPE_OPTIONS.map(option => (
                                 <SelectItem
                                   key={option.value}
                                   value={String(option.value)}
@@ -7026,7 +7113,7 @@ export default function EmployeesManagementPage() {
                       >
                         <Textarea
                           value={absenceForm.note}
-                          onChange={(event) =>
+                          onChange={event =>
                             handleAbsenceFormChange("note", event.target.value)
                           }
                           placeholder="مثال: غياب بعذر أو نصف يوم لمراجعة شخصية"
@@ -7056,7 +7143,7 @@ export default function EmployeesManagementPage() {
                           </div>
                         ) : employeeAbsences.length ? (
                           <div className="space-y-3">
-                            {employeeAbsences.slice(0, 6).map((absence) => (
+                            {employeeAbsences.slice(0, 6).map(absence => (
                               <div
                                 key={absence.id}
                                 className="rounded-[18px] border border-slate-200 bg-slate-50/70 p-4"
@@ -7077,7 +7164,7 @@ export default function EmployeesManagementPage() {
                                       className="rounded-full border-amber-200 bg-amber-50 text-amber-800"
                                     >
                                       {getEmployeeAbsenceTypeLabel(
-                                        absence.type,
+                                        absence.type
                                       )}
                                     </Badge>
                                     <Badge
@@ -7093,7 +7180,7 @@ export default function EmployeesManagementPage() {
                                       className="h-8 rounded-full border-rose-200 px-3 text-rose-700 hover:bg-rose-50 hover:text-rose-800"
                                       onClick={() =>
                                         void handleDeleteEmployeeAbsence(
-                                          absence,
+                                          absence
                                         )
                                       }
                                       disabled={
@@ -7128,7 +7215,7 @@ export default function EmployeesManagementPage() {
                   ref={employeeMessagesSectionRef}
                   className={cn(
                     "order-40 scroll-mt-36 gap-0 overflow-hidden border-slate-200/80 bg-white/95 py-0 shadow-sm lg:scroll-mt-44",
-                    activeEmployeeWorkspaceSection !== "messages" && "hidden",
+                    activeEmployeeWorkspaceSection !== "messages" && "hidden"
                   )}
                 >
                   <CardHeader className="border-b border-slate-100 bg-white/90 px-6 pt-6 pb-4">
@@ -7177,7 +7264,7 @@ export default function EmployeesManagementPage() {
                             </div>
                           ) : employeeConversations.length ? (
                             <div className="space-y-2">
-                              {employeeConversations.map((conversation) => {
+                              {employeeConversations.map(conversation => {
                                 const latestMessage =
                                   conversation.latestMessage;
                                 const isActive =
@@ -7193,14 +7280,14 @@ export default function EmployeesManagementPage() {
                                     type="button"
                                     onClick={() =>
                                       handleSelectEmployeeConversation(
-                                        conversation,
+                                        conversation
                                       )
                                     }
                                     className={cn(
                                       "w-full min-w-0 rounded-[22px] border px-4 py-4 text-right transition-all",
                                       isActive
                                         ? "border-slate-900 bg-slate-900 text-white shadow-[0_20px_42px_-28px_rgba(15,23,42,0.75)]"
-                                        : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50",
+                                        : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
                                     )}
                                   >
                                     <div className="flex min-w-0 items-start justify-between gap-3">
@@ -7212,7 +7299,7 @@ export default function EmployeesManagementPage() {
                                               "rounded-full shadow-none",
                                               isActive
                                                 ? "border-white/20 bg-white/10 text-white"
-                                                : "border-slate-200 bg-slate-50 text-slate-600",
+                                                : "border-slate-200 bg-slate-50 text-slate-600"
                                             )}
                                           >
                                             {latestMessage.typeLabel}
@@ -7225,7 +7312,7 @@ export default function EmployeesManagementPage() {
                                                 ? "border-white/20 bg-white/10 text-white"
                                                 : latestFromEmployee
                                                   ? "border-[#030640]/15 bg-[#030640]/5 text-[#030640]"
-                                                  : "border-slate-200 bg-slate-100 text-slate-600",
+                                                  : "border-slate-200 bg-slate-100 text-slate-600"
                                             )}
                                           >
                                             {latestFromEmployee
@@ -7251,7 +7338,7 @@ export default function EmployeesManagementPage() {
                                             "mt-2 min-w-0 text-right text-sm leading-7 line-clamp-2 whitespace-pre-wrap break-words [overflow-wrap:anywhere]",
                                             isActive
                                               ? "text-white/80"
-                                              : "text-slate-600",
+                                              : "text-slate-600"
                                           )}
                                         >
                                           {latestMessage.preview ||
@@ -7264,12 +7351,12 @@ export default function EmployeesManagementPage() {
                                           "shrink-0 whitespace-nowrap pt-0.5 text-[11px]",
                                           isActive
                                             ? "text-white/70"
-                                            : "text-slate-500",
+                                            : "text-slate-500"
                                         )}
                                       >
                                         {latestMessage.createdAtDate
                                           ? formatDateTimeEN(
-                                              latestMessage.createdAtDate,
+                                              latestMessage.createdAtDate
                                             )
                                           : "تاريخ غير متوفر"}
                                       </div>
@@ -7280,7 +7367,7 @@ export default function EmployeesManagementPage() {
                                         "mt-3 flex flex-wrap items-center justify-between gap-2 border-t pt-3 text-xs",
                                         isActive
                                           ? "border-white/10 text-white/70"
-                                          : "border-slate-200 text-slate-500",
+                                          : "border-slate-200 text-slate-500"
                                       )}
                                     >
                                       <span>
@@ -7300,7 +7387,7 @@ export default function EmployeesManagementPage() {
                                           "mt-2 text-xs",
                                           isActive
                                             ? "text-white/70"
-                                            : "text-slate-500",
+                                            : "text-slate-500"
                                         )}
                                       >
                                         جارٍ تحديث حالة القراءة...
@@ -7378,14 +7465,14 @@ export default function EmployeesManagementPage() {
                                   label="آخر تحديث"
                                   value={formatDateTimeEN(
                                     activeEmployeeConversation.latestMessage
-                                      .createdAtDate,
+                                      .createdAtDate
                                   )}
                                 />
                               </div>
 
                               <div className="space-y-4 pt-1" dir="ltr">
                                 {activeEmployeeConversation.messages.map(
-                                  (message) => {
+                                  message => {
                                     const ownMessage =
                                       message.fromUserId === user?.uid;
                                     const fromEmployee =
@@ -7398,7 +7485,7 @@ export default function EmployeesManagementPage() {
                                           "max-w-[92%] rounded-[24px] border px-5 py-4 text-right shadow-[0_18px_40px_-32px_rgba(15,23,42,0.32)] sm:max-w-[84%]",
                                           fromEmployee
                                             ? "mr-auto border-[#E7D8AA] bg-[#FBF7E8] text-slate-900"
-                                            : "ml-auto border-slate-200 bg-white text-slate-800",
+                                            : "ml-auto border-slate-200 bg-white text-slate-800"
                                         )}
                                         dir="rtl"
                                       >
@@ -7409,7 +7496,7 @@ export default function EmployeesManagementPage() {
                                               "rounded-full shadow-none",
                                               fromEmployee
                                                 ? "border-[#E7D8AA] bg-white text-[#8b6700]"
-                                                : "border-slate-200 bg-slate-50 text-slate-700",
+                                                : "border-slate-200 bg-slate-50 text-slate-700"
                                             )}
                                           >
                                             {fromEmployee
@@ -7422,7 +7509,7 @@ export default function EmployeesManagementPage() {
                                               "rounded-full shadow-none",
                                               fromEmployee
                                                 ? "border-[#E7D8AA] bg-[#F8F2DD] text-[#8b6700]"
-                                                : "border-slate-200 bg-white text-slate-500",
+                                                : "border-slate-200 bg-white text-slate-500"
                                             )}
                                           >
                                             {fromEmployee
@@ -7446,7 +7533,7 @@ export default function EmployeesManagementPage() {
                                           <span>
                                             {message.createdAtDate
                                               ? formatDateTimeEN(
-                                                  message.createdAtDate,
+                                                  message.createdAtDate
                                                 )
                                               : "تاريخ غير متوفر"}
                                           </span>
@@ -7455,7 +7542,7 @@ export default function EmployeesManagementPage() {
                                               ? message.isRead &&
                                                 message.readAtDate
                                                 ? `تمت القراءة في ${formatDateTimeEN(
-                                                    message.readAtDate,
+                                                    message.readAtDate
                                                   )}`
                                                 : "بانتظار القراءة"
                                               : "وارد من الموظف"}
@@ -7463,7 +7550,7 @@ export default function EmployeesManagementPage() {
                                         </div>
                                       </div>
                                     );
-                                  },
+                                  }
                                 )}
                               </div>
                             </div>
@@ -7502,7 +7589,7 @@ export default function EmployeesManagementPage() {
                               variant="outline"
                               onClick={() =>
                                 setComposeEmployeeMessageAsNew(
-                                  (current) => !current,
+                                  current => !current
                                 )
                               }
                               disabled={
@@ -7520,10 +7607,10 @@ export default function EmployeesManagementPage() {
                             <Field label="نوع الرسالة">
                               <Select
                                 value={employeeMessageForm.type}
-                                onValueChange={(value) =>
+                                onValueChange={value =>
                                   handleEmployeeMessageFormChange(
                                     "type",
-                                    value as EmployeeMessageType,
+                                    value as EmployeeMessageType
                                   )
                                 }
                                 disabled={
@@ -7534,16 +7621,14 @@ export default function EmployeesManagementPage() {
                                   <SelectValue placeholder="اختر نوع الرسالة" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  {EMPLOYEE_MESSAGE_TYPE_OPTIONS.map(
-                                    (option) => (
-                                      <SelectItem
-                                        key={option.value}
-                                        value={option.value}
-                                      >
-                                        {option.label}
-                                      </SelectItem>
-                                    ),
-                                  )}
+                                  {EMPLOYEE_MESSAGE_TYPE_OPTIONS.map(option => (
+                                    <SelectItem
+                                      key={option.value}
+                                      value={option.value}
+                                    >
+                                      {option.label}
+                                    </SelectItem>
+                                  ))}
                                 </SelectContent>
                               </Select>
                             </Field>
@@ -7551,10 +7636,10 @@ export default function EmployeesManagementPage() {
                             <Field label="نص الرسالة">
                               <Textarea
                                 value={employeeMessageForm.message}
-                                onChange={(event) =>
+                                onChange={event =>
                                   handleEmployeeMessageFormChange(
                                     "message",
-                                    event.target.value,
+                                    event.target.value
                                   )
                                 }
                                 placeholder="اكتب الرسالة الداخلية التي ستصل إلى الموظف"
@@ -7608,7 +7693,7 @@ export default function EmployeesManagementPage() {
                   ref={employeeFilesSectionRef}
                   className={cn(
                     "order-50 scroll-mt-36 gap-0 overflow-hidden border-slate-200/80 bg-white/95 py-0 shadow-sm lg:scroll-mt-44",
-                    activeEmployeeWorkspaceSection !== "files" && "hidden",
+                    activeEmployeeWorkspaceSection !== "files" && "hidden"
                   )}
                 >
                   <CardHeader className="border-b border-slate-100 bg-white/90 px-6 pt-6 pb-4">
@@ -7681,10 +7766,10 @@ export default function EmployeesManagementPage() {
                             <Field label="عنوان الملف">
                               <Input
                                 value={employeeFileForm.title}
-                                onChange={(event) =>
+                                onChange={event =>
                                   handleEmployeeFileFormChange(
                                     "title",
-                                    event.target.value,
+                                    event.target.value
                                   )
                                 }
                                 placeholder="مثال: خطاب مباشرة العمل"
@@ -7697,10 +7782,10 @@ export default function EmployeesManagementPage() {
                             <Field label="وصف الملف">
                               <Textarea
                                 value={employeeFileForm.description}
-                                onChange={(event) =>
+                                onChange={event =>
                                   handleEmployeeFileFormChange(
                                     "description",
-                                    event.target.value,
+                                    event.target.value
                                   )
                                 }
                                 placeholder="أضف وصفًا بسيطًا للملف"
@@ -7714,10 +7799,10 @@ export default function EmployeesManagementPage() {
                             <Field label="نوع الملف">
                               <Select
                                 value={employeeFileForm.fileType}
-                                onValueChange={(value) =>
+                                onValueChange={value =>
                                   handleEmployeeFileFormChange(
                                     "fileType",
-                                    value,
+                                    value
                                   )
                                 }
                                 disabled={
@@ -7729,11 +7814,11 @@ export default function EmployeesManagementPage() {
                                 </SelectTrigger>
                                 <SelectContent>
                                   {EMPLOYEE_FILE_TYPE_OPTIONS.filter(
-                                    (option) =>
+                                    option =>
                                       !["cv", "education_certificate"].includes(
-                                        option.value,
-                                      ),
-                                  ).map((option) => (
+                                        option.value
+                                      )
+                                  ).map(option => (
                                     <SelectItem
                                       key={option.value}
                                       value={option.value}
@@ -7766,7 +7851,7 @@ export default function EmployeesManagementPage() {
                                 onClick={() =>
                                   employeeFileInputRef.current?.click()
                                 }
-                                onKeyDown={(event) => {
+                                onKeyDown={event => {
                                   if (
                                     event.key === "Enter" ||
                                     event.key === " "
@@ -7775,13 +7860,13 @@ export default function EmployeesManagementPage() {
                                     employeeFileInputRef.current?.click();
                                   }
                                 }}
-                                onDragOver={(event) => event.preventDefault()}
+                                onDragOver={event => event.preventDefault()}
                                 onDrop={handleEmployeeFileDrop}
                                 className={cn(
                                   "flex cursor-pointer flex-col items-center justify-center gap-3 rounded-[16px] border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-sm text-slate-600 transition hover:border-[#F2B705] hover:bg-[#F2B705]/5",
                                   (!canManageEmployees ||
                                     uploadingEmployeeFile) &&
-                                    "pointer-events-none cursor-not-allowed opacity-60",
+                                    "pointer-events-none cursor-not-allowed opacity-60"
                                 )}
                               >
                                 <Upload className="h-6 w-6 text-slate-500" />
@@ -7793,7 +7878,7 @@ export default function EmployeesManagementPage() {
                                     <div>
                                       الحجم:{" "}
                                       {formatFileSizeEN(
-                                        employeeFileForm.file.size,
+                                        employeeFileForm.file.size
                                       )}
                                     </div>
                                   </div>
@@ -7834,13 +7919,13 @@ export default function EmployeesManagementPage() {
                               جاري تحميل ملفات الموظف...
                             </div>
                           ) : visibleEmployeeFiles.length ? (
-                            visibleEmployeeFiles.map((file) => (
+                            visibleEmployeeFiles.map(file => (
                               <div
                                 key={file.id}
-                                className="rounded-[24px] border border-slate-200/80 bg-slate-50/70 p-5"
+                                className="rounded-[18px] border border-slate-200 bg-white px-4 py-3 shadow-sm"
                               >
-                                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                                  <div className="min-w-0 space-y-3">
+                                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                                  <div className="min-w-0 space-y-2.5">
                                     <div className="flex flex-wrap items-center gap-2">
                                       <EmployeeFileVersionBadge file={file} />
                                       <EmployeeFileStatusBadge file={file} />
@@ -7853,7 +7938,7 @@ export default function EmployeesManagementPage() {
                                     </div>
 
                                     <div>
-                                      <div className="text-lg font-semibold text-slate-950">
+                                      <div className="text-base font-semibold text-slate-950">
                                         {file.title}
                                       </div>
                                       <div className="mt-1 text-sm text-slate-500">
@@ -7863,19 +7948,19 @@ export default function EmployeesManagementPage() {
                                       </div>
                                     </div>
 
-                                    <p className="text-sm leading-7 text-slate-600">
+                                    <p className="text-sm leading-6 text-slate-500">
                                       {file.description ||
                                         "لا يوجد وصف لهذا الملف."}
                                     </p>
 
-                                    <div className="flex flex-wrap gap-2">
+                                    <div className="flex flex-wrap gap-1.5">
                                       <EmployeeFileMetaBadge
                                         label={file.fileName}
                                         dir="ltr"
                                       />
                                       <EmployeeFileMetaBadge
                                         label={formatFileSizeEN(
-                                          file.fileSize ?? null,
+                                          file.fileSize ?? null
                                         )}
                                       />
                                       <EmployeeFileMetaBadge
@@ -7893,7 +7978,7 @@ export default function EmployeesManagementPage() {
                                         "text-xs",
                                         file.isRead
                                           ? "text-emerald-700"
-                                          : "text-amber-700",
+                                          : "text-amber-700"
                                       )}
                                     >
                                       {file.isRead && file.readAtDate
@@ -7902,7 +7987,7 @@ export default function EmployeesManagementPage() {
                                     </div>
                                   </div>
 
-                                  <div className="flex flex-wrap gap-2 lg:justify-end">
+                                  <div className="flex flex-wrap gap-1.5 lg:justify-end">
                                     <Button
                                       type="button"
                                       variant="outline"
@@ -8007,7 +8092,7 @@ export default function EmployeesManagementPage() {
                   ref={employeeSalarySectionRef}
                   className={cn(
                     "order-25 scroll-mt-36 gap-0 overflow-hidden border-slate-200/80 bg-white/95 py-0 shadow-sm lg:scroll-mt-44",
-                    activeEmployeeWorkspaceSection !== "salary" && "hidden",
+                    activeEmployeeWorkspaceSection !== "salary" && "hidden"
                   )}
                 >
                   <CardHeader className="border-b border-white/70 bg-white/70 px-6 py-4 backdrop-blur">
@@ -8069,11 +8154,11 @@ export default function EmployeesManagementPage() {
                           <div className="space-y-4">
                             <div className="max-w-xs">
                               <Field label="الشهر المستهدف">
-                                <Input
+                                <NativeDatePickerInput
                                   type="month"
                                   value={payrollMonthInput}
-                                  onChange={(event) =>
-                                    setPayrollMonthInput(event.target.value)
+                                  onValueChange={value =>
+                                    setPayrollMonthInput(value)
                                   }
                                   disabled={
                                     !canManageEmployees || creatingPayrollRecord
@@ -8101,17 +8186,19 @@ export default function EmployeesManagementPage() {
                                           {selectedPayrollCalculationRange.isCurrentMonth
                                             ? "من بداية الشهر حتى اليوم"
                                             : `${formatPayrollCalculationDate(
-                                                selectedPayrollCalculationRange.calculationStartDate,
+                                                selectedPayrollCalculationRange.calculationStartDate
                                               )} إلى ${formatPayrollCalculationDate(
-                                                selectedPayrollCalculationRange.calculationEndDate,
+                                                selectedPayrollCalculationRange.calculationEndDate
                                               )}`}
                                         </p>
                                       ) : null}
-                                      {selectedPayrollCalculationRange?.isFutureMonth ? (
+                                      {selectedPayrollCalculationRange
+                                        ?.isFutureMonth ? (
                                         <p className="font-semibold text-red-600">
                                           لا يمكن احتساب الحضور لشهر مستقبلي.
                                         </p>
-                                      ) : selectedPayrollCalculationRange?.excludesFutureDays ? (
+                                      ) : selectedPayrollCalculationRange
+                                          ?.excludesFutureDays ? (
                                         <p className="font-semibold text-slate-600">
                                           الأيام المستقبلية غير محسوبة.
                                         </p>
@@ -8131,7 +8218,8 @@ export default function EmployeesManagementPage() {
                                     saving ||
                                     attendancePayrollLoading ||
                                     !selectedPayrollMonthMeta ||
-                                    selectedPayrollCalculationRange?.isFutureMonth
+                                    selectedPayrollCalculationRange
+                                      ?.isFutureMonth
                                   }
                                 >
                                   {attendancePayrollLoading ? (
@@ -8141,7 +8229,8 @@ export default function EmployeesManagementPage() {
                                   )}
                                   {attendancePayrollLoading
                                     ? "جاري احتساب الحضور..."
-                                    : selectedPayrollCalculationRange?.isCurrentMonth
+                                    : selectedPayrollCalculationRange
+                                        ?.isCurrentMonth
                                       ? "احتساب الحضور حتى اليوم"
                                       : "احتساب حضور الشهر"}
                                 </Button>
@@ -8153,7 +8242,7 @@ export default function EmployeesManagementPage() {
                                   selectedEmployeeShiftSchedule.startTime &&
                                     selectedEmployeeShiftSchedule.endTime
                                     ? "border-slate-200 bg-slate-50 text-slate-800"
-                                    : "border-red-200 bg-red-50 text-red-700",
+                                    : "border-red-200 bg-red-50 text-red-700"
                                 )}
                               >
                                 وقت الدوام المعتمد لهذا الموظف:{" "}
@@ -8161,13 +8250,13 @@ export default function EmployeesManagementPage() {
                                 <div className="mt-1 text-xs font-medium leading-5 text-slate-500">
                                   أيام الراحة:{" "}
                                   {formatWeeklyOffDaysLabel(
-                                    selectedEmployeeShiftSchedule.weeklyOffDays,
+                                    selectedEmployeeShiftSchedule.weeklyOffDays
                                   )}{" "}
                                   · أيام العمل داخل نطاق الاحتساب:{" "}
                                   {formatNumberEN(
                                     selectedPayrollCalculationRange?.isFutureMonth
                                       ? 0
-                                      : payrollAttendanceWorkDateKeys.length,
+                                      : payrollAttendanceWorkDateKeys.length
                                   )}{" "}
                                   يوم
                                 </div>
@@ -8185,25 +8274,25 @@ export default function EmployeesManagementPage() {
                                   <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
                                     التأخير:{" "}
                                     {formatHoursDuration(
-                                      attendancePayrollSummary.lateHours,
+                                      attendancePayrollSummary.lateHours
                                     )}
                                   </div>
                                   <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
                                     النقص:{" "}
                                     {formatHoursDuration(
-                                      attendancePayrollSummary.missingHours,
+                                      attendancePayrollSummary.missingHours
                                     )}
                                   </div>
                                   <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
                                     الأوفر تايم:{" "}
                                     {formatHoursDuration(
-                                      attendancePayrollSummary.overtimeHours,
+                                      attendancePayrollSummary.overtimeHours
                                     )}
                                   </div>
                                   <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
                                     أيام مكتملة:{" "}
                                     {formatNumberEN(
-                                      attendancePayrollSummary.completeDays,
+                                      attendancePayrollSummary.completeDays
                                     )}
                                   </div>
                                   <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-red-700">
@@ -8235,7 +8324,7 @@ export default function EmployeesManagementPage() {
                                     </div>
                                     <div className="mt-1 text-lg font-semibold text-slate-950 tabular-nums">
                                       {formatNumberEN(
-                                        totalSalaryDeductions || 0,
+                                        totalSalaryDeductions || 0
                                       )}{" "}
                                       ر.س
                                     </div>
@@ -8265,40 +8354,39 @@ export default function EmployeesManagementPage() {
                                     {employeeAbsences
                                       .slice(0, 3)
                                       .map(
-                                        (absence) =>
+                                        absence =>
                                           `${formatEmployeeAbsenceDate(
-                                            absence.date,
+                                            absence.date
                                           )} (${getEmployeeAbsenceTypeLabel(
-                                            absence.type,
-                                          )})`,
+                                            absence.type
+                                          )})`
                                       )
                                       .join("، ")}
                                     {employeeAbsences.length > 3
                                       ? `، و${formatNumberEN(
-                                          employeeAbsences.length - 3,
+                                          employeeAbsences.length - 3
                                         )} أخرى`
                                       : ""}
-                                    . هذه ملاحظة فقط ولا تضيف خصمًا يدويًا
-                                    مكررًا؛ خصم الغياب يتم من سجل الغياب عند
-                                    إنشاء الراتب.
+                                    . هذه ملاحظة فقط ولا تضيف خصمًا يدويًا مكررًا؛
+                                    خصم الغياب يتم من سجل الغياب عند إنشاء الراتب.
                                   </div>
                                 </div>
                               ) : null}
 
                               {salaryDeductions.length ? (
                                 <div className="space-y-3">
-                                  {salaryDeductions.map((item) => (
+                                  {salaryDeductions.map(item => (
                                     <div
                                       key={item.id}
                                       className="grid gap-3 rounded-[18px] border border-slate-200 bg-slate-50/70 p-4 md:grid-cols-[minmax(0,1fr)_160px_auto]"
                                     >
                                       <Input
                                         value={item.title}
-                                        onChange={(event) =>
+                                        onChange={event =>
                                           handleSalaryDeductionChange(
                                             item.id,
                                             "title",
-                                            event.target.value,
+                                            event.target.value
                                           )
                                         }
                                         placeholder="مثال: خصم غياب"
@@ -8311,13 +8399,13 @@ export default function EmployeesManagementPage() {
                                         inputMode="decimal"
                                         step="0.01"
                                         value={item.amount}
-                                        onChange={(event) =>
+                                        onChange={event =>
                                           handleSalaryDeductionChange(
                                             item.id,
                                             "amount",
                                             normalizeEnglishDigits(
-                                              event.target.value,
-                                            ),
+                                              event.target.value
+                                            )
                                           )
                                         }
                                         placeholder="قيمة الخصم"
@@ -8373,11 +8461,11 @@ export default function EmployeesManagementPage() {
                                       calculatedHoursDifference < 0 &&
                                         "text-red-600",
                                       calculatedHoursDifference === 0 &&
-                                        "text-slate-950",
+                                        "text-slate-950"
                                     )}
                                   >
                                     {formatHoursDifferenceLabel(
-                                      calculatedHoursDifference,
+                                      calculatedHoursDifference
                                     )}
                                   </div>
                                 </div>
@@ -8408,7 +8496,7 @@ export default function EmployeesManagementPage() {
                                   </div>
                                   <div className="mt-2 text-base font-semibold text-slate-950">
                                     {formatNumberEN(
-                                      calculatedOvertimeAmount || 0,
+                                      calculatedOvertimeAmount || 0
                                     )}{" "}
                                     ر.س
                                   </div>
@@ -8420,7 +8508,7 @@ export default function EmployeesManagementPage() {
                                   </div>
                                   <div className="mt-2 text-base font-semibold text-slate-950">
                                     {formatNumberEN(
-                                      calculatedMissingDeduction || 0,
+                                      calculatedMissingDeduction || 0
                                     )}{" "}
                                     ر.س
                                   </div>
@@ -8442,7 +8530,7 @@ export default function EmployeesManagementPage() {
                                   </div>
                                   <div className="mt-2 text-base font-semibold text-slate-950">
                                     {formatNumberEN(
-                                      calculatedAttendanceAbsenceDeduction || 0,
+                                      calculatedAttendanceAbsenceDeduction || 0
                                     )}{" "}
                                     ر.س
                                   </div>
@@ -8500,7 +8588,7 @@ export default function EmployeesManagementPage() {
                                   onClick={() =>
                                     payrollMudadDocumentInputRef.current?.click()
                                   }
-                                  onKeyDown={(event) => {
+                                  onKeyDown={event => {
                                     if (
                                       event.key === "Enter" ||
                                       event.key === " "
@@ -8509,14 +8597,14 @@ export default function EmployeesManagementPage() {
                                       payrollMudadDocumentInputRef.current?.click();
                                     }
                                   }}
-                                  onDragOver={(event) => event.preventDefault()}
+                                  onDragOver={event => event.preventDefault()}
                                   onDrop={handlePayrollMudadDocumentDrop}
                                   className={cn(
                                     "flex min-h-40 w-full cursor-pointer flex-col items-center justify-center gap-4 rounded-2xl border-2 border-dashed border-[#F2B705] bg-[#F2B705]/10 px-5 py-8 text-center text-sm text-slate-700 transition hover:bg-[#F2B705]/15 sm:px-10",
                                     (!canManageEmployees ||
                                       creatingPayrollRecord ||
                                       !!selectedPayrollRecord) &&
-                                      "pointer-events-none cursor-not-allowed opacity-60",
+                                      "pointer-events-none cursor-not-allowed opacity-60"
                                   )}
                                 >
                                   <Upload className="h-6 w-6 text-[#030640]" />
@@ -8528,7 +8616,7 @@ export default function EmployeesManagementPage() {
                                       <div className="text-xs text-slate-600">
                                         الحجم:{" "}
                                         {formatFileSizeEN(
-                                          payrollMudadDocument.size,
+                                          payrollMudadDocument.size
                                         )}
                                       </div>
                                     </div>
@@ -8602,7 +8690,7 @@ export default function EmployeesManagementPage() {
                             </div>
                           ) : employeePayrollRecords.length ? (
                             <div className="space-y-3">
-                              {employeePayrollRecords.map((record) => (
+                              {employeePayrollRecords.map(record => (
                                 <div
                                   key={record.id}
                                   className="rounded-[20px] border border-slate-200 bg-white p-4"
@@ -8611,7 +8699,7 @@ export default function EmployeesManagementPage() {
                                     <div className="space-y-1">
                                       <div className="text-base font-semibold text-slate-950">
                                         {formatEmployeePayrollMonthLabel(
-                                          record.payrollMonth,
+                                          record.payrollMonth
                                         )}
                                       </div>
                                       <div className="text-xs text-slate-500">
@@ -8635,7 +8723,7 @@ export default function EmployeesManagementPage() {
                                         className="h-9 gap-2 rounded-full border-emerald-200 bg-emerald-50 px-4 text-emerald-800 hover:bg-emerald-100 hover:text-emerald-900"
                                         onClick={() =>
                                           void handleExportPayrollApprovalExcel(
-                                            record,
+                                            record
                                           )
                                         }
                                         disabled={
@@ -8738,7 +8826,7 @@ export default function EmployeesManagementPage() {
                                       </div>
                                       <div className="mt-2 text-base font-semibold text-slate-950">
                                         {formatEmployeeAbsenceDays(
-                                          record.absenceDays || 0,
+                                          record.absenceDays || 0
                                         )}
                                       </div>
                                     </div>
@@ -8749,7 +8837,7 @@ export default function EmployeesManagementPage() {
                                       </div>
                                       <div className="mt-2 text-base font-semibold text-amber-800">
                                         {formatNumberEN(
-                                          record.absenceDeduction || 0,
+                                          record.absenceDeduction || 0
                                         )}{" "}
                                         ر.س
                                       </div>
@@ -8761,7 +8849,7 @@ export default function EmployeesManagementPage() {
                                       </div>
                                       <div className="mt-2 text-base font-semibold text-emerald-800">
                                         {formatNumberEN(
-                                          record.finalSalary || 0,
+                                          record.finalSalary || 0
                                         )}{" "}
                                         ر.س
                                       </div>
@@ -8775,7 +8863,7 @@ export default function EmployeesManagementPage() {
                                       </div>
                                       <div className="mt-2 text-sm font-semibold text-slate-900">
                                         {formatNumberEN(
-                                          record.delayDeduction || 0,
+                                          record.delayDeduction || 0
                                         )}{" "}
                                         ر.س
                                       </div>
@@ -8787,7 +8875,7 @@ export default function EmployeesManagementPage() {
                                       </div>
                                       <div className="mt-2 text-sm font-semibold text-slate-900">
                                         {formatNumberEN(
-                                          record.attendanceAbsentDays || 0,
+                                          record.attendanceAbsentDays || 0
                                         )}{" "}
                                         يوم
                                       </div>
@@ -8799,8 +8887,7 @@ export default function EmployeesManagementPage() {
                                       </div>
                                       <div className="mt-2 text-sm font-semibold text-slate-900">
                                         {formatNumberEN(
-                                          record.attendanceAbsenceDeduction ||
-                                            0,
+                                          record.attendanceAbsenceDeduction || 0
                                         )}{" "}
                                         ر.س
                                       </div>
@@ -8812,7 +8899,7 @@ export default function EmployeesManagementPage() {
                                       </div>
                                       <div className="mt-2 text-sm font-semibold text-slate-900">
                                         {formatNumberEN(
-                                          record.overtimeBonus || 0,
+                                          record.overtimeBonus || 0
                                         )}{" "}
                                         ر.س
                                       </div>
@@ -8824,7 +8911,7 @@ export default function EmployeesManagementPage() {
                                       </div>
                                       <div className="mt-2 text-sm font-semibold text-slate-900">
                                         {formatNumberEN(
-                                          record.totalSalaryDeductions || 0,
+                                          record.totalSalaryDeductions || 0
                                         )}{" "}
                                         ر.س
                                       </div>
@@ -8849,7 +8936,7 @@ export default function EmployeesManagementPage() {
                   ref={employeeRequestsSectionRef}
                   className={cn(
                     "order-25 scroll-mt-36 gap-0 overflow-hidden border-slate-200/80 bg-white/95 py-0 shadow-sm lg:scroll-mt-44",
-                    activeEmployeeWorkspaceSection !== "requests" && "hidden",
+                    activeEmployeeWorkspaceSection !== "requests" && "hidden"
                   )}
                 >
                   <CardHeader className="border-b border-white/70 bg-white/70 px-6 pt-6 pb-4 backdrop-blur">
@@ -8879,8 +8966,8 @@ export default function EmployeesManagementPage() {
                           label="المعتمدة"
                           value={formatNumberEN(
                             serviceRequests.filter(
-                              (request) => request.status === "approved",
-                            ).length,
+                              request => request.status === "approved"
+                            ).length
                           )}
                         />
                         <LeaveOverviewStat
@@ -8888,8 +8975,8 @@ export default function EmployeesManagementPage() {
                           label="المرفوضة"
                           value={formatNumberEN(
                             serviceRequests.filter(
-                              (request) => request.status === "rejected",
-                            ).length,
+                              request => request.status === "rejected"
+                            ).length
                           )}
                         />
                       </div>
@@ -8914,7 +9001,7 @@ export default function EmployeesManagementPage() {
                               "rounded-[24px] border p-5 shadow-sm",
                               index === 0
                                 ? "border-[#F2B705]/35 bg-[#F2B705]/[0.08]"
-                                : "border-slate-200/80 bg-slate-50/70",
+                                : "border-slate-200/80 bg-slate-50/70"
                             )}
                           >
                             <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
@@ -8933,7 +9020,7 @@ export default function EmployeesManagementPage() {
                                     className="rounded-full"
                                   >
                                     {getEmployeeServiceRequestTypeLabel(
-                                      request.requestType,
+                                      request.requestType
                                     )}
                                   </Badge>
                                   <Badge
@@ -8944,11 +9031,11 @@ export default function EmployeesManagementPage() {
                                         ? "border-emerald-200 bg-emerald-50 text-emerald-700"
                                         : request.status === "pending"
                                           ? "border-amber-200 bg-amber-50 text-amber-700"
-                                          : "border-rose-200 bg-rose-50 text-rose-700",
+                                          : "border-rose-200 bg-rose-50 text-rose-700"
                                     )}
                                   >
                                     {getEmployeeServiceRequestStatusLabel(
-                                      request.status,
+                                      request.status
                                     )}
                                   </Badge>
                                 </div>
@@ -8969,7 +9056,7 @@ export default function EmployeesManagementPage() {
                                       </span>{" "}
                                       {[request.startDate, request.endDate]
                                         .filter(Boolean)
-                                        .map((value) => formatDateEN(value))
+                                        .map(value => formatDateEN(value))
                                         .join(" - ")}
                                     </div>
                                   ) : null}
@@ -9032,10 +9119,10 @@ export default function EmployeesManagementPage() {
                                     </Label>
                                     <Textarea
                                       value={currentReviewNote}
-                                      onChange={(event) =>
+                                      onChange={event =>
                                         handleReviewNoteChange(
                                           request.id,
-                                          event.target.value,
+                                          event.target.value
                                         )
                                       }
                                       placeholder="اكتب ملاحظة عند الاعتماد أو الرفض"
@@ -9058,7 +9145,7 @@ export default function EmployeesManagementPage() {
                                         onClick={() =>
                                           void handleReviewServiceRequest(
                                             request,
-                                            "approved",
+                                            "approved"
                                           )
                                         }
                                       >
@@ -9082,7 +9169,7 @@ export default function EmployeesManagementPage() {
                                         onClick={() =>
                                           void handleReviewServiceRequest(
                                             request,
-                                            "rejected",
+                                            "rejected"
                                           )
                                         }
                                       >
@@ -9110,7 +9197,7 @@ export default function EmployeesManagementPage() {
                   ref={employeeLeaveSectionRef}
                   className={cn(
                     "order-30 scroll-mt-36 gap-0 overflow-hidden border-slate-200/80 bg-white/95 py-0 shadow-sm lg:scroll-mt-44",
-                    activeEmployeeWorkspaceSection !== "leave" && "hidden",
+                    activeEmployeeWorkspaceSection !== "leave" && "hidden"
                   )}
                 >
                   <CardHeader className="border-b border-white/70 bg-white/70 px-6 pt-6 pb-4 backdrop-blur">
@@ -9155,7 +9242,7 @@ export default function EmployeesManagementPage() {
                           value={
                             latestDeductedLeaveRequest
                               ? formatLeaveDaysLabel(
-                                  latestDeductedLeaveRequest.daysCount,
+                                  latestDeductedLeaveRequest.daysCount
                                 )
                               : "لا يوجد"
                           }
@@ -9182,7 +9269,7 @@ export default function EmployeesManagementPage() {
                           </div>
                           <div className="mt-2 text-lg font-semibold text-slate-950">
                             {formatNumberEN(
-                              previousLeaveBalanceBeforeLastApproval,
+                              previousLeaveBalanceBeforeLastApproval
                             )}{" "}
                             يوم
                           </div>
@@ -9206,7 +9293,7 @@ export default function EmployeesManagementPage() {
                           <div className="mt-2 text-lg font-semibold text-slate-950">
                             {latestDeductedLeaveRequest?.reviewedAt
                               ? formatDateTimeEN(
-                                  latestDeductedLeaveRequest.reviewedAt,
+                                  latestDeductedLeaveRequest.reviewedAt
                                 )
                               : "غير متوفر"}
                           </div>
@@ -9263,14 +9350,14 @@ export default function EmployeesManagementPage() {
                           <Field label="نوع العملية">
                             <Select
                               value={manualLeaveBalanceOperation}
-                              onValueChange={(value) => {
+                              onValueChange={value => {
                                 const nextOperation =
                                   value === "deduct" ? "deduct" : "add";
                                 setManualLeaveBalanceOperation(nextOperation);
                                 setManualLeaveBalance(
                                   nextOperation === "deduct"
                                     ? ""
-                                    : String(currentLeaveBalanceNumber),
+                                    : String(currentLeaveBalanceNumber)
                                 );
                               }}
                               disabled={
@@ -9301,9 +9388,9 @@ export default function EmployeesManagementPage() {
                               step="0.5"
                               min="0"
                               value={manualLeaveBalance}
-                              onChange={(event) =>
+                              onChange={event =>
                                 setManualLeaveBalance(
-                                  normalizeEnglishDigits(event.target.value),
+                                  normalizeEnglishDigits(event.target.value)
                                 )
                               }
                               placeholder={
@@ -9333,9 +9420,9 @@ export default function EmployeesManagementPage() {
                           <Field label="سبب التعديل">
                             <Textarea
                               value={manualLeaveAdjustmentReason}
-                              onChange={(event) =>
+                              onChange={event =>
                                 setManualLeaveAdjustmentReason(
-                                  event.target.value,
+                                  event.target.value
                                 )
                               }
                               placeholder="مثال: ترحيل رصيد من السنة الماضية أو تصحيح إداري"
@@ -9371,7 +9458,7 @@ export default function EmployeesManagementPage() {
                               </span>{" "}
                               {latestManualLeaveAdjustmentMeta.adjustedAt
                                 ? formatDateTimeEN(
-                                    latestManualLeaveAdjustmentMeta.adjustedAt,
+                                    latestManualLeaveAdjustmentMeta.adjustedAt
                                   )
                                 : "غير متوفر"}
                             </div>
@@ -9394,8 +9481,8 @@ export default function EmployeesManagementPage() {
                               </span>{" "}
                               {formatNumberEN(
                                 Number(
-                                  latestManualLeaveAdjustmentMeta.previousBalance,
-                                ) || 0,
+                                  latestManualLeaveAdjustmentMeta.previousBalance
+                                ) || 0
                               )}{" "}
                               يوم
                             </div>
@@ -9405,8 +9492,8 @@ export default function EmployeesManagementPage() {
                               </span>{" "}
                               {formatNumberEN(
                                 Number(
-                                  latestManualLeaveAdjustmentMeta.nextBalance,
-                                ) || 0,
+                                  latestManualLeaveAdjustmentMeta.nextBalance
+                                ) || 0
                               )}{" "}
                               يوم
                             </div>
@@ -9440,7 +9527,7 @@ export default function EmployeesManagementPage() {
                               </Badge>
                               <Badge variant="outline" className="rounded-full">
                                 {getLeaveTypeLabel(
-                                  latestApprovedLeaveRequest.leaveType,
+                                  latestApprovedLeaveRequest.leaveType
                                 )}
                               </Badge>
                               <LeaveStatusBadge
@@ -9453,28 +9540,28 @@ export default function EmployeesManagementPage() {
                                 icon={CalendarDays}
                                 label="تاريخ البداية"
                                 value={formatDateEN(
-                                  latestApprovedLeaveRequest.startDate,
+                                  latestApprovedLeaveRequest.startDate
                                 )}
                               />
                               <ReadonlyMeta
                                 icon={CalendarDays}
                                 label="تاريخ النهاية"
                                 value={formatDateEN(
-                                  latestApprovedLeaveRequest.endDate,
+                                  latestApprovedLeaveRequest.endDate
                                 )}
                               />
                               <ReadonlyMeta
                                 icon={CalendarDays}
                                 label="عدد الأيام"
                                 value={formatLeaveDaysLabel(
-                                  latestApprovedLeaveRequest.daysCount,
+                                  latestApprovedLeaveRequest.daysCount
                                 )}
                               />
                               <ReadonlyMeta
                                 icon={Clock3}
                                 label="تاريخ الطلب"
                                 value={formatDateTimeEN(
-                                  latestApprovedLeaveRequest.createdAt,
+                                  latestApprovedLeaveRequest.createdAt
                                 )}
                               />
                             </div>
@@ -9516,7 +9603,7 @@ export default function EmployeesManagementPage() {
                           </div>
                         ) : leaveBalanceAdjustments.length ? (
                           <div className="space-y-3">
-                            {leaveBalanceAdjustments.slice(0, 5).map((item) => (
+                            {leaveBalanceAdjustments.slice(0, 5).map(item => (
                               <div
                                 key={item.id}
                                 className="rounded-[20px] border border-slate-200 bg-white px-4 py-4"
@@ -9540,7 +9627,7 @@ export default function EmployeesManagementPage() {
                                         من:
                                       </span>{" "}
                                       {formatNumberEN(
-                                        Number(item.previousBalance) || 0,
+                                        Number(item.previousBalance) || 0
                                       )}{" "}
                                       يوم
                                     </div>
@@ -9549,7 +9636,7 @@ export default function EmployeesManagementPage() {
                                         إلى:
                                       </span>{" "}
                                       {formatNumberEN(
-                                        Number(item.nextBalance) || 0,
+                                        Number(item.nextBalance) || 0
                                       )}{" "}
                                       يوم
                                     </div>
@@ -9558,7 +9645,7 @@ export default function EmployeesManagementPage() {
                                         الفرق:
                                       </span>{" "}
                                       {formatNumberEN(
-                                        Number(item.difference) || 0,
+                                        Number(item.difference) || 0
                                       )}{" "}
                                       يوم
                                     </div>
@@ -9616,7 +9703,7 @@ export default function EmployeesManagementPage() {
                                   "rounded-[24px] border p-5 shadow-sm",
                                   index === 0
                                     ? "border-[#F2B705]/35 bg-[#F2B705]/[0.08]"
-                                    : "border-slate-200/80 bg-slate-50/70",
+                                    : "border-slate-200/80 bg-slate-50/70"
                                 )}
                               >
                                 <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
@@ -9652,7 +9739,7 @@ export default function EmployeesManagementPage() {
                                           ? "border-emerald-200 bg-emerald-50 text-emerald-700"
                                           : request.status === "pending"
                                             ? "border-amber-200 bg-amber-50 text-amber-700"
-                                            : "border-rose-200 bg-rose-50 text-rose-700",
+                                            : "border-rose-200 bg-rose-50 text-rose-700"
                                       )}
                                     >
                                       {request.status === "approved"
@@ -9669,7 +9756,7 @@ export default function EmployeesManagementPage() {
                                         </span>{" "}
                                         {formatLeaveDateRange(
                                           request.startDate,
-                                          request.endDate,
+                                          request.endDate
                                         )}
                                       </div>
 
@@ -9678,7 +9765,7 @@ export default function EmployeesManagementPage() {
                                           عدد الأيام:
                                         </span>{" "}
                                         {formatLeaveDaysLabel(
-                                          request.daysCount,
+                                          request.daysCount
                                         )}
                                       </div>
 
@@ -9717,8 +9804,8 @@ export default function EmployeesManagementPage() {
                                             </span>{" "}
                                             {formatNumberEN(
                                               getLeaveBalanceBeforeRequest(
-                                                request,
-                                              ) || 0,
+                                                request
+                                              ) || 0
                                             )}{" "}
                                             يوم
                                           </div>
@@ -9729,8 +9816,8 @@ export default function EmployeesManagementPage() {
                                             </span>{" "}
                                             {formatNumberEN(
                                               getLeaveBalanceAfterRequest(
-                                                request,
-                                              ) || 0,
+                                                request
+                                              ) || 0
                                             )}{" "}
                                             يوم
                                           </div>
@@ -9764,10 +9851,10 @@ export default function EmployeesManagementPage() {
                                         </Label>
                                         <Textarea
                                           value={currentReviewNote}
-                                          onChange={(event) =>
+                                          onChange={event =>
                                             handleReviewNoteChange(
                                               request.id,
-                                              event.target.value,
+                                              event.target.value
                                             )
                                           }
                                           placeholder="اكتب ملاحظة عند الاعتماد أو الرفض"
@@ -9791,7 +9878,7 @@ export default function EmployeesManagementPage() {
                                             onClick={() =>
                                               void handleReviewLeaveRequest(
                                                 request,
-                                                "approved",
+                                                "approved"
                                               )
                                             }
                                           >
@@ -9815,7 +9902,7 @@ export default function EmployeesManagementPage() {
                                             onClick={() =>
                                               void handleReviewLeaveRequest(
                                                 request,
-                                                "rejected",
+                                                "rejected"
                                               )
                                             }
                                           >
@@ -9840,13 +9927,26 @@ export default function EmployeesManagementPage() {
                   </CardContent>
                 </Card>
 
-                <Card
+                <div
                   className={cn(
-                    "order-20 gap-0 overflow-hidden border-slate-200/80 bg-white/95 py-0 shadow-sm",
-                    activeEmployeeWorkspaceSection !== "profile" && "hidden",
+                    "order-19",
+                    activeEmployeeWorkspaceSection !== "profile" && "hidden"
                   )}
                 >
-                  <CardHeader className="border-b border-slate-100 bg-white/90 px-6 pt-6 pb-4">
+                  <EmployeeWorkspaceSectionBreak
+                    icon={ShieldCheck}
+                    title="منطقة تعديل البيانات"
+                    description="هذا فاصل بصري مستقل بين ملخص الموظف والحقول القابلة للتعديل حتى لا تظهر المعلومات ككتلة واحدة."
+                  />
+                </div>
+
+                <Card
+                  className={cn(
+                    "order-20 gap-0 overflow-hidden border-slate-300/80 bg-white py-0 shadow-[0_28px_70px_-46px_rgba(15,23,42,0.42)] ring-1 ring-white/90",
+                    activeEmployeeWorkspaceSection !== "profile" && "hidden"
+                  )}
+                >
+                  <CardHeader className="border-b border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] px-6 pt-6 pb-5">
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                       <div className="space-y-1">
                         <CardTitle className="flex items-center gap-2 text-xl text-slate-950">
@@ -9865,7 +9965,7 @@ export default function EmployeesManagementPage() {
                           "w-fit rounded-full shadow-none",
                           canManageEmployees
                             ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                            : "border-slate-200 bg-slate-100 text-slate-600",
+                            : "border-slate-200 bg-slate-100 text-slate-600"
                         )}
                       >
                         {canManageEmployees ? "تعديل مفعل" : "عرض فقط"}
@@ -9873,12 +9973,12 @@ export default function EmployeesManagementPage() {
                     </div>
                   </CardHeader>
 
-                  <CardContent className="space-y-6 p-6">
+                  <CardContent className="space-y-7 bg-white p-6">
                     <div className="grid gap-5 md:grid-cols-2">
                       <Field label="اسم الموظف">
                         <Input
                           value={form.fullName}
-                          onChange={(event) =>
+                          onChange={event =>
                             handleFormChange("fullName", event.target.value)
                           }
                           placeholder="مثال: نواف العليان"
@@ -9891,7 +9991,7 @@ export default function EmployeesManagementPage() {
                           type="email"
                           dir="ltr"
                           value={form.email}
-                          onChange={(event) =>
+                          onChange={event =>
                             handleFormChange("email", event.target.value)
                           }
                           placeholder="name@example.com"
@@ -9903,7 +10003,7 @@ export default function EmployeesManagementPage() {
                         <Input
                           dir="ltr"
                           value={form.phone}
-                          onChange={(event) =>
+                          onChange={event =>
                             handleFormChange("phone", event.target.value)
                           }
                           placeholder="05xxxxxxxx"
@@ -9913,7 +10013,7 @@ export default function EmployeesManagementPage() {
                       <Field label="المسمى الوظيفي">
                         <Input
                           value={form.jobTitle}
-                          onChange={(event) =>
+                          onChange={event =>
                             handleFormChange("jobTitle", event.target.value)
                           }
                           placeholder="مثال: مسؤول عمليات"
@@ -9924,7 +10024,7 @@ export default function EmployeesManagementPage() {
                       <Field label="القسم / الإدارة">
                         <Input
                           value={form.department}
-                          onChange={(event) =>
+                          onChange={event =>
                             handleFormChange("department", event.target.value)
                           }
                           placeholder="مثال: الموارد البشرية"
@@ -9935,7 +10035,7 @@ export default function EmployeesManagementPage() {
                       <Field label="الحالة الوظيفية">
                         <Select
                           value={form.employmentStatus}
-                          onValueChange={(value) =>
+                          onValueChange={value =>
                             handleFormChange("employmentStatus", value)
                           }
                           disabled={!canManageEmployees || saving}
@@ -9944,7 +10044,7 @@ export default function EmployeesManagementPage() {
                             <SelectValue placeholder="اختر الحالة الوظيفية" />
                           </SelectTrigger>
                           <SelectContent>
-                            {EMPLOYMENT_STATUS_OPTIONS.map((option) => (
+                            {EMPLOYMENT_STATUS_OPTIONS.map(option => (
                               <SelectItem
                                 key={option.value}
                                 value={option.value}
@@ -9957,11 +10057,10 @@ export default function EmployeesManagementPage() {
                       </Field>
 
                       <Field label="تاريخ بداية العمل">
-                        <Input
-                          type="date"
+                        <NativeDatePickerInput
                           value={form.startDate}
-                          onChange={(event) =>
-                            handleFormChange("startDate", event.target.value)
+                          onValueChange={value =>
+                            handleFormChange("startDate", value)
                           }
                           disabled={!canManageEmployees || saving}
                         />
@@ -9974,10 +10073,10 @@ export default function EmployeesManagementPage() {
                         <Input
                           dir="ltr"
                           value={form.fingerprintNumber}
-                          onChange={(event) =>
+                          onChange={event =>
                             handleFormChange(
                               "fingerprintNumber",
-                              event.target.value,
+                              event.target.value
                             )
                           }
                           placeholder="مثال: 10245"
@@ -9985,7 +10084,7 @@ export default function EmployeesManagementPage() {
                         />
                       </Field>
 
-                      <div className="space-y-5 rounded-[22px] border border-slate-200 bg-slate-50/70 p-4 md:col-span-2">
+                      <div className="space-y-5 rounded-[26px] border border-slate-200 bg-[linear-gradient(135deg,rgba(248,250,252,0.98)_0%,rgba(255,255,255,0.96)_100%)] p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.92)] md:col-span-2">
                         <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
                           <div className="space-y-1">
                             <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500">
@@ -10028,15 +10127,15 @@ export default function EmployeesManagementPage() {
                         <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
                           <Field label="الراتب الأساسي">
                             <Input
-                              type="number"
-                              dir="rtl"
+                              type="text"
+                              dir="ltr"
                               inputMode="decimal"
                               step="0.01"
                               value={form.baseSalary}
-                              onChange={(event) =>
+                              onChange={event =>
                                 handleFormChange(
                                   "baseSalary",
-                                  normalizeEnglishDigits(event.target.value),
+                                  normalizeEnglishDigits(event.target.value)
                                 )
                               }
                               placeholder="مثال: 4500"
@@ -10047,15 +10146,15 @@ export default function EmployeesManagementPage() {
 
                           <Field label="بدل السكن">
                             <Input
-                              type="number"
-                              dir="rtl"
+                              type="text"
+                              dir="ltr"
                               inputMode="decimal"
                               step="0.01"
                               value={form.housingAllowance}
-                              onChange={(event) =>
+                              onChange={event =>
                                 handleFormChange(
                                   "housingAllowance",
-                                  normalizeEnglishDigits(event.target.value),
+                                  normalizeEnglishDigits(event.target.value)
                                 )
                               }
                               placeholder="مثال: 1250"
@@ -10066,15 +10165,15 @@ export default function EmployeesManagementPage() {
 
                           <Field label="بدل المواصلات">
                             <Input
-                              type="number"
-                              dir="rtl"
+                              type="text"
+                              dir="ltr"
                               inputMode="decimal"
                               step="0.01"
                               value={form.transportationAllowance}
-                              onChange={(event) =>
+                              onChange={event =>
                                 handleFormChange(
                                   "transportationAllowance",
-                                  normalizeEnglishDigits(event.target.value),
+                                  normalizeEnglishDigits(event.target.value)
                                 )
                               }
                               placeholder="مثال: 500"
@@ -10085,15 +10184,15 @@ export default function EmployeesManagementPage() {
 
                           <Field label="بدلات ثابتة أخرى">
                             <Input
-                              type="number"
-                              dir="rtl"
+                              type="text"
+                              dir="ltr"
                               inputMode="decimal"
                               step="0.01"
                               value={form.otherAllowances}
-                              onChange={(event) =>
+                              onChange={event =>
                                 handleFormChange(
                                   "otherAllowances",
-                                  normalizeEnglishDigits(event.target.value),
+                                  normalizeEnglishDigits(event.target.value)
                                 )
                               }
                               placeholder="مثال: 300"
@@ -10104,15 +10203,15 @@ export default function EmployeesManagementPage() {
 
                           <Field label="عدد أيام العمل">
                             <Input
-                              type="number"
-                              dir="rtl"
+                              type="text"
+                              dir="ltr"
                               inputMode="decimal"
                               step="1"
                               value={form.expectedWorkDays}
-                              onChange={(event) =>
+                              onChange={event =>
                                 handleFormChange(
                                   "expectedWorkDays",
-                                  normalizeEnglishDigits(event.target.value),
+                                  normalizeEnglishDigits(event.target.value)
                                 )
                               }
                               placeholder="مثال: 26"
@@ -10126,15 +10225,15 @@ export default function EmployeesManagementPage() {
                             description="تستخدم كبديل فقط إذا لم يتم تحديد وقت بداية ونهاية الدوام."
                           >
                             <Input
-                              type="number"
-                              dir="rtl"
+                              type="text"
+                              dir="ltr"
                               inputMode="decimal"
                               step="0.5"
                               value={form.expectedWorkHours}
-                              onChange={(event) =>
+                              onChange={event =>
                                 handleFormChange(
                                   "expectedWorkHours",
-                                  normalizeEnglishDigits(event.target.value),
+                                  normalizeEnglishDigits(event.target.value)
                                 )
                               }
                               placeholder="مثال: 240"
@@ -10145,15 +10244,15 @@ export default function EmployeesManagementPage() {
 
                           <Field label="سعر ساعة الأوفر تايم">
                             <Input
-                              type="number"
-                              dir="rtl"
+                              type="text"
+                              dir="ltr"
                               inputMode="decimal"
                               step="0.01"
                               value={form.overtimeHourlyRate}
-                              onChange={(event) =>
+                              onChange={event =>
                                 handleFormChange(
                                   "overtimeHourlyRate",
-                                  normalizeEnglishDigits(event.target.value),
+                                  normalizeEnglishDigits(event.target.value)
                                 )
                               }
                               placeholder="إذا تركته فارغًا سيُستخدم سعر الساعة العادي"
@@ -10164,15 +10263,15 @@ export default function EmployeesManagementPage() {
 
                           <Field label="خصم التأمينات">
                             <Input
-                              type="number"
-                              dir="rtl"
+                              type="text"
+                              dir="ltr"
                               inputMode="decimal"
                               step="0.01"
                               value={form.insuranceDeduction}
-                              onChange={(event) =>
+                              onChange={event =>
                                 handleFormChange(
                                   "insuranceDeduction",
-                                  normalizeEnglishDigits(event.target.value),
+                                  normalizeEnglishDigits(event.target.value)
                                 )
                               }
                               placeholder="مثال: 400"
@@ -10190,8 +10289,7 @@ export default function EmployeesManagementPage() {
                           <Field label="الراتب قبل الخصومات">
                             <div className="rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900">
                               {formatNumberEN(
-                                (baseSalaryNumber || 0) +
-                                  (totalAllowances || 0),
+                                (baseSalaryNumber || 0) + (totalAllowances || 0)
                               )}{" "}
                               ر.س
                             </div>
@@ -10205,8 +10303,8 @@ export default function EmployeesManagementPage() {
                                   (baseSalaryNumber || 0) +
                                     (totalAllowances || 0) -
                                     effectiveInsuranceDeduction -
-                                    totalSalaryDeductions,
-                                ),
+                                    totalSalaryDeductions
+                                )
                               )}{" "}
                               ر.س
                             </div>
@@ -10229,10 +10327,10 @@ export default function EmployeesManagementPage() {
                                   type="time"
                                   dir="ltr"
                                   value={form.shiftStartTime}
-                                  onChange={(event) =>
+                                  onChange={event =>
                                     handleFormChange(
                                       "shiftStartTime",
-                                      event.target.value,
+                                      event.target.value
                                     )
                                   }
                                   className="h-11 bg-white text-center text-base font-semibold tabular-nums"
@@ -10248,10 +10346,10 @@ export default function EmployeesManagementPage() {
                                   type="time"
                                   dir="ltr"
                                   value={form.shiftEndTime}
-                                  onChange={(event) =>
+                                  onChange={event =>
                                     handleFormChange(
                                       "shiftEndTime",
-                                      event.target.value,
+                                      event.target.value
                                     )
                                   }
                                   className="h-11 bg-white text-center text-base font-semibold tabular-nums"
@@ -10280,9 +10378,9 @@ export default function EmployeesManagementPage() {
                               </div>
 
                               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
-                                {WORK_SCHEDULE_WEEKDAYS.map((day) => {
+                                {WORK_SCHEDULE_WEEKDAYS.map(day => {
                                   const checked = form.weeklyOffDays.includes(
-                                    day.value,
+                                    day.value
                                   );
                                   return (
                                     <label
@@ -10291,15 +10389,15 @@ export default function EmployeesManagementPage() {
                                         "flex cursor-pointer items-center justify-center gap-2 rounded-xl border px-2 py-2 text-xs font-semibold transition-colors",
                                         checked
                                           ? "border-slate-900 bg-slate-950 text-white"
-                                          : "border-slate-200 bg-slate-50 text-slate-600",
+                                          : "border-slate-200 bg-slate-50 text-slate-600"
                                       )}
                                     >
                                       <Checkbox
                                         checked={checked}
-                                        onCheckedChange={(value) =>
+                                        onCheckedChange={value =>
                                           handleToggleWeeklyOffDay(
                                             day.value,
-                                            value === true,
+                                            value === true
                                           )
                                         }
                                         disabled={!canManageEmployees || saving}
@@ -10349,10 +10447,10 @@ export default function EmployeesManagementPage() {
                                     </Label>
                                     <Input
                                       value={newWorkZoneForm.name}
-                                      onChange={(event) =>
+                                      onChange={event =>
                                         handleNewWorkZoneFormChange(
                                           "name",
-                                          event.target.value,
+                                          event.target.value
                                         )
                                       }
                                       placeholder="مثال: مكتب جدة"
@@ -10372,10 +10470,10 @@ export default function EmployeesManagementPage() {
                                       dir="ltr"
                                       inputMode="numeric"
                                       value={newWorkZoneForm.radiusMeters}
-                                      onChange={(event) =>
+                                      onChange={event =>
                                         handleNewWorkZoneFormChange(
                                           "radiusMeters",
-                                          event.target.value,
+                                          event.target.value
                                         )
                                       }
                                       placeholder="200"
@@ -10395,10 +10493,10 @@ export default function EmployeesManagementPage() {
                                       dir="ltr"
                                       inputMode="decimal"
                                       value={newWorkZoneForm.lat}
-                                      onChange={(event) =>
+                                      onChange={event =>
                                         handleNewWorkZoneFormChange(
                                           "lat",
-                                          event.target.value,
+                                          event.target.value
                                         )
                                       }
                                       disabled={
@@ -10417,10 +10515,10 @@ export default function EmployeesManagementPage() {
                                       dir="ltr"
                                       inputMode="decimal"
                                       value={newWorkZoneForm.lng}
-                                      onChange={(event) =>
+                                      onChange={event =>
                                         handleNewWorkZoneFormChange(
                                           "lng",
-                                          event.target.value,
+                                          event.target.value
                                         )
                                       }
                                       disabled={
@@ -10493,9 +10591,9 @@ export default function EmployeesManagementPage() {
                                 جارٍ تحميل مناطق العمل...
                               </div>
                             ) : workZones.length ? (
-                              workZones.map((zone) => {
+                              workZones.map(zone => {
                                 const checked = form.allowedZoneIds.includes(
-                                  zone.id,
+                                  zone.id
                                 );
                                 return (
                                   <label
@@ -10504,15 +10602,15 @@ export default function EmployeesManagementPage() {
                                       "flex cursor-pointer items-start gap-3 rounded-2xl border px-3 py-3 transition-colors",
                                       checked
                                         ? "border-[#F2B705]/45 bg-[#F2B705]/10"
-                                        : "border-slate-200 bg-white",
+                                        : "border-slate-200 bg-white"
                                     )}
                                   >
                                     <Checkbox
                                       checked={checked}
-                                      onCheckedChange={(value) =>
+                                      onCheckedChange={value =>
                                         handleToggleAllowedZone(
                                           zone.id,
-                                          value === true,
+                                          value === true
                                         )
                                       }
                                       disabled={!canManageEmployees || saving}
@@ -10529,7 +10627,7 @@ export default function EmployeesManagementPage() {
                                             "rounded-full",
                                             zone.active
                                               ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                                              : "border-slate-200 bg-slate-100 text-slate-500",
+                                              : "border-slate-200 bg-slate-100 text-slate-500"
                                           )}
                                         >
                                           {zone.active ? "مفعلة" : "غير مفعلة"}
@@ -10542,11 +10640,11 @@ export default function EmployeesManagementPage() {
                                           <button
                                             type="button"
                                             className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs font-semibold text-slate-700 transition hover:border-[#F2B705]/45 hover:bg-[#F2B705]/10"
-                                            onClick={(event) => {
+                                            onClick={event => {
                                               event.preventDefault();
                                               event.stopPropagation();
                                               handleEditWorkZoneFromEmployee(
-                                                zone,
+                                                zone
                                               );
                                             }}
                                             disabled={
@@ -10578,7 +10676,7 @@ export default function EmployeesManagementPage() {
                     >
                       <Textarea
                         value={form.adminNotes}
-                        onChange={(event) =>
+                        onChange={event =>
                           handleFormChange("adminNotes", event.target.value)
                         }
                         placeholder="اكتب أي ملاحظات إدارية داخلية هنا"
@@ -10587,7 +10685,7 @@ export default function EmployeesManagementPage() {
                       />
                     </Field>
 
-                    <div className="space-y-3 rounded-[20px] border border-slate-200 bg-slate-50/70 p-4">
+                    <div className="space-y-4 rounded-[24px] border border-slate-200 bg-white p-4">
                       <div className="space-y-1">
                         <div className="text-sm font-semibold text-slate-950">
                           المستندات الرسمية
@@ -10598,7 +10696,7 @@ export default function EmployeesManagementPage() {
                         </p>
                       </div>
 
-                      <div className="rounded-[18px] border border-slate-200 bg-white p-3.5 sm:p-4">
+                      <div className="rounded-[18px] border border-slate-200 bg-slate-50/50 p-3.5 sm:p-4">
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                           <div className="flex min-w-0 items-center gap-3">
                             <Avatar className="h-12 w-12 shrink-0 rounded-[18px] border border-slate-200 bg-slate-100 shadow-sm">
@@ -10614,7 +10712,7 @@ export default function EmployeesManagementPage() {
                                   selectedEmployeeLabel,
                                   selectedEmployeeProfile?.personal?.email ||
                                     selectedEmployee?.email ||
-                                    "",
+                                    ""
                                 )}
                               </AvatarFallback>
                             </Avatar>
@@ -10638,7 +10736,7 @@ export default function EmployeesManagementPage() {
                           </Badge>
                         </div>
 
-                        <div className="mt-3 space-y-2">
+                        <div className="mt-3 space-y-3">
                           <Input
                             id="employee-avatar-upload-input"
                             ref={employeeAvatarInputRef}
@@ -10661,19 +10759,19 @@ export default function EmployeesManagementPage() {
                             onClick={() =>
                               employeeAvatarInputRef.current?.click()
                             }
-                            onKeyDown={(event) => {
+                            onKeyDown={event => {
                               if (event.key === "Enter" || event.key === " ") {
                                 event.preventDefault();
                                 employeeAvatarInputRef.current?.click();
                               }
                             }}
-                            onDragOver={(event) => event.preventDefault()}
+                            onDragOver={event => event.preventDefault()}
                             onDrop={handleEmployeeAvatarDrop}
                             className={cn(
-                              "flex min-h-[92px] cursor-pointer flex-col items-center justify-center gap-2 rounded-[16px] border border-dashed border-slate-300 bg-slate-50 px-3 py-4 text-center text-xs text-slate-600 transition hover:border-[#F2B705] hover:bg-[#F2B705]/5",
+                              "flex cursor-pointer items-center justify-center gap-3 rounded-[14px] border border-slate-200 bg-white px-3 py-3 text-center text-xs text-slate-600 transition hover:border-[#F2B705]/60 hover:bg-[#F2B705]/5",
                               (!canManageEmployees ||
                                 uploadingEmployeeAvatar) &&
-                                "pointer-events-none cursor-not-allowed opacity-60",
+                                "pointer-events-none cursor-not-allowed opacity-60"
                             )}
                           >
                             <Camera className="h-5 w-5 text-slate-500" />
@@ -10685,7 +10783,7 @@ export default function EmployeesManagementPage() {
                                 <div className="text-xs">
                                   الحجم:{" "}
                                   {formatFileSizeEN(
-                                    employeeAvatarCropDraft.fileSize,
+                                    employeeAvatarCropDraft.fileSize
                                   )}
                                 </div>
                                 <div className="text-xs text-slate-500">
@@ -10735,7 +10833,7 @@ export default function EmployeesManagementPage() {
                           </div>
                         </div>
 
-                        <p className="mt-2 text-[11px] leading-5 text-slate-500">
+                        <p className="hidden">
                           بعد اختيار الصورة ستظهر نافذة المعاينة والقص مثل التي
                           في البروفايل، ثم تعتمد الصورة داخل البطاقة والملف.
                         </p>
@@ -10743,7 +10841,7 @@ export default function EmployeesManagementPage() {
 
                       <Dialog
                         open={employeeAvatarCropOpen}
-                        onOpenChange={(open) => {
+                        onOpenChange={open => {
                           if (uploadingEmployeeAvatar) return;
                           if (!open) {
                             resetEmployeeAvatarCropState();
@@ -10755,7 +10853,7 @@ export default function EmployeesManagementPage() {
                         <DialogContent
                           showCloseButton={!uploadingEmployeeAvatar}
                           className="w-[min(94vw,46rem)] max-w-[46rem] overflow-hidden rounded-[30px] border border-slate-200 bg-white p-0 shadow-[0_28px_80px_-36px_rgba(15,23,42,0.4)]"
-                          onPointerDownOutside={(event) => {
+                          onPointerDownOutside={event => {
                             if (uploadingEmployeeAvatar) {
                               event.preventDefault();
                             }
@@ -10775,7 +10873,7 @@ export default function EmployeesManagementPage() {
                                   "relative mx-auto aspect-square w-full max-w-[360px] overflow-hidden rounded-[32px] bg-slate-950 touch-none select-none",
                                   employeeAvatarCropDragging
                                     ? "cursor-grabbing"
-                                    : "cursor-grab",
+                                    : "cursor-grab"
                                 )}
                                 onPointerDown={
                                   handleEmployeeAvatarCropPointerDown
@@ -10829,7 +10927,7 @@ export default function EmployeesManagementPage() {
                                   </Button>
                                   <Slider
                                     value={[employeeAvatarCropZoom]}
-                                    onValueChange={(values) => {
+                                    onValueChange={values => {
                                       const nextZoom =
                                         values[0] ??
                                         EMPLOYEE_AVATAR_CROP_MIN_ZOOM;
@@ -10837,8 +10935,8 @@ export default function EmployeesManagementPage() {
                                         clampNumber(
                                           nextZoom,
                                           EMPLOYEE_AVATAR_CROP_MIN_ZOOM,
-                                          EMPLOYEE_AVATAR_CROP_MAX_ZOOM,
-                                        ),
+                                          EMPLOYEE_AVATAR_CROP_MAX_ZOOM
+                                        )
                                       );
                                     }}
                                     min={EMPLOYEE_AVATAR_CROP_MIN_ZOOM}
@@ -10930,15 +11028,15 @@ export default function EmployeesManagementPage() {
                         </DialogContent>
                       </Dialog>
 
-                      <div className="grid gap-5 xl:grid-cols-[minmax(0,360px)_minmax(0,1fr)]">
-                        <div className="space-y-4 rounded-[20px] border border-slate-200 bg-white p-4">
+                      <div className="grid gap-5 xl:grid-cols-[minmax(0,320px)_minmax(0,1fr)]">
+                        <div className="space-y-3 rounded-[18px] border border-slate-200 bg-slate-50/50 p-4">
                           <Field label="عنوان المستند">
                             <Input
                               value={officialDocumentForm.title}
-                              onChange={(event) =>
+                              onChange={event =>
                                 handleOfficialDocumentFormChange(
                                   "title",
-                                  event.target.value,
+                                  event.target.value
                                 )
                               }
                               placeholder="مثال: عقد عمل، شهادة خبرة، هوية"
@@ -10951,10 +11049,10 @@ export default function EmployeesManagementPage() {
                           <Field label="وصف المستند (اختياري)">
                             <Textarea
                               value={officialDocumentForm.description}
-                              onChange={(event) =>
+                              onChange={event =>
                                 handleOfficialDocumentFormChange(
                                   "description",
-                                  event.target.value,
+                                  event.target.value
                                 )
                               }
                               placeholder="أضف ملاحظة مختصرة عن المستند"
@@ -10968,10 +11066,10 @@ export default function EmployeesManagementPage() {
                           <Field label="نوع المستند">
                             <Select
                               value={officialDocumentForm.fileType}
-                              onValueChange={(value) =>
+                              onValueChange={value =>
                                 handleOfficialDocumentFormChange(
                                   "fileType",
-                                  value,
+                                  value
                                 )
                               }
                               disabled={
@@ -10982,16 +11080,14 @@ export default function EmployeesManagementPage() {
                                 <SelectValue placeholder="اختر نوع المستند" />
                               </SelectTrigger>
                               <SelectContent>
-                                {OFFICIAL_DOCUMENT_TYPE_OPTIONS.map(
-                                  (option) => (
-                                    <SelectItem
-                                      key={option.value}
-                                      value={option.value}
-                                    >
-                                      {option.label}
-                                    </SelectItem>
-                                  ),
-                                )}
+                                {OFFICIAL_DOCUMENT_TYPE_OPTIONS.map(option => (
+                                  <SelectItem
+                                    key={option.value}
+                                    value={option.value}
+                                  >
+                                    {option.label}
+                                  </SelectItem>
+                                ))}
                               </SelectContent>
                             </Select>
                           </Field>
@@ -11017,7 +11113,7 @@ export default function EmployeesManagementPage() {
                               onClick={() =>
                                 officialDocumentInputRef.current?.click()
                               }
-                              onKeyDown={(event) => {
+                              onKeyDown={event => {
                                 if (
                                   event.key === "Enter" ||
                                   event.key === " "
@@ -11026,13 +11122,13 @@ export default function EmployeesManagementPage() {
                                   officialDocumentInputRef.current?.click();
                                 }
                               }}
-                              onDragOver={(event) => event.preventDefault()}
+                              onDragOver={event => event.preventDefault()}
                               onDrop={handleOfficialDocumentDrop}
                               className={cn(
-                                "flex cursor-pointer flex-col items-center justify-center gap-3 rounded-[16px] border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-sm text-slate-600 transition hover:border-[#F2B705] hover:bg-[#F2B705]/5",
+                                "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-[14px] border border-slate-200 bg-white px-4 py-4 text-center text-sm text-slate-600 transition hover:border-[#F2B705]/60 hover:bg-[#F2B705]/5",
                                 (!canManageEmployees ||
                                   uploadingOfficialDocument) &&
-                                  "pointer-events-none cursor-not-allowed opacity-60",
+                                  "pointer-events-none cursor-not-allowed opacity-60"
                               )}
                             >
                               <Upload className="h-6 w-6 text-slate-500" />
@@ -11044,7 +11140,7 @@ export default function EmployeesManagementPage() {
                                   <div>
                                     الحجم:{" "}
                                     {formatFileSizeEN(
-                                      officialDocumentForm.file.size,
+                                      officialDocumentForm.file.size
                                     )}
                                   </div>
                                 </div>
@@ -11095,13 +11191,13 @@ export default function EmployeesManagementPage() {
 
                         <div className="space-y-4">
                           {employeeOfficialFiles.length ? (
-                            employeeOfficialFiles.map((file) => (
+                            employeeOfficialFiles.map(file => (
                               <div
                                 key={file.id}
-                                className="space-y-4 rounded-[20px] border border-slate-200 bg-white p-4"
+                                className="rounded-[18px] border border-slate-200 bg-white px-4 py-3 shadow-sm"
                               >
                                 <div className="flex flex-wrap items-start justify-between gap-3">
-                                  <div className="space-y-2">
+                                  <div className="space-y-1.5">
                                     <div className="text-base font-semibold text-slate-950">
                                       {file.title}
                                     </div>
@@ -11129,33 +11225,33 @@ export default function EmployeesManagementPage() {
                                 </div>
 
                                 {file.description ? (
-                                  <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-7 text-slate-600">
+                                  <div className="mt-3 text-sm leading-6 text-slate-500">
                                     {file.description}
                                   </div>
                                 ) : null}
 
-                                <div className="grid gap-3 text-sm text-slate-600 md:grid-cols-2 xl:grid-cols-4">
-                                  <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-4 py-3">
+                                <div className="mt-3 grid gap-x-5 gap-y-2 border-t border-slate-100 pt-3 text-xs text-slate-500 md:grid-cols-2 xl:grid-cols-3">
+                                  <div className="min-w-0">
                                     <div className="text-xs text-slate-500">
                                       اسم الملف
                                     </div>
-                                    <div className="mt-1 font-semibold text-slate-900">
+                                    <div className="mt-0.5 truncate font-semibold text-slate-800" dir="ltr">
                                       {file.fileName}
                                     </div>
                                   </div>
-                                  <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-4 py-3">
+                                  <div>
                                     <div className="text-xs text-slate-500">
                                       الحجم
                                     </div>
-                                    <div className="mt-1 font-semibold text-slate-900">
+                                    <div className="mt-0.5 font-semibold text-slate-800">
                                       {formatFileSizeEN(file.fileSize ?? null)}
                                     </div>
                                   </div>
-                                  <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-4 py-3 md:col-span-2 xl:col-span-2">
+                                  <div>
                                     <div className="text-xs text-slate-500">
                                       تاريخ الرفع
                                     </div>
-                                    <div className="mt-1 font-semibold text-slate-900">
+                                    <div className="mt-0.5 font-semibold text-slate-800">
                                       {file.uploadedAtDate
                                         ? formatDateTimeEN(file.uploadedAtDate)
                                         : "غير متوفر"}
