@@ -56,11 +56,16 @@ import {
 import { fetchEmployeeDirectoryFromWorker } from "@/lib/employeeDirectoryWorker";
 import { languageDir, tr } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import {
+  fetchWorkZones,
+  normalizeAllowedZoneIds,
+  type WorkZone,
+} from "@/lib/workZones";
 
 const PAGE_SIZE = 50;
 
 type FilterState = {
-  department: string;
+  zoneId: string;
   month: string;
   employeeUid: string;
   fromDate: string;
@@ -75,7 +80,8 @@ type MetricTone = "emerald" | "sky" | "rose" | "amber" | "violet";
 type AttendanceEmployeeOption = {
   uid: string;
   name: string;
-  department: string;
+  employeeCode: string;
+  allowedZoneIds: string[];
 };
 
 function pickText(...values: unknown[]) {
@@ -124,7 +130,7 @@ function summarizeFilteredRecords(
 }
 
 const EMPTY_FILTERS: FilterState = {
-  department: "all",
+  zoneId: "all",
   month: "",
   employeeUid: "all",
   fromDate: "",
@@ -209,60 +215,603 @@ function formatMeters(value: number | null | undefined) {
   return `${Math.round(value)} m`;
 }
 
-function csvCell(value: unknown) {
-  return `"${String(value ?? "").replace(/"/g, '""')}"`;
+function escapeExcelXml(value: unknown) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
 }
 
-function exportCsv(records: AttendanceRecord[]) {
-  const headers = [
-    "employee_name",
-    "employee_uid",
-    "type",
-    "result",
-    "server_time",
-    "zone_name",
-    "distance_meters",
-    "gps_accuracy",
-    "latitude",
-    "longitude",
-    "device_id",
-    "device_changed",
-    "previous_device_id",
-    "shared_device_employee_count",
-    "shared_device_employees",
-    "rejection_reason",
-  ];
-  const rows = records.map((record) => [
-    record.employeeName || "",
-    record.employeeUid,
-    record.type,
-    record.result,
-    record.serverTime,
-    record.zoneName || "",
+type ExcelXmlCellInput = {
+  value: unknown;
+  styleId?: string;
+  mergeAcross?: number;
+};
+
+function excelXmlCell(
+  input: unknown | ExcelXmlCellInput,
+  fallbackStyleId = "Cell",
+) {
+  const cell =
+    input && typeof input === "object" && "value" in input
+      ? (input as ExcelXmlCellInput)
+      : { value: input };
+  const value = cell.value;
+  const isNumber = typeof value === "number" && Number.isFinite(value);
+  const mergeAcross = Math.max(0, Number(cell.mergeAcross || 0));
+  const mergeAttribute = mergeAcross
+    ? ` ss:MergeAcross="${mergeAcross}"`
+    : "";
+
+  return `<Cell ss:StyleID="${cell.styleId || fallbackStyleId}"${mergeAttribute}><Data ss:Type="${
+    isNumber ? "Number" : "String"
+  }">${escapeExcelXml(value)}</Data></Cell>`;
+}
+
+function excelXmlRow(
+  values: Array<unknown | ExcelXmlCellInput>,
+  options?: { height?: number },
+) {
+  const height =
+    typeof options?.height === "number" && Number.isFinite(options.height)
+      ? ` ss:Height="${options.height}"`
+      : "";
+  return `<Row${height}>${values.map((value) => excelXmlCell(value)).join("")}</Row>`;
+}
+
+function getRiyadhDateKey(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Riyadh",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+function formatMonthLabel(month: string, language: "ar" | "en") {
+  const match = /^(\d{4})-(\d{2})$/.exec(String(month || "").trim());
+  if (!match) return month || "-";
+  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, 1));
+  return new Intl.DateTimeFormat(language === "ar" ? "ar-SA" : "en-US", {
+    calendar: "gregory",
+    year: "numeric",
+    month: "long",
+    timeZone: "UTC",
+  }).format(date);
+}
+
+function sanitizeExcelFileName(value: string) {
+  return String(value || "attendance")
+    .replace(/[\\/:*?"<>|]/g, "-")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function readEmployeeCode(data: Record<string, any> | null | undefined) {
+  return pickText(
+    data?.employeeProfile?.employment?.employeeCode,
+    data?.employment?.employeeCode,
+    data?.profile?.employeeCode,
+    data?.employeeCode,
+    data?.employeeId,
+  );
+}
+
+function exportAttendanceExcel(input: {
+  records: AttendanceRecord[];
+  employees: AttendanceEmployeeOption[];
+  zone: WorkZone;
+  month: string;
+  language: "ar" | "en";
+}) {
+  const { records, employees, zone, month, language } = input;
+  const isArabic = language === "ar";
+  const monthLabel = formatMonthLabel(month, language);
+  const generatedAt = formatDateTime(new Date().toISOString());
+  const recordsByEmployee = new Map<string, AttendanceRecord[]>();
+  const employeeCodeByUid = new Map(
+    employees.map((employee) => [employee.uid, employee.employeeCode || "-"]),
+  );
+
+  records.forEach((record) => {
+    const current = recordsByEmployee.get(record.employeeUid) || [];
+    current.push(record);
+    recordsByEmployee.set(record.employeeUid, current);
+  });
+
+  const summaryHeaders = isArabic
+    ? [
+        "الموظف",
+        "الرقم الوظيفي",
+        "نطاق الحضور",
+        "الشهر",
+        "أيام الحضور",
+        "مرات الحضور",
+        "مرات الانصراف",
+        "العمليات المرفوضة",
+        "أول عملية",
+        "آخر عملية",
+      ]
+    : [
+        "Employee",
+        "Employee Number",
+        "Attendance Zone",
+        "Month",
+        "Attendance Days",
+        "Check-ins",
+        "Check-outs",
+        "Rejected Operations",
+        "First Operation",
+        "Last Operation",
+      ];
+
+  const summaryRows = employees.map((employee) => {
+    const employeeRecords = [...(recordsByEmployee.get(employee.uid) || [])].sort(
+      (left, right) =>
+        new Date(left.serverTime).getTime() - new Date(right.serverTime).getTime(),
+    );
+    const presentDays = new Set(
+      employeeRecords
+        .filter(
+          (record) => record.type === "check_in" && record.result === "allowed",
+        )
+        .map((record) => getRiyadhDateKey(record.serverTime))
+        .filter(Boolean),
+    ).size;
+
+    return [
+      employee.name,
+      employee.employeeCode || "-",
+      zone.name,
+      monthLabel,
+      presentDays,
+      employeeRecords.filter(
+        (record) => record.type === "check_in" && record.result === "allowed",
+      ).length,
+      employeeRecords.filter(
+        (record) => record.type === "check_out" && record.result === "allowed",
+      ).length,
+      employeeRecords.filter((record) => record.result === "rejected").length,
+      employeeRecords[0] ? formatDateTime(employeeRecords[0].serverTime) : "-",
+      employeeRecords.length
+        ? formatDateTime(employeeRecords[employeeRecords.length - 1].serverTime)
+        : "-",
+    ];
+  });
+
+  const detailsHeaders = isArabic
+    ? [
+        "الموظف",
+        "الرقم الوظيفي",
+        "نوع العملية",
+        "النتيجة",
+        "التاريخ والوقت",
+        "اسم النطاق المسجل",
+        "المسافة بالمتر",
+        "دقة GPS",
+        "خط العرض",
+        "خط الطول",
+        "معرف الجهاز",
+        "جهاز جديد",
+        "سبب الرفض",
+      ]
+    : [
+        "Employee",
+        "Employee Number",
+        "Operation",
+        "Result",
+        "Date and Time",
+        "Recorded Zone",
+        "Distance (m)",
+        "GPS Accuracy",
+        "Latitude",
+        "Longitude",
+        "Device ID",
+        "New Device",
+        "Rejection Reason",
+      ];
+
+  const detailsRows = [...records]
+    .sort((left, right) => {
+      const nameCompare = String(left.employeeName || left.employeeUid).localeCompare(
+        String(right.employeeName || right.employeeUid),
+        isArabic ? "ar" : "en",
+      );
+      if (nameCompare !== 0) return nameCompare;
+      return (
+        new Date(left.serverTime).getTime() -
+        new Date(right.serverTime).getTime()
+      );
+    })
+    .map((record) => [
+    record.employeeName || record.employeeUid,
+    employeeCodeByUid.get(record.employeeUid) || "-",
+    record.type === "check_in"
+      ? isArabic
+        ? "حضور"
+        : "Check-in"
+      : isArabic
+        ? "انصراف"
+        : "Check-out",
+    record.result === "allowed"
+      ? isArabic
+        ? "مسموح"
+        : "Allowed"
+      : isArabic
+        ? "مرفوض"
+        : "Rejected",
+    formatDateTime(record.serverTime),
+    record.zoneName || "-",
     record.distanceMeters ?? "",
     record.location.accuracy,
     record.location.lat,
     record.location.lng,
     record.deviceInfo.deviceId || "",
-    Boolean(record.deviceInfo.deviceChanged),
-    record.deviceInfo.previousDeviceId || "",
-    record.deviceInfo.sharedDevice?.employeeCount ?? "",
-    record.deviceInfo.sharedDevice?.employees
-      ?.map((employee) => employee.name || employee.uid)
-      .join(" | ") || "",
-    record.rejectionReason || "",
+    record.deviceInfo.deviceChanged
+      ? isArabic
+        ? "نعم"
+        : "Yes"
+      : isArabic
+        ? "لا"
+        : "No",
+    record.result === "rejected"
+      ? rejectionLabel(record.rejectionReason, language)
+      : "-",
   ]);
-  const csv = [headers, ...rows]
-    .map((row) => row.map(csvCell).join(","))
-    .join("\r\n");
-  const blob = new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" });
+
+  const summaryColumnWidths = [170, 210, 150, 125, 90, 90, 95, 105, 165, 165];
+  const detailsColumnWidths = [
+    170, 210, 95, 90, 165, 150, 95, 95, 110, 110, 190, 90, 170,
+  ];
+
+  const buildSummaryRowsXml = () =>
+    summaryRows
+      .map((row, rowIndex) => {
+        const alternate = rowIndex % 2 === 1;
+        return excelXmlRow(
+          row.map((value, columnIndex) => {
+            let styleId = alternate ? "CellAlt" : "Cell";
+
+            if ([4, 5, 6, 7].includes(columnIndex)) {
+              styleId = alternate ? "IntegerAlt" : "Integer";
+            }
+            if ([8, 9].includes(columnIndex)) {
+              styleId = alternate ? "DateAlt" : "Date";
+            }
+            if (columnIndex === 4 && Number(value) === 0) {
+              styleId = "ZeroAttendance";
+            }
+            if (columnIndex === 7 && Number(value) > 0) {
+              styleId = "RejectedCount";
+            }
+
+            return { value, styleId };
+          }),
+          { height: 24 },
+        );
+      })
+      .join("");
+
+  const buildDetailsRowsXml = () =>
+    detailsRows
+      .map((row, rowIndex) => {
+        const alternate = rowIndex % 2 === 1;
+        return excelXmlRow(
+          row.map((value, columnIndex) => {
+            let styleId = alternate ? "CellAlt" : "Cell";
+
+            if ([6, 7].includes(columnIndex)) {
+              styleId = alternate ? "DecimalAlt" : "Decimal";
+            }
+            if ([8, 9].includes(columnIndex)) {
+              styleId = alternate ? "CoordinateAlt" : "Coordinate";
+            }
+            if (columnIndex === 4) {
+              styleId = alternate ? "DateAlt" : "Date";
+            }
+            if (columnIndex === 2) {
+              styleId = String(value).includes("حضور") || value === "Check-in"
+                ? "CheckIn"
+                : "CheckOut";
+            }
+            if (columnIndex === 3) {
+              styleId = String(value).includes("مسموح") || value === "Allowed"
+                ? "Allowed"
+                : "Rejected";
+            }
+            if (columnIndex === 11 && (value === "نعم" || value === "Yes")) {
+              styleId = "NewDevice";
+            }
+            if (columnIndex === 12 && value !== "-") {
+              styleId = "RejectedReason";
+            }
+
+            return { value, styleId };
+          }),
+          { height: 24 },
+        );
+      })
+      .join("");
+
+  const worksheet = (input: {
+    name: string;
+    title: string;
+    headers: string[];
+    rowsXml: string;
+    rowCount: number;
+    columnWidths: number[];
+  }) => {
+    const columnCount = input.headers.length;
+    const headerRowNumber = 5;
+    const finalRowNumber = headerRowNumber + input.rowCount;
+    const filterRange = `R${headerRowNumber}C1:R${Math.max(
+      headerRowNumber,
+      finalRowNumber,
+    )}C${columnCount}`;
+
+    return `
+    <Worksheet ss:Name="${escapeExcelXml(input.name)}">
+      <Table ss:DefaultRowHeight="24">
+        ${input.columnWidths
+          .map((width) => `<Column ss:AutoFitWidth="0" ss:Width="${width}"/>`)
+          .join("")}
+        ${excelXmlRow(
+          [
+            {
+              value: input.title,
+              styleId: "Title",
+              mergeAcross: columnCount - 1,
+            },
+          ],
+          { height: 34 },
+        )}
+        ${excelXmlRow(
+          [
+            {
+              value: isArabic
+                ? `النطاق: ${zone.name}    |    الشهر: ${monthLabel}`
+                : `Zone: ${zone.name}    |    Month: ${monthLabel}`,
+              styleId: "Subtitle",
+              mergeAcross: columnCount - 1,
+            },
+          ],
+          { height: 26 },
+        )}
+        ${excelXmlRow(
+          [
+            {
+              value: isArabic
+                ? `تاريخ إنشاء الكشف: ${generatedAt}    |    عدد الموظفين: ${employees.length}    |    عدد العمليات: ${records.length}`
+                : `Generated: ${generatedAt}    |    Employees: ${employees.length}    |    Operations: ${records.length}`,
+              styleId: "Meta",
+              mergeAcross: columnCount - 1,
+            },
+          ],
+          { height: 24 },
+        )}
+        ${excelXmlRow(
+          [
+            {
+              value: "",
+              styleId: "Spacer",
+              mergeAcross: columnCount - 1,
+            },
+          ],
+          { height: 10 },
+        )}
+        ${excelXmlRow(
+          input.headers.map((header) => ({ value: header, styleId: "Header" })),
+          { height: 30 },
+        )}
+        ${input.rowsXml}
+      </Table>
+      <AutoFilter x:Range="${filterRange}" xmlns="urn:schemas-microsoft-com:office:excel"/>
+      <WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">
+        ${isArabic ? "<DisplayRightToLeft/>" : ""}
+        <Selected/>
+        <FreezePanes/>
+        <FrozenNoSplit/>
+        <SplitHorizontal>${headerRowNumber}</SplitHorizontal>
+        <TopRowBottomPane>${headerRowNumber}</TopRowBottomPane>
+        <ActivePane>2</ActivePane>
+        <PageSetup>
+          <Layout x:Orientation="Landscape"/>
+          <PageMargins x:Bottom="0.5" x:Left="0.25" x:Right="0.25" x:Top="0.5"/>
+        </PageSetup>
+        <FitToPage/>
+        <Print>
+          <FitHeight>0</FitHeight>
+          <FitWidth>1</FitWidth>
+          <HorizontalResolution>600</HorizontalResolution>
+          <VerticalResolution>600</VerticalResolution>
+        </Print>
+        <ProtectObjects>False</ProtectObjects>
+        <ProtectScenarios>False</ProtectScenarios>
+      </WorksheetOptions>
+    </Worksheet>`;
+  };
+
+  const workbook = `<?xml version="1.0" encoding="UTF-8"?>
+  <?mso-application progid="Excel.Sheet"?>
+  <Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+    xmlns:o="urn:schemas-microsoft-com:office:office"
+    xmlns:x="urn:schemas-microsoft-com:office:excel"
+    xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+    <DocumentProperties xmlns="urn:schemas-microsoft-com:office:office">
+      <Title>${escapeExcelXml(
+        isArabic ? "كشف الحضور الشهري حسب النطاق" : "Monthly Attendance by Zone",
+      )}</Title>
+      <Subject>${escapeExcelXml(zone.name)}</Subject>
+      <Author>MAEDIN HR</Author>
+      <Created>${new Date().toISOString()}</Created>
+    </DocumentProperties>
+    <ExcelWorkbook xmlns="urn:schemas-microsoft-com:office:excel">
+      <WindowHeight>12300</WindowHeight>
+      <WindowWidth>28800</WindowWidth>
+      <ProtectStructure>False</ProtectStructure>
+      <ProtectWindows>False</ProtectWindows>
+    </ExcelWorkbook>
+    <Styles>
+      <Style ss:ID="Default" ss:Name="Normal">
+        <Alignment ss:Vertical="Center"/>
+        <Borders/>
+        <Font ss:FontName="Tahoma" ss:Size="10" ss:Color="#0F172A"/>
+        <Interior/>
+        <NumberFormat/>
+        <Protection/>
+      </Style>
+      <Style ss:ID="Title">
+        <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
+        <Font ss:FontName="Tahoma" ss:Size="16" ss:Bold="1" ss:Color="#FFFFFF"/>
+        <Interior ss:Color="#030640" ss:Pattern="Solid"/>
+        <Borders>
+          <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="3" ss:Color="#F2B705"/>
+        </Borders>
+      </Style>
+      <Style ss:ID="Subtitle">
+        <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
+        <Font ss:FontName="Tahoma" ss:Size="11" ss:Bold="1" ss:Color="#030640"/>
+        <Interior ss:Color="#FFF4BF" ss:Pattern="Solid"/>
+      </Style>
+      <Style ss:ID="Meta">
+        <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
+        <Font ss:FontName="Tahoma" ss:Size="9" ss:Color="#475569"/>
+        <Interior ss:Color="#F8FAFC" ss:Pattern="Solid"/>
+        <Borders>
+          <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
+        </Borders>
+      </Style>
+      <Style ss:ID="Spacer">
+        <Interior ss:Color="#FFFFFF" ss:Pattern="Solid"/>
+      </Style>
+      <Style ss:ID="Header">
+        <Alignment ss:Horizontal="Center" ss:Vertical="Center" ss:WrapText="1"/>
+        <Font ss:FontName="Tahoma" ss:Size="10" ss:Bold="1" ss:Color="#030640"/>
+        <Interior ss:Color="#F2B705" ss:Pattern="Solid"/>
+        <Borders>
+          <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="2" ss:Color="#030640"/>
+          <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#D4A000"/>
+          <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#D4A000"/>
+          <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#D4A000"/>
+        </Borders>
+      </Style>
+      <Style ss:ID="Cell">
+        <Alignment ss:Horizontal="Right" ss:Vertical="Center" ss:WrapText="1"/>
+        <Interior ss:Color="#FFFFFF" ss:Pattern="Solid"/>
+        <Borders>
+          <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+          <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+          <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+          <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+        </Borders>
+      </Style>
+      <Style ss:ID="CellAlt" ss:Parent="Cell">
+        <Interior ss:Color="#F8FAFC" ss:Pattern="Solid"/>
+      </Style>
+      <Style ss:ID="Integer" ss:Parent="Cell">
+        <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
+        <NumberFormat ss:Format="0"/>
+      </Style>
+      <Style ss:ID="IntegerAlt" ss:Parent="Integer">
+        <Interior ss:Color="#F8FAFC" ss:Pattern="Solid"/>
+      </Style>
+      <Style ss:ID="Decimal" ss:Parent="Cell">
+        <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
+        <NumberFormat ss:Format="0.00"/>
+      </Style>
+      <Style ss:ID="DecimalAlt" ss:Parent="Decimal">
+        <Interior ss:Color="#F8FAFC" ss:Pattern="Solid"/>
+      </Style>
+      <Style ss:ID="Coordinate" ss:Parent="Cell">
+        <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
+        <NumberFormat ss:Format="0.000000"/>
+      </Style>
+      <Style ss:ID="CoordinateAlt" ss:Parent="Coordinate">
+        <Interior ss:Color="#F8FAFC" ss:Pattern="Solid"/>
+      </Style>
+      <Style ss:ID="Date" ss:Parent="Cell">
+        <Alignment ss:Horizontal="Center" ss:Vertical="Center" ss:WrapText="1"/>
+      </Style>
+      <Style ss:ID="DateAlt" ss:Parent="Date">
+        <Interior ss:Color="#F8FAFC" ss:Pattern="Solid"/>
+      </Style>
+      <Style ss:ID="Allowed" ss:Parent="Cell">
+        <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
+        <Font ss:FontName="Tahoma" ss:Size="10" ss:Bold="1" ss:Color="#166534"/>
+        <Interior ss:Color="#DCFCE7" ss:Pattern="Solid"/>
+      </Style>
+      <Style ss:ID="Rejected" ss:Parent="Cell">
+        <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
+        <Font ss:FontName="Tahoma" ss:Size="10" ss:Bold="1" ss:Color="#991B1B"/>
+        <Interior ss:Color="#FEE2E2" ss:Pattern="Solid"/>
+      </Style>
+      <Style ss:ID="CheckIn" ss:Parent="Cell">
+        <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
+        <Font ss:FontName="Tahoma" ss:Size="10" ss:Bold="1" ss:Color="#075985"/>
+        <Interior ss:Color="#E0F2FE" ss:Pattern="Solid"/>
+      </Style>
+      <Style ss:ID="CheckOut" ss:Parent="Cell">
+        <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
+        <Font ss:FontName="Tahoma" ss:Size="10" ss:Bold="1" ss:Color="#5B21B6"/>
+        <Interior ss:Color="#EDE9FE" ss:Pattern="Solid"/>
+      </Style>
+      <Style ss:ID="NewDevice" ss:Parent="Cell">
+        <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
+        <Font ss:FontName="Tahoma" ss:Size="10" ss:Bold="1" ss:Color="#92400E"/>
+        <Interior ss:Color="#FEF3C7" ss:Pattern="Solid"/>
+      </Style>
+      <Style ss:ID="ZeroAttendance" ss:Parent="Integer">
+        <Font ss:FontName="Tahoma" ss:Size="10" ss:Bold="1" ss:Color="#991B1B"/>
+        <Interior ss:Color="#FEE2E2" ss:Pattern="Solid"/>
+      </Style>
+      <Style ss:ID="RejectedCount" ss:Parent="Integer">
+        <Font ss:FontName="Tahoma" ss:Size="10" ss:Bold="1" ss:Color="#991B1B"/>
+        <Interior ss:Color="#FEE2E2" ss:Pattern="Solid"/>
+      </Style>
+      <Style ss:ID="RejectedReason" ss:Parent="Cell">
+        <Font ss:FontName="Tahoma" ss:Size="10" ss:Color="#991B1B"/>
+        <Interior ss:Color="#FFF1F2" ss:Pattern="Solid"/>
+      </Style>
+    </Styles>
+    ${worksheet({
+      name: isArabic ? "سجل العمليات" : "Operation Log",
+      title: isArabic
+        ? "كل عمليات الحضور والانصراف — كل عملية في صف مستقل"
+        : "All Attendance Operations — One Operation per Row",
+      headers: detailsHeaders,
+      rowsXml: buildDetailsRowsXml(),
+      rowCount: detailsRows.length,
+      columnWidths: detailsColumnWidths,
+    })}
+    ${worksheet({
+      name: isArabic ? "ملخص الموظفين" : "Employee Summary",
+      title: isArabic
+        ? "ملخص الحضور الشهري حسب نطاق العمل"
+        : "Monthly Attendance Summary by Work Zone",
+      headers: summaryHeaders,
+      rowsXml: buildSummaryRowsXml(),
+      rowCount: summaryRows.length,
+      columnWidths: summaryColumnWidths,
+    })}
+  </Workbook>`;
+
+  const blob = new Blob(["\uFEFF", workbook], {
+    type: "application/vnd.ms-excel;charset=utf-8",
+  });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = `attendance-${new Date().toISOString().slice(0, 10)}.csv`;
+  anchor.download = `${sanitizeExcelFileName(zone.name)}-${month}-attendance.xls`;
   anchor.click();
   URL.revokeObjectURL(url);
 }
+
 
 function normalizeLookupKey(value: string | null | undefined) {
   return String(value || "").trim();
@@ -890,6 +1439,7 @@ export default function HrAttendancePage() {
   const [page, setPage] = useState(1);
   const [data, setData] = useState<AttendanceRecordsResponse | null>(null);
   const [employees, setEmployees] = useState<AttendanceEmployeeOption[]>([]);
+  const [workZones, setWorkZones] = useState<WorkZone[]>([]);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [visibleDeviceIds, setVisibleDeviceIds] = useState<Set<string>>(
@@ -903,7 +1453,7 @@ export default function HrAttendancePage() {
     setLoading(true);
     setError("");
     try {
-      if (appliedFilters.department !== "all") {
+      if (appliedFilters.zoneId !== "all") {
         const collected: AttendanceRecord[] = [];
         let cursor: string | undefined;
         do {
@@ -919,14 +1469,18 @@ export default function HrAttendancePage() {
 
         const allowedUids = new Set(
           employees
-            .filter(
-              (employee) => employee.department === appliedFilters.department,
+            .filter((employee) =>
+              employee.allowedZoneIds.includes(appliedFilters.zoneId),
             )
             .map((employee) => employee.uid),
         );
-        const filtered = collected.filter((record) =>
-          allowedUids.has(record.employeeUid),
-        );
+        const filtered = collected.filter((record) => {
+          if (!allowedUids.has(record.employeeUid)) return false;
+          return (
+            appliedFilters.employeeUid === "all" ||
+            record.employeeUid === appliedFilters.employeeUid
+          );
+        });
         const start = (page - 1) * PAGE_SIZE;
         if (requestId !== requestIdRef.current) return;
         setData({
@@ -977,23 +1531,40 @@ export default function HrAttendancePage() {
       fetchEmployeeDirectoryFromWorker(),
       getDocs(collection(db, "users")),
       getDocs(collection(db, "employees")),
+      fetchWorkZones(),
     ])
-      .then(([items, usersSnapshot, employeesSnapshot]) => {
+      .then(([items, usersSnapshot, employeesSnapshot, zones]) => {
         if (!active) return;
 
-        const departmentByUid = new Map<string, string>();
-        const readDepartment = (data: Record<string, any>) =>
-          pickText(
-            data.department,
-            data.employment?.department,
-            data.employeeProfile?.employment?.department,
-          );
+        const allowedZonesByUid = new Map<string, Set<string>>();
+        const employeeCodeByUid = new Map<string, string>();
+        const addEmployeeCode = (
+          uid: string,
+          data: Record<string, any> | null | undefined,
+        ) => {
+          if (!uid) return;
+          const employeeCode = readEmployeeCode(data);
+          if (employeeCode && !employeeCodeByUid.has(uid)) {
+            employeeCodeByUid.set(uid, employeeCode);
+          }
+        };
+        const addAllowedZones = (uid: string, value: unknown) => {
+          if (!uid) return;
+          const existing = allowedZonesByUid.get(uid) || new Set<string>();
+          normalizeAllowedZoneIds(value).forEach((zoneId) => existing.add(zoneId));
+          allowedZonesByUid.set(uid, existing);
+        };
+        const readAllowedZoneIds = (data: Record<string, any>) =>
+          data.allowedZoneIds ||
+          data.employment?.allowedZoneIds ||
+          data.employeeProfile?.employment?.allowedZoneIds ||
+          [];
 
         usersSnapshot.docs.forEach((snapshot) => {
           const data = snapshot.data() as Record<string, any>;
           const uid = pickText(data.uid, snapshot.id);
-          const department = readDepartment(data);
-          if (uid && department) departmentByUid.set(uid, department);
+          addAllowedZones(uid, readAllowedZoneIds(data));
+          addEmployeeCode(uid, data);
         });
 
         employeesSnapshot.docs.forEach((snapshot) => {
@@ -1004,15 +1575,18 @@ export default function HrAttendancePage() {
             data.userId,
             snapshot.id,
           );
-          const department = readDepartment(data);
-          if (uid && department) departmentByUid.set(uid, department);
+          addAllowedZones(uid, readAllowedZoneIds(data));
+          addEmployeeCode(uid, data);
+          addEmployeeCode(snapshot.id, data);
         });
 
+        setWorkZones(zones);
         setEmployees(
           items.map((item) => ({
             uid: item.uid,
             name: item.name,
-            department: departmentByUid.get(item.uid) || "غير محدد",
+            employeeCode: employeeCodeByUid.get(item.uid) || "-",
+            allowedZoneIds: Array.from(allowedZonesByUid.get(item.uid) || []),
           })),
         );
       })
@@ -1021,7 +1595,10 @@ export default function HrAttendancePage() {
           "hr_attendance_employee_directory_failed",
           directoryError,
         );
-        if (active) setEmployees([]);
+        if (active) {
+          setEmployees([]);
+          setWorkZones([]);
+        }
       });
     return () => {
       active = false;
@@ -1038,41 +1615,39 @@ export default function HrAttendancePage() {
     [data?.records, employeeNameMap],
   );
 
-  const departmentOptions = useMemo(
+  const zoneOptions = useMemo(
     () =>
-      Array.from(
-        new Set(
-          employees
-            .map((employee) => employee.department.trim())
-            .filter(Boolean),
-        ),
-      ).sort((left, right) =>
-        left.localeCompare(right, language === "ar" ? "ar" : "en"),
+      [...workZones].sort((left, right) =>
+        left.name.localeCompare(right.name, language === "ar" ? "ar" : "en"),
       ),
-    [employees, language],
+    [language, workZones],
   );
 
-  const departmentEmployeeUids = useMemo(() => {
-    if (appliedFilters.department === "all") return null;
-    return new Set(
-      employees
-        .filter((employee) => employee.department === appliedFilters.department)
-        .map((employee) => employee.uid),
+  const selectedZoneEmployees = useMemo(() => {
+    if (appliedFilters.zoneId === "all") return employees;
+    return employees.filter((employee) =>
+      employee.allowedZoneIds.includes(appliedFilters.zoneId),
     );
-  }, [appliedFilters.department, employees]);
+  }, [appliedFilters.zoneId, employees]);
 
   const employeeOptions = useMemo(() => {
-    const options = new Map(
-      employees
-        .filter(
-          (employee) =>
-            filters.department === "all" ||
-            employee.department === filters.department,
-        )
-        .map((employee) => [employee.uid, employee.name]),
+    const eligibleEmployees = employees.filter(
+      (employee) =>
+        filters.zoneId === "all" ||
+        employee.allowedZoneIds.includes(filters.zoneId),
+    );
+    const eligibleEmployeeUids = new Set(
+      eligibleEmployees.map((employee) => employee.uid),
+    );
+    const options = new Map<string, string>(
+      eligibleEmployees.map((employee) => [employee.uid, employee.name]),
     );
     for (const record of displayRecords) {
-      if (!options.has(record.employeeUid)) {
+      if (
+        (filters.zoneId === "all" ||
+          eligibleEmployeeUids.has(record.employeeUid)) &&
+        !options.has(record.employeeUid)
+      ) {
         options.set(
           record.employeeUid,
           record.employeeName || record.employeeUid,
@@ -1083,30 +1658,30 @@ export default function HrAttendancePage() {
       (left, right) =>
         left.name.localeCompare(right.name, language === "ar" ? "ar" : "en"),
     );
-  }, [displayRecords, employees, filters.department, language]);
+  }, [displayRecords, employees, filters.zoneId, language]);
 
   const totalPages = Math.max(1, Math.ceil((data?.total || 0) / PAGE_SIZE));
   const summaryCards = [
     {
-      label: tr(language, "حضور اليوم", "Today's check-ins"),
+      label: tr(language, "عمليات الحضور", "Check-ins"),
       value: data?.summary.checkIns ?? 0,
       icon: LogIn,
       tone: "emerald" as const,
     },
     {
-      label: tr(language, "انصراف اليوم", "Today's check-outs"),
+      label: tr(language, "عمليات الانصراف", "Check-outs"),
       value: data?.summary.checkOuts ?? 0,
       icon: LogOut,
       tone: "sky" as const,
     },
     {
-      label: tr(language, "المرفوض اليوم", "Rejected today"),
+      label: tr(language, "العمليات المرفوضة", "Rejected"),
       value: data?.summary.rejected ?? 0,
       icon: ShieldX,
       tone: "rose" as const,
     },
     {
-      label: tr(language, "أجهزة جديدة اليوم", "New devices today"),
+      label: tr(language, "الأجهزة الجديدة", "New devices"),
       value: data?.summary.newDevices ?? 0,
       icon: Smartphone,
       tone: "amber" as const,
@@ -1123,7 +1698,7 @@ export default function HrAttendancePage() {
   ];
 
   const activeFiltersCount = [
-    appliedFilters.department !== EMPTY_FILTERS.department,
+    appliedFilters.zoneId !== EMPTY_FILTERS.zoneId,
     Boolean(appliedFilters.month),
     appliedFilters.employeeUid !== EMPTY_FILTERS.employeeUid,
     Boolean(appliedFilters.fromDate),
@@ -1171,6 +1746,27 @@ export default function HrAttendancePage() {
   };
 
   const handleExport = async () => {
+    if (appliedFilters.zoneId === "all") {
+      toast.error(
+        tr(language, "اختر نطاق الحضور أولًا.", "Select a work zone first."),
+      );
+      return;
+    }
+    if (!appliedFilters.month) {
+      toast.error(tr(language, "اختر الشهر أولًا.", "Select a month first."));
+      return;
+    }
+
+    const selectedZone = workZones.find(
+      (zone) => zone.id === appliedFilters.zoneId,
+    );
+    if (!selectedZone) {
+      toast.error(
+        tr(language, "تعذر تحديد نطاق الحضور.", "Could not resolve work zone."),
+      );
+      return;
+    }
+
     setExporting(true);
     try {
       const collected: AttendanceRecord[] = [];
@@ -1178,32 +1774,45 @@ export default function HrAttendancePage() {
       do {
         const response = await fetchAttendanceRecords({
           ...toRequestFilters(appliedFilters),
+          employeeUid: undefined,
           limit: 200,
           cursor,
         });
         collected.push(...response.records);
         cursor = response.nextCursor || undefined;
       } while (cursor && collected.length < 10000);
-      const exportedRecords =
-        appliedFilters.department === "all"
-          ? collected
-          : collected.filter((record) =>
-              departmentEmployeeUids?.has(record.employeeUid),
-            );
-      exportCsv(
-        enrichAttendanceRecordsWithNames(exportedRecords, employeeNameMap),
+
+      const assignedEmployees = selectedZoneEmployees.filter(
+        (employee) =>
+          appliedFilters.employeeUid === "all" ||
+          employee.uid === appliedFilters.employeeUid,
       );
+      const assignedEmployeeUids = new Set(
+        assignedEmployees.map((employee) => employee.uid),
+      );
+      const exportedRecords = enrichAttendanceRecordsWithNames(
+        collected.filter((record) => assignedEmployeeUids.has(record.employeeUid)),
+        employeeNameMap,
+      );
+
+      exportAttendanceExcel({
+        records: exportedRecords,
+        employees: assignedEmployees,
+        zone: selectedZone,
+        month: appliedFilters.month,
+        language,
+      });
       toast.success(
         tr(
           language,
-          `تم تصدير ${exportedRecords.length} سجل.`,
-          `Exported ${exportedRecords.length} records.`,
+          `تم إنشاء كشف Excel لنطاق ${selectedZone.name} ويشمل ${assignedEmployees.length} موظفًا.`,
+          `Excel report created for ${selectedZone.name} with ${assignedEmployees.length} employees.`,
         ),
       );
     } catch (exportError) {
       console.error("hr_attendance_export_failed", exportError);
       toast.error(
-        tr(language, "تعذر تصدير السجلات.", "Could not export records."),
+        tr(language, "تعذر إنشاء كشف Excel.", "Could not create Excel report."),
       );
     } finally {
       setExporting(false);
@@ -1253,10 +1862,10 @@ export default function HrAttendancePage() {
                 <Button
                   className="h-11 rounded-2xl bg-slate-950 px-4 shadow-sm hover:bg-slate-800"
                   onClick={() => void handleExport()}
-                  disabled={exporting || !data?.total}
+                  disabled={exporting}
                 >
                   <Download className="h-4 w-4" />
-                  {tr(language, "تصدير CSV", "Export CSV")}
+                  {tr(language, "تصدير Excel", "Export Excel")}
                 </Button>
               </div>
             </div>
@@ -1314,14 +1923,14 @@ export default function HrAttendancePage() {
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-12">
               <div className="space-y-2 xl:col-span-2">
                 <Label className="text-xs font-semibold text-slate-600">
-                  {tr(language, "الإدارة / المشروع", "Department / Project")}
+                  {tr(language, "نطاق الحضور", "Work zone")}
                 </Label>
                 <Select
-                  value={filters.department}
+                  value={filters.zoneId}
                   onValueChange={(value) =>
                     setFilters((current) => ({
                       ...current,
-                      department: value,
+                      zoneId: value,
                       employeeUid: "all",
                     }))
                   }
@@ -1331,11 +1940,11 @@ export default function HrAttendancePage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">
-                      {tr(language, "جميع الإدارات", "All departments")}
+                      {tr(language, "جميع النطاقات", "All work zones")}
                     </SelectItem>
-                    {departmentOptions.map((department) => (
-                      <SelectItem key={department} value={department}>
-                        {department}
+                    {zoneOptions.map((zone) => (
+                      <SelectItem key={zone.id} value={zone.id}>
+                        {zone.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -1354,14 +1963,16 @@ export default function HrAttendancePage() {
                   type="month"
                   className="h-11 rounded-2xl border-slate-200 bg-slate-50/70"
                   value={filters.month}
-                  onChange={(event) =>
+                  onChange={(event) => {
+                    const month = event.target.value;
+                    const range = monthToDateRange(month);
                     setFilters((current) => ({
                       ...current,
-                      month: event.target.value,
-                      fromDate: "",
-                      toDate: "",
-                    }))
-                  }
+                      month,
+                      fromDate: range?.fromDate || "",
+                      toDate: range?.toDate || "",
+                    }));
+                  }}
                 />
               </div>
 
@@ -1383,7 +1994,7 @@ export default function HrAttendancePage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">
-                      {tr(language, "جميع الموظفين", "All employees")}
+                      {tr(language, `جميع الموظفين (${employeeOptions.length})`, `All employees (${employeeOptions.length})`)}
                     </SelectItem>
                     {employeeOptions.map((employee) => (
                       <SelectItem key={employee.uid} value={employee.uid}>
@@ -1409,6 +2020,7 @@ export default function HrAttendancePage() {
                   onChange={(event) =>
                     setFilters((current) => ({
                       ...current,
+                      month: "",
                       fromDate: event.target.value,
                     }))
                   }
@@ -1430,6 +2042,7 @@ export default function HrAttendancePage() {
                   onChange={(event) =>
                     setFilters((current) => ({
                       ...current,
+                      month: "",
                       toDate: event.target.value,
                     }))
                   }
