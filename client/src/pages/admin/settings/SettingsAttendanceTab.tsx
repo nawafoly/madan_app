@@ -10,6 +10,7 @@ import {
   Radar,
   Save,
   Trash2,
+  Wifi,
   XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -42,6 +43,7 @@ type AttendanceZoneForm = {
   lat: string;
   lng: string;
   radiusMeters: string;
+  officeIp: string;
   active: boolean;
 };
 
@@ -56,12 +58,38 @@ const createEmptyForm = (): AttendanceZoneForm => ({
   lat: String(DEFAULT_CENTER.lat),
   lng: String(DEFAULT_CENTER.lng),
   radiusMeters: "100",
+  officeIp: "",
   active: true,
 });
 
 function parseFiniteNumber(value: string) {
   const parsed = Number(String(value || "").trim());
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function isValidIpAddress(value: string) {
+  const input = String(value || "").trim();
+  if (!input) return true;
+
+  const ipv4Parts = input.split(".");
+  if (
+    ipv4Parts.length === 4 &&
+    ipv4Parts.every(part => {
+      if (!/^\d{1,3}$/.test(part)) return false;
+      if (part.length > 1 && part.startsWith("0")) return false;
+      const number = Number(part);
+      return number >= 0 && number <= 255;
+    })
+  ) {
+    return true;
+  }
+
+  if (!input.includes(":")) return false;
+  try {
+    return new URL(`http://[${input.replace(/^\[|\]$/g, "")}]/`).hostname.includes(":");
+  } catch {
+    return false;
+  }
 }
 
 function formatCoordinate(value: number) {
@@ -437,6 +465,7 @@ export default function SettingsAttendanceTab() {
       lat: formatCoordinate(zone.center.lat),
       lng: formatCoordinate(zone.center.lng),
       radiusMeters: String(Math.round(zone.radiusMeters)),
+      officeIp: zone.officeIp || "",
       active: zone.active,
     });
   };
@@ -463,6 +492,7 @@ export default function SettingsAttendanceTab() {
     const lat = parseFiniteNumber(form.lat);
     const lng = parseFiniteNumber(form.lng);
     const radiusMeters = parseFiniteNumber(form.radiusMeters);
+    const officeIp = form.officeIp.trim();
 
     if (!name) {
       toast.error("اسم المنطقة مطلوب.");
@@ -484,6 +514,11 @@ export default function SettingsAttendanceTab() {
       return;
     }
 
+    if (!isValidIpAddress(officeIp)) {
+      toast.error("عنوان IP العام غير صحيح.");
+      return;
+    }
+
     setSaving(true);
     try {
       const payload = {
@@ -491,6 +526,7 @@ export default function SettingsAttendanceTab() {
         type: "radius" as const,
         center: { lat, lng },
         radiusMeters,
+        officeIp: officeIp || null,
         active: form.active,
       };
 
@@ -539,7 +575,7 @@ export default function SettingsAttendanceTab() {
                   مناطق العمل
                 </CardTitle>
                 <CardDescription>
-                  إنشاء وإدارة مناطق Radius التي تستخدمها عمليات الحضور.
+                  إدارة نطاق GPS وإضافة شرط شبكة الفرع عند الحاجة.
                 </CardDescription>
               </div>
               <Badge
@@ -592,6 +628,20 @@ export default function SettingsAttendanceTab() {
                           className="rounded-full bg-white"
                         >
                           Radius: {formatZoneRadiusLabel(zone)}
+                        </Badge>
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "rounded-full bg-white",
+                            zone.officeIp
+                              ? "border-sky-200 text-sky-700"
+                              : "text-slate-500"
+                          )}
+                        >
+                          <Wifi className="ml-1 h-3.5 w-3.5" />
+                          {zone.officeIp
+                            ? `IP مطلوب: ${zone.officeIp}`
+                            : "تحقق IP غير مفعّل"}
                         </Badge>
                         <Badge
                           variant="outline"
@@ -648,7 +698,7 @@ export default function SettingsAttendanceTab() {
                   {editingZone ? "تعديل منطقة العمل" : "منطقة عمل جديدة"}
                 </CardTitle>
                 <CardDescription>
-                  اختر نقطة المركز ثم حدد نصف القطر بالمتر.
+                  اختر نقطة المركز، وحدد نصف القطر، وأضف IP الفرع اختياريًا.
                 </CardDescription>
               </div>
               <Button
@@ -737,6 +787,27 @@ export default function SettingsAttendanceTab() {
                   }
                   disabled={saving}
                 />
+              </div>
+
+              <div className="space-y-2 md:col-span-2">
+                <Label>عنوان IP العام للفرع (اختياري)</Label>
+                <Input
+                  dir="ltr"
+                  inputMode="text"
+                  value={form.officeIp}
+                  onChange={event =>
+                    setForm(current => ({
+                      ...current,
+                      officeIp: event.target.value,
+                    }))
+                  }
+                  placeholder="مثال: 203.0.113.10"
+                  disabled={saving}
+                />
+                <p className="text-xs leading-5 text-slate-500">
+                  عند إدخاله يجب أن يتطابق IP الموظف معه بالإضافة إلى نجاح
+                  فحص الموقع. اتركه فارغًا للاستمرار بفحص GPS الحالي فقط.
+                </p>
               </div>
 
               <div className="space-y-2">

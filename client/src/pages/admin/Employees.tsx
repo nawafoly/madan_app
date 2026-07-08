@@ -4039,6 +4039,7 @@ export default function EmployeesManagementPage() {
         center: { lat, lng },
         radiusMeters,
         active: true,
+        officeIp: workZones.find(zone => zone.id === editingWorkZoneId)?.officeIp ?? null,
       } as const;
 
       const savedZone = editingWorkZoneId

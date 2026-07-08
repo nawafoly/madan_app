@@ -78,6 +78,7 @@ export async function handleAttendanceRequest({
   }
 
   if (pathname === "/attendance/work-zones" && request.method === "GET") {
+    if (!canManageAttendance(requester.runtime)) return forbidden();
     return listWorkZones(db);
   }
 
@@ -180,7 +181,7 @@ async function listWorkZones(db) {
       .prepare(
         `
       SELECT id, name, type, center_lat, center_lng, radius_meters, active,
-             created_at, updated_at
+             office_ip, created_at, updated_at
       FROM work_zones
       ORDER BY name COLLATE NOCASE ASC, id ASC
     `
@@ -1169,9 +1170,9 @@ async function createWorkZone(request, db, requester) {
       .prepare(
         `
       INSERT INTO work_zones (
-        id, name, type, center_lat, center_lng, radius_meters, active,
+        id, name, type, center_lat, center_lng, radius_meters, active, office_ip,
         created_by_uid, created_at, updated_by_uid, updated_at
-      ) VALUES (?, ?, 'radius', ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, 'radius', ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `
       )
       .bind(
@@ -1181,6 +1182,7 @@ async function createWorkZone(request, db, requester) {
         zone.value.center.lng,
         zone.value.radiusMeters,
         zone.value.active ? 1 : 0,
+        zone.value.officeIp,
         requester.uid,
         now,
         requester.uid,
@@ -1210,7 +1212,8 @@ async function updateWorkZone(request, db, requester, id) {
         `
       UPDATE work_zones
       SET name = ?, type = 'radius', center_lat = ?, center_lng = ?,
-          radius_meters = ?, active = ?, updated_by_uid = ?, updated_at = ?
+          radius_meters = ?, active = ?, office_ip = ?, updated_by_uid = ?,
+          updated_at = ?
       WHERE id = ?
     `
       )
@@ -1220,6 +1223,7 @@ async function updateWorkZone(request, db, requester, id) {
         zone.value.center.lng,
         zone.value.radiusMeters,
         zone.value.active ? 1 : 0,
+        zone.value.officeIp,
         requester.uid,
         now,
         id
@@ -1307,11 +1311,13 @@ async function recordAttendance({
   const allowedZoneIds = pickAllowedZoneIds(employeeData, userData);
   const zoneResolution = await resolveZones(db, allowedZoneIds);
   const zoneCheck = evaluateAttendanceZones(location, zoneResolution.zones);
+  const clientIp = getRequestClientIp(request);
 
   const locationDecision = evaluateLocationDecision({
     location,
     zoneError: zoneResolution.error,
     zoneCheck,
+    clientIp,
   });
   const attendanceDebug = buildAttendanceDebug({
     debugRequest,
@@ -1338,6 +1344,7 @@ async function recordAttendance({
   const deviceInfo = normalizeDeviceInfo(input.data?.deviceInfo);
   const zone = zoneCheck.zone;
   const role = normalizeText(requester.runtime?.role) || "guest";
+  const source = buildAttendanceSource({ clientIp, zone });
 
   try {
     if (initialResult === "rejected") {
@@ -1355,6 +1362,7 @@ async function recordAttendance({
         rejectionReason: initialReason,
         deviceInfo,
         role,
+        source,
       });
       const currentState = await readAttendanceState(db, requester.uid);
       return attendanceResponse({
@@ -1389,13 +1397,6 @@ async function recordAttendance({
       type === "check_in"
         ? "(status = 'checked_out' OR last_server_time IS NULL OR last_server_time < ? OR last_server_time >= ?)"
         : "(status = 'checked_in' AND last_server_time >= ? AND last_server_time < ?)";
-    const source = JSON.stringify({
-      area: "employee",
-      page: "employee_profile",
-      route: "worker.attendance.record",
-      method: "gps_button",
-    });
-
     const results = await db.batch([
       buildRecordInsert(db, {
         recordId,
@@ -1573,12 +1574,6 @@ async function insertRejectedRecord(db, values) {
   await buildRecordInsert(db, {
     ...values,
     result: "rejected",
-    source: JSON.stringify({
-      area: "employee",
-      page: "employee_profile",
-      route: "worker.attendance.record",
-      method: "gps_button",
-    }),
   }).run();
 }
 
@@ -1681,7 +1676,7 @@ async function resolveZones(db, allowedZoneIds) {
     .prepare(
       `
     SELECT id, name, type, center_lat, center_lng, radius_meters, active,
-           created_at, updated_at
+           office_ip, created_at, updated_at
     FROM work_zones WHERE id IN (${placeholders})
   `
     )
@@ -1765,7 +1760,12 @@ export function evaluateAttendanceZones(location, zones) {
   };
 }
 
-export function evaluateLocationDecision({ location, zoneError, zoneCheck }) {
+export function evaluateLocationDecision({
+  location,
+  zoneError,
+  zoneCheck,
+  clientIp = null,
+}) {
   if (zoneError) {
     return { result: "rejected", rejectionReason: zoneError };
   }
@@ -1779,6 +1779,18 @@ export function evaluateLocationDecision({ location, zoneError, zoneCheck }) {
   ) {
     return { result: "rejected", rejectionReason: "poor_accuracy" };
   }
+
+  const requiredOfficeIp = normalizeIpAddress(zoneCheck.zone?.officeIp);
+  if (requiredOfficeIp) {
+    const normalizedClientIp = normalizeIpAddress(clientIp);
+    if (!normalizedClientIp) {
+      return { result: "rejected", rejectionReason: "office_ip_unavailable" };
+    }
+    if (normalizedClientIp !== requiredOfficeIp) {
+      return { result: "rejected", rejectionReason: "office_ip_mismatch" };
+    }
+  }
+
   return { result: "allowed", rejectionReason: null };
 }
 
@@ -1961,6 +1973,10 @@ function normalizeWorkZoneInput(value) {
   const lat = finiteNumber(center.lat ?? center.latitude);
   const lng = finiteNumber(center.lng ?? center.longitude);
   const radiusMeters = finiteNumber(data.radiusMeters);
+  const officeIp = normalizeIpAddress(data.officeIp ?? data.office_ip);
+  const hasOfficeIpInput = Boolean(
+    normalizeText(data.officeIp ?? data.office_ip)
+  );
   if (
     !name ||
     type !== "radius" ||
@@ -1971,7 +1987,8 @@ function normalizeWorkZoneInput(value) {
     lng < -180 ||
     lng > 180 ||
     radiusMeters === null ||
-    radiusMeters <= 0
+    radiusMeters <= 0 ||
+    (hasOfficeIpInput && !officeIp)
   ) {
     return {
       ok: false,
@@ -1986,6 +2003,7 @@ function normalizeWorkZoneInput(value) {
       center: { lat, lng },
       radiusMeters,
       active: data.active !== false,
+      officeIp,
     },
   };
 }
@@ -2030,9 +2048,63 @@ function mapWorkZoneRow(row) {
     center: { lat: Number(row.center_lat), lng: Number(row.center_lng) },
     radiusMeters: Number(row.radius_meters),
     active: Number(row.active) === 1,
+    officeIp: normalizeIpAddress(row.office_ip),
     createdAt: row.created_at || null,
     updatedAt: row.updated_at || null,
   };
+}
+
+function getRequestClientIp(request) {
+  return normalizeIpAddress(request?.headers?.get("CF-Connecting-IP"));
+}
+
+function normalizeIpAddress(value) {
+  let input = normalizeText(value).toLowerCase();
+  if (!input) return null;
+  if (input.startsWith("[") && input.endsWith("]")) {
+    input = input.slice(1, -1);
+  }
+  if (isValidIpv4(input)) return input;
+  if (!input.includes(":")) return null;
+
+  try {
+    const parsed = new URL(`http://[${input}]/`).hostname;
+    const normalized = parsed.replace(/^\[|\]$/g, "").toLowerCase();
+    return normalized.includes(":") ? normalized : null;
+  } catch {
+    return null;
+  }
+}
+
+function isValidIpv4(value) {
+  const parts = String(value || "").split(".");
+  return (
+    parts.length === 4 &&
+    parts.every(part => {
+      if (!/^\d{1,3}$/.test(part)) return false;
+      if (part.length > 1 && part.startsWith("0")) return false;
+      const number = Number(part);
+      return number >= 0 && number <= 255;
+    })
+  );
+}
+
+function buildAttendanceSource({ clientIp, zone }) {
+  const requiredOfficeIp = normalizeIpAddress(zone?.officeIp);
+  const normalizedClientIp = normalizeIpAddress(clientIp);
+  return JSON.stringify({
+    area: "employee",
+    page: "employee_profile",
+    route: "worker.attendance.record",
+    method: "gps_button",
+    network: {
+      clientIp: normalizedClientIp,
+      officeIpRequired: Boolean(requiredOfficeIp),
+      officeIpMatched: requiredOfficeIp
+        ? normalizedClientIp === requiredOfficeIp
+        : null,
+    },
+  });
 }
 
 function normalizeAttendanceDebug(value) {

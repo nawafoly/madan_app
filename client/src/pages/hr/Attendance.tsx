@@ -194,6 +194,8 @@ function rejectionLabel(reason: string | null, language: "ar" | "en") {
   const labels: Record<string, { ar: string; en: string }> = {
     poor_accuracy: { ar: "خارج النطاق", en: "Outside range" },
     outside_zone: { ar: "خارج النطاق", en: "Outside work zone" },
+    office_ip_mismatch: { ar: "شبكة فرع غير مطابقة", en: "Office network mismatch" },
+    office_ip_unavailable: { ar: "تعذر التحقق من الشبكة", en: "Office network unavailable" },
     duplicate_check_in: { ar: "حضور مكرر", en: "Duplicate check-in" },
     not_checked_in: { ar: "لا يوجد حضور مفتوح", en: "No open check-in" },
     zone_not_found: { ar: "النطاق غير موجود", en: "Zone not found" },

@@ -561,6 +561,8 @@ function getRejectionReasonLabel(reason: string | null) {
   const labels: Record<string, string> = {
     poor_accuracy: "دقة الموقع غير كافية",
     outside_zone: "خارج نطاق العمل",
+    office_ip_mismatch: "شبكة الفرع غير مطابقة",
+    office_ip_unavailable: "تعذر التحقق من شبكة الفرع",
     duplicate_check_in: "حضور مكرر",
     not_checked_in: "لا يوجد حضور مفتوح",
     zone_not_found: "النطاق غير موجود",

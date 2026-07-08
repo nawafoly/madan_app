@@ -10,13 +10,14 @@ export type WorkZone = {
   center: { lat: number; lng: number };
   radiusMeters: number;
   active: boolean;
+  officeIp: string | null;
   createdAt?: unknown;
   updatedAt?: unknown;
 };
 
 export type WorkZoneInput = Pick<
   WorkZone,
-  "name" | "type" | "center" | "radiusMeters" | "active"
+  "name" | "type" | "center" | "radiusMeters" | "active" | "officeIp"
 >;
 
 type WorkZonesResponse = {
@@ -44,6 +45,7 @@ export function normalizeWorkZone(id: string, data: Record<string, any>) {
     },
     radiusMeters: Math.max(1, finiteNumber(data?.radiusMeters, 100)),
     active: data?.active !== false,
+    officeIp: String(data?.officeIp ?? data?.office_ip ?? "").trim() || null,
     createdAt: data?.createdAt,
     updatedAt: data?.updatedAt,
   } satisfies WorkZone;

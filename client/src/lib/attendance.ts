@@ -296,6 +296,10 @@ export function getAttendanceRejectionLabel(reason?: string | null) {
       return "دقة الموقع ضعيفة. حاول من مكان مفتوح أو فعّل GPS عالي الدقة.";
     case "outside_zone":
       return "أنت خارج نطاق تسجيل الحضور.";
+    case "office_ip_mismatch":
+      return "يجب الاتصال بشبكة الإنترنت الخاصة بمقر العمل لتسجيل الحضور.";
+    case "office_ip_unavailable":
+      return "تعذر التحقق من شبكة مقر العمل. أعد المحاولة من شبكة الفرع.";
     case "duplicate_check_in":
       return "يوجد حضور مسجل بالفعل ولم يتم تسجيل انصراف بعد.";
     case "not_checked_in":
