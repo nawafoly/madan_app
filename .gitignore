@@ -84,3 +84,6 @@ android/app/src/*
 .tmp/
 .vercel
 .env*.local
+
+# Local account audit reports can contain emails and UIDs.
+reports/account-audit/
