@@ -36,6 +36,7 @@ import {
   ArrowRight,
   Camera,
   Inbox,
+  KeyRound,
   Loader2,
   Mail,
   MapPin,
@@ -46,6 +47,7 @@ import {
   Search,
   ShieldCheck,
   Trash2,
+  TriangleAlert,
   Upload,
   UserRound,
   XCircle,
@@ -151,7 +153,7 @@ import {
   buildR2DownloadUrl,
   uploadDocumentToCloudflare,
 } from "@/lib/documentUploadService";
-import { updateProfile } from "firebase/auth";
+import { sendPasswordResetEmail, updateProfile } from "firebase/auth";
 import {
   createInAppNotification,
   markInAppNotificationsRead,
@@ -284,7 +286,17 @@ type EmployeeWorkZoneFormValues = {
   radiusMeters: string;
 };
 
+type EmployeePasswordResetStatus = {
+  type: "success" | "error";
+  message: string;
+};
+
 const DEFAULT_WORK_ZONE_CENTER = { lat: 24.7136, lng: 46.6753 };
+const EMPLOYEE_PASSWORD_RESET_ALLOWED_ROLES = new Set([
+  "owner",
+  "admin",
+  "hr",
+]);
 
 function buildEmployeeWorkZoneFormValues(): EmployeeWorkZoneFormValues {
   return {
@@ -1242,6 +1254,32 @@ function Field({
   );
 }
 
+function friendlyEmployeePasswordResetError(error: any) {
+  const code = String(error?.code || "").toLowerCase();
+
+  if (code.includes("permission-denied")) {
+    return "لا تملك صلاحية إرسال رابط إعادة تعيين كلمة مرور الموظف.";
+  }
+
+  if (code.includes("unauthenticated")) {
+    return "يجب تسجيل الدخول قبل تنفيذ العملية.";
+  }
+
+  if (code.includes("user-not-found")) {
+    return "لا يوجد حساب مسجل بهذا البريد في Firebase Authentication.";
+  }
+
+  if (code.includes("invalid-email")) {
+    return "بريد الموظف المسجل غير صالح لإرسال رابط إعادة التعيين.";
+  }
+
+  if (code.includes("too-many-requests")) {
+    return "تم إرسال طلبات كثيرة خلال وقت قصير. حاول مرة أخرى لاحقًا.";
+  }
+
+  return "تعذر إرسال رابط إعادة تعيين كلمة المرور الآن.";
+}
+
 function showNativeInputPicker(input: HTMLInputElement | null) {
   if (!input) return;
   if (input.disabled || input.readOnly) return;
@@ -1815,6 +1853,9 @@ export default function EmployeesManagementPage() {
   const { language } = useLanguage();
   const search = useSearch();
   const canManageEmployees = hasPermission(user, "employees.manage");
+  const canResetEmployeePassword = EMPLOYEE_PASSWORD_RESET_ALLOWED_ROLES.has(
+    String(user?.role || "")
+  );
   const pageDir = languageDir(language);
   const pageTextAlignClass = language === "ar" ? "text-right" : "text-left";
   const [employees, setEmployees] = useState<EmployeeRecord[]>([]);
@@ -1869,6 +1910,10 @@ export default function EmployeesManagementPage() {
   const [attendancePayrollLoading, setAttendancePayrollLoading] =
     useState(false);
   const [saving, setSaving] = useState(false);
+  const [resettingEmployeePassword, setResettingEmployeePassword] =
+    useState(false);
+  const [employeePasswordResetStatus, setEmployeePasswordResetStatus] =
+    useState<EmployeePasswordResetStatus | null>(null);
   const [leaveRequests, setLeaveRequests] = useState<
     EmployeeLeaveRequestRecord[]
   >([]);
@@ -2321,6 +2366,15 @@ export default function EmployeesManagementPage() {
       )
     );
   }, [language, selectedEmployee, selectedEmployeeProfile]);
+  const selectedEmployeeAuthEmail = useMemo(
+    () =>
+      String(
+        selectedEmployee?.email ||
+          selectedEmployeeProfile?.personal?.email ||
+          ""
+      ).trim(),
+    [selectedEmployee, selectedEmployeeProfile]
+  );
   const selectedEmployeeDisplayAvatarUrl = useMemo(
     () =>
       selectedEmployee
@@ -2687,6 +2741,11 @@ export default function EmployeesManagementPage() {
   }, [selectedEmployeeAuthUid]);
 
   useEffect(() => {
+    setEmployeePasswordResetStatus(null);
+    setResettingEmployeePassword(false);
+  }, [selectedEmployeeId]);
+
+  useEffect(() => {
     if (!selectedEmployeeAuthUid) {
       setLeaveBalanceAdjustments([]);
       setLeaveBalanceAdjustmentsLoading(false);
@@ -2962,6 +3021,50 @@ export default function EmployeesManagementPage() {
     const parsed = Number(form.leaveBalance || 0);
     return Number.isFinite(parsed) ? parsed : 0;
   }, [form.leaveBalance]);
+
+  const handleResetEmployeePassword = async () => {
+    const employeeEmail = selectedEmployeeAuthEmail.trim();
+
+    setEmployeePasswordResetStatus(null);
+
+    if (!canResetEmployeePassword) {
+      const message = "لا تملك صلاحية إرسال رابط إعادة تعيين كلمة مرور الموظف.";
+      setEmployeePasswordResetStatus({ type: "error", message });
+      toast.error(message);
+      return;
+    }
+
+    if (!employeeEmail) {
+      const message = "لا يوجد بريد مسجل لهذا الموظف لإرسال رابط إعادة التعيين.";
+      setEmployeePasswordResetStatus({ type: "error", message });
+      toast.error(message);
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `سيتم إرسال رابط إعادة تعيين كلمة المرور إلى ${employeeEmail}. هل تريد المتابعة؟`
+    );
+    if (!confirmed) return;
+
+    setResettingEmployeePassword(true);
+    try {
+      await sendPasswordResetEmail(auth, employeeEmail);
+
+      const message = `تم إرسال رابط إعادة تعيين كلمة المرور إلى ${employeeEmail}.`;
+      setEmployeePasswordResetStatus({ type: "success", message });
+      toast.success(message);
+    } catch (error: any) {
+      console.error("employee_password_reset_email_failed", {
+        code: error?.code,
+        message: error?.message,
+      });
+      const message = friendlyEmployeePasswordResetError(error);
+      setEmployeePasswordResetStatus({ type: "error", message });
+      toast.error(message);
+    } finally {
+      setResettingEmployeePassword(false);
+    }
+  };
 
   const downloadBlob = (blob: Blob, filename: string) => {
     const url = URL.createObjectURL(blob);
@@ -6854,6 +6957,83 @@ export default function EmployeesManagementPage() {
                         value={selectedEmployeeEmployment.fingerprintNumber}
                         dir="ltr"
                       />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card
+                  className={cn(
+                    "order-12 gap-0 overflow-hidden border-slate-200/80 bg-white py-0 shadow-sm",
+                    activeEmployeeWorkspaceSection !== "profile" && "hidden"
+                  )}
+                >
+                  <CardHeader className="border-b border-slate-100 bg-white/90 px-6 pt-6 pb-4">
+                    <div className="space-y-2">
+                      <CardTitle className="flex items-center gap-2 text-xl text-slate-950">
+                        <KeyRound className="h-5 w-5 text-[#030640]" />
+                        إعادة تعيين كلمة مرور الموظف
+                      </CardTitle>
+                      <CardDescription className="text-sm leading-6 text-slate-500">
+                        استخدم هذا القسم عند نسيان الموظف كلمة المرور لإرسال رابط إعادة التعيين إلى بريده المسجل.
+                      </CardDescription>
+                    </div>
+                  </CardHeader>
+
+                  <CardContent className="space-y-5 p-6">
+                    <div className="flex gap-3 rounded-[20px] border border-amber-200 bg-amber-50/80 px-4 py-3 text-sm leading-6 text-amber-900">
+                      <TriangleAlert className="mt-0.5 h-5 w-5 shrink-0" />
+                      <div>
+                        سيتم إرسال رابط إعادة تعيين كلمة المرور إلى بريد الموظف. لن يتم تغيير كلمة المرور مباشرة من الواجهة ولن يتم حفظ أي كلمة مرور داخل Firestore.
+                      </div>
+                    </div>
+
+                    {!canResetEmployeePassword ? (
+                      <div className="rounded-[18px] border border-rose-200 bg-rose-50 px-4 py-3 text-sm leading-6 text-rose-700">
+                        هذه العملية متاحة فقط لأدوار owner و admin و hr.
+                      </div>
+                    ) : null}
+
+                    <Field
+                      label="البريد المسجل في Firebase Authentication"
+                      description="سيتم إرسال رابط إعادة التعيين إلى هذا البريد."
+                    >
+                      <Input
+                        dir="ltr"
+                        value={selectedEmployeeAuthEmail || "لا يوجد بريد مسجل"}
+                        readOnly
+                        className="h-11 bg-slate-50 text-left"
+                      />
+                    </Field>
+
+                    {employeePasswordResetStatus ? (
+                      <div
+                        className={cn(
+                          "rounded-[18px] border px-4 py-3 text-sm leading-6",
+                          employeePasswordResetStatus.type === "success"
+                            ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                            : "border-rose-200 bg-rose-50 text-rose-700"
+                        )}
+                      >
+                        {employeePasswordResetStatus.message}
+                      </div>
+                    ) : null}
+
+                    <div className="flex justify-start">
+                      <Button
+                        type="button"
+                        className="h-11 rounded-2xl bg-[#F2B705] px-5 text-slate-950 hover:bg-[#dfaa00]"
+                        disabled={
+                          !canResetEmployeePassword ||
+                          !selectedEmployeeAuthEmail ||
+                          resettingEmployeePassword
+                        }
+                        onClick={() => void handleResetEmployeePassword()}
+                      >
+                        {resettingEmployeePassword ? (
+                          <Loader2 className="ml-2 h-4 w-4 animate-spin" />
+                        ) : null}
+                        إرسال رابط إعادة تعيين كلمة المرور
+                      </Button>
                     </div>
                   </CardContent>
                 </Card>

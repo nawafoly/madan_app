@@ -50,6 +50,7 @@ const PUBLIC_WEB_CALLABLE_OPTIONS = Object.freeze({
   cors: PUBLIC_WEB_APP_ORIGINS,
   invoker: "public",
 });
+const HR_ONLY_CALLABLE_OPTIONS = PUBLIC_WEB_CALLABLE_OPTIONS;
 const ATTENDANCE_APP_CHECK_ENFORCED = [
   "1",
   "true",
@@ -187,6 +188,16 @@ const normalizeStringArray = value =>
       .map(entry => entry.trim())
       .filter(Boolean)
     : [];
+
+const normalizeCreateStaffInput = value => {
+  const input = value && typeof value === "object" ? value : {};
+  return {
+    email: normalizeLoginEmailValue(input.email),
+    password: String(input.password || ""),
+    fullName: stringOrEmpty(input.fullName || input.name || input.displayName),
+    phone: stringOrEmpty(input.phone),
+  };
+};
 
 const normalizeKnownRole = value => {
   const role = String(value || "")
