@@ -794,3 +794,101 @@ export async function createHrCoreAuditLog(input: Record<string, unknown>) {
     body: JSON.stringify(input),
   });
 }
+
+export type HrCoreDailyTask = Record<string, unknown> & {
+  id: string;
+  createdByUid: string;
+  receiverUid?: string | null;
+  status: string;
+  taskDate?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+};
+
+export async function listHrCoreDailyTasks(
+  input: {
+    createdByUid?: string;
+    receiverUid?: string;
+    status?: string;
+    limit?: number;
+    offset?: number;
+  } = {}
+) {
+  const params = new URLSearchParams();
+  if (input.createdByUid) params.set("createdByUid", input.createdByUid);
+  if (input.receiverUid) params.set("receiverUid", input.receiverUid);
+  if (input.status) params.set("status", input.status);
+  if (input.limit !== undefined) params.set("limit", String(input.limit));
+  if (input.offset !== undefined) params.set("offset", String(input.offset));
+  return requestHrCore<{
+    ok: true;
+    dailyTasks: HrCoreDailyTask[];
+    pagination: HrCorePagination;
+  }>("/api/hr/daily-tasks", {}, params);
+}
+
+export async function createHrCoreDailyTask(input: Record<string, unknown>) {
+  return requestHrCore<{ ok: true; dailyTask: HrCoreDailyTask }>(
+    "/api/hr/daily-tasks",
+    { method: "POST", body: JSON.stringify(input) }
+  );
+}
+
+export async function updateHrCoreDailyTask(
+  id: string,
+  input: Record<string, unknown>
+) {
+  return requestHrCore<{ ok: true; dailyTask: HrCoreDailyTask }>(
+    `/api/hr/daily-tasks/${encodeURIComponent(id)}`,
+    { method: "PATCH", body: JSON.stringify(input) }
+  );
+}
+
+export type HrCoreWeeklyReport = Record<string, unknown> & {
+  id: string;
+  createdByUid: string;
+  receiverUid?: string | null;
+  status: string;
+  reportDate?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+};
+
+export async function listHrCoreWeeklyReports(
+  input: {
+    createdByUid?: string;
+    receiverUid?: string;
+    status?: string;
+    limit?: number;
+    offset?: number;
+  } = {}
+) {
+  const params = new URLSearchParams();
+  if (input.createdByUid) params.set("createdByUid", input.createdByUid);
+  if (input.receiverUid) params.set("receiverUid", input.receiverUid);
+  if (input.status) params.set("status", input.status);
+  if (input.limit !== undefined) params.set("limit", String(input.limit));
+  if (input.offset !== undefined) params.set("offset", String(input.offset));
+  return requestHrCore<{
+    ok: true;
+    weeklyReports: HrCoreWeeklyReport[];
+    pagination: HrCorePagination;
+  }>("/api/hr/weekly-reports", {}, params);
+}
+
+export async function createHrCoreWeeklyReport(input: Record<string, unknown>) {
+  return requestHrCore<{ ok: true; weeklyReport: HrCoreWeeklyReport }>(
+    "/api/hr/weekly-reports",
+    { method: "POST", body: JSON.stringify(input) }
+  );
+}
+
+export async function updateHrCoreWeeklyReport(
+  id: string,
+  input: Record<string, unknown>
+) {
+  return requestHrCore<{ ok: true; weeklyReport: HrCoreWeeklyReport }>(
+    `/api/hr/weekly-reports/${encodeURIComponent(id)}`,
+    { method: "PATCH", body: JSON.stringify(input) }
+  );
+}

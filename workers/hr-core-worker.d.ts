@@ -85,3 +85,17 @@ export function normalizeNotificationType(value: unknown):
   | "file"
   | "message"
   | "system";
+
+export function normalizeOperationalPayload(
+  raw: Record<string, any>,
+  kind: "daily_task" | "weekly_report",
+  requester: { uid: string },
+  existing?: Record<string, any> | null
+): {
+  payload: Record<string, any>;
+  createdByUid: string;
+  receiverUid: string | null;
+  dateKey: string | null;
+  status: "draft" | "sent";
+  now: string;
+};

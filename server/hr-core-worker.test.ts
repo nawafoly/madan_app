@@ -11,6 +11,7 @@ import {
   normalizeImportedPayrollRecord,
   normalizeImportedServiceRequest,
   normalizeNotificationType,
+  normalizeOperationalPayload,
   validateFirebaseTokenClaims,
 } from "../workers/hr-core-worker.js";
 
@@ -407,5 +408,54 @@ describe("HR notification normalization", () => {
     expect(normalizeNotificationType("leave")).toBe("leave");
     expect(normalizeNotificationType("leave_request_submitted")).toBe("system");
     expect(normalizeNotificationType(null)).toBe("system");
+  });
+});
+
+
+describe("HR tasks and reports normalization", () => {
+  it("normalizes a daily task for D1", () => {
+    const result = normalizeOperationalPayload(
+      {
+        createdByUid: "employee-1",
+        receiverUid: "manager-1",
+        taskDate: "2026-07-21T00:00:00.000Z",
+        status: "sent",
+        message: "تمت المهمة",
+      },
+      "daily_task",
+      { uid: "employee-1" }
+    );
+    expect(result).toMatchObject({
+      createdByUid: "employee-1",
+      receiverUid: "manager-1",
+      dateKey: "2026-07-21",
+      status: "sent",
+    });
+    expect(result.payload).toMatchObject({
+      taskDate: "2026-07-21",
+      message: "تمت المهمة",
+      status: "sent",
+    });
+  });
+
+  it("merges manager notes into an existing weekly report", () => {
+    const result = normalizeOperationalPayload(
+      { managerNotes: "مراجعة الإدارة" },
+      "weekly_report",
+      { uid: "manager-1" },
+      {
+        createdByUid: "employee-1",
+        receiverUid: "manager-1",
+        reportDate: "2026-07-20",
+        status: "sent",
+        tasks: [{ title: "Task" }],
+      }
+    );
+    expect(result.createdByUid).toBe("employee-1");
+    expect(result.payload).toMatchObject({
+      reportDate: "2026-07-20",
+      managerNotes: "مراجعة الإدارة",
+      status: "sent",
+    });
   });
 });

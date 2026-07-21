@@ -14,7 +14,7 @@ const ACCOUNT_MANAGE_ROLES = new Set(["owner", "admin"]);
 const DEFAULT_LIST_LIMIT = 50;
 const MAX_LIST_LIMIT = 200;
 const MAX_IMPORT_ROWS = 250;
-const HR_WORKER_RELEASE = "phase7-notifications-audit-v1";
+const HR_WORKER_RELEASE = "phase8a-tasks-reports-v1";
 const FIREBASE_JWKS_URL =
   "https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com";
 
@@ -59,6 +59,10 @@ async function routeRequest(request, env) {
 
   if (pathname === "/internal/hr/notifications-audit/import" && request.method === "POST") {
     return importNotificationsAuditSnapshot(request, env);
+  }
+
+  if (pathname === "/internal/hr/tasks-reports/import" && request.method === "POST") {
+    return importTasksReportsSnapshot(request, env);
   }
 
   if (isPayrollImportPath(pathname)) {
@@ -227,6 +231,33 @@ async function routeRequest(request, env) {
     );
   }
 
+
+  if (pathname === "/api/hr/daily-tasks" && request.method === "GET") {
+    return listDailyTasks(url, env.HR_DB, requester);
+  }
+
+  if (pathname === "/api/hr/daily-tasks" && request.method === "POST") {
+    return createDailyTask(request, env.HR_DB, requester);
+  }
+
+  const dailyTaskMatch = pathname.match(/^\/api\/hr\/daily-tasks\/([^/]+)$/);
+  if (dailyTaskMatch && request.method === "PATCH") {
+    return updateDailyTask(request, env.HR_DB, requester, decodeURIComponent(dailyTaskMatch[1]));
+  }
+
+  if (pathname === "/api/hr/weekly-reports" && request.method === "GET") {
+    return listWeeklyReports(url, env.HR_DB, requester);
+  }
+
+  if (pathname === "/api/hr/weekly-reports" && request.method === "POST") {
+    return createWeeklyReport(request, env.HR_DB, requester);
+  }
+
+  const weeklyReportMatch = pathname.match(/^\/api\/hr\/weekly-reports\/([^/]+)$/);
+  if (weeklyReportMatch && request.method === "PATCH") {
+    return updateWeeklyReport(request, env.HR_DB, requester, decodeURIComponent(weeklyReportMatch[1]));
+  }
+
   if (pathname === "/api/hr/notifications" && request.method === "GET") {
     return listNotifications(url, env.HR_DB, requester);
   }
@@ -288,7 +319,9 @@ async function healthCheck(db) {
            (SELECT COUNT(*) FROM employee_service_requests) AS service_request_count,
            (SELECT COUNT(*) FROM employee_payroll_records) AS payroll_record_count,
            (SELECT COUNT(*) FROM hr_notifications) AS notification_count,
-           (SELECT COUNT(*) FROM hr_audit_logs) AS audit_log_count`
+           (SELECT COUNT(*) FROM hr_audit_logs) AS audit_log_count,
+           (SELECT COUNT(*) FROM hr_daily_tasks) AS daily_task_count,
+           (SELECT COUNT(*) FROM hr_weekly_reports) AS weekly_report_count`
       )
       .first();
 
@@ -305,6 +338,8 @@ async function healthCheck(db) {
       payrollRecordCount: Number(row?.payroll_record_count || 0),
       notificationCount: Number(row?.notification_count || 0),
       auditLogCount: Number(row?.audit_log_count || 0),
+      dailyTaskCount: Number(row?.daily_task_count || 0),
+      weeklyReportCount: Number(row?.weekly_report_count || 0),
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
@@ -1444,6 +1479,216 @@ function mapNotificationRow(row) {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+
+function canReviewDailyTasks(requester) {
+  return requester.role === "owner" || requester.role === "admin" || requester.role === "hr" ||
+    requester.permissions.includes("daily_tasks.manage");
+}
+
+function canReviewWeeklyReports(requester) {
+  return requester.role === "owner" || requester.role === "admin" || requester.role === "hr" ||
+    requester.permissions.includes("weekly_reports.manage");
+}
+
+export function normalizeOperationalPayload(raw, kind, requester, existing = null) {
+  const now = new Date().toISOString();
+  const current = existing && typeof existing === "object" ? existing : {};
+  const input = raw && typeof raw === "object" ? raw : {};
+  const isDaily = kind === "daily_task";
+  const createdByUid = normalizeText(input.createdByUid || current.createdByUid || requester.uid);
+  const receiverUid = normalizeText(input.receiverUid || current.receiverUid) || null;
+  const dateKey = normalizeIsoDateKey(
+    isDaily ? (input.taskDate || current.taskDate) : (input.reportDate || current.reportDate)
+  );
+  const status = normalizeText(input.status || current.status || "draft").toLowerCase() === "sent" ? "sent" : "draft";
+  const payload = {
+    ...current,
+    ...input,
+    createdByUid,
+    receiverUid,
+    status,
+    ...(isDaily ? { taskDate: dateKey || normalizeText(input.taskDate || current.taskDate) } : { reportDate: dateKey || normalizeText(input.reportDate || current.reportDate) }),
+    createdAt: normalizeDateToIso(current.createdAt || input.createdAt) || now,
+    updatedAt: now,
+    sentAt: status === "sent" ? (normalizeDateToIso(input.sentAt || current.sentAt) || now) : null,
+  };
+  return { payload, createdByUid, receiverUid, dateKey: dateKey || null, status, now };
+}
+
+function mapOperationalRow(row) {
+  const payload = parseJson(row?.payload_json, {});
+  return {
+    ...payload,
+    id: row.id,
+    createdByUid: row.created_by_uid,
+    receiverUid: row.receiver_uid || null,
+    status: row.status,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+async function listDailyTasks(url, db, requester) {
+  const manager = canReviewDailyTasks(requester);
+  const filters = [];
+  const bindings = [];
+  const requestedCreator = normalizeText(url.searchParams.get("createdByUid"));
+  const requestedReceiver = normalizeText(url.searchParams.get("receiverUid"));
+  const status = normalizeText(url.searchParams.get("status"));
+  if (!manager) {
+    filters.push("created_by_uid = ?"); bindings.push(requester.uid);
+  } else if (requestedCreator) {
+    filters.push("created_by_uid = ?"); bindings.push(requestedCreator);
+  }
+  if (requestedReceiver) { filters.push("receiver_uid = ?"); bindings.push(requestedReceiver); }
+  if (status) { filters.push("status = ?"); bindings.push(status); }
+  const whereSql = filters.length ? `WHERE ${filters.join(" AND ")}` : "";
+  const query = parseListQuery(url);
+  try {
+    const [rows, count] = await db.batch([
+      db.prepare(`SELECT * FROM hr_daily_tasks ${whereSql} ORDER BY task_date DESC, created_at DESC LIMIT ? OFFSET ?`).bind(...bindings, query.limit, query.offset),
+      db.prepare(`SELECT COUNT(*) AS total FROM hr_daily_tasks ${whereSql}`).bind(...bindings),
+    ]);
+    return json(200, { ok: true, dailyTasks: (rows?.results || []).map(mapOperationalRow), pagination: { ...query, total: Number(count?.results?.[0]?.total || 0) } });
+  } catch (error) { return serverError("daily_tasks_query_failed", error); }
+}
+
+async function createDailyTask(request, db, requester) {
+  const bodyResult = await readJsonBody(request);
+  if (!bodyResult.ok) return bodyResult.response;
+  const normalized = normalizeOperationalPayload(bodyResult.value, "daily_task", requester);
+  if (!normalized.createdByUid || normalized.createdByUid !== requester.uid) {
+    if (!canReviewDailyTasks(requester)) return forbidden("daily_tasks_manage_forbidden");
+  }
+  const id = normalizeText(bodyResult.value?.id) || crypto.randomUUID();
+  try {
+    await db.batch([
+      db.prepare(`INSERT INTO hr_daily_tasks (id, created_by_uid, receiver_uid, task_date, status, payload_json, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 'hr_api', ?, ?)`)
+        .bind(id, normalized.createdByUid, normalized.receiverUid, normalized.dateKey, normalized.status, JSON.stringify(normalized.payload), normalized.payload.createdAt, normalized.now),
+      buildAuditStatement(db, request, requester, { action: "daily_task.create", entityType: "hr_daily_task", entityId: id, before: null, after: normalized.payload }),
+    ]);
+    const row = await db.prepare("SELECT * FROM hr_daily_tasks WHERE id = ?").bind(id).first();
+    return json(201, { ok: true, dailyTask: mapOperationalRow(row) });
+  } catch (error) { return databaseMutationError("daily_task_create_failed", error); }
+}
+
+async function updateDailyTask(request, db, requester, id) {
+  const row = await db.prepare("SELECT * FROM hr_daily_tasks WHERE id = ? LIMIT 1").bind(id).first();
+  if (!row) return json(404, { ok: false, message: "daily_task_not_found" });
+  const existing = mapOperationalRow(row);
+  const manager = canReviewDailyTasks(requester);
+  if (existing.createdByUid !== requester.uid && !manager) return forbidden("daily_tasks_manage_forbidden");
+  const bodyResult = await readJsonBody(request);
+  if (!bodyResult.ok) return bodyResult.response;
+  const normalized = normalizeOperationalPayload(bodyResult.value, "daily_task", requester, existing);
+  if (!manager) normalized.createdByUid = requester.uid;
+  try {
+    await db.batch([
+      db.prepare(`UPDATE hr_daily_tasks SET created_by_uid = ?, receiver_uid = ?, task_date = ?, status = ?, payload_json = ?, updated_at = ? WHERE id = ?`)
+        .bind(normalized.createdByUid, normalized.receiverUid, normalized.dateKey, normalized.status, JSON.stringify(normalized.payload), normalized.now, id),
+      buildAuditStatement(db, request, requester, { action: "daily_task.update", entityType: "hr_daily_task", entityId: id, before: existing, after: normalized.payload }),
+    ]);
+    const updated = await db.prepare("SELECT * FROM hr_daily_tasks WHERE id = ?").bind(id).first();
+    return json(200, { ok: true, dailyTask: mapOperationalRow(updated) });
+  } catch (error) { return databaseMutationError("daily_task_update_failed", error); }
+}
+
+async function listWeeklyReports(url, db, requester) {
+  const manager = canReviewWeeklyReports(requester);
+  const filters = [];
+  const bindings = [];
+  const requestedCreator = normalizeText(url.searchParams.get("createdByUid"));
+  const requestedReceiver = normalizeText(url.searchParams.get("receiverUid"));
+  const status = normalizeText(url.searchParams.get("status"));
+  if (!manager) {
+    filters.push("created_by_uid = ?"); bindings.push(requester.uid);
+  } else if (requestedCreator) {
+    filters.push("created_by_uid = ?"); bindings.push(requestedCreator);
+  }
+  if (requestedReceiver) { filters.push("receiver_uid = ?"); bindings.push(requestedReceiver); }
+  if (status) { filters.push("status = ?"); bindings.push(status); }
+  const whereSql = filters.length ? `WHERE ${filters.join(" AND ")}` : "";
+  const query = parseListQuery(url);
+  try {
+    const [rows, count] = await db.batch([
+      db.prepare(`SELECT * FROM hr_weekly_reports ${whereSql} ORDER BY report_date DESC, created_at DESC LIMIT ? OFFSET ?`).bind(...bindings, query.limit, query.offset),
+      db.prepare(`SELECT COUNT(*) AS total FROM hr_weekly_reports ${whereSql}`).bind(...bindings),
+    ]);
+    return json(200, { ok: true, weeklyReports: (rows?.results || []).map(mapOperationalRow), pagination: { ...query, total: Number(count?.results?.[0]?.total || 0) } });
+  } catch (error) { return serverError("weekly_reports_query_failed", error); }
+}
+
+async function createWeeklyReport(request, db, requester) {
+  const bodyResult = await readJsonBody(request);
+  if (!bodyResult.ok) return bodyResult.response;
+  const normalized = normalizeOperationalPayload(bodyResult.value, "weekly_report", requester);
+  if (!normalized.createdByUid || normalized.createdByUid !== requester.uid) {
+    if (!canReviewWeeklyReports(requester)) return forbidden("weekly_reports_manage_forbidden");
+  }
+  const id = normalizeText(bodyResult.value?.id) || crypto.randomUUID();
+  try {
+    await db.batch([
+      db.prepare(`INSERT INTO hr_weekly_reports (id, created_by_uid, receiver_uid, report_date, status, payload_json, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 'hr_api', ?, ?)`)
+        .bind(id, normalized.createdByUid, normalized.receiverUid, normalized.dateKey, normalized.status, JSON.stringify(normalized.payload), normalized.payload.createdAt, normalized.now),
+      buildAuditStatement(db, request, requester, { action: "weekly_report.create", entityType: "hr_weekly_report", entityId: id, before: null, after: normalized.payload }),
+    ]);
+    const row = await db.prepare("SELECT * FROM hr_weekly_reports WHERE id = ?").bind(id).first();
+    return json(201, { ok: true, weeklyReport: mapOperationalRow(row) });
+  } catch (error) { return databaseMutationError("weekly_report_create_failed", error); }
+}
+
+async function updateWeeklyReport(request, db, requester, id) {
+  const row = await db.prepare("SELECT * FROM hr_weekly_reports WHERE id = ? LIMIT 1").bind(id).first();
+  if (!row) return json(404, { ok: false, message: "weekly_report_not_found" });
+  const existing = mapOperationalRow(row);
+  const manager = canReviewWeeklyReports(requester);
+  if (existing.createdByUid !== requester.uid && !manager) return forbidden("weekly_reports_manage_forbidden");
+  const bodyResult = await readJsonBody(request);
+  if (!bodyResult.ok) return bodyResult.response;
+  const normalized = normalizeOperationalPayload(bodyResult.value, "weekly_report", requester, existing);
+  if (!manager) normalized.createdByUid = requester.uid;
+  try {
+    await db.batch([
+      db.prepare(`UPDATE hr_weekly_reports SET created_by_uid = ?, receiver_uid = ?, report_date = ?, status = ?, payload_json = ?, updated_at = ? WHERE id = ?`)
+        .bind(normalized.createdByUid, normalized.receiverUid, normalized.dateKey, normalized.status, JSON.stringify(normalized.payload), normalized.now, id),
+      buildAuditStatement(db, request, requester, { action: "weekly_report.update", entityType: "hr_weekly_report", entityId: id, before: existing, after: normalized.payload }),
+    ]);
+    const updated = await db.prepare("SELECT * FROM hr_weekly_reports WHERE id = ?").bind(id).first();
+    return json(200, { ok: true, weeklyReport: mapOperationalRow(updated) });
+  } catch (error) { return databaseMutationError("weekly_report_update_failed", error); }
+}
+
+async function importTasksReportsSnapshot(request, env) {
+  const authorized = await verifySyncSecret(request, env.HR_SYNC_SECRET);
+  if (!authorized) return json(401, { ok: false, message: "invalid_hr_sync_secret" });
+  const bodyResult = await readJsonBody(request, 5_000_000);
+  if (!bodyResult.ok) return bodyResult.response;
+  const dailyTasks = Array.isArray(bodyResult.value?.dailyTasks) ? bodyResult.value.dailyTasks : [];
+  const weeklyReports = Array.isArray(bodyResult.value?.weeklyReports) ? bodyResult.value.weeklyReports : [];
+  if (dailyTasks.length > MAX_IMPORT_ROWS || weeklyReports.length > MAX_IMPORT_ROWS) {
+    return json(413, { ok: false, message: "tasks_reports_import_batch_too_large", maxRowsPerType: MAX_IMPORT_ROWS });
+  }
+  const runId = normalizeText(bodyResult.value?.runId) || crypto.randomUUID();
+  const complete = Boolean(bodyResult.value?.complete);
+  const now = new Date().toISOString();
+  const statements = [env.HR_DB.prepare(`INSERT INTO hr_migration_runs (id, source, status, daily_tasks_received, weekly_reports_received, details_json, started_at) VALUES (?, 'firestore_tasks_reports', 'running', ?, ?, '{}', ?) ON CONFLICT(id) DO UPDATE SET status = 'running', daily_tasks_received = daily_tasks_received + excluded.daily_tasks_received, weekly_reports_received = weekly_reports_received + excluded.weekly_reports_received`).bind(runId, dailyTasks.length, weeklyReports.length, now)];
+  for (const raw of dailyTasks) {
+    const id = normalizeText(raw?.id); const createdByUid = normalizeText(raw?.createdByUid); if (!id || !createdByUid) continue;
+    const normalized = normalizeOperationalPayload(raw, "daily_task", { uid: createdByUid });
+    statements.push(env.HR_DB.prepare(`INSERT INTO hr_daily_tasks (id, created_by_uid, receiver_uid, task_date, status, payload_json, source, source_updated_at, migrated_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 'firestore', ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET created_by_uid = excluded.created_by_uid, receiver_uid = excluded.receiver_uid, task_date = excluded.task_date, status = excluded.status, payload_json = excluded.payload_json, source = excluded.source, source_updated_at = excluded.source_updated_at, migrated_at = excluded.migrated_at, updated_at = excluded.updated_at`).bind(id, createdByUid, normalized.receiverUid, normalized.dateKey, normalized.status, JSON.stringify(normalized.payload), normalizeDateToIso(raw?.updatedAt), now, normalizeDateToIso(raw?.createdAt) || now, now));
+  }
+  for (const raw of weeklyReports) {
+    const id = normalizeText(raw?.id); const createdByUid = normalizeText(raw?.createdByUid); if (!id || !createdByUid) continue;
+    const normalized = normalizeOperationalPayload(raw, "weekly_report", { uid: createdByUid });
+    statements.push(env.HR_DB.prepare(`INSERT INTO hr_weekly_reports (id, created_by_uid, receiver_uid, report_date, status, payload_json, source, source_updated_at, migrated_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 'firestore', ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET created_by_uid = excluded.created_by_uid, receiver_uid = excluded.receiver_uid, report_date = excluded.report_date, status = excluded.status, payload_json = excluded.payload_json, source = excluded.source, source_updated_at = excluded.source_updated_at, migrated_at = excluded.migrated_at, updated_at = excluded.updated_at`).bind(id, createdByUid, normalized.receiverUid, normalized.dateKey, normalized.status, JSON.stringify(normalized.payload), normalizeDateToIso(raw?.updatedAt), now, normalizeDateToIso(raw?.createdAt) || now, now));
+  }
+  if (complete) statements.push(env.HR_DB.prepare("UPDATE hr_migration_runs SET status = 'completed', finished_at = ? WHERE id = ?").bind(now, runId));
+  try {
+    await env.HR_DB.batch(statements);
+    return json(200, { ok: true, runId, complete, dailyTasks: dailyTasks.length, weeklyReports: weeklyReports.length });
+  } catch (error) { return databaseMutationError("tasks_reports_import_failed", error); }
 }
 
 async function listNotifications(url, db, requester) {

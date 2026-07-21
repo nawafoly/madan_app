@@ -1,15 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  collection,
-  doc,
-  getDoc,
-  onSnapshot,
-  query,
-  serverTimestamp,
-  setDoc,
-  where,
-} from "firebase/firestore";
-import {
   Camera,
   CheckCircle2,
   Clock3,
@@ -23,7 +13,6 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { db } from "@/_core/firebase";
 import { hasPermission, type AppUser } from "@/_core/hooks/useAuth";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Badge } from "@/components/ui/badge";
@@ -31,14 +20,19 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { createInAppNotification } from "@/lib/inAppNotifications";
+import {
+  HR_CORE_D1_ENABLED,
+  createHrCoreDailyTask,
+  isHrCoreConfigured,
+  listHrCoreDailyTasks,
+  updateHrCoreDailyTask,
+} from "@/lib/hrCoreApi";
 import { uploadDocumentToCloudflare } from "@/lib/documentUploadService";
 import { languageDir, tr } from "@/lib/i18n";
 import {
   WEEKLY_REPORT_MANAGER_NOTES_PERMISSION,
 } from "@/lib/weeklyReportConfig";
 import { WEEKLY_REPORT_RECEIVER } from "@/pages/employee/messages/WeeklyReportTab";
-
-const DAILY_TASKS_COLLECTION = "daily_tasks";
 
 type DailyTaskStatus = "draft" | "sent";
 
@@ -326,84 +320,76 @@ export function DailyTaskTab({
   }, [cameraOpen]);
 
   useEffect(() => {
-    let cancelled = false;
-    void getDoc(doc(db, "users", user.uid))
-      .then(snapshot => {
-        if (cancelled || !snapshot.exists()) return;
-        const data = snapshot.data() as Record<string, any>;
-        const employeeProfile = data.employeeProfile || {};
-        const personal = employeeProfile.personal || data.personal || {};
-        const employment = employeeProfile.employment || data.employment || {};
-        const defaults = {
-          name:
-            cleanText(data.displayName) ||
-            cleanText(data.name) ||
-            cleanText(personal.name) ||
-            cleanText(user.displayName),
-          title:
-            cleanText(employment.title) ||
-            cleanText(data.title) ||
-            cleanText(employment.jobTitle) ||
-            cleanText(user.title),
-        };
-        setProfileDefaults(defaults);
-        setForm(current =>
-          current.id
-            ? current
-            : {
-                ...current,
-                createdByName: current.createdByName || defaults.name,
-                jobTitle: current.jobTitle || defaults.title,
-              }
-        );
-      })
-      .catch(error => {
-        console.error("daily_task_profile_defaults_failed", error);
-      });
-
-    return () => {
-      cancelled = true;
+    const defaults = {
+      name: cleanText(user.displayName) || cleanText(user.email),
+      title: cleanText(user.title),
     };
-  }, [user.displayName, user.title, user.uid]);
-
-  useEffect(() => {
-    setLoadingOwn(true);
-    const unsubscribe = onSnapshot(
-      query(collection(db, DAILY_TASKS_COLLECTION), where("createdByUid", "==", user.uid)),
-      snapshot => {
-        setOwnTasks(snapshot.docs.map(docSnapshot => normalizeTask(docSnapshot.id, docSnapshot.data())));
-        setLoadingOwn(false);
-      },
-      error => {
-        console.error("daily_tasks_own_snapshot_failed", error);
-        setOwnTasks([]);
-        setLoadingOwn(false);
-      }
+    setProfileDefaults(defaults);
+    setForm(current =>
+      current.id
+        ? current
+        : {
+            ...current,
+            createdByName: current.createdByName || defaults.name,
+            jobTitle: current.jobTitle || defaults.title,
+          }
     );
-    return unsubscribe;
-  }, [user.uid]);
+  }, [user.displayName, user.email, user.title]);
 
-  useEffect(() => {
+  const loadOwnTasks = async () => {
+    setLoadingOwn(true);
+    try {
+      if (!HR_CORE_D1_ENABLED || !isHrCoreConfigured()) {
+        throw new Error("HR Core D1 is not configured.");
+      }
+      const result = await listHrCoreDailyTasks({
+        createdByUid: user.uid,
+        limit: 200,
+      });
+      setOwnTasks(
+        result.dailyTasks.map(task =>
+          normalizeTask(String(task.id), task as Record<string, unknown>)
+        )
+      );
+    } catch (error) {
+      console.error("daily_tasks_own_d1_load_failed", error);
+      setOwnTasks([]);
+    } finally {
+      setLoadingOwn(false);
+    }
+  };
+
+  const loadReceivedTasks = async () => {
     if (!canReviewDailyTasks) {
       setReceivedTasks([]);
       setLoadingReceived(false);
       return;
     }
-
     setLoadingReceived(true);
-    const unsubscribe = onSnapshot(
-      query(collection(db, DAILY_TASKS_COLLECTION), where("status", "==", "sent")),
-      snapshot => {
-        setReceivedTasks(snapshot.docs.map(docSnapshot => normalizeTask(docSnapshot.id, docSnapshot.data())));
-        setLoadingReceived(false);
-      },
-      error => {
-        console.error("daily_tasks_received_snapshot_failed", error);
-        setReceivedTasks([]);
-        setLoadingReceived(false);
+    try {
+      if (!HR_CORE_D1_ENABLED || !isHrCoreConfigured()) {
+        throw new Error("HR Core D1 is not configured.");
       }
-    );
-    return unsubscribe;
+      const result = await listHrCoreDailyTasks({ status: "sent", limit: 200 });
+      setReceivedTasks(
+        result.dailyTasks.map(task =>
+          normalizeTask(String(task.id), task as Record<string, unknown>)
+        )
+      );
+    } catch (error) {
+      console.error("daily_tasks_received_d1_load_failed", error);
+      setReceivedTasks([]);
+    } finally {
+      setLoadingReceived(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadOwnTasks();
+  }, [user.uid]);
+
+  useEffect(() => {
+    void loadReceivedTasks();
   }, [canReviewDailyTasks]);
 
   const resetForm = () => {
@@ -501,11 +487,18 @@ export function DailyTaskTab({
 
     setSaving(true);
     try {
-      const taskRef = form.id
-        ? doc(db, DAILY_TASKS_COLLECTION, form.id)
-        : doc(collection(db, DAILY_TASKS_COLLECTION));
-      const attachment = await uploadAttachmentIfNeeded(taskRef.id);
+      if (!HR_CORE_D1_ENABLED || !isHrCoreConfigured()) {
+        throw new Error("HR Core D1 is not configured.");
+      }
+      const taskId =
+        form.id ||
+        (typeof crypto !== "undefined" && "randomUUID" in crypto
+          ? crypto.randomUUID()
+          : `daily-task-${Date.now()}`);
+      const attachment = await uploadAttachmentIfNeeded(taskId);
+      const now = new Date().toISOString();
       const payload = {
+        id: taskId,
         createdByUid: user.uid,
         createdByEmail: cleanText(user.email),
         createdByName: cleanText(form.createdByName),
@@ -518,15 +511,31 @@ export function DailyTaskTab({
         receiverName: WEEKLY_REPORT_RECEIVER.displayName,
         status,
         attachment,
-        updatedAt: serverTimestamp(),
-        sentAt: status === "sent" ? serverTimestamp() : null,
-        ...(form.id ? {} : { createdAt: serverTimestamp() }),
+        updatedAt: now,
+        sentAt: status === "sent" ? now : null,
+        ...(form.id ? {} : { createdAt: now }),
       };
 
-      await setDoc(taskRef, payload, { merge: true });
+      const result = form.id
+        ? await updateHrCoreDailyTask(taskId, payload)
+        : await createHrCoreDailyTask(payload);
+      const savedTask = normalizeTask(
+        String(result.dailyTask.id),
+        result.dailyTask as Record<string, unknown>
+      );
+      setOwnTasks(current => {
+        const next = current.filter(task => task.id !== savedTask.id);
+        return [savedTask, ...next];
+      });
+      if (canReviewDailyTasks && savedTask.status === "sent") {
+        setReceivedTasks(current => {
+          const next = current.filter(task => task.id !== savedTask.id);
+          return [savedTask, ...next];
+        });
+      }
       setForm(current => ({
         ...current,
-        id: taskRef.id,
+        id: savedTask.id,
         status,
         attachment,
         pendingFile: null,
@@ -539,7 +548,7 @@ export function DailyTaskTab({
           title: "مهمة يومية جديدة",
           body: `تم إرسال مهمة يومية من ${cleanText(form.createdByName) || cleanText(user.email)}.`,
           type: "message",
-          relatedId: taskRef.id,
+          relatedId: taskId,
           relatedTo: "daily_task",
           relatedPath: "/hr/daily-tasks",
         }).catch(error => {
@@ -560,17 +569,28 @@ export function DailyTaskTab({
     if (!selectedTask?.id || !canEditManagerNotes) return;
     setSavingManagerNotes(true);
     try {
-      await setDoc(
-        doc(db, DAILY_TASKS_COLLECTION, selectedTask.id),
-        {
-          managerNotes: cleanText(form.managerNotes),
-          managerNotesUpdatedAt: serverTimestamp(),
-          managerNotesUpdatedByUid: user.uid,
-          managerNotesUpdatedByEmail: cleanText(user.email),
-          managerNotesUpdatedByName: cleanText(user.displayName) || cleanText(user.email),
-          updatedAt: serverTimestamp(),
-        },
-        { merge: true }
+      if (!HR_CORE_D1_ENABLED || !isHrCoreConfigured()) {
+        throw new Error("HR Core D1 is not configured.");
+      }
+      const now = new Date().toISOString();
+      const result = await updateHrCoreDailyTask(selectedTask.id, {
+        managerNotes: cleanText(form.managerNotes),
+        managerNotesUpdatedAt: now,
+        managerNotesUpdatedByUid: user.uid,
+        managerNotesUpdatedByEmail: cleanText(user.email),
+        managerNotesUpdatedByName:
+          cleanText(user.displayName) || cleanText(user.email),
+        updatedAt: now,
+      });
+      const savedTask = normalizeTask(
+        String(result.dailyTask.id),
+        result.dailyTask as Record<string, unknown>
+      );
+      setReceivedTasks(current =>
+        current.map(task => (task.id === savedTask.id ? savedTask : task))
+      );
+      setOwnTasks(current =>
+        current.map(task => (task.id === savedTask.id ? savedTask : task))
       );
 
       if (selectedTask.createdByUid && selectedTask.createdByUid !== user.uid) {
