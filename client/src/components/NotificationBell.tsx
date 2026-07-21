@@ -3,10 +3,7 @@ import { useLocation } from "wouter";
 import { Bell, CalendarDays, FileText, Mail, ShieldCheck } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ar } from "date-fns/locale";
-import { collection, onSnapshot, orderBy, query, where } from "firebase/firestore";
-
 import { useAuth } from "@/_core/hooks/useAuth";
-import { db } from "@/_core/firebase";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,15 +12,11 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import type { EmployeeNotificationType } from "@shared/employee";
 import {
-  EMPLOYEE_NOTIFICATIONS_COLLECTION,
-  type EmployeeNotificationType,
-} from "@shared/employee";
-import {
+  listInAppNotifications,
   markInAppNotificationRead,
   markInAppNotificationsRead,
-  normalizeInAppNotificationRecord,
-  sortInAppNotifications,
   type InAppNotificationRecord,
 } from "@/lib/inAppNotifications";
 
@@ -52,32 +45,23 @@ export function NotificationBell({ triggerClassName = "" }: NotificationBellProp
       return;
     }
 
-    const notificationsQuery = query(
-      collection(db, EMPLOYEE_NOTIFICATIONS_COLLECTION),
-      where("targetUid", "==", user.uid),
-      orderBy("createdAt", "desc")
-    );
-
-    const unsubscribe = onSnapshot(
-      notificationsQuery,
-      snapshot => {
-        const rows = sortInAppNotifications(
-          snapshot.docs.map(docSnapshot =>
-            normalizeInAppNotificationRecord(
-              docSnapshot.id,
-              (docSnapshot.data() as Record<string, any>) || {}
-            )
-          )
-        );
-        setItems(rows);
-      },
-      error => {
-        console.error("in_app_notifications_snapshot_error", error);
-        setItems([]);
+    let active = true;
+    const load = async () => {
+      try {
+        const rows = await listInAppNotifications(user.uid);
+        if (active) setItems(rows);
+      } catch (error) {
+        console.error("in_app_notifications_load_error", error);
+        if (active) setItems([]);
       }
-    );
+    };
 
-    return () => unsubscribe();
+    void load();
+    const timer = window.setInterval(() => void load(), 30_000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
   }, [user?.uid]);
 
   const unreadCount = items.filter(notification => !notification.isRead).length;

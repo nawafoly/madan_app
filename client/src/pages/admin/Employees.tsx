@@ -156,8 +156,8 @@ import {
 import { sendPasswordResetEmail, updateProfile } from "firebase/auth";
 import {
   createInAppNotification,
+  listInAppNotifications,
   markInAppNotificationsRead,
-  normalizeInAppNotificationRecord,
   type InAppNotificationRecord,
 } from "@/lib/inAppNotifications";
 import {
@@ -254,10 +254,7 @@ import type {
   EmployeeMessageDoc,
   EmployeeMessageType,
 } from "@shared/employee";
-import {
-  EMPLOYEE_MESSAGES_COLLECTION,
-  EMPLOYEE_NOTIFICATIONS_COLLECTION,
-} from "@shared/employee";
+import { EMPLOYEE_MESSAGES_COLLECTION } from "@shared/employee";
 
 type EmployeeRecord = EmployeeProfileUserDoc & {
   id: string;
@@ -2687,31 +2684,23 @@ export default function EmployeesManagementPage() {
       return;
     }
 
-    const notificationsQuery = query(
-      collection(db, EMPLOYEE_NOTIFICATIONS_COLLECTION),
-      where("targetUid", "==", user.uid),
-      orderBy("createdAt", "desc")
-    );
-
-    const unsubscribe = onSnapshot(
-      notificationsQuery,
-      snapshot => {
-        setAdminNotifications(
-          snapshot.docs.map(docSnapshot =>
-            normalizeInAppNotificationRecord(
-              docSnapshot.id,
-              (docSnapshot.data() as Record<string, any>) || {}
-            )
-          )
-        );
-      },
-      error => {
-        console.error("employee_admin_notifications_snapshot_error", error);
-        setAdminNotifications([]);
+    let active = true;
+    const loadNotifications = async () => {
+      try {
+        const rows = await listInAppNotifications(user.uid);
+        if (active) setAdminNotifications(rows);
+      } catch (error) {
+        console.error("employee_admin_notifications_load_error", error);
+        if (active) setAdminNotifications([]);
       }
-    );
+    };
 
-    return () => unsubscribe();
+    void loadNotifications();
+    const timer = window.setInterval(() => void loadNotifications(), 30_000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
   }, [user?.uid]);
 
   useEffect(() => {

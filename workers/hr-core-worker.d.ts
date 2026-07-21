@@ -79,3 +79,9 @@ export function buildPayrollInsertStatement(
   actorEmail?: string | null,
   source?: string
 ): any;
+
+export function normalizeNotificationType(value: unknown):
+  | "leave"
+  | "file"
+  | "message"
+  | "system";

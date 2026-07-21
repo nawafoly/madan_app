@@ -14,7 +14,7 @@ const ACCOUNT_MANAGE_ROLES = new Set(["owner", "admin"]);
 const DEFAULT_LIST_LIMIT = 50;
 const MAX_LIST_LIMIT = 200;
 const MAX_IMPORT_ROWS = 250;
-const HR_WORKER_RELEASE = "phase6-payroll-import-v2";
+const HR_WORKER_RELEASE = "phase7-notifications-audit-v1";
 const FIREBASE_JWKS_URL =
   "https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com";
 
@@ -55,6 +55,10 @@ async function routeRequest(request, env) {
 
   if (pathname === "/internal/hr/operations/import" && request.method === "POST") {
     return importHrOperationsSnapshot(request, env);
+  }
+
+  if (pathname === "/internal/hr/notifications-audit/import" && request.method === "POST") {
+    return importNotificationsAuditSnapshot(request, env);
   }
 
   if (isPayrollImportPath(pathname)) {
@@ -223,6 +227,39 @@ async function routeRequest(request, env) {
     );
   }
 
+  if (pathname === "/api/hr/notifications" && request.method === "GET") {
+    return listNotifications(url, env.HR_DB, requester);
+  }
+
+  if (pathname === "/api/hr/notifications" && request.method === "POST") {
+    return createNotification(request, env.HR_DB, requester);
+  }
+
+  const notificationReadMatch = pathname.match(
+    /^\/api\/hr\/notifications\/([^/]+)\/read$/
+  );
+  if (notificationReadMatch && request.method === "PATCH") {
+    return markNotificationRead(
+      request,
+      env.HR_DB,
+      requester,
+      decodeURIComponent(notificationReadMatch[1])
+    );
+  }
+
+  if (pathname === "/api/hr/notifications/read-all" && request.method === "POST") {
+    return markNotificationsRead(request, env.HR_DB, requester);
+  }
+
+  if (pathname === "/api/hr/audit-logs" && request.method === "GET") {
+    if (!canViewAudit(requester)) return forbidden("audit_view_forbidden");
+    return listAuditLogs(url, env.HR_DB);
+  }
+
+  if (pathname === "/api/hr/audit-logs" && request.method === "POST") {
+    return createAuditLog(request, env.HR_DB, requester);
+  }
+
   if (pathname === "/api/hr/payroll-records" && request.method === "GET") {
     return listPayrollRecords(url, env.HR_DB, requester);
   }
@@ -249,7 +286,9 @@ async function healthCheck(db) {
            (SELECT COUNT(*) FROM employee_leave_requests) AS leave_request_count,
            (SELECT COUNT(*) FROM employee_absences) AS absence_count,
            (SELECT COUNT(*) FROM employee_service_requests) AS service_request_count,
-           (SELECT COUNT(*) FROM employee_payroll_records) AS payroll_record_count`
+           (SELECT COUNT(*) FROM employee_payroll_records) AS payroll_record_count,
+           (SELECT COUNT(*) FROM hr_notifications) AS notification_count,
+           (SELECT COUNT(*) FROM hr_audit_logs) AS audit_log_count`
       )
       .first();
 
@@ -264,6 +303,8 @@ async function healthCheck(db) {
       absenceCount: Number(row?.absence_count || 0),
       serviceRequestCount: Number(row?.service_request_count || 0),
       payrollRecordCount: Number(row?.payroll_record_count || 0),
+      notificationCount: Number(row?.notification_count || 0),
+      auditLogCount: Number(row?.audit_log_count || 0),
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
@@ -458,6 +499,22 @@ function canViewPayroll(requester) {
 function canManagePayroll(requester) {
   return (
     requester.permissions.includes("payroll.manage") ||
+    ["owner", "admin", "hr", "accountant"].includes(
+      normalizeRole(requester.account?.role_key)
+    )
+  );
+}
+
+function canManageNotifications(requester) {
+  return (
+    requester.permissions.includes("notifications.manage") ||
+    ["owner", "admin", "hr"].includes(normalizeRole(requester.account?.role_key))
+  );
+}
+
+function canViewAudit(requester) {
+  return (
+    requester.permissions.includes("audit.view") ||
     ["owner", "admin", "hr", "accountant"].includes(
       normalizeRole(requester.account?.role_key)
     )
@@ -1361,6 +1418,325 @@ async function reviewServiceRequest(request, db, requester, id) {
   }
 }
 
+
+
+export function normalizeNotificationType(value) {
+  const type = normalizeText(value).toLowerCase();
+  return ["leave", "file", "message", "system"].includes(type) ? type : "system";
+}
+
+function mapNotificationRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    userId: row.target_uid,
+    uid: row.target_uid,
+    targetUid: row.target_uid,
+    title: row.title,
+    body: row.body || null,
+    message: row.body || null,
+    type: row.notification_type || "system",
+    relatedTo: row.related_to || null,
+    relatedId: row.related_id || null,
+    relatedPath: row.related_path || null,
+    isRead: Boolean(row.is_read),
+    readAt: row.read_at || null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+async function listNotifications(url, db, requester) {
+  const requestedTarget = normalizeText(url.searchParams.get("targetUid"));
+  const targetUid = requestedTarget || requester.uid;
+  if (targetUid !== requester.uid && !canManageNotifications(requester)) {
+    return forbidden("notifications_view_forbidden");
+  }
+  const query = parseListQuery(url.searchParams);
+  const filters = ["target_uid = ?"];
+  const bindings = [targetUid];
+  const unread = normalizeText(url.searchParams.get("unread")).toLowerCase();
+  if (["1", "true", "yes"].includes(unread)) filters.push("is_read = 0");
+  const whereSql = `WHERE ${filters.join(" AND ")}`;
+  try {
+    const result = await db.batch([
+      db.prepare(`SELECT * FROM hr_notifications ${whereSql} ORDER BY created_at DESC LIMIT ? OFFSET ?`)
+        .bind(...bindings, query.limit, query.offset),
+      db.prepare(`SELECT COUNT(*) AS total FROM hr_notifications ${whereSql}`)
+        .bind(...bindings),
+    ]);
+    return json(200, {
+      ok: true,
+      notifications: (result[0]?.results || []).map(mapNotificationRow),
+      pagination: {
+        limit: query.limit,
+        offset: query.offset,
+        total: Number(result[1]?.results?.[0]?.total || 0),
+      },
+    });
+  } catch (error) {
+    return serverError("notifications_query_failed", error);
+  }
+}
+
+async function createNotification(request, db, requester) {
+  const bodyResult = await readJsonBody(request);
+  if (!bodyResult.ok) return bodyResult.response;
+  const body = bodyResult.value || {};
+  const directTarget = normalizeText(body.targetUid || body.userId || body.uid);
+  const requestedRoles = normalizeStringArray(body.targetRoles)
+    .map(normalizeRole)
+    .filter(role => KNOWN_ROLES.has(role));
+  let targetUids = [];
+  if (requestedRoles.length) {
+    const allowedEmployeeBroadcastRoles = new Set(["owner", "admin", "hr"]);
+    if (
+      !canManageNotifications(requester) &&
+      requestedRoles.some(role => !allowedEmployeeBroadcastRoles.has(role))
+    ) {
+      return forbidden("notifications_broadcast_forbidden");
+    }
+    const placeholders = requestedRoles.map(() => "?").join(",");
+    const rows = await db.prepare(
+      `SELECT uid FROM accounts WHERE is_active = 1 AND role_key IN (${placeholders})`
+    ).bind(...requestedRoles).all();
+    targetUids = (rows.results || []).map(row => normalizeText(row.uid)).filter(Boolean);
+  } else if (directTarget) {
+    targetUids = [directTarget];
+  }
+  targetUids = Array.from(new Set(targetUids.filter(uid => uid && uid !== normalizeText(body.excludeUid))));
+  if (!targetUids.length) return json(400, { ok: false, message: "notification_target_required" });
+  const title = normalizeText(body.title) || "إشعار داخلي";
+  const messageBody = normalizeText(body.body || body.message);
+  const type = normalizeNotificationType(body.type);
+  const now = new Date().toISOString();
+  const statements = targetUids.map(targetUid => db.prepare(
+    `INSERT INTO hr_notifications (
+       id, target_uid, title, body, notification_type, related_to,
+       related_id, related_path, is_read, read_at, source,
+       created_by_uid, created_at, updated_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, 'hr_api', ?, ?, ?)`
+  ).bind(
+    crypto.randomUUID(), targetUid, title, messageBody || null, type,
+    nullableText(body.relatedTo), nullableText(body.relatedId),
+    nullableText(body.relatedPath), requester.uid, now, now
+  ));
+  try {
+    await db.batch(statements);
+    return json(201, { ok: true, created: targetUids.length, targetUids });
+  } catch (error) {
+    return databaseMutationError("notification_create_failed", error);
+  }
+}
+
+async function markNotificationRead(_request, db, requester, id) {
+  const row = await db.prepare("SELECT id, target_uid FROM hr_notifications WHERE id = ? LIMIT 1").bind(id).first();
+  if (!row) return json(404, { ok: false, message: "notification_not_found" });
+  if (row.target_uid !== requester.uid && !canManageNotifications(requester)) {
+    return forbidden("notification_update_forbidden");
+  }
+  const now = new Date().toISOString();
+  await db.prepare("UPDATE hr_notifications SET is_read = 1, read_at = ?, updated_at = ? WHERE id = ?")
+    .bind(now, now, id).run();
+  return json(200, { ok: true, id });
+}
+
+async function markNotificationsRead(request, db, requester) {
+  const bodyResult = await readJsonBody(request);
+  if (!bodyResult.ok) return bodyResult.response;
+  const ids = normalizeStringArray(bodyResult.value?.ids).slice(0, 200);
+  const now = new Date().toISOString();
+  try {
+    if (ids.length) {
+      const placeholders = ids.map(() => "?").join(",");
+      await db.prepare(
+        `UPDATE hr_notifications SET is_read = 1, read_at = ?, updated_at = ?
+         WHERE target_uid = ? AND id IN (${placeholders})`
+      ).bind(now, now, requester.uid, ...ids).run();
+    } else {
+      await db.prepare(
+        "UPDATE hr_notifications SET is_read = 1, read_at = ?, updated_at = ? WHERE target_uid = ? AND is_read = 0"
+      ).bind(now, now, requester.uid).run();
+    }
+    return json(200, { ok: true });
+  } catch (error) {
+    return databaseMutationError("notifications_mark_read_failed", error);
+  }
+}
+
+function mapAuditRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    action: row.action,
+    category: row.category || "system",
+    severity: row.severity || "info",
+    status: row.status || "success",
+    message: row.message || row.action,
+    entityType: row.entity_type,
+    entityId: row.entity_id || "",
+    entityPath: row.entity_path || "",
+    actor: {
+      uid: row.actor_uid || "",
+      name: row.actor_name || "",
+      email: row.actor_email || "",
+      role: row.actor_role || "",
+    },
+    source: parseJson(row.source_json, {}),
+    relatedIds: parseJson(row.related_ids_json, {}),
+    changes: parseJsonArray(row.changes_json),
+    meta: parseJson(row.meta_json, {}),
+    before: parseJson(row.before_json, null),
+    after: parseJson(row.after_json, null),
+    requestId: row.request_id || "",
+    sessionId: row.session_id || "",
+    occurredAt: row.occurred_at || row.created_at,
+    createdAt: row.created_at,
+  };
+}
+
+async function listAuditLogs(url, db) {
+  const query = parseListQuery(url.searchParams);
+  const filters = [];
+  const bindings = [];
+  for (const [param, column] of [["category", "category"], ["status", "status"], ["severity", "severity"], ["entityType", "entity_type"]]) {
+    const value = normalizeText(url.searchParams.get(param));
+    if (value) { filters.push(`${column} = ?`); bindings.push(value); }
+  }
+  const whereSql = filters.length ? `WHERE ${filters.join(" AND ")}` : "";
+  try {
+    const result = await db.batch([
+      db.prepare(`SELECT * FROM hr_audit_logs ${whereSql} ORDER BY created_at DESC LIMIT ? OFFSET ?`)
+        .bind(...bindings, query.limit, query.offset),
+      db.prepare(`SELECT COUNT(*) AS total FROM hr_audit_logs ${whereSql}`).bind(...bindings),
+    ]);
+    return json(200, {
+      ok: true,
+      auditLogs: (result[0]?.results || []).map(mapAuditRow),
+      pagination: { limit: query.limit, offset: query.offset, total: Number(result[1]?.results?.[0]?.total || 0) },
+    });
+  } catch (error) {
+    return serverError("audit_logs_query_failed", error);
+  }
+}
+
+async function createAuditLog(request, db, requester) {
+  const bodyResult = await readJsonBody(request);
+  if (!bodyResult.ok) return bodyResult.response;
+  const body = bodyResult.value || {};
+  const action = normalizeText(body.action);
+  const entityType = normalizeText(body.entityType);
+  if (!action || !entityType) return json(400, { ok: false, message: "invalid_audit_payload" });
+  const id = normalizeText(body.id) || crypto.randomUUID();
+  const now = new Date().toISOString();
+  const occurredAt = normalizeDateToIso(body.occurredAt || body.clientTimestamp) || now;
+  try {
+    await db.prepare(
+      `INSERT INTO hr_audit_logs (
+         id, actor_uid, actor_email, actor_role, actor_name, action, category,
+         severity, status, message, entity_type, entity_id, entity_path,
+         before_json, after_json, source_json, related_ids_json, changes_json,
+         meta_json, request_id, session_id, occurred_at, ip_address, user_agent,
+         source_system, created_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'hr_api', ?)`
+    ).bind(
+      id, requester.uid, requester.email || null, requester.account?.role_key || null,
+      requester.account?.display_name || requester.email || null,
+      action, normalizeText(body.category) || "system",
+      normalizeText(body.severity) || "info", normalizeText(body.status) || "success",
+      normalizeText(body.message) || action, entityType, nullableText(body.entityId),
+      nullableText(body.entityPath), body.before ? safeJsonStringify(body.before) : null,
+      body.after ? safeJsonStringify(body.after) : null,
+      safeJsonStringify(body.source || {}), safeJsonStringify(body.relatedIds || {}),
+      safeJsonStringify(body.changes || []), safeJsonStringify(body.meta || {}),
+      nullableText(body.requestId), nullableText(body.sessionId), occurredAt,
+      request.headers.get("CF-Connecting-IP") || null,
+      request.headers.get("User-Agent") || null, now
+    ).run();
+    return json(201, { ok: true, id });
+  } catch (error) {
+    return databaseMutationError("audit_log_create_failed", error);
+  }
+}
+
+async function importNotificationsAuditSnapshot(request, env) {
+  if (!env.HR_SYNC_SECRET) return json(503, { ok: false, message: "hr_sync_secret_missing" });
+  const supplied = normalizeText(request.headers.get("X-HR-Sync-Secret"));
+  if (!supplied || supplied !== env.HR_SYNC_SECRET) return json(401, { ok: false, message: "invalid_hr_sync_secret" });
+  const bodyResult = await readJsonBody(request);
+  if (!bodyResult.ok) return bodyResult.response;
+  const body = bodyResult.value || {};
+  const notifications = Array.isArray(body.notifications) ? body.notifications.slice(0, MAX_IMPORT_ROWS) : [];
+  const auditLogs = Array.isArray(body.auditLogs) ? body.auditLogs.slice(0, MAX_IMPORT_ROWS) : [];
+  const now = new Date().toISOString();
+  const statements = [];
+  for (const raw of notifications) {
+    const id = normalizeText(raw.id) || crypto.randomUUID();
+    const targetUid = normalizeText(raw.targetUid || raw.userId || raw.uid);
+    if (!targetUid) continue;
+    statements.push(env.HR_DB.prepare(
+      `INSERT INTO hr_notifications (
+         id, target_uid, title, body, notification_type, related_to, related_id,
+         related_path, is_read, read_at, source, source_updated_at, migrated_at,
+         created_by_uid, created_at, updated_at
+       ) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'firestore', ?, ?, ?, ?, ?
+         WHERE EXISTS (SELECT 1 FROM accounts WHERE uid = ?)
+       ON CONFLICT(id) DO UPDATE SET
+         target_uid=excluded.target_uid, title=excluded.title, body=excluded.body,
+         notification_type=excluded.notification_type, related_to=excluded.related_to,
+         related_id=excluded.related_id, related_path=excluded.related_path,
+         is_read=excluded.is_read, read_at=excluded.read_at,
+         source_updated_at=excluded.source_updated_at, migrated_at=excluded.migrated_at,
+         updated_at=excluded.updated_at`
+    ).bind(
+      id, targetUid, normalizeText(raw.title) || "إشعار داخلي",
+      nullableText(raw.body || raw.message), normalizeNotificationType(raw.type),
+      nullableText(raw.relatedTo), nullableText(raw.relatedId), nullableText(raw.relatedPath),
+      parseBoolean(raw.isRead, false) ? 1 : 0, normalizeDateToIso(raw.readAt),
+      normalizeDateToIso(raw.updatedAt || raw.createdAt), now,
+      nullableText(raw.createdByUid), normalizeDateToIso(raw.createdAt) || now,
+      normalizeDateToIso(raw.updatedAt || raw.createdAt) || now, targetUid
+    ));
+  }
+  for (const raw of auditLogs) {
+    const actor = isPlainObject(raw.actor) ? raw.actor : {};
+    const id = normalizeText(raw.id) || crypto.randomUUID();
+    const createdAt = normalizeDateToIso(raw.createdAt || raw.occurredAt) || now;
+    statements.push(env.HR_DB.prepare(
+      `INSERT INTO hr_audit_logs (
+         id, actor_uid, actor_email, actor_role, actor_name, action, category,
+         severity, status, message, entity_type, entity_id, entity_path,
+         before_json, after_json, source_json, related_ids_json, changes_json,
+         meta_json, request_id, session_id, occurred_at, source_system,
+         source_updated_at, migrated_at, created_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'firestore', ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET action=excluded.action, category=excluded.category,
+         severity=excluded.severity, status=excluded.status, message=excluded.message,
+         entity_type=excluded.entity_type, entity_id=excluded.entity_id,
+         entity_path=excluded.entity_path, source_json=excluded.source_json,
+         changes_json=excluded.changes_json, meta_json=excluded.meta_json,
+         source_updated_at=excluded.source_updated_at, migrated_at=excluded.migrated_at`
+    ).bind(
+      id, nullableText(actor.uid || raw.actorUid), nullableEmail(actor.email || raw.actorEmail),
+      nullableText(actor.role || raw.actorRole), nullableText(actor.name || raw.actorName),
+      normalizeText(raw.action) || "legacy_event", normalizeText(raw.category) || "system",
+      normalizeText(raw.severity) || "info", normalizeText(raw.status) || "success",
+      normalizeText(raw.message) || normalizeText(raw.action) || "Legacy audit event",
+      normalizeText(raw.entityType) || "system", nullableText(raw.entityId), nullableText(raw.entityPath),
+      raw.before ? safeJsonStringify(raw.before) : null, raw.after ? safeJsonStringify(raw.after) : null,
+      safeJsonStringify(raw.source || {}), safeJsonStringify(raw.relatedIds || {}),
+      safeJsonStringify(raw.changes || []), safeJsonStringify(raw.meta || {}),
+      nullableText(raw.requestId), nullableText(raw.sessionId), normalizeDateToIso(raw.occurredAt) || createdAt,
+      normalizeDateToIso(raw.updatedAt || raw.createdAt), now, createdAt
+    ));
+  }
+  try {
+    if (statements.length) await env.HR_DB.batch(statements);
+    return json(200, { ok: true, notifications: notifications.length, auditLogs: auditLogs.length });
+  } catch (error) {
+    return databaseMutationError("notifications_audit_import_failed", error);
+  }
+}
 
 function normalizePayrollMonth(value) {
   const text = normalizeText(value);
@@ -3057,26 +3433,33 @@ function mapAccountRow(row) {
 }
 
 function buildAuditStatement(db, request, requester, input) {
+  const now = new Date().toISOString();
   return db
     .prepare(
       `INSERT INTO hr_audit_logs (
-         id, actor_uid, actor_email, actor_role, action, entity_type,
-         entity_id, before_json, after_json, ip_address, user_agent, created_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         id, actor_uid, actor_email, actor_role, actor_name, action, category,
+         severity, status, message, entity_type, entity_id, before_json,
+         after_json, source_json, changes_json, meta_json, occurred_at,
+         ip_address, user_agent, source_system, created_at
+       ) VALUES (?, ?, ?, ?, ?, ?, 'hr', 'info', 'success', ?, ?, ?, ?, ?, ?, '[]', '{}', ?, ?, ?, 'hr_api', ?)`
     )
     .bind(
       crypto.randomUUID(),
       requester.uid,
       requester.email || null,
       requester.account?.role_key || null,
+      requester.account?.display_name || requester.email || null,
       input.action,
+      input.message || input.action,
       input.entityType,
       input.entityId || null,
       input.before ? safeJsonStringify(input.before) : null,
       input.after ? safeJsonStringify(input.after) : null,
+      safeJsonStringify({ area: 'hr', page: 'hr-core-worker', route: new URL(request.url).pathname, method: request.method }),
+      now,
       request.headers.get("CF-Connecting-IP") || null,
       request.headers.get("User-Agent") || null,
-      new Date().toISOString()
+      now
     );
 }
 
@@ -3248,7 +3631,11 @@ function methodOrNotFound(pathname, method) {
     pathname === "/api/hr/employees" ||
     pathname === "/api/hr/accounts" ||
     pathname === "/api/hr/permissions" ||
-    /^\/api\/hr\/(employees|accounts)\/[^/]+(?:\/permissions)?$/.test(pathname);
+    pathname === "/api/hr/notifications" ||
+    pathname === "/api/hr/notifications/read-all" ||
+    pathname === "/api/hr/audit-logs" ||
+    /^\/api\/hr\/(employees|accounts)\/[^/]+(?:\/permissions)?$/.test(pathname) ||
+    /^\/api\/hr\/notifications\/[^/]+\/read$/.test(pathname);
   if (known) {
     return json(405, { ok: false, message: "method_not_allowed", method });
   }

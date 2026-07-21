@@ -47,7 +47,7 @@ import {
 import { useLanguage } from "@/contexts/LanguageContext";
 import { languageDir, tr } from "@/lib/i18n";
 import { WEEKLY_REPORT_MANAGER_NOTES_PERMISSION } from "@/lib/weeklyReportConfig";
-import { EMPLOYEE_NOTIFICATIONS_COLLECTION } from "@shared/employee";
+import { listInAppNotifications } from "@/lib/inAppNotifications";
 
 function PortalAlert({
   tone,
@@ -214,36 +214,33 @@ export default function StaffPortalPage() {
       return;
     }
 
-    const unsubscribe = onSnapshot(
-      query(
-        collection(db, EMPLOYEE_NOTIFICATIONS_COLLECTION),
-        where("targetUid", "==", user.uid)
-      ),
-      snapshot => {
+    let active = true;
+    const loadNotifications = async () => {
+      try {
+        const items = await listInAppNotifications(user.uid);
+        if (!active) return;
         const counts = createEmptyPortalNotificationCounts();
-        snapshot.docs.forEach(docSnapshot => {
-          const data = docSnapshot.data() as Record<string, unknown>;
-          if (data.isRead === true) return;
-
-          const bucket = resolvePortalNotificationBucket(data);
+        items.forEach(item => {
+          if (item.isRead) return;
+          const bucket = resolvePortalNotificationBucket(item as unknown as Record<string, unknown>);
           if (bucket) counts[bucket] += 1;
         });
-
         setPortalNotificationCounts(counts);
-        if (!canWriteWeeklyReportNotes) {
-          setWeeklyReportBadgeCount(counts.reports);
-        }
-      },
-      error => {
+        if (!canWriteWeeklyReportNotes) setWeeklyReportBadgeCount(counts.reports);
+      } catch (error) {
         console.error("staff_portal_notifications_badge_failed", error);
+        if (!active) return;
         setPortalNotificationCounts(createEmptyPortalNotificationCounts());
-        if (!canWriteWeeklyReportNotes) {
-          setWeeklyReportBadgeCount(0);
-        }
+        if (!canWriteWeeklyReportNotes) setWeeklyReportBadgeCount(0);
       }
-    );
+    };
 
-    return () => unsubscribe();
+    void loadNotifications();
+    const timer = window.setInterval(() => void loadNotifications(), 30_000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
   }, [canWriteWeeklyReportNotes, user?.uid]);
 
   useEffect(() => {

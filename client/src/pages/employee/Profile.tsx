@@ -18,7 +18,6 @@ import {
   collection,
   doc,
   getDoc,
-  getDocs,
   onSnapshot,
   or,
   query,
@@ -2205,34 +2204,16 @@ export default function EmployeeProfilePage() {
       }
 
       try {
-        const hrUsers = await getDocs(
-          query(
-            collection(db, "users"),
-            where("role", "in", ["owner", "admin", "hr"])
-          )
-        );
-
-        const recipients = hrUsers.docs.filter(
-          docSnap =>
-            docSnap.id !== user.uid &&
-            shouldReceiveLeaveNotification(
-              docSnap.data() as Record<string, any>
-            )
-        );
-
-        await Promise.all(
-          recipients.map(docSnap =>
-            createInAppNotification({
-              userId: docSnap.id,
-              title: `${requestLabel} جديد`,
-              body: `${requestLabel} جديد من ${user.displayName || user.email}`,
-              type: "system",
-              relatedId: createdRequestId,
-              relatedTo: "employee_service_request",
-              relatedPath: `/hr/employees?employeeId=${user.uid}&panel=requests`,
-            })
-          )
-        );
+        await createInAppNotification({
+          targetRoles: ["owner", "admin", "hr"],
+          excludeUid: user.uid,
+          title: `${requestLabel} جديد`,
+          body: `${requestLabel} جديد من ${user.displayName || user.email}`,
+          type: "system",
+          relatedId: createdRequestId,
+          relatedTo: "employee_service_request",
+          relatedPath: `/hr/employees?employeeId=${user.uid}&panel=requests`,
+        });
       } catch (notificationError) {
         console.error(
           "employee_service_request_notification_failed",
@@ -2327,34 +2308,16 @@ export default function EmployeeProfilePage() {
       }
 
       try {
-        const hrUsers = await getDocs(
-          query(
-            collection(db, "users"),
-            where("role", "in", ["owner", "admin", "hr"])
-          )
-        );
-
-        const leaveNotificationRecipients = hrUsers.docs.filter(
-          docSnap =>
-            docSnap.id !== user.uid &&
-            shouldReceiveLeaveNotification(
-              docSnap.data() as Record<string, any>
-            )
-        );
-
-        await Promise.all(
-          leaveNotificationRecipients.map(docSnap =>
-            createInAppNotification({
-              userId: docSnap.id,
-              title: "طلب إجازة جديد",
-              body: `طلب إجازة جديد من ${user.displayName || user.email}`,
-              type: "leave_request_submitted",
-              relatedId: createdRequestId,
-              relatedTo: "leave_request",
-              relatedPath: `/hr/employees?employeeId=${user.uid}&panel=leave`,
-            })
-          )
-        );
+        await createInAppNotification({
+          targetRoles: ["owner", "admin", "hr"],
+          excludeUid: user.uid,
+          title: "طلب إجازة جديد",
+          body: `طلب إجازة جديد من ${user.displayName || user.email}`,
+          type: "leave",
+          relatedId: createdRequestId,
+          relatedTo: "leave_request",
+          relatedPath: `/hr/employees?employeeId=${user.uid}&panel=leave`,
+        });
       } catch (notificationError) {
         console.error(
           "employee_leave_request_notification_failed",

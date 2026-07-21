@@ -12,6 +12,11 @@ import {
 } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { auth, firebaseFunctions } from "@/_core/firebase";
+import {
+  HR_CORE_D1_ENABLED,
+  createHrCoreAuditLog,
+  isHrCoreConfigured,
+} from "@/lib/hrCoreApi";
 
 export const AUDIT_ACTIONS = {
   PROJECT_CREATED: "project_created",
@@ -506,7 +511,18 @@ export async function logAuditEvent(payload: AuditLogInput) {
     sessionId: payload.sessionId || getAuditSessionId(),
   };
 
+  if (HR_CORE_D1_ENABLED && isHrCoreConfigured()) {
+    try {
+      await createHrCoreAuditLog(normalizedPayload as unknown as Record<string, unknown>);
+    } catch (error) {
+      console.error("[audit] failed to write D1 audit log", error, normalizedPayload);
+      rememberAuditFailure(normalizedPayload, error);
+    }
+    return;
+  }
+
   if (shouldSkipRemoteAuditLogging()) {
+    warnRemoteAuditSkippedOnce();
     return;
   }
 

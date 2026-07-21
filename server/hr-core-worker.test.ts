@@ -10,6 +10,7 @@ import {
   normalizeImportedLeaveRequest,
   normalizeImportedPayrollRecord,
   normalizeImportedServiceRequest,
+  normalizeNotificationType,
   validateFirebaseTokenClaims,
 } from "../workers/hr-core-worker.js";
 
@@ -397,5 +398,14 @@ describe("HR payroll import routing", () => {
     expect(isPayrollImportPath("/internal/hr/payroll-import")).toBe(true);
     expect(isPayrollImportPath("/internal/hr/import/payroll")).toBe(true);
     expect(isPayrollImportPath("/internal/hr/operations/import")).toBe(false);
+  });
+});
+
+
+describe("HR notification normalization", () => {
+  it("keeps supported notification types and falls back to system", () => {
+    expect(normalizeNotificationType("leave")).toBe("leave");
+    expect(normalizeNotificationType("leave_request_submitted")).toBe("system");
+    expect(normalizeNotificationType(null)).toBe("system");
   });
 });

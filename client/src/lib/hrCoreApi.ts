@@ -668,3 +668,129 @@ export async function createHrCorePayrollRecord(input: Record<string, unknown>) 
     { method: "POST", body: JSON.stringify(input) }
   );
 }
+
+export type HrCoreNotification = {
+  id: string;
+  userId: string;
+  uid: string | null;
+  targetUid: string;
+  title: string;
+  body: string | null;
+  message: string | null;
+  type: string;
+  relatedTo: string | null;
+  relatedId: string | null;
+  relatedPath: string | null;
+  isRead: boolean;
+  readAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export async function listHrCoreNotifications(
+  input: {
+    targetUid?: string;
+    unread?: boolean;
+    limit?: number;
+    offset?: number;
+  } = {}
+) {
+  const params = new URLSearchParams();
+  if (input.targetUid) params.set("targetUid", input.targetUid);
+  if (input.unread) params.set("unread", "true");
+  if (input.limit !== undefined) params.set("limit", String(input.limit));
+  if (input.offset !== undefined) params.set("offset", String(input.offset));
+  return requestHrCore<{
+    ok: true;
+    notifications: HrCoreNotification[];
+    pagination: HrCorePagination;
+  }>("/api/hr/notifications", {}, params);
+}
+
+export async function createHrCoreNotification(input: {
+  userId?: string;
+  targetUid?: string;
+  targetRoles?: string[];
+  excludeUid?: string | null;
+  title: string;
+  body: string;
+  type?: string | null;
+  relatedId?: string | null;
+  relatedTo?: string | null;
+  relatedPath?: string | null;
+}) {
+  return requestHrCore<{
+    ok: true;
+    created: number;
+    targetUids: string[];
+  }>("/api/hr/notifications", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function markHrCoreNotificationRead(id: string) {
+  return requestHrCore<{ ok: true; id: string }>(
+    `/api/hr/notifications/${encodeURIComponent(id)}/read`,
+    { method: "PATCH", body: JSON.stringify({}) }
+  );
+}
+
+export async function markHrCoreNotificationsRead(ids: string[] = []) {
+  return requestHrCore<{ ok: true }>("/api/hr/notifications/read-all", {
+    method: "POST",
+    body: JSON.stringify({ ids }),
+  });
+}
+
+export type HrCoreAuditLog = {
+  id: string;
+  action: string;
+  category: string;
+  severity: string;
+  status: string;
+  message: string;
+  entityType: string;
+  entityId: string;
+  entityPath: string;
+  actor: { uid: string; name: string; email: string; role: string };
+  source: Record<string, unknown>;
+  relatedIds: Record<string, string>;
+  changes: Array<{ field: string; before: unknown; after: unknown }>;
+  meta: Record<string, unknown>;
+  requestId: string;
+  sessionId: string;
+  occurredAt: string;
+  createdAt: string;
+};
+
+export async function listHrCoreAuditLogs(
+  input: {
+    category?: string;
+    status?: string;
+    severity?: string;
+    entityType?: string;
+    limit?: number;
+    offset?: number;
+  } = {}
+) {
+  const params = new URLSearchParams();
+  if (input.category) params.set("category", input.category);
+  if (input.status) params.set("status", input.status);
+  if (input.severity) params.set("severity", input.severity);
+  if (input.entityType) params.set("entityType", input.entityType);
+  if (input.limit !== undefined) params.set("limit", String(input.limit));
+  if (input.offset !== undefined) params.set("offset", String(input.offset));
+  return requestHrCore<{
+    ok: true;
+    auditLogs: HrCoreAuditLog[];
+    pagination: HrCorePagination;
+  }>("/api/hr/audit-logs", {}, params);
+}
+
+export async function createHrCoreAuditLog(input: Record<string, unknown>) {
+  return requestHrCore<{ ok: true; id: string }>("/api/hr/audit-logs", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}

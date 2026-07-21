@@ -3,9 +3,13 @@ import { toDateSafe } from "@/lib/formatters";
 import {
   collection,
   doc,
+  getDocs,
+  orderBy,
+  query,
   serverTimestamp,
   setDoc,
   updateDoc,
+  where,
   writeBatch,
 } from "firebase/firestore";
 import {
@@ -14,6 +18,14 @@ import {
   type EmployeeNotificationDoc,
   type EmployeeNotificationType,
 } from "@shared/employee";
+import {
+  HR_CORE_D1_ENABLED,
+  createHrCoreNotification,
+  isHrCoreConfigured,
+  listHrCoreNotifications,
+  markHrCoreNotificationRead,
+  markHrCoreNotificationsRead,
+} from "@/lib/hrCoreApi";
 
 export const IN_APP_NOTIFICATION_TYPE_OPTIONS: Array<{
   value: EmployeeNotificationType;
@@ -120,20 +132,77 @@ export function sortInAppNotifications<T extends EmployeeNotificationDoc>(
   });
 }
 
+export async function listInAppNotifications(userId: string) {
+  const normalizedUserId = pickText(userId);
+  if (!normalizedUserId) return [];
+
+  if (HR_CORE_D1_ENABLED && isHrCoreConfigured()) {
+    const result = await listHrCoreNotifications({
+      targetUid: normalizedUserId,
+      limit: 200,
+      offset: 0,
+    });
+    return sortInAppNotifications(
+      result.notifications.map(notification =>
+        normalizeInAppNotificationRecord(notification.id, notification)
+      )
+    );
+  }
+
+  const snapshot = await getDocs(
+    query(
+      collection(db, EMPLOYEE_NOTIFICATIONS_COLLECTION),
+      where("targetUid", "==", normalizedUserId),
+      orderBy("createdAt", "desc")
+    )
+  );
+  return sortInAppNotifications(
+    snapshot.docs.map(docSnapshot =>
+      normalizeInAppNotificationRecord(
+        docSnapshot.id,
+        (docSnapshot.data() as Record<string, any>) || {}
+      )
+    )
+  );
+}
+
 export async function createInAppNotification(input: {
-  userId: string;
+  userId?: string;
+  targetRoles?: string[];
+  excludeUid?: string | null;
   title: string;
   body: string;
-  type: EmployeeNotificationType;
+  type: EmployeeNotificationType | string;
   relatedId?: string | null;
   relatedTo?: string | null;
   relatedPath?: string | null;
 }) {
   const userId = pickText(input.userId);
-  if (!userId) {
+  const targetRoles = Array.isArray(input.targetRoles)
+    ? input.targetRoles.map(pickText).filter(Boolean)
+    : [];
+  if (!userId && !targetRoles.length) {
     throw new Error("notification_user_required");
   }
 
+  if (HR_CORE_D1_ENABLED && isHrCoreConfigured()) {
+    const result = await createHrCoreNotification({
+      userId: userId || undefined,
+      targetRoles,
+      excludeUid: pickText(input.excludeUid) || null,
+      title: pickText(input.title) || "إشعار داخلي",
+      body: pickText(input.body) || "",
+      type: normalizeNotificationType(input.type),
+      relatedId: pickText(input.relatedId) || null,
+      relatedTo: pickText(input.relatedTo) || null,
+      relatedPath: pickText(input.relatedPath) || null,
+    });
+    return result.targetUids[0] || "broadcast";
+  }
+
+  if (!userId) {
+    throw new Error("notification_user_required");
+  }
   const notificationRef = doc(collection(db, EMPLOYEE_NOTIFICATIONS_COLLECTION));
   await setDoc(notificationRef, {
     userId,
@@ -156,6 +225,10 @@ export async function createInAppNotification(input: {
 }
 
 export async function markInAppNotificationRead(id: string) {
+  if (HR_CORE_D1_ENABLED && isHrCoreConfigured()) {
+    await markHrCoreNotificationRead(id);
+    return;
+  }
   await updateDoc(doc(db, EMPLOYEE_NOTIFICATIONS_COLLECTION, id), {
     isRead: true,
     readAt: serverTimestamp(),
@@ -166,6 +239,11 @@ export async function markInAppNotificationRead(id: string) {
 export async function markInAppNotificationsRead(ids: string[]) {
   const normalizedIds = Array.from(new Set(ids.filter(Boolean)));
   if (!normalizedIds.length) return;
+
+  if (HR_CORE_D1_ENABLED && isHrCoreConfigured()) {
+    await markHrCoreNotificationsRead(normalizedIds);
+    return;
+  }
 
   const batch = writeBatch(db);
   normalizedIds.forEach(id => {
