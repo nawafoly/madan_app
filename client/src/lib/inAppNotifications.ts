@@ -71,7 +71,7 @@ export function getInAppNotificationTypeLabel(value: unknown) {
 
 export function resolveNotificationTargetPath(
   notification:
-    | Pick<EmployeeNotificationDoc, "relatedPath" | "type">
+    | Pick<EmployeeNotificationDoc, "relatedPath" | "relatedTo" | "type">
     | null
     | undefined
 ) {

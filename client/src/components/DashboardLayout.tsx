@@ -622,7 +622,8 @@ function DashboardLayoutContent({
   const visibleHrSettingsSubItems = useMemo(
     () =>
       HR_SETTINGS_SUB_ITEMS.filter(subItem => {
-        const permission = subItem.permission;
+        const permission =
+          "permission" in subItem ? subItem.permission : undefined;
         return !permission || hasStaffAdminPermission(user, permission);
       }),
     [user]

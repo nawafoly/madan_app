@@ -76,6 +76,7 @@ export async function downloadWeeklyReportWord(report: WeeklyReportWordData) {
                   },
                 },
                 altText: {
+                  name: "MAEDIN weekly report letterhead",
                   title: "MAEDIN weekly report letterhead",
                   description: "MAEDIN report background",
                 },

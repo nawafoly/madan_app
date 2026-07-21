@@ -28,8 +28,8 @@ export function getProjectComputedAmounts(project: ProjectAmountLike | null | un
     project?.investmentsAmount != null && project?.investmentsAmount !== ""
       ? toProjectNumber(project.investmentsAmount)
       : project?.baseCoveredAmount != null
-        ? Math.max(toProjectNumber(project.currentAmount) - baseCoveredAmount, 0)
-        : toProjectNumber(project.currentAmount);
+        ? Math.max(toProjectNumber(project?.currentAmount) - baseCoveredAmount, 0)
+        : toProjectNumber(project?.currentAmount);
   const currentAmount = baseCoveredAmount + investmentsAmount;
   const progressPercent = targetAmount
     ? Math.max(0, Math.min(100, (currentAmount / targetAmount) * 100))

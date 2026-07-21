@@ -4591,7 +4591,7 @@ export default function EmployeesManagementPage() {
           employeeId: selectedEmployeeDocumentId,
           employeeUid: selectedEmployeeAuthUid || selectedEmployee.id,
           date: normalizedDate,
-          type: normalizedType as EmployeeAbsenceType,
+          type: normalizedType === "half_day" ? "half_day" : "full_day",
           note: String(absenceForm.note || "").trim() || null,
         });
         setAbsenceForm(buildEmployeeAbsenceFormValues());
@@ -4606,7 +4606,7 @@ export default function EmployeesManagementPage() {
           employeeId: selectedEmployeeDocumentId,
           employeeUid: selectedEmployeeAuthUid || selectedEmployee.id,
           date: normalizedDate,
-          type: normalizedType as EmployeeAbsenceType,
+          type: normalizedType === "half_day" ? "half_day" : "full_day",
           note: absenceForm.note,
           createdByUid: user?.uid || "",
         }),
@@ -7257,6 +7257,7 @@ export default function EmployeesManagementPage() {
     nextStatus: EmployeeLeaveRequestStatus
   ) => {
     if (!selectedEmployee || !selectedEmployeeProfile) return;
+    if (nextStatus !== "approved" && nextStatus !== "rejected") return;
     if (!canManageEmployees) {
       toast.error(
         tr(
@@ -7545,6 +7546,7 @@ export default function EmployeesManagementPage() {
     request: EmployeeServiceRequestRecord,
     nextStatus: EmployeeServiceRequestStatus
   ) => {
+    if (nextStatus !== "approved" && nextStatus !== "rejected") return;
     if (!canManageEmployees) {
       toast.error("لا تملك صلاحية مراجعة طلبات الموظفين.");
       return;

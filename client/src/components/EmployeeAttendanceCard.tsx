@@ -121,7 +121,7 @@ function summarizeAttendanceRecordForDebug(record: AttendanceRecord | null) {
     serverTime: record.serverTime || null,
     zoneId: record.zoneId || null,
     distanceMeters: record.distanceMeters ?? null,
-    accuracy: record.accuracy ?? null,
+    accuracy: record.location?.accuracy ?? null,
   };
 }
 

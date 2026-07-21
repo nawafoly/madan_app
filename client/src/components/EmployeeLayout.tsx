@@ -187,7 +187,7 @@ export default function EmployeeLayout({
     "leaves",
     "employee-documents-info",
     "documents",
-    ...requestAnchors,
+    ...Array.from(requestAnchors),
   ]);
   const hasFocusedProfileSection =
     innerViewAnchors.has(currentHash) && currentHash !== "dashboard";
