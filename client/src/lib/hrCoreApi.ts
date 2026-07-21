@@ -176,13 +176,15 @@ async function requestHrCore<T>(
     },
   });
 
-  const payload = (await response
-    .json()
-    .catch(() => null)) as (T & HrCoreApiErrorPayload) | null;
+  const payload = (await response.json().catch(() => null)) as
+    | (T & HrCoreApiErrorPayload)
+    | null;
 
   if (!response.ok || !payload) {
     const error = new Error(
-      payload?.message || payload?.detail || `HR Core request failed (${response.status}).`
+      payload?.message ||
+        payload?.detail ||
+        `HR Core request failed (${response.status}).`
     ) as Error & {
       status?: number;
       code?: string;
@@ -205,14 +207,16 @@ export async function getHrCoreMe() {
   }>("/api/hr/me");
 }
 
-export async function listHrCoreEmployees(input: {
-  search?: string;
-  status?: string;
-  department?: string;
-  active?: boolean | null;
-  limit?: number;
-  offset?: number;
-} = {}) {
+export async function listHrCoreEmployees(
+  input: {
+    search?: string;
+    status?: string;
+    department?: string;
+    active?: boolean | null;
+    limit?: number;
+    offset?: number;
+  } = {}
+) {
   const params = new URLSearchParams();
   if (input.search) params.set("search", input.search);
   if (input.status) params.set("status", input.status);
@@ -269,12 +273,14 @@ export async function updateHrCoreEmployee(
   });
 }
 
-export async function listHrCoreAccounts(input: {
-  search?: string;
-  role?: HrCoreRole;
-  limit?: number;
-  offset?: number;
-} = {}) {
+export async function listHrCoreAccounts(
+  input: {
+    search?: string;
+    role?: HrCoreRole;
+    limit?: number;
+    offset?: number;
+  } = {}
+) {
   const params = new URLSearchParams();
   if (input.search) params.set("search", input.search);
   if (input.role) params.set("role", input.role);
@@ -331,4 +337,238 @@ export async function listHrCorePermissionDefinitions() {
     ok: true;
     permissions: HrCorePermissionDefinition[];
   }>("/api/hr/permissions");
+}
+
+export type HrCoreLeaveRequest = {
+  id: string;
+  employeeId: string | null;
+  employeeDocId: string | null;
+  employeeUid: string;
+  userId: string;
+  employeeName: string | null;
+  employeeEmail: string | null;
+  status: "pending" | "approved" | "rejected" | "cancelled" | string;
+  leaveType: string;
+  startDate: string;
+  endDate: string;
+  daysCount: number | null;
+  balanceDeductedDays: number;
+  balanceRestoredDays: number;
+  cancelledDateKeys: string[];
+  cancellationDate: string | null;
+  cancelledAt: string | null;
+  cancelledBy: string | null;
+  cancelledByEmail: string | null;
+  cancelledByName: string | null;
+  employeeNote: string | null;
+  hrNote: string | null;
+  decidedAt: string | null;
+  decidedBy: string | null;
+  decidedByEmail: string | null;
+  decidedByName: string | null;
+  reviewedAt: string | null;
+  reviewedBy: string | null;
+  reviewedByEmail: string | null;
+  reviewedByName: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type HrCoreAbsence = {
+  id: string;
+  employeeId: string | null;
+  employeeUid: string;
+  date: string;
+  type: "full_day" | "half_day" | string;
+  note: string | null;
+  createdByUid: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type HrCoreServiceRequest = {
+  id: string;
+  employeeId: string | null;
+  employeeDocId: string | null;
+  employeeUid: string;
+  userId: string;
+  employeeName: string | null;
+  employeeEmail: string | null;
+  status: "pending" | "approved" | "rejected" | string;
+  requestType: string;
+  title: string | null;
+  requestDate: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  startTime: string | null;
+  endTime: string | null;
+  amount: number | null;
+  letterType: string | null;
+  employeeNote: string | null;
+  hrNote: string | null;
+  decidedAt: string | null;
+  decidedBy: string | null;
+  decidedByEmail: string | null;
+  decidedByName: string | null;
+  reviewedAt: string | null;
+  reviewedBy: string | null;
+  reviewedByEmail: string | null;
+  reviewedByName: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export async function listHrCoreLeaveRequests(
+  input: {
+    employeeId?: string;
+    employeeUid?: string;
+    status?: string;
+    limit?: number;
+    offset?: number;
+  } = {}
+) {
+  const params = new URLSearchParams();
+  if (input.employeeId) params.set("employeeId", input.employeeId);
+  if (input.employeeUid) params.set("employeeUid", input.employeeUid);
+  if (input.status) params.set("status", input.status);
+  if (input.limit !== undefined) params.set("limit", String(input.limit));
+  if (input.offset !== undefined) params.set("offset", String(input.offset));
+  return requestHrCore<{
+    ok: true;
+    leaveRequests: HrCoreLeaveRequest[];
+    pagination: HrCorePagination;
+  }>("/api/hr/leave-requests", {}, params);
+}
+
+export async function createHrCoreLeaveRequest(input: {
+  employeeId?: string | null;
+  employeeUid?: string;
+  employeeName?: string | null;
+  employeeEmail?: string | null;
+  leaveType: string;
+  startDate: string;
+  endDate?: string;
+  employeeNote?: string | null;
+}) {
+  return requestHrCore<{ ok: true; leaveRequest: HrCoreLeaveRequest }>(
+    "/api/hr/leave-requests",
+    { method: "POST", body: JSON.stringify(input) }
+  );
+}
+
+export async function reviewHrCoreLeaveRequest(
+  id: string,
+  input: { status: "approved" | "rejected"; hrNote?: string | null }
+) {
+  return requestHrCore<{ ok: true; leaveRequest: HrCoreLeaveRequest }>(
+    `/api/hr/leave-requests/${encodeURIComponent(id)}/review`,
+    { method: "PATCH", body: JSON.stringify(input) }
+  );
+}
+
+export async function cancelHrCoreLeaveDate(id: string, date: string) {
+  return requestHrCore<{ ok: true; leaveRequest: HrCoreLeaveRequest }>(
+    `/api/hr/leave-requests/${encodeURIComponent(id)}/cancel-date`,
+    { method: "PATCH", body: JSON.stringify({ date }) }
+  );
+}
+
+export async function listHrCoreAbsences(
+  input: {
+    employeeId?: string;
+    employeeUid?: string;
+    from?: string;
+    to?: string;
+    limit?: number;
+    offset?: number;
+  } = {}
+) {
+  const params = new URLSearchParams();
+  if (input.employeeId) params.set("employeeId", input.employeeId);
+  if (input.employeeUid) params.set("employeeUid", input.employeeUid);
+  if (input.from) params.set("from", input.from);
+  if (input.to) params.set("to", input.to);
+  if (input.limit !== undefined) params.set("limit", String(input.limit));
+  if (input.offset !== undefined) params.set("offset", String(input.offset));
+  return requestHrCore<{
+    ok: true;
+    absences: HrCoreAbsence[];
+    pagination: HrCorePagination;
+  }>("/api/hr/absences", {}, params);
+}
+
+export async function createHrCoreAbsence(input: {
+  employeeId?: string | null;
+  employeeUid: string;
+  date: string;
+  type: "full_day" | "half_day";
+  note?: string | null;
+}) {
+  return requestHrCore<{ ok: true; absence: HrCoreAbsence }>(
+    "/api/hr/absences",
+    { method: "POST", body: JSON.stringify(input) }
+  );
+}
+
+export async function deleteHrCoreAbsence(id: string) {
+  return requestHrCore<{ ok: true; id: string }>(
+    `/api/hr/absences/${encodeURIComponent(id)}`,
+    { method: "DELETE" }
+  );
+}
+
+export async function listHrCoreServiceRequests(
+  input: {
+    employeeId?: string;
+    employeeUid?: string;
+    status?: string;
+    requestType?: string;
+    limit?: number;
+    offset?: number;
+  } = {}
+) {
+  const params = new URLSearchParams();
+  if (input.employeeId) params.set("employeeId", input.employeeId);
+  if (input.employeeUid) params.set("employeeUid", input.employeeUid);
+  if (input.status) params.set("status", input.status);
+  if (input.requestType) params.set("requestType", input.requestType);
+  if (input.limit !== undefined) params.set("limit", String(input.limit));
+  if (input.offset !== undefined) params.set("offset", String(input.offset));
+  return requestHrCore<{
+    ok: true;
+    serviceRequests: HrCoreServiceRequest[];
+    pagination: HrCorePagination;
+  }>("/api/hr/service-requests", {}, params);
+}
+
+export async function createHrCoreServiceRequest(input: {
+  employeeId?: string | null;
+  employeeUid?: string;
+  employeeName?: string | null;
+  employeeEmail?: string | null;
+  requestType: string;
+  title?: string | null;
+  requestDate?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
+  startTime?: string | null;
+  endTime?: string | null;
+  amount?: number | null;
+  letterType?: string | null;
+  employeeNote?: string | null;
+}) {
+  return requestHrCore<{ ok: true; serviceRequest: HrCoreServiceRequest }>(
+    "/api/hr/service-requests",
+    { method: "POST", body: JSON.stringify(input) }
+  );
+}
+
+export async function reviewHrCoreServiceRequest(
+  id: string,
+  input: { status: "approved" | "rejected"; hrNote?: string | null }
+) {
+  return requestHrCore<{ ok: true; serviceRequest: HrCoreServiceRequest }>(
+    `/api/hr/service-requests/${encodeURIComponent(id)}/review`,
+    { method: "PATCH", body: JSON.stringify(input) }
+  );
 }

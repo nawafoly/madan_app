@@ -36,3 +36,26 @@ export function resolveEffectivePermissions(
 export default {
   fetch(request: Request, env: Record<string, any>): Promise<Response>;
 };
+
+export function computeLeaveCancellationState(
+  row: Record<string, any>,
+  dateKey: string
+): {
+  cancelledDateKeys: string[];
+  activeDateKeys: string[];
+  status: "approved" | "cancelled";
+  restoreDays: number;
+  balanceRestoredDays: number;
+};
+
+export function normalizeImportedLeaveRequest(
+  raw: unknown
+): Record<string, any> | null;
+
+export function normalizeImportedAbsence(
+  raw: unknown
+): Record<string, any> | null;
+
+export function normalizeImportedServiceRequest(
+  raw: unknown
+): Record<string, any> | null;

@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   computeEffectivePermissions,
+  computeLeaveCancellationState,
   normalizeEmployeePayload,
+  normalizeImportedAbsence,
+  normalizeImportedLeaveRequest,
+  normalizeImportedServiceRequest,
   validateFirebaseTokenClaims,
 } from "../workers/hr-core-worker.js";
 
@@ -130,5 +134,134 @@ describe("HR employee normalization", () => {
       { partial: false }
     );
     expect(result.ok).toBe(false);
+  });
+});
+
+
+describe("HR operations normalization", () => {
+  it("normalizes imported leave requests and preserves partial cancellations", () => {
+    expect(
+      normalizeImportedLeaveRequest({
+        id: "leave-1",
+        employeeUid: "auth-1",
+        employeeDocId: "employee-1",
+        status: "approved",
+        leaveType: "annual",
+        startDate: "2026-07-20",
+        endDate: "2026-07-22",
+        daysCount: 3,
+        balanceDeductedDays: 3,
+        balanceRestoredDays: 1,
+        cancelledDateKeys: ["2026-07-21"],
+      })
+    ).toMatchObject({
+      id: "leave-1",
+      employeeId: "employee-1",
+      employeeUid: "auth-1",
+      status: "approved",
+      daysCount: 3,
+      cancelledDateKeys: ["2026-07-21"],
+    });
+  });
+
+  it("accepts Firestore ISO timestamps for leave dates", () => {
+    expect(
+      normalizeImportedLeaveRequest({
+        id: "leave-firestore-date",
+        employeeUid: "auth-1",
+        employeeDocId: "employee-1",
+        status: "approved",
+        leaveType: "annual",
+        startDate: "2026-07-20T00:00:00.000Z",
+        endDate: "2026-07-22T00:00:00.000Z",
+      })
+    ).toMatchObject({
+      startDate: "2026-07-20",
+      endDate: "2026-07-22",
+      daysCount: 3,
+    });
+  });
+
+  it("computes one-day leave cancellation without cancelling the whole range", () => {
+    expect(
+      computeLeaveCancellationState(
+        {
+          start_date: "2026-07-20",
+          end_date: "2026-07-22",
+          cancelled_date_keys_json: "[]",
+          balance_deducted_days: 3,
+          balance_restored_days: 0,
+        },
+        "2026-07-21"
+      )
+    ).toEqual({
+      cancelledDateKeys: ["2026-07-21"],
+      activeDateKeys: ["2026-07-20", "2026-07-22"],
+      status: "approved",
+      restoreDays: 1,
+      balanceRestoredDays: 1,
+    });
+  });
+
+  it("fully cancels the request after the final active day is removed", () => {
+    expect(
+      computeLeaveCancellationState(
+        {
+          start_date: "2026-07-20",
+          end_date: "2026-07-21",
+          cancelled_date_keys_json: '["2026-07-20"]',
+          balance_deducted_days: 2,
+          balance_restored_days: 1,
+        },
+        "2026-07-21"
+      )
+    ).toMatchObject({
+      status: "cancelled",
+      restoreDays: 1,
+      balanceRestoredDays: 2,
+    });
+  });
+
+  it("normalizes absences and rejects invalid absence dates", () => {
+    expect(
+      normalizeImportedAbsence({
+        id: "absence-1",
+        employeeUid: "auth-1",
+        employeeId: "employee-1",
+        date: "2026-07-21",
+        type: "half_day",
+      })
+    ).toMatchObject({
+      id: "absence-1",
+      date: "2026-07-21",
+      type: "half_day",
+    });
+    expect(
+      normalizeImportedAbsence({
+        id: "absence-2",
+        employeeUid: "auth-1",
+        date: "2026-02-31",
+        type: "full_day",
+      })
+    ).toBeNull();
+  });
+
+  it("normalizes employee service requests", () => {
+    expect(
+      normalizeImportedServiceRequest({
+        id: "request-1",
+        employeeUid: "auth-1",
+        employeeId: "employee-1",
+        requestType: "salary_advance",
+        status: "pending",
+        amount: 500,
+      })
+    ).toMatchObject({
+      id: "request-1",
+      employeeUid: "auth-1",
+      employeeId: "employee-1",
+      requestType: "salary_advance",
+      amount: 500,
+    });
   });
 });

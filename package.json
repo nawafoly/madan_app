@@ -17,7 +17,9 @@
     "hr:d1:migrate:local": "npx wrangler d1 migrations apply maedin-hr --local --config workers/wrangler.hr.toml",
     "hr:d1:migrate:remote": "npx wrangler d1 migrations apply maedin-hr --remote --config workers/wrangler.hr.toml",
     "hr:migrate:dry": "node scripts/migrate-hr-core-to-cloudflare.mjs --dry-run",
-    "hr:migrate": "node scripts/migrate-hr-core-to-cloudflare.mjs"
+    "hr:migrate": "node scripts/migrate-hr-core-to-cloudflare.mjs",
+    "hr:operations:migrate:dry": "node scripts/migrate-hr-operations-to-cloudflare.mjs --dry-run",
+    "hr:operations:migrate": "node scripts/migrate-hr-operations-to-cloudflare.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.693.0",

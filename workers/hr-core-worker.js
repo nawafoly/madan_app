@@ -52,6 +52,10 @@ async function routeRequest(request, env) {
     return importHrSnapshot(request, env);
   }
 
+  if (pathname === "/internal/hr/operations/import" && request.method === "POST") {
+    return importHrOperationsSnapshot(request, env);
+  }
+
   if (pathname.startsWith("/internal/")) {
     return json(404, { ok: false, message: "not_found" });
   }
@@ -130,6 +134,87 @@ async function routeRequest(request, env) {
     );
   }
 
+  if (pathname === "/api/hr/leave-requests" && request.method === "GET") {
+    return listLeaveRequests(url, env.HR_DB, requester);
+  }
+
+  if (pathname === "/api/hr/leave-requests" && request.method === "POST") {
+    return createLeaveRequest(request, env.HR_DB, requester);
+  }
+
+  const leaveReviewMatch = pathname.match(
+    /^\/api\/hr\/leave-requests\/([^/]+)\/review$/
+  );
+  if (leaveReviewMatch && request.method === "PATCH") {
+    if (!canManageLeaveRequests(requester)) {
+      return forbidden("leave_requests_manage_forbidden");
+    }
+    return reviewLeaveRequest(
+      request,
+      env.HR_DB,
+      requester,
+      decodeURIComponent(leaveReviewMatch[1])
+    );
+  }
+
+  const leaveCancelDateMatch = pathname.match(
+    /^\/api\/hr\/leave-requests\/([^/]+)\/cancel-date$/
+  );
+  if (leaveCancelDateMatch && request.method === "PATCH") {
+    if (!canManageLeaveRequests(requester)) {
+      return forbidden("leave_requests_manage_forbidden");
+    }
+    return cancelLeaveDate(
+      request,
+      env.HR_DB,
+      requester,
+      decodeURIComponent(leaveCancelDateMatch[1])
+    );
+  }
+
+  if (pathname === "/api/hr/absences" && request.method === "GET") {
+    return listAbsences(url, env.HR_DB, requester);
+  }
+
+  if (pathname === "/api/hr/absences" && request.method === "POST") {
+    if (!canManageAbsences(requester)) return forbidden("absences_manage_forbidden");
+    return createAbsence(request, env.HR_DB, requester);
+  }
+
+  const absenceMatch = pathname.match(/^\/api\/hr\/absences\/([^/]+)$/);
+  if (absenceMatch && request.method === "DELETE") {
+    if (!canManageAbsences(requester)) return forbidden("absences_manage_forbidden");
+    return deleteAbsence(
+      request,
+      env.HR_DB,
+      requester,
+      decodeURIComponent(absenceMatch[1])
+    );
+  }
+
+  if (pathname === "/api/hr/service-requests" && request.method === "GET") {
+    return listServiceRequests(url, env.HR_DB, requester);
+  }
+
+  if (pathname === "/api/hr/service-requests" && request.method === "POST") {
+    return createServiceRequest(request, env.HR_DB, requester);
+  }
+
+  const serviceReviewMatch = pathname.match(
+    /^\/api\/hr\/service-requests\/([^/]+)\/review$/
+  );
+  if (serviceReviewMatch && request.method === "PATCH") {
+    if (!canManageServiceRequests(requester)) {
+      return forbidden("service_requests_manage_forbidden");
+    }
+    return reviewServiceRequest(
+      request,
+      env.HR_DB,
+      requester,
+      decodeURIComponent(serviceReviewMatch[1])
+    );
+  }
+
   return methodOrNotFound(pathname, request.method);
 }
 
@@ -139,7 +224,10 @@ async function healthCheck(db) {
       .prepare(
         `SELECT
            (SELECT COUNT(*) FROM accounts) AS account_count,
-           (SELECT COUNT(*) FROM employees) AS employee_count`
+           (SELECT COUNT(*) FROM employees) AS employee_count,
+           (SELECT COUNT(*) FROM employee_leave_requests) AS leave_request_count,
+           (SELECT COUNT(*) FROM employee_absences) AS absence_count,
+           (SELECT COUNT(*) FROM employee_service_requests) AS service_request_count`
       )
       .first();
 
@@ -149,6 +237,9 @@ async function healthCheck(db) {
       database: "ready",
       accountCount: Number(row?.account_count || 0),
       employeeCount: Number(row?.employee_count || 0),
+      leaveRequestCount: Number(row?.leave_request_count || 0),
+      absenceCount: Number(row?.absence_count || 0),
+      serviceRequestCount: Number(row?.service_request_count || 0),
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
@@ -290,6 +381,49 @@ function canManageAccounts(requester) {
 function canReadEmployee(requester, employeeId) {
   if (canReadEmployees(requester)) return true;
   return normalizeText(requester.account?.linked_employee_id) === employeeId;
+}
+
+function canViewLeaveRequests(requester) {
+  return (
+    requester.permissions.includes("leave_requests.view") ||
+    canReadEmployees(requester)
+  );
+}
+
+function canManageLeaveRequests(requester) {
+  return (
+    requester.permissions.includes("leave_requests.manage") ||
+    canManageEmployees(requester)
+  );
+}
+
+function canViewAbsences(requester) {
+  return requester.permissions.includes("absences.view") || canReadEmployees(requester);
+}
+
+function canManageAbsences(requester) {
+  return (
+    requester.permissions.includes("absences.manage") ||
+    canManageEmployees(requester)
+  );
+}
+
+function canViewServiceRequests(requester) {
+  return (
+    requester.permissions.includes("service_requests.view") ||
+    canReadEmployees(requester)
+  );
+}
+
+function canManageServiceRequests(requester) {
+  return (
+    requester.permissions.includes("service_requests.manage") ||
+    canManageEmployees(requester)
+  );
+}
+
+function requesterEmployeeId(requester) {
+  return normalizeText(requester.account?.linked_employee_id);
 }
 
 async function listEmployees(url, db) {
@@ -594,6 +728,586 @@ async function updateEmployee(request, db, requester, id) {
     return getEmployee(db, before.id);
   } catch (error) {
     return databaseMutationError("employee_update_failed", error);
+  }
+}
+
+
+function normalizeIsoDateKey(value) {
+  const text = normalizeText(value);
+  const match = text.match(/^(\d{4})-(\d{2})-(\d{2})(?:$|T|\s)/);
+  if (!match) return "";
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    return "";
+  }
+  return `${match[1]}-${match[2]}-${match[3]}`;
+}
+
+function buildDateKeysInclusive(startDate, endDate) {
+  const start = normalizeIsoDateKey(startDate);
+  const end = normalizeIsoDateKey(endDate);
+  if (!start || !end || end < start) return [];
+  const cursor = new Date(`${start}T12:00:00.000Z`);
+  const finalDate = new Date(`${end}T12:00:00.000Z`);
+  const keys = [];
+  while (cursor <= finalDate && keys.length <= 370) {
+    keys.push(cursor.toISOString().slice(0, 10));
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return keys;
+}
+
+export function computeLeaveCancellationState(row, dateKey) {
+  const normalizedDate = normalizeIsoDateKey(dateKey);
+  const allDates = buildDateKeysInclusive(row?.start_date, row?.end_date);
+  if (!normalizedDate || !allDates.includes(normalizedDate)) {
+    throw new Error("leave_request_date_mismatch");
+  }
+  const existing = new Set(parseJsonArray(row?.cancelled_date_keys_json));
+  if (existing.has(normalizedDate)) {
+    throw new Error("leave_date_already_cancelled");
+  }
+  existing.add(normalizedDate);
+  const cancelledDateKeys = Array.from(existing)
+    .filter(key => allDates.includes(key))
+    .sort();
+  const activeDateKeys = allDates.filter(key => !existing.has(key));
+  const deducted = Math.max(0, Number(row?.balance_deducted_days || 0));
+  const restored = Math.max(0, Number(row?.balance_restored_days || 0));
+  const restoreDays = Math.min(1, Math.max(0, deducted - restored));
+  return {
+    cancelledDateKeys,
+    activeDateKeys,
+    status: activeDateKeys.length ? "approved" : "cancelled",
+    restoreDays,
+    balanceRestoredDays: restored + restoreDays,
+  };
+}
+
+function mapLeaveRequestRow(row) {
+  return {
+    id: row.id,
+    employeeId: row.employee_id || null,
+    employeeDocId: row.employee_id || null,
+    employeeUid: row.employee_uid,
+    userId: row.employee_uid,
+    employeeName: row.employee_name || null,
+    employeeEmail: row.employee_email || null,
+    status: row.status,
+    leaveType: row.leave_type,
+    startDate: row.start_date,
+    endDate: row.end_date,
+    daysCount: nullableNumber(row.days_count),
+    balanceDeductedDays: Number(row.balance_deducted_days || 0),
+    balanceRestoredDays: Number(row.balance_restored_days || 0),
+    cancelledDateKeys: parseJsonArray(row.cancelled_date_keys_json),
+    cancellationDate: row.cancellation_date || null,
+    cancelledAt: row.cancelled_at || null,
+    cancelledBy: row.cancelled_by || null,
+    cancelledByEmail: row.cancelled_by_email || null,
+    cancelledByName: row.cancelled_by_name || null,
+    employeeNote: row.employee_note || null,
+    hrNote: row.hr_note || null,
+    decidedAt: row.decided_at || null,
+    decidedBy: row.decided_by || null,
+    decidedByEmail: row.decided_by_email || null,
+    decidedByName: row.decided_by_name || null,
+    reviewedAt: row.reviewed_at || null,
+    reviewedBy: row.reviewed_by || null,
+    reviewedByEmail: row.reviewed_by_email || null,
+    reviewedByName: row.reviewed_by_name || null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function mapAbsenceRow(row) {
+  return {
+    id: row.id,
+    employeeId: row.employee_id || null,
+    employeeUid: row.employee_uid,
+    date: row.absence_date,
+    type: row.absence_type,
+    note: row.note || null,
+    createdByUid: row.created_by_uid || "",
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function mapServiceRequestRow(row) {
+  return {
+    id: row.id,
+    employeeId: row.employee_id || null,
+    employeeDocId: row.employee_id || null,
+    employeeUid: row.employee_uid,
+    userId: row.employee_uid,
+    employeeName: row.employee_name || null,
+    employeeEmail: row.employee_email || null,
+    status: row.status,
+    requestType: row.request_type,
+    title: row.title || null,
+    requestDate: row.request_date || null,
+    startDate: row.start_date || null,
+    endDate: row.end_date || null,
+    startTime: row.start_time || null,
+    endTime: row.end_time || null,
+    amount: nullableNumber(row.amount),
+    letterType: row.letter_type || null,
+    employeeNote: row.employee_note || null,
+    hrNote: row.hr_note || null,
+    decidedAt: row.decided_at || null,
+    decidedBy: row.decided_by || null,
+    decidedByEmail: row.decided_by_email || null,
+    decidedByName: row.decided_by_name || null,
+    reviewedAt: row.reviewed_at || null,
+    reviewedBy: row.reviewed_by || null,
+    reviewedByEmail: row.reviewed_by_email || null,
+    reviewedByName: row.reviewed_by_name || null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+async function listLeaveRequests(url, db, requester) {
+  const manager = canViewLeaveRequests(requester);
+  const requestedEmployeeUid = normalizeText(url.searchParams.get("employeeUid"));
+  const requestedEmployeeId = normalizeText(url.searchParams.get("employeeId"));
+  if (!manager && requestedEmployeeUid && requestedEmployeeUid !== requester.uid) {
+    return forbidden("leave_requests_view_forbidden");
+  }
+  if (!manager && requestedEmployeeId && requestedEmployeeId !== requesterEmployeeId(requester)) {
+    return forbidden("leave_requests_view_forbidden");
+  }
+
+  const query = parseListQuery(url.searchParams);
+  const filters = [];
+  const bindings = [];
+  if (manager) {
+    if (requestedEmployeeUid) {
+      filters.push("employee_uid = ?");
+      bindings.push(requestedEmployeeUid);
+    }
+    if (requestedEmployeeId) {
+      filters.push("employee_id = ?");
+      bindings.push(requestedEmployeeId);
+    }
+  } else {
+    filters.push("employee_uid = ?");
+    bindings.push(requester.uid);
+  }
+  const status = normalizeText(url.searchParams.get("status")).toLowerCase();
+  if (status) {
+    filters.push("status = ?");
+    bindings.push(status);
+  }
+  const whereSql = filters.length ? `WHERE ${filters.join(" AND ")}` : "";
+  try {
+    const result = await db.batch([
+      db.prepare(`SELECT * FROM employee_leave_requests ${whereSql} ORDER BY created_at DESC LIMIT ? OFFSET ?`).bind(...bindings, query.limit, query.offset),
+      db.prepare(`SELECT COUNT(*) AS total FROM employee_leave_requests ${whereSql}`).bind(...bindings),
+    ]);
+    return json(200, {
+      ok: true,
+      leaveRequests: (result[0]?.results || []).map(mapLeaveRequestRow),
+      pagination: {
+        limit: query.limit,
+        offset: query.offset,
+        total: Number(result[1]?.results?.[0]?.total || 0),
+      },
+    });
+  } catch (error) {
+    return serverError("leave_requests_query_failed", error);
+  }
+}
+
+async function createLeaveRequest(request, db, requester) {
+  const bodyResult = await readJsonBody(request);
+  if (!bodyResult.ok) return bodyResult.response;
+  const body = bodyResult.value || {};
+  const manager = canManageLeaveRequests(requester);
+  const employeeUid = manager
+    ? normalizeText(body.employeeUid || body.userId || requester.uid)
+    : requester.uid;
+  const employeeId = manager
+    ? nullableText(body.employeeId || body.employeeDocId || requesterEmployeeId(requester))
+    : nullableText(requesterEmployeeId(requester));
+  if (!employeeUid) return json(400, { ok: false, message: "employee_uid_required" });
+  if (!manager && employeeUid !== requester.uid) {
+    return forbidden("leave_request_create_forbidden");
+  }
+
+  const startDate = normalizeIsoDateKey(body.startDate);
+  const endDate = normalizeIsoDateKey(body.endDate || body.startDate);
+  const dateKeys = buildDateKeysInclusive(startDate, endDate);
+  if (!dateKeys.length) return json(400, { ok: false, message: "invalid_leave_date_range" });
+  const leaveType = normalizeText(body.leaveType || "annual").toLowerCase();
+  const id = normalizeText(body.id) || crypto.randomUUID();
+  const now = new Date().toISOString();
+  const employee = employeeId
+    ? await db.prepare("SELECT id, auth_uid, name, email FROM employees WHERE id = ? LIMIT 1").bind(employeeId).first()
+    : await db.prepare("SELECT id, auth_uid, name, email FROM employees WHERE auth_uid = ? LIMIT 1").bind(employeeUid).first();
+
+  try {
+    await db.batch([
+      db.prepare(
+        `INSERT INTO employee_leave_requests (
+           id, employee_id, employee_uid, employee_name, employee_email,
+           status, leave_type, start_date, end_date, days_count,
+           employee_note, hr_note, source, source_updated_at, migrated_at,
+           created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, NULL, 'hr_api', ?, ?, ?, ?)`
+      ).bind(
+        id,
+        employee?.id || employeeId,
+        employeeUid,
+        normalizeText(body.employeeName || employee?.name) || null,
+        nullableEmail(body.employeeEmail || employee?.email),
+        leaveType || "annual",
+        startDate,
+        endDate,
+        dateKeys.length,
+        nullableText(body.employeeNote),
+        now,
+        now,
+        now,
+        now
+      ),
+      buildAuditStatement(db, request, requester, {
+        action: "leave_request.create",
+        entityType: "employee_leave_request",
+        entityId: id,
+        before: null,
+        after: { employeeUid, employeeId, startDate, endDate, leaveType },
+      }),
+    ]);
+    const row = await db.prepare("SELECT * FROM employee_leave_requests WHERE id = ?").bind(id).first();
+    return json(201, { ok: true, leaveRequest: mapLeaveRequestRow(row) });
+  } catch (error) {
+    return databaseMutationError("leave_request_create_failed", error);
+  }
+}
+
+async function reviewLeaveRequest(request, db, requester, id) {
+  const bodyResult = await readJsonBody(request);
+  if (!bodyResult.ok) return bodyResult.response;
+  const nextStatus = normalizeText(bodyResult.value?.status).toLowerCase();
+  if (!['approved', 'rejected'].includes(nextStatus)) {
+    return json(400, { ok: false, message: "invalid_leave_review_status" });
+  }
+  const row = await db.prepare("SELECT * FROM employee_leave_requests WHERE id = ? LIMIT 1").bind(id).first();
+  if (!row) return json(404, { ok: false, message: "leave_request_not_found" });
+  if (normalizeText(row.status).toLowerCase() !== "pending") {
+    return json(409, { ok: false, message: "leave_request_already_reviewed" });
+  }
+  const daysCount = Math.max(0, Number(row.days_count || 0));
+  const employee = row.employee_id
+    ? await db.prepare("SELECT id, leave_balance FROM employees WHERE id = ? LIMIT 1").bind(row.employee_id).first()
+    : await db.prepare("SELECT id, leave_balance FROM employees WHERE auth_uid = ? LIMIT 1").bind(row.employee_uid).first();
+  const currentBalance = Math.max(0, Number(employee?.leave_balance || 0));
+  const deductDays = nextStatus === "approved" && row.leave_type !== "unpaid" ? daysCount : 0;
+  if (deductDays > currentBalance) {
+    return json(409, { ok: false, message: "leave_balance_insufficient", currentBalance, requiredDays: deductDays });
+  }
+  const now = new Date().toISOString();
+  const statements = [];
+  if (employee && deductDays > 0) {
+    statements.push(
+      db.prepare("UPDATE employees SET leave_balance = ?, updated_at = ? WHERE id = ?")
+        .bind(currentBalance - deductDays, now, employee.id)
+    );
+  }
+  statements.push(
+    db.prepare(
+      `UPDATE employee_leave_requests SET
+         status = ?, hr_note = ?, balance_deducted_days = ?,
+         decided_at = ?, decided_by = ?, decided_by_email = ?, decided_by_name = ?,
+         reviewed_at = ?, reviewed_by = ?, reviewed_by_email = ?, reviewed_by_name = ?,
+         updated_at = ?
+       WHERE id = ?`
+    ).bind(
+      nextStatus,
+      nullableText(bodyResult.value?.hrNote),
+      deductDays,
+      now,
+      requester.uid,
+      requester.email || null,
+      requester.account?.display_name || requester.email || null,
+      now,
+      requester.uid,
+      requester.email || null,
+      requester.account?.display_name || requester.email || null,
+      now,
+      id
+    )
+  );
+  statements.push(buildAuditStatement(db, request, requester, {
+    action: `leave_request.${nextStatus}`,
+    entityType: "employee_leave_request",
+    entityId: id,
+    before: row,
+    after: { status: nextStatus, deductedDays: deductDays },
+  }));
+  try {
+    await db.batch(statements);
+    const updated = await db.prepare("SELECT * FROM employee_leave_requests WHERE id = ?").bind(id).first();
+    return json(200, { ok: true, leaveRequest: mapLeaveRequestRow(updated) });
+  } catch (error) {
+    return databaseMutationError("leave_request_review_failed", error);
+  }
+}
+
+async function cancelLeaveDate(request, db, requester, id) {
+  const bodyResult = await readJsonBody(request);
+  if (!bodyResult.ok) return bodyResult.response;
+  const dateKey = normalizeIsoDateKey(bodyResult.value?.date);
+  if (!dateKey) return json(400, { ok: false, message: "invalid_leave_cancel_date" });
+  const row = await db.prepare("SELECT * FROM employee_leave_requests WHERE id = ? LIMIT 1").bind(id).first();
+  if (!row) return json(404, { ok: false, message: "leave_request_not_found" });
+  if (normalizeText(row.status).toLowerCase() !== "approved") {
+    return json(409, { ok: false, message: "leave_request_not_approved" });
+  }
+  let state;
+  try {
+    state = computeLeaveCancellationState(row, dateKey);
+  } catch (error) {
+    return json(409, { ok: false, message: error instanceof Error ? error.message : "leave_cancel_failed" });
+  }
+  const employee = row.employee_id
+    ? await db.prepare("SELECT id, leave_balance FROM employees WHERE id = ? LIMIT 1").bind(row.employee_id).first()
+    : await db.prepare("SELECT id, leave_balance FROM employees WHERE auth_uid = ? LIMIT 1").bind(row.employee_uid).first();
+  const now = new Date().toISOString();
+  const statements = [];
+  if (employee && state.restoreDays > 0) {
+    statements.push(
+      db.prepare("UPDATE employees SET leave_balance = ?, updated_at = ? WHERE id = ?")
+        .bind(Math.max(0, Number(employee.leave_balance || 0)) + state.restoreDays, now, employee.id)
+    );
+  }
+  statements.push(
+    db.prepare(
+      `UPDATE employee_leave_requests SET
+         status = ?, cancelled_date_keys_json = ?, cancellation_date = ?,
+         balance_restored_days = ?, cancelled_at = ?, cancelled_by = ?,
+         cancelled_by_email = ?, cancelled_by_name = ?, updated_at = ?
+       WHERE id = ?`
+    ).bind(
+      state.status,
+      JSON.stringify(state.cancelledDateKeys),
+      state.status === "cancelled" ? dateKey : row.cancellation_date,
+      state.balanceRestoredDays,
+      now,
+      requester.uid,
+      requester.email || null,
+      requester.account?.display_name || requester.email || null,
+      now,
+      id
+    )
+  );
+  statements.push(buildAuditStatement(db, request, requester, {
+    action: "leave_request.cancel_date",
+    entityType: "employee_leave_request",
+    entityId: id,
+    before: row,
+    after: { date: dateKey, ...state },
+  }));
+  try {
+    await db.batch(statements);
+    const updated = await db.prepare("SELECT * FROM employee_leave_requests WHERE id = ?").bind(id).first();
+    return json(200, { ok: true, leaveRequest: mapLeaveRequestRow(updated) });
+  } catch (error) {
+    return databaseMutationError("leave_date_cancel_failed", error);
+  }
+}
+
+async function listAbsences(url, db, requester) {
+  const manager = canViewAbsences(requester);
+  const requestedEmployeeUid = normalizeText(url.searchParams.get("employeeUid"));
+  const requestedEmployeeId = normalizeText(url.searchParams.get("employeeId"));
+  if (!manager && requestedEmployeeUid && requestedEmployeeUid !== requester.uid) {
+    return forbidden("absences_view_forbidden");
+  }
+  const query = parseListQuery(url.searchParams);
+  const filters = [];
+  const bindings = [];
+  if (manager) {
+    if (requestedEmployeeUid) { filters.push("employee_uid = ?"); bindings.push(requestedEmployeeUid); }
+    if (requestedEmployeeId) { filters.push("employee_id = ?"); bindings.push(requestedEmployeeId); }
+  } else {
+    filters.push("employee_uid = ?"); bindings.push(requester.uid);
+  }
+  const from = normalizeIsoDateKey(url.searchParams.get("from"));
+  const to = normalizeIsoDateKey(url.searchParams.get("to"));
+  if (from) { filters.push("absence_date >= ?"); bindings.push(from); }
+  if (to) { filters.push("absence_date <= ?"); bindings.push(to); }
+  const whereSql = filters.length ? `WHERE ${filters.join(" AND ")}` : "";
+  try {
+    const result = await db.batch([
+      db.prepare(`SELECT * FROM employee_absences ${whereSql} ORDER BY absence_date DESC, created_at DESC LIMIT ? OFFSET ?`).bind(...bindings, query.limit, query.offset),
+      db.prepare(`SELECT COUNT(*) AS total FROM employee_absences ${whereSql}`).bind(...bindings),
+    ]);
+    return json(200, { ok: true, absences: (result[0]?.results || []).map(mapAbsenceRow), pagination: { limit: query.limit, offset: query.offset, total: Number(result[1]?.results?.[0]?.total || 0) } });
+  } catch (error) {
+    return serverError("absences_query_failed", error);
+  }
+}
+
+async function createAbsence(request, db, requester) {
+  const bodyResult = await readJsonBody(request);
+  if (!bodyResult.ok) return bodyResult.response;
+  const body = bodyResult.value || {};
+  const employeeUid = normalizeText(body.employeeUid);
+  const employeeId = nullableText(body.employeeId);
+  const date = normalizeIsoDateKey(body.date);
+  const type = normalizeText(body.type || "full_day").toLowerCase();
+  if (!employeeUid || !date || !['full_day', 'half_day'].includes(type)) {
+    return json(400, { ok: false, message: "invalid_absence_payload" });
+  }
+  const id = normalizeText(body.id) || crypto.randomUUID();
+  const now = new Date().toISOString();
+  try {
+    await db.batch([
+      db.prepare(
+        `INSERT INTO employee_absences (
+           id, employee_id, employee_uid, absence_date, absence_type, note,
+           created_by_uid, source, source_updated_at, migrated_at, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, 'hr_api', ?, ?, ?, ?)`
+      ).bind(id, employeeId, employeeUid, date, type, nullableText(body.note), requester.uid, now, now, now, now),
+      buildAuditStatement(db, request, requester, { action: "absence.create", entityType: "employee_absence", entityId: id, before: null, after: { employeeId, employeeUid, date, type } }),
+    ]);
+    const row = await db.prepare("SELECT * FROM employee_absences WHERE id = ?").bind(id).first();
+    return json(201, { ok: true, absence: mapAbsenceRow(row) });
+  } catch (error) {
+    return databaseMutationError("absence_create_failed", error);
+  }
+}
+
+async function deleteAbsence(request, db, requester, id) {
+  const row = await db.prepare("SELECT * FROM employee_absences WHERE id = ? LIMIT 1").bind(id).first();
+  if (!row) return json(404, { ok: false, message: "absence_not_found" });
+  try {
+    await db.batch([
+      db.prepare("DELETE FROM employee_absences WHERE id = ?").bind(id),
+      buildAuditStatement(db, request, requester, { action: "absence.delete", entityType: "employee_absence", entityId: id, before: row, after: null }),
+    ]);
+    return json(200, { ok: true, id });
+  } catch (error) {
+    return databaseMutationError("absence_delete_failed", error);
+  }
+}
+
+async function listServiceRequests(url, db, requester) {
+  const manager = canViewServiceRequests(requester);
+  const requestedEmployeeUid = normalizeText(url.searchParams.get("employeeUid"));
+  const requestedEmployeeId = normalizeText(url.searchParams.get("employeeId"));
+  if (!manager && requestedEmployeeUid && requestedEmployeeUid !== requester.uid) {
+    return forbidden("service_requests_view_forbidden");
+  }
+  const query = parseListQuery(url.searchParams);
+  const filters = [];
+  const bindings = [];
+  if (manager) {
+    if (requestedEmployeeUid) { filters.push("employee_uid = ?"); bindings.push(requestedEmployeeUid); }
+    if (requestedEmployeeId) { filters.push("employee_id = ?"); bindings.push(requestedEmployeeId); }
+  } else {
+    filters.push("employee_uid = ?"); bindings.push(requester.uid);
+  }
+  const status = normalizeText(url.searchParams.get("status")).toLowerCase();
+  const requestType = normalizeText(url.searchParams.get("requestType"));
+  if (status) { filters.push("status = ?"); bindings.push(status); }
+  if (requestType) { filters.push("request_type = ?"); bindings.push(requestType); }
+  const whereSql = filters.length ? `WHERE ${filters.join(" AND ")}` : "";
+  try {
+    const result = await db.batch([
+      db.prepare(`SELECT * FROM employee_service_requests ${whereSql} ORDER BY created_at DESC LIMIT ? OFFSET ?`).bind(...bindings, query.limit, query.offset),
+      db.prepare(`SELECT COUNT(*) AS total FROM employee_service_requests ${whereSql}`).bind(...bindings),
+    ]);
+    return json(200, { ok: true, serviceRequests: (result[0]?.results || []).map(mapServiceRequestRow), pagination: { limit: query.limit, offset: query.offset, total: Number(result[1]?.results?.[0]?.total || 0) } });
+  } catch (error) {
+    return serverError("service_requests_query_failed", error);
+  }
+}
+
+async function createServiceRequest(request, db, requester) {
+  const bodyResult = await readJsonBody(request);
+  if (!bodyResult.ok) return bodyResult.response;
+  const body = bodyResult.value || {};
+  const manager = canManageServiceRequests(requester);
+  const employeeUid = manager ? normalizeText(body.employeeUid || requester.uid) : requester.uid;
+  const employeeId = manager ? nullableText(body.employeeId || body.employeeDocId || requesterEmployeeId(requester)) : nullableText(requesterEmployeeId(requester));
+  const requestType = normalizeText(body.requestType);
+  if (!employeeUid || !requestType) return json(400, { ok: false, message: "invalid_service_request_payload" });
+  const id = normalizeText(body.id) || crypto.randomUUID();
+  const now = new Date().toISOString();
+  const employee = employeeId
+    ? await db.prepare("SELECT id, name, email FROM employees WHERE id = ? LIMIT 1").bind(employeeId).first()
+    : await db.prepare("SELECT id, name, email FROM employees WHERE auth_uid = ? LIMIT 1").bind(employeeUid).first();
+  try {
+    await db.batch([
+      db.prepare(
+        `INSERT INTO employee_service_requests (
+           id, employee_id, employee_uid, employee_name, employee_email, status,
+           request_type, title, request_date, start_date, end_date, start_time,
+           end_time, amount, letter_type, employee_note, hr_note, source,
+           source_updated_at, migrated_at, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'hr_api', ?, ?, ?, ?)`
+      ).bind(
+        id, employee?.id || employeeId, employeeUid,
+        normalizeText(body.employeeName || employee?.name) || null,
+        nullableEmail(body.employeeEmail || employee?.email),
+        requestType, nullableText(body.title), normalizeIsoDateKey(body.requestDate) || null,
+        normalizeIsoDateKey(body.startDate) || null, normalizeIsoDateKey(body.endDate) || null,
+        nullableText(body.startTime), nullableText(body.endTime), nullableNumber(body.amount),
+        nullableText(body.letterType), nullableText(body.employeeNote), now, now, now, now
+      ),
+      buildAuditStatement(db, request, requester, { action: "service_request.create", entityType: "employee_service_request", entityId: id, before: null, after: { employeeUid, employeeId, requestType } }),
+    ]);
+    const row = await db.prepare("SELECT * FROM employee_service_requests WHERE id = ?").bind(id).first();
+    return json(201, { ok: true, serviceRequest: mapServiceRequestRow(row) });
+  } catch (error) {
+    return databaseMutationError("service_request_create_failed", error);
+  }
+}
+
+async function reviewServiceRequest(request, db, requester, id) {
+  const bodyResult = await readJsonBody(request);
+  if (!bodyResult.ok) return bodyResult.response;
+  const status = normalizeText(bodyResult.value?.status).toLowerCase();
+  if (!['approved', 'rejected'].includes(status)) {
+    return json(400, { ok: false, message: "invalid_service_review_status" });
+  }
+  const row = await db.prepare("SELECT * FROM employee_service_requests WHERE id = ? LIMIT 1").bind(id).first();
+  if (!row) return json(404, { ok: false, message: "service_request_not_found" });
+  if (normalizeText(row.status).toLowerCase() !== "pending") {
+    return json(409, { ok: false, message: "service_request_already_reviewed" });
+  }
+  const now = new Date().toISOString();
+  try {
+    await db.batch([
+      db.prepare(
+        `UPDATE employee_service_requests SET status = ?, hr_note = ?,
+           decided_at = ?, decided_by = ?, decided_by_email = ?, decided_by_name = ?,
+           reviewed_at = ?, reviewed_by = ?, reviewed_by_email = ?, reviewed_by_name = ?,
+           updated_at = ? WHERE id = ?`
+      ).bind(
+        status, nullableText(bodyResult.value?.hrNote), now, requester.uid,
+        requester.email || null, requester.account?.display_name || requester.email || null,
+        now, requester.uid, requester.email || null,
+        requester.account?.display_name || requester.email || null, now, id
+      ),
+      buildAuditStatement(db, request, requester, { action: `service_request.${status}`, entityType: "employee_service_request", entityId: id, before: row, after: { status } }),
+    ]);
+    const updated = await db.prepare("SELECT * FROM employee_service_requests WHERE id = ?").bind(id).first();
+    return json(200, { ok: true, serviceRequest: mapServiceRequestRow(updated) });
+  } catch (error) {
+    return databaseMutationError("service_request_review_failed", error);
   }
 }
 
@@ -964,6 +1678,280 @@ async function importHrSnapshot(request, env) {
   } catch (error) {
     return databaseMutationError("hr_import_failed", error);
   }
+}
+
+
+async function importHrOperationsSnapshot(request, env) {
+  const authorized = await verifySyncSecret(request, env.HR_SYNC_SECRET);
+  if (!authorized) return json(401, { ok: false, message: "invalid_hr_sync_secret" });
+  const bodyResult = await readJsonBody(request, 5_000_000);
+  if (!bodyResult.ok) return bodyResult.response;
+  const leaves = Array.isArray(bodyResult.value?.leaveRequests) ? bodyResult.value.leaveRequests : [];
+  const absences = Array.isArray(bodyResult.value?.absences) ? bodyResult.value.absences : [];
+  const serviceRequests = Array.isArray(bodyResult.value?.serviceRequests) ? bodyResult.value.serviceRequests : [];
+  if (leaves.length > MAX_IMPORT_ROWS || absences.length > MAX_IMPORT_ROWS || serviceRequests.length > MAX_IMPORT_ROWS) {
+    return json(413, { ok: false, message: "hr_operations_import_batch_too_large", maxRowsPerType: MAX_IMPORT_ROWS });
+  }
+  const runId = normalizeText(bodyResult.value?.runId) || crypto.randomUUID();
+  const complete = Boolean(bodyResult.value?.complete);
+  const now = new Date().toISOString();
+  const normalizedLeaves = leaves.map(normalizeImportedLeaveRequest).filter(Boolean);
+  const normalizedAbsences = absences.map(normalizeImportedAbsence).filter(Boolean);
+  const normalizedServiceRequests = serviceRequests
+    .map(normalizeImportedServiceRequest)
+    .filter(Boolean);
+  const skipped = {
+    leaveRequests: leaves.length - normalizedLeaves.length,
+    absences: absences.length - normalizedAbsences.length,
+    serviceRequests: serviceRequests.length - normalizedServiceRequests.length,
+  };
+
+  if (skipped.leaveRequests || skipped.absences || skipped.serviceRequests) {
+    return json(422, {
+      ok: false,
+      message: "hr_operations_import_validation_failed",
+      received: {
+        leaveRequests: leaves.length,
+        absences: absences.length,
+        serviceRequests: serviceRequests.length,
+      },
+      skipped,
+    });
+  }
+
+  const statements = [
+    env.HR_DB.prepare(
+      `INSERT INTO hr_migration_runs (
+         id, source, status, leave_requests_received, absences_received,
+         service_requests_received, details_json, started_at
+       ) VALUES (?, 'firestore_operations', 'running', ?, ?, ?, '{}', ?)
+       ON CONFLICT(id) DO UPDATE SET
+         status = 'running',
+         leave_requests_received = leave_requests_received + excluded.leave_requests_received,
+         absences_received = absences_received + excluded.absences_received,
+         service_requests_received = service_requests_received + excluded.service_requests_received`
+    ).bind(
+      runId,
+      normalizedLeaves.length,
+      normalizedAbsences.length,
+      normalizedServiceRequests.length,
+      now
+    ),
+  ];
+
+  for (const row of normalizedLeaves) {
+    statements.push(buildImportedLeaveUpsert(env.HR_DB, row, now));
+  }
+  for (const row of normalizedAbsences) {
+    statements.push(buildImportedAbsenceUpsert(env.HR_DB, row, now));
+  }
+  for (const row of normalizedServiceRequests) {
+    statements.push(buildImportedServiceRequestUpsert(env.HR_DB, row, now));
+  }
+  if (complete) {
+    statements.push(env.HR_DB.prepare("UPDATE hr_migration_runs SET status = 'completed', finished_at = ? WHERE id = ?").bind(now, runId));
+  }
+  try {
+    await env.HR_DB.batch(statements);
+    return json(200, {
+      ok: true,
+      runId,
+      complete,
+      leaveRequestsReceived: normalizedLeaves.length,
+      absencesReceived: normalizedAbsences.length,
+      serviceRequestsReceived: normalizedServiceRequests.length,
+      skipped,
+    });
+  } catch (error) {
+    return databaseMutationError("hr_operations_import_failed", error);
+  }
+}
+
+export function normalizeImportedLeaveRequest(raw) {
+  const id = normalizeText(raw?.id);
+  const employeeUid = normalizeText(raw?.employeeUid || raw?.userId);
+  const startDate = normalizeIsoDateKey(raw?.startDate);
+  const endDate = normalizeIsoDateKey(raw?.endDate || raw?.startDate);
+  if (!id || !employeeUid || !startDate || !endDate) return null;
+  const dateKeys = buildDateKeysInclusive(startDate, endDate);
+  return {
+    id,
+    employeeId: nullableText(raw?.employeeId || raw?.employeeDocId),
+    employeeUid,
+    employeeName: nullableText(raw?.employeeName),
+    employeeEmail: nullableEmail(raw?.employeeEmail),
+    status: normalizeText(raw?.status || "pending").toLowerCase(),
+    leaveType: normalizeText(raw?.leaveType || "annual").toLowerCase(),
+    startDate,
+    endDate,
+    daysCount: nullableNumber(raw?.daysCount) ?? dateKeys.length,
+    balanceDeductedDays: Math.max(0, Number(raw?.balanceDeductedDays || 0)),
+    balanceRestoredDays: Math.max(0, Number(raw?.balanceRestoredDays || 0)),
+    cancelledDateKeys: normalizeStringArray(raw?.cancelledDateKeys).map(normalizeIsoDateKey).filter(Boolean),
+    cancellationDate: normalizeIsoDateKey(raw?.cancellationDate) || null,
+    cancelledAt: normalizeDateToIso(raw?.cancelledAt),
+    cancelledBy: nullableText(raw?.cancelledBy),
+    cancelledByEmail: nullableEmail(raw?.cancelledByEmail),
+    cancelledByName: nullableText(raw?.cancelledByName),
+    employeeNote: nullableText(raw?.employeeNote),
+    hrNote: nullableText(raw?.hrNote),
+    decidedAt: normalizeDateToIso(raw?.decidedAt),
+    decidedBy: nullableText(raw?.decidedBy),
+    decidedByEmail: nullableEmail(raw?.decidedByEmail),
+    decidedByName: nullableText(raw?.decidedByName),
+    reviewedAt: normalizeDateToIso(raw?.reviewedAt),
+    reviewedBy: nullableText(raw?.reviewedBy),
+    reviewedByEmail: nullableEmail(raw?.reviewedByEmail),
+    reviewedByName: nullableText(raw?.reviewedByName),
+    sourceUpdatedAt: normalizeDateToIso(raw?.updatedAt || raw?.createdAt),
+    createdAt: normalizeDateToIso(raw?.createdAt) || new Date().toISOString(),
+    updatedAt: normalizeDateToIso(raw?.updatedAt || raw?.createdAt) || new Date().toISOString(),
+  };
+}
+
+export function normalizeImportedAbsence(raw) {
+  const id = normalizeText(raw?.id);
+  const employeeUid = normalizeText(raw?.employeeUid);
+  const date = normalizeIsoDateKey(raw?.date);
+  const type = normalizeText(raw?.type || "full_day").toLowerCase();
+  if (!id || !employeeUid || !date || !['full_day', 'half_day'].includes(type)) return null;
+  return {
+    id,
+    employeeId: nullableText(raw?.employeeId),
+    employeeUid,
+    date,
+    type,
+    note: nullableText(raw?.note),
+    createdByUid: nullableText(raw?.createdByUid),
+    sourceUpdatedAt: normalizeDateToIso(raw?.updatedAt || raw?.createdAt),
+    createdAt: normalizeDateToIso(raw?.createdAt) || new Date().toISOString(),
+    updatedAt: normalizeDateToIso(raw?.updatedAt || raw?.createdAt) || new Date().toISOString(),
+  };
+}
+
+export function normalizeImportedServiceRequest(raw) {
+  const id = normalizeText(raw?.id);
+  const employeeUid = normalizeText(raw?.employeeUid || raw?.userId);
+  const requestType = normalizeText(raw?.requestType);
+  if (!id || !employeeUid || !requestType) return null;
+  return {
+    id,
+    employeeId: nullableText(raw?.employeeId || raw?.employeeDocId),
+    employeeUid,
+    employeeName: nullableText(raw?.employeeName),
+    employeeEmail: nullableEmail(raw?.employeeEmail),
+    status: normalizeText(raw?.status || "pending").toLowerCase(),
+    requestType,
+    title: nullableText(raw?.title),
+    requestDate: normalizeIsoDateKey(raw?.requestDate) || null,
+    startDate: normalizeIsoDateKey(raw?.startDate) || null,
+    endDate: normalizeIsoDateKey(raw?.endDate) || null,
+    startTime: nullableText(raw?.startTime),
+    endTime: nullableText(raw?.endTime),
+    amount: nullableNumber(raw?.amount),
+    letterType: nullableText(raw?.letterType),
+    employeeNote: nullableText(raw?.employeeNote),
+    hrNote: nullableText(raw?.hrNote),
+    decidedAt: normalizeDateToIso(raw?.decidedAt),
+    decidedBy: nullableText(raw?.decidedBy),
+    decidedByEmail: nullableEmail(raw?.decidedByEmail),
+    decidedByName: nullableText(raw?.decidedByName),
+    reviewedAt: normalizeDateToIso(raw?.reviewedAt),
+    reviewedBy: nullableText(raw?.reviewedBy),
+    reviewedByEmail: nullableEmail(raw?.reviewedByEmail),
+    reviewedByName: nullableText(raw?.reviewedByName),
+    sourceUpdatedAt: normalizeDateToIso(raw?.updatedAt || raw?.createdAt),
+    createdAt: normalizeDateToIso(raw?.createdAt) || new Date().toISOString(),
+    updatedAt: normalizeDateToIso(raw?.updatedAt || raw?.createdAt) || new Date().toISOString(),
+  };
+}
+
+function buildImportedLeaveUpsert(db, row, now) {
+  return db.prepare(
+    `INSERT INTO employee_leave_requests (
+       id, employee_id, employee_uid, employee_name, employee_email, status,
+       leave_type, start_date, end_date, days_count, balance_deducted_days,
+       balance_restored_days, cancelled_date_keys_json, cancellation_date,
+       cancelled_at, cancelled_by, cancelled_by_email, cancelled_by_name,
+       employee_note, hr_note, decided_at, decided_by, decided_by_email,
+       decided_by_name, reviewed_at, reviewed_by, reviewed_by_email,
+       reviewed_by_name, source, source_updated_at, migrated_at, created_at, updated_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'firestore', ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       employee_id = excluded.employee_id, employee_uid = excluded.employee_uid,
+       employee_name = excluded.employee_name, employee_email = excluded.employee_email,
+       status = excluded.status, leave_type = excluded.leave_type,
+       start_date = excluded.start_date, end_date = excluded.end_date,
+       days_count = excluded.days_count, balance_deducted_days = excluded.balance_deducted_days,
+       balance_restored_days = excluded.balance_restored_days,
+       cancelled_date_keys_json = excluded.cancelled_date_keys_json,
+       cancellation_date = excluded.cancellation_date, cancelled_at = excluded.cancelled_at,
+       cancelled_by = excluded.cancelled_by, cancelled_by_email = excluded.cancelled_by_email,
+       cancelled_by_name = excluded.cancelled_by_name, employee_note = excluded.employee_note,
+       hr_note = excluded.hr_note, decided_at = excluded.decided_at,
+       decided_by = excluded.decided_by, decided_by_email = excluded.decided_by_email,
+       decided_by_name = excluded.decided_by_name, reviewed_at = excluded.reviewed_at,
+       reviewed_by = excluded.reviewed_by, reviewed_by_email = excluded.reviewed_by_email,
+       reviewed_by_name = excluded.reviewed_by_name, source_updated_at = excluded.source_updated_at,
+       migrated_at = excluded.migrated_at, updated_at = excluded.updated_at`
+  ).bind(
+    row.id, row.employeeId, row.employeeUid, row.employeeName, row.employeeEmail,
+    row.status, row.leaveType, row.startDate, row.endDate, row.daysCount,
+    row.balanceDeductedDays, row.balanceRestoredDays, JSON.stringify(row.cancelledDateKeys),
+    row.cancellationDate, row.cancelledAt, row.cancelledBy, row.cancelledByEmail,
+    row.cancelledByName, row.employeeNote, row.hrNote, row.decidedAt, row.decidedBy,
+    row.decidedByEmail, row.decidedByName, row.reviewedAt, row.reviewedBy,
+    row.reviewedByEmail, row.reviewedByName, row.sourceUpdatedAt, now, row.createdAt, row.updatedAt
+  );
+}
+
+function buildImportedAbsenceUpsert(db, row, now) {
+  return db.prepare(
+    `INSERT INTO employee_absences (
+       id, employee_id, employee_uid, absence_date, absence_type, note,
+       created_by_uid, source, source_updated_at, migrated_at, created_at, updated_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, 'firestore', ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       employee_id = excluded.employee_id, employee_uid = excluded.employee_uid,
+       absence_date = excluded.absence_date, absence_type = excluded.absence_type,
+       note = excluded.note, created_by_uid = excluded.created_by_uid,
+       source_updated_at = excluded.source_updated_at, migrated_at = excluded.migrated_at,
+       updated_at = excluded.updated_at`
+  ).bind(row.id, row.employeeId, row.employeeUid, row.date, row.type, row.note, row.createdByUid, row.sourceUpdatedAt, now, row.createdAt, row.updatedAt);
+}
+
+function buildImportedServiceRequestUpsert(db, row, now) {
+  return db.prepare(
+    `INSERT INTO employee_service_requests (
+       id, employee_id, employee_uid, employee_name, employee_email, status,
+       request_type, title, request_date, start_date, end_date, start_time,
+       end_time, amount, letter_type, employee_note, hr_note, decided_at,
+       decided_by, decided_by_email, decided_by_name, reviewed_at, reviewed_by,
+       reviewed_by_email, reviewed_by_name, source, source_updated_at,
+       migrated_at, created_at, updated_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'firestore', ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       employee_id = excluded.employee_id, employee_uid = excluded.employee_uid,
+       employee_name = excluded.employee_name, employee_email = excluded.employee_email,
+       status = excluded.status, request_type = excluded.request_type, title = excluded.title,
+       request_date = excluded.request_date, start_date = excluded.start_date,
+       end_date = excluded.end_date, start_time = excluded.start_time,
+       end_time = excluded.end_time, amount = excluded.amount, letter_type = excluded.letter_type,
+       employee_note = excluded.employee_note, hr_note = excluded.hr_note,
+       decided_at = excluded.decided_at, decided_by = excluded.decided_by,
+       decided_by_email = excluded.decided_by_email, decided_by_name = excluded.decided_by_name,
+       reviewed_at = excluded.reviewed_at, reviewed_by = excluded.reviewed_by,
+       reviewed_by_email = excluded.reviewed_by_email, reviewed_by_name = excluded.reviewed_by_name,
+       source_updated_at = excluded.source_updated_at, migrated_at = excluded.migrated_at,
+       updated_at = excluded.updated_at`
+  ).bind(
+    row.id, row.employeeId, row.employeeUid, row.employeeName, row.employeeEmail,
+    row.status, row.requestType, row.title, row.requestDate, row.startDate, row.endDate,
+    row.startTime, row.endTime, row.amount, row.letterType, row.employeeNote, row.hrNote,
+    row.decidedAt, row.decidedBy, row.decidedByEmail, row.decidedByName, row.reviewedAt,
+    row.reviewedBy, row.reviewedByEmail, row.reviewedByName, row.sourceUpdatedAt, now,
+    row.createdAt, row.updatedAt
+  );
 }
 
 function buildEmployeeAccountLinkUpsert(db, employee, now) {
@@ -1908,6 +2896,11 @@ function parseJson(value, fallback) {
   } catch {
     return fallback;
   }
+}
+
+function parseJsonArray(value) {
+  const parsed = parseJson(value, []);
+  return Array.isArray(parsed) ? parsed : [];
 }
 
 function safeJsonStringify(value) {
