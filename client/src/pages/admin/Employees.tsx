@@ -169,6 +169,13 @@ import {
   type EmployeeProfileUserDoc,
 } from "@/lib/employeeProfile";
 import {
+  HR_CORE_D1_ENABLED,
+  isHrCoreConfigured,
+  listHrCoreEmployees,
+  updateHrCoreEmployee,
+  type HrCoreEmployee,
+} from "@/lib/hrCoreApi";
+import {
   EMPLOYEE_LEAVE_REQUESTS_COLLECTION,
   buildActiveApprovedLeaveDateKeySet,
   buildEmployeeLeaveRequestPayload,
@@ -814,6 +821,94 @@ function buildMergedEmployeeRecord(input: {
     employment: mergedEmployment,
     photoURL: pickText(userData.photoURL, employeeData?.photoURL) || null,
   } as EmployeeRecord;
+}
+
+
+function buildEmployeeRecordFromHrCore(employee: HrCoreEmployee): EmployeeRecord {
+  const authUid = pickText(employee.authUid, employee.id) || employee.id;
+  const personal = {
+    ...(employee.personal || {}),
+    name: employee.name,
+    email: employee.email,
+    phone: employee.phone,
+    avatarUrl: employee.avatarUrl,
+  };
+  const employment = {
+    ...(employee.employment || {}),
+    title: employee.title,
+    jobTitle: employee.title,
+    department: employee.department,
+    employeeCode: employee.employeeCode,
+    fingerprintNumber: employee.fingerprintNumber,
+    status: employee.employmentStatus,
+    employmentStatus: employee.employmentStatus,
+    startDate: employee.startDate,
+    leaveBalance: employee.leaveBalance,
+    baseSalary: employee.salary.baseSalary,
+    housingAllowance: employee.salary.housingAllowance,
+    transportationAllowance: employee.salary.transportationAllowance,
+    otherAllowances: employee.salary.otherAllowances,
+    insuranceDeduction: employee.salary.insuranceDeduction,
+    salaryDeductions: employee.salary.deductions,
+    workSchedule: employee.workSchedule,
+    shiftStartTime: employee.workSchedule.startTime,
+    shiftEndTime: employee.workSchedule.endTime,
+    weeklyOffDays: employee.workSchedule.weeklyOffDays,
+    allowedZoneIds: employee.allowedZoneIds,
+    adminNotes: employee.adminNotes,
+  };
+
+  return buildMergedEmployeeRecord({
+    userId: authUid,
+    userData: {
+      uid: authUid,
+      email: employee.email,
+      displayName: employee.name,
+      name: employee.name,
+      fullName: employee.name,
+      phone: employee.phone,
+      photoURL: employee.avatarUrl,
+      title: employee.title,
+      department: employee.department,
+      role: employee.account?.role || "staff",
+      isActive: employee.account?.isActive ?? employee.isActive,
+      employeeProfileEnabled:
+        employee.account?.employeeProfileEnabled ?? true,
+      includeInEmployeeManagement: true,
+      linkedEmployeeId: employee.id,
+      allowedZoneIds: employee.allowedZoneIds,
+      startDate: employee.startDate,
+      leaveBalance: employee.leaveBalance,
+      personal,
+      employment,
+      employeeProfile: { personal, employment },
+    },
+    employeeDocId: employee.id,
+    employeeData: {
+      id: employee.id,
+      uid: authUid,
+      linkedUserUid: authUid,
+      email: employee.email,
+      displayName: employee.name,
+      name: employee.name,
+      fullName: employee.name,
+      phone: employee.phone,
+      photoURL: employee.avatarUrl,
+      title: employee.title,
+      department: employee.department,
+      employeeCode: employee.employeeCode,
+      fingerprintNumber: employee.fingerprintNumber,
+      employmentStatus: employee.employmentStatus,
+      isActive: employee.isActive,
+      startDate: employee.startDate,
+      leaveBalance: employee.leaveBalance,
+      allowedZoneIds: employee.allowedZoneIds,
+      personal,
+      employment,
+      employeeProfile: { personal, employment },
+      includeInEmployeeManagement: true,
+    },
+  });
 }
 
 function buildEmployeeFormValues(
@@ -2104,6 +2199,36 @@ export default function EmployeesManagementPage() {
   useEffect(() => {
     setLoading(true);
     setError("");
+
+    if (HR_CORE_D1_ENABLED && isHrCoreConfigured()) {
+      let active = true;
+
+      listHrCoreEmployees({ limit: 500, offset: 0 })
+        .then(result => {
+          if (!active) return;
+          const rows = result.employees
+            .map(buildEmployeeRecordFromHrCore)
+            .sort((a, b) => {
+              const aName = pickText(a.displayName, a.name, a.email).toLowerCase();
+              const bName = pickText(b.displayName, b.name, b.email).toLowerCase();
+              return aName.localeCompare(bName);
+            });
+          setEmployees(rows);
+        })
+        .catch(snapshotError => {
+          console.error("employees_hr_core_load_error", snapshotError);
+          if (!active) return;
+          setEmployees([]);
+          setError("تعذر تحميل قائمة الموظفين من Cloudflare.");
+        })
+        .finally(() => {
+          if (active) setLoading(false);
+        });
+
+      return () => {
+        active = false;
+      };
+    }
 
     let usersReady = false;
     let employeesReady = false;
@@ -5871,6 +5996,52 @@ export default function EmployeesManagementPage() {
           });
           throw error;
         }
+      }
+
+      if (HR_CORE_D1_ENABLED && isHrCoreConfigured()) {
+        const hrCoreResult = await updateHrCoreEmployee(linkedEmployeeId, {
+          authUid: linkedUserUid,
+          name: normalizedFullName,
+          email: normalizedEmail,
+          phone: normalizedPhone || null,
+          avatarUrl:
+            pickText(
+              selectedEmployee.photoURL,
+              selectedEmployeeProfile?.personal?.avatarUrl
+            ) || null,
+          title: form.jobTitle.trim() || null,
+          department: form.department.trim() || null,
+          employeeCode: pickText(nextEmployment.employeeCode) || null,
+          fingerprintNumber: normalizedFingerprintNumber || null,
+          employmentStatus: form.employmentStatus || "active",
+          isActive: !["inactive", "suspended", "terminated"].includes(
+            String(form.employmentStatus || "active").toLowerCase()
+          ),
+          startDate: form.startDate || null,
+          leaveBalance,
+          baseSalary,
+          housingAllowance,
+          transportationAllowance,
+          otherAllowances,
+          insuranceDeduction,
+          shiftStartTime,
+          shiftEndTime,
+          weeklyOffDays,
+          allowedZoneIds,
+          salaryDeductions: normalizedSalaryDeductions,
+          adminNotes: form.adminNotes.trim() || null,
+          personal: nextPersonal,
+          employment: nextEmployment as unknown as Record<string, unknown>,
+        });
+
+        const refreshedEmployee = buildEmployeeRecordFromHrCore(
+          hrCoreResult.employee
+        );
+        setEmployees(current =>
+          current.map(employee =>
+            employee.id === selectedEmployee.id ? refreshedEmployee : employee
+          )
+        );
       }
 
       toast.success("تم حفظ بيانات الموظف الوظيفية.");

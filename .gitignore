@@ -87,3 +87,8 @@ android/app/src/*
 
 # Local account audit reports can contain emails and UIDs.
 reports/account-audit/
+
+# Cloudflare HR Core local secrets and migration reports
+workers/.dev.vars
+workers/.dev.vars.*
+reports/hr-core-migration/
