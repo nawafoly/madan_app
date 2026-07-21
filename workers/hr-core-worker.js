@@ -14,7 +14,7 @@ const ACCOUNT_MANAGE_ROLES = new Set(["owner", "admin"]);
 const DEFAULT_LIST_LIMIT = 50;
 const MAX_LIST_LIMIT = 200;
 const MAX_IMPORT_ROWS = 250;
-const HR_WORKER_RELEASE = "phase8b-files-messages-v1";
+const HR_WORKER_RELEASE = "phase9b-self-service-profile-v1";
 const FIREBASE_JWKS_URL =
   "https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com";
 
@@ -91,6 +91,13 @@ async function routeRequest(request, env) {
     });
   }
 
+  if (pathname === "/api/hr/employee-directory" && request.method === "GET") {
+    if (!canViewEmployeeDirectory(requester)) {
+      return forbidden("employee_directory_view_forbidden");
+    }
+    return listEmployeeDirectory(env.HR_DB);
+  }
+
   if (pathname === "/api/hr/permissions" && request.method === "GET") {
     if (!canReadEmployees(requester)) return forbidden("employees_view_forbidden");
     return listPermissionDefinitions(env.HR_DB);
@@ -145,13 +152,19 @@ async function routeRequest(request, env) {
   }
 
   if (employeeMatch && request.method === "PATCH") {
-    if (!canManageEmployees(requester)) return forbidden("employees_manage_forbidden");
-    return updateEmployee(
-      request,
-      env.HR_DB,
-      requester,
-      decodeURIComponent(employeeMatch[1])
-    );
+    const employeeId = decodeURIComponent(employeeMatch[1]);
+    if (canManageEmployees(requester)) {
+      return updateEmployee(request, env.HR_DB, requester, employeeId);
+    }
+    if (canReadEmployee(requester, employeeId)) {
+      return updateOwnEmployeeProfile(
+        request,
+        env.HR_DB,
+        requester,
+        employeeId
+      );
+    }
+    return forbidden("employees_manage_forbidden");
   }
 
   if (pathname === "/api/hr/leave-requests" && request.method === "GET") {
@@ -526,6 +539,11 @@ function canReadEmployee(requester, employeeId) {
   return normalizeText(requester.account?.linked_employee_id) === employeeId;
 }
 
+function canViewEmployeeDirectory(requester) {
+  const role = normalizeRole(requester.account?.role_key);
+  return Boolean(requester.account?.is_active) && !["client", "guest"].includes(role);
+}
+
 function canViewLeaveRequests(requester) {
   return (
     requester.permissions.includes("leave_requests.view") ||
@@ -601,6 +619,44 @@ function canViewAudit(requester) {
 
 function requesterEmployeeId(requester) {
   return normalizeText(requester.account?.linked_employee_id);
+}
+
+async function listEmployeeDirectory(db) {
+  try {
+    const rows = await db
+      .prepare(
+        `SELECT
+           e.id, e.auth_uid, e.name, e.email, e.avatar_url,
+           e.title, e.department, e.employment_status,
+           e.employee_code, e.allowed_zone_ids_json
+         FROM employees e
+         LEFT JOIN accounts a ON a.uid = e.auth_uid
+         WHERE e.is_active = 1
+           AND e.auth_uid IS NOT NULL
+           AND (a.is_active IS NULL OR a.is_active = 1)
+         ORDER BY e.name COLLATE NOCASE ASC, e.id ASC
+         LIMIT 500`
+      )
+      .all();
+
+    return json(200, {
+      ok: true,
+      employees: (rows.results || []).map(row => ({
+        uid: row.auth_uid,
+        employeeId: row.id,
+        name: row.name,
+        email: row.email || null,
+        avatarUrl: row.avatar_url || null,
+        title: row.title || null,
+        department: row.department || null,
+        statusKey: row.employment_status || "active",
+        employeeCode: row.employee_code || null,
+        allowedZoneIds: parseJsonArray(row.allowed_zone_ids_json),
+      })),
+    });
+  } catch (error) {
+    return serverError("employee_directory_query_failed", error);
+  }
 }
 
 async function listEmployees(url, db) {
@@ -792,6 +848,102 @@ async function createEmployee(request, db, requester) {
     return getEmployee(db, id);
   } catch (error) {
     return databaseMutationError("employee_create_failed", error);
+  }
+}
+
+export function normalizeEmployeeSelfServicePayload(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return { ok: false, message: "invalid_employee_self_service_payload" };
+  }
+
+  const raw = value;
+  const allowedKeys = new Set(["phone", "avatarUrl"]);
+  const unknown = Object.keys(raw).filter(key => !allowedKeys.has(key));
+  if (unknown.length) {
+    return {
+      ok: false,
+      message: "employee_self_service_fields_forbidden",
+      unknown,
+    };
+  }
+
+  const patch = {};
+  if (Object.prototype.hasOwnProperty.call(raw, "phone")) {
+    const phone = normalizeText(raw.phone);
+    const digits = phone.replace(/\D/g, "");
+    if (phone.length < 7 || digits.length < 7) {
+      return { ok: false, message: "employee_phone_invalid" };
+    }
+    patch.phone = phone;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(raw, "avatarUrl")) {
+    const avatarUrl = normalizeText(raw.avatarUrl);
+    if (!/^(https?:\/\/|\/)/i.test(avatarUrl)) {
+      return { ok: false, message: "employee_avatar_url_invalid" };
+    }
+    patch.avatarUrl = avatarUrl;
+  }
+
+  if (!Object.keys(patch).length) {
+    return { ok: false, message: "no_employee_fields_to_update" };
+  }
+
+  return { ok: true, value: patch };
+}
+
+async function updateOwnEmployeeProfile(request, db, requester, id) {
+  const bodyResult = await readJsonBody(request);
+  if (!bodyResult.ok) return bodyResult.response;
+
+  const payload = normalizeEmployeeSelfServicePayload(bodyResult.value);
+  if (!payload.ok) {
+    return json(400, {
+      ok: false,
+      message: payload.message,
+      unknown: payload.unknown || [],
+    });
+  }
+
+  const before = await db
+    .prepare("SELECT * FROM employees WHERE id = ? OR auth_uid = ? LIMIT 1")
+    .bind(id, id)
+    .first();
+  if (!before) return json(404, { ok: false, message: "employee_not_found" });
+
+  const columns = [];
+  const bindings = [];
+  if (Object.prototype.hasOwnProperty.call(payload.value, "phone")) {
+    columns.push("phone = ?");
+    bindings.push(payload.value.phone);
+  }
+  if (Object.prototype.hasOwnProperty.call(payload.value, "avatarUrl")) {
+    columns.push("avatar_url = ?");
+    bindings.push(payload.value.avatarUrl);
+  }
+
+  const now = new Date().toISOString();
+  columns.push("updated_at = ?");
+  bindings.push(now, before.id);
+
+  try {
+    await db.batch([
+      db
+        .prepare(
+          `UPDATE employees SET ${columns.join(", ")} WHERE id = ?`
+        )
+        .bind(...bindings),
+      buildAuditStatement(db, request, requester, {
+        action: "employee.self_profile.update",
+        entityType: "employee",
+        entityId: before.id,
+        before,
+        after: payload.value,
+      }),
+    ]);
+    return getEmployee(db, before.id);
+  } catch (error) {
+    return databaseMutationError("employee_self_profile_update_failed", error);
   }
 }
 

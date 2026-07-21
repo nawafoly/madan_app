@@ -22,9 +22,8 @@ import {
   signInWithEmailAndPassword,
   signOut,
 } from "firebase/auth";
-import { collection, onSnapshot, query, where } from "firebase/firestore";
 
-import { auth, db } from "@/_core/firebase";
+import { auth } from "@/_core/firebase";
 import {
   getHomePathForUser,
   hasPermission,
@@ -48,6 +47,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { languageDir, tr } from "@/lib/i18n";
 import { WEEKLY_REPORT_MANAGER_NOTES_PERMISSION } from "@/lib/weeklyReportConfig";
 import { listInAppNotifications } from "@/lib/inAppNotifications";
+import { listHrCoreWeeklyReports } from "@/lib/hrCoreApi";
 
 function PortalAlert({
   tone,
@@ -246,23 +246,36 @@ export default function StaffPortalPage() {
   useEffect(() => {
     if (!user?.uid || !canWriteWeeklyReportNotes) return;
 
-    const unsubscribe = onSnapshot(
-      query(collection(db, "weekly_reports"), where("status", "==", "sent")),
-      snapshot => {
+    let active = true;
+    const loadPendingWeeklyReports = async () => {
+      try {
+        const result = await listHrCoreWeeklyReports({
+          status: "sent",
+          limit: 200,
+          offset: 0,
+        });
+        if (!active) return;
         setWeeklyReportBadgeCount(
-          snapshot.docs.filter(docSnapshot => {
-            const data = docSnapshot.data() as Record<string, unknown>;
-            return !String(data.managerNotes ?? "").trim();
-          }).length
+          result.weeklyReports.filter(report =>
+            !String(report.managerNotes ?? "").trim()
+          ).length
         );
-      },
-      error => {
+      } catch (error) {
         console.error("weekly_report_pending_badge_failed", error);
-        setWeeklyReportBadgeCount(0);
+        if (active) setWeeklyReportBadgeCount(0);
       }
+    };
+
+    void loadPendingWeeklyReports();
+    const timer = window.setInterval(
+      () => void loadPendingWeeklyReports(),
+      30_000
     );
 
-    return () => unsubscribe();
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
   }, [canWriteWeeklyReportNotes, user?.uid]);
 
   const portalLinks = useMemo(

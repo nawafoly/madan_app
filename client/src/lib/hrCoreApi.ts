@@ -234,6 +234,26 @@ export async function listHrCoreEmployees(
   }>("/api/hr/employees", {}, params);
 }
 
+export type HrCoreEmployeeDirectoryEntry = {
+  uid: string;
+  employeeId: string;
+  name: string;
+  email: string | null;
+  avatarUrl: string | null;
+  title: string | null;
+  department: string | null;
+  statusKey: string;
+  employeeCode: string | null;
+  allowedZoneIds: string[];
+};
+
+export async function listHrCoreEmployeeDirectory() {
+  return requestHrCore<{
+    ok: true;
+    employees: HrCoreEmployeeDirectoryEntry[];
+  }>("/api/hr/employee-directory");
+}
+
 export async function getHrCoreEmployee(employeeId: string) {
   const id = String(employeeId || "").trim();
   if (!id) throw new Error("Employee id is required.");

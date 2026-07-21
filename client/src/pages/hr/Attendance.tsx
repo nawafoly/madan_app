@@ -21,10 +21,8 @@ import {
   Smartphone,
 } from "lucide-react";
 import { toast } from "sonner";
-import { collection, getDocs } from "firebase/firestore";
 
 import DashboardLayout from "@/components/DashboardLayout";
-import { db } from "@/_core/firebase";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -1529,79 +1527,32 @@ export default function HrAttendancePage() {
 
   useEffect(() => {
     let active = true;
-    Promise.all([
-      fetchEmployeeDirectoryFromWorker(),
-      getDocs(collection(db, "users")),
-      getDocs(collection(db, "employees")),
-      fetchWorkZones(),
-    ])
-      .then(([items, usersSnapshot, employeesSnapshot, zones]) => {
+
+    Promise.all([fetchEmployeeDirectoryFromWorker(), fetchWorkZones()])
+      .then(([items, zones]) => {
         if (!active) return;
-
-        const allowedZonesByUid = new Map<string, Set<string>>();
-        const employeeCodeByUid = new Map<string, string>();
-        const addEmployeeCode = (
-          uid: string,
-          data: Record<string, any> | null | undefined,
-        ) => {
-          if (!uid) return;
-          const employeeCode = readEmployeeCode(data);
-          if (employeeCode && !employeeCodeByUid.has(uid)) {
-            employeeCodeByUid.set(uid, employeeCode);
-          }
-        };
-        const addAllowedZones = (uid: string, value: unknown) => {
-          if (!uid) return;
-          const existing = allowedZonesByUid.get(uid) || new Set<string>();
-          normalizeAllowedZoneIds(value).forEach((zoneId) => existing.add(zoneId));
-          allowedZonesByUid.set(uid, existing);
-        };
-        const readAllowedZoneIds = (data: Record<string, any>) =>
-          data.allowedZoneIds ||
-          data.employment?.allowedZoneIds ||
-          data.employeeProfile?.employment?.allowedZoneIds ||
-          [];
-
-        usersSnapshot.docs.forEach((snapshot) => {
-          const data = snapshot.data() as Record<string, any>;
-          const uid = pickText(data.uid, snapshot.id);
-          addAllowedZones(uid, readAllowedZoneIds(data));
-          addEmployeeCode(uid, data);
-        });
-
-        employeesSnapshot.docs.forEach((snapshot) => {
-          const data = snapshot.data() as Record<string, any>;
-          const uid = pickText(
-            data.linkedUserUid,
-            data.uid,
-            data.userId,
-            snapshot.id,
-          );
-          addAllowedZones(uid, readAllowedZoneIds(data));
-          addEmployeeCode(uid, data);
-          addEmployeeCode(snapshot.id, data);
-        });
 
         setWorkZones(zones);
         setEmployees(
-          items.map((item) => ({
+          items.map(item => ({
             uid: item.uid,
             name: item.name,
-            employeeCode: employeeCodeByUid.get(item.uid) || "-",
-            allowedZoneIds: Array.from(allowedZonesByUid.get(item.uid) || []),
-          })),
+            employeeCode: item.employeeCode || "-",
+            allowedZoneIds: normalizeAllowedZoneIds(item.allowedZoneIds),
+          }))
         );
       })
-      .catch((directoryError) => {
+      .catch(directoryError => {
         console.error(
           "hr_attendance_employee_directory_failed",
-          directoryError,
+          directoryError
         );
         if (active) {
           setEmployees([]);
           setWorkZones([]);
         }
       });
+
     return () => {
       active = false;
     };

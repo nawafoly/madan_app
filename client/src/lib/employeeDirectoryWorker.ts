@@ -1,5 +1,6 @@
 import { auth } from "@/_core/firebase";
 import { buildDocumentWorkerUrl } from "@/lib/documentUploadService";
+import { listHrCoreEmployeeDirectory } from "@/lib/hrCoreApi";
 
 export type EmployeeDirectoryWorkerEmployee = {
   uid: string;
@@ -9,6 +10,8 @@ export type EmployeeDirectoryWorkerEmployee = {
   title: string | null;
   department: string | null;
   statusKey: string;
+  employeeCode?: string | null;
+  allowedZoneIds?: string[];
 };
 
 export type EmployeeDirectorySyncResult = {
@@ -150,100 +153,20 @@ function createEmployeeDirectoryWorkerError(
 }
 
 export async function fetchEmployeeDirectoryFromWorker() {
-  const requestUrl = getEmployeeDirectoryWorkerUrl("/listActiveEmployeeDirectory");
-
-  try {
-    const response = await fetch(requestUrl, {
-      method: "GET",
-      headers: await getEmployeeDirectoryAuthHeaders(),
-      cache: "no-store",
-    });
-    const payload = await readWorkerJson<EmployeeDirectoryListResponse>(response);
-
-    if (!response.ok) {
-      console.error("employee_directory_worker_fetch_failed", {
-        url: response.url || requestUrl,
-        status: response.status,
-        statusText: response.statusText,
-        payload,
-      });
-
-      throw createEmployeeDirectoryWorkerError(
-        getWorkerErrorMessage(
-          response,
-          payload,
-          "Employee directory request failed."
-        ),
-        {
-          response,
-          payload,
-        }
-      );
-    }
-
-    if (payload && !Array.isArray(payload.employees) && payload.employees != null) {
-      console.error("employee_directory_worker_payload_invalid", {
-        url: response.url || requestUrl,
-        status: response.status,
-        payload,
-      });
-
-      throw createEmployeeDirectoryWorkerError(
-        getWorkerErrorMessage(
-          response,
-          payload,
-          "Employee directory payload is invalid."
-        ),
-        {
-          response,
-          payload,
-        }
-      );
-    }
-
-    const employees = Array.isArray(payload?.employees) ? payload.employees : [];
-    const normalizedEmployees = employees
-      .map(normalizeEmployeeDirectoryWorkerEmployee)
-      .filter(
-        (employee): employee is EmployeeDirectoryWorkerEmployee =>
-          employee !== null
-      );
-
-    if (employees.length && normalizedEmployees.length !== employees.length) {
-      console.warn("employee_directory_worker_rows_dropped_during_normalize", {
-        url: response.url || requestUrl,
-        rawCount: employees.length,
-        normalizedCount: normalizedEmployees.length,
-        droppedCount: employees.length - normalizedEmployees.length,
-        payload,
-      });
-    }
-
-    return normalizedEmployees;
-  } catch (error) {
-    if (
-      error &&
-      typeof error === "object" &&
-      "name" in error &&
-      error.name === "EmployeeDirectoryWorkerError"
-    ) {
-      throw error;
-    }
-
-    console.error("employee_directory_worker_fetch_unhandled_error", {
-      url: requestUrl,
-      error,
-    });
-
-    throw createEmployeeDirectoryWorkerError(
-      error instanceof Error
-        ? error.message
-        : "Employee directory request failed.",
-      {
-        payload: null,
-      }
-    );
-  }
+  const result = await listHrCoreEmployeeDirectory();
+  return result.employees.map(employee => ({
+    uid: String(employee.uid || "").trim(),
+    name: String(employee.name || "").trim(),
+    email: normalizeOptionalText(employee.email),
+    avatarUrl: normalizeOptionalText(employee.avatarUrl),
+    title: normalizeOptionalText(employee.title),
+    department: normalizeOptionalText(employee.department),
+    statusKey: String(employee.statusKey || "active").trim() || "active",
+    employeeCode: normalizeOptionalText(employee.employeeCode),
+    allowedZoneIds: Array.isArray(employee.allowedZoneIds)
+      ? employee.allowedZoneIds.map(value => String(value || "").trim()).filter(Boolean)
+      : [],
+  }));
 }
 
 export async function syncEmployeeDirectoryFromWorker(): Promise<EmployeeDirectorySyncResult> {
