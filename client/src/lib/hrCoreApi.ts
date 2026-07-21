@@ -892,3 +892,128 @@ export async function updateHrCoreWeeklyReport(
     { method: "PATCH", body: JSON.stringify(input) }
   );
 }
+
+export type HrCoreEmployeeFile = Record<string, unknown> & {
+  id: string;
+  employeeId: string | null;
+  employeeUid: string | null;
+  senderUid: string | null;
+  receiverUid: string | null;
+  participantUids: string[];
+  title: string;
+  fileName: string;
+  fileUrl: string | null;
+  filePath: string | null;
+  status: string;
+  active: boolean;
+  isRead: boolean;
+  readAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export async function listHrCoreEmployeeFiles(
+  input: {
+    employeeUid?: string;
+    participantUid?: string;
+    active?: boolean;
+    limit?: number;
+    offset?: number;
+  } = {}
+) {
+  const params = new URLSearchParams();
+  if (input.employeeUid) params.set("employeeUid", input.employeeUid);
+  if (input.participantUid) params.set("participantUid", input.participantUid);
+  if (input.active !== undefined) params.set("active", String(input.active));
+  if (input.limit !== undefined) params.set("limit", String(input.limit));
+  if (input.offset !== undefined) params.set("offset", String(input.offset));
+  return requestHrCore<{
+    ok: true;
+    employeeFiles: HrCoreEmployeeFile[];
+    pagination: HrCorePagination;
+  }>("/api/hr/employee-files", {}, params);
+}
+
+export async function createHrCoreEmployeeFile(input: Record<string, unknown>) {
+  return requestHrCore<{ ok: true; employeeFile: HrCoreEmployeeFile }>(
+    "/api/hr/employee-files",
+    { method: "POST", body: JSON.stringify(input) }
+  );
+}
+
+export async function markHrCoreEmployeeFileRead(id: string) {
+  return requestHrCore<{ ok: true; employeeFile: HrCoreEmployeeFile }>(
+    `/api/hr/employee-files/${encodeURIComponent(id)}/read`,
+    { method: "PATCH", body: JSON.stringify({}) }
+  );
+}
+
+export async function deleteHrCoreEmployeeFile(id: string) {
+  return requestHrCore<{ ok: true; id: string }>(
+    `/api/hr/employee-files/${encodeURIComponent(id)}`,
+    { method: "DELETE" }
+  );
+}
+
+export type HrCoreEmployeeMessage = Record<string, unknown> & {
+  id: string;
+  employeeId: string | null;
+  employeeUid: string | null;
+  conversationId: string;
+  threadId: string;
+  conversationType: string;
+  participantUids: string[];
+  senderUid: string;
+  senderRole: string;
+  recipientUid: string;
+  messageType: string;
+  body: string;
+  status: string;
+  isRead: boolean;
+  readAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export async function listHrCoreEmployeeMessages(
+  input: {
+    employeeUid?: string;
+    participantUid?: string;
+    conversationId?: string;
+    limit?: number;
+    offset?: number;
+  } = {}
+) {
+  const params = new URLSearchParams();
+  if (input.employeeUid) params.set("employeeUid", input.employeeUid);
+  if (input.participantUid) params.set("participantUid", input.participantUid);
+  if (input.conversationId) params.set("conversationId", input.conversationId);
+  if (input.limit !== undefined) params.set("limit", String(input.limit));
+  if (input.offset !== undefined) params.set("offset", String(input.offset));
+  return requestHrCore<{
+    ok: true;
+    employeeMessages: HrCoreEmployeeMessage[];
+    pagination: HrCorePagination;
+  }>("/api/hr/employee-messages", {}, params);
+}
+
+export async function createHrCoreEmployeeMessage(input: Record<string, unknown>) {
+  return requestHrCore<{ ok: true; employeeMessage: HrCoreEmployeeMessage }>(
+    "/api/hr/employee-messages",
+    { method: "POST", body: JSON.stringify(input) }
+  );
+}
+
+export async function markHrCoreEmployeeMessageRead(id: string) {
+  return requestHrCore<{ ok: true; employeeMessage: HrCoreEmployeeMessage }>(
+    `/api/hr/employee-messages/${encodeURIComponent(id)}/read`,
+    { method: "PATCH", body: JSON.stringify({}) }
+  );
+}
+
+export async function markHrCoreEmployeeMessagesRead(ids: string[]) {
+  return requestHrCore<{ ok: true }>("/api/hr/employee-messages/read-all", {
+    method: "POST",
+    body: JSON.stringify({ ids }),
+  });
+}

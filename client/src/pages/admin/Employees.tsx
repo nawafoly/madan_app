@@ -171,17 +171,23 @@ import {
 import {
   HR_CORE_D1_ENABLED,
   cancelHrCoreLeaveDate,
+  createHrCoreEmployeeFile,
+  createHrCoreEmployeeMessage,
   createHrCoreAbsence,
   createHrCoreLeaveRequest,
   createHrCorePayrollRecord,
   deleteHrCoreAbsence,
+  deleteHrCoreEmployeeFile,
   isHrCoreConfigured,
   listHrCoreAbsences,
   listHrCoreEmployees,
+  listHrCoreEmployeeFiles,
+  listHrCoreEmployeeMessages,
   listHrCoreLeaveRequests,
   listHrCorePayrollAdvances,
   listHrCorePayrollRecords,
   listHrCoreServiceRequests,
+  markHrCoreEmployeeMessagesRead,
   reviewHrCoreLeaveRequest,
   reviewHrCoreServiceRequest,
   updateHrCoreEmployee,
@@ -3097,6 +3103,35 @@ export default function EmployeesManagementPage() {
     }
 
     setEmployeeFilesLoading(true);
+
+    if (HR_CORE_D1_ENABLED && isHrCoreConfigured()) {
+      let cancelled = false;
+      void listHrCoreEmployeeFiles({ employeeUid: selectedEmployeeAuthUid, limit: 200 })
+        .then(response => {
+          if (cancelled) return;
+          setEmployeeFiles(
+            sortEmployeeFiles(
+              response.employeeFiles.map(file =>
+                normalizeEmployeeFileRecord(
+                  file.id,
+                  file as Record<string, unknown>
+                )
+              )
+            )
+          );
+        })
+        .catch(error => {
+          console.error("employee_files_hr_core_admin_load_failed", error);
+          if (!cancelled) setEmployeeFiles([]);
+        })
+        .finally(() => {
+          if (!cancelled) setEmployeeFilesLoading(false);
+        });
+      return () => {
+        cancelled = true;
+      };
+    }
+
     const unsubscribe = onSnapshot(
       query(
         collection(db, EMPLOYEE_FILES_COLLECTION),
@@ -3132,6 +3167,33 @@ export default function EmployeesManagementPage() {
     }
 
     setEmployeeMessagesLoading(true);
+
+    if (HR_CORE_D1_ENABLED && isHrCoreConfigured()) {
+      let cancelled = false;
+      void listHrCoreEmployeeMessages({ employeeUid: selectedEmployeeAuthUid, limit: 200 })
+        .then(response => {
+          if (cancelled) return;
+          setEmployeeMessages(
+            response.employeeMessages.map(message =>
+              normalizeEmployeeMessageRecord(
+                message.id,
+                message as Record<string, any>
+              )
+            )
+          );
+        })
+        .catch(error => {
+          console.error("employee_messages_hr_core_admin_load_failed", error);
+          if (!cancelled) setEmployeeMessages([]);
+        })
+        .finally(() => {
+          if (!cancelled) setEmployeeMessagesLoading(false);
+        });
+      return () => {
+        cancelled = true;
+      };
+    }
+
     const unsubscribe = onSnapshot(
       query(
         collection(db, EMPLOYEE_MESSAGES_COLLECTION),
@@ -5290,16 +5352,29 @@ export default function EmployeesManagementPage() {
 
     setOpeningEmployeeConversationId(conversation.id);
     try {
-      const batch = writeBatch(db);
-      unreadIncomingMessages.forEach(message => {
-        batch.update(doc(db, EMPLOYEE_MESSAGES_COLLECTION, message.id), {
-          isRead: true,
-          readAt: serverTimestamp(),
-          status: "read",
-          updatedAt: serverTimestamp(),
+      if (HR_CORE_D1_ENABLED && isHrCoreConfigured()) {
+        const ids = unreadIncomingMessages.map(message => message.id);
+        await markHrCoreEmployeeMessagesRead(ids);
+        const now = new Date();
+        setEmployeeMessages(current =>
+          current.map(message =>
+            ids.includes(message.id)
+              ? { ...message, isRead: true, status: "read", readAt: now, readAtDate: now }
+              : message
+          )
+        );
+      } else {
+        const batch = writeBatch(db);
+        unreadIncomingMessages.forEach(message => {
+          batch.update(doc(db, EMPLOYEE_MESSAGES_COLLECTION, message.id), {
+            isRead: true,
+            readAt: serverTimestamp(),
+            status: "read",
+            updatedAt: serverTimestamp(),
+          });
         });
-      });
-      await batch.commit();
+        await batch.commit();
+      }
     } catch (error) {
       console.error("employee_conversation_mark_read_failed", error);
     } finally {
@@ -5356,7 +5431,8 @@ export default function EmployeesManagementPage() {
 
     setSendingEmployeeMessage(true);
     try {
-      const messageRef = doc(collection(db, EMPLOYEE_MESSAGES_COLLECTION));
+      const messageId = crypto.randomUUID();
+      const messageRef = doc(db, EMPLOYEE_MESSAGES_COLLECTION, messageId);
       const isReply = Boolean(
         activeEmployeeConversation && !composeEmployeeMessageAsNew
       );
@@ -5377,7 +5453,7 @@ export default function EmployeesManagementPage() {
             "الموظف";
       const senderDisplayName = user?.displayName || user?.email || "HR";
 
-      await setDoc(messageRef, {
+      const messagePayload = {
         employeeId: selectedEmployee.id,
         employeeUid: selectedEmployeeAuthUid,
         conversationId,
@@ -5400,7 +5476,25 @@ export default function EmployeesManagementPage() {
         isRead: false,
         readAt: null,
         updatedAt: serverTimestamp(),
-      } satisfies EmployeeMessageDoc);
+      } satisfies EmployeeMessageDoc;
+
+      if (HR_CORE_D1_ENABLED && isHrCoreConfigured()) {
+        const response = await createHrCoreEmployeeMessage({
+          id: messageId,
+          ...messagePayload,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+        setEmployeeMessages(current => [
+          ...current,
+          normalizeEmployeeMessageRecord(
+            response.employeeMessage.id,
+            response.employeeMessage as Record<string, any>
+          ),
+        ]);
+      } else {
+        await setDoc(messageRef, messagePayload);
+      }
 
       let notificationFailed = false;
       try {
@@ -5414,7 +5508,7 @@ export default function EmployeesManagementPage() {
                 : "رسالة جديدة من HR",
           body: normalizedMessage,
           type: "message",
-          relatedId: messageRef.id,
+          relatedId: messageId,
           relatedTo: "employee_message",
           relatedPath: `/hr/messages?messageId=${messageRef.id}`,
         });
@@ -5506,7 +5600,8 @@ export default function EmployeesManagementPage() {
         storageFolder: "official_documents",
       });
 
-      const fileRef = doc(collection(db, EMPLOYEE_FILES_COLLECTION));
+      const fileRecordId = crypto.randomUUID();
+      const fileRef = doc(db, EMPLOYEE_FILES_COLLECTION, fileRecordId);
       const uploadedByName = user?.displayName || user?.email || "HR";
       const replacedCandidates = employeeOfficialFiles.filter(file => {
         if (!file.active) return false;
@@ -5557,21 +5652,46 @@ export default function EmployeesManagementPage() {
         updatedAt: serverTimestamp(),
       };
 
-      await runTransaction(db, async tx => {
-        replacedCandidates.forEach(file => {
-          tx.update(doc(db, EMPLOYEE_FILES_COLLECTION, file.id), {
-            status: "replaced",
-            active: false,
-            replacedAt: serverTimestamp(),
-            replacedBy: user?.uid || null,
-            replacedByName: uploadedByName,
-            replacedByFileId: fileRef.id,
-            updatedAt: serverTimestamp(),
-          });
+      if (HR_CORE_D1_ENABLED && isHrCoreConfigured()) {
+        const response = await createHrCoreEmployeeFile({
+          id: fileRecordId,
+          ...fileDoc,
+          replaceFileIds: replacedCandidates.map(file => file.id),
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
         });
+        const created = normalizeEmployeeFileRecord(
+          response.employeeFile.id,
+          response.employeeFile as Record<string, unknown>
+        );
+        const replacedIds = new Set(replacedCandidates.map(file => file.id));
+        setEmployeeFiles(current =>
+          sortEmployeeFiles([
+            created,
+            ...current.map(file =>
+              replacedIds.has(file.id)
+                ? { ...file, active: false, status: "replaced" }
+                : file
+            ),
+          ])
+        );
+      } else {
+        await runTransaction(db, async tx => {
+          replacedCandidates.forEach(file => {
+            tx.update(doc(db, EMPLOYEE_FILES_COLLECTION, file.id), {
+              status: "replaced",
+              active: false,
+              replacedAt: serverTimestamp(),
+              replacedBy: user?.uid || null,
+              replacedByName: uploadedByName,
+              replacedByFileId: fileRef.id,
+              updatedAt: serverTimestamp(),
+            });
+          });
 
-        tx.set(fileRef, fileDoc);
-      });
+          tx.set(fileRef, fileDoc);
+        });
+      }
 
       await logAuditEvent({
         action: replacedCandidates.length
@@ -5579,7 +5699,7 @@ export default function EmployeesManagementPage() {
           : "employee_file_uploaded",
         category: "user",
         entityType: "employee_file",
-        entityId: fileRef.id,
+        entityId: fileRecordId,
         entityPath: fileRef.path,
         source: buildAuditSource({
           area: "hr",
@@ -5617,7 +5737,7 @@ export default function EmployeesManagementPage() {
             ? `تم تحديث "${normalizedTitle}" داخل ملفك الوظيفي.`
             : `تمت إضافة "${normalizedTitle}" إلى ملفك الوظيفي.`,
           type: "file",
-          relatedId: fileRef.id,
+          relatedId: fileRecordId,
           relatedTo: "employee_file",
           relatedPath: "/hr/profile",
         });
@@ -5657,9 +5777,12 @@ export default function EmployeesManagementPage() {
 
     setDeletingEmployeeFileId(file.id);
     try {
-      // The current Cloudflare Worker does not expose a delete endpoint for R2 objects.
-      // This action removes only the Firestore employee_files record.
-      await auditedDeleteDoc({
+      if (HR_CORE_D1_ENABLED && isHrCoreConfigured()) {
+        await deleteHrCoreEmployeeFile(file.id);
+        setEmployeeFiles(current => current.filter(item => item.id !== file.id));
+      } else {
+        // The R2 object is retained; only the metadata row is removed.
+        await auditedDeleteDoc({
         ref: doc(db, EMPLOYEE_FILES_COLLECTION, file.id),
         action: "employee_file_deleted",
         category: "user",
@@ -5682,7 +5805,8 @@ export default function EmployeesManagementPage() {
           fileType: file.fileType || EMPLOYEE_DEFAULT_FILE_TYPE,
           storageCleanupSupported: false,
         },
-      });
+        });
+      }
 
       if (replacingEmployeeFileId === file.id) {
         resetEmployeeFileForm();
@@ -5744,7 +5868,8 @@ export default function EmployeesManagementPage() {
         storageFolder: "internal_files",
       });
 
-      const fileRef = doc(collection(db, EMPLOYEE_FILES_COLLECTION));
+      const fileRecordId = crypto.randomUUID();
+      const fileRef = doc(db, EMPLOYEE_FILES_COLLECTION, fileRecordId);
       const uploadedByName = user?.displayName || user?.email || "HR";
       const replacedCandidates = employeeFiles.filter(file => {
         if (!file.active) return false;
@@ -5794,21 +5919,46 @@ export default function EmployeesManagementPage() {
         updatedAt: serverTimestamp(),
       };
 
-      await runTransaction(db, async tx => {
-        replacedCandidates.forEach(file => {
-          tx.update(doc(db, EMPLOYEE_FILES_COLLECTION, file.id), {
-            status: "replaced",
-            active: false,
-            replacedAt: serverTimestamp(),
-            replacedBy: user?.uid || null,
-            replacedByName: uploadedByName,
-            replacedByFileId: fileRef.id,
-            updatedAt: serverTimestamp(),
-          });
+      if (HR_CORE_D1_ENABLED && isHrCoreConfigured()) {
+        const response = await createHrCoreEmployeeFile({
+          id: fileRecordId,
+          ...fileDoc,
+          replaceFileIds: replacedCandidates.map(file => file.id),
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
         });
+        const created = normalizeEmployeeFileRecord(
+          response.employeeFile.id,
+          response.employeeFile as Record<string, unknown>
+        );
+        const replacedIds = new Set(replacedCandidates.map(file => file.id));
+        setEmployeeFiles(current =>
+          sortEmployeeFiles([
+            created,
+            ...current.map(file =>
+              replacedIds.has(file.id)
+                ? { ...file, active: false, status: "replaced" }
+                : file
+            ),
+          ])
+        );
+      } else {
+        await runTransaction(db, async tx => {
+          replacedCandidates.forEach(file => {
+            tx.update(doc(db, EMPLOYEE_FILES_COLLECTION, file.id), {
+              status: "replaced",
+              active: false,
+              replacedAt: serverTimestamp(),
+              replacedBy: user?.uid || null,
+              replacedByName: uploadedByName,
+              replacedByFileId: fileRef.id,
+              updatedAt: serverTimestamp(),
+            });
+          });
 
-        tx.set(fileRef, fileDoc as any);
-      });
+          tx.set(fileRef, fileDoc as any);
+        });
+      }
 
       await logAuditEvent({
         action: replacedCandidates.length
@@ -5816,7 +5966,7 @@ export default function EmployeesManagementPage() {
           : "employee_file_uploaded",
         category: "user",
         entityType: "employee_file",
-        entityId: fileRef.id,
+        entityId: fileRecordId,
         entityPath: fileRef.path,
         source: buildAuditSource({
           area: "hr",
@@ -5853,7 +6003,7 @@ export default function EmployeesManagementPage() {
             ? `تم استبدال "${normalizedTitle}" بنسخة محدثة داخل ملفك الوظيفي.`
             : `تمت إضافة "${normalizedTitle}" إلى ملفك الوظيفي.`,
           type: "file",
-          relatedId: fileRef.id,
+          relatedId: fileRecordId,
           relatedTo: "employee_file",
           relatedPath: "/hr/files",
         });

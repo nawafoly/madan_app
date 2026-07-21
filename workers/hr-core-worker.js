@@ -14,7 +14,7 @@ const ACCOUNT_MANAGE_ROLES = new Set(["owner", "admin"]);
 const DEFAULT_LIST_LIMIT = 50;
 const MAX_LIST_LIMIT = 200;
 const MAX_IMPORT_ROWS = 250;
-const HR_WORKER_RELEASE = "phase8a-tasks-reports-v1";
+const HR_WORKER_RELEASE = "phase8b-files-messages-v1";
 const FIREBASE_JWKS_URL =
   "https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com";
 
@@ -63,6 +63,10 @@ async function routeRequest(request, env) {
 
   if (pathname === "/internal/hr/tasks-reports/import" && request.method === "POST") {
     return importTasksReportsSnapshot(request, env);
+  }
+
+  if (pathname === "/internal/hr/files-messages/import" && request.method === "POST") {
+    return importFilesMessagesSnapshot(request, env);
   }
 
   if (isPayrollImportPath(pathname)) {
@@ -258,6 +262,41 @@ async function routeRequest(request, env) {
     return updateWeeklyReport(request, env.HR_DB, requester, decodeURIComponent(weeklyReportMatch[1]));
   }
 
+  if (pathname === "/api/hr/employee-files" && request.method === "GET") {
+    return listEmployeeFiles(url, env.HR_DB, requester);
+  }
+
+  if (pathname === "/api/hr/employee-files" && request.method === "POST") {
+    return createEmployeeFile(request, env.HR_DB, requester);
+  }
+
+  const employeeFileMatch = pathname.match(/^\/api\/hr\/employee-files\/([^/]+)$/);
+  if (employeeFileMatch && request.method === "DELETE") {
+    return deleteEmployeeFile(request, env.HR_DB, requester, decodeURIComponent(employeeFileMatch[1]));
+  }
+
+  const employeeFileReadMatch = pathname.match(/^\/api\/hr\/employee-files\/([^/]+)\/read$/);
+  if (employeeFileReadMatch && request.method === "PATCH") {
+    return markEmployeeFileRead(request, env.HR_DB, requester, decodeURIComponent(employeeFileReadMatch[1]));
+  }
+
+  if (pathname === "/api/hr/employee-messages" && request.method === "GET") {
+    return listEmployeeMessages(url, env.HR_DB, requester);
+  }
+
+  if (pathname === "/api/hr/employee-messages" && request.method === "POST") {
+    return createEmployeeMessage(request, env.HR_DB, requester);
+  }
+
+  const employeeMessageReadMatch = pathname.match(/^\/api\/hr\/employee-messages\/([^/]+)\/read$/);
+  if (employeeMessageReadMatch && request.method === "PATCH") {
+    return markEmployeeMessageRead(request, env.HR_DB, requester, decodeURIComponent(employeeMessageReadMatch[1]));
+  }
+
+  if (pathname === "/api/hr/employee-messages/read-all" && request.method === "POST") {
+    return markEmployeeMessagesRead(request, env.HR_DB, requester);
+  }
+
   if (pathname === "/api/hr/notifications" && request.method === "GET") {
     return listNotifications(url, env.HR_DB, requester);
   }
@@ -321,7 +360,9 @@ async function healthCheck(db) {
            (SELECT COUNT(*) FROM hr_notifications) AS notification_count,
            (SELECT COUNT(*) FROM hr_audit_logs) AS audit_log_count,
            (SELECT COUNT(*) FROM hr_daily_tasks) AS daily_task_count,
-           (SELECT COUNT(*) FROM hr_weekly_reports) AS weekly_report_count`
+           (SELECT COUNT(*) FROM hr_weekly_reports) AS weekly_report_count,
+           (SELECT COUNT(*) FROM hr_employee_files) AS employee_file_count,
+           (SELECT COUNT(*) FROM hr_employee_messages) AS employee_message_count`
       )
       .first();
 
@@ -340,6 +381,8 @@ async function healthCheck(db) {
       auditLogCount: Number(row?.audit_log_count || 0),
       dailyTaskCount: Number(row?.daily_task_count || 0),
       weeklyReportCount: Number(row?.weekly_report_count || 0),
+      employeeFileCount: Number(row?.employee_file_count || 0),
+      employeeMessageCount: Number(row?.employee_message_count || 0),
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
@@ -1690,6 +1733,330 @@ async function importTasksReportsSnapshot(request, env) {
     return json(200, { ok: true, runId, complete, dailyTasks: dailyTasks.length, weeklyReports: weeklyReports.length });
   } catch (error) { return databaseMutationError("tasks_reports_import_failed", error); }
 }
+
+
+function canViewEmployeeFiles(requester) {
+  return requester.permissions.includes("employee_files.view") || canReadEmployees(requester);
+}
+
+function canManageEmployeeFiles(requester) {
+  return requester.permissions.includes("employee_files.manage") || canManageEmployees(requester);
+}
+
+function canViewEmployeeMessages(requester) {
+  return requester.permissions.includes("employee_messages.view") || canReadEmployees(requester);
+}
+
+function canManageEmployeeMessages(requester) {
+  return requester.permissions.includes("employee_messages.manage") || canManageEmployees(requester);
+}
+
+function normalizeEmployeeFilePayload(input, requester, existing = null) {
+  const current = existing || {};
+  const now = new Date().toISOString();
+  const senderUid = normalizeText(input?.senderUid || current.senderUid || requester.uid);
+  const receiverUid = normalizeText(input?.receiverUid || input?.employeeUid || current.receiverUid || current.employeeUid);
+  const employeeUid = normalizeText(input?.employeeUid || input?.userId || current.employeeUid || receiverUid);
+  const employeeId = normalizeText(input?.employeeId || current.employeeId || employeeUid) || null;
+  const participantUids = normalizeStringArray([
+    ...(Array.isArray(input?.participantUids) ? input.participantUids : []),
+    senderUid,
+    receiverUid,
+    employeeUid,
+  ]);
+  const title = normalizeText(input?.title || current.title) || "ملف داخلي";
+  const fileName = normalizeText(input?.fileName || current.fileName) || "attachment";
+  const fileType = normalizeText(input?.fileType || current.fileType || "general").toLowerCase();
+  const status = normalizeText(input?.status || current.status || "active").toLowerCase();
+  const active = parseBoolean(input?.active, status !== "replaced");
+  const isRead = parseBoolean(input?.isRead, Boolean(current.isRead));
+  const createdAt = normalizeDateToIso(input?.createdAt || input?.uploadedAt || current.createdAt) || now;
+  const readAt = isRead ? (normalizeDateToIso(input?.readAt || current.readAt) || now) : null;
+  const payload = {
+    ...current,
+    ...input,
+    employeeId,
+    employeeUid,
+    userId: normalizeText(input?.userId || current.userId || employeeUid) || null,
+    senderUid,
+    receiverUid,
+    participantUids,
+    title,
+    fileName,
+    fileType,
+    status,
+    active,
+    isRead,
+    readAt,
+    createdAt,
+    uploadedAt: normalizeDateToIso(input?.uploadedAt || current.uploadedAt || createdAt) || createdAt,
+    updatedAt: now,
+  };
+  return { payload, employeeId, employeeUid, senderUid, receiverUid, participantUids, title, fileName, fileType, status, active, isRead, readAt, createdAt, now };
+}
+
+function mapEmployeeFileRow(row) {
+  const payload = parseJson(row?.payload_json, {});
+  return {
+    ...payload,
+    id: row.id,
+    employeeId: row.employee_id || payload.employeeId || null,
+    employeeUid: row.employee_uid || payload.employeeUid || null,
+    senderUid: row.sender_uid || payload.senderUid || null,
+    receiverUid: row.receiver_uid || payload.receiverUid || null,
+    participantUids: parseJsonArray(row.participant_uids_json),
+    title: row.title,
+    description: row.description || null,
+    fileType: row.file_type,
+    fileId: row.file_id || null,
+    fileName: row.file_name,
+    filePath: row.file_path || null,
+    fileUrl: row.file_url || null,
+    storageKey: row.storage_key || null,
+    contentType: row.content_type || null,
+    mimeType: row.content_type || payload.mimeType || null,
+    fileSize: row.file_size === null || row.file_size === undefined ? null : Number(row.file_size),
+    category: row.category || null,
+    status: row.status,
+    active: Boolean(row.active),
+    officialDocument: Boolean(row.official_document),
+    isRead: Boolean(row.is_read),
+    readAt: row.read_at || null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+async function listEmployeeFiles(url, db, requester) {
+  const manager = canManageEmployeeFiles(requester);
+  const params = url.searchParams;
+  const query = parseListQuery(params);
+  const filters = [];
+  const bindings = [];
+  const employeeUid = normalizeText(params.get("employeeUid"));
+  const participantUid = normalizeText(params.get("participantUid"));
+  const activeValue = params.get("active");
+  if (!manager) {
+    filters.push("(employee_uid = ? OR sender_uid = ? OR receiver_uid = ? OR instr(participant_uids_json, ?) > 0)");
+    bindings.push(requester.uid, requester.uid, requester.uid, `"${requester.uid}"`);
+  } else if (employeeUid) {
+    filters.push("employee_uid = ?");
+    bindings.push(employeeUid);
+  }
+  if (participantUid) {
+    filters.push("(sender_uid = ? OR receiver_uid = ? OR instr(participant_uids_json, ?) > 0)");
+    bindings.push(participantUid, participantUid, `"${participantUid}"`);
+  }
+  if (activeValue !== null && activeValue !== "") {
+    filters.push("active = ?");
+    bindings.push(parseBoolean(activeValue, true) ? 1 : 0);
+  }
+  const whereSql = filters.length ? `WHERE ${filters.join(" AND ")}` : "";
+  try {
+    const [rows, count] = await db.batch([
+      db.prepare(`SELECT * FROM hr_employee_files ${whereSql} ORDER BY created_at DESC LIMIT ? OFFSET ?`).bind(...bindings, query.limit, query.offset),
+      db.prepare(`SELECT COUNT(*) AS total FROM hr_employee_files ${whereSql}`).bind(...bindings),
+    ]);
+    return json(200, { ok: true, employeeFiles: (rows?.results || []).map(mapEmployeeFileRow), pagination: { limit: query.limit, offset: query.offset, total: Number(count?.results?.[0]?.total || 0) } });
+  } catch (error) { return serverError("employee_files_query_failed", error); }
+}
+
+async function createEmployeeFile(request, db, requester) {
+  const bodyResult = await readJsonBody(request);
+  if (!bodyResult.ok) return bodyResult.response;
+  const normalized = normalizeEmployeeFilePayload(bodyResult.value || {}, requester);
+  const manager = canManageEmployeeFiles(requester);
+  if (!manager && normalized.senderUid !== requester.uid) return forbidden("employee_files_manage_forbidden");
+  if (!normalized.receiverUid && !normalized.employeeUid) return json(400, { ok: false, message: "employee_file_receiver_required" });
+  if (!normalized.payload.fileUrl && !normalized.payload.filePath) return json(400, { ok: false, message: "employee_file_url_required" });
+  const id = normalizeText(bodyResult.value?.id) || crypto.randomUUID();
+  try {
+    const replaceFileIds = normalizeStringArray(bodyResult.value?.replaceFileIds);
+    const statements = [];
+    for (const replaceId of replaceFileIds) {
+      statements.push(
+        db.prepare("UPDATE hr_employee_files SET status = 'replaced', active = 0, updated_at = ? WHERE id = ?")
+          .bind(normalized.now, replaceId)
+      );
+    }
+    statements.push(
+      db.prepare(`INSERT INTO hr_employee_files (id, employee_id, employee_uid, sender_uid, receiver_uid, participant_uids_json, title, description, file_type, file_id, file_name, file_path, file_url, storage_key, content_type, file_size, category, status, active, official_document, is_read, read_at, payload_json, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'hr_api', ?, ?)`)
+        .bind(id, normalized.employeeId, normalized.employeeUid, normalized.senderUid, normalized.receiverUid, JSON.stringify(normalized.participantUids), normalized.title, nullableText(normalized.payload.description), normalized.fileType, nullableText(normalized.payload.fileId), normalized.fileName, nullableText(normalized.payload.filePath), nullableText(normalized.payload.fileUrl), nullableText(normalized.payload.storageKey || normalized.payload.filePath), nullableText(normalized.payload.contentType || normalized.payload.mimeType), nullableNumber(normalized.payload.fileSize), nullableText(normalized.payload.category), normalized.status, normalized.active ? 1 : 0, parseBoolean(normalized.payload.officialDocument, false) ? 1 : 0, normalized.isRead ? 1 : 0, normalized.readAt, safeJsonStringify({ ...normalized.payload, replaceFileIds }), normalized.createdAt, normalized.now),
+      buildAuditStatement(db, request, requester, { action: replaceFileIds.length ? "employee_file.replace" : "employee_file.create", entityType: "employee_file", entityId: id, before: replaceFileIds, after: normalized.payload })
+    );
+    await db.batch(statements);
+    const row = await db.prepare("SELECT * FROM hr_employee_files WHERE id = ?").bind(id).first();
+    return json(201, { ok: true, employeeFile: mapEmployeeFileRow(row) });
+  } catch (error) { return databaseMutationError("employee_file_create_failed", error); }
+}
+
+async function markEmployeeFileRead(request, db, requester, id) {
+  const row = await db.prepare("SELECT * FROM hr_employee_files WHERE id = ? LIMIT 1").bind(id).first();
+  if (!row) return json(404, { ok: false, message: "employee_file_not_found" });
+  const file = mapEmployeeFileRow(row);
+  const allowed = canManageEmployeeFiles(requester) || [file.employeeUid, file.receiverUid].includes(requester.uid) || (file.participantUids || []).includes(requester.uid);
+  if (!allowed) return forbidden("employee_file_read_forbidden");
+  const now = new Date().toISOString();
+  const payload = { ...file, isRead: true, readAt: now, updatedAt: now };
+  try {
+    await db.prepare("UPDATE hr_employee_files SET is_read = 1, read_at = ?, payload_json = ?, updated_at = ? WHERE id = ?").bind(now, safeJsonStringify(payload), now, id).run();
+    const updated = await db.prepare("SELECT * FROM hr_employee_files WHERE id = ?").bind(id).first();
+    return json(200, { ok: true, employeeFile: mapEmployeeFileRow(updated) });
+  } catch (error) { return databaseMutationError("employee_file_read_failed", error); }
+}
+
+async function deleteEmployeeFile(request, db, requester, id) {
+  const row = await db.prepare("SELECT * FROM hr_employee_files WHERE id = ? LIMIT 1").bind(id).first();
+  if (!row) return json(404, { ok: false, message: "employee_file_not_found" });
+  const file = mapEmployeeFileRow(row);
+  if (!canManageEmployeeFiles(requester) && file.senderUid !== requester.uid) return forbidden("employee_file_delete_forbidden");
+  try {
+    await db.batch([
+      db.prepare("DELETE FROM hr_employee_files WHERE id = ?").bind(id),
+      buildAuditStatement(db, request, requester, { action: "employee_file.delete", entityType: "employee_file", entityId: id, before: file, after: null }),
+    ]);
+    return json(200, { ok: true, id });
+  } catch (error) { return databaseMutationError("employee_file_delete_failed", error); }
+}
+
+function normalizeEmployeeMessagePayload(input, requester, existing = null) {
+  const current = existing || {};
+  const now = new Date().toISOString();
+  const senderUid = normalizeText(input?.senderUid || input?.fromUserId || current.senderUid || requester.uid);
+  const recipientUid = normalizeText(input?.recipientUid || input?.toUserId || current.recipientUid);
+  const employeeUid = normalizeText(input?.employeeUid || current.employeeUid) || null;
+  const employeeId = normalizeText(input?.employeeId || current.employeeId) || null;
+  const conversationType = normalizeText(input?.conversationType || current.conversationType || (employeeUid ? "hr_to_employee" : "employee_to_employee")).toLowerCase();
+  const participantUids = normalizeStringArray([...(Array.isArray(input?.participantUids) ? input.participantUids : []), senderUid, recipientUid, employeeUid]);
+  const conversationId = normalizeText(input?.conversationId || input?.threadId || current.conversationId) || crypto.randomUUID();
+  const threadId = normalizeText(input?.threadId || current.threadId || conversationId) || conversationId;
+  const body = normalizeText(input?.body || input?.message || current.body);
+  const messageType = normalizeText(input?.messageType || input?.type || current.messageType || "message").toLowerCase();
+  const senderRole = normalizeText(input?.senderRole || current.senderRole || (canManageEmployeeMessages(requester) ? "hr" : "employee")).toLowerCase();
+  const isRead = parseBoolean(input?.isRead, Boolean(current.isRead));
+  const createdAt = normalizeDateToIso(input?.createdAt || current.createdAt) || now;
+  const readAt = isRead ? (normalizeDateToIso(input?.readAt || current.readAt) || now) : null;
+  const payload = { ...current, ...input, employeeId, employeeUid, conversationId, threadId, conversationType, participantUids, senderUid, senderRole, recipientUid, messageType, body, message: body, fromUserId: senderUid, toUserId: recipientUid, status: isRead ? "read" : (normalizeText(input?.status || current.status || "sent") || "sent"), isRead, readAt, createdAt, updatedAt: now };
+  return { payload, employeeId, employeeUid, conversationId, threadId, conversationType, participantUids, senderUid, senderRole, recipientUid, messageType, body, status: payload.status, isRead, readAt, createdAt, now };
+}
+
+function mapEmployeeMessageRow(row) {
+  const payload = parseJson(row?.payload_json, {});
+  return { ...payload, id: row.id, employeeId: row.employee_id || null, employeeUid: row.employee_uid || null, conversationId: row.conversation_id, threadId: row.thread_id, conversationType: row.conversation_type, participantUids: parseJsonArray(row.participant_uids_json), senderUid: row.sender_uid, senderRole: row.sender_role, recipientUid: row.recipient_uid, messageType: row.message_type, body: row.body, message: row.body, fromUserId: row.sender_uid, toUserId: row.recipient_uid, status: row.status, isRead: Boolean(row.is_read), readAt: row.read_at || null, createdAt: row.created_at, updatedAt: row.updated_at };
+}
+
+async function listEmployeeMessages(url, db, requester) {
+  const manager = canManageEmployeeMessages(requester);
+  const params = url.searchParams;
+  const query = parseListQuery(params);
+  const filters = [];
+  const bindings = [];
+  const employeeUid = normalizeText(params.get("employeeUid"));
+  const participantUid = normalizeText(params.get("participantUid"));
+  const conversationId = normalizeText(params.get("conversationId"));
+  if (!manager) {
+    filters.push("(sender_uid = ? OR recipient_uid = ? OR employee_uid = ? OR instr(participant_uids_json, ?) > 0)");
+    bindings.push(requester.uid, requester.uid, requester.uid, `"${requester.uid}"`);
+  } else if (employeeUid) {
+    filters.push("employee_uid = ?"); bindings.push(employeeUid);
+  }
+  if (participantUid) { filters.push("(sender_uid = ? OR recipient_uid = ? OR instr(participant_uids_json, ?) > 0)"); bindings.push(participantUid, participantUid, `"${participantUid}"`); }
+  if (conversationId) { filters.push("conversation_id = ?"); bindings.push(conversationId); }
+  const whereSql = filters.length ? `WHERE ${filters.join(" AND ")}` : "";
+  try {
+    const [rows, count] = await db.batch([
+      db.prepare(`SELECT * FROM hr_employee_messages ${whereSql} ORDER BY created_at ASC LIMIT ? OFFSET ?`).bind(...bindings, query.limit, query.offset),
+      db.prepare(`SELECT COUNT(*) AS total FROM hr_employee_messages ${whereSql}`).bind(...bindings),
+    ]);
+    return json(200, { ok: true, employeeMessages: (rows?.results || []).map(mapEmployeeMessageRow), pagination: { limit: query.limit, offset: query.offset, total: Number(count?.results?.[0]?.total || 0) } });
+  } catch (error) { return serverError("employee_messages_query_failed", error); }
+}
+
+async function createEmployeeMessage(request, db, requester) {
+  const bodyResult = await readJsonBody(request);
+  if (!bodyResult.ok) return bodyResult.response;
+  const normalized = normalizeEmployeeMessagePayload(bodyResult.value || {}, requester);
+  const manager = canManageEmployeeMessages(requester);
+  if (!manager && normalized.senderUid !== requester.uid) return forbidden("employee_messages_manage_forbidden");
+  if (!normalized.recipientUid) return json(400, { ok: false, message: "employee_message_recipient_required" });
+  if (!normalized.body) return json(400, { ok: false, message: "employee_message_body_required" });
+  const id = normalizeText(bodyResult.value?.id) || crypto.randomUUID();
+  try {
+    await db.batch([
+      db.prepare(`INSERT INTO hr_employee_messages (id, employee_id, employee_uid, conversation_id, thread_id, conversation_type, participant_uids_json, sender_uid, sender_role, recipient_uid, message_type, body, status, is_read, read_at, payload_json, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'hr_api', ?, ?)`)
+        .bind(id, normalized.employeeId, normalized.employeeUid, normalized.conversationId, normalized.threadId, normalized.conversationType, JSON.stringify(normalized.participantUids), normalized.senderUid, normalized.senderRole, normalized.recipientUid, normalized.messageType, normalized.body, normalized.status, normalized.isRead ? 1 : 0, normalized.readAt, safeJsonStringify(normalized.payload), normalized.createdAt, normalized.now),
+      buildAuditStatement(db, request, requester, { action: "employee_message.create", entityType: "employee_message", entityId: id, before: null, after: normalized.payload }),
+    ]);
+    const row = await db.prepare("SELECT * FROM hr_employee_messages WHERE id = ?").bind(id).first();
+    return json(201, { ok: true, employeeMessage: mapEmployeeMessageRow(row) });
+  } catch (error) { return databaseMutationError("employee_message_create_failed", error); }
+}
+
+async function markEmployeeMessageRead(request, db, requester, id) {
+  const row = await db.prepare("SELECT * FROM hr_employee_messages WHERE id = ? LIMIT 1").bind(id).first();
+  if (!row) return json(404, { ok: false, message: "employee_message_not_found" });
+  const message = mapEmployeeMessageRow(row);
+  if (!canManageEmployeeMessages(requester) && message.recipientUid !== requester.uid) return forbidden("employee_message_read_forbidden");
+  const now = new Date().toISOString();
+  const payload = { ...message, isRead: true, status: "read", readAt: now, updatedAt: now };
+  try {
+    await db.prepare("UPDATE hr_employee_messages SET is_read = 1, status = 'read', read_at = ?, payload_json = ?, updated_at = ? WHERE id = ?").bind(now, safeJsonStringify(payload), now, id).run();
+    const updated = await db.prepare("SELECT * FROM hr_employee_messages WHERE id = ?").bind(id).first();
+    return json(200, { ok: true, employeeMessage: mapEmployeeMessageRow(updated) });
+  } catch (error) { return databaseMutationError("employee_message_read_failed", error); }
+}
+
+async function markEmployeeMessagesRead(request, db, requester) {
+  const bodyResult = await readJsonBody(request);
+  if (!bodyResult.ok) return bodyResult.response;
+  const ids = normalizeStringArray(bodyResult.value?.ids);
+  const now = new Date().toISOString();
+  try {
+    if (ids.length) {
+      const statements = ids.map(id => db.prepare("UPDATE hr_employee_messages SET is_read = 1, status = 'read', read_at = ?, updated_at = ? WHERE id = ? AND (recipient_uid = ? OR ? = 1)").bind(now, now, id, requester.uid, canManageEmployeeMessages(requester) ? 1 : 0));
+      await db.batch(statements);
+    } else {
+      await db.prepare("UPDATE hr_employee_messages SET is_read = 1, status = 'read', read_at = ?, updated_at = ? WHERE recipient_uid = ?").bind(now, now, requester.uid).run();
+    }
+    return json(200, { ok: true });
+  } catch (error) { return databaseMutationError("employee_messages_read_failed", error); }
+}
+
+async function importFilesMessagesSnapshot(request, env) {
+  const authorized = await verifySyncSecret(request, env.HR_SYNC_SECRET);
+  if (!authorized) return json(401, { ok: false, message: "invalid_hr_sync_secret" });
+  const bodyResult = await readJsonBody(request, 8_000_000);
+  if (!bodyResult.ok) return bodyResult.response;
+  const employeeFiles = Array.isArray(bodyResult.value?.employeeFiles) ? bodyResult.value.employeeFiles : [];
+  const employeeMessages = Array.isArray(bodyResult.value?.employeeMessages) ? bodyResult.value.employeeMessages : [];
+  if (employeeFiles.length > MAX_IMPORT_ROWS || employeeMessages.length > MAX_IMPORT_ROWS) return json(413, { ok: false, message: "files_messages_import_batch_too_large" });
+  const runId = normalizeText(bodyResult.value?.runId) || crypto.randomUUID();
+  const complete = Boolean(bodyResult.value?.complete);
+  const now = new Date().toISOString();
+  const statements = [env.HR_DB.prepare(`INSERT INTO hr_migration_runs (id, source, status, employee_files_received, employee_messages_received, details_json, started_at) VALUES (?, 'firestore_files_messages', 'running', ?, ?, '{}', ?) ON CONFLICT(id) DO UPDATE SET status = 'running', employee_files_received = employee_files_received + excluded.employee_files_received, employee_messages_received = employee_messages_received + excluded.employee_messages_received`).bind(runId, employeeFiles.length, employeeMessages.length, now)];
+  for (const raw of employeeFiles) {
+    const id = normalizeText(raw?.id); if (!id) continue;
+    const requester = { uid: normalizeText(raw?.senderUid || raw?.uploadedBy || raw?.employeeUid) || "migration", permissions: ["employee_files.manage"], account: { role_key: "hr" } };
+    const n = normalizeEmployeeFilePayload(raw, requester);
+    statements.push(env.HR_DB.prepare(`INSERT INTO hr_employee_files (id, employee_id, employee_uid, sender_uid, receiver_uid, participant_uids_json, title, description, file_type, file_id, file_name, file_path, file_url, storage_key, content_type, file_size, category, status, active, official_document, is_read, read_at, payload_json, source, source_updated_at, migrated_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'firestore', ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET employee_id=excluded.employee_id, employee_uid=excluded.employee_uid, sender_uid=excluded.sender_uid, receiver_uid=excluded.receiver_uid, participant_uids_json=excluded.participant_uids_json, title=excluded.title, description=excluded.description, file_type=excluded.file_type, file_id=excluded.file_id, file_name=excluded.file_name, file_path=excluded.file_path, file_url=excluded.file_url, storage_key=excluded.storage_key, content_type=excluded.content_type, file_size=excluded.file_size, category=excluded.category, status=excluded.status, active=excluded.active, official_document=excluded.official_document, is_read=excluded.is_read, read_at=excluded.read_at, payload_json=excluded.payload_json, source=excluded.source, source_updated_at=excluded.source_updated_at, migrated_at=excluded.migrated_at, updated_at=excluded.updated_at`)
+      .bind(id, n.employeeId, n.employeeUid, n.senderUid, n.receiverUid, JSON.stringify(n.participantUids), n.title, nullableText(n.payload.description), n.fileType, nullableText(n.payload.fileId), n.fileName, nullableText(n.payload.filePath), nullableText(n.payload.fileUrl), nullableText(n.payload.storageKey || n.payload.filePath), nullableText(n.payload.contentType || n.payload.mimeType), nullableNumber(n.payload.fileSize), nullableText(n.payload.category), n.status, n.active ? 1 : 0, parseBoolean(n.payload.officialDocument, false) ? 1 : 0, n.isRead ? 1 : 0, n.readAt, safeJsonStringify(n.payload), normalizeDateToIso(raw?.updatedAt), now, n.createdAt, now));
+  }
+  for (const raw of employeeMessages) {
+    const id = normalizeText(raw?.id); if (!id) continue;
+    const requester = { uid: normalizeText(raw?.senderUid || raw?.fromUserId) || "migration", permissions: ["employee_messages.manage"], account: { role_key: "hr" } };
+    const n = normalizeEmployeeMessagePayload(raw, requester);
+    if (!n.senderUid || !n.recipientUid || !n.body) continue;
+    statements.push(env.HR_DB.prepare(`INSERT INTO hr_employee_messages (id, employee_id, employee_uid, conversation_id, thread_id, conversation_type, participant_uids_json, sender_uid, sender_role, recipient_uid, message_type, body, status, is_read, read_at, payload_json, source, source_updated_at, migrated_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'firestore', ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET employee_id=excluded.employee_id, employee_uid=excluded.employee_uid, conversation_id=excluded.conversation_id, thread_id=excluded.thread_id, conversation_type=excluded.conversation_type, participant_uids_json=excluded.participant_uids_json, sender_uid=excluded.sender_uid, sender_role=excluded.sender_role, recipient_uid=excluded.recipient_uid, message_type=excluded.message_type, body=excluded.body, status=excluded.status, is_read=excluded.is_read, read_at=excluded.read_at, payload_json=excluded.payload_json, source=excluded.source, source_updated_at=excluded.source_updated_at, migrated_at=excluded.migrated_at, updated_at=excluded.updated_at`)
+      .bind(id, n.employeeId, n.employeeUid, n.conversationId, n.threadId, n.conversationType, JSON.stringify(n.participantUids), n.senderUid, n.senderRole, n.recipientUid, n.messageType, n.body, n.status, n.isRead ? 1 : 0, n.readAt, safeJsonStringify(n.payload), normalizeDateToIso(raw?.updatedAt), now, n.createdAt, now));
+  }
+  if (complete) statements.push(env.HR_DB.prepare("UPDATE hr_migration_runs SET status = 'completed', finished_at = ? WHERE id = ?").bind(now, runId));
+  try {
+    await env.HR_DB.batch(statements);
+    return json(200, { ok: true, runId, complete, employeeFiles: employeeFiles.length, employeeMessages: employeeMessages.length });
+  } catch (error) { return databaseMutationError("files_messages_import_failed", error); }
+}
+
+export { normalizeEmployeeFilePayload, normalizeEmployeeMessagePayload };
 
 async function listNotifications(url, db, requester) {
   const requestedTarget = normalizeText(url.searchParams.get("targetUid"));
@@ -3879,8 +4246,13 @@ function methodOrNotFound(pathname, method) {
     pathname === "/api/hr/notifications" ||
     pathname === "/api/hr/notifications/read-all" ||
     pathname === "/api/hr/audit-logs" ||
+    pathname === "/api/hr/employee-files" ||
+    pathname === "/api/hr/employee-messages" ||
+    pathname === "/api/hr/employee-messages/read-all" ||
     /^\/api\/hr\/(employees|accounts)\/[^/]+(?:\/permissions)?$/.test(pathname) ||
-    /^\/api\/hr\/notifications\/[^/]+\/read$/.test(pathname);
+    /^\/api\/hr\/notifications\/[^/]+\/read$/.test(pathname) ||
+    /^\/api\/hr\/employee-files\/[^/]+(?:\/read)?$/.test(pathname) ||
+    /^\/api\/hr\/employee-messages\/[^/]+\/read$/.test(pathname);
   if (known) {
     return json(405, { ok: false, message: "method_not_allowed", method });
   }

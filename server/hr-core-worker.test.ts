@@ -12,6 +12,8 @@ import {
   normalizeImportedServiceRequest,
   normalizeNotificationType,
   normalizeOperationalPayload,
+  normalizeEmployeeFilePayload,
+  normalizeEmployeeMessagePayload,
   validateFirebaseTokenClaims,
 } from "../workers/hr-core-worker.js";
 
@@ -457,5 +459,56 @@ describe("HR tasks and reports normalization", () => {
       managerNotes: "مراجعة الإدارة",
       status: "sent",
     });
+  });
+});
+
+
+describe("HR files and messages normalization", () => {
+  it("normalizes employee file participants and R2 metadata", () => {
+    const result = normalizeEmployeeFilePayload(
+      {
+        employeeUid: "employee-2",
+        senderUid: "employee-1",
+        receiverUid: "employee-2",
+        participantUids: ["employee-1", "employee-2"],
+        title: "Contract",
+        fileName: "contract.pdf",
+        filePath: "internal_files/contract.pdf",
+        fileUrl: "https://files.example/contract.pdf",
+      },
+      { uid: "employee-1", permissions: ["employee_files.view"], account: { role_key: "staff" } }
+    );
+    expect(result).toMatchObject({
+      employeeUid: "employee-2",
+      senderUid: "employee-1",
+      receiverUid: "employee-2",
+      title: "Contract",
+      fileName: "contract.pdf",
+      active: true,
+      isRead: false,
+    });
+    expect(result.participantUids).toEqual(["employee-1", "employee-2"]);
+  });
+
+  it("normalizes internal employee messages", () => {
+    const result = normalizeEmployeeMessagePayload(
+      {
+        senderUid: "employee-1",
+        recipientUid: "employee-2",
+        conversationId: "employee_to_employee__employee-1__employee-2",
+        conversationType: "employee_to_employee",
+        body: "Hello",
+      },
+      { uid: "employee-1", permissions: ["employee_messages.manage"], account: { role_key: "staff" } }
+    );
+    expect(result).toMatchObject({
+      senderUid: "employee-1",
+      recipientUid: "employee-2",
+      conversationType: "employee_to_employee",
+      body: "Hello",
+      status: "sent",
+      isRead: false,
+    });
+    expect(result.participantUids).toEqual(["employee-1", "employee-2"]);
   });
 });

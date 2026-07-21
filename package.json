@@ -25,7 +25,9 @@
     "hr:notifications-audit:migrate:dry": "node scripts/migrate-hr-notifications-audit-to-cloudflare.mjs --dry-run",
     "hr:notifications-audit:migrate": "node scripts/migrate-hr-notifications-audit-to-cloudflare.mjs",
     "hr:tasks-reports:migrate": "node scripts/migrate-hr-tasks-reports-to-cloudflare.mjs",
-    "hr:tasks-reports:migrate:dry": "node scripts/migrate-hr-tasks-reports-to-cloudflare.mjs --dry-run"
+    "hr:tasks-reports:migrate:dry": "node scripts/migrate-hr-tasks-reports-to-cloudflare.mjs --dry-run",
+    "hr:files-messages:migrate": "node scripts/migrate-hr-files-messages-to-cloudflare.mjs",
+    "hr:files-messages:migrate:dry": "node scripts/migrate-hr-files-messages-to-cloudflare.mjs --dry-run"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.693.0",

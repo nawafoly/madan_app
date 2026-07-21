@@ -84,6 +84,13 @@ import {
   type EmployeeFileRecord,
 } from "@/lib/employeeFiles";
 import { formatDateTimeEN, formatFileSizeEN } from "@/lib/formatters";
+import {
+  createHrCoreEmployeeFile,
+  HR_CORE_D1_ENABLED,
+  isHrCoreConfigured,
+  listHrCoreEmployeeFiles,
+  markHrCoreEmployeeFileRead,
+} from "@/lib/hrCoreApi";
 import { createInAppNotification } from "@/lib/inAppNotifications";
 import { languageDir, tr } from "@/lib/i18n";
 import {
@@ -389,6 +396,39 @@ export default function EmployeeFilesPage() {
     setLegacyLoading(true);
     setParticipantLoading(true);
 
+    if (HR_CORE_D1_ENABLED && isHrCoreConfigured()) {
+      let cancelled = false;
+      void listHrCoreEmployeeFiles({ participantUid: user.uid, limit: 200 })
+        .then(response => {
+          if (cancelled) return;
+          const rows = response.employeeFiles.map(file =>
+            normalizeEmployeeFileRecord(
+              file.id,
+              file as Record<string, unknown>,
+              user.uid
+            )
+          );
+          setLegacyFiles(rows);
+          setParticipantFiles([]);
+        })
+        .catch(error => {
+          console.error("employee_files_hr_core_load_failed", error);
+          if (!cancelled) {
+            setLegacyFiles([]);
+            setParticipantFiles([]);
+          }
+        })
+        .finally(() => {
+          if (!cancelled) {
+            setLegacyLoading(false);
+            setParticipantLoading(false);
+          }
+        });
+      return () => {
+        cancelled = true;
+      };
+    }
+
     const unsubscribeLegacy = onSnapshot(
       query(collection(db, EMPLOYEE_FILES_COLLECTION), where("employeeUid", "==", user.uid)),
       snapshot => {
@@ -573,6 +613,18 @@ export default function EmployeeFilesPage() {
 
     if (!canMarkRead) return;
 
+    if (HR_CORE_D1_ENABLED && isHrCoreConfigured()) {
+      const response = await markHrCoreEmployeeFileRead(file.id);
+      const updated = normalizeEmployeeFileRecord(
+        response.employeeFile.id,
+        response.employeeFile as Record<string, unknown>,
+        user.uid
+      );
+      setLegacyFiles(current => current.map(item => (item.id === updated.id ? updated : item)));
+      setParticipantFiles(current => current.map(item => (item.id === updated.id ? updated : item)));
+      return;
+    }
+
     await updateDoc(doc(db, EMPLOYEE_FILES_COLLECTION, file.id), {
       isRead: true,
       readAt: serverTimestamp(),
@@ -676,10 +728,11 @@ export default function EmployeeFilesPage() {
 
     setSendingFile(true);
     try {
-      const fileRef = doc(collection(db, EMPLOYEE_FILES_COLLECTION));
+      const fileRecordId = crypto.randomUUID();
+      const fileRef = doc(db, EMPLOYEE_FILES_COLLECTION, fileRecordId);
       const uploaded = await uploadDocumentToCloudflare({
         entityType: "employee_file_transfer",
-        entityId: fileRef.id,
+        entityId: fileRecordId,
         category: EMPLOYEE_FILE_CATEGORY,
         file: sendForm.file,
         kind: "attachment",
@@ -729,14 +782,29 @@ export default function EmployeeFilesPage() {
         updatedAt: serverTimestamp(),
       };
 
-      await setDoc(fileRef, fileDoc);
+      if (HR_CORE_D1_ENABLED && isHrCoreConfigured()) {
+        const response = await createHrCoreEmployeeFile({
+          id: fileRecordId,
+          ...fileDoc,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+        const created = normalizeEmployeeFileRecord(
+          response.employeeFile.id,
+          response.employeeFile as Record<string, unknown>,
+          user.uid
+        );
+        setLegacyFiles(current => [created, ...current.filter(item => item.id !== created.id)]);
+      } else {
+        await setDoc(fileRef, fileDoc);
+      }
 
       await createInAppNotification({
         userId: selectedRecipient.uid,
         title: `ملف داخلي جديد من ${currentUserDisplayName}`,
         body: sendForm.title.trim(),
         type: "file",
-        relatedId: fileRef.id,
+        relatedId: fileRecordId,
         relatedTo: "employee_file",
         relatedPath: "/hr/files?tab=incoming",
       }).catch(error => {

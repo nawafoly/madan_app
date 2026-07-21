@@ -52,6 +52,13 @@ import {
 } from "@/lib/employeeProfile";
 import { resolveEmployeeAvatarUrl } from "@/lib/defaultEmployeeAvatars";
 import { createInAppNotification } from "@/lib/inAppNotifications";
+import {
+  createHrCoreEmployeeMessage,
+  HR_CORE_D1_ENABLED,
+  isHrCoreConfigured,
+  listHrCoreEmployeeMessages,
+  markHrCoreEmployeeMessagesRead,
+} from "@/lib/hrCoreApi";
 import { languageDir, tr } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import {
@@ -175,6 +182,38 @@ export default function EmployeeMessagesScreen() {
 
     setLegacyLoading(true);
     setParticipantLoading(true);
+
+    if (HR_CORE_D1_ENABLED && isHrCoreConfigured()) {
+      let cancelled = false;
+      void listHrCoreEmployeeMessages({ participantUid: user.uid, limit: 200 })
+        .then(response => {
+          if (cancelled) return;
+          const rows = response.employeeMessages.map(message =>
+            normalizeEmployeeMessageRecord(
+              message.id,
+              message as Record<string, any>
+            )
+          );
+          setLegacyMessages(rows);
+          setParticipantMessages([]);
+        })
+        .catch(error => {
+          console.error("employee_messages_hr_core_load_failed", error);
+          if (!cancelled) {
+            setLegacyMessages([]);
+            setParticipantMessages([]);
+          }
+        })
+        .finally(() => {
+          if (!cancelled) {
+            setLegacyLoading(false);
+            setParticipantLoading(false);
+          }
+        });
+      return () => {
+        cancelled = true;
+      };
+    }
 
     const unsubscribeLegacy = onSnapshot(
       query(
@@ -659,16 +698,36 @@ export default function EmployeeMessagesScreen() {
 
     setOpeningConversationId(conversation.id);
     try {
-      const batch = writeBatch(db);
-      unreadIncomingMessages.forEach(message => {
-        batch.update(doc(db, EMPLOYEE_MESSAGES_COLLECTION, message.id), {
-          isRead: true,
-          readAt: serverTimestamp(),
-          status: "read",
-          updatedAt: serverTimestamp(),
+      if (HR_CORE_D1_ENABLED && isHrCoreConfigured()) {
+        const ids = unreadIncomingMessages.map(message => message.id);
+        await markHrCoreEmployeeMessagesRead(ids);
+        const now = new Date();
+        setLegacyMessages(current =>
+          current.map(message =>
+            ids.includes(message.id)
+              ? { ...message, isRead: true, status: "read", readAt: now, readAtDate: now }
+              : message
+          )
+        );
+        setParticipantMessages(current =>
+          current.map(message =>
+            ids.includes(message.id)
+              ? { ...message, isRead: true, status: "read", readAt: now, readAtDate: now }
+              : message
+          )
+        );
+      } else {
+        const batch = writeBatch(db);
+        unreadIncomingMessages.forEach(message => {
+          batch.update(doc(db, EMPLOYEE_MESSAGES_COLLECTION, message.id), {
+            isRead: true,
+            readAt: serverTimestamp(),
+            status: "read",
+            updatedAt: serverTimestamp(),
+          });
         });
-      });
-      await batch.commit();
+        await batch.commit();
+      }
     } catch (error) {
       console.error("employee_message_mark_read_failed", error);
     } finally {
@@ -741,8 +800,9 @@ export default function EmployeeMessagesScreen() {
 
     setSendingHrReply(true);
     try {
-      const messageRef = doc(collection(db, EMPLOYEE_MESSAGES_COLLECTION));
-      await setDoc(messageRef, {
+      const messageId = crypto.randomUUID();
+      const messageRef = doc(db, EMPLOYEE_MESSAGES_COLLECTION, messageId);
+      const messagePayload = {
         employeeId: activeHrConversation.employeeId || null,
         employeeUid: activeHrConversation.employeeUid || user.uid,
         conversationId: activeHrConversation.conversationId,
@@ -775,18 +835,34 @@ export default function EmployeeMessagesScreen() {
         isRead: false,
         readAt: null,
         updatedAt: serverTimestamp(),
-      } satisfies EmployeeMessageDoc);
+      } satisfies EmployeeMessageDoc;
+
+      if (HR_CORE_D1_ENABLED && isHrCoreConfigured()) {
+        const response = await createHrCoreEmployeeMessage({
+          id: messageId,
+          ...messagePayload,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+        const created = normalizeEmployeeMessageRecord(
+          response.employeeMessage.id,
+          response.employeeMessage as Record<string, any>
+        );
+        setLegacyMessages(current => [...current, created]);
+      } else {
+        await setDoc(messageRef, messagePayload);
+      }
 
       await createInAppNotification({
         userId: activeHrConversation.counterpartyUid,
         title: "رد جديد من الموظف",
         body: normalizedReply,
         type: "message",
-        relatedId: messageRef.id,
+        relatedId: messageId,
         relatedTo: "employee_message",
         relatedPath: activeHrConversation.employeeId
-          ? `/hr/employees?employeeId=${encodeURIComponent(activeHrConversation.employeeId)}&panel=messages&messageId=${messageRef.id}`
-          : `/hr/employees?panel=messages&messageId=${messageRef.id}`,
+          ? `/hr/employees?employeeId=${encodeURIComponent(activeHrConversation.employeeId)}&panel=messages&messageId=${messageId}`
+          : `/hr/employees?panel=messages&messageId=${messageId}`,
       }).catch(error => {
         console.error("employee_reply_notification_failed", error);
       });
@@ -815,13 +891,14 @@ export default function EmployeeMessagesScreen() {
 
     setSendingInternalMessage(true);
     try {
-      const messageRef = doc(collection(db, EMPLOYEE_MESSAGES_COLLECTION));
+      const messageId = crypto.randomUUID();
+      const messageRef = doc(db, EMPLOYEE_MESSAGES_COLLECTION, messageId);
       const parentMessage =
         activeInternalConversation?.messages[
         activeInternalConversation.messages.length - 1
         ] || null;
 
-      await setDoc(messageRef, {
+      const messagePayload = {
         employeeId: null,
         employeeUid: null,
         conversationId,
@@ -853,14 +930,30 @@ export default function EmployeeMessagesScreen() {
         isRead: false,
         readAt: null,
         updatedAt: serverTimestamp(),
-      } satisfies EmployeeMessageDoc);
+      } satisfies EmployeeMessageDoc;
+
+      if (HR_CORE_D1_ENABLED && isHrCoreConfigured()) {
+        const response = await createHrCoreEmployeeMessage({
+          id: messageId,
+          ...messagePayload,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+        const created = normalizeEmployeeMessageRecord(
+          response.employeeMessage.id,
+          response.employeeMessage as Record<string, any>
+        );
+        setLegacyMessages(current => [...current, created]);
+      } else {
+        await setDoc(messageRef, messagePayload);
+      }
 
       await createInAppNotification({
         userId: selectedInternalRecipient.uid,
         title: `رسالة داخلية جديدة من ${currentUserDisplayName}`,
         body: normalizedMessage,
         type: "message",
-        relatedId: messageRef.id,
+        relatedId: messageId,
         relatedTo: "employee_message",
         relatedPath: `/hr/messages?messageId=${messageRef.id}`,
       }).catch(error => {

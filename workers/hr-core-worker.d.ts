@@ -99,3 +99,15 @@ export function normalizeOperationalPayload(
   status: "draft" | "sent";
   now: string;
 };
+
+export function normalizeEmployeeFilePayload(
+  raw: Record<string, any>,
+  requester: { uid: string; permissions?: string[]; account?: Record<string, any> },
+  existing?: Record<string, any> | null
+): Record<string, any>;
+
+export function normalizeEmployeeMessagePayload(
+  raw: Record<string, any>,
+  requester: { uid: string; permissions?: string[]; account?: Record<string, any> },
+  existing?: Record<string, any> | null
+): Record<string, any>;
