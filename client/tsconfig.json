@@ -4,10 +4,22 @@
     "jsx": "react-jsx",
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"],
-      "@shared/*": ["../shared/*"]
+      "@/*": [
+        "src/*"
+      ],
+      "@shared/*": [
+        "../shared/*"
+      ]
     },
-    "types": ["react", "react-dom", "node", "vite/client"]
+    "types": [
+      "react",
+      "react-dom",
+      "node",
+      "vite/client"
+    ]
   },
-  "include": ["src", "src/vite-env.d.ts"]
+  "include": [
+    "src",
+    "src/vite-env.d.ts"
+  ]
 }
