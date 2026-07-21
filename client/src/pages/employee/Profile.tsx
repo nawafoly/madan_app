@@ -94,6 +94,7 @@ import {
   createHrCoreServiceRequest,
   isHrCoreConfigured,
   listHrCoreLeaveRequests,
+  listHrCorePayrollRecords,
   listHrCoreServiceRequests,
 } from "@/lib/hrCoreApi";
 import {
@@ -1519,6 +1520,45 @@ export default function EmployeeProfilePage() {
     }
 
     const linkedEmployeeId = String(user.linkedEmployeeId || "").trim();
+    setEmployeePayrollRecordsLoading(true);
+
+    if (HR_CORE_D1_ENABLED && isHrCoreConfigured()) {
+      let active = true;
+      listHrCorePayrollRecords({
+        employeeUid: user.uid,
+        employeeId: linkedEmployeeId || undefined,
+        limit: 200,
+      })
+        .then(result => {
+          if (!active) return;
+          setEmployeePayrollRecords(
+            sortEmployeePayrollRecords(
+              result.payrollRecords
+                .map(record =>
+                  normalizeEmployeePayrollRecord(
+                    record.id,
+                    record as Record<string, any>
+                  )
+                )
+                .filter(record =>
+                  employeeRecordBelongsToScope(record, employeeRecordScope)
+                )
+            )
+          );
+          setEmployeePayrollRecordsLoading(false);
+        })
+        .catch(error => {
+          if (!active) return;
+          console.error("employee_payroll_records_hr_core_error", error);
+          setEmployeePayrollRecords([]);
+          setEmployeePayrollRecordsLoading(false);
+        });
+
+      return () => {
+        active = false;
+      };
+    }
+
     const payrollQuery =
       linkedEmployeeId && linkedEmployeeId !== user.uid
         ? query(
@@ -1533,7 +1573,6 @@ export default function EmployeeProfilePage() {
             where("employeeUid", "==", user.uid)
           );
 
-    setEmployeePayrollRecordsLoading(true);
     const unsubscribe = onSnapshot(
       payrollQuery,
       snapshot => {

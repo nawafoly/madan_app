@@ -59,3 +59,23 @@ export function normalizeImportedAbsence(
 export function normalizeImportedServiceRequest(
   raw: unknown
 ): Record<string, any> | null;
+
+export function normalizeImportedPayrollRecord(
+  raw: unknown
+): Record<string, any> | null;
+
+export function computePayrollFinancialTotals(input: Record<string, any>): {
+  manualAbsenceDeduction: number;
+  totalSalaryDeductions: number;
+  grossSalary: number;
+  finalSalary: number;
+};
+
+export function buildPayrollInsertStatement(
+  db: any,
+  row: Record<string, any>,
+  now: string,
+  actorUid?: string | null,
+  actorEmail?: string | null,
+  source?: string
+): any;

@@ -14,6 +14,7 @@ const ACCOUNT_MANAGE_ROLES = new Set(["owner", "admin"]);
 const DEFAULT_LIST_LIMIT = 50;
 const MAX_LIST_LIMIT = 200;
 const MAX_IMPORT_ROWS = 250;
+const HR_WORKER_RELEASE = "phase6-payroll-import-v2";
 const FIREBASE_JWKS_URL =
   "https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com";
 
@@ -54,6 +55,13 @@ async function routeRequest(request, env) {
 
   if (pathname === "/internal/hr/operations/import" && request.method === "POST") {
     return importHrOperationsSnapshot(request, env);
+  }
+
+  if (isPayrollImportPath(pathname)) {
+    if (request.method !== "POST") {
+      return json(405, { ok: false, message: "payroll_import_method_not_allowed" });
+    }
+    return importPayrollSnapshot(request, env);
   }
 
   if (pathname.startsWith("/internal/")) {
@@ -215,6 +223,19 @@ async function routeRequest(request, env) {
     );
   }
 
+  if (pathname === "/api/hr/payroll-records" && request.method === "GET") {
+    return listPayrollRecords(url, env.HR_DB, requester);
+  }
+
+  if (pathname === "/api/hr/payroll-records" && request.method === "POST") {
+    if (!canManagePayroll(requester)) return forbidden("payroll_manage_forbidden");
+    return createPayrollRecord(request, env.HR_DB, requester);
+  }
+
+  if (pathname === "/api/hr/payroll-advances" && request.method === "GET") {
+    return listPayrollAdvances(url, env.HR_DB, requester);
+  }
+
   return methodOrNotFound(pathname, request.method);
 }
 
@@ -227,19 +248,22 @@ async function healthCheck(db) {
            (SELECT COUNT(*) FROM employees) AS employee_count,
            (SELECT COUNT(*) FROM employee_leave_requests) AS leave_request_count,
            (SELECT COUNT(*) FROM employee_absences) AS absence_count,
-           (SELECT COUNT(*) FROM employee_service_requests) AS service_request_count`
+           (SELECT COUNT(*) FROM employee_service_requests) AS service_request_count,
+           (SELECT COUNT(*) FROM employee_payroll_records) AS payroll_record_count`
       )
       .first();
 
     return json(200, {
       ok: true,
       service: "maedin-hr-api",
+      release: HR_WORKER_RELEASE,
       database: "ready",
       accountCount: Number(row?.account_count || 0),
       employeeCount: Number(row?.employee_count || 0),
       leaveRequestCount: Number(row?.leave_request_count || 0),
       absenceCount: Number(row?.absence_count || 0),
       serviceRequestCount: Number(row?.service_request_count || 0),
+      payrollRecordCount: Number(row?.payroll_record_count || 0),
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
@@ -419,6 +443,24 @@ function canManageServiceRequests(requester) {
   return (
     requester.permissions.includes("service_requests.manage") ||
     canManageEmployees(requester)
+  );
+}
+
+function canViewPayroll(requester) {
+  return (
+    requester.permissions.includes("payroll.view") ||
+    ["owner", "admin", "hr", "accountant"].includes(
+      normalizeRole(requester.account?.role_key)
+    )
+  );
+}
+
+function canManagePayroll(requester) {
+  return (
+    requester.permissions.includes("payroll.manage") ||
+    ["owner", "admin", "hr", "accountant"].includes(
+      normalizeRole(requester.account?.role_key)
+    )
   );
 }
 
@@ -823,6 +865,10 @@ function mapLeaveRequestRow(row) {
     reviewedBy: row.reviewed_by || null,
     reviewedByEmail: row.reviewed_by_email || null,
     reviewedByName: row.reviewed_by_name || null,
+    payrollRecordId: row.payroll_record_id || null,
+    payrollMonth: row.payroll_month || null,
+    settledAt: row.settled_at || null,
+    settledBy: row.settled_by || null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -871,6 +917,10 @@ function mapServiceRequestRow(row) {
     reviewedBy: row.reviewed_by || null,
     reviewedByEmail: row.reviewed_by_email || null,
     reviewedByName: row.reviewed_by_name || null,
+    payrollRecordId: row.payroll_record_id || null,
+    payrollMonth: row.payroll_month || null,
+    settledAt: row.settled_at || null,
+    settledBy: row.settled_by || null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -1308,6 +1358,465 @@ async function reviewServiceRequest(request, db, requester, id) {
     return json(200, { ok: true, serviceRequest: mapServiceRequestRow(updated) });
   } catch (error) {
     return databaseMutationError("service_request_review_failed", error);
+  }
+}
+
+
+function normalizePayrollMonth(value) {
+  const text = normalizeText(value);
+  const match = text.match(/^(\d{4})-(\d{2})$/);
+  if (!match) return "";
+  const month = Number(match[2]);
+  return month >= 1 && month <= 12 ? text : "";
+}
+
+function normalizePayrollDeductions(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item, index) => ({
+      id: normalizeText(item?.id) || `deduction-${index + 1}`,
+      title: normalizeText(item?.title),
+      amount: Math.max(0, Number(item?.amount || 0)),
+    }))
+    .filter(item => item.title && Number.isFinite(item.amount) && item.amount > 0);
+}
+
+function mapPayrollRecordRow(row) {
+  const mudadDocument = parseJson(row.mudad_document_json, null);
+  return {
+    id: row.id,
+    employeeId: row.employee_id || null,
+    employeeUid: row.employee_uid,
+    payrollMonth: row.payroll_month,
+    monthStart: row.month_start,
+    monthEnd: row.month_end,
+    calculationStartDate: row.calculation_start_date || null,
+    calculationEndDate: row.calculation_end_date || null,
+    baseSalary: Number(row.base_salary || 0),
+    housingAllowance: nullableNumber(row.housing_allowance),
+    transportationAllowance: nullableNumber(row.transportation_allowance),
+    otherAllowances: nullableNumber(row.other_allowances),
+    allowances: Number(row.allowances || 0),
+    absenceDays: Number(row.absence_days || 0),
+    absenceDeduction: Number(row.absence_deduction || 0),
+    expectedWorkHours: nullableNumber(row.expected_work_hours),
+    actualWorkedHours: nullableNumber(row.actual_worked_hours),
+    attendanceLateHours: nullableNumber(row.attendance_late_hours),
+    attendanceMissingHours: nullableNumber(row.attendance_missing_hours),
+    attendanceOvertimeHours: nullableNumber(row.attendance_overtime_hours),
+    attendanceCompleteDays: nullableNumber(row.attendance_complete_days),
+    attendanceIncompleteDays: nullableNumber(row.attendance_incomplete_days),
+    attendanceAbsentDays: nullableNumber(row.attendance_absent_days),
+    attendanceAbsenceDeduction: nullableNumber(row.attendance_absence_deduction),
+    attendanceSource: row.attendance_source || "cloudflare_attendance",
+    attendanceSummary: parseJson(row.attendance_summary_json, {}),
+    scheduleSnapshot: parseJson(row.schedule_snapshot_json, null),
+    delayDeduction: Number(row.delay_deduction || 0),
+    overtimeBonus: Number(row.overtime_bonus || 0),
+    insuranceDeduction: Number(row.insurance_deduction || 0),
+    salaryDeductions: parseJsonArray(row.salary_deductions_json),
+    salaryAdvanceDeduction: Number(row.salary_advance_deduction || 0),
+    salaryAdvanceRequestIds: parseJsonArray(row.salary_advance_request_ids_json),
+    totalSalaryDeductions: Number(row.total_salary_deductions || 0),
+    absenceEntries: parseJsonArray(row.absence_entries_json),
+    grossSalary: nullableNumber(row.gross_salary),
+    finalSalary: Number(row.final_salary || 0),
+    mudadDocument,
+    status: row.status || "finalized",
+    source: row.source || "hr_api",
+    sourceUpdatedAt: row.source_updated_at || null,
+    migratedAt: row.migrated_at || null,
+    createdAt: row.created_at,
+    createdByUid: row.created_by_uid || null,
+    createdByEmail: row.created_by_email || null,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function normalizeImportedPayrollRecord(raw) {
+  const id = normalizeText(raw?.id);
+  const employeeUid = normalizeText(raw?.employeeUid);
+  const employeeId = nullableText(raw?.employeeId || raw?.employeeDocId);
+  const payrollMonth = normalizePayrollMonth(raw?.payrollMonth);
+  const monthStart = normalizeIsoDateKey(raw?.monthStart || `${payrollMonth}-01`);
+  const monthEnd = normalizeIsoDateKey(raw?.monthEnd);
+  if (!id || !employeeUid || !payrollMonth || !monthStart || !monthEnd) return null;
+  const baseSalary = Math.max(0, Number(raw?.baseSalary || 0));
+  const allowances = Math.max(0, Number(raw?.allowances || 0));
+  const attendanceAbsenceDeduction = Math.max(0, Number(raw?.attendanceAbsenceDeduction || 0));
+  const absenceDeduction = Math.max(0, Number(raw?.absenceDeduction || 0));
+  const delayDeduction = Math.max(0, Number(raw?.delayDeduction || 0));
+  const overtimeBonus = Math.max(0, Number(raw?.overtimeBonus || 0));
+  const insuranceDeduction = Math.max(0, Number(raw?.insuranceDeduction || 0));
+  const salaryDeductions = normalizePayrollDeductions(raw?.salaryDeductions);
+  const salaryAdvanceDeduction = Math.max(0, Number(raw?.salaryAdvanceDeduction || 0));
+  const manualDeductions = salaryDeductions.reduce((sum, item) => sum + item.amount, 0);
+  const totalSalaryDeductions = Math.max(
+    0,
+    Number(raw?.totalSalaryDeductions ?? manualDeductions + salaryAdvanceDeduction)
+  );
+  const grossSalary = Math.max(
+    0,
+    Number(
+      raw?.grossSalary ??
+        baseSalary + allowances + overtimeBonus - delayDeduction - attendanceAbsenceDeduction
+    )
+  );
+  return {
+    id,
+    employeeId,
+    employeeUid,
+    payrollMonth,
+    monthStart,
+    monthEnd,
+    calculationStartDate: normalizeIsoDateKey(raw?.calculationStartDate || monthStart) || monthStart,
+    calculationEndDate: normalizeIsoDateKey(raw?.calculationEndDate || monthEnd) || monthEnd,
+    baseSalary,
+    housingAllowance: nullableNumber(raw?.housingAllowance),
+    transportationAllowance: nullableNumber(raw?.transportationAllowance),
+    otherAllowances: nullableNumber(raw?.otherAllowances),
+    allowances,
+    absenceDays: Math.max(0, Number(raw?.absenceDays || 0)),
+    absenceDeduction,
+    expectedWorkHours: nullableNumber(raw?.expectedWorkHours),
+    actualWorkedHours: nullableNumber(raw?.actualWorkedHours),
+    attendanceLateHours: nullableNumber(raw?.attendanceLateHours),
+    attendanceMissingHours: nullableNumber(raw?.attendanceMissingHours),
+    attendanceOvertimeHours: nullableNumber(raw?.attendanceOvertimeHours),
+    attendanceCompleteDays: nullableNumber(raw?.attendanceCompleteDays),
+    attendanceIncompleteDays: nullableNumber(raw?.attendanceIncompleteDays),
+    attendanceAbsentDays: nullableNumber(raw?.attendanceAbsentDays),
+    attendanceAbsenceDeduction,
+    attendanceSource: normalizeText(raw?.attendanceSource) || "cloudflare_attendance",
+    attendanceSummary: isPlainObject(raw?.attendanceSummary) ? raw.attendanceSummary : {},
+    scheduleSnapshot: isPlainObject(raw?.scheduleSnapshot) ? raw.scheduleSnapshot : {},
+    delayDeduction,
+    overtimeBonus,
+    insuranceDeduction,
+    salaryDeductions,
+    salaryAdvanceDeduction,
+    salaryAdvanceRequestIds: normalizeStringArray(raw?.salaryAdvanceRequestIds),
+    totalSalaryDeductions,
+    absenceEntries: Array.isArray(raw?.absenceEntries)
+      ? raw.absenceEntries
+      : Array.isArray(raw?.absenceEntriesSummary)
+        ? raw.absenceEntriesSummary
+        : [],
+    grossSalary,
+    finalSalary: Math.max(0, Number(raw?.finalSalary || 0)),
+    mudadDocument: isPlainObject(raw?.mudadDocument) ? raw.mudadDocument : null,
+    status: normalizeText(raw?.status || "finalized").toLowerCase(),
+    sourceUpdatedAt: normalizeDateToIso(raw?.updatedAt || raw?.createdAt),
+    createdAt: normalizeDateToIso(raw?.createdAt) || new Date().toISOString(),
+    createdByUid: nullableText(raw?.createdByUid),
+    createdByEmail: nullableEmail(raw?.createdByEmail),
+    updatedAt: normalizeDateToIso(raw?.updatedAt || raw?.createdAt) || new Date().toISOString(),
+  };
+}
+
+async function listPayrollRecords(url, db, requester) {
+  const manager = canViewPayroll(requester);
+  const requestedEmployeeUid = normalizeText(url.searchParams.get("employeeUid"));
+  const requestedEmployeeId = normalizeText(url.searchParams.get("employeeId"));
+  if (!manager && requestedEmployeeUid && requestedEmployeeUid !== requester.uid) {
+    return forbidden("payroll_view_forbidden");
+  }
+  if (!manager && requestedEmployeeId && requestedEmployeeId !== requesterEmployeeId(requester)) {
+    return forbidden("payroll_view_forbidden");
+  }
+  const query = parseListQuery(url.searchParams);
+  const filters = [];
+  const bindings = [];
+  if (manager) {
+    if (requestedEmployeeUid) { filters.push("employee_uid = ?"); bindings.push(requestedEmployeeUid); }
+    if (requestedEmployeeId) { filters.push("employee_id = ?"); bindings.push(requestedEmployeeId); }
+  } else {
+    filters.push("employee_uid = ?");
+    bindings.push(requester.uid);
+  }
+  const payrollMonth = normalizePayrollMonth(url.searchParams.get("payrollMonth"));
+  if (payrollMonth) { filters.push("payroll_month = ?"); bindings.push(payrollMonth); }
+  const whereSql = filters.length ? `WHERE ${filters.join(" AND ")}` : "";
+  try {
+    const result = await db.batch([
+      db.prepare(`SELECT * FROM employee_payroll_records ${whereSql} ORDER BY payroll_month DESC, created_at DESC LIMIT ? OFFSET ?`).bind(...bindings, query.limit, query.offset),
+      db.prepare(`SELECT COUNT(*) AS total FROM employee_payroll_records ${whereSql}`).bind(...bindings),
+    ]);
+    return json(200, {
+      ok: true,
+      payrollRecords: (result[0]?.results || []).map(mapPayrollRecordRow),
+      pagination: { limit: query.limit, offset: query.offset, total: Number(result[1]?.results?.[0]?.total || 0) },
+    });
+  } catch (error) {
+    return serverError("payroll_records_query_failed", error);
+  }
+}
+
+async function listPayrollAdvances(url, db, requester) {
+  const manager = canViewPayroll(requester);
+  const requestedEmployeeUid = normalizeText(url.searchParams.get("employeeUid"));
+  const requestedEmployeeId = normalizeText(url.searchParams.get("employeeId"));
+  if (!manager && requestedEmployeeUid && requestedEmployeeUid !== requester.uid) return forbidden("payroll_view_forbidden");
+  const filters = ["request_type = 'salary_advance'", "status = 'approved'", "payroll_record_id IS NULL"];
+  const bindings = [];
+  if (manager) {
+    if (requestedEmployeeUid) { filters.push("employee_uid = ?"); bindings.push(requestedEmployeeUid); }
+    if (requestedEmployeeId) { filters.push("employee_id = ?"); bindings.push(requestedEmployeeId); }
+  } else {
+    filters.push("employee_uid = ?"); bindings.push(requester.uid);
+  }
+  try {
+    const result = await db.prepare(`SELECT * FROM employee_service_requests WHERE ${filters.join(" AND ")} ORDER BY decided_at ASC, created_at ASC`).bind(...bindings).all();
+    return json(200, { ok: true, advances: (result.results || []).map(mapServiceRequestRow) });
+  } catch (error) {
+    return serverError("payroll_advances_query_failed", error);
+  }
+}
+
+export function computePayrollFinancialTotals(input) {
+  const baseSalary = Math.max(0, Number(input?.baseSalary || 0));
+  const allowances = Math.max(0, Number(input?.allowances || 0));
+  const overtimeBonus = Math.max(0, Number(input?.overtimeBonus || 0));
+  const delayDeduction = Math.max(0, Number(input?.delayDeduction || 0));
+  const attendanceAbsenceDeduction = Math.max(
+    0,
+    Number(input?.attendanceAbsenceDeduction || 0)
+  );
+  const combinedAbsenceDeduction = Math.max(
+    0,
+    Number(input?.absenceDeduction || 0)
+  );
+  const insuranceDeduction = Math.max(
+    0,
+    Number(input?.insuranceDeduction || 0)
+  );
+  const manualSalaryDeductions = Math.max(
+    0,
+    Number(input?.manualSalaryDeductions || 0)
+  );
+  const salaryAdvanceDeduction = Math.max(
+    0,
+    Number(input?.salaryAdvanceDeduction || 0)
+  );
+  const manualAbsenceDeduction = Math.max(
+    0,
+    combinedAbsenceDeduction - attendanceAbsenceDeduction
+  );
+  const totalSalaryDeductions =
+    manualSalaryDeductions + salaryAdvanceDeduction;
+  const grossSalary = Math.max(
+    0,
+    baseSalary +
+      allowances +
+      overtimeBonus -
+      delayDeduction -
+      attendanceAbsenceDeduction
+  );
+  const finalSalary = Math.max(
+    0,
+    grossSalary -
+      totalSalaryDeductions -
+      insuranceDeduction -
+      manualAbsenceDeduction
+  );
+  return {
+    manualAbsenceDeduction,
+    totalSalaryDeductions,
+    grossSalary,
+    finalSalary,
+  };
+}
+
+async function createPayrollRecord(request, db, requester) {
+  const bodyResult = await readJsonBody(request, 2_000_000);
+  if (!bodyResult.ok) return bodyResult.response;
+  const raw = bodyResult.value || {};
+  const id = normalizeText(raw.id) || crypto.randomUUID();
+  const employeeId = normalizeText(raw.employeeId);
+  const employeeUid = normalizeText(raw.employeeUid);
+  const payrollMonth = normalizePayrollMonth(raw.payrollMonth);
+  const monthStart = normalizeIsoDateKey(raw.monthStart);
+  const monthEnd = normalizeIsoDateKey(raw.monthEnd);
+  if (!employeeId || !employeeUid || !payrollMonth || !monthStart || !monthEnd) {
+    return json(400, { ok: false, message: "invalid_payroll_identity_or_month" });
+  }
+  const employee = await db.prepare("SELECT id, auth_uid FROM employees WHERE id = ? OR auth_uid = ? LIMIT 1").bind(employeeId, employeeUid).first();
+  if (!employee) return json(404, { ok: false, message: "employee_not_found" });
+  const existing = await db.prepare("SELECT id FROM employee_payroll_records WHERE employee_id = ? AND payroll_month = ? LIMIT 1").bind(employee.id, payrollMonth).first();
+  if (existing) return json(409, { ok: false, message: "payroll_record_exists" });
+
+  const requestedAdvanceIds = normalizeStringArray(raw.salaryAdvanceRequestIds);
+  let advanceRows = [];
+  if (requestedAdvanceIds.length) {
+    const placeholders = requestedAdvanceIds.map(() => "?").join(",");
+    const result = await db.prepare(
+      `SELECT * FROM employee_service_requests
+       WHERE id IN (${placeholders}) AND request_type = 'salary_advance'
+         AND status = 'approved' AND payroll_record_id IS NULL
+         AND (employee_id = ? OR employee_uid = ?)`
+    ).bind(...requestedAdvanceIds, employee.id, employeeUid).all();
+    advanceRows = result.results || [];
+    if (advanceRows.length !== requestedAdvanceIds.length) {
+      return json(409, { ok: false, message: "invalid_or_settled_salary_advance" });
+    }
+  }
+
+  const salaryDeductions = normalizePayrollDeductions(raw.salaryDeductions);
+  const manualDeductionTotal = salaryDeductions.reduce(
+    (sum, item) => sum + item.amount,
+    0
+  );
+  const salaryAdvanceDeduction = advanceRows.reduce(
+    (sum, row) => sum + Math.max(0, Number(row.amount || 0)),
+    0
+  );
+  const baseSalary = Math.max(0, Number(raw.baseSalary || 0));
+  const allowances = Math.max(0, Number(raw.allowances || 0));
+  const attendanceAbsenceDeduction = Math.max(
+    0,
+    Number(raw.attendanceAbsenceDeduction || 0)
+  );
+  const combinedAbsenceDeduction = Math.max(
+    0,
+    Number(raw.absenceDeduction || 0)
+  );
+  const delayDeduction = Math.max(0, Number(raw.delayDeduction || 0));
+  const overtimeBonus = Math.max(0, Number(raw.overtimeBonus || 0));
+  const insuranceDeduction = Math.max(
+    0,
+    Number(raw.insuranceDeduction || 0)
+  );
+  const financialTotals = computePayrollFinancialTotals({
+    baseSalary,
+    allowances,
+    overtimeBonus,
+    delayDeduction,
+    attendanceAbsenceDeduction,
+    absenceDeduction: combinedAbsenceDeduction,
+    insuranceDeduction,
+    manualSalaryDeductions: manualDeductionTotal,
+    salaryAdvanceDeduction,
+  });
+  const { totalSalaryDeductions, grossSalary, finalSalary } = financialTotals;
+  const now = new Date().toISOString();
+  const normalized = {
+    id, employeeId: employee.id, employeeUid, payrollMonth, monthStart, monthEnd,
+    calculationStartDate: normalizeIsoDateKey(raw.calculationStartDate || monthStart) || monthStart,
+    calculationEndDate: normalizeIsoDateKey(raw.calculationEndDate || monthEnd) || monthEnd,
+    baseSalary,
+    housingAllowance: nullableNumber(raw.housingAllowance),
+    transportationAllowance: nullableNumber(raw.transportationAllowance),
+    otherAllowances: nullableNumber(raw.otherAllowances),
+    allowances,
+    absenceDays: Math.max(0, Number(raw.absenceDays || 0)),
+    absenceDeduction: combinedAbsenceDeduction,
+    expectedWorkHours: nullableNumber(raw.expectedWorkHours),
+    actualWorkedHours: nullableNumber(raw.actualWorkedHours),
+    attendanceLateHours: nullableNumber(raw.attendanceLateHours),
+    attendanceMissingHours: nullableNumber(raw.attendanceMissingHours),
+    attendanceOvertimeHours: nullableNumber(raw.attendanceOvertimeHours),
+    attendanceCompleteDays: nullableNumber(raw.attendanceCompleteDays),
+    attendanceIncompleteDays: nullableNumber(raw.attendanceIncompleteDays),
+    attendanceAbsentDays: nullableNumber(raw.attendanceAbsentDays),
+    attendanceAbsenceDeduction,
+    attendanceSource: normalizeText(raw.attendanceSource) || "cloudflare_attendance",
+    attendanceSummary: isPlainObject(raw.attendanceSummary) ? raw.attendanceSummary : {},
+    scheduleSnapshot: isPlainObject(raw.scheduleSnapshot) ? raw.scheduleSnapshot : {},
+    delayDeduction, overtimeBonus, insuranceDeduction, salaryDeductions,
+    salaryAdvanceDeduction,
+    salaryAdvanceRequestIds: advanceRows.map(row => row.id),
+    totalSalaryDeductions,
+    absenceEntries: Array.isArray(raw.absenceEntries) ? raw.absenceEntries : [],
+    grossSalary,
+    finalSalary,
+    mudadDocument: isPlainObject(raw.mudadDocument) ? raw.mudadDocument : null,
+    status: "finalized",
+  };
+  try {
+    const statements = [buildPayrollInsertStatement(db, normalized, now, requester.uid, requester.email || null)];
+    for (const row of advanceRows) {
+      statements.push(db.prepare(
+        `UPDATE employee_service_requests SET payroll_record_id = ?, payroll_month = ?, settled_at = ?, settled_by = ?, updated_at = ? WHERE id = ? AND payroll_record_id IS NULL`
+      ).bind(id, payrollMonth, now, requester.uid, now, row.id));
+    }
+    statements.push(buildAuditStatement(db, request, requester, { action: "payroll.create", entityType: "employee_payroll_record", entityId: id, before: null, after: normalized }));
+    await db.batch(statements);
+    const row = await db.prepare("SELECT * FROM employee_payroll_records WHERE id = ?").bind(id).first();
+    return json(201, { ok: true, payrollRecord: mapPayrollRecordRow(row) });
+  } catch (error) {
+    return databaseMutationError("payroll_record_create_failed", error);
+  }
+}
+
+export function buildPayrollInsertStatement(db, row, now, actorUid, actorEmail, source = "hr_api") {
+  return db.prepare(
+    `INSERT INTO employee_payroll_records (
+      id, employee_id, employee_uid, payroll_month, month_start, month_end,
+      calculation_start_date, calculation_end_date, base_salary, housing_allowance,
+      transportation_allowance, other_allowances, allowances, absence_days,
+      absence_deduction, expected_work_hours, actual_worked_hours,
+      attendance_late_hours, attendance_missing_hours, attendance_overtime_hours,
+      attendance_complete_days, attendance_incomplete_days, attendance_absent_days,
+      attendance_absence_deduction, attendance_source, attendance_summary_json,
+      schedule_snapshot_json, delay_deduction, overtime_bonus, insurance_deduction,
+      salary_deductions_json, salary_advance_deduction,
+      salary_advance_request_ids_json, total_salary_deductions, absence_entries_json,
+      gross_salary, final_salary, mudad_document_json, status, source,
+      source_updated_at, migrated_at, created_at, created_by_uid, created_by_email, updated_at
+    ) VALUES (?, (SELECT id FROM employees WHERE id = ? LIMIT 1), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).bind(
+    row.id, row.employeeId, row.employeeUid, row.payrollMonth, row.monthStart, row.monthEnd,
+    row.calculationStartDate, row.calculationEndDate, row.baseSalary, row.housingAllowance,
+    row.transportationAllowance, row.otherAllowances, row.allowances, row.absenceDays,
+    row.absenceDeduction, row.expectedWorkHours, row.actualWorkedHours,
+    row.attendanceLateHours, row.attendanceMissingHours, row.attendanceOvertimeHours,
+    row.attendanceCompleteDays, row.attendanceIncompleteDays, row.attendanceAbsentDays,
+    row.attendanceAbsenceDeduction, row.attendanceSource, JSON.stringify(row.attendanceSummary || {}),
+    JSON.stringify(row.scheduleSnapshot || {}), row.delayDeduction, row.overtimeBonus,
+    row.insuranceDeduction, JSON.stringify(row.salaryDeductions || []),
+    row.salaryAdvanceDeduction, JSON.stringify(row.salaryAdvanceRequestIds || []),
+    row.totalSalaryDeductions, JSON.stringify(row.absenceEntries || []), row.grossSalary,
+    row.finalSalary, row.mudadDocument ? JSON.stringify(row.mudadDocument) : null,
+    row.status || "finalized", source, row.sourceUpdatedAt || null,
+    source === "firestore" ? now : null, row.createdAt || now,
+    row.createdByUid || actorUid || null, row.createdByEmail || actorEmail || null,
+    row.updatedAt || now
+  );
+}
+
+async function importPayrollSnapshot(request, env) {
+  const authorized = await verifySyncSecret(request, env.HR_SYNC_SECRET);
+  if (!authorized) return json(401, { ok: false, message: "invalid_hr_sync_secret" });
+  const bodyResult = await readJsonBody(request, 5_000_000);
+  if (!bodyResult.ok) return bodyResult.response;
+  const rows = Array.isArray(bodyResult.value?.payrollRecords) ? bodyResult.value.payrollRecords : [];
+  if (rows.length > MAX_IMPORT_ROWS) return json(413, { ok: false, message: "payroll_import_batch_too_large", maxRows: MAX_IMPORT_ROWS });
+  const normalizedRows = rows.map(normalizeImportedPayrollRecord).filter(Boolean);
+  if (normalizedRows.length !== rows.length) {
+    return json(422, { ok: false, message: "payroll_import_validation_failed", received: rows.length, valid: normalizedRows.length });
+  }
+  const runId = normalizeText(bodyResult.value?.runId) || crypto.randomUUID();
+  const complete = Boolean(bodyResult.value?.complete);
+  const now = new Date().toISOString();
+  const statements = [
+    env.HR_DB.prepare(
+      `INSERT INTO hr_migration_runs (id, source, status, payroll_records_received, details_json, started_at)
+       VALUES (?, 'firestore_payroll', 'running', ?, '{}', ?)
+       ON CONFLICT(id) DO UPDATE SET status = 'running', payroll_records_received = payroll_records_received + excluded.payroll_records_received`
+    ).bind(runId, normalizedRows.length, now),
+  ];
+  for (const row of normalizedRows) {
+    statements.push(
+      env.HR_DB.prepare("DELETE FROM employee_payroll_records WHERE id = ?").bind(row.id),
+      buildPayrollInsertStatement(env.HR_DB, row, now, row.createdByUid, row.createdByEmail, "firestore")
+    );
+  }
+  if (complete) statements.push(env.HR_DB.prepare("UPDATE hr_migration_runs SET status = 'completed', finished_at = ? WHERE id = ?").bind(now, runId));
+  try {
+    await env.HR_DB.batch(statements);
+    return json(200, { ok: true, runId, complete, payrollRecordsReceived: normalizedRows.length });
+  } catch (error) {
+    return databaseMutationError("payroll_import_failed", error);
   }
 }
 
@@ -2780,7 +3289,7 @@ function withCors(response, request, env) {
     response.headers.set("Access-Control-Allow-Origin", origin);
     response.headers.set("Vary", "Origin");
   }
-  response.headers.set("Access-Control-Allow-Methods", "GET,POST,PATCH,PUT,OPTIONS");
+  response.headers.set("Access-Control-Allow-Methods", "GET,POST,PATCH,PUT,DELETE,OPTIONS");
   response.headers.set(
     "Access-Control-Allow-Headers",
     "Authorization,Content-Type,X-HR-Sync-Secret"
@@ -2798,6 +3307,15 @@ function json(status, payload) {
       "Cache-Control": "no-store",
     },
   });
+}
+
+export function isPayrollImportPath(pathname) {
+  const normalized = normalizePathname(pathname);
+  return (
+    normalized === "/internal/hr/payroll/import" ||
+    normalized === "/internal/hr/payroll-import" ||
+    normalized === "/internal/hr/import/payroll"
+  );
 }
 
 function normalizePathname(value) {

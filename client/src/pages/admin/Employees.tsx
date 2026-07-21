@@ -173,16 +173,20 @@ import {
   cancelHrCoreLeaveDate,
   createHrCoreAbsence,
   createHrCoreLeaveRequest,
+  createHrCorePayrollRecord,
   deleteHrCoreAbsence,
   isHrCoreConfigured,
   listHrCoreAbsences,
   listHrCoreEmployees,
   listHrCoreLeaveRequests,
+  listHrCorePayrollAdvances,
+  listHrCorePayrollRecords,
   listHrCoreServiceRequests,
   reviewHrCoreLeaveRequest,
   reviewHrCoreServiceRequest,
   updateHrCoreEmployee,
   type HrCoreEmployee,
+  type HrCoreServiceRequest,
 } from "@/lib/hrCoreApi";
 import {
   EMPLOYEE_LEAVE_REQUESTS_COLLECTION,
@@ -1977,6 +1981,12 @@ export default function EmployeesManagementPage() {
   >([]);
   const [employeePayrollRecordsLoading, setEmployeePayrollRecordsLoading] =
     useState(false);
+  const [approvedPayrollAdvances, setApprovedPayrollAdvances] = useState<
+    HrCoreServiceRequest[]
+  >([]);
+  const [approvedPayrollAdvancesLoading, setApprovedPayrollAdvancesLoading] =
+    useState(false);
+  const [payrollRevision, setPayrollRevision] = useState(0);
   const [payrollMonthInput, setPayrollMonthInput] = useState(
     buildEmployeePayrollMonthInput
   );
@@ -2777,14 +2787,57 @@ export default function EmployeesManagementPage() {
   ]);
 
   useEffect(() => {
-    if (!selectedEmployeeDocumentId) {
+    if (!selectedEmployeeDocumentId && !selectedEmployeeAuthUid) {
       setEmployeePayrollRecords([]);
+      setApprovedPayrollAdvances([]);
       setEmployeePayrollRecordsLoading(false);
+      setApprovedPayrollAdvancesLoading(false);
       resetPayrollMudadDocument();
       return;
     }
 
     setEmployeePayrollRecordsLoading(true);
+
+    if (HR_CORE_D1_ENABLED && isHrCoreConfigured()) {
+      let active = true;
+      setApprovedPayrollAdvancesLoading(true);
+      Promise.all([
+        listHrCorePayrollRecords({
+          employeeId: selectedEmployeeDocumentId || undefined,
+          employeeUid: selectedEmployeeAuthUid || undefined,
+          limit: 200,
+        }),
+        listHrCorePayrollAdvances({
+          employeeId: selectedEmployeeDocumentId || undefined,
+          employeeUid: selectedEmployeeAuthUid || undefined,
+        }),
+      ])
+        .then(([payrollResult, advancesResult]) => {
+          if (!active) return;
+          setEmployeePayrollRecords(
+            sortEmployeePayrollRecords(
+              payrollResult.payrollRecords.map(record =>
+                normalizeEmployeePayrollRecord(record.id, record as Record<string, any>)
+              )
+            )
+          );
+          setApprovedPayrollAdvances(advancesResult.advances || []);
+          setEmployeePayrollRecordsLoading(false);
+          setApprovedPayrollAdvancesLoading(false);
+        })
+        .catch(error => {
+          if (!active) return;
+          console.error("employee_payroll_records_hr_core_error", error);
+          setEmployeePayrollRecords([]);
+          setApprovedPayrollAdvances([]);
+          setEmployeePayrollRecordsLoading(false);
+          setApprovedPayrollAdvancesLoading(false);
+        });
+
+      return () => {
+        active = false;
+      };
+    }
 
     const unsubscribe = onSnapshot(
       query(
@@ -2801,17 +2854,21 @@ export default function EmployeesManagementPage() {
           )
         );
         setEmployeePayrollRecords(rows);
+        setApprovedPayrollAdvances([]);
         setEmployeePayrollRecordsLoading(false);
+        setApprovedPayrollAdvancesLoading(false);
       },
       error => {
         console.error("employee_payroll_records_admin_snapshot_error", error);
         setEmployeePayrollRecords([]);
+        setApprovedPayrollAdvances([]);
         setEmployeePayrollRecordsLoading(false);
+        setApprovedPayrollAdvancesLoading(false);
       }
     );
 
     return () => unsubscribe();
-  }, [selectedEmployeeDocumentId]);
+  }, [selectedEmployeeDocumentId, selectedEmployeeAuthUid, payrollRevision]);
 
   useEffect(() => {
     resetPayrollMudadDocument();
@@ -3992,6 +4049,16 @@ export default function EmployeesManagementPage() {
       }, 0),
     [salaryDeductions]
   );
+  const approvedPayrollAdvanceTotal = useMemo(
+    () =>
+      approvedPayrollAdvances.reduce((sum, request) => {
+        const amount = Number(request.amount || 0);
+        return sum + (Number.isFinite(amount) ? Math.max(0, amount) : 0);
+      }, 0),
+    [approvedPayrollAdvances]
+  );
+  const payrollTotalDeductions =
+    totalSalaryDeductions + approvedPayrollAdvanceTotal;
 
   const calculatedDailyRate = useMemo(() => {
     if (!Number.isFinite(baseSalaryNumber) || baseSalaryNumber <= 0) return 0;
@@ -4092,10 +4159,10 @@ export default function EmployeesManagementPage() {
       Math.max(
         0,
         calculatedGrossSalary -
-          totalSalaryDeductions -
+          payrollTotalDeductions -
           effectiveInsuranceDeduction
       ),
-    [calculatedGrossSalary, effectiveInsuranceDeduction, totalSalaryDeductions]
+    [calculatedGrossSalary, effectiveInsuranceDeduction, payrollTotalDeductions]
   );
 
   const handleFormChange = <K extends keyof EmployeeFormValues>(
@@ -4630,15 +4697,9 @@ export default function EmployeesManagementPage() {
     const overtimeHourlyRate = toNullableNumber(form.overtimeHourlyRate);
     const insuranceDeduction = toNullableNumber(form.insuranceDeduction);
     const housingAllowance = toNullableNumber(form.housingAllowance);
-    const transportationAllowance = toNullableNumber(
-      form.transportationAllowance
-    );
+    const transportationAllowance = toNullableNumber(form.transportationAllowance);
     const otherAllowances = toNullableNumber(form.otherAllowances);
-    const allowances = [
-      housingAllowance,
-      transportationAllowance,
-      otherAllowances,
-    ]
+    const allowances = [housingAllowance, transportationAllowance, otherAllowances]
       .filter((value): value is number => typeof value === "number")
       .reduce((sum, value) => sum + value, 0);
     const scheduleSnapshot = {
@@ -4647,83 +4708,85 @@ export default function EmployeesManagementPage() {
       weeklyOffDays: selectedEmployeeShiftSchedule.weeklyOffDays,
     };
     const payrollCalculationStartDate =
-      activePayrollCalculationRange?.calculationStartDate ||
-      selectedPayrollMonthMeta.monthStart;
+      activePayrollCalculationRange?.calculationStartDate || selectedPayrollMonthMeta.monthStart;
     const payrollCalculationEndDate =
-      activePayrollCalculationRange?.calculationEndDate ||
-      selectedPayrollMonthMeta.monthEnd;
+      activePayrollCalculationRange?.calculationEndDate || selectedPayrollMonthMeta.monthEnd;
+
     if (baseSalary === null || baseSalary <= 0) {
       toast.error("يجب إدخال الراتب الأساسي أولًا.");
       return;
     }
-
     if (!scheduleSnapshot.startTime || !scheduleSnapshot.endTime) {
-      toast.error(
-        "يجب تحديد وقت الدوام من بيانات الموظف قبل الاحتساب من الحضور"
-      );
+      toast.error("يجب تحديد وقت الدوام من بيانات الموظف قبل الاحتساب من الحضور");
       return;
     }
-
     if (!selectedEmployeeAuthUid) {
       toast.error("لا يوجد معرف حضور مرتبط بالموظف.");
       return;
     }
-
-    if (
-      payrollMudadDocument &&
-      !isSupportedMudadPayrollDocument(payrollMudadDocument)
-    ) {
+    if (payrollMudadDocument && !isSupportedMudadPayrollDocument(payrollMudadDocument)) {
       toast.error("الصيغ المدعومة لمستند مدد هي PDF أو PNG أو JPG فقط.");
       return;
     }
 
     setCreatingPayrollRecord(true);
     try {
-      const absencesSnapshot = await getDocs(
-        query(
-          collection(db, EMPLOYEE_ABSENCES_COLLECTION),
-          where("employeeId", "==", selectedEmployeeDocumentId)
-        )
-      );
-
-      const monthlyAbsences = sortEmployeeAbsences(
-        absencesSnapshot.docs.map(docSnapshot =>
-          normalizeEmployeeAbsence(
-            docSnapshot.id,
-            (docSnapshot.data() as Record<string, any>) || {}
+      let monthlyAbsences: EmployeeAbsenceRecord[];
+      if (HR_CORE_D1_ENABLED && isHrCoreConfigured()) {
+        monthlyAbsences = employeeAbsences.filter(
+          absence =>
+            absence.date >= payrollCalculationStartDate &&
+            absence.date <= payrollCalculationEndDate
+        );
+      } else {
+        const absencesSnapshot = await getDocs(
+          query(
+            collection(db, EMPLOYEE_ABSENCES_COLLECTION),
+            where("employeeId", "==", selectedEmployeeDocumentId)
           )
-        )
-      ).filter(
-        absence =>
-          absence.date >= payrollCalculationStartDate &&
-          absence.date <= payrollCalculationEndDate
-      );
+        );
+        monthlyAbsences = sortEmployeeAbsences(
+          absencesSnapshot.docs.map(docSnapshot =>
+            normalizeEmployeeAbsence(
+              docSnapshot.id,
+              (docSnapshot.data() as Record<string, any>) || {}
+            )
+          )
+        ).filter(
+          absence =>
+            absence.date >= payrollCalculationStartDate &&
+            absence.date <= payrollCalculationEndDate
+        );
+      }
 
-      const normalizedSalaryDeductions =
+      const manualSalaryDeductions =
         normalizeSalaryDeductionsForPersistence(salaryDeductions);
+      const advanceSalaryDeductions = approvedPayrollAdvances.map(advance => ({
+        id: `salary-advance-${advance.id}`,
+        title: `سلفة راتب معتمدة${advance.requestDate ? ` - ${advance.requestDate}` : ""}`,
+        amount: Math.max(0, Number(advance.amount || 0)),
+      }));
+      const effectiveSalaryDeductions = [
+        ...manualSalaryDeductions,
+        ...advanceSalaryDeductions,
+      ];
+
       const attendanceSummary = await buildAttendancePayrollSummary(
         activePayrollCalculationRange,
         payrollCalculationDate,
         monthlyAbsences.map(absence => absence.date)
       );
-      if (attendanceSummary) {
-        setAttendancePayrollSummary(attendanceSummary);
-      }
-      const effectiveExpectedWorkHours =
-        payrollRateWorkHours || expectedWorkHours;
-      const effectiveAttendanceExpectedHours =
-        attendanceSummary?.expectedHours ?? 0;
-      const effectiveActualWorkedHours =
-        attendanceSummary?.actualHours ?? actualWorkedHours;
+      if (attendanceSummary) setAttendancePayrollSummary(attendanceSummary);
+
+      const effectiveExpectedWorkHours = payrollRateWorkHours || expectedWorkHours;
+      const effectiveAttendanceExpectedHours = attendanceSummary?.expectedHours ?? 0;
+      const effectiveActualWorkedHours = attendanceSummary?.actualHours ?? actualWorkedHours;
       const effectiveAttendanceAbsentDays = attendanceSummary?.absentDays ?? 0;
-      const attendanceAbsentDateKeys = new Set(
-        attendanceSummary?.absentDateKeys || []
-      );
+      const attendanceAbsentDateKeys = new Set(attendanceSummary?.absentDateKeys || []);
       const payrollAbsences = monthlyAbsences.filter(
         absence => !attendanceAbsentDateKeys.has(absence.date)
       );
-      const effectiveExpectedWorkDays =
-        payrollExpectedWorkDaysNumber || expectedWorkDays;
+      const effectiveExpectedWorkDays = payrollExpectedWorkDaysNumber || expectedWorkDays;
       const payrollComputation = computeEmployeePayroll({
         baseSalary,
         allowances,
@@ -4736,28 +4799,22 @@ export default function EmployeesManagementPage() {
         actualWorkedHours: effectiveActualWorkedHours,
         overtimeHourlyRate,
         insuranceDeduction,
-        salaryDeductions: normalizedSalaryDeductions,
+        salaryDeductions: effectiveSalaryDeductions,
         absences: payrollAbsences,
       });
       const combinedAbsenceDays =
-        payrollComputation.absenceDays +
-        payrollComputation.attendanceAbsentDays;
+        payrollComputation.absenceDays + payrollComputation.attendanceAbsentDays;
       const combinedAbsenceDeduction =
-        payrollComputation.absenceDeduction +
-        payrollComputation.attendanceAbsenceDeduction;
-
-      const payrollRef = doc(
-        db,
-        EMPLOYEE_PAYROLL_RECORDS_COLLECTION,
-        buildEmployeePayrollRecordId(
-          selectedEmployeeDocumentId,
-          selectedPayrollMonthMeta.payrollMonth
-        )
+        payrollComputation.absenceDeduction + payrollComputation.attendanceAbsenceDeduction;
+      const payrollRecordId = buildEmployeePayrollRecordId(
+        selectedEmployeeDocumentId,
+        selectedPayrollMonthMeta.payrollMonth
       );
+
       const uploadedMudadDocument = payrollMudadDocument
         ? await uploadDocumentToCloudflare({
             entityType: "employee_payroll_record",
-            entityId: payrollRef.id,
+            entityId: payrollRecordId,
             category: "employee_payroll_mudad_document",
             file: payrollMudadDocument,
             kind: "attachment",
@@ -4780,63 +4837,87 @@ export default function EmployeesManagementPage() {
           }
         : null;
 
-      await runTransaction(db, async tx => {
-        const existingRecord = await tx.get(payrollRef);
-        if (existingRecord.exists()) {
-          throw new Error("payroll_record_exists");
-        }
+      const payrollPayload = {
+        id: payrollRecordId,
+        employeeId: selectedEmployeeDocumentId,
+        employeeUid: selectedEmployeeAuthUid || selectedEmployee.id,
+        payrollMonth: selectedPayrollMonthMeta.payrollMonth,
+        monthStart: selectedPayrollMonthMeta.monthStart,
+        monthEnd: selectedPayrollMonthMeta.monthEnd,
+        calculationStartDate: payrollCalculationStartDate,
+        calculationEndDate: payrollCalculationEndDate,
+        baseSalary: payrollComputation.baseSalary,
+        allowances: payrollComputation.allowances,
+        housingAllowance,
+        transportationAllowance,
+        otherAllowances,
+        absenceDays: combinedAbsenceDays,
+        absenceDeduction: combinedAbsenceDeduction,
+        delayDeduction: payrollComputation.delayDeduction,
+        overtimeBonus: payrollComputation.overtimeBonus,
+        insuranceDeduction: payrollComputation.insuranceDeduction,
+        salaryDeductions: manualSalaryDeductions,
+        salaryAdvanceRequestIds: approvedPayrollAdvances.map(advance => advance.id),
+        totalSalaryDeductions: payrollComputation.totalSalaryDeductions,
+        expectedWorkHours: effectiveExpectedWorkHours,
+        actualWorkedHours: effectiveActualWorkedHours,
+        attendanceLateHours: attendanceSummary?.lateHours ?? null,
+        attendanceMissingHours: attendanceSummary?.missingHours ?? null,
+        attendanceOvertimeHours: attendanceSummary?.overtimeHours ?? null,
+        attendanceCompleteDays: attendanceSummary?.completeDays ?? null,
+        attendanceIncompleteDays: attendanceSummary?.incompleteDays ?? null,
+        attendanceAbsentDays: payrollComputation.attendanceAbsentDays,
+        attendanceAbsenceDeduction: payrollComputation.attendanceAbsenceDeduction,
+        attendanceSource: "cloudflare_attendance",
+        attendanceSummary: attendanceSummary || {},
+        scheduleSnapshot,
+        absenceEntries: payrollAbsences.map(absence => ({
+          date: absence.date,
+          type: absence.type,
+          note: absence.note || null,
+        })),
+        finalSalary: payrollComputation.finalSalary,
+        mudadDocument: mudadDocumentPayload,
+      };
 
-        tx.set(payrollRef, {
-          employeeId: selectedEmployeeDocumentId,
-          employeeUid: selectedEmployeeAuthUid || selectedEmployee.id,
-          payrollMonth: selectedPayrollMonthMeta.payrollMonth,
-          monthStart: selectedPayrollMonthMeta.monthStart,
-          monthEnd: selectedPayrollMonthMeta.monthEnd,
-          calculationStartDate: payrollCalculationStartDate,
-          calculationEndDate: payrollCalculationEndDate,
-          baseSalary: payrollComputation.baseSalary,
-          allowances: payrollComputation.allowances,
-          housingAllowance,
-          transportationAllowance,
-          otherAllowances,
-          absenceDays: combinedAbsenceDays,
-          absenceDeduction: combinedAbsenceDeduction,
-          delayDeduction: payrollComputation.delayDeduction,
-          overtimeBonus: payrollComputation.overtimeBonus,
-          insuranceDeduction: payrollComputation.insuranceDeduction,
-          salaryDeductions: normalizedSalaryDeductions,
-          totalSalaryDeductions: payrollComputation.totalSalaryDeductions,
-          expectedWorkHours: effectiveExpectedWorkHours,
-          actualWorkedHours: effectiveActualWorkedHours,
-          attendanceLateHours: attendanceSummary?.lateHours ?? null,
-          attendanceMissingHours: attendanceSummary?.missingHours ?? null,
-          attendanceOvertimeHours: attendanceSummary?.overtimeHours ?? null,
-          attendanceCompleteDays: attendanceSummary?.completeDays ?? null,
-          attendanceIncompleteDays: attendanceSummary?.incompleteDays ?? null,
-          attendanceAbsentDays: payrollComputation.attendanceAbsentDays,
-          attendanceAbsenceDeduction:
-            payrollComputation.attendanceAbsenceDeduction,
-          scheduleSnapshot,
-          absenceCount: payrollAbsences.length,
-          absenceEntriesSummary: payrollAbsences.map(absence => ({
-            date: absence.date,
-            type: absence.type,
-          })),
-          finalSalary: payrollComputation.finalSalary,
-          mudadDocument: mudadDocumentPayload,
-          createdAt: serverTimestamp(),
-          createdByUid: user?.uid || null,
-          createdByEmail: user?.email || null,
+      if (HR_CORE_D1_ENABLED && isHrCoreConfigured()) {
+        const created = await createHrCorePayrollRecord(payrollPayload);
+        const normalizedRecord = normalizeEmployeePayrollRecord(
+          created.payrollRecord.id,
+          created.payrollRecord as Record<string, any>
+        );
+        setEmployeePayrollRecords(current =>
+          sortEmployeePayrollRecords([
+            normalizedRecord,
+            ...current.filter(record => record.id !== normalizedRecord.id),
+          ])
+        );
+        setApprovedPayrollAdvances([]);
+        setPayrollRevision(current => current + 1);
+      } else {
+        const payrollRef = doc(db, EMPLOYEE_PAYROLL_RECORDS_COLLECTION, payrollRecordId);
+        await runTransaction(db, async tx => {
+          const existingRecord = await tx.get(payrollRef);
+          if (existingRecord.exists()) throw new Error("payroll_record_exists");
+          tx.set(payrollRef, {
+            ...payrollPayload,
+            salaryDeductions: effectiveSalaryDeductions,
+            createdAt: serverTimestamp(),
+            createdByUid: user?.uid || null,
+            createdByEmail: user?.email || null,
+          });
         });
-      });
+      }
 
       try {
         await logAuditEvent({
           action: "employee_payroll_record_created",
           category: "finance",
           entityType: "employee_payroll_record",
-          entityId: payrollRef.id,
-          entityPath: payrollRef.path,
+          entityId: payrollRecordId,
+          entityPath: HR_CORE_D1_ENABLED
+            ? `cloudflare:employee_payroll_records/${payrollRecordId}`
+            : `${EMPLOYEE_PAYROLL_RECORDS_COLLECTION}/${payrollRecordId}`,
           relatedIds: { userId: selectedEmployee.id },
           source: buildAuditSource({
             area: "hr",
@@ -4845,45 +4926,27 @@ export default function EmployeesManagementPage() {
           }),
           message: `Created payroll record for ${selectedEmployeeLabel}`,
           meta: {
-            employeeId: selectedEmployeeDocumentId,
-            employeeUid: selectedEmployeeAuthUid || selectedEmployee.id,
-            payrollMonth: selectedPayrollMonthMeta.payrollMonth,
-            baseSalary: payrollComputation.baseSalary,
-            allowances: payrollComputation.allowances,
-            housingAllowance,
-            transportationAllowance,
-            otherAllowances,
-            absenceDays: combinedAbsenceDays,
-            absenceDeduction: combinedAbsenceDeduction,
-            delayDeduction: payrollComputation.delayDeduction,
-            overtimeBonus: payrollComputation.overtimeBonus,
-            totalSalaryDeductions: payrollComputation.totalSalaryDeductions,
-            finalSalary: payrollComputation.finalSalary,
-            scheduleSnapshot,
-            mudadDocument: mudadDocumentPayload
-              ? {
-                  id: mudadDocumentPayload.id,
-                  fileName: mudadDocumentPayload.fileName,
-                  filePath: mudadDocumentPayload.filePath,
-                  contentType: mudadDocumentPayload.contentType,
-                  fileSize: mudadDocumentPayload.fileSize,
-                }
-              : null,
+            ...payrollPayload,
+            salaryAdvanceDeduction: advanceSalaryDeductions.reduce(
+              (sum, item) => sum + item.amount,
+              0
+            ),
           },
         });
       } catch (auditError) {
         console.error("employee_payroll_record_audit_failed", auditError);
       }
 
-      toast.success(
-        `تم إنشاء سجل راتب ${selectedPayrollMonthMeta.label} بنجاح.`
-      );
+      toast.success(`تم إنشاء سجل راتب ${selectedPayrollMonthMeta.label} بنجاح.`);
       resetPayrollMudadDocument();
     } catch (error) {
       console.error("employee_payroll_record_create_failed", error);
-
-      if (error instanceof Error && error.message === "payroll_record_exists") {
+      const code = error instanceof Error ? (error as Error & { code?: string }).code || error.message : "";
+      if (code === "payroll_record_exists") {
         toast.error("يوجد سجل راتب محفوظ لهذا الشهر بالفعل.");
+      } else if (code === "invalid_or_settled_salary_advance") {
+        toast.error("إحدى السلف المعتمدة خُصمت سابقًا أو لم تعد صالحة.");
+        setPayrollRevision(current => current + 1);
       } else {
         toast.error("تعذر إنشاء سجل راتب نهاية الشهر.");
       }
@@ -9497,6 +9560,29 @@ export default function EmployeesManagementPage() {
                                   </div>
                                 </div>
                               ) : null}
+
+                              {approvedPayrollAdvancesLoading ? (
+                                <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                                  جاري تحميل السلف المعتمدة...
+                                </div>
+                              ) : approvedPayrollAdvances.length ? (
+                                <div className="rounded-[18px] border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-950">
+                                  <div className="font-semibold">
+                                    سلف راتب معتمدة ستُخصم تلقائيًا
+                                  </div>
+                                  <div className="mt-1 text-xs leading-6 text-violet-800">
+                                    {approvedPayrollAdvances
+                                      .map(
+                                        request =>
+                                          `${formatNumberEN(Number(request.amount || 0))} ر.س${request.requestDate ? ` (${request.requestDate})` : ""}`
+                                      )
+                                      .join("، ")}
+                                  </div>
+                                  <div className="mt-2 font-semibold">
+                                    الإجمالي: {formatNumberEN(approvedPayrollAdvanceTotal)} ر.س
+                                  </div>
+                                </div>
+                              ) : null}
                             </div>
 
                             <div className="space-y-4 rounded-[22px] border border-slate-200 bg-white p-4">
@@ -9519,7 +9605,7 @@ export default function EmployeesManagementPage() {
                                     </div>
                                     <div className="mt-1 text-lg font-semibold text-slate-950 tabular-nums">
                                       {formatNumberEN(
-                                        totalSalaryDeductions || 0
+                                        payrollTotalDeductions || 0
                                       )}{" "}
                                       ر.س
                                     </div>

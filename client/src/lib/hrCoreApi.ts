@@ -414,6 +414,10 @@ export type HrCoreServiceRequest = {
   reviewedBy: string | null;
   reviewedByEmail: string | null;
   reviewedByName: string | null;
+  payrollRecordId?: string | null;
+  payrollMonth?: string | null;
+  settledAt?: string | null;
+  settledBy?: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -570,5 +574,97 @@ export async function reviewHrCoreServiceRequest(
   return requestHrCore<{ ok: true; serviceRequest: HrCoreServiceRequest }>(
     `/api/hr/service-requests/${encodeURIComponent(id)}/review`,
     { method: "PATCH", body: JSON.stringify(input) }
+  );
+}
+
+
+export type HrCorePayrollRecord = {
+  id: string;
+  employeeId: string | null;
+  employeeUid: string;
+  payrollMonth: string;
+  monthStart: string;
+  monthEnd: string;
+  calculationStartDate: string | null;
+  calculationEndDate: string | null;
+  baseSalary: number;
+  housingAllowance: number | null;
+  transportationAllowance: number | null;
+  otherAllowances: number | null;
+  allowances: number;
+  absenceDays: number;
+  absenceDeduction: number;
+  expectedWorkHours: number | null;
+  actualWorkedHours: number | null;
+  attendanceLateHours: number | null;
+  attendanceMissingHours: number | null;
+  attendanceOvertimeHours: number | null;
+  attendanceCompleteDays: number | null;
+  attendanceIncompleteDays: number | null;
+  attendanceAbsentDays: number | null;
+  attendanceAbsenceDeduction: number | null;
+  attendanceSource: string;
+  attendanceSummary: Record<string, unknown>;
+  scheduleSnapshot: Record<string, unknown> | null;
+  delayDeduction: number;
+  overtimeBonus: number;
+  insuranceDeduction: number;
+  salaryDeductions: Array<{ id?: string; title?: string; amount?: number }>;
+  salaryAdvanceDeduction: number;
+  salaryAdvanceRequestIds: string[];
+  totalSalaryDeductions: number;
+  absenceEntries: Array<{ date: string; type: string; note?: string | null }>;
+  grossSalary: number | null;
+  finalSalary: number;
+  mudadDocument: Record<string, unknown> | null;
+  status: string;
+  source: string;
+  sourceUpdatedAt: string | null;
+  migratedAt: string | null;
+  createdAt: string;
+  createdByUid: string | null;
+  createdByEmail: string | null;
+  updatedAt: string;
+};
+
+export async function listHrCorePayrollRecords(
+  input: {
+    employeeId?: string;
+    employeeUid?: string;
+    payrollMonth?: string;
+    limit?: number;
+    offset?: number;
+  } = {}
+) {
+  const params = new URLSearchParams();
+  if (input.employeeId) params.set("employeeId", input.employeeId);
+  if (input.employeeUid) params.set("employeeUid", input.employeeUid);
+  if (input.payrollMonth) params.set("payrollMonth", input.payrollMonth);
+  if (input.limit !== undefined) params.set("limit", String(input.limit));
+  if (input.offset !== undefined) params.set("offset", String(input.offset));
+  return requestHrCore<{
+    ok: true;
+    payrollRecords: HrCorePayrollRecord[];
+    pagination: HrCorePagination;
+  }>("/api/hr/payroll-records", {}, params);
+}
+
+export async function listHrCorePayrollAdvances(
+  input: { employeeId?: string; employeeUid?: string } = {}
+) {
+  const params = new URLSearchParams();
+  if (input.employeeId) params.set("employeeId", input.employeeId);
+  if (input.employeeUid) params.set("employeeUid", input.employeeUid);
+  return requestHrCore<{ ok: true; advances: HrCoreServiceRequest[] }>(
+    "/api/hr/payroll-advances",
+    {},
+    params
+  );
+}
+
+export async function createHrCorePayrollRecord(input: Record<string, unknown>) {
+  return requestHrCore<{ ok: true; payrollRecord: HrCorePayrollRecord }>(
+    "/api/hr/payroll-records",
+    { method: "POST", body: JSON.stringify(input) }
   );
 }

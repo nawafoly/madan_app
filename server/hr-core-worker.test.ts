@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildPayrollInsertStatement,
   computeEffectivePermissions,
   computeLeaveCancellationState,
+  computePayrollFinancialTotals,
+  isPayrollImportPath,
   normalizeEmployeePayload,
   normalizeImportedAbsence,
   normalizeImportedLeaveRequest,
+  normalizeImportedPayrollRecord,
   normalizeImportedServiceRequest,
   validateFirebaseTokenClaims,
 } from "../workers/hr-core-worker.js";
@@ -263,5 +267,135 @@ describe("HR operations normalization", () => {
       requestType: "salary_advance",
       amount: 500,
     });
+  });
+});
+
+
+describe("HR payroll normalization", () => {
+  it("normalizes Firestore payroll records for D1", () => {
+    expect(
+      normalizeImportedPayrollRecord({
+        id: "employee-1__2026-07",
+        employeeId: "employee-1",
+        employeeUid: "auth-1",
+        payrollMonth: "2026-07",
+        monthStart: "2026-07-01T00:00:00.000Z",
+        monthEnd: "2026-07-31T00:00:00.000Z",
+        baseSalary: 5000,
+        allowances: 500,
+        attendanceAbsenceDeduction: 200,
+        absenceDeduction: 300,
+        delayDeduction: 100,
+        overtimeBonus: 250,
+        insuranceDeduction: 450,
+        salaryDeductions: [{ title: "خصم", amount: 50 }],
+        finalSalary: 4650,
+      })
+    ).toMatchObject({
+      id: "employee-1__2026-07",
+      employeeId: "employee-1",
+      employeeUid: "auth-1",
+      payrollMonth: "2026-07",
+      monthStart: "2026-07-01",
+      monthEnd: "2026-07-31",
+      baseSalary: 5000,
+      salaryDeductions: [{ id: "deduction-1", title: "خصم", amount: 50 }],
+      finalSalary: 4650,
+      attendanceSource: "cloudflare_attendance",
+    });
+  });
+
+  it("rejects payroll records without a valid month", () => {
+    expect(
+      normalizeImportedPayrollRecord({
+        id: "payroll-invalid",
+        employeeUid: "auth-1",
+        payrollMonth: "2026-13",
+        monthStart: "2026-01-01",
+        monthEnd: "2026-01-31",
+      })
+    ).toBeNull();
+  });
+});
+
+
+it("computes payroll totals with salary advances without double-counting attendance absence", () => {
+  expect(
+    computePayrollFinancialTotals({
+      baseSalary: 5000,
+      allowances: 500,
+      overtimeBonus: 250,
+      delayDeduction: 100,
+      attendanceAbsenceDeduction: 200,
+      absenceDeduction: 300,
+      insuranceDeduction: 450,
+      manualSalaryDeductions: 50,
+      salaryAdvanceDeduction: 600,
+    })
+  ).toEqual({
+    manualAbsenceDeduction: 100,
+    totalSalaryDeductions: 650,
+    grossSalary: 5450,
+    finalSalary: 4250,
+  });
+});
+
+it("builds a payroll insert with matching SQL placeholders", () => {
+  const db = {
+    prepare(sql: string) {
+      return {
+        bind(...args: unknown[]) {
+          expect(args).toHaveLength((sql.match(/\?/g) || []).length);
+          return { sql, args };
+        },
+      };
+    },
+  };
+  expect(
+    buildPayrollInsertStatement(
+      db,
+      {
+        id: "payroll-1",
+        employeeId: "employee-1",
+        employeeUid: "auth-1",
+        payrollMonth: "2026-07",
+        monthStart: "2026-07-01",
+        monthEnd: "2026-07-31",
+        calculationStartDate: "2026-07-01",
+        calculationEndDate: "2026-07-31",
+        baseSalary: 5000,
+        allowances: 500,
+        absenceDays: 0,
+        absenceDeduction: 0,
+        attendanceSource: "cloudflare_attendance",
+        attendanceSummary: {},
+        scheduleSnapshot: {},
+        delayDeduction: 0,
+        overtimeBonus: 0,
+        insuranceDeduction: 0,
+        salaryDeductions: [],
+        salaryAdvanceDeduction: 0,
+        salaryAdvanceRequestIds: [],
+        totalSalaryDeductions: 0,
+        absenceEntries: [],
+        grossSalary: 5500,
+        finalSalary: 5500,
+        status: "finalized",
+      },
+      "2026-07-21T00:00:00.000Z",
+      "owner-1",
+      "owner@example.com"
+    )
+  ).toBeTruthy();
+});
+
+
+describe("HR payroll import routing", () => {
+  it("recognizes the canonical route and compatibility aliases", () => {
+    expect(isPayrollImportPath("/internal/hr/payroll/import")).toBe(true);
+    expect(isPayrollImportPath("/internal/hr/payroll/import/")).toBe(true);
+    expect(isPayrollImportPath("/internal/hr/payroll-import")).toBe(true);
+    expect(isPayrollImportPath("/internal/hr/import/payroll")).toBe(true);
+    expect(isPayrollImportPath("/internal/hr/operations/import")).toBe(false);
   });
 });

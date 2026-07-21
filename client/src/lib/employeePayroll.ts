@@ -380,6 +380,20 @@ export function normalizeEmployeePayrollRecord(
         ? null
         : Math.max(0, toFiniteNumber(raw.insuranceDeduction)),
     salaryDeductions: normalizedSalaryDeductions,
+    salaryAdvanceDeduction:
+      raw.salaryAdvanceDeduction === null ||
+      raw.salaryAdvanceDeduction === undefined
+        ? null
+        : Math.max(0, toFiniteNumber(raw.salaryAdvanceDeduction)),
+    salaryAdvanceRequestIds: Array.isArray(raw.salaryAdvanceRequestIds)
+      ? raw.salaryAdvanceRequestIds
+          .map((item: unknown) => String(item || "").trim())
+          .filter(Boolean)
+      : [],
+    grossSalary:
+      raw.grossSalary === null || raw.grossSalary === undefined
+        ? null
+        : Math.max(0, toFiniteNumber(raw.grossSalary)),
     totalSalaryDeductions:
       raw.totalSalaryDeductions === null ||
       raw.totalSalaryDeductions === undefined
