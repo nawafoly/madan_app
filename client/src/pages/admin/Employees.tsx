@@ -170,6 +170,10 @@ import {
 } from "@/lib/employeeProfile";
 import {
   EMPLOYEE_LEAVE_REQUESTS_COLLECTION,
+  buildActiveApprovedLeaveDateKeySet,
+  buildEmployeeLeaveRequestPayload,
+  buildLeaveDateFromInput,
+  getActiveApprovedLeaveDateKeys,
   getLatestApprovedEmployeeLeaveRequest,
   formatLeaveDateInput,
   formatLeaveDateRange,
@@ -177,6 +181,7 @@ import {
   getLeaveStatusMeta,
   getLeaveTypeLabel,
   normalizeEmployeeLeaveRequest,
+  normalizeLeaveCancelledDateKeys,
   sortEmployeeLeaveRequests,
   type EmployeeLeaveRequestRecord,
 } from "@/lib/employeeLeave";
@@ -589,32 +594,6 @@ function formatWorkScheduleRange(schedule: {
   const start = formatWorkScheduleTime(schedule.startTime);
   const end = formatWorkScheduleTime(schedule.endTime);
   return start && end ? `${start} - ${end}` : "غير محدد";
-}
-
-function buildApprovedLeaveDateKeys(
-  requests: Array<
-    Pick<EmployeeLeaveRequestRecord, "status" | "startDate" | "endDate">
-  >
-) {
-  const dates = new Set<string>();
-
-  for (const request of requests) {
-    if (
-      String(request.status || "")
-        .trim()
-        .toLowerCase() !== "approved"
-    ) {
-      continue;
-    }
-
-    const startDate = formatLeaveDateInput(request.startDate);
-    const endDate = formatLeaveDateInput(request.endDate || request.startDate);
-    for (const dateKey of buildDateKeysInRange(startDate, endDate)) {
-      dates.add(dateKey);
-    }
-  }
-
-  return dates;
 }
 
 function getRiyadhTodayDateKey(date = new Date()) {
@@ -1527,14 +1506,18 @@ function LeaveImpactBadge({ status }: { status: unknown }) {
           ? "border-emerald-200 bg-emerald-50 text-emerald-700"
           : normalizedStatus === "pending"
             ? "border-amber-200 bg-amber-50 text-amber-700"
-            : "border-rose-200 bg-rose-50 text-rose-700"
+            : normalizedStatus === "cancelled"
+              ? "border-slate-200 bg-slate-100 text-slate-700"
+              : "border-rose-200 bg-rose-50 text-rose-700"
       )}
     >
       {normalizedStatus === "approved"
         ? "تم الخصم من الرصيد"
         : normalizedStatus === "pending"
           ? "بانتظار القرار"
-          : "لم يتم الخصم"}
+          : normalizedStatus === "cancelled"
+            ? "تمت إعادة الرصيد المخصوم"
+            : "لم يتم الخصم"}
     </Badge>
   );
 }
@@ -1942,6 +1925,8 @@ export default function EmployeesManagementPage() {
   const [reviewingLeaveRequestId, setReviewingLeaveRequestId] = useState<
     string | null
   >(null);
+  const [savingEmergencyLeave, setSavingEmergencyLeave] = useState(false);
+  const [cancellingLeaveDate, setCancellingLeaveDate] = useState("");
   const [reviewingServiceRequestId, setReviewingServiceRequestId] = useState<
     string | null
   >(null);
@@ -2954,7 +2939,7 @@ export default function EmployeesManagementPage() {
     [leaveRequests]
   );
   const approvedLeaveDateKeys = useMemo(
-    () => buildApprovedLeaveDateKeys(approvedLeaveRequests),
+    () => buildActiveApprovedLeaveDateKeySet(approvedLeaveRequests),
     [approvedLeaveRequests]
   );
   const payrollWorkingDateKeys = useMemo(() => {
@@ -6118,6 +6103,532 @@ export default function EmployeesManagementPage() {
     }));
   };
 
+  const handleCreateEmergencyLeaveForToday = async () => {
+    if (!selectedEmployee || !selectedEmployeeProfile) return;
+    if (!canManageEmployees) {
+      toast.error(
+        tr(
+          language,
+          "لا تملك صلاحية تسجيل إجازة مفاجئة.",
+          "You do not have permission to create emergency leave."
+        )
+      );
+      return;
+    }
+
+    const dateKey = getRiyadhTodayDateKey();
+    if (approvedLeaveDateKeys.has(dateKey)) {
+      toast.info(
+        tr(
+          language,
+          "هذا اليوم مسجل كإجازة معتمدة بالفعل.",
+          "This day is already recorded as approved leave."
+        )
+      );
+      return;
+    }
+
+    const startDate = buildLeaveDateFromInput(dateKey);
+    if (!startDate) {
+      toast.error(
+        tr(language, "تعذر تحديد تاريخ الإجازة.", "Could not resolve leave date.")
+      );
+      return;
+    }
+
+    const employeeUid = selectedEmployeeAuthUid || selectedEmployee.id;
+    if (!employeeUid) {
+      toast.error(
+        tr(
+          language,
+          "تعذر تحديد حساب الموظف لتسجيل الإجازة.",
+          "Could not resolve the employee account."
+        )
+      );
+      return;
+    }
+
+    const confirmed = window.confirm(
+      tr(
+        language,
+        `سيتم تسجيل اليوم ${dateKey} كإجازة اضطرارية معتمدة وتحديث الرصيد إن وجد. هل تريد المتابعة؟`,
+        `Today ${dateKey} will be recorded as approved emergency leave and the balance will be updated when available. Continue?`
+      )
+    );
+    if (!confirmed) return;
+
+    setSavingEmergencyLeave(true);
+    try {
+      let createdLeaveRequestId = "";
+      await runTransaction(db, async tx => {
+        const userRef = doc(db, "users", selectedEmployee.id);
+        const userSnap = await tx.get(userRef);
+        if (!userSnap.exists()) {
+          throw new Error("employee_user_not_found");
+        }
+
+        const userData = (userSnap.data() as Record<string, any>) || {};
+        const userEmployment = (userData.employeeProfile?.employment ||
+          userData.employment ||
+          {}) as Record<string, any>;
+
+        const employeeDocId = String(selectedEmployeeDocumentId || "").trim();
+        const employeeRef = employeeDocId
+          ? doc(db, "employees", employeeDocId)
+          : null;
+        const employeeSnap = employeeRef ? await tx.get(employeeRef) : null;
+        const employeeData =
+          employeeSnap?.exists() && employeeSnap.data()
+            ? (employeeSnap.data() as Record<string, any>) || {}
+            : null;
+        const employeeEmployment = (employeeData?.employeeProfile?.employment ||
+          employeeData?.employment ||
+          {}) as Record<string, any>;
+
+        const currentLeaveBalance = resolveEmploymentLeaveBalance(
+          userData,
+          employeeData
+        );
+        if (currentLeaveBalance < 1) {
+          throw new Error("leave_balance_insufficient");
+        }
+
+        const balanceDeductedDays = 1;
+        const nextLeaveBalance = currentLeaveBalance - 1;
+        const nextUserEmployment = {
+          ...userEmployment,
+          leaveBalance: nextLeaveBalance,
+          updatedAt: serverTimestamp(),
+          updatedByUid: user?.uid || null,
+          updatedByEmail: user?.email || null,
+        };
+
+        tx.set(
+          userRef,
+          {
+            leaveBalance: nextLeaveBalance,
+            updatedAt: serverTimestamp(),
+            employment: nextUserEmployment,
+            employeeProfile: {
+              personal: (userData.employeeProfile?.personal ||
+                userData.personal ||
+                null) as Record<string, any> | null,
+              employment: nextUserEmployment,
+            },
+          },
+          { merge: true }
+        );
+
+        if (employeeRef) {
+          const nextEmployeeEmployment = {
+            ...employeeEmployment,
+            leaveBalance: nextLeaveBalance,
+            updatedAt: serverTimestamp(),
+            updatedByUid: user?.uid || null,
+            updatedByEmail: user?.email || null,
+          };
+
+          tx.set(
+            employeeRef,
+            {
+              uid: employeeUid,
+              linkedUserUid: employeeUid,
+              leaveBalance: nextLeaveBalance,
+              updatedAt: serverTimestamp(),
+              employment: nextEmployeeEmployment,
+              employeeProfile: {
+                personal: (employeeData?.employeeProfile?.personal ||
+                  employeeData?.personal ||
+                  null) as Record<string, any> | null,
+                employment: nextEmployeeEmployment,
+              },
+            },
+            { merge: true }
+          );
+        }
+
+        const leaveRequestRef = doc(collection(db, EMPLOYEE_LEAVE_REQUESTS_COLLECTION));
+        createdLeaveRequestId = leaveRequestRef.id;
+        tx.set(leaveRequestRef, {
+          ...buildEmployeeLeaveRequestPayload({
+            authUid: employeeUid,
+            employeeDocId: employeeDocId || null,
+            employeeName:
+              selectedEmployeeLabel !== EMPLOYEE_EMPTY_VALUE
+                ? selectedEmployeeLabel
+                : selectedEmployee.displayName ||
+                  selectedEmployee.name ||
+                  selectedEmployee.email ||
+                  "موظف",
+            employeeEmail:
+              selectedEmployeeProfile.personal.email !== EMPLOYEE_EMPTY_VALUE
+                ? selectedEmployeeProfile.personal.email
+                : selectedEmployee.email || null,
+            leaveType: "emergency",
+            startDate,
+            endDate: startDate,
+            daysCount: 1,
+            employeeNote: "إجازة مفاجئة من إدارة الحضور",
+          }),
+          status: "approved",
+          balanceDeductedDays,
+          hrNote: "إجازة مفاجئة معتمدة من إدارة الحضور",
+          decidedAt: serverTimestamp(),
+          decidedBy: user?.uid || null,
+          decidedByEmail: user?.email || null,
+          decidedByName: user?.displayName || user?.email || null,
+          reviewedAt: serverTimestamp(),
+          reviewedBy: user?.uid || null,
+          reviewedByEmail: user?.email || null,
+          reviewedByName: user?.displayName || user?.email || null,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      });
+
+      try {
+        await createInAppNotification({
+          userId: employeeUid,
+          title: tr(
+            language,
+            "تم تسجيل إجازة اضطرارية",
+            "Emergency Leave Recorded"
+          ),
+          body: tr(
+            language,
+            `تم تسجيل يوم ${dateKey} كإجازة اضطرارية معتمدة وتحديث الرصيد.`,
+            `${dateKey} was recorded as approved emergency leave and the balance was updated.`
+          ),
+          type: "leave",
+          relatedId: createdLeaveRequestId,
+          relatedTo: "employee_leave_request",
+          relatedPath: "/hr/profile",
+        });
+      } catch (notificationError) {
+        console.error("emergency_leave_notification_failed", notificationError);
+      }
+
+      toast.success(
+        tr(
+          language,
+          "تم تسجيل الإجازة المفاجئة واعتمادها.",
+          "Emergency leave was recorded and approved."
+        )
+      );
+    } catch (error) {
+      console.error("create_emergency_leave_error", error);
+      if (error instanceof Error && error.message === "leave_balance_insufficient") {
+        toast.error(
+          tr(
+            language,
+            "رصيد الإجازات الحالي لا يكفي لتسجيل إجازة مفاجئة.",
+            "The current leave balance is not enough to record emergency leave."
+          )
+        );
+      } else {
+        toast.error(
+          tr(
+            language,
+            "تعذر تسجيل الإجازة المفاجئة.",
+            "Could not record emergency leave."
+          )
+        );
+      }
+    } finally {
+      setSavingEmergencyLeave(false);
+    }
+  };
+
+  const handleCancelApprovedLeaveForDate = async (dateKey: string) => {
+    if (!selectedEmployee || !selectedEmployeeProfile) return;
+    if (!canManageEmployees) {
+      toast.error(
+        tr(
+          language,
+          "لا تملك صلاحية إلغاء الإجازات.",
+          "You do not have permission to cancel leave."
+        )
+      );
+      return;
+    }
+
+    const normalizedDateKey = String(dateKey || "").trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(normalizedDateKey)) {
+      toast.error(
+        tr(
+          language,
+          "تعذر تحديد تاريخ الإجازة المطلوب إلغاؤها.",
+          "Could not resolve the leave date to cancel."
+        )
+      );
+      return;
+    }
+
+    const leaveRequest = approvedLeaveRequests.find(request =>
+      getActiveApprovedLeaveDateKeys(request).includes(normalizedDateKey)
+    );
+
+    if (!leaveRequest) {
+      toast.error(
+        tr(
+          language,
+          "لا يوجد طلب إجازة معتمد وفعال يغطي هذا اليوم.",
+          "No active approved leave request covers this day."
+        )
+      );
+      return;
+    }
+
+    const confirmed = window.confirm(
+      tr(
+        language,
+        `سيتم إلغاء يوم ${normalizedDateKey} فقط من الإجازة وإرجاع يوم واحد إلى الرصيد إذا كان قد خُصم. بقية أيام الإجازة ستبقى معتمدة. هل تريد المتابعة؟`,
+        `Only ${normalizedDateKey} will be cancelled from the leave. One day will be restored if it was deducted, while the remaining leave days stay approved. Continue?`
+      )
+    );
+    if (!confirmed) return;
+
+    setCancellingLeaveDate(normalizedDateKey);
+    try {
+      await runTransaction(db, async tx => {
+        const leaveRequestRef = doc(
+          db,
+          EMPLOYEE_LEAVE_REQUESTS_COLLECTION,
+          leaveRequest.id
+        );
+        const leaveRequestSnap = await tx.get(leaveRequestRef);
+        if (!leaveRequestSnap.exists()) {
+          throw new Error("leave_request_not_found");
+        }
+
+        const currentLeaveRequest =
+          leaveRequestSnap.data() as EmployeeLeaveRequestDoc;
+        const currentStatus = String(currentLeaveRequest.status || "")
+          .trim()
+          .toLowerCase();
+        if (currentStatus !== "approved") {
+          throw new Error("leave_request_not_approved");
+        }
+
+        const startDateKey =
+          formatLeaveDateInput(currentLeaveRequest.startDate) ||
+          formatLeaveDateInput(leaveRequest.startDate);
+        const endDateKey =
+          formatLeaveDateInput(
+            currentLeaveRequest.endDate ||
+              currentLeaveRequest.startDate ||
+              leaveRequest.endDate ||
+              leaveRequest.startDate
+          ) || startDateKey;
+        const allDateKeys = buildDateKeysInRange(startDateKey, endDateKey);
+        const currentCancelledDateKeys = normalizeLeaveCancelledDateKeys(
+          currentLeaveRequest.cancelledDateKeys
+        );
+        const cancelledDateKeySet = new Set(currentCancelledDateKeys);
+
+        if (
+          !startDateKey ||
+          !allDateKeys.includes(normalizedDateKey) ||
+          cancelledDateKeySet.has(normalizedDateKey)
+        ) {
+          throw new Error("leave_request_date_mismatch");
+        }
+
+        const activeDateKeys = allDateKeys.filter(
+          currentDateKey => !cancelledDateKeySet.has(currentDateKey)
+        );
+        if (!activeDateKeys.includes(normalizedDateKey)) {
+          throw new Error("leave_request_date_inactive");
+        }
+
+        const remainingActiveDateKeys = activeDateKeys.filter(
+          currentDateKey => currentDateKey !== normalizedDateKey
+        );
+        const parsedDeductedDays = Number(
+          currentLeaveRequest.balanceDeductedDays
+        );
+        const hasStoredDeduction =
+          currentLeaveRequest.balanceDeductedDays !== undefined &&
+          currentLeaveRequest.balanceDeductedDays !== null &&
+          Number.isFinite(parsedDeductedDays);
+        const currentDeductedDays = Math.max(
+          0,
+          Math.min(
+            hasStoredDeduction ? parsedDeductedDays : activeDateKeys.length,
+            activeDateKeys.length
+          )
+        );
+        const restoreDays = currentDeductedDays > 0 ? 1 : 0;
+        const nextDeductedDays = Math.max(0, currentDeductedDays - restoreDays);
+        const parsedRestoredDays = Number(
+          currentLeaveRequest.balanceRestoredDays
+        );
+        const currentRestoredDays = Number.isFinite(parsedRestoredDays)
+          ? Math.max(0, parsedRestoredDays)
+          : 0;
+
+        const employeeUid = selectedEmployeeAuthUid || selectedEmployee.id;
+        const userRef = doc(db, "users", selectedEmployee.id);
+        const userSnap = await tx.get(userRef);
+        if (!userSnap.exists()) {
+          throw new Error("employee_user_not_found");
+        }
+
+        const userData = (userSnap.data() as Record<string, any>) || {};
+        const userEmployment = (userData.employeeProfile?.employment ||
+          userData.employment ||
+          {}) as Record<string, any>;
+
+        const employeeDocId = String(
+          selectedEmployeeDocumentId ||
+            selectedEmployee.linkedEmployeeId ||
+            currentLeaveRequest.employeeDocId ||
+            currentLeaveRequest.employeeId ||
+            ""
+        ).trim();
+        const employeeRef = employeeDocId
+          ? doc(db, "employees", employeeDocId)
+          : null;
+        const employeeSnap = employeeRef ? await tx.get(employeeRef) : null;
+        const employeeData =
+          employeeSnap?.exists() && employeeSnap.data()
+            ? (employeeSnap.data() as Record<string, any>) || {}
+            : null;
+        const employeeEmployment = (employeeData?.employeeProfile?.employment ||
+          employeeData?.employment ||
+          {}) as Record<string, any>;
+
+        if (restoreDays > 0) {
+          const currentLeaveBalance = resolveEmploymentLeaveBalance(
+            userData,
+            employeeData
+          );
+          const nextLeaveBalance = currentLeaveBalance + restoreDays;
+          const nextUserEmployment = {
+            ...userEmployment,
+            leaveBalance: nextLeaveBalance,
+            updatedAt: serverTimestamp(),
+            updatedByUid: user?.uid || null,
+            updatedByEmail: user?.email || null,
+          };
+
+          tx.set(
+            userRef,
+            {
+              leaveBalance: nextLeaveBalance,
+              updatedAt: serverTimestamp(),
+              employment: nextUserEmployment,
+              employeeProfile: {
+                personal: (userData.employeeProfile?.personal ||
+                  userData.personal ||
+                  null) as Record<string, any> | null,
+                employment: nextUserEmployment,
+              },
+            },
+            { merge: true }
+          );
+
+          if (employeeRef) {
+            const nextEmployeeEmployment = {
+              ...employeeEmployment,
+              leaveBalance: nextLeaveBalance,
+              updatedAt: serverTimestamp(),
+              updatedByUid: user?.uid || null,
+              updatedByEmail: user?.email || null,
+            };
+
+            tx.set(
+              employeeRef,
+              {
+                uid: employeeUid,
+                linkedUserUid: employeeUid,
+                leaveBalance: nextLeaveBalance,
+                updatedAt: serverTimestamp(),
+                employment: nextEmployeeEmployment,
+                employeeProfile: {
+                  personal: (employeeData?.employeeProfile?.personal ||
+                    employeeData?.personal ||
+                    null) as Record<string, any> | null,
+                  employment: nextEmployeeEmployment,
+                },
+              },
+              { merge: true }
+            );
+          }
+        }
+
+        const nextCancelledDateKeys = [
+          ...currentCancelledDateKeys,
+          normalizedDateKey,
+        ].sort();
+        const nextStatus = remainingActiveDateKeys.length
+          ? "approved"
+          : "cancelled";
+        const previousHrNote = String(
+          currentLeaveRequest.hrNote || leaveRequest.hrNote || ""
+        ).trim();
+        const cancellationNote = `تم إلغاء يوم ${normalizedDateKey} فقط من الإجازة بواسطة إدارة الحضور.`;
+
+        tx.update(leaveRequestRef, {
+          status: nextStatus,
+          daysCount: remainingActiveDateKeys.length,
+          balanceDeductedDays: nextDeductedDays,
+          balanceRestoredDays: currentRestoredDays + restoreDays,
+          cancelledDateKeys: nextCancelledDateKeys,
+          cancellationDate: normalizedDateKey,
+          cancelledAt: serverTimestamp(),
+          cancelledBy: user?.uid || null,
+          cancelledByEmail: user?.email || null,
+          cancelledByName: user?.displayName || user?.email || null,
+          hrNote: previousHrNote
+            ? `${previousHrNote}\n${cancellationNote}`
+            : cancellationNote,
+          updatedAt: serverTimestamp(),
+        });
+      });
+
+      try {
+        await createInAppNotification({
+          userId:
+            leaveRequest.employeeUid ||
+            selectedEmployeeAuthUid ||
+            selectedEmployee.id,
+          title: tr(language, "تم إلغاء يوم من الإجازة", "Leave Day Cancelled"),
+          body: tr(
+            language,
+            `تم إلغاء يوم ${normalizedDateKey} فقط من الإجازة، وإرجاع يوم إلى الرصيد إذا كان قد خُصم.`,
+            `Only ${normalizedDateKey} was cancelled from the leave, and one day was restored if it had been deducted.`
+          ),
+          type: "leave",
+          relatedId: leaveRequest.id,
+          relatedTo: "employee_leave_request",
+          relatedPath: "/hr/profile",
+        });
+      } catch (notificationError) {
+        console.error("cancel_leave_notification_failed", notificationError);
+      }
+
+      toast.success(
+        tr(
+          language,
+          "تم إلغاء اليوم المحدد فقط مع الحفاظ على بقية أيام الإجازة.",
+          "Only the selected day was cancelled; the remaining leave days were preserved."
+        )
+      );
+    } catch (error) {
+      console.error("cancel_approved_leave_error", error);
+      toast.error(
+        tr(
+          language,
+          "تعذر إلغاء يوم الإجازة المحدد.",
+          "Could not cancel the selected leave day."
+        )
+      );
+    } finally {
+      setCancellingLeaveDate("");
+    }
+  };
+
   const handleReviewLeaveRequest = async (
     request: EmployeeLeaveRequestRecord,
     nextStatus: EmployeeLeaveRequestStatus
@@ -6200,6 +6711,7 @@ export default function EmployeesManagementPage() {
         const employeeEmployment = (employeeData?.employeeProfile?.employment ||
           employeeData?.employment ||
           {}) as Record<string, any>;
+        let balanceDeductedDays: number | null = null;
 
         if (nextStatus === "approved") {
           const currentLeaveBalance = resolveEmploymentLeaveBalance(
@@ -6211,6 +6723,7 @@ export default function EmployeesManagementPage() {
           }
 
           const nextLeaveBalance = currentLeaveBalance - daysCount;
+          balanceDeductedDays = daysCount;
           const nextUserEmployment = {
             ...userEmployment,
             leaveBalance: nextLeaveBalance,
@@ -6267,6 +6780,7 @@ export default function EmployeesManagementPage() {
         tx.update(leaveRequestRef, {
           status: nextStatus,
           hrNote,
+          ...(nextStatus === "approved" ? { balanceDeductedDays } : {}),
           decidedAt: serverTimestamp(),
           decidedBy: user?.uid || null,
           decidedByEmail: user?.email || null,
@@ -7219,6 +7733,39 @@ export default function EmployeesManagementPage() {
                     activeEmployeeWorkspaceSection !== "attendance" && "hidden"
                   )}
                 >
+                  {canManageEmployees ? (
+                    <Card className="mb-4 gap-0 overflow-hidden border-emerald-200/80 bg-emerald-50/70 py-0 shadow-sm">
+                      <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2 text-sm font-semibold text-emerald-900">
+                            <CalendarDays className="h-4 w-4" />
+                            إجازة مفاجئة لليوم
+                          </div>
+                          <p className="text-xs leading-6 text-emerald-800">
+                            يسجل اليوم كإجازة اضطرارية معتمدة ويستبعده من الغياب والحسابات المرتبطة بالحضور.
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          className="bg-emerald-600 text-white hover:bg-emerald-700"
+                          onClick={() => void handleCreateEmergencyLeaveForToday()}
+                          disabled={
+                            savingEmergencyLeave ||
+                            approvedLeaveDateKeys.has(getRiyadhTodayDateKey())
+                          }
+                        >
+                          {savingEmergencyLeave ? (
+                            <Loader2 className="ml-2 h-4 w-4 animate-spin" />
+                          ) : (
+                            <CalendarDays className="ml-2 h-4 w-4" />
+                          )}
+                          {savingEmergencyLeave
+                            ? "جاري التسجيل..."
+                            : "تسجيل إجازة مفاجئة"}
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  ) : null}
                   <EmployeeTodayAttendancePanel
                     employeeUid={selectedEmployeeAuthUid || null}
                     employeeDocId={selectedEmployeeDocumentId || null}
@@ -7230,6 +7777,10 @@ export default function EmployeesManagementPage() {
                       absence => absence.date
                     )}
                     canManageAttendance={canManageEmployees}
+                    cancelLeaveLoading={Boolean(cancellingLeaveDate)}
+                    onCancelLeave={dateKey =>
+                      void handleCancelApprovedLeaveForDate(dateKey)
+                    }
                     title="سجل حضور الموظف الشهري"
                     description="عرض إداري لكل عمليات الحضور والانصراف المقبولة فعليًا لهذا الموظف خلال الشهر الحالي."
                   />
@@ -9874,6 +10425,10 @@ export default function EmployeesManagementPage() {
                         ) : leaveRequests.length ? (
                           leaveRequests.map((request, index) => {
                             const isPending = request.status === "pending";
+                            const cancelledDateKeys =
+                              normalizeLeaveCancelledDateKeys(
+                                request.cancelledDateKeys
+                              );
                             const currentReviewNote =
                               reviewNotes[request.id] ?? request.hrNote ?? "";
 
@@ -9920,14 +10475,20 @@ export default function EmployeesManagementPage() {
                                           ? "border-emerald-200 bg-emerald-50 text-emerald-700"
                                           : request.status === "pending"
                                             ? "border-amber-200 bg-amber-50 text-amber-700"
-                                            : "border-rose-200 bg-rose-50 text-rose-700"
+                                            : request.status === "cancelled"
+                                              ? "border-slate-200 bg-slate-100 text-slate-700"
+                                              : "border-rose-200 bg-rose-50 text-rose-700"
                                       )}
                                     >
                                       {request.status === "approved"
-                                        ? "تم اعتماد الطلب"
+                                        ? cancelledDateKeys.length
+                                          ? "الطلب معتمد جزئيًا"
+                                          : "تم اعتماد الطلب"
                                         : request.status === "pending"
                                           ? "بانتظار مراجعة HR"
-                                          : "تم رفض الطلب"}
+                                          : request.status === "cancelled"
+                                            ? "تم إلغاء الطلب"
+                                            : "تم رفض الطلب"}
                                     </Badge>
 
                                     <div className="grid gap-2 text-sm text-slate-600">
@@ -9950,6 +10511,15 @@ export default function EmployeesManagementPage() {
                                         )}
                                       </div>
 
+                                      {cancelledDateKeys.length ? (
+                                        <div>
+                                          <span className="font-semibold text-slate-900">
+                                            الأيام الملغاة:
+                                          </span>{" "}
+                                          {cancelledDateKeys.join("، ")}
+                                        </div>
+                                      ) : null}
+
                                       <div>
                                         <span className="font-semibold text-slate-900">
                                           تاريخ الإنشاء:
@@ -9971,10 +10541,14 @@ export default function EmployeesManagementPage() {
                                           أثر الطلب على الرصيد:
                                         </span>{" "}
                                         {request.status === "approved"
-                                          ? "تم اعتماد الطلب وخصم الأيام من الرصيد"
+                                          ? cancelledDateKeys.length
+                                            ? "تم إلغاء الأيام المحددة وإرجاع ما خُصم منها، وبقية الأيام ما زالت معتمدة"
+                                            : "تم اعتماد الطلب وخصم الأيام من الرصيد"
                                           : request.status === "pending"
                                             ? "الطلب ما زال تحت المراجعة ولم يتم الخصم بعد"
-                                            : "تم رفض الطلب ولم يتم الخصم من الرصيد"}
+                                            : request.status === "cancelled"
+                                              ? "تم إلغاء جميع أيام الطلب وإرجاع ما خُصم منها"
+                                              : "تم رفض الطلب ولم يتم الخصم من الرصيد"}
                                       </div>
 
                                       {request.status === "approved" ? (

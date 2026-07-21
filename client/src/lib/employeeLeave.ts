@@ -3,6 +3,7 @@ import {
   formatNumberEN,
   toDateSafe,
 } from "@/lib/formatters";
+import { buildDateKeysInRange } from "@/lib/workSchedule";
 import type {
   EmployeeLeaveRequestDoc,
   EmployeeLeaveRequestStatus,
@@ -100,6 +101,61 @@ export function formatLeaveDateInput(value: unknown) {
   )}`;
 }
 
+export type EmployeeLeaveDateRangeLike = {
+  status?: unknown;
+  startDate?: unknown;
+  endDate?: unknown;
+  cancelledDateKeys?: unknown;
+};
+
+export function normalizeLeaveCancelledDateKeys(value: unknown) {
+  if (!Array.isArray(value)) return [] as string[];
+
+  return Array.from(
+    new Set(
+      value
+        .map(item => String(item || "").trim())
+        .filter(item => /^\d{4}-\d{2}-\d{2}$/.test(item))
+    )
+  ).sort();
+}
+
+export function getActiveApprovedLeaveDateKeys(
+  request: EmployeeLeaveDateRangeLike
+) {
+  if (
+    String(request.status || "approved")
+      .trim()
+      .toLowerCase() !== "approved"
+  ) {
+    return [] as string[];
+  }
+
+  const startDate = formatLeaveDateInput(request.startDate);
+  const endDate = formatLeaveDateInput(request.endDate || request.startDate);
+  const cancelledDateKeys = new Set(
+    normalizeLeaveCancelledDateKeys(request.cancelledDateKeys)
+  );
+
+  return buildDateKeysInRange(startDate, endDate).filter(
+    dateKey => !cancelledDateKeys.has(dateKey)
+  );
+}
+
+export function buildActiveApprovedLeaveDateKeySet(
+  requests: EmployeeLeaveDateRangeLike[] = []
+) {
+  const dates = new Set<string>();
+
+  for (const request of requests) {
+    for (const dateKey of getActiveApprovedLeaveDateKeys(request)) {
+      dates.add(dateKey);
+    }
+  }
+
+  return dates;
+}
+
 export function calculateLeaveDaysCount(startDate: unknown, endDate: unknown) {
   const start = toLeaveDate(startDate);
   const end = toLeaveDate(endDate);
@@ -128,6 +184,10 @@ export function getLeaveStatusMeta(value: unknown): EmployeeLeaveStatusMeta {
 
   if (normalized === "rejected") {
     return { label: "مرفوض", tone: "danger" };
+  }
+
+  if (normalized === "cancelled") {
+    return { label: "ملغي", tone: "muted" };
   }
 
   if (normalized === "pending") {
@@ -282,9 +342,27 @@ export function normalizeEmployeeLeaveRequest(
     startDate: raw.startDate ?? null,
     endDate: raw.endDate ?? null,
     daysCount:
-      Number.isFinite(Number(raw.daysCount)) && Number(raw.daysCount) > 0
+      Number.isFinite(Number(raw.daysCount)) && Number(raw.daysCount) >= 0
         ? Number(raw.daysCount)
         : calculateLeaveDaysCount(raw.startDate, raw.endDate),
+    balanceDeductedDays:
+      Number.isFinite(Number(raw.balanceDeductedDays)) &&
+      Number(raw.balanceDeductedDays) >= 0
+        ? Number(raw.balanceDeductedDays)
+        : null,
+    balanceRestoredDays:
+      Number.isFinite(Number(raw.balanceRestoredDays)) &&
+      Number(raw.balanceRestoredDays) >= 0
+        ? Number(raw.balanceRestoredDays)
+        : null,
+    cancelledDateKeys: normalizeLeaveCancelledDateKeys(raw.cancelledDateKeys),
+    cancellationDate:
+      String(raw.cancellationDate || "").trim() || null,
+    cancelledAt: raw.cancelledAt ?? null,
+    cancelledBy: String(raw.cancelledBy || "").trim() || null,
+    cancelledByEmail:
+      String(raw.cancelledByEmail || "").trim() || null,
+    cancelledByName: String(raw.cancelledByName || "").trim() || null,
     employeeNote: String(raw.employeeNote || "").trim() || null,
     hrNote: String(raw.hrNote || "").trim() || null,
     createdAt: raw.createdAt ?? null,

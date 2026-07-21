@@ -108,6 +108,7 @@ import {
   getLeaveStatusMeta,
   getLeaveTypeLabel,
   normalizeEmployeeLeaveRequest,
+  normalizeLeaveCancelledDateKeys,
   sortEmployeeLeaveRequests,
   type EmployeeLeaveRequestRecord,
 } from "@/lib/employeeLeave";
@@ -3870,6 +3871,18 @@ export default function EmployeeProfilePage() {
                               {formatLeaveDaysLabel(request.daysCount)}
                             </strong>
                           </span>
+                          {normalizeLeaveCancelledDateKeys(
+                            request.cancelledDateKeys
+                          ).length ? (
+                            <span>
+                              الأيام الملغاة:{" "}
+                              <strong className="text-slate-900">
+                                {normalizeLeaveCancelledDateKeys(
+                                  request.cancelledDateKeys
+                                ).join("، ")}
+                              </strong>
+                            </span>
+                          ) : null}
                           <span>
                             تاريخ الطلب:{" "}
                             <strong className="text-slate-900">
@@ -3895,7 +3908,7 @@ export default function EmployeeProfilePage() {
 
           <EmployeeCard
             title={tr(language, "طلبات الإجازة", "Leave Requests")}
-            subtitle={tr(language, "كل طلب يظهر بنوع الإجازة وحالته: معلق، موافق، أو مرفوض.", "Each request shows the leave type and status: pending, approved, or rejected.")}
+            subtitle={tr(language, "كل طلب يظهر بنوع الإجازة وحالته: معلق، موافق، مرفوض، أو ملغي.", "Each request shows the leave type and status: pending, approved, rejected, or cancelled.")}
           >
             {leaveRequestsLoading ? (
               <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50/70 px-5 py-10 text-center text-sm text-slate-500">
@@ -3935,6 +3948,18 @@ export default function EmployeeProfilePage() {
                               {formatLeaveDaysLabel(request.daysCount)}
                             </strong>
                           </span>
+                          {normalizeLeaveCancelledDateKeys(
+                            request.cancelledDateKeys
+                          ).length ? (
+                            <span>
+                              الأيام الملغاة:{" "}
+                              <strong className="text-slate-900">
+                                {normalizeLeaveCancelledDateKeys(
+                                  request.cancelledDateKeys
+                                ).join("، ")}
+                              </strong>
+                            </span>
+                          ) : null}
                           <span>
                             تاريخ الطلب:{" "}
                             <strong className="text-slate-900">

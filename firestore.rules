@@ -767,8 +767,6 @@ service cloud.firestore {
 
     function isValidEmployeeLeaveRequestCreate() {
       return signedIn()
-        && request.resource.data.employeeId is string
-        && request.resource.data.employeeId.size() > 0
         && request.resource.data.employeeUid is string
         && request.resource.data.employeeUid.size() > 0
         && request.resource.data.userId is string
@@ -784,25 +782,66 @@ service cloud.firestore {
         && request.resource.data.daysCount > 0;
     }
 
+    function isValidEmployeeLeaveRequestAdminCreate() {
+      return signedIn()
+        && canManageEmployeesAdmin()
+        && request.resource.data.employeeUid is string
+        && request.resource.data.employeeUid.size() > 0
+        && request.resource.data.userId is string
+        && request.resource.data.userId == request.resource.data.employeeUid
+        && requestStatusValue(request.resource.data) == "approved"
+        && request.resource.data.leaveType is string
+        && ("startDate" in request.resource.data)
+        && request.resource.data.startDate != null
+        && ("endDate" in request.resource.data)
+        && request.resource.data.endDate != null
+        && request.resource.data.daysCount is number
+        && request.resource.data.daysCount > 0
+        && request.resource.data.balanceDeductedDays is number
+        && request.resource.data.balanceDeductedDays >= 0
+        && request.resource.data.balanceDeductedDays <= request.resource.data.daysCount;
+    }
+
     function isValidEmployeeLeaveRequestAdminUpdate() {
       let keys = request.resource.data.diff(resource.data).changedKeys();
       let beforeStatus = requestStatusValue(resource.data);
       let afterStatus = requestStatusValue(request.resource.data);
-      return beforeStatus == "pending"
-        && afterStatus in ["approved", "rejected"]
-        && keys.hasOnly([
-          "status",
-          "hrNote",
-          "decidedAt",
-          "decidedBy",
-          "decidedByEmail",
-          "decidedByName",
-          "reviewedAt",
-          "reviewedBy",
-          "reviewedByEmail",
-          "reviewedByName",
-          "updatedAt"
-        ]);
+      return (
+          beforeStatus == "pending"
+          && afterStatus in ["approved", "rejected"]
+          && keys.hasOnly([
+            "status",
+            "hrNote",
+            "balanceDeductedDays",
+            "decidedAt",
+            "decidedBy",
+            "decidedByEmail",
+            "decidedByName",
+            "reviewedAt",
+            "reviewedBy",
+            "reviewedByEmail",
+            "reviewedByName",
+            "updatedAt"
+          ])
+        )
+        || (
+          beforeStatus == "approved"
+          && afterStatus in ["approved", "cancelled"]
+          && keys.hasOnly([
+            "status",
+            "daysCount",
+            "hrNote",
+            "balanceDeductedDays",
+            "balanceRestoredDays",
+            "cancelledDateKeys",
+            "cancellationDate",
+            "cancelledAt",
+            "cancelledBy",
+            "cancelledByEmail",
+            "cancelledByName",
+            "updatedAt"
+          ])
+        );
     }
 
     function serviceRequestOwnerUid(data) {
@@ -1750,7 +1789,8 @@ service cloud.firestore {
     match /employee_leave_requests/{requestId} {
       allow read: if canReadEmployeesAdmin()
         || (signedIn() && leaveRequestOwnerUid(resource.data) == request.auth.uid);
-      allow create: if isValidEmployeeLeaveRequestCreate();
+      allow create: if isValidEmployeeLeaveRequestCreate()
+        || isValidEmployeeLeaveRequestAdminCreate();
       allow update: if canManageEmployeesAdmin()
         && isValidEmployeeLeaveRequestAdminUpdate();
       allow delete: if canManageEmployeesAdmin();

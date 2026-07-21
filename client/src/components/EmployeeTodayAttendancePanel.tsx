@@ -28,7 +28,7 @@ import {
   getAttendanceDayStatus,
   type AttendanceStatus,
 } from "@/lib/attendanceCalculations";
-import { formatLeaveDateInput } from "@/lib/employeeLeave";
+import { buildActiveApprovedLeaveDateKeySet } from "@/lib/employeeLeave";
 import { formatNumberEN } from "@/lib/formatters";
 import { cn } from "@/lib/utils";
 import {
@@ -44,6 +44,7 @@ type ApprovedLeaveLike = {
   status?: unknown;
   startDate?: unknown;
   endDate?: unknown;
+  cancelledDateKeys?: unknown;
 };
 
 type EmployeeTodayAttendancePanelProps = {
@@ -60,6 +61,8 @@ type EmployeeTodayAttendancePanelProps = {
   holidayDateKeys?: string[];
   absenceDateKeys?: string[];
   canManageAttendance?: boolean;
+  cancelLeaveLoading?: boolean;
+  onCancelLeave?: (dateKey: string) => void | Promise<void>;
 };
 
 type MonthBounds = {
@@ -397,28 +400,6 @@ function getSelectedAccentClass(status: AttendanceStatus) {
   }
 }
 
-function buildApprovedLeaveDateKeys(requests: ApprovedLeaveLike[] = []) {
-  const dates = new Set<string>();
-
-  for (const request of requests) {
-    if (
-      String(request.status || "approved")
-        .trim()
-        .toLowerCase() !== "approved"
-    ) {
-      continue;
-    }
-
-    const startDate = formatLeaveDateInput(request.startDate);
-    const endDate = formatLeaveDateInput(request.endDate || request.startDate);
-    for (const dateKey of buildDateKeysInRange(startDate, endDate)) {
-      dates.add(dateKey);
-    }
-  }
-
-  return dates;
-}
-
 function getWorkDurationMs(day?: MonthlyAttendanceDay | null) {
   if (!day?.checkIn?.serverTime || !day.checkOut?.serverTime) return null;
   const start = Date.parse(day.checkIn.serverTime);
@@ -626,6 +607,8 @@ export default function EmployeeTodayAttendancePanel({
   holidayDateKeys = [],
   absenceDateKeys = [],
   canManageAttendance = false,
+  cancelLeaveLoading = false,
+  onCancelLeave,
 }: EmployeeTodayAttendancePanelProps) {
   const { language } = useLanguage();
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
@@ -765,7 +748,7 @@ export default function EmployeeTodayAttendancePanel({
   );
   const todayKey = getRiyadhTodayKey();
   const approvedLeaveDateKeys = useMemo(
-    () => buildApprovedLeaveDateKeys(approvedLeaveRequests),
+    () => buildActiveApprovedLeaveDateKeySet(approvedLeaveRequests),
     [approvedLeaveRequests]
   );
   const holidayDateKeySet = useMemo(
@@ -1563,6 +1546,22 @@ export default function EmployeeTodayAttendancePanel({
                           ? tr(language, `هذا اليوم ضمن أيام الراحة الأسبوعية: ${weeklyOffDaysLabel}.`, `This day is part of the weekly days off: ${weeklyOffDaysLabel}.`)
                           : tr(language, "لا توجد بيانات حضور فعلية لليوم المحدد.", "No actual attendance data exists for the selected day.")}
                   </p>
+                  {canManageAttendance && selectedStatus === "leave" && onCancelLeave ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="mt-5 rounded-full border-rose-200 bg-white px-5 text-rose-700 hover:bg-rose-50 hover:text-rose-800"
+                      onClick={() => void onCancelLeave(selectedDate)}
+                      disabled={cancelLeaveLoading}
+                    >
+                      {cancelLeaveLoading ? (
+                        <Loader2 className="ml-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="ml-2 h-4 w-4" />
+                      )}
+                      {tr(language, "إلغاء الإجازة", "Cancel Leave")}
+                    </Button>
+                  ) : null}
                 </div>
               )}
 

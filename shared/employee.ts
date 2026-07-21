@@ -298,7 +298,11 @@ export type EmployeePayrollRecordDoc = {
   createdByEmail?: string | null;
 };
 
-export type EmployeeLeaveRequestStatus = "pending" | "approved" | "rejected";
+export type EmployeeLeaveRequestStatus =
+  | "pending"
+  | "approved"
+  | "rejected"
+  | "cancelled";
 
 export type EmployeeLeaveType =
   | "annual"
@@ -320,6 +324,14 @@ export type EmployeeLeaveRequestDoc = {
   startDate: unknown;
   endDate: unknown;
   daysCount: number | null;
+  balanceDeductedDays?: number | null;
+  balanceRestoredDays?: number | null;
+  cancelledDateKeys?: string[] | null;
+  cancellationDate?: string | null;
+  cancelledAt?: unknown;
+  cancelledBy?: string | null;
+  cancelledByEmail?: string | null;
+  cancelledByName?: string | null;
   employeeNote?: string | null;
   hrNote?: string | null;
   createdAt?: unknown;
