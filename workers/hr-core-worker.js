@@ -14,7 +14,7 @@ const ACCOUNT_MANAGE_ROLES = new Set(["owner", "admin"]);
 const DEFAULT_LIST_LIMIT = 50;
 const MAX_LIST_LIMIT = 200;
 const MAX_IMPORT_ROWS = 250;
-const HR_WORKER_RELEASE = "phase9b-self-service-profile-v1";
+const HR_WORKER_RELEASE = "phase9c-employee-admin-cutover-v1";
 const FIREBASE_JWKS_URL =
   "https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com";
 
@@ -165,6 +165,28 @@ async function routeRequest(request, env) {
       );
     }
     return forbidden("employees_manage_forbidden");
+  }
+
+  if (pathname === "/api/hr/leave-balance-adjustments" && request.method === "GET") {
+    if (!canReadEmployees(requester)) {
+      return forbidden("employees_view_forbidden");
+    }
+    return listLeaveBalanceAdjustments(url, env.HR_DB);
+  }
+
+  const leaveBalanceAdjustmentMatch = pathname.match(
+    /^\/api\/hr\/employees\/([^/]+)\/leave-balance-adjustments$/
+  );
+  if (leaveBalanceAdjustmentMatch && request.method === "POST") {
+    if (!canManageEmployees(requester)) {
+      return forbidden("employees_manage_forbidden");
+    }
+    return adjustEmployeeLeaveBalance(
+      request,
+      env.HR_DB,
+      requester,
+      decodeURIComponent(leaveBalanceAdjustmentMatch[1])
+    );
   }
 
   if (pathname === "/api/hr/leave-requests" && request.method === "GET") {
@@ -375,7 +397,8 @@ async function healthCheck(db) {
            (SELECT COUNT(*) FROM hr_daily_tasks) AS daily_task_count,
            (SELECT COUNT(*) FROM hr_weekly_reports) AS weekly_report_count,
            (SELECT COUNT(*) FROM hr_employee_files) AS employee_file_count,
-           (SELECT COUNT(*) FROM hr_employee_messages) AS employee_message_count`
+           (SELECT COUNT(*) FROM hr_employee_messages) AS employee_message_count,
+           (SELECT COUNT(*) FROM employee_leave_balance_adjustments) AS leave_balance_adjustment_count`
       )
       .first();
 
@@ -396,6 +419,7 @@ async function healthCheck(db) {
       weeklyReportCount: Number(row?.weekly_report_count || 0),
       employeeFileCount: Number(row?.employee_file_count || 0),
       employeeMessageCount: Number(row?.employee_message_count || 0),
+      leaveBalanceAdjustmentCount: Number(row?.leave_balance_adjustment_count || 0),
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
@@ -656,6 +680,260 @@ async function listEmployeeDirectory(db) {
     });
   } catch (error) {
     return serverError("employee_directory_query_failed", error);
+  }
+}
+
+
+export function normalizeLeaveBalanceAdjustmentPayload(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return { ok: false, message: "invalid_leave_balance_adjustment_payload" };
+  }
+
+  const operationType =
+    normalizeText(value.operationType).toLowerCase() === "deduct"
+      ? "deduct"
+      : "add";
+  const amount = Number(value.value);
+  const reason = normalizeText(value.reason);
+
+  if (!Number.isFinite(amount) || amount < 0) {
+    return { ok: false, message: "leave_balance_value_invalid" };
+  }
+  if (operationType === "deduct" && amount <= 0) {
+    return { ok: false, message: "leave_balance_deduction_invalid" };
+  }
+  if (!reason) {
+    return { ok: false, message: "leave_balance_reason_required" };
+  }
+
+  return {
+    ok: true,
+    value: {
+      operationType,
+      amount,
+      reason,
+    },
+  };
+}
+
+function mapLeaveBalanceAdjustmentRow(row) {
+  return {
+    id: row.id,
+    employeeId: row.employee_id,
+    employeeUid: row.employee_uid || null,
+    employeeName: row.employee_name || null,
+    previousBalance: Number(row.previous_balance || 0),
+    nextBalance: Number(row.next_balance || 0),
+    difference: Number(row.difference || 0),
+    operationType: row.operation_type,
+    operationLabel: row.operation_label || "",
+    reason: row.reason,
+    createdByUid: row.created_by_uid || null,
+    createdByEmail: row.created_by_email || null,
+    createdByName: row.created_by_name || null,
+    createdAt: row.created_at,
+  };
+}
+
+async function listLeaveBalanceAdjustments(url, db) {
+  const query = parseListQuery(url.searchParams);
+  const employeeId = normalizeText(url.searchParams.get("employeeId"));
+  const employeeUid = normalizeText(url.searchParams.get("employeeUid"));
+  const filters = [];
+  const bindings = [];
+
+  if (employeeId) {
+    filters.push("employee_id = ?");
+    bindings.push(employeeId);
+  }
+  if (employeeUid) {
+    filters.push("employee_uid = ?");
+    bindings.push(employeeUid);
+  }
+
+  const whereSql = filters.length ? `WHERE ${filters.join(" AND ")}` : "";
+
+  try {
+    const result = await db.batch([
+      db
+        .prepare(
+          `SELECT *
+           FROM employee_leave_balance_adjustments
+           ${whereSql}
+           ORDER BY created_at DESC, id DESC
+           LIMIT ? OFFSET ?`
+        )
+        .bind(...bindings, query.limit, query.offset),
+      db
+        .prepare(
+          `SELECT COUNT(*) AS total
+           FROM employee_leave_balance_adjustments
+           ${whereSql}`
+        )
+        .bind(...bindings),
+    ]);
+
+    const rows = result[0]?.results || [];
+    const total = Number(result[1]?.results?.[0]?.total || 0);
+    return json(200, {
+      ok: true,
+      adjustments: rows.map(mapLeaveBalanceAdjustmentRow),
+      pagination: {
+        limit: query.limit,
+        offset: query.offset,
+        total,
+        hasMore: query.offset + rows.length < total,
+      },
+    });
+  } catch (error) {
+    return serverError("leave_balance_adjustments_query_failed", error);
+  }
+}
+
+async function adjustEmployeeLeaveBalance(request, db, requester, id) {
+  const bodyResult = await readJsonBody(request);
+  if (!bodyResult.ok) return bodyResult.response;
+
+  const payload = normalizeLeaveBalanceAdjustmentPayload(bodyResult.value);
+  if (!payload.ok) {
+    return json(400, { ok: false, message: payload.message });
+  }
+
+  const before = await db
+    .prepare("SELECT * FROM employees WHERE id = ? OR auth_uid = ? LIMIT 1")
+    .bind(id, id)
+    .first();
+  if (!before) return json(404, { ok: false, message: "employee_not_found" });
+
+  const previousBalance = Number(before.leave_balance || 0);
+  const nextBalance =
+    payload.value.operationType === "deduct"
+      ? previousBalance - payload.value.amount
+      : payload.value.amount;
+
+  if (!Number.isFinite(nextBalance) || nextBalance < 0) {
+    return json(409, { ok: false, message: "leave_balance_insufficient" });
+  }
+
+  const now = new Date().toISOString();
+  const adjustmentId = crypto.randomUUID();
+  const operationLabel =
+    payload.value.operationType === "deduct" ? "خصم" : "إضافة";
+
+  let employment = {};
+  try {
+    employment = before.employment_json
+      ? JSON.parse(before.employment_json)
+      : {};
+  } catch {
+    employment = {};
+  }
+  employment = {
+    ...employment,
+    leaveBalance: nextBalance,
+    leaveBalanceAdjustmentMeta: {
+      previousBalance,
+      nextBalance,
+      operationType: payload.value.operationType,
+      operationLabel,
+      reason: payload.value.reason,
+      adjustedAt: now,
+      adjustedByUid: requester.uid,
+      adjustedByEmail: requester.email || null,
+    },
+    updatedAt: now,
+    updatedByUid: requester.uid,
+    updatedByEmail: requester.email || null,
+  };
+
+  const adjustmentRow = {
+    id: adjustmentId,
+    employee_id: before.id,
+    employee_uid: before.auth_uid || null,
+    employee_name: before.name || null,
+    previous_balance: previousBalance,
+    next_balance: nextBalance,
+    difference: nextBalance - previousBalance,
+    operation_type: payload.value.operationType,
+    operation_label: operationLabel,
+    reason: payload.value.reason,
+    created_by_uid: requester.uid,
+    created_by_email: requester.email || null,
+    created_by_name:
+      requester.account?.display_name || requester.email || null,
+    created_at: now,
+  };
+
+  try {
+    await db.batch([
+      db
+        .prepare(
+          `UPDATE employees
+           SET leave_balance = ?, employment_json = ?, updated_at = ?
+           WHERE id = ?`
+        )
+        .bind(nextBalance, JSON.stringify(employment), now, before.id),
+      db
+        .prepare(
+          `INSERT INTO employee_leave_balance_adjustments (
+             id, employee_id, employee_uid, employee_name,
+             previous_balance, next_balance, difference,
+             operation_type, operation_label, reason,
+             created_by_uid, created_by_email, created_by_name, created_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        )
+        .bind(
+          adjustmentRow.id,
+          adjustmentRow.employee_id,
+          adjustmentRow.employee_uid,
+          adjustmentRow.employee_name,
+          adjustmentRow.previous_balance,
+          adjustmentRow.next_balance,
+          adjustmentRow.difference,
+          adjustmentRow.operation_type,
+          adjustmentRow.operation_label,
+          adjustmentRow.reason,
+          adjustmentRow.created_by_uid,
+          adjustmentRow.created_by_email,
+          adjustmentRow.created_by_name,
+          adjustmentRow.created_at
+        ),
+      buildAuditStatement(db, request, requester, {
+        action: "employee.leave_balance.adjust",
+        entityType: "employee",
+        entityId: before.id,
+        before: { leaveBalance: previousBalance },
+        after: {
+          leaveBalance: nextBalance,
+          operationType: payload.value.operationType,
+          reason: payload.value.reason,
+          adjustmentId,
+        },
+      }),
+    ]);
+
+    const updated = await db
+      .prepare(
+        `SELECT
+           e.*,
+           a.role_key AS account_role,
+           a.is_active AS account_is_active,
+           a.employee_profile_enabled
+         FROM employees e
+         LEFT JOIN accounts a ON a.uid = e.auth_uid
+         WHERE e.id = ?
+         LIMIT 1`
+      )
+      .bind(before.id)
+      .first();
+
+    return json(200, {
+      ok: true,
+      employee: mapEmployeeRow(updated),
+      adjustment: mapLeaveBalanceAdjustmentRow(adjustmentRow),
+    });
+  } catch (error) {
+    return databaseMutationError("leave_balance_adjustment_failed", error);
   }
 }
 

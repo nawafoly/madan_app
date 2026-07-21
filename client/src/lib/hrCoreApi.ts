@@ -1037,3 +1037,62 @@ export async function markHrCoreEmployeeMessagesRead(ids: string[]) {
     body: JSON.stringify({ ids }),
   });
 }
+
+
+export type HrCoreLeaveBalanceAdjustment = {
+  id: string;
+  employeeId: string;
+  employeeUid: string | null;
+  employeeName: string | null;
+  previousBalance: number;
+  nextBalance: number;
+  difference: number;
+  operationType: "add" | "deduct" | string;
+  operationLabel: string;
+  reason: string;
+  createdByUid: string | null;
+  createdByEmail: string | null;
+  createdByName: string | null;
+  createdAt: string;
+};
+
+export async function listHrCoreLeaveBalanceAdjustments(
+  input: {
+    employeeId?: string;
+    employeeUid?: string;
+    limit?: number;
+    offset?: number;
+  } = {}
+) {
+  const params = new URLSearchParams();
+  if (input.employeeId) params.set("employeeId", input.employeeId);
+  if (input.employeeUid) params.set("employeeUid", input.employeeUid);
+  if (input.limit !== undefined) params.set("limit", String(input.limit));
+  if (input.offset !== undefined) params.set("offset", String(input.offset));
+  return requestHrCore<{
+    ok: true;
+    adjustments: HrCoreLeaveBalanceAdjustment[];
+    pagination: HrCorePagination;
+  }>("/api/hr/leave-balance-adjustments", {}, params);
+}
+
+export async function adjustHrCoreEmployeeLeaveBalance(
+  employeeId: string,
+  input: {
+    value: number;
+    operationType: "add" | "deduct";
+    reason: string;
+  }
+) {
+  return requestHrCore<{
+    ok: true;
+    employee: HrCoreEmployee;
+    adjustment: HrCoreLeaveBalanceAdjustment;
+  }>(
+    `/api/hr/employees/${encodeURIComponent(employeeId)}/leave-balance-adjustments`,
+    {
+      method: "POST",
+      body: JSON.stringify(input),
+    }
+  );
+}

@@ -10,20 +10,6 @@ import {
 } from "react";
 import { useSearch } from "wouter";
 import {
-  collection,
-  doc,
-  getDocs,
-  onSnapshot,
-  orderBy,
-  or,
-  query,
-  runTransaction,
-  serverTimestamp,
-  setDoc,
-  writeBatch,
-  where,
-} from "firebase/firestore";
-import {
   BriefcaseBusiness,
   BadgeCheck,
   CalendarDays,
@@ -92,12 +78,9 @@ import {
 } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Textarea } from "@/components/ui/textarea";
-import { auth, db } from "@/_core/firebase";
+import { auth } from "@/_core/firebase";
 import { hasPermission, useAuth } from "@/_core/hooks/useAuth";
 import {
-  AUDIT_ACTIONS,
-  auditedDeleteDoc,
-  auditedUpdateDoc,
   buildAuditSource,
   logAuditEvent,
 } from "@/lib/auditLog";
@@ -119,10 +102,8 @@ import {
   type WorkScheduleWeekday,
 } from "@/lib/workSchedule";
 import {
-  EMPLOYEE_ABSENCES_COLLECTION,
   EMPLOYEE_ABSENCE_TYPE_OPTIONS,
   buildEmployeeAbsenceDateInput,
-  buildEmployeeAbsencePayload,
   formatEmployeeAbsenceDate,
   formatEmployeeAbsenceDays,
   getEmployeeAbsenceTypeLabel,
@@ -134,7 +115,6 @@ import {
 import {
   EMPLOYEE_DEFAULT_FILE_TYPE,
   EMPLOYEE_FILE_CATEGORY,
-  EMPLOYEE_FILES_COLLECTION,
   EMPLOYEE_FILE_TYPE_OPTIONS,
   filterActiveEmployeeFiles,
   isOfficialEmployeeFile,
@@ -163,13 +143,11 @@ import {
 import {
   EMPLOYEE_AVATAR_CATEGORY,
   EMPLOYEE_EMPTY_VALUE,
-  buildEmployeeAvatarPatch,
   normalizeEmployeeProfile,
   type EmployeeAvatarDoc,
   type EmployeeProfileUserDoc,
 } from "@/lib/employeeProfile";
 import {
-  HR_CORE_D1_ENABLED,
   cancelHrCoreLeaveDate,
   createHrCoreEmployeeFile,
   createHrCoreEmployeeMessage,
@@ -178,12 +156,12 @@ import {
   createHrCorePayrollRecord,
   deleteHrCoreAbsence,
   deleteHrCoreEmployeeFile,
-  isHrCoreConfigured,
   listHrCoreAbsences,
   listHrCoreEmployees,
   listHrCoreEmployeeFiles,
   listHrCoreEmployeeMessages,
   listHrCoreLeaveRequests,
+  listHrCoreLeaveBalanceAdjustments,
   listHrCorePayrollAdvances,
   listHrCorePayrollRecords,
   listHrCoreServiceRequests,
@@ -191,13 +169,12 @@ import {
   reviewHrCoreLeaveRequest,
   reviewHrCoreServiceRequest,
   updateHrCoreEmployee,
+  adjustHrCoreEmployeeLeaveBalance,
   type HrCoreEmployee,
   type HrCoreServiceRequest,
 } from "@/lib/hrCoreApi";
 import {
-  EMPLOYEE_LEAVE_REQUESTS_COLLECTION,
   buildActiveApprovedLeaveDateKeySet,
-  buildEmployeeLeaveRequestPayload,
   buildLeaveDateFromInput,
   getActiveApprovedLeaveDateKeys,
   getLatestApprovedEmployeeLeaveRequest,
@@ -212,7 +189,6 @@ import {
   type EmployeeLeaveRequestRecord,
 } from "@/lib/employeeLeave";
 import {
-  EMPLOYEE_SERVICE_REQUESTS_COLLECTION,
   getEmployeeServiceRequestStatusLabel,
   getEmployeeServiceRequestTypeLabel,
   normalizeEmployeeServiceRequest,
@@ -221,7 +197,6 @@ import {
 } from "@/lib/employeeServiceRequests";
 import type { EmployeeServiceRequestStatus } from "@shared/employee";
 import {
-  EMPLOYEE_PAYROLL_RECORDS_COLLECTION,
   buildEmployeePayrollMonthInput,
   buildEmployeePayrollRecordId,
   computeEmployeePayroll,
@@ -255,12 +230,10 @@ import type {
   EmployeeEmploymentDoc,
   EmployeeEmploymentStatus,
   EmployeeFileDoc,
-  EmployeeLeaveRequestDoc,
   EmployeeLeaveRequestStatus,
   EmployeeMessageDoc,
   EmployeeMessageType,
 } from "@shared/employee";
-import { EMPLOYEE_MESSAGES_COLLECTION } from "@shared/employee";
 
 type EmployeeRecord = EmployeeProfileUserDoc & {
   id: string;
@@ -499,8 +472,6 @@ function createEmptyEmployeeWorkspaceNotificationBucket(): EmployeeWorkspaceNoti
   };
 }
 
-const EMPLOYEE_LEAVE_BALANCE_ADJUSTMENTS_COLLECTION =
-  "employee_leave_balance_adjustments";
 
 const OFFICIAL_DOCUMENT_TYPE_OPTIONS = [
   { value: "contract", label: "عقد" },
@@ -2217,159 +2188,34 @@ export default function EmployeesManagementPage() {
   }, []);
 
   useEffect(() => {
+    let active = true;
     setLoading(true);
     setError("");
 
-    if (HR_CORE_D1_ENABLED && isHrCoreConfigured()) {
-      let active = true;
-
-      listHrCoreEmployees({ limit: 500, offset: 0 })
-        .then(result => {
-          if (!active) return;
-          const rows = result.employees
-            .map(buildEmployeeRecordFromHrCore)
-            .sort((a, b) => {
-              const aName = pickText(
-                a.displayName,
-                a.name,
-                a.email
-              ).toLowerCase();
-              const bName = pickText(
-                b.displayName,
-                b.name,
-                b.email
-              ).toLowerCase();
-              return aName.localeCompare(bName);
-            });
-          setEmployees(rows);
-        })
-        .catch(snapshotError => {
-          console.error("employees_hr_core_load_error", snapshotError);
-          if (!active) return;
-          setEmployees([]);
-          setError("تعذر تحميل قائمة الموظفين من Cloudflare.");
-        })
-        .finally(() => {
-          if (active) setLoading(false);
-        });
-
-      return () => {
-        active = false;
-      };
-    }
-
-    let usersReady = false;
-    let employeesReady = false;
-    let usersMap = new Map<string, Record<string, any>>();
-    let employeesMap = new Map<string, Record<string, any>>();
-
-    const rebuildEmployees = () => {
-      if (!usersReady || !employeesReady) return;
-      const employeesByLinkedUserId = new Map<
-        string,
-        { docId: string; data: Record<string, any> }
-      >();
-
-      employeesMap.forEach((employeeData, employeeDocId) => {
-        const linkedUserId = pickText(
-          employeeData.linkedUserUid,
-          employeeData.uid,
-          employeeData.userId
-        );
-
-        if (linkedUserId && !employeesByLinkedUserId.has(linkedUserId)) {
-          employeesByLinkedUserId.set(linkedUserId, {
-            docId: employeeDocId,
-            data: employeeData,
+    void listHrCoreEmployees({ limit: 500, offset: 0 })
+      .then(result => {
+        if (!active) return;
+        const rows = result.employees
+          .map(buildEmployeeRecordFromHrCore)
+          .sort((a, b) => {
+            const aName = pickText(a.displayName, a.name, a.email).toLowerCase();
+            const bName = pickText(b.displayName, b.name, b.email).toLowerCase();
+            return aName.localeCompare(bName);
           });
-        }
+        setEmployees(rows);
+      })
+      .catch(error => {
+        console.error("employees_hr_core_load_error", error);
+        if (!active) return;
+        setEmployees([]);
+        setError("تعذر تحميل قائمة الموظفين من Cloudflare.");
+      })
+      .finally(() => {
+        if (active) setLoading(false);
       });
 
-      const rows = Array.from(usersMap.entries())
-        .map(([userId, userData]) => {
-          const linkedEmployeeId = pickText(userData.linkedEmployeeId);
-          const linkedEmployee =
-            (linkedEmployeeId && employeesMap.has(linkedEmployeeId)
-              ? {
-                  docId: linkedEmployeeId,
-                  data: employeesMap.get(linkedEmployeeId) as Record<
-                    string,
-                    any
-                  >,
-                }
-              : employeesByLinkedUserId.get(userId)) ||
-            (employeesMap.has(userId)
-              ? {
-                  docId: userId,
-                  data: employeesMap.get(userId) as Record<string, any>,
-                }
-              : null);
-
-          if (!hasEmployeeProfileSignal(userData, linkedEmployee?.data)) {
-            return null;
-          }
-
-          return buildMergedEmployeeRecord({
-            userId,
-            userData,
-            employeeDocId: linkedEmployee?.docId ?? null,
-            employeeData: linkedEmployee?.data ?? null,
-          });
-        })
-        .filter((employee): employee is EmployeeRecord => !!employee)
-        .sort((a, b) => {
-          const aName = pickText(a.displayName, a.name, a.email).toLowerCase();
-          const bName = pickText(b.displayName, b.name, b.email).toLowerCase();
-          return aName.localeCompare(bName);
-        });
-
-      setEmployees(rows);
-      setLoading(false);
-    };
-
-    const unsubscribeUsers = onSnapshot(
-      collection(db, "users"),
-      snapshot => {
-        usersMap = new Map(
-          snapshot.docs.map(docSnapshot => [
-            docSnapshot.id,
-            docSnapshot.data() as Record<string, any>,
-          ])
-        );
-        usersReady = true;
-        rebuildEmployees();
-      },
-      snapshotError => {
-        console.error("employees_snapshot_error", snapshotError);
-        setEmployees([]);
-        setError("تعذر تحميل قائمة الموظفين.");
-        setLoading(false);
-      }
-    );
-
-    const unsubscribeEmployeeDirectory = onSnapshot(
-      collection(db, "employees"),
-      snapshot => {
-        employeesMap = new Map(
-          snapshot.docs.map(docSnapshot => [
-            docSnapshot.id,
-            docSnapshot.data() as Record<string, any>,
-          ])
-        );
-        employeesReady = true;
-        rebuildEmployees();
-      },
-      snapshotError => {
-        console.error("employee_directory_snapshot_error", snapshotError);
-        employeesMap = new Map();
-        employeesReady = true;
-        rebuildEmployees();
-      }
-    );
-
     return () => {
-      unsubscribeUsers();
-      unsubscribeEmployeeDirectory();
+      active = false;
     };
   }, []);
 
@@ -2716,65 +2562,36 @@ export default function EmployeesManagementPage() {
       return;
     }
 
+    let active = true;
     setEmployeeAbsencesLoading(true);
 
-    if (HR_CORE_D1_ENABLED && isHrCoreConfigured()) {
-      let active = true;
-
-      void listHrCoreAbsences({
-        employeeId: selectedEmployeeDocumentId || undefined,
-        employeeUid: selectedEmployeeAuthUid || undefined,
-        limit: 500,
-        offset: 0,
-      })
-        .then(result => {
-          if (!active) return;
-          setEmployeeAbsences(
-            sortEmployeeAbsences(
-              result.absences.map(absence =>
-                normalizeEmployeeAbsence(absence.id, absence)
-              )
-            )
-          );
-          setEmployeeAbsencesLoading(false);
-        })
-        .catch(error => {
-          if (!active) return;
-          console.error("employee_absences_hr_core_error", error);
-          setEmployeeAbsences([]);
-          setEmployeeAbsencesLoading(false);
-        });
-
-      return () => {
-        active = false;
-      };
-    }
-
-    const unsubscribe = onSnapshot(
-      query(
-        collection(db, EMPLOYEE_ABSENCES_COLLECTION),
-        where("employeeId", "==", selectedEmployeeDocumentId)
-      ),
-      snapshot => {
-        const rows = sortEmployeeAbsences(
-          snapshot.docs.map(docSnapshot =>
-            normalizeEmployeeAbsence(
-              docSnapshot.id,
-              (docSnapshot.data() as Record<string, any>) || {}
+    void listHrCoreAbsences({
+      employeeId: selectedEmployeeDocumentId || undefined,
+      employeeUid: selectedEmployeeAuthUid || undefined,
+      limit: 500,
+      offset: 0,
+    })
+      .then(result => {
+        if (!active) return;
+        setEmployeeAbsences(
+          sortEmployeeAbsences(
+            result.absences.map(absence =>
+              normalizeEmployeeAbsence(absence.id, absence)
             )
           )
         );
-        setEmployeeAbsences(rows);
-        setEmployeeAbsencesLoading(false);
-      },
-      error => {
-        console.error("employee_absences_admin_snapshot_error", error);
-        setEmployeeAbsences([]);
-        setEmployeeAbsencesLoading(false);
-      }
-    );
+      })
+      .catch(error => {
+        console.error("employee_absences_hr_core_error", error);
+        if (active) setEmployeeAbsences([]);
+      })
+      .finally(() => {
+        if (active) setEmployeeAbsencesLoading(false);
+      });
 
-    return () => unsubscribe();
+    return () => {
+      active = false;
+    };
   }, [
     selectedEmployeeDocumentId,
     selectedEmployeeAuthUid,
@@ -2791,78 +2608,50 @@ export default function EmployeesManagementPage() {
       return;
     }
 
+    let active = true;
     setEmployeePayrollRecordsLoading(true);
+    setApprovedPayrollAdvancesLoading(true);
 
-    if (HR_CORE_D1_ENABLED && isHrCoreConfigured()) {
-      let active = true;
-      setApprovedPayrollAdvancesLoading(true);
-      Promise.all([
-        listHrCorePayrollRecords({
-          employeeId: selectedEmployeeDocumentId || undefined,
-          employeeUid: selectedEmployeeAuthUid || undefined,
-          limit: 200,
-        }),
-        listHrCorePayrollAdvances({
-          employeeId: selectedEmployeeDocumentId || undefined,
-          employeeUid: selectedEmployeeAuthUid || undefined,
-        }),
-      ])
-        .then(([payrollResult, advancesResult]) => {
-          if (!active) return;
-          setEmployeePayrollRecords(
-            sortEmployeePayrollRecords(
-              payrollResult.payrollRecords.map(record =>
-                normalizeEmployeePayrollRecord(record.id, record as Record<string, any>)
+    void Promise.all([
+      listHrCorePayrollRecords({
+        employeeId: selectedEmployeeDocumentId || undefined,
+        employeeUid: selectedEmployeeAuthUid || undefined,
+        limit: 200,
+      }),
+      listHrCorePayrollAdvances({
+        employeeId: selectedEmployeeDocumentId || undefined,
+        employeeUid: selectedEmployeeAuthUid || undefined,
+      }),
+    ])
+      .then(([payrollResult, advancesResult]) => {
+        if (!active) return;
+        setEmployeePayrollRecords(
+          sortEmployeePayrollRecords(
+            payrollResult.payrollRecords.map(record =>
+              normalizeEmployeePayrollRecord(
+                record.id,
+                record as Record<string, any>
               )
-            )
-          );
-          setApprovedPayrollAdvances(advancesResult.advances || []);
-          setEmployeePayrollRecordsLoading(false);
-          setApprovedPayrollAdvancesLoading(false);
-        })
-        .catch(error => {
-          if (!active) return;
-          console.error("employee_payroll_records_hr_core_error", error);
-          setEmployeePayrollRecords([]);
-          setApprovedPayrollAdvances([]);
-          setEmployeePayrollRecordsLoading(false);
-          setApprovedPayrollAdvancesLoading(false);
-        });
-
-      return () => {
-        active = false;
-      };
-    }
-
-    const unsubscribe = onSnapshot(
-      query(
-        collection(db, EMPLOYEE_PAYROLL_RECORDS_COLLECTION),
-        where("employeeId", "==", selectedEmployeeDocumentId)
-      ),
-      snapshot => {
-        const rows = sortEmployeePayrollRecords(
-          snapshot.docs.map(docSnapshot =>
-            normalizeEmployeePayrollRecord(
-              docSnapshot.id,
-              (docSnapshot.data() as Record<string, any>) || {}
             )
           )
         );
-        setEmployeePayrollRecords(rows);
-        setApprovedPayrollAdvances([]);
-        setEmployeePayrollRecordsLoading(false);
-        setApprovedPayrollAdvancesLoading(false);
-      },
-      error => {
-        console.error("employee_payroll_records_admin_snapshot_error", error);
+        setApprovedPayrollAdvances(advancesResult.advances || []);
+      })
+      .catch(error => {
+        console.error("employee_payroll_records_hr_core_error", error);
+        if (!active) return;
         setEmployeePayrollRecords([]);
         setApprovedPayrollAdvances([]);
+      })
+      .finally(() => {
+        if (!active) return;
         setEmployeePayrollRecordsLoading(false);
         setApprovedPayrollAdvancesLoading(false);
-      }
-    );
+      });
 
-    return () => unsubscribe();
+    return () => {
+      active = false;
+    };
   }, [selectedEmployeeDocumentId, selectedEmployeeAuthUid, payrollRevision]);
 
   useEffect(() => {
@@ -2877,72 +2666,37 @@ export default function EmployeesManagementPage() {
       return;
     }
 
+    let active = true;
     setReviewNotes({});
     setLeaveRequestsLoading(true);
 
-    if (HR_CORE_D1_ENABLED && isHrCoreConfigured()) {
-      let active = true;
-
-      void listHrCoreLeaveRequests({
-        employeeId: selectedEmployeeDocumentId || undefined,
-        employeeUid: selectedEmployeeAuthUid || undefined,
-        limit: 500,
-        offset: 0,
-      })
-        .then(result => {
-          if (!active) return;
-          setLeaveRequests(
-            sortEmployeeLeaveRequests(
-              result.leaveRequests.map(request =>
-                normalizeEmployeeLeaveRequest(request.id, request)
-              )
-            )
-          );
-          setLeaveRequestsLoading(false);
-        })
-        .catch(error => {
-          if (!active) return;
-          console.error("employee_leave_requests_hr_core_error", error);
-          setLeaveRequests([]);
-          setLeaveRequestsLoading(false);
-        });
-
-      return () => {
-        active = false;
-      };
-    }
-
-    const unsubscribe = onSnapshot(
-      query(
-        collection(db, EMPLOYEE_LEAVE_REQUESTS_COLLECTION),
-        or(
-          where("userId", "==", selectedEmployeeAuthUid),
-          where("employeeUid", "==", selectedEmployeeAuthUid)
-        )
-      ),
-      snapshot => {
-        const rows = sortEmployeeLeaveRequests(
-          snapshot.docs.map(docSnapshot =>
-            normalizeEmployeeLeaveRequest(
-              docSnapshot.id,
-              (docSnapshot.data() as Record<string, any>) || {}
+    void listHrCoreLeaveRequests({
+      employeeId: selectedEmployeeDocumentId || undefined,
+      employeeUid: selectedEmployeeAuthUid || undefined,
+      limit: 500,
+      offset: 0,
+    })
+      .then(result => {
+        if (!active) return;
+        setLeaveRequests(
+          sortEmployeeLeaveRequests(
+            result.leaveRequests.map(request =>
+              normalizeEmployeeLeaveRequest(request.id, request)
             )
           )
         );
-        setLeaveRequests(rows);
-        setLeaveRequestsLoading(false);
-      },
-      snapshotError => {
-        console.error(
-          "employee_leave_requests_admin_snapshot_error",
-          snapshotError
-        );
-        setLeaveRequests([]);
-        setLeaveRequestsLoading(false);
-      }
-    );
+      })
+      .catch(error => {
+        console.error("employee_leave_requests_hr_core_error", error);
+        if (active) setLeaveRequests([]);
+      })
+      .finally(() => {
+        if (active) setLeaveRequestsLoading(false);
+      });
 
-    return () => unsubscribe();
+    return () => {
+      active = false;
+    };
   }, [
     selectedEmployeeAuthUid,
     selectedEmployeeDocumentId,
@@ -2956,68 +2710,36 @@ export default function EmployeesManagementPage() {
       return;
     }
 
+    let active = true;
     setServiceRequestsLoading(true);
 
-    if (HR_CORE_D1_ENABLED && isHrCoreConfigured()) {
-      let active = true;
-
-      void listHrCoreServiceRequests({
-        employeeId: selectedEmployeeDocumentId || undefined,
-        employeeUid: selectedEmployeeAuthUid || undefined,
-        limit: 500,
-        offset: 0,
-      })
-        .then(result => {
-          if (!active) return;
-          setServiceRequests(
-            sortEmployeeServiceRequests(
-              result.serviceRequests.map(request =>
-                normalizeEmployeeServiceRequest(request.id, request)
-              )
-            )
-          );
-          setServiceRequestsLoading(false);
-        })
-        .catch(error => {
-          if (!active) return;
-          console.error("employee_service_requests_hr_core_error", error);
-          setServiceRequests([]);
-          setServiceRequestsLoading(false);
-        });
-
-      return () => {
-        active = false;
-      };
-    }
-
-    const unsubscribe = onSnapshot(
-      query(
-        collection(db, EMPLOYEE_SERVICE_REQUESTS_COLLECTION),
-        where("employeeUid", "==", selectedEmployeeAuthUid)
-      ),
-      snapshot => {
-        const rows = sortEmployeeServiceRequests(
-          snapshot.docs.map(docSnapshot =>
-            normalizeEmployeeServiceRequest(
-              docSnapshot.id,
-              (docSnapshot.data() as Record<string, any>) || {}
+    void listHrCoreServiceRequests({
+      employeeId: selectedEmployeeDocumentId || undefined,
+      employeeUid: selectedEmployeeAuthUid || undefined,
+      limit: 500,
+      offset: 0,
+    })
+      .then(result => {
+        if (!active) return;
+        setServiceRequests(
+          sortEmployeeServiceRequests(
+            result.serviceRequests.map(request =>
+              normalizeEmployeeServiceRequest(request.id, request)
             )
           )
         );
-        setServiceRequests(rows);
-        setServiceRequestsLoading(false);
-      },
-      snapshotError => {
-        console.error(
-          "employee_service_requests_admin_snapshot_error",
-          snapshotError
-        );
-        setServiceRequests([]);
-        setServiceRequestsLoading(false);
-      }
-    );
+      })
+      .catch(error => {
+        console.error("employee_service_requests_hr_core_error", error);
+        if (active) setServiceRequests([]);
+      })
+      .finally(() => {
+        if (active) setServiceRequestsLoading(false);
+      });
 
-    return () => unsubscribe();
+    return () => {
+      active = false;
+    };
   }, [
     selectedEmployeeAuthUid,
     selectedEmployeeDocumentId,
@@ -3030,47 +2752,46 @@ export default function EmployeesManagementPage() {
   }, [selectedEmployeeId]);
 
   useEffect(() => {
-    if (!selectedEmployeeAuthUid) {
+    if (!selectedEmployeeAuthUid && !selectedEmployeeDocumentId) {
       setLeaveBalanceAdjustments([]);
       setLeaveBalanceAdjustmentsLoading(false);
       return;
     }
 
+    let active = true;
     setLeaveBalanceAdjustmentsLoading(true);
 
-    const unsubscribe = onSnapshot(
-      query(
-        collection(db, EMPLOYEE_LEAVE_BALANCE_ADJUSTMENTS_COLLECTION),
-        where("employeeUid", "==", selectedEmployeeAuthUid)
-      ),
-      snapshot => {
-        const rows = snapshot.docs
-          .map(docSnapshot => {
-            const data = (docSnapshot.data() as Record<string, any>) || {};
-            return {
-              id: docSnapshot.id,
-              ...data,
-              createdAtDate: toDateSafe(data.createdAt),
-            };
-          })
-          .sort((a, b) => {
-            const aTime = a.createdAtDate?.getTime() || 0;
-            const bTime = b.createdAtDate?.getTime() || 0;
-            return bTime - aTime;
-          });
+    void listHrCoreLeaveBalanceAdjustments({
+      employeeId: selectedEmployeeDocumentId || undefined,
+      employeeUid: selectedEmployeeAuthUid || undefined,
+      limit: 200,
+      offset: 0,
+    })
+      .then(result => {
+        if (!active) return;
+        setLeaveBalanceAdjustments(
+          result.adjustments.map(adjustment => ({
+            ...adjustment,
+            createdAtDate: toDateSafe(adjustment.createdAt),
+          }))
+        );
+      })
+      .catch(error => {
+        console.error("leave_balance_adjustments_hr_core_error", error);
+        if (active) setLeaveBalanceAdjustments([]);
+      })
+      .finally(() => {
+        if (active) setLeaveBalanceAdjustmentsLoading(false);
+      });
 
-        setLeaveBalanceAdjustments(rows);
-        setLeaveBalanceAdjustmentsLoading(false);
-      },
-      error => {
-        console.error("leave_balance_adjustments_snapshot_error", error);
-        setLeaveBalanceAdjustments([]);
-        setLeaveBalanceAdjustmentsLoading(false);
-      }
-    );
-
-    return () => unsubscribe();
-  }, [selectedEmployeeAuthUid]);
+    return () => {
+      active = false;
+    };
+  }, [
+    selectedEmployeeAuthUid,
+    selectedEmployeeDocumentId,
+    hrOperationsRevision,
+  ]);
 
   useEffect(() => {
     resetEmployeeFileForm();
@@ -3102,62 +2823,38 @@ export default function EmployeesManagementPage() {
       return;
     }
 
+    let active = true;
     setEmployeeFilesLoading(true);
 
-    if (HR_CORE_D1_ENABLED && isHrCoreConfigured()) {
-      let cancelled = false;
-      void listHrCoreEmployeeFiles({ employeeUid: selectedEmployeeAuthUid, limit: 200 })
-        .then(response => {
-          if (cancelled) return;
-          setEmployeeFiles(
-            sortEmployeeFiles(
-              response.employeeFiles.map(file =>
-                normalizeEmployeeFileRecord(
-                  file.id,
-                  file as Record<string, unknown>
-                )
+    void listHrCoreEmployeeFiles({
+      employeeUid: selectedEmployeeAuthUid,
+      limit: 200,
+    })
+      .then(response => {
+        if (!active) return;
+        setEmployeeFiles(
+          sortEmployeeFiles(
+            response.employeeFiles.map(file =>
+              normalizeEmployeeFileRecord(
+                file.id,
+                file as Record<string, unknown>
               )
-            )
-          );
-        })
-        .catch(error => {
-          console.error("employee_files_hr_core_admin_load_failed", error);
-          if (!cancelled) setEmployeeFiles([]);
-        })
-        .finally(() => {
-          if (!cancelled) setEmployeeFilesLoading(false);
-        });
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    const unsubscribe = onSnapshot(
-      query(
-        collection(db, EMPLOYEE_FILES_COLLECTION),
-        where("employeeUid", "==", selectedEmployeeAuthUid)
-      ),
-      snapshot => {
-        const rows = sortEmployeeFiles(
-          snapshot.docs.map(docSnapshot =>
-            normalizeEmployeeFileRecord(
-              docSnapshot.id,
-              (docSnapshot.data() as Record<string, any>) || {}
             )
           )
         );
-        setEmployeeFiles(rows);
-        setEmployeeFilesLoading(false);
-      },
-      snapshotError => {
-        console.error("employee_files_admin_snapshot_error", snapshotError);
-        setEmployeeFiles([]);
-        setEmployeeFilesLoading(false);
-      }
-    );
+      })
+      .catch(error => {
+        console.error("employee_files_hr_core_admin_load_failed", error);
+        if (active) setEmployeeFiles([]);
+      })
+      .finally(() => {
+        if (active) setEmployeeFilesLoading(false);
+      });
 
-    return () => unsubscribe();
-  }, [selectedEmployeeAuthUid]);
+    return () => {
+      active = false;
+    };
+  }, [selectedEmployeeAuthUid, hrOperationsRevision]);
 
   useEffect(() => {
     if (!selectedEmployeeAuthUid) {
@@ -3166,58 +2863,36 @@ export default function EmployeesManagementPage() {
       return;
     }
 
+    let active = true;
     setEmployeeMessagesLoading(true);
 
-    if (HR_CORE_D1_ENABLED && isHrCoreConfigured()) {
-      let cancelled = false;
-      void listHrCoreEmployeeMessages({ employeeUid: selectedEmployeeAuthUid, limit: 200 })
-        .then(response => {
-          if (cancelled) return;
-          setEmployeeMessages(
-            response.employeeMessages.map(message =>
-              normalizeEmployeeMessageRecord(
-                message.id,
-                message as Record<string, any>
-              )
+    void listHrCoreEmployeeMessages({
+      employeeUid: selectedEmployeeAuthUid,
+      limit: 200,
+    })
+      .then(response => {
+        if (!active) return;
+        setEmployeeMessages(
+          response.employeeMessages.map(message =>
+            normalizeEmployeeMessageRecord(
+              message.id,
+              message as Record<string, any>
             )
-          );
-        })
-        .catch(error => {
-          console.error("employee_messages_hr_core_admin_load_failed", error);
-          if (!cancelled) setEmployeeMessages([]);
-        })
-        .finally(() => {
-          if (!cancelled) setEmployeeMessagesLoading(false);
-        });
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    const unsubscribe = onSnapshot(
-      query(
-        collection(db, EMPLOYEE_MESSAGES_COLLECTION),
-        where("employeeUid", "==", selectedEmployeeAuthUid)
-      ),
-      snapshot => {
-        const rows = snapshot.docs.map(docSnapshot =>
-          normalizeEmployeeMessageRecord(
-            docSnapshot.id,
-            (docSnapshot.data() as Record<string, any>) || {}
           )
         );
-        setEmployeeMessages(rows);
-        setEmployeeMessagesLoading(false);
-      },
-      snapshotError => {
-        console.error("employee_messages_admin_snapshot_error", snapshotError);
-        setEmployeeMessages([]);
-        setEmployeeMessagesLoading(false);
-      }
-    );
+      })
+      .catch(error => {
+        console.error("employee_messages_hr_core_admin_load_failed", error);
+        if (active) setEmployeeMessages([]);
+      })
+      .finally(() => {
+        if (active) setEmployeeMessagesLoading(false);
+      });
 
-    return () => unsubscribe();
-  }, [selectedEmployeeAuthUid]);
+    return () => {
+      active = false;
+    };
+  }, [selectedEmployeeAuthUid, hrOperationsRevision]);
 
   const initialForm = useMemo(
     () => buildEmployeeFormValues(selectedEmployee),
@@ -4419,40 +4094,18 @@ export default function EmployeesManagementPage() {
       return nextAllowedZoneIds;
     }
 
-    const linkedEmployeeId =
+    const employeeId =
       String(selectedEmployee.linkedEmployeeId || "").trim() ||
       selectedEmployee.id;
-    const zonePatch = {
+    const result = await updateHrCoreEmployee(employeeId, {
       allowedZoneIds: nextAllowedZoneIds,
-      employment: {
-        allowedZoneIds: nextAllowedZoneIds,
-        updatedAt: serverTimestamp(),
-      },
-      employeeProfile: {
-        employment: {
-          allowedZoneIds: nextAllowedZoneIds,
-          updatedAt: serverTimestamp(),
-        },
-      },
-      updatedAt: serverTimestamp(),
-    };
-
-    if (linkedEmployeeId) {
-      await setDoc(doc(db, "employees", linkedEmployeeId), zonePatch, {
-        merge: true,
-      });
-    }
-
-    try {
-      await setDoc(doc(db, "users", selectedEmployee.id), zonePatch, {
-        merge: true,
-      });
-    } catch (error) {
-      console.warn("employee_work_zone_user_link_best_effort_failed", {
-        userId: selectedEmployee.id,
-        error,
-      });
-    }
+    });
+    const refreshedEmployee = buildEmployeeRecordFromHrCore(result.employee);
+    setEmployees(current =>
+      current.map(employee =>
+        employee.id === selectedEmployee.id ? refreshedEmployee : employee
+      )
+    );
 
     return nextAllowedZoneIds;
   };
@@ -4586,61 +4239,16 @@ export default function EmployeesManagementPage() {
 
     setSavingAbsence(true);
     try {
-      if (HR_CORE_D1_ENABLED && isHrCoreConfigured()) {
-        await createHrCoreAbsence({
-          employeeId: selectedEmployeeDocumentId,
-          employeeUid: selectedEmployeeAuthUid || selectedEmployee.id,
-          date: normalizedDate,
-          type: normalizedType === "half_day" ? "half_day" : "full_day",
-          note: String(absenceForm.note || "").trim() || null,
-        });
-        setAbsenceForm(buildEmployeeAbsenceFormValues());
-        refreshHrOperations();
-        toast.success("تم تسجيل الغياب بنجاح في Cloudflare.");
-        return;
-      }
-
-      const absenceRef = doc(collection(db, EMPLOYEE_ABSENCES_COLLECTION));
-      await setDoc(absenceRef, {
-        ...buildEmployeeAbsencePayload({
-          employeeId: selectedEmployeeDocumentId,
-          employeeUid: selectedEmployeeAuthUid || selectedEmployee.id,
-          date: normalizedDate,
-          type: normalizedType === "half_day" ? "half_day" : "full_day",
-          note: absenceForm.note,
-          createdByUid: user?.uid || "",
-        }),
-        createdAt: serverTimestamp(),
+      await createHrCoreAbsence({
+        employeeId: selectedEmployeeDocumentId,
+        employeeUid: selectedEmployeeAuthUid || selectedEmployee.id,
+        date: normalizedDate,
+        type: normalizedType === "half_day" ? "half_day" : "full_day",
+        note: String(absenceForm.note || "").trim() || null,
       });
-
-      try {
-        await logAuditEvent({
-          action: "employee_absence_created",
-          category: "user",
-          entityType: "employee_absence",
-          entityId: absenceRef.id,
-          entityPath: absenceRef.path,
-          relatedIds: { userId: selectedEmployee.id },
-          source: buildAuditSource({
-            area: "hr",
-            page: "Employees",
-            method: "create_employee_absence",
-          }),
-          message: `Recorded absence for ${selectedEmployeeLabel}`,
-          meta: {
-            employeeId: selectedEmployeeDocumentId,
-            employeeUid: selectedEmployeeAuthUid || selectedEmployee.id,
-            date: normalizedDate,
-            type: normalizedType,
-            note: String(absenceForm.note || "").trim() || null,
-          },
-        });
-      } catch (auditError) {
-        console.error("employee_absence_audit_failed", auditError);
-      }
-
       setAbsenceForm(buildEmployeeAbsenceFormValues());
-      toast.success("تم تسجيل الغياب بنجاح.");
+      refreshHrOperations();
+      toast.success("تم تسجيل الغياب بنجاح في Cloudflare.");
     } catch (error) {
       console.error("employee_absence_create_failed", error);
       toast.error("تعذر تسجيل الغياب.");
@@ -4665,38 +4273,9 @@ export default function EmployeesManagementPage() {
 
     setDeletingAbsenceId(absence.id);
     try {
-      if (HR_CORE_D1_ENABLED && isHrCoreConfigured()) {
-        await deleteHrCoreAbsence(absence.id);
-        refreshHrOperations();
-        toast.success("تم حذف الغياب من سجل الموظف في Cloudflare.");
-        return;
-      }
-
-      await auditedDeleteDoc({
-        ref: doc(db, EMPLOYEE_ABSENCES_COLLECTION, absence.id),
-        action: "employee_absence_deleted",
-        category: "user",
-        entityType: "employee_absence",
-        source: buildAuditSource({
-          area: "hr",
-          page: "Employees",
-          method: "delete_employee_absence",
-        }),
-        relatedIds: {
-          userId: selectedEmployee.id,
-        },
-        message: `Deleted employee absence for ${selectedEmployeeLabel}`,
-        meta: {
-          employeeId: absence.employeeId,
-          employeeUid: absence.employeeUid,
-          date: absence.date,
-          type: absence.type,
-          note: absence.note || null,
-          reason: "excuse_provided",
-        },
-      });
-
-      toast.success("تم حذف الغياب من سجل الموظف.");
+      await deleteHrCoreAbsence(absence.id);
+      refreshHrOperations();
+      toast.success("تم حذف الغياب من سجل الموظف في Cloudflare.");
     } catch (error) {
       console.error("employee_absence_delete_failed", error);
       toast.error("تعذر حذف الغياب.");
@@ -4782,33 +4361,11 @@ export default function EmployeesManagementPage() {
 
     setCreatingPayrollRecord(true);
     try {
-      let monthlyAbsences: EmployeeAbsenceRecord[];
-      if (HR_CORE_D1_ENABLED && isHrCoreConfigured()) {
-        monthlyAbsences = employeeAbsences.filter(
-          absence =>
-            absence.date >= payrollCalculationStartDate &&
-            absence.date <= payrollCalculationEndDate
-        );
-      } else {
-        const absencesSnapshot = await getDocs(
-          query(
-            collection(db, EMPLOYEE_ABSENCES_COLLECTION),
-            where("employeeId", "==", selectedEmployeeDocumentId)
-          )
-        );
-        monthlyAbsences = sortEmployeeAbsences(
-          absencesSnapshot.docs.map(docSnapshot =>
-            normalizeEmployeeAbsence(
-              docSnapshot.id,
-              (docSnapshot.data() as Record<string, any>) || {}
-            )
-          )
-        ).filter(
-          absence =>
-            absence.date >= payrollCalculationStartDate &&
-            absence.date <= payrollCalculationEndDate
-        );
-      }
+      const monthlyAbsences = employeeAbsences.filter(
+        absence =>
+          absence.date >= payrollCalculationStartDate &&
+          absence.date <= payrollCalculationEndDate
+      );
 
       const manualSalaryDeductions =
         normalizeSalaryDeductionsForPersistence(salaryDeductions);
@@ -4931,7 +4488,7 @@ export default function EmployeesManagementPage() {
         mudadDocument: mudadDocumentPayload,
       };
 
-      if (HR_CORE_D1_ENABLED && isHrCoreConfigured()) {
+
         const created = await createHrCorePayrollRecord(payrollPayload);
         const normalizedRecord = normalizeEmployeePayrollRecord(
           created.payrollRecord.id,
@@ -4945,20 +4502,7 @@ export default function EmployeesManagementPage() {
         );
         setApprovedPayrollAdvances([]);
         setPayrollRevision(current => current + 1);
-      } else {
-        const payrollRef = doc(db, EMPLOYEE_PAYROLL_RECORDS_COLLECTION, payrollRecordId);
-        await runTransaction(db, async tx => {
-          const existingRecord = await tx.get(payrollRef);
-          if (existingRecord.exists()) throw new Error("payroll_record_exists");
-          tx.set(payrollRef, {
-            ...payrollPayload,
-            salaryDeductions: effectiveSalaryDeductions,
-            createdAt: serverTimestamp(),
-            createdByUid: user?.uid || null,
-            createdByEmail: user?.email || null,
-          });
-        });
-      }
+
 
       try {
         await logAuditEvent({
@@ -4966,9 +4510,7 @@ export default function EmployeesManagementPage() {
           category: "finance",
           entityType: "employee_payroll_record",
           entityId: payrollRecordId,
-          entityPath: HR_CORE_D1_ENABLED
-            ? `cloudflare:employee_payroll_records/${payrollRecordId}`
-            : `${EMPLOYEE_PAYROLL_RECORDS_COLLECTION}/${payrollRecordId}`,
+          entityPath: `cloudflare:employee_payroll_records/${payrollRecordId}`,
           relatedIds: { userId: selectedEmployee.id },
           source: buildAuditSource({
             area: "hr",
@@ -5275,30 +4817,17 @@ export default function EmployeesManagementPage() {
         uploadedAt: uploaded.uploadedAt,
       };
 
-      const userRef = doc(db, "users", selectedEmployee.id);
-      const employeeRef = selectedEmployee.linkedEmployeeId
-        ? doc(db, "employees", selectedEmployee.linkedEmployeeId)
-        : null;
-
-      await setDoc(
-        userRef,
-        {
-          ...buildEmployeeAvatarPatch(avatarPayload),
-          updatedAt: serverTimestamp(),
-        },
-        { merge: true }
+      const hrCoreResult = await updateHrCoreEmployee(employeeId, {
+        avatarUrl: avatarPayload.fileUrl || null,
+      });
+      const refreshedEmployee = buildEmployeeRecordFromHrCore(
+        hrCoreResult.employee
       );
-
-      if (employeeRef) {
-        await setDoc(
-          employeeRef,
-          {
-            ...buildEmployeeAvatarPatch(avatarPayload),
-            updatedAt: serverTimestamp(),
-          },
-          { merge: true }
-        );
-      }
+      setEmployees(current =>
+        current.map(employee =>
+          employee.id === selectedEmployee.id ? refreshedEmployee : employee
+        )
+      );
 
       const currentAuthUser = auth.currentUser;
       if (
@@ -5352,7 +4881,7 @@ export default function EmployeesManagementPage() {
 
     setOpeningEmployeeConversationId(conversation.id);
     try {
-      if (HR_CORE_D1_ENABLED && isHrCoreConfigured()) {
+
         const ids = unreadIncomingMessages.map(message => message.id);
         await markHrCoreEmployeeMessagesRead(ids);
         const now = new Date();
@@ -5363,18 +4892,7 @@ export default function EmployeesManagementPage() {
               : message
           )
         );
-      } else {
-        const batch = writeBatch(db);
-        unreadIncomingMessages.forEach(message => {
-          batch.update(doc(db, EMPLOYEE_MESSAGES_COLLECTION, message.id), {
-            isRead: true,
-            readAt: serverTimestamp(),
-            status: "read",
-            updatedAt: serverTimestamp(),
-          });
-        });
-        await batch.commit();
-      }
+
     } catch (error) {
       console.error("employee_conversation_mark_read_failed", error);
     } finally {
@@ -5432,7 +4950,6 @@ export default function EmployeesManagementPage() {
     setSendingEmployeeMessage(true);
     try {
       const messageId = crypto.randomUUID();
-      const messageRef = doc(db, EMPLOYEE_MESSAGES_COLLECTION, messageId);
       const isReply = Boolean(
         activeEmployeeConversation && !composeEmployeeMessageAsNew
       );
@@ -5442,8 +4959,8 @@ export default function EmployeesManagementPage() {
           ] || null
         : null;
       const conversationId = isReply
-        ? activeEmployeeConversation?.conversationId || messageRef.id
-        : messageRef.id;
+        ? activeEmployeeConversation?.conversationId || messageId
+        : messageId;
       const employeeDisplayName =
         selectedEmployeeLabel !== EMPLOYEE_EMPTY_VALUE
           ? selectedEmployeeLabel
@@ -5472,13 +4989,13 @@ export default function EmployeesManagementPage() {
         type: normalizedType,
         relatedTo: parentMessage ? "employee_message" : null,
         relatedId: parentMessage?.id || null,
-        createdAt: serverTimestamp(),
+        createdAt: new Date().toISOString(),
         isRead: false,
         readAt: null,
-        updatedAt: serverTimestamp(),
+        updatedAt: new Date().toISOString(),
       } satisfies EmployeeMessageDoc;
 
-      if (HR_CORE_D1_ENABLED && isHrCoreConfigured()) {
+
         const response = await createHrCoreEmployeeMessage({
           id: messageId,
           ...messagePayload,
@@ -5492,9 +5009,7 @@ export default function EmployeesManagementPage() {
             response.employeeMessage as Record<string, any>
           ),
         ]);
-      } else {
-        await setDoc(messageRef, messagePayload);
-      }
+
 
       let notificationFailed = false;
       try {
@@ -5510,7 +5025,7 @@ export default function EmployeesManagementPage() {
           type: "message",
           relatedId: messageId,
           relatedTo: "employee_message",
-          relatedPath: `/hr/messages?messageId=${messageRef.id}`,
+          relatedPath: `/hr/messages?messageId=${messageId}`,
         });
       } catch (notificationError) {
         notificationFailed = true;
@@ -5601,7 +5116,6 @@ export default function EmployeesManagementPage() {
       });
 
       const fileRecordId = crypto.randomUUID();
-      const fileRef = doc(db, EMPLOYEE_FILES_COLLECTION, fileRecordId);
       const uploadedByName = user?.displayName || user?.email || "HR";
       const replacedCandidates = employeeOfficialFiles.filter(file => {
         if (!file.active) return false;
@@ -5649,10 +5163,10 @@ export default function EmployeesManagementPage() {
         replacesFileId: replacedCandidates[0]?.id || null,
         isRead: false,
         readAt: null,
-        updatedAt: serverTimestamp(),
+        updatedAt: new Date().toISOString(),
       };
 
-      if (HR_CORE_D1_ENABLED && isHrCoreConfigured()) {
+
         const response = await createHrCoreEmployeeFile({
           id: fileRecordId,
           ...fileDoc,
@@ -5675,23 +5189,7 @@ export default function EmployeesManagementPage() {
             ),
           ])
         );
-      } else {
-        await runTransaction(db, async tx => {
-          replacedCandidates.forEach(file => {
-            tx.update(doc(db, EMPLOYEE_FILES_COLLECTION, file.id), {
-              status: "replaced",
-              active: false,
-              replacedAt: serverTimestamp(),
-              replacedBy: user?.uid || null,
-              replacedByName: uploadedByName,
-              replacedByFileId: fileRef.id,
-              updatedAt: serverTimestamp(),
-            });
-          });
 
-          tx.set(fileRef, fileDoc);
-        });
-      }
 
       await logAuditEvent({
         action: replacedCandidates.length
@@ -5700,7 +5198,7 @@ export default function EmployeesManagementPage() {
         category: "user",
         entityType: "employee_file",
         entityId: fileRecordId,
-        entityPath: fileRef.path,
+        entityPath: `cloudflare:hr_employee_files/${fileRecordId}`,
         source: buildAuditSource({
           area: "hr",
           page: "Employees",
@@ -5777,36 +5275,10 @@ export default function EmployeesManagementPage() {
 
     setDeletingEmployeeFileId(file.id);
     try {
-      if (HR_CORE_D1_ENABLED && isHrCoreConfigured()) {
+
         await deleteHrCoreEmployeeFile(file.id);
         setEmployeeFiles(current => current.filter(item => item.id !== file.id));
-      } else {
-        // The R2 object is retained; only the metadata row is removed.
-        await auditedDeleteDoc({
-        ref: doc(db, EMPLOYEE_FILES_COLLECTION, file.id),
-        action: "employee_file_deleted",
-        category: "user",
-        entityType: "employee_file",
-        source: buildAuditSource({
-          area: "hr",
-          page: "Employees",
-          method: "delete_employee_file",
-        }),
-        relatedIds: {
-          userId: selectedEmployee.id,
-        },
-        message: `Deleted employee file for ${selectedEmployeeLabel}`,
-        meta: {
-          employeeId: file.employeeId,
-          employeeUid: file.employeeUid,
-          employeeName: file.employeeName || null,
-          title: file.title,
-          fileName: file.fileName,
-          fileType: file.fileType || EMPLOYEE_DEFAULT_FILE_TYPE,
-          storageCleanupSupported: false,
-        },
-        });
-      }
+
 
       if (replacingEmployeeFileId === file.id) {
         resetEmployeeFileForm();
@@ -5869,7 +5341,6 @@ export default function EmployeesManagementPage() {
       });
 
       const fileRecordId = crypto.randomUUID();
-      const fileRef = doc(db, EMPLOYEE_FILES_COLLECTION, fileRecordId);
       const uploadedByName = user?.displayName || user?.email || "HR";
       const replacedCandidates = employeeFiles.filter(file => {
         if (!file.active) return false;
@@ -5916,10 +5387,10 @@ export default function EmployeesManagementPage() {
           replacingEmployeeFileId || replacedCandidates[0]?.id || null,
         isRead: false,
         readAt: null,
-        updatedAt: serverTimestamp(),
+        updatedAt: new Date().toISOString(),
       };
 
-      if (HR_CORE_D1_ENABLED && isHrCoreConfigured()) {
+
         const response = await createHrCoreEmployeeFile({
           id: fileRecordId,
           ...fileDoc,
@@ -5942,23 +5413,7 @@ export default function EmployeesManagementPage() {
             ),
           ])
         );
-      } else {
-        await runTransaction(db, async tx => {
-          replacedCandidates.forEach(file => {
-            tx.update(doc(db, EMPLOYEE_FILES_COLLECTION, file.id), {
-              status: "replaced",
-              active: false,
-              replacedAt: serverTimestamp(),
-              replacedBy: user?.uid || null,
-              replacedByName: uploadedByName,
-              replacedByFileId: fileRef.id,
-              updatedAt: serverTimestamp(),
-            });
-          });
 
-          tx.set(fileRef, fileDoc as any);
-        });
-      }
 
       await logAuditEvent({
         action: replacedCandidates.length
@@ -5967,7 +5422,7 @@ export default function EmployeesManagementPage() {
         category: "user",
         entityType: "employee_file",
         entityId: fileRecordId,
-        entityPath: fileRef.path,
+        entityPath: `cloudflare:hr_employee_files/${fileRecordId}`,
         source: buildAuditSource({
           area: "hr",
           page: "Employees",
@@ -6219,132 +5674,12 @@ export default function EmployeesManagementPage() {
         fingerprintNumber: normalizedFingerprintNumber || null,
         allowedZoneIds,
         adminNotes: form.adminNotes.trim() || null,
-        updatedAt: serverTimestamp(),
+        updatedAt: new Date().toISOString(),
         updatedByUid: user?.uid || null,
         updatedByEmail: user?.email || null,
       };
 
-      try {
-        await auditedUpdateDoc({
-          ref: doc(db, "users", selectedEmployee.id),
-          data: {
-            displayName: normalizedFullName,
-            name: normalizedFullName,
-            fullName: normalizedFullName,
-            email: normalizedEmail,
-            phone: normalizedPhone || null,
-            "profile.name": normalizedFullName,
-            "profile.displayName": normalizedFullName,
-            "profile.email": normalizedEmail,
-            "profile.phone": normalizedPhone || null,
-            title: form.jobTitle.trim() || null,
-            department: form.department.trim() || null,
-            employeeProfileEnabled: true,
-            includeInEmployeeManagement: true,
-            linkedEmployeeId,
-            allowedZoneIds,
-            startDate: form.startDate || null,
-            leaveBalance,
-            updatedAt: serverTimestamp(),
-            employment: nextEmployment,
-            "employeeProfile.personal": nextPersonal,
-            "employeeProfile.employment": nextEmployment,
-          } as any,
-          action: AUDIT_ACTIONS.USER_UPDATED,
-          category: "user",
-          entityType: "user",
-          source: buildAuditSource({
-            area: "hr",
-            page: "Employees",
-            method: "update_employment_profile",
-          }),
-          relatedIds: { userId: selectedEmployee.id },
-          message: `Updated employee employment profile for ${selectedEmployeeLabel}`,
-          meta: {
-            targetUserEmail: normalizedEmail,
-            targetUserName: normalizedFullName,
-            phone: normalizedPhone || null,
-            jobTitle: nextEmployment.jobTitle || null,
-            department: nextEmployment.department || null,
-            employmentStatus: nextEmployment.employmentStatus || null,
-            fingerprintNumber: nextEmployment.fingerprintNumber || null,
-            allowedZoneIds,
-            leaveBalance,
-            baseSalary,
-            housingAllowance,
-            transportationAllowance,
-            otherAllowances,
-            allowances,
-            expectedWorkDays,
-            expectedWorkHours,
-            actualWorkedHours,
-            shiftStartTime,
-            shiftEndTime,
-            workSchedule,
-            overtimeHours: calculatedOvertimeHours,
-            missingHours: calculatedMissingHours,
-            hoursDifference: calculatedHoursDifference,
-            overtimeHourlyRate: effectiveOvertimeHourlyRate,
-            calculatedDailyRate,
-            calculatedHourlyRate,
-            calculatedOvertimeAmount,
-            calculatedMissingDeduction,
-            insuranceDeduction,
-            totalSalaryDeductions,
-            calculatedGrossSalary,
-            calculatedNetSalary,
-          },
-        });
-      } catch (error) {
-        console.error("save_employee_profile_user_update_error", {
-          userId: selectedEmployee.id,
-          error,
-        });
-        throw error;
-      }
 
-      if (linkedEmployeeId) {
-        try {
-          await setDoc(
-            doc(db, "employees", linkedEmployeeId),
-            {
-              uid: linkedUserUid,
-              linkedUserUid: linkedUserUid,
-              name: normalizedFullName,
-              displayName: normalizedFullName,
-              fullName: normalizedFullName,
-              email: normalizedEmail,
-              phone: normalizedPhone || null,
-              profile: {
-                name: normalizedFullName,
-                displayName: normalizedFullName,
-                email: normalizedEmail,
-                phone: normalizedPhone || null,
-              },
-              title: form.jobTitle.trim() || null,
-              department: form.department.trim() || null,
-              allowedZoneIds,
-              startDate: form.startDate || null,
-              leaveBalance,
-              updatedAt: serverTimestamp(),
-              employment: nextEmployment,
-              employeeProfile: {
-                personal: nextPersonal,
-                employment: nextEmployment,
-              },
-            },
-            { merge: true }
-          );
-        } catch (error) {
-          console.error("save_employee_profile_employee_update_error", {
-            employeeDocId: linkedEmployeeId,
-            error,
-          });
-          throw error;
-        }
-      }
-
-      if (HR_CORE_D1_ENABLED && isHrCoreConfigured()) {
         const hrCoreResult = await updateHrCoreEmployee(linkedEmployeeId, {
           authUid: linkedUserUid,
           name: normalizedFullName,
@@ -6388,7 +5723,7 @@ export default function EmployeesManagementPage() {
             employee.id === selectedEmployee.id ? refreshedEmployee : employee
           )
         );
-      }
+
 
       toast.success("تم حفظ بيانات الموظف الوظيفية.");
     } catch {
@@ -6419,16 +5754,13 @@ export default function EmployeesManagementPage() {
       return;
     }
 
-    if (operationType === "deduct") {
-      if (manualBalanceValue <= 0) {
-        toast.error("أدخل عدد أيام صالحًا للخصم.");
-        return;
-      }
-
-      if (manualBalanceValue > currentLeaveBalanceNumber) {
-        toast.error("لا يمكن خصم عدد أيام أكبر من الرصيد الحالي.");
-        return;
-      }
+    if (
+      operationType === "deduct" &&
+      (manualBalanceValue <= 0 ||
+        manualBalanceValue > currentLeaveBalanceNumber)
+    ) {
+      toast.error("لا يمكن خصم عدد أيام غير صالح أو أكبر من الرصيد الحالي.");
+      return;
     }
 
     if (!reason) {
@@ -6438,159 +5770,38 @@ export default function EmployeesManagementPage() {
 
     setSavingManualLeaveBalance(true);
     try {
-      const linkedUserUid =
-        String(selectedEmployee.uid || selectedEmployee.id || "").trim() ||
+      const employeeId =
+        selectedEmployeeDocumentId ||
+        String(selectedEmployee.linkedEmployeeId || "").trim() ||
         selectedEmployee.id;
-
-      const userRef = doc(db, "users", selectedEmployee.id);
-      const employeeDocId = String(
-        selectedEmployee.linkedEmployeeId || ""
-      ).trim();
-      const employeeRef = employeeDocId
-        ? doc(db, "employees", employeeDocId)
-        : null;
-
-      const adjustmentRef = doc(
-        collection(db, EMPLOYEE_LEAVE_BALANCE_ADJUSTMENTS_COLLECTION)
-      );
-      let persistedNextBalance = manualBalanceValue;
-
-      await runTransaction(db, async tx => {
-        const userSnap = await tx.get(userRef);
-        if (!userSnap.exists()) {
-          throw new Error("employee_user_not_found");
-        }
-
-        const userData = (userSnap.data() as Record<string, any>) || {};
-        const userEmployment = (userData.employeeProfile?.employment ||
-          userData.employment ||
-          {}) as Record<string, any>;
-
-        const employeeSnap = employeeRef ? await tx.get(employeeRef) : null;
-        const employeeData =
-          employeeSnap?.exists() && employeeSnap.data()
-            ? (employeeSnap.data() as Record<string, any>) || {}
-            : null;
-
-        const employeeEmployment = (employeeData?.employeeProfile?.employment ||
-          employeeData?.employment ||
-          {}) as Record<string, any>;
-
-        const previousBalance = resolveEmploymentLeaveBalance(
-          userData,
-          employeeData
-        );
-        const nextBalance =
-          operationType === "deduct"
-            ? previousBalance - manualBalanceValue
-            : manualBalanceValue;
-        const operationLabel = operationType === "deduct" ? "خصم" : "إضافة";
-
-        if (!Number.isFinite(nextBalance) || nextBalance < 0) {
-          throw new Error("leave_balance_invalid_operation");
-        }
-        persistedNextBalance = nextBalance;
-
-        const leaveBalanceAdjustmentMeta = {
-          previousBalance,
-          nextBalance,
-          operationType,
-          operationLabel,
-          reason,
-          adjustedAt: serverTimestamp(),
-          adjustedByUid: user?.uid || null,
-          adjustedByEmail: user?.email || null,
-          adjustedByName: user?.displayName || user?.email || null,
-        };
-
-        const nextUserEmployment = {
-          ...userEmployment,
-          leaveBalance: nextBalance,
-          leaveBalanceAdjustmentMeta,
-          updatedAt: serverTimestamp(),
-          updatedByUid: user?.uid || null,
-          updatedByEmail: user?.email || null,
-        };
-
-        tx.set(
-          userRef,
-          {
-            leaveBalance: nextBalance,
-            updatedAt: serverTimestamp(),
-            employment: nextUserEmployment,
-            employeeProfile: {
-              personal: (userData.employeeProfile?.personal ||
-                userData.personal ||
-                null) as Record<string, any> | null,
-              employment: nextUserEmployment,
-            },
-          },
-          { merge: true }
-        );
-
-        if (employeeRef) {
-          const nextEmployeeEmployment = {
-            ...employeeEmployment,
-            leaveBalance: nextBalance,
-            leaveBalanceAdjustmentMeta,
-            updatedAt: serverTimestamp(),
-            updatedByUid: user?.uid || null,
-            updatedByEmail: user?.email || null,
-          };
-
-          tx.set(
-            employeeRef,
-            {
-              uid: linkedUserUid,
-              linkedUserUid,
-              leaveBalance: nextBalance,
-              updatedAt: serverTimestamp(),
-              employment: nextEmployeeEmployment,
-              employeeProfile: {
-                personal: (employeeData?.employeeProfile?.personal ||
-                  employeeData?.personal ||
-                  null) as Record<string, any> | null,
-                employment: nextEmployeeEmployment,
-              },
-            },
-            { merge: true }
-          );
-        }
-
-        tx.set(adjustmentRef, {
-          employeeId:
-            String(selectedEmployee.linkedEmployeeId || "").trim() ||
-            selectedEmployee.id,
-          employeeUid: selectedEmployeeAuthUid || selectedEmployee.id,
-          userId: selectedEmployee.id,
-          employeeName:
-            selectedEmployeeLabel !== EMPLOYEE_EMPTY_VALUE
-              ? selectedEmployeeLabel
-              : selectedEmployee.displayName ||
-                selectedEmployee.name ||
-                selectedEmployee.email ||
-                "الموظف",
-          previousBalance,
-          nextBalance,
-          difference: nextBalance - previousBalance,
-          operationType,
-          operationLabel,
-          reason,
-          createdAt: serverTimestamp(),
-          createdByUid: user?.uid || null,
-          createdByEmail: user?.email || null,
-          createdByName: user?.displayName || user?.email || null,
-        });
+      const result = await adjustHrCoreEmployeeLeaveBalance(employeeId, {
+        value: manualBalanceValue,
+        operationType,
+        reason,
       });
+      const persistedNextBalance = Number(result.adjustment.nextBalance || 0);
+      const refreshedEmployee = buildEmployeeRecordFromHrCore(result.employee);
 
+      setEmployees(current =>
+        current.map(employee =>
+          employee.id === selectedEmployee.id ? refreshedEmployee : employee
+        )
+      );
+      setLeaveBalanceAdjustments(current => [
+        {
+          ...result.adjustment,
+          createdAtDate: toDateSafe(result.adjustment.createdAt),
+        },
+        ...current.filter(item => item.id !== result.adjustment.id),
+      ]);
       setForm(current => ({
         ...current,
         leaveBalance: String(persistedNextBalance),
       }));
-
       setManualLeaveBalance(String(persistedNextBalance));
       setManualLeaveBalanceOperation("add");
       setManualLeaveAdjustmentReason("");
+      refreshHrOperations();
 
       toast.success(
         tr(
@@ -6682,7 +5893,7 @@ export default function EmployeesManagementPage() {
     try {
       let createdLeaveRequestId = "";
 
-      if (HR_CORE_D1_ENABLED && isHrCoreConfigured()) {
+
         const created = await createHrCoreLeaveRequest({
           employeeId: selectedEmployeeDocumentId || null,
           employeeUid,
@@ -6715,136 +5926,7 @@ export default function EmployeesManagementPage() {
             leaveBalance: String(Math.max(0, currentBalance - 1)),
           };
         });
-      } else {
-        await runTransaction(db, async tx => {
-          const userRef = doc(db, "users", selectedEmployee.id);
-          const userSnap = await tx.get(userRef);
-          if (!userSnap.exists()) {
-            throw new Error("employee_user_not_found");
-          }
 
-          const userData = (userSnap.data() as Record<string, any>) || {};
-          const userEmployment = (userData.employeeProfile?.employment ||
-            userData.employment ||
-            {}) as Record<string, any>;
-
-          const employeeDocId = String(selectedEmployeeDocumentId || "").trim();
-          const employeeRef = employeeDocId
-            ? doc(db, "employees", employeeDocId)
-            : null;
-          const employeeSnap = employeeRef ? await tx.get(employeeRef) : null;
-          const employeeData =
-            employeeSnap?.exists() && employeeSnap.data()
-              ? (employeeSnap.data() as Record<string, any>) || {}
-              : null;
-          const employeeEmployment = (employeeData?.employeeProfile
-            ?.employment ||
-            employeeData?.employment ||
-            {}) as Record<string, any>;
-
-          const currentLeaveBalance = resolveEmploymentLeaveBalance(
-            userData,
-            employeeData
-          );
-          if (currentLeaveBalance < 1) {
-            throw new Error("leave_balance_insufficient");
-          }
-
-          const balanceDeductedDays = 1;
-          const nextLeaveBalance = currentLeaveBalance - 1;
-          const nextUserEmployment = {
-            ...userEmployment,
-            leaveBalance: nextLeaveBalance,
-            updatedAt: serverTimestamp(),
-            updatedByUid: user?.uid || null,
-            updatedByEmail: user?.email || null,
-          };
-
-          tx.set(
-            userRef,
-            {
-              leaveBalance: nextLeaveBalance,
-              updatedAt: serverTimestamp(),
-              employment: nextUserEmployment,
-              employeeProfile: {
-                personal: (userData.employeeProfile?.personal ||
-                  userData.personal ||
-                  null) as Record<string, any> | null,
-                employment: nextUserEmployment,
-              },
-            },
-            { merge: true }
-          );
-
-          if (employeeRef) {
-            const nextEmployeeEmployment = {
-              ...employeeEmployment,
-              leaveBalance: nextLeaveBalance,
-              updatedAt: serverTimestamp(),
-              updatedByUid: user?.uid || null,
-              updatedByEmail: user?.email || null,
-            };
-
-            tx.set(
-              employeeRef,
-              {
-                uid: employeeUid,
-                linkedUserUid: employeeUid,
-                leaveBalance: nextLeaveBalance,
-                updatedAt: serverTimestamp(),
-                employment: nextEmployeeEmployment,
-                employeeProfile: {
-                  personal: (employeeData?.employeeProfile?.personal ||
-                    employeeData?.personal ||
-                    null) as Record<string, any> | null,
-                  employment: nextEmployeeEmployment,
-                },
-              },
-              { merge: true }
-            );
-          }
-
-          const leaveRequestRef = doc(
-            collection(db, EMPLOYEE_LEAVE_REQUESTS_COLLECTION)
-          );
-          createdLeaveRequestId = leaveRequestRef.id;
-          tx.set(leaveRequestRef, {
-            ...buildEmployeeLeaveRequestPayload({
-              authUid: employeeUid,
-              employeeDocId: employeeDocId || null,
-              employeeName:
-                selectedEmployeeLabel !== EMPLOYEE_EMPTY_VALUE
-                  ? selectedEmployeeLabel
-                  : selectedEmployee.displayName ||
-                    selectedEmployee.name ||
-                    selectedEmployee.email ||
-                    "موظف",
-              employeeEmail:
-                selectedEmployeeProfile.personal.email !== EMPLOYEE_EMPTY_VALUE
-                  ? selectedEmployeeProfile.personal.email
-                  : selectedEmployee.email || null,
-              leaveType: "emergency",
-              startDate,
-              endDate: startDate,
-              daysCount: 1,
-              employeeNote: "إجازة مفاجئة من إدارة الحضور",
-            }),
-            status: "approved",
-            balanceDeductedDays,
-            hrNote: "إجازة مفاجئة معتمدة من إدارة الحضور",
-            decidedAt: serverTimestamp(),
-            decidedBy: user?.uid || null,
-            decidedByEmail: user?.email || null,
-            decidedByName: user?.displayName || user?.email || null,
-            reviewedAt: serverTimestamp(),
-            reviewedBy: user?.uid || null,
-            reviewedByEmail: user?.email || null,
-            reviewedByName: user?.displayName || user?.email || null,
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          });
-        });
-      }
 
       try {
         await createInAppNotification({
@@ -6953,7 +6035,7 @@ export default function EmployeesManagementPage() {
 
     setCancellingLeaveDate(normalizedDateKey);
     try {
-      if (HR_CORE_D1_ENABLED && isHrCoreConfigured()) {
+
         const previousRestoredDays = Number(
           leaveRequest.balanceRestoredDays || 0
         );
@@ -7011,233 +6093,7 @@ export default function EmployeesManagementPage() {
           )
         );
         return;
-      }
 
-      await runTransaction(db, async tx => {
-        const leaveRequestRef = doc(
-          db,
-          EMPLOYEE_LEAVE_REQUESTS_COLLECTION,
-          leaveRequest.id
-        );
-        const leaveRequestSnap = await tx.get(leaveRequestRef);
-        if (!leaveRequestSnap.exists()) {
-          throw new Error("leave_request_not_found");
-        }
-
-        const currentLeaveRequest =
-          leaveRequestSnap.data() as EmployeeLeaveRequestDoc;
-        const currentStatus = String(currentLeaveRequest.status || "")
-          .trim()
-          .toLowerCase();
-        if (currentStatus !== "approved") {
-          throw new Error("leave_request_not_approved");
-        }
-
-        const startDateKey =
-          formatLeaveDateInput(currentLeaveRequest.startDate) ||
-          formatLeaveDateInput(leaveRequest.startDate);
-        const endDateKey =
-          formatLeaveDateInput(
-            currentLeaveRequest.endDate ||
-              currentLeaveRequest.startDate ||
-              leaveRequest.endDate ||
-              leaveRequest.startDate
-          ) || startDateKey;
-        const allDateKeys = buildDateKeysInRange(startDateKey, endDateKey);
-        const currentCancelledDateKeys = normalizeLeaveCancelledDateKeys(
-          currentLeaveRequest.cancelledDateKeys
-        );
-        const cancelledDateKeySet = new Set(currentCancelledDateKeys);
-
-        if (
-          !startDateKey ||
-          !allDateKeys.includes(normalizedDateKey) ||
-          cancelledDateKeySet.has(normalizedDateKey)
-        ) {
-          throw new Error("leave_request_date_mismatch");
-        }
-
-        const activeDateKeys = allDateKeys.filter(
-          currentDateKey => !cancelledDateKeySet.has(currentDateKey)
-        );
-        if (!activeDateKeys.includes(normalizedDateKey)) {
-          throw new Error("leave_request_date_inactive");
-        }
-
-        const remainingActiveDateKeys = activeDateKeys.filter(
-          currentDateKey => currentDateKey !== normalizedDateKey
-        );
-        const parsedDeductedDays = Number(
-          currentLeaveRequest.balanceDeductedDays
-        );
-        const hasStoredDeduction =
-          currentLeaveRequest.balanceDeductedDays !== undefined &&
-          currentLeaveRequest.balanceDeductedDays !== null &&
-          Number.isFinite(parsedDeductedDays);
-        const currentDeductedDays = Math.max(
-          0,
-          Math.min(
-            hasStoredDeduction ? parsedDeductedDays : activeDateKeys.length,
-            activeDateKeys.length
-          )
-        );
-        const restoreDays = currentDeductedDays > 0 ? 1 : 0;
-        const nextDeductedDays = Math.max(0, currentDeductedDays - restoreDays);
-        const parsedRestoredDays = Number(
-          currentLeaveRequest.balanceRestoredDays
-        );
-        const currentRestoredDays = Number.isFinite(parsedRestoredDays)
-          ? Math.max(0, parsedRestoredDays)
-          : 0;
-
-        const employeeUid = selectedEmployeeAuthUid || selectedEmployee.id;
-        const userRef = doc(db, "users", selectedEmployee.id);
-        const userSnap = await tx.get(userRef);
-        if (!userSnap.exists()) {
-          throw new Error("employee_user_not_found");
-        }
-
-        const userData = (userSnap.data() as Record<string, any>) || {};
-        const userEmployment = (userData.employeeProfile?.employment ||
-          userData.employment ||
-          {}) as Record<string, any>;
-
-        const employeeDocId = String(
-          selectedEmployeeDocumentId ||
-            selectedEmployee.linkedEmployeeId ||
-            currentLeaveRequest.employeeDocId ||
-            currentLeaveRequest.employeeId ||
-            ""
-        ).trim();
-        const employeeRef = employeeDocId
-          ? doc(db, "employees", employeeDocId)
-          : null;
-        const employeeSnap = employeeRef ? await tx.get(employeeRef) : null;
-        const employeeData =
-          employeeSnap?.exists() && employeeSnap.data()
-            ? (employeeSnap.data() as Record<string, any>) || {}
-            : null;
-        const employeeEmployment = (employeeData?.employeeProfile?.employment ||
-          employeeData?.employment ||
-          {}) as Record<string, any>;
-
-        if (restoreDays > 0) {
-          const currentLeaveBalance = resolveEmploymentLeaveBalance(
-            userData,
-            employeeData
-          );
-          const nextLeaveBalance = currentLeaveBalance + restoreDays;
-          const nextUserEmployment = {
-            ...userEmployment,
-            leaveBalance: nextLeaveBalance,
-            updatedAt: serverTimestamp(),
-            updatedByUid: user?.uid || null,
-            updatedByEmail: user?.email || null,
-          };
-
-          tx.set(
-            userRef,
-            {
-              leaveBalance: nextLeaveBalance,
-              updatedAt: serverTimestamp(),
-              employment: nextUserEmployment,
-              employeeProfile: {
-                personal: (userData.employeeProfile?.personal ||
-                  userData.personal ||
-                  null) as Record<string, any> | null,
-                employment: nextUserEmployment,
-              },
-            },
-            { merge: true }
-          );
-
-          if (employeeRef) {
-            const nextEmployeeEmployment = {
-              ...employeeEmployment,
-              leaveBalance: nextLeaveBalance,
-              updatedAt: serverTimestamp(),
-              updatedByUid: user?.uid || null,
-              updatedByEmail: user?.email || null,
-            };
-
-            tx.set(
-              employeeRef,
-              {
-                uid: employeeUid,
-                linkedUserUid: employeeUid,
-                leaveBalance: nextLeaveBalance,
-                updatedAt: serverTimestamp(),
-                employment: nextEmployeeEmployment,
-                employeeProfile: {
-                  personal: (employeeData?.employeeProfile?.personal ||
-                    employeeData?.personal ||
-                    null) as Record<string, any> | null,
-                  employment: nextEmployeeEmployment,
-                },
-              },
-              { merge: true }
-            );
-          }
-        }
-
-        const nextCancelledDateKeys = [
-          ...currentCancelledDateKeys,
-          normalizedDateKey,
-        ].sort();
-        const nextStatus = remainingActiveDateKeys.length
-          ? "approved"
-          : "cancelled";
-        const previousHrNote = String(
-          currentLeaveRequest.hrNote || leaveRequest.hrNote || ""
-        ).trim();
-        const cancellationNote = `تم إلغاء يوم ${normalizedDateKey} فقط من الإجازة بواسطة إدارة الحضور.`;
-
-        tx.update(leaveRequestRef, {
-          status: nextStatus,
-          daysCount: remainingActiveDateKeys.length,
-          balanceDeductedDays: nextDeductedDays,
-          balanceRestoredDays: currentRestoredDays + restoreDays,
-          cancelledDateKeys: nextCancelledDateKeys,
-          cancellationDate: normalizedDateKey,
-          cancelledAt: serverTimestamp(),
-          cancelledBy: user?.uid || null,
-          cancelledByEmail: user?.email || null,
-          cancelledByName: user?.displayName || user?.email || null,
-          hrNote: previousHrNote
-            ? `${previousHrNote}\n${cancellationNote}`
-            : cancellationNote,
-          updatedAt: serverTimestamp(),
-        });
-      });
-
-      try {
-        await createInAppNotification({
-          userId:
-            leaveRequest.employeeUid ||
-            selectedEmployeeAuthUid ||
-            selectedEmployee.id,
-          title: tr(language, "تم إلغاء يوم من الإجازة", "Leave Day Cancelled"),
-          body: tr(
-            language,
-            `تم إلغاء يوم ${normalizedDateKey} فقط من الإجازة، وإرجاع يوم إلى الرصيد إذا كان قد خُصم.`,
-            `Only ${normalizedDateKey} was cancelled from the leave, and one day was restored if it had been deducted.`
-          ),
-          type: "leave",
-          relatedId: leaveRequest.id,
-          relatedTo: "employee_leave_request",
-          relatedPath: "/hr/profile",
-        });
-      } catch (notificationError) {
-        console.error("cancel_leave_notification_failed", notificationError);
-      }
-
-      toast.success(
-        tr(
-          language,
-          "تم إلغاء اليوم المحدد فقط مع الحفاظ على بقية أيام الإجازة.",
-          "Only the selected day was cancelled; the remaining leave days were preserved."
-        )
-      );
     } catch (error) {
       console.error("cancel_approved_leave_error", error);
       toast.error(
@@ -7285,7 +6141,7 @@ export default function EmployeesManagementPage() {
 
     setReviewingLeaveRequestId(request.id);
     try {
-      if (HR_CORE_D1_ENABLED && isHrCoreConfigured()) {
+
         await reviewHrCoreLeaveRequest(request.id, {
           status: nextStatus,
           hrNote,
@@ -7300,154 +6156,7 @@ export default function EmployeesManagementPage() {
           }));
         }
         refreshHrOperations();
-      } else {
-        await runTransaction(db, async tx => {
-          const leaveRequestRef = doc(
-            db,
-            EMPLOYEE_LEAVE_REQUESTS_COLLECTION,
-            request.id
-          );
-          const leaveRequestSnap = await tx.get(leaveRequestRef);
-          if (!leaveRequestSnap.exists()) {
-            throw new Error("leave_request_not_found");
-          }
 
-          const currentLeaveRequest =
-            leaveRequestSnap.data() as EmployeeLeaveRequestDoc;
-          const currentStatus = String(currentLeaveRequest.status || "pending")
-            .trim()
-            .toLowerCase();
-          if (currentStatus !== "pending") {
-            throw new Error("leave_request_already_reviewed");
-          }
-
-          const daysCount = Number(
-            currentLeaveRequest.daysCount ?? request.daysCount ?? 0
-          );
-          if (!Number.isFinite(daysCount) || daysCount <= 0) {
-            throw new Error("leave_request_invalid_days");
-          }
-
-          const hrNote = String(
-            reviewNotes[request.id] ?? request.hrNote ?? ""
-          ).trim();
-
-          if (nextStatus === "rejected" && !hrNote) {
-            throw new Error("leave_rejection_note_required");
-          }
-
-          const userRef = doc(db, "users", selectedEmployee.id);
-          const userSnap = await tx.get(userRef);
-          if (!userSnap.exists()) {
-            throw new Error("employee_user_not_found");
-          }
-
-          const userData = (userSnap.data() as Record<string, any>) || {};
-          const userEmployment = (userData.employeeProfile?.employment ||
-            userData.employment ||
-            {}) as Record<string, any>;
-          const linkedUserUid = selectedEmployeeAuthUid || selectedEmployee.id;
-
-          const employeeDocId = String(
-            selectedEmployee.linkedEmployeeId ||
-              currentLeaveRequest.employeeDocId ||
-              currentLeaveRequest.employeeId ||
-              ""
-          ).trim();
-          const employeeRef = employeeDocId
-            ? doc(db, "employees", employeeDocId)
-            : null;
-          const employeeSnap = employeeRef ? await tx.get(employeeRef) : null;
-          const employeeData =
-            employeeSnap?.exists() && employeeSnap.data()
-              ? (employeeSnap.data() as Record<string, any>) || {}
-              : null;
-          const employeeEmployment = (employeeData?.employeeProfile
-            ?.employment ||
-            employeeData?.employment ||
-            {}) as Record<string, any>;
-          let balanceDeductedDays: number | null = null;
-
-          if (nextStatus === "approved") {
-            const currentLeaveBalance = resolveEmploymentLeaveBalance(
-              userData,
-              employeeData
-            );
-            if (currentLeaveBalance < daysCount) {
-              throw new Error("leave_balance_insufficient");
-            }
-
-            const nextLeaveBalance = currentLeaveBalance - daysCount;
-            balanceDeductedDays = daysCount;
-            const nextUserEmployment = {
-              ...userEmployment,
-              leaveBalance: nextLeaveBalance,
-              updatedAt: serverTimestamp(),
-              updatedByUid: user?.uid || null,
-              updatedByEmail: user?.email || null,
-            };
-
-            tx.set(
-              userRef,
-              {
-                leaveBalance: nextLeaveBalance,
-                updatedAt: serverTimestamp(),
-                employment: nextUserEmployment,
-                employeeProfile: {
-                  personal: (userData.employeeProfile?.personal ||
-                    userData.personal ||
-                    null) as Record<string, any> | null,
-                  employment: nextUserEmployment,
-                },
-              },
-              { merge: true }
-            );
-
-            if (employeeRef) {
-              const nextEmployeeEmployment = {
-                ...employeeEmployment,
-                leaveBalance: nextLeaveBalance,
-                updatedAt: serverTimestamp(),
-                updatedByUid: user?.uid || null,
-                updatedByEmail: user?.email || null,
-              };
-
-              tx.set(
-                employeeRef,
-                {
-                  uid: linkedUserUid,
-                  linkedUserUid: linkedUserUid,
-                  leaveBalance: nextLeaveBalance,
-                  updatedAt: serverTimestamp(),
-                  employment: nextEmployeeEmployment,
-                  employeeProfile: {
-                    personal: (employeeData?.employeeProfile?.personal ||
-                      employeeData?.personal ||
-                      null) as Record<string, any> | null,
-                    employment: nextEmployeeEmployment,
-                  },
-                },
-                { merge: true }
-              );
-            }
-          }
-
-          tx.update(leaveRequestRef, {
-            status: nextStatus,
-            hrNote,
-            ...(nextStatus === "approved" ? { balanceDeductedDays } : {}),
-            decidedAt: serverTimestamp(),
-            decidedBy: user?.uid || null,
-            decidedByEmail: user?.email || null,
-            decidedByName: user?.displayName || user?.email || null,
-            reviewedAt: serverTimestamp(),
-            reviewedBy: user?.uid || null,
-            reviewedByEmail: user?.email || null,
-            reviewedByName: user?.displayName || user?.email || null,
-            updatedAt: serverTimestamp(),
-          });
-        });
-      }
 
       try {
         await createInAppNotification({
@@ -7562,46 +6271,13 @@ export default function EmployeesManagementPage() {
 
     setReviewingServiceRequestId(request.id);
     try {
-      if (HR_CORE_D1_ENABLED && isHrCoreConfigured()) {
+
         await reviewHrCoreServiceRequest(request.id, {
           status: nextStatus,
           hrNote,
         });
         refreshHrOperations();
-      } else {
-        await runTransaction(db, async tx => {
-          const requestRef = doc(
-            db,
-            EMPLOYEE_SERVICE_REQUESTS_COLLECTION,
-            request.id
-          );
-          const requestSnap = await tx.get(requestRef);
-          if (!requestSnap.exists()) {
-            throw new Error("service_request_not_found");
-          }
 
-          const currentStatus = String(requestSnap.data()?.status || "pending")
-            .trim()
-            .toLowerCase();
-          if (currentStatus !== "pending") {
-            throw new Error("service_request_already_reviewed");
-          }
-
-          tx.update(requestRef, {
-            status: nextStatus,
-            hrNote,
-            decidedAt: serverTimestamp(),
-            decidedBy: user?.uid || null,
-            decidedByEmail: user?.email || null,
-            decidedByName: user?.displayName || user?.email || null,
-            reviewedAt: serverTimestamp(),
-            reviewedBy: user?.uid || null,
-            reviewedByEmail: user?.email || null,
-            reviewedByName: user?.displayName || user?.email || null,
-            updatedAt: serverTimestamp(),
-          });
-        });
-      }
 
       try {
         const requestLabel = getEmployeeServiceRequestTypeLabel(
