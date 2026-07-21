@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useLocation } from "wouter";
-import { doc, getDoc } from "firebase/firestore";
 import { getLoginUrl } from "@/const";
 
 import {
@@ -10,7 +9,7 @@ import {
   hasStaffAreaPermission,
   useAuth,
 } from "@/_core/hooks/useAuth";
-import { db } from "@/_core/firebase";
+import { getHrCoreEmployee, isHrCoreConfigured } from "@/lib/hrCoreApi";
 
 type Props = {
   children: ReactNode;
@@ -44,14 +43,21 @@ export default function RequireEmployeeProfileAccess({
       return;
     }
 
+    const employeeId = String(user.linkedEmployeeId || user.uid || "").trim();
+    if (!employeeId || !isHrCoreConfigured()) {
+      setHasLinkedEmployeeRecord(false);
+      return;
+    }
+
     let cancelled = false;
     setHasLinkedEmployeeRecord(null);
 
-    void getDoc(doc(db, "employees", user.uid))
-      .then(snapshot => {
-        if (!cancelled) setHasLinkedEmployeeRecord(snapshot.exists());
+    void getHrCoreEmployee(employeeId)
+      .then(() => {
+        if (!cancelled) setHasLinkedEmployeeRecord(true);
       })
-      .catch(() => {
+      .catch(error => {
+        console.error("employee_profile_d1_access_lookup_failed", error);
         if (!cancelled) setHasLinkedEmployeeRecord(false);
       });
 
@@ -60,7 +66,8 @@ export default function RequireEmployeeProfileAccess({
     };
   }, [hasDirectAccess, loading, user]);
 
-  const canOpenEmployeeProfile = hasDirectAccess || hasLinkedEmployeeRecord === true;
+  const canOpenEmployeeProfile =
+    hasDirectAccess || hasLinkedEmployeeRecord === true;
 
   useEffect(() => {
     if (loading) return;

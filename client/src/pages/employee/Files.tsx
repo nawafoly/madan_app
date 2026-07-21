@@ -6,16 +6,6 @@ import {
   type DragEvent,
 } from "react";
 import {
-  collection,
-  doc,
-  onSnapshot,
-  query,
-  serverTimestamp,
-  setDoc,
-  updateDoc,
-  where,
-} from "firebase/firestore";
-import {
   CheckCircle2,
   Clock3,
   Download,
@@ -63,7 +53,6 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { db } from "@/_core/firebase";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useLanguage } from "@/contexts/LanguageContext";
 import {
@@ -75,7 +64,6 @@ import { uploadDocumentToCloudflare } from "@/lib/documentUploadService";
 import {
   buildEmployeeFileParticipants,
   EMPLOYEE_FILE_CATEGORY,
-  EMPLOYEE_FILES_COLLECTION,
   EMPLOYEE_FILE_TYPE_OPTIONS,
   filterIncomingEmployeeFiles,
   filterSentEmployeeFiles,
@@ -86,8 +74,6 @@ import {
 import { formatDateTimeEN, formatFileSizeEN } from "@/lib/formatters";
 import {
   createHrCoreEmployeeFile,
-  HR_CORE_D1_ENABLED,
-  isHrCoreConfigured,
   listHrCoreEmployeeFiles,
   markHrCoreEmployeeFileRead,
 } from "@/lib/hrCoreApi";
@@ -393,90 +379,39 @@ export default function EmployeeFilesPage() {
       return;
     }
 
+    let cancelled = false;
     setLegacyLoading(true);
     setParticipantLoading(true);
 
-    if (HR_CORE_D1_ENABLED && isHrCoreConfigured()) {
-      let cancelled = false;
-      void listHrCoreEmployeeFiles({ participantUid: user.uid, limit: 200 })
-        .then(response => {
-          if (cancelled) return;
-          const rows = response.employeeFiles.map(file =>
-            normalizeEmployeeFileRecord(
-              file.id,
-              file as Record<string, unknown>,
-              user.uid
-            )
-          );
-          setLegacyFiles(rows);
-          setParticipantFiles([]);
-        })
-        .catch(error => {
-          console.error("employee_files_hr_core_load_failed", error);
-          if (!cancelled) {
-            setLegacyFiles([]);
-            setParticipantFiles([]);
-          }
-        })
-        .finally(() => {
-          if (!cancelled) {
-            setLegacyLoading(false);
-            setParticipantLoading(false);
-          }
-        });
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    const unsubscribeLegacy = onSnapshot(
-      query(collection(db, EMPLOYEE_FILES_COLLECTION), where("employeeUid", "==", user.uid)),
-      snapshot => {
-        setLegacyFiles(
-          snapshot.docs.map(docSnapshot =>
-            normalizeEmployeeFileRecord(
-              docSnapshot.id,
-              (docSnapshot.data() as Record<string, unknown>) || {},
-              user.uid
-            )
+    void listHrCoreEmployeeFiles({ participantUid: user.uid, limit: 200 })
+      .then(response => {
+        if (cancelled) return;
+        const rows = response.employeeFiles.map(file =>
+          normalizeEmployeeFileRecord(
+            file.id,
+            file as Record<string, unknown>,
+            user.uid
           )
         );
-        setLegacyLoading(false);
-      },
-      error => {
-        console.error("employee_files_legacy_snapshot_error", error);
-        setLegacyFiles([]);
-        setLegacyLoading(false);
-      }
-    );
-
-    const unsubscribeParticipants = onSnapshot(
-      query(
-        collection(db, EMPLOYEE_FILES_COLLECTION),
-        where("participantUids", "array-contains", user.uid)
-      ),
-      snapshot => {
-        setParticipantFiles(
-          snapshot.docs.map(docSnapshot =>
-            normalizeEmployeeFileRecord(
-              docSnapshot.id,
-              (docSnapshot.data() as Record<string, unknown>) || {},
-              user.uid
-            )
-          )
-        );
-        setParticipantLoading(false);
-      },
-      error => {
-        console.error("employee_files_participants_snapshot_error", error);
+        setLegacyFiles(rows);
         setParticipantFiles([]);
-        setParticipantLoading(false);
-      }
-    );
+      })
+      .catch(error => {
+        console.error("employee_files_hr_core_load_failed", error);
+        if (!cancelled) {
+          setLegacyFiles([]);
+          setParticipantFiles([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLegacyLoading(false);
+          setParticipantLoading(false);
+        }
+      });
 
     return () => {
-      unsubscribeLegacy();
-      unsubscribeParticipants();
+      cancelled = true;
     };
   }, [user?.uid]);
 
@@ -609,27 +544,24 @@ export default function EmployeeFilesPage() {
     const canMarkRead =
       !file.isRead &&
       file.direction === "incoming" &&
-      (!file.isInternalTransfer || file.receiverUid === user.uid || file.employeeUid === user.uid);
+      (!file.isInternalTransfer ||
+        file.receiverUid === user.uid ||
+        file.employeeUid === user.uid);
 
     if (!canMarkRead) return;
 
-    if (HR_CORE_D1_ENABLED && isHrCoreConfigured()) {
-      const response = await markHrCoreEmployeeFileRead(file.id);
-      const updated = normalizeEmployeeFileRecord(
-        response.employeeFile.id,
-        response.employeeFile as Record<string, unknown>,
-        user.uid
-      );
-      setLegacyFiles(current => current.map(item => (item.id === updated.id ? updated : item)));
-      setParticipantFiles(current => current.map(item => (item.id === updated.id ? updated : item)));
-      return;
-    }
-
-    await updateDoc(doc(db, EMPLOYEE_FILES_COLLECTION, file.id), {
-      isRead: true,
-      readAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    });
+    const response = await markHrCoreEmployeeFileRead(file.id);
+    const updated = normalizeEmployeeFileRecord(
+      response.employeeFile.id,
+      response.employeeFile as Record<string, unknown>,
+      user.uid
+    );
+    setLegacyFiles(current =>
+      current.map(item => (item.id === updated.id ? updated : item))
+    );
+    setParticipantFiles(current =>
+      current.map(item => (item.id === updated.id ? updated : item))
+    );
   };
 
   const openFileUrl = (url: string) => {
@@ -729,7 +661,7 @@ export default function EmployeeFilesPage() {
     setSendingFile(true);
     try {
       const fileRecordId = crypto.randomUUID();
-      const fileRef = doc(db, EMPLOYEE_FILES_COLLECTION, fileRecordId);
+      const nowIso = new Date().toISOString();
       const uploaded = await uploadDocumentToCloudflare({
         entityType: "employee_file_transfer",
         entityId: fileRecordId,
@@ -768,7 +700,7 @@ export default function EmployeeFilesPage() {
         category: uploaded.category || EMPLOYEE_FILE_CATEGORY,
         uploadedBy: user.uid,
         uploadedByName: currentUserDisplayName,
-        createdAt: serverTimestamp(),
+        createdAt: nowIso,
         uploadedAt: uploaded.uploadedAt,
         status: "active",
         active: true,
@@ -779,25 +711,24 @@ export default function EmployeeFilesPage() {
         replacesFileId: null,
         isRead: false,
         readAt: null,
-        updatedAt: serverTimestamp(),
+        updatedAt: nowIso,
       };
 
-      if (HR_CORE_D1_ENABLED && isHrCoreConfigured()) {
-        const response = await createHrCoreEmployeeFile({
-          id: fileRecordId,
-          ...fileDoc,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        });
-        const created = normalizeEmployeeFileRecord(
-          response.employeeFile.id,
-          response.employeeFile as Record<string, unknown>,
-          user.uid
-        );
-        setLegacyFiles(current => [created, ...current.filter(item => item.id !== created.id)]);
-      } else {
-        await setDoc(fileRef, fileDoc);
-      }
+      const response = await createHrCoreEmployeeFile({
+        id: fileRecordId,
+        ...fileDoc,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      });
+      const created = normalizeEmployeeFileRecord(
+        response.employeeFile.id,
+        response.employeeFile as Record<string, unknown>,
+        user.uid
+      );
+      setLegacyFiles(current => [
+        created,
+        ...current.filter(item => item.id !== created.id),
+      ]);
 
       await createInAppNotification({
         userId: selectedRecipient.uid,

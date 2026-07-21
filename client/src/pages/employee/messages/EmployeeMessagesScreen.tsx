@@ -1,16 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import {
-  collection,
-  doc,
-  getDoc,
-  onSnapshot,
-  query,
-  serverTimestamp,
-  setDoc,
-  where,
-  writeBatch,
-} from "firebase/firestore";
-import {
   CheckCircle2,
   Clock3,
   Mail,
@@ -21,7 +10,6 @@ import {
 import { toast } from "sonner";
 import { useLocation, useSearch } from "wouter";
 
-import { db } from "@/_core/firebase";
 import { useAuth } from "@/_core/hooks/useAuth";
 import EmployeeLayout from "@/components/EmployeeLayout";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -45,17 +33,10 @@ import {
   type EmployeeMessageConversationRecord,
   type EmployeeMessageRecord,
 } from "@/lib/employeeMessages";
-import {
-  EMPLOYEE_EMPTY_VALUE,
-  normalizeEmployeeProfile,
-  type EmployeeProfileUserDoc,
-} from "@/lib/employeeProfile";
 import { resolveEmployeeAvatarUrl } from "@/lib/defaultEmployeeAvatars";
 import { createInAppNotification } from "@/lib/inAppNotifications";
 import {
   createHrCoreEmployeeMessage,
-  HR_CORE_D1_ENABLED,
-  isHrCoreConfigured,
   listHrCoreEmployeeMessages,
   markHrCoreEmployeeMessagesRead,
 } from "@/lib/hrCoreApi";
@@ -68,10 +49,7 @@ import {
   initialsFromName,
   type MessageSenderProfile,
 } from "@/pages/employee/messages/ConversationUi";
-import {
-  EMPLOYEE_MESSAGES_COLLECTION,
-  type EmployeeMessageDoc,
-} from "@shared/employee";
+import { type EmployeeMessageDoc } from "@shared/employee";
 
 type ConversationSectionKey = "hr" | "internal";
 type InboxFilterKey = "all" | "unread" | "hr" | "internal";
@@ -180,90 +158,38 @@ export default function EmployeeMessagesScreen() {
       return;
     }
 
+    let cancelled = false;
     setLegacyLoading(true);
     setParticipantLoading(true);
 
-    if (HR_CORE_D1_ENABLED && isHrCoreConfigured()) {
-      let cancelled = false;
-      void listHrCoreEmployeeMessages({ participantUid: user.uid, limit: 200 })
-        .then(response => {
-          if (cancelled) return;
-          const rows = response.employeeMessages.map(message =>
-            normalizeEmployeeMessageRecord(
-              message.id,
-              message as Record<string, any>
-            )
-          );
-          setLegacyMessages(rows);
-          setParticipantMessages([]);
-        })
-        .catch(error => {
-          console.error("employee_messages_hr_core_load_failed", error);
-          if (!cancelled) {
-            setLegacyMessages([]);
-            setParticipantMessages([]);
-          }
-        })
-        .finally(() => {
-          if (!cancelled) {
-            setLegacyLoading(false);
-            setParticipantLoading(false);
-          }
-        });
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    const unsubscribeLegacy = onSnapshot(
-      query(
-        collection(db, EMPLOYEE_MESSAGES_COLLECTION),
-        where("employeeUid", "==", user.uid)
-      ),
-      snapshot => {
-        setLegacyMessages(
-          snapshot.docs.map(docSnapshot =>
-            normalizeEmployeeMessageRecord(
-              docSnapshot.id,
-              (docSnapshot.data() as Record<string, any>) || {}
-            )
+    void listHrCoreEmployeeMessages({ participantUid: user.uid, limit: 200 })
+      .then(response => {
+        if (cancelled) return;
+        const rows = response.employeeMessages.map(message =>
+          normalizeEmployeeMessageRecord(
+            message.id,
+            message as Record<string, any>
           )
         );
-        setLegacyLoading(false);
-      },
-      error => {
-        console.error("employee_messages_legacy_snapshot_error", error);
-        setLegacyMessages([]);
-        setLegacyLoading(false);
-      }
-    );
-
-    const unsubscribeParticipants = onSnapshot(
-      query(
-        collection(db, EMPLOYEE_MESSAGES_COLLECTION),
-        where("participantUids", "array-contains", user.uid)
-      ),
-      snapshot => {
-        setParticipantMessages(
-          snapshot.docs.map(docSnapshot =>
-            normalizeEmployeeMessageRecord(
-              docSnapshot.id,
-              (docSnapshot.data() as Record<string, any>) || {}
-            )
-          )
-        );
-        setParticipantLoading(false);
-      },
-      error => {
-        console.error("employee_messages_participants_snapshot_error", error);
+        setLegacyMessages(rows);
         setParticipantMessages([]);
-        setParticipantLoading(false);
-      }
-    );
+      })
+      .catch(error => {
+        console.error("employee_messages_hr_core_load_failed", error);
+        if (!cancelled) {
+          setLegacyMessages([]);
+          setParticipantMessages([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLegacyLoading(false);
+          setParticipantLoading(false);
+        }
+      });
 
     return () => {
-      unsubscribeLegacy();
-      unsubscribeParticipants();
+      cancelled = true;
     };
   }, [user?.uid]);
 
@@ -617,43 +543,6 @@ export default function EmployeeMessagesScreen() {
           ] as const;
         }
 
-        try {
-          const snapshot = await getDoc(doc(db, "users", senderUid));
-          if (snapshot.exists()) {
-            const raw = {
-              ...(snapshot.data() as EmployeeProfileUserDoc),
-              uid: senderUid,
-            } satisfies EmployeeProfileUserDoc;
-            const profile = normalizeEmployeeProfile(raw, {
-              displayName: raw.displayName,
-              email: raw.email,
-              photoURL: raw.photoURL,
-            });
-            return [
-              senderUid,
-              {
-                avatarUrl:
-                  profile.personal.avatarUrl ||
-                  seededMessage.fromUserPhoto ||
-                  null,
-                name:
-                  profile.personal.name !== EMPLOYEE_EMPTY_VALUE
-                    ? profile.personal.name
-                    : seededMessage.fromUserName || "HR",
-                email:
-                  profile.personal.email !== EMPLOYEE_EMPTY_VALUE
-                    ? profile.personal.email
-                    : seededMessage.fromUserEmail || null,
-              },
-            ] as const;
-          }
-        } catch (error) {
-          console.error("employee_message_sender_lookup_failed", {
-            senderUid,
-            error,
-          });
-        }
-
         return [
           senderUid,
           {
@@ -698,36 +587,35 @@ export default function EmployeeMessagesScreen() {
 
     setOpeningConversationId(conversation.id);
     try {
-      if (HR_CORE_D1_ENABLED && isHrCoreConfigured()) {
-        const ids = unreadIncomingMessages.map(message => message.id);
-        await markHrCoreEmployeeMessagesRead(ids);
-        const now = new Date();
-        setLegacyMessages(current =>
-          current.map(message =>
-            ids.includes(message.id)
-              ? { ...message, isRead: true, status: "read", readAt: now, readAtDate: now }
-              : message
-          )
-        );
-        setParticipantMessages(current =>
-          current.map(message =>
-            ids.includes(message.id)
-              ? { ...message, isRead: true, status: "read", readAt: now, readAtDate: now }
-              : message
-          )
-        );
-      } else {
-        const batch = writeBatch(db);
-        unreadIncomingMessages.forEach(message => {
-          batch.update(doc(db, EMPLOYEE_MESSAGES_COLLECTION, message.id), {
-            isRead: true,
-            readAt: serverTimestamp(),
-            status: "read",
-            updatedAt: serverTimestamp(),
-          });
-        });
-        await batch.commit();
-      }
+      const ids = unreadIncomingMessages.map(message => message.id);
+      await markHrCoreEmployeeMessagesRead(ids);
+      const now = new Date();
+      setLegacyMessages(current =>
+        current.map(message =>
+          ids.includes(message.id)
+            ? {
+                ...message,
+                isRead: true,
+                status: "read",
+                readAt: now,
+                readAtDate: now,
+              }
+            : message
+        )
+      );
+      setParticipantMessages(current =>
+        current.map(message =>
+          ids.includes(message.id)
+            ? {
+                ...message,
+                isRead: true,
+                status: "read",
+                readAt: now,
+                readAtDate: now,
+              }
+            : message
+        )
+      );
     } catch (error) {
       console.error("employee_message_mark_read_failed", error);
     } finally {
@@ -801,7 +689,7 @@ export default function EmployeeMessagesScreen() {
     setSendingHrReply(true);
     try {
       const messageId = crypto.randomUUID();
-      const messageRef = doc(db, EMPLOYEE_MESSAGES_COLLECTION, messageId);
+      const nowIso = new Date().toISOString();
       const messagePayload = {
         employeeId: activeHrConversation.employeeId || null,
         employeeUid: activeHrConversation.employeeUid || user.uid,
@@ -831,27 +719,23 @@ export default function EmployeeMessagesScreen() {
         type: "message",
         relatedTo: "employee_message",
         relatedId: parentMessage.id,
-        createdAt: serverTimestamp(),
+        createdAt: nowIso,
         isRead: false,
         readAt: null,
-        updatedAt: serverTimestamp(),
+        updatedAt: nowIso,
       } satisfies EmployeeMessageDoc;
 
-      if (HR_CORE_D1_ENABLED && isHrCoreConfigured()) {
-        const response = await createHrCoreEmployeeMessage({
-          id: messageId,
-          ...messagePayload,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        });
-        const created = normalizeEmployeeMessageRecord(
-          response.employeeMessage.id,
-          response.employeeMessage as Record<string, any>
-        );
-        setLegacyMessages(current => [...current, created]);
-      } else {
-        await setDoc(messageRef, messagePayload);
-      }
+      const response = await createHrCoreEmployeeMessage({
+        id: messageId,
+        ...messagePayload,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      });
+      const created = normalizeEmployeeMessageRecord(
+        response.employeeMessage.id,
+        response.employeeMessage as Record<string, any>
+      );
+      setLegacyMessages(current => [...current, created]);
 
       await createInAppNotification({
         userId: activeHrConversation.counterpartyUid,
@@ -892,7 +776,7 @@ export default function EmployeeMessagesScreen() {
     setSendingInternalMessage(true);
     try {
       const messageId = crypto.randomUUID();
-      const messageRef = doc(db, EMPLOYEE_MESSAGES_COLLECTION, messageId);
+      const nowIso = new Date().toISOString();
       const parentMessage =
         activeInternalConversation?.messages[
         activeInternalConversation.messages.length - 1
@@ -926,27 +810,23 @@ export default function EmployeeMessagesScreen() {
         type: "message",
         relatedTo: parentMessage ? "employee_message" : null,
         relatedId: parentMessage?.id || null,
-        createdAt: serverTimestamp(),
+        createdAt: nowIso,
         isRead: false,
         readAt: null,
-        updatedAt: serverTimestamp(),
+        updatedAt: nowIso,
       } satisfies EmployeeMessageDoc;
 
-      if (HR_CORE_D1_ENABLED && isHrCoreConfigured()) {
-        const response = await createHrCoreEmployeeMessage({
-          id: messageId,
-          ...messagePayload,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        });
-        const created = normalizeEmployeeMessageRecord(
-          response.employeeMessage.id,
-          response.employeeMessage as Record<string, any>
-        );
-        setLegacyMessages(current => [...current, created]);
-      } else {
-        await setDoc(messageRef, messagePayload);
-      }
+      const response = await createHrCoreEmployeeMessage({
+        id: messageId,
+        ...messagePayload,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      });
+      const created = normalizeEmployeeMessageRecord(
+        response.employeeMessage.id,
+        response.employeeMessage as Record<string, any>
+      );
+      setLegacyMessages(current => [...current, created]);
 
       await createInAppNotification({
         userId: selectedInternalRecipient.uid,
@@ -955,7 +835,7 @@ export default function EmployeeMessagesScreen() {
         type: "message",
         relatedId: messageId,
         relatedTo: "employee_message",
-        relatedPath: `/hr/messages?messageId=${messageRef.id}`,
+        relatedPath: `/hr/messages?messageId=${messageId}`,
       }).catch(error => {
         console.error("employee_internal_notification_failed", error);
       });
