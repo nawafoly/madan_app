@@ -84,6 +84,11 @@ type AttendanceEmployeeOption = {
   allowedZoneIds: string[];
 };
 
+type FirestoreCollectionRow = {
+  id: string;
+  data: Record<string, any>;
+};
+
 function pickText(...values: unknown[]) {
   for (const value of values) {
     const text = String(value ?? "").trim();
@@ -303,6 +308,162 @@ function readEmployeeCode(data: Record<string, any> | null | undefined) {
     data?.employeeCode,
     data?.employeeId,
   );
+}
+
+function uniqueLookupValues(values: unknown[]) {
+  const out: string[] = [];
+  const seen = new Set<string>();
+
+  for (const value of values) {
+    const text = normalizeLookupKey(value);
+    if (!text) continue;
+    const key = text.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(text);
+  }
+
+  return out;
+}
+
+function getNestedRecord(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, any>)
+    : {};
+}
+
+function isPlaceholderEmployeeName(value: unknown) {
+  const text = normalizeLookupKey(value).toLowerCase();
+  return (
+    !text ||
+    text === "-" ||
+    text === "غير محدد" ||
+    text === "موظف غير مرتبط" ||
+    text === "unlinked employee"
+  );
+}
+
+function normalizeEmployeeDisplayName(
+  value: unknown,
+  aliases: string[] = [],
+) {
+  const text = normalizeLookupKey(value);
+  if (isPlaceholderEmployeeName(text)) return "";
+
+  const lower = text.toLowerCase();
+  const aliasSet = new Set(aliases.map((alias) => alias.toLowerCase()));
+  if (aliasSet.has(lower)) return "";
+
+  return text;
+}
+
+function readEmployeeDisplayName(
+  data: Record<string, any> | null | undefined,
+  aliases: string[] = [],
+) {
+  const personal = getNestedRecord(
+    data?.employeeProfile?.personal || data?.personal,
+  );
+  const profile = getNestedRecord(data?.profile);
+  const employee = getNestedRecord(data?.employee);
+  const userSnapshot = getNestedRecord(data?.userSnapshot);
+
+  for (const candidate of [
+    data?.displayName,
+    data?.name,
+    data?.fullName,
+    data?.employeeName,
+    employee.displayName,
+    employee.name,
+    personal.name,
+    profile.displayName,
+    profile.name,
+    userSnapshot.displayName,
+    userSnapshot.name,
+  ]) {
+    const name = normalizeEmployeeDisplayName(candidate, aliases);
+    if (name) return name;
+  }
+
+  return "";
+}
+
+function readEmployeeEmail(data: Record<string, any> | null | undefined) {
+  return pickText(
+    data?.email,
+    data?.employeeProfile?.personal?.email,
+    data?.personal?.email,
+    data?.profile?.email,
+    data?.userSnapshot?.email,
+  );
+}
+
+function readIdentityAliases(id: string, data: Record<string, any>) {
+  const employee = getNestedRecord(data.employee);
+  const createdBy = getNestedRecord(data.createdBy);
+  const actor = getNestedRecord(data.actor);
+
+  return uniqueLookupValues([
+    id,
+    data.id,
+    data.uid,
+    data.userId,
+    data.linkedUserUid,
+    data.linkedEmployeeId,
+    data.employeeId,
+    data.employeeDocId,
+    data.staffId,
+    data.actorId,
+    actor.uid,
+    actor.id,
+    actor.userId,
+    data.createdBy,
+    data.createdByUid,
+    data.createdByUserId,
+    createdBy.uid,
+    createdBy.id,
+    createdBy.userId,
+    employee.uid,
+    employee.id,
+    employee.userId,
+    readEmployeeEmail(data),
+  ]);
+}
+
+function addEmployeeNameAliases(
+  names: Map<string, string>,
+  aliases: string[],
+  name: string,
+) {
+  const cleanName = normalizeEmployeeDisplayName(name, aliases);
+  if (!cleanName) return;
+
+  for (const alias of aliases) {
+    const key = normalizeLookupKey(alias);
+    if (!key) continue;
+    if (!names.has(key)) names.set(key, cleanName);
+    const lowerKey = key.toLowerCase();
+    if (!names.has(lowerKey)) names.set(lowerKey, cleanName);
+  }
+}
+
+function getLookupValue<T>(map: Map<string, T>, value: unknown) {
+  const key = normalizeLookupKey(value);
+  if (!key) return undefined;
+  return map.get(key) || map.get(key.toLowerCase());
+}
+
+async function loadOptionalCollectionRows(collectionName: string) {
+  try {
+    const snapshot = await getDocs(collection(db, collectionName));
+    return snapshot.docs.map((doc) => ({
+      id: doc.id,
+      data: (doc.data() as Record<string, any>) || {},
+    }));
+  } catch (error) {
+    console.debug(`hr_attendance_${collectionName}_fallback_failed`, error);
+    return [] as FirestoreCollectionRow[];
+  }
 }
 
 function exportAttendanceExcel(input: {
@@ -820,73 +981,142 @@ function exportAttendanceExcel(input: {
 
 function isAttendanceInternalIdentifier(
   value: string,
-  record: Pick<AttendanceRecord, "employeeUid" | "employeeDocId">,
+  record: Pick<AttendanceRecord, "employeeUid" | "employeeDocId"> &
+    Record<string, any>,
 ) {
   const normalized = normalizeLookupKey(value).toLowerCase();
   if (!normalized) return true;
 
-  const uid = normalizeLookupKey(record.employeeUid).toLowerCase();
-  const documentId = normalizeLookupKey(record.employeeDocId).toLowerCase();
+  const aliases = readAttendanceRecordIdentityKeys(
+    record as AttendanceRecord,
+  ).map((alias) => alias.toLowerCase());
 
   return (
-    normalized === uid ||
-    normalized === documentId ||
+    aliases.includes(normalized) ||
     (/^[a-z0-9_-]{24,}$/i.test(normalized) && !normalized.includes(" "))
   );
 }
 
 function getAttendanceEmployeeDisplayName(
-  record: Pick<AttendanceRecord, "employeeName" | "employeeUid" | "employeeDocId">,
+  record: AttendanceRecord,
   language: "ar" | "en",
 ) {
-  const employeeName = normalizeLookupKey(record.employeeName);
-  if (employeeName && !isAttendanceInternalIdentifier(employeeName, record)) {
-    return employeeName;
-  }
-
-  return tr(language, "موظف غير مرتبط", "Unlinked employee");
+  return (
+    resolveAttendanceEmployeeName(record, new Map()) ||
+    tr(language, "موظف غير مرتبط", "Unlinked employee")
+  );
 }
 
-function normalizeLookupKey(value: string | null | undefined) {
+function normalizeLookupKey(value: unknown) {
   return String(value || "").trim();
 }
 
 function buildEmployeeNameMap(employees: AttendanceEmployeeOption[]) {
   const names = new Map<string, string>();
   for (const employee of employees) {
-    const uid = normalizeLookupKey(employee.uid);
-    const name = normalizeLookupKey(employee.name);
-    if (uid && name) names.set(uid, name);
+    addEmployeeNameAliases(names, [employee.uid], employee.name);
   }
   return names;
+}
+
+function readAttendanceRecordIdentityKeys(record: AttendanceRecord) {
+  const raw = record as AttendanceRecord & Record<string, any>;
+  const createdBy = getNestedRecord(raw.createdBy);
+  const actor = getNestedRecord(raw.actor);
+  const employee = getNestedRecord(raw.employee);
+
+  return uniqueLookupValues([
+    raw.employeeUid,
+    raw.employeeDocId,
+    raw.employeeId,
+    raw.staffId,
+    raw.userId,
+    raw.uid,
+    raw.actorId,
+    actor.uid,
+    actor.id,
+    actor.userId,
+    raw.createdBy,
+    raw.createdByUid,
+    raw.createdByUserId,
+    createdBy.uid,
+    createdBy.id,
+    createdBy.userId,
+    employee.uid,
+    employee.id,
+    employee.userId,
+    raw.createdByEmail,
+    raw.email,
+  ]);
+}
+
+function readAttendanceRecordName(record: AttendanceRecord, allowIdentifier = false) {
+  const raw = record as AttendanceRecord & Record<string, any>;
+  const createdBy = getNestedRecord(raw.createdBy);
+  const actor = getNestedRecord(raw.actor);
+  const employee = getNestedRecord(raw.employee);
+  const userSnapshot = getNestedRecord(raw.userSnapshot);
+  const aliases = readAttendanceRecordIdentityKeys(record);
+
+  for (const candidate of [
+    raw.employeeName,
+    raw.employeeDisplayName,
+    raw.displayName,
+    employee.displayName,
+    employee.name,
+    userSnapshot.displayName,
+    userSnapshot.name,
+    raw.createdByName,
+    raw.actorName,
+    createdBy.displayName,
+    createdBy.name,
+    actor.displayName,
+    actor.name,
+  ]) {
+    const text = normalizeLookupKey(candidate);
+    if (!text) continue;
+    if (isPlaceholderEmployeeName(text)) continue;
+    if (allowIdentifier) return text;
+
+    const name = normalizeEmployeeDisplayName(text, aliases);
+    if (name && !isAttendanceInternalIdentifier(name, raw)) return name;
+  }
+
+  return "";
 }
 
 function resolveAttendanceEmployeeName(
   record: AttendanceRecord,
   employeeNames: Map<string, string>,
 ) {
-  return (
-    normalizeLookupKey(record.employeeName) ||
-    employeeNames.get(normalizeLookupKey(record.employeeUid)) ||
-    employeeNames.get(normalizeLookupKey(record.employeeDocId)) ||
-    null
-  );
+  const identityKeys = readAttendanceRecordIdentityKeys(record);
+  for (const key of identityKeys) {
+    const mappedName = getLookupValue(employeeNames, key);
+    if (mappedName) return mappedName;
+  }
+
+  const recordName = readAttendanceRecordName(record);
+  if (recordName) return recordName;
+
+  const identifierFallback = readAttendanceRecordName(record, true);
+  if (identifierFallback) return identifierFallback;
+
+  return identityKeys[0] || null;
 }
 
 function enrichAttendanceRecordsWithNames(
   records: AttendanceRecord[],
   employeeNames: Map<string, string>,
 ) {
-  if (!employeeNames.size) return records;
-
   return records.map((record) => {
     const employeeName = resolveAttendanceEmployeeName(record, employeeNames);
     const sharedDevice = record.deviceInfo.sharedDevice;
     const sharedEmployees = sharedDevice?.employees?.map((employee) => ({
       ...employee,
       name:
-        normalizeLookupKey(employee.name) ||
-        employeeNames.get(normalizeLookupKey(employee.uid)) ||
+        normalizeEmployeeDisplayName(employee.name, [employee.uid]) ||
+        getLookupValue(employeeNames, employee.uid) ||
+        employee.uid ||
         null,
     }));
 
@@ -1433,6 +1663,9 @@ export default function HrAttendancePage() {
   const [page, setPage] = useState(1);
   const [data, setData] = useState<AttendanceRecordsResponse | null>(null);
   const [employees, setEmployees] = useState<AttendanceEmployeeOption[]>([]);
+  const [employeeNameLookup, setEmployeeNameLookup] = useState<
+    Map<string, string>
+  >(() => new Map());
   const [workZones, setWorkZones] = useState<WorkZone[]>([]);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
@@ -1522,16 +1755,25 @@ export default function HrAttendancePage() {
   useEffect(() => {
     let active = true;
     Promise.all([
-      fetchEmployeeDirectoryFromWorker(),
-      getDocs(collection(db, "users")),
-      getDocs(collection(db, "employees")),
+      fetchEmployeeDirectoryFromWorker().catch((directoryError) => {
+        console.warn(
+          "hr_attendance_employee_directory_worker_failed",
+          directoryError,
+        );
+        return [];
+      }),
+      loadOptionalCollectionRows("users"),
+      loadOptionalCollectionRows("employees"),
+      loadOptionalCollectionRows("admin_users"),
+      loadOptionalCollectionRows("staff_public"),
       fetchWorkZones(),
     ])
-      .then(([items, usersSnapshot, employeesSnapshot, zones]) => {
+      .then(([items, userRows, employeeRows, adminUserRows, staffPublicRows, zones]) => {
         if (!active) return;
 
         const allowedZonesByUid = new Map<string, Set<string>>();
         const employeeCodeByUid = new Map<string, string>();
+        const nameLookup = new Map<string, string>();
         const addEmployeeCode = (
           uid: string,
           data: Record<string, any> | null | undefined,
@@ -1548,39 +1790,53 @@ export default function HrAttendancePage() {
           normalizeAllowedZoneIds(value).forEach((zoneId) => existing.add(zoneId));
           allowedZonesByUid.set(uid, existing);
         };
+        const addEmployeeCodeForAliases = (
+          aliases: string[],
+          data: Record<string, any> | null | undefined,
+        ) => {
+          aliases.forEach((alias) => addEmployeeCode(alias, data));
+        };
+        const addAllowedZonesForAliases = (aliases: string[], value: unknown) => {
+          aliases.forEach((alias) => addAllowedZones(alias, value));
+        };
+        const addFirestoreIdentity = ({ id, data }: FirestoreCollectionRow) => {
+          const aliases = readIdentityAliases(id, data);
+          const name = readEmployeeDisplayName(data, aliases);
+          addEmployeeNameAliases(nameLookup, aliases, name);
+          addEmployeeCodeForAliases(aliases, data);
+          addAllowedZonesForAliases(aliases, readAllowedZoneIds(data));
+        };
+        const getEmployeeCode = (uid: string) =>
+          getLookupValue(employeeCodeByUid, uid) || "-";
+        const getAllowedZones = (uid: string) =>
+          Array.from(getLookupValue(allowedZonesByUid, uid) || []);
         const readAllowedZoneIds = (data: Record<string, any>) =>
           data.allowedZoneIds ||
           data.employment?.allowedZoneIds ||
           data.employeeProfile?.employment?.allowedZoneIds ||
           [];
 
-        usersSnapshot.docs.forEach((snapshot) => {
-          const data = snapshot.data() as Record<string, any>;
-          const uid = pickText(data.uid, snapshot.id);
-          addAllowedZones(uid, readAllowedZoneIds(data));
-          addEmployeeCode(uid, data);
+        items.forEach((item) => {
+          const aliases = uniqueLookupValues([item.uid, item.email]);
+          addEmployeeNameAliases(nameLookup, aliases, item.name);
         });
-
-        employeesSnapshot.docs.forEach((snapshot) => {
-          const data = snapshot.data() as Record<string, any>;
-          const uid = pickText(
-            data.linkedUserUid,
-            data.uid,
-            data.userId,
-            snapshot.id,
-          );
-          addAllowedZones(uid, readAllowedZoneIds(data));
-          addEmployeeCode(uid, data);
-          addEmployeeCode(snapshot.id, data);
-        });
+        userRows.forEach(addFirestoreIdentity);
+        employeeRows.forEach(addFirestoreIdentity);
+        adminUserRows.forEach(addFirestoreIdentity);
+        staffPublicRows.forEach(addFirestoreIdentity);
 
         setWorkZones(zones);
+        setEmployeeNameLookup(nameLookup);
         setEmployees(
           items.map((item) => ({
             uid: item.uid,
-            name: item.name,
-            employeeCode: employeeCodeByUid.get(item.uid) || "-",
-            allowedZoneIds: Array.from(allowedZonesByUid.get(item.uid) || []),
+            name:
+              getLookupValue(nameLookup, item.uid) ||
+              normalizeEmployeeDisplayName(item.name, [item.uid]) ||
+              item.name ||
+              item.uid,
+            employeeCode: getEmployeeCode(item.uid),
+            allowedZoneIds: getAllowedZones(item.uid),
           })),
         );
       })
@@ -1591,6 +1847,7 @@ export default function HrAttendancePage() {
         );
         if (active) {
           setEmployees([]);
+          setEmployeeNameLookup(new Map());
           setWorkZones([]);
         }
       });
@@ -1599,10 +1856,14 @@ export default function HrAttendancePage() {
     };
   }, []);
 
-  const employeeNameMap = useMemo(
-    () => buildEmployeeNameMap(employees),
-    [employees],
-  );
+  const employeeNameMap = useMemo(() => {
+    const names = new Map<string, string>();
+    employeeNameLookup.forEach((value, key) => names.set(key, value));
+    buildEmployeeNameMap(employees).forEach((value, key) => {
+      if (!names.has(key)) names.set(key, value);
+    });
+    return names;
+  }, [employeeNameLookup, employees]);
   const displayRecords = useMemo(
     () =>
       enrichAttendanceRecordsWithNames(data?.records || [], employeeNameMap),
