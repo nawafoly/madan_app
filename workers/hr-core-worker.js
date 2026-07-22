@@ -25,8 +25,12 @@ let firebaseJwksCache = {
 
 export default {
   async fetch(request, env) {
-    const response = await routeRequest(request, env);
-    return withCors(response, request, env);
+    try {
+      const response = await routeRequest(request, env);
+      return withCors(response, request, env);
+    } catch (error) {
+      return withCors(serverError("hr_core_worker_unhandled_error", error), request, env);
+    }
   },
 };
 
@@ -4625,7 +4629,26 @@ async function getFirebaseJwks() {
   return keys;
 }
 
-function parseListQuery(searchParams) {
+function toSearchParams(input) {
+  try {
+    if (typeof URLSearchParams !== "undefined" && input instanceof URLSearchParams) return input;
+    if (typeof URL !== "undefined" && input instanceof URL) return input.searchParams;
+    if (typeof Request !== "undefined" && input instanceof Request) return new URL(input.url).searchParams;
+    if (typeof input === "string") {
+      const text = normalizeText(input);
+      if (!text) return new URLSearchParams();
+      if (text.includes("://")) return new URL(text).searchParams;
+      if (text.includes("?")) return new URLSearchParams(text.split("?")[1].split("#")[0]);
+      return new URLSearchParams(text.startsWith("?") ? text.slice(1) : text);
+    }
+  } catch (error) {
+    console.warn("parse_list_query_params_invalid", error);
+  }
+  return new URLSearchParams();
+}
+
+function parseListQuery(input) {
+  const searchParams = toSearchParams(input);
   const limit = clampInteger(searchParams.get("limit"), 1, MAX_LIST_LIMIT, DEFAULT_LIST_LIMIT);
   const offset = clampInteger(searchParams.get("offset"), 0, 1_000_000, 0);
   const activeValue = searchParams.get("active");
