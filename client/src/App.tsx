@@ -482,7 +482,7 @@ export default function App() {
   return (
     <ErrorBoundary>
       <LanguageProvider defaultLanguage="ar">
-        <ThemeProvider defaultTheme="light">
+        <ThemeProvider defaultTheme="system">
           <div className="rsg-bg" aria-hidden="true" />
 
           <TooltipProvider>
