@@ -10,6 +10,8 @@ import {
 
 export { EMPLOYEE_PAYROLL_RECORDS_COLLECTION };
 
+export const DEFAULT_OVERTIME_MULTIPLIER = 1.5;
+
 type EmployeePayrollDeductionInput = {
   id?: string | null;
   title?: string | null;
@@ -23,6 +25,10 @@ export type EmployeePayrollComputation = {
   dailySalary: number;
   hourlyRate: number;
   hoursDifference: number;
+  detectedOvertimeHours: number;
+  financialOvertimeHours: number;
+  includeOvertime: boolean;
+  overtimeMultiplier: number;
   overtimeHours: number;
   missingHours: number;
   attendanceAbsentDays: number;
@@ -151,6 +157,8 @@ export function computeEmployeePayroll(input: {
   attendanceOvertimeHours?: number | null;
   actualWorkedHours?: number | null;
   overtimeHourlyRate?: number | null;
+  overtimeMultiplier?: number | null;
+  includeOvertime?: boolean | null;
   insuranceDeduction?: number | null;
   salaryDeductions?: EmployeePayrollDeductionInput[] | null;
   absences?: Array<Pick<EmployeeAbsenceDoc, "date" | "type" | "note">> | null;
@@ -187,10 +195,15 @@ export function computeEmployeePayroll(input: {
     0,
     toFiniteNumber(input.actualWorkedHours)
   );
-  const overtimeHourlyRate = Math.max(
+  const requestedOvertimeMultiplier = Math.max(
     0,
-    toFiniteNumber(input.overtimeHourlyRate)
+    toFiniteNumber(input.overtimeMultiplier)
   );
+  const overtimeMultiplier =
+    requestedOvertimeMultiplier > 0
+      ? requestedOvertimeMultiplier
+      : DEFAULT_OVERTIME_MULTIPLIER;
+  const includeOvertime = input.includeOvertime === true;
   const insuranceDeduction = Math.max(
     0,
     toFiniteNumber(input.insuranceDeduction)
@@ -204,7 +217,7 @@ export function computeEmployeePayroll(input: {
       ? baseSalary / expectedWorkHours
       : 0;
   const derivedHoursDifference = actualWorkedHours - attendanceExpectedHours;
-  const overtimeHours =
+  const detectedOvertimeHours =
     explicitOvertimeHours === null
       ? Math.max(0, derivedHoursDifference)
       : explicitOvertimeHours;
@@ -215,10 +228,11 @@ export function computeEmployeePayroll(input: {
   const hoursDifference =
     explicitMissingHours === null && explicitOvertimeHours === null
       ? derivedHoursDifference
-      : overtimeHours - missingHours;
-  const effectiveOvertimeHourlyRate =
-    overtimeHourlyRate > 0 ? overtimeHourlyRate : hourlyRate;
-  const overtimeBonus = overtimeHours * effectiveOvertimeHourlyRate;
+      : detectedOvertimeHours - missingHours;
+  const financialOvertimeHours = includeOvertime ? detectedOvertimeHours : 0;
+  const overtimeHours = financialOvertimeHours;
+  const effectiveOvertimeHourlyRate = hourlyRate * overtimeMultiplier;
+  const overtimeBonus = financialOvertimeHours * effectiveOvertimeHourlyRate;
   const delayDeduction = missingHours * hourlyRate;
   const salaryDeductionsTotal = normalizedSalaryDeductions.reduce(
     (sum, item) => sum + item.amount,
@@ -252,6 +266,10 @@ export function computeEmployeePayroll(input: {
     dailySalary,
     hourlyRate,
     hoursDifference,
+    detectedOvertimeHours,
+    financialOvertimeHours,
+    includeOvertime,
+    overtimeMultiplier,
     overtimeHours,
     missingHours,
     attendanceAbsentDays,
@@ -291,6 +309,10 @@ export function normalizeEmployeePayrollRecord(
         .filter(item => item.date)
     : null;
   const mudadDocument = normalizePayrollDocument(raw.mudadDocument);
+  const attendanceSummary =
+    raw.attendanceSummary && typeof raw.attendanceSummary === "object"
+      ? (raw.attendanceSummary as Record<string, unknown>)
+      : null;
   const mudadDocumentViewUrl =
     mudadDocument?.fileUrl ||
     (mudadDocument?.filePath
@@ -356,6 +378,7 @@ export function normalizeEmployeePayrollRecord(
       raw.attendanceAbsenceDeduction === undefined
         ? null
         : Math.max(0, toFiniteNumber(raw.attendanceAbsenceDeduction)),
+    attendanceSummary,
     scheduleSnapshot:
       raw.scheduleSnapshot && typeof raw.scheduleSnapshot === "object"
         ? {

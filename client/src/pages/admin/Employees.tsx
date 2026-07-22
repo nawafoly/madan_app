@@ -46,6 +46,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -197,6 +198,7 @@ import {
 } from "@/lib/employeeServiceRequests";
 import type { EmployeeServiceRequestStatus } from "@shared/employee";
 import {
+  DEFAULT_OVERTIME_MULTIPLIER,
   buildEmployeePayrollMonthInput,
   buildEmployeePayrollRecordId,
   computeEmployeePayroll,
@@ -275,6 +277,7 @@ type EmployeeFormValues = {
   shiftEndTime: string;
   weeklyOffDays: WorkScheduleWeekday[];
   overtimeHourlyRate: string;
+  overtimeMultiplier: string;
   insuranceDeduction: string;
   allowedZoneIds: string[];
   adminNotes: string;
@@ -541,10 +544,42 @@ function formatHoursDuration(value: number | null | undefined) {
   return parts.join(" و ") || "0 ساعة";
 }
 
-function formatHoursDifferenceLabel(value: number) {
-  if (!Number.isFinite(value) || value === 0) return "0 ساعة";
-  const duration = formatHoursDuration(value);
-  return value > 0 ? `+${duration} إضافية` : `-${duration} نقص`;
+function formatPayrollHoursDifferenceLabel(value: number) {
+  if (!Number.isFinite(value) || value === 0) return "صافي فرق الساعات: 0";
+  const duration = formatHoursDuration(Math.abs(value));
+  return value > 0 ? `زيادة ساعات: ${duration}` : `نقص ساعات: ${duration}`;
+}
+
+function normalizeOvertimeMultiplier(value: number | null | undefined) {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return value;
+  }
+  return DEFAULT_OVERTIME_MULTIPLIER;
+}
+
+function getPayrollRecordAttendanceSummary(
+  record: EmployeePayrollRecord | null | undefined
+) {
+  return record?.attendanceSummary && typeof record.attendanceSummary === "object"
+    ? record.attendanceSummary
+    : null;
+}
+
+function getPayrollRecordSummaryNumber(
+  record: EmployeePayrollRecord | null | undefined,
+  key: string,
+  fallback = 0
+) {
+  const summary = getPayrollRecordAttendanceSummary(record);
+  const value = Number(summary?.[key] ?? fallback);
+  return Number.isFinite(value) ? value : fallback;
+}
+
+function getPayrollRecordIncludeOvertime(
+  record: EmployeePayrollRecord | null | undefined
+) {
+  const summary = getPayrollRecordAttendanceSummary(record);
+  return summary?.["includeOvertimeInPayroll"] === true;
 }
 
 function isValidTimeInput(value: string) {
@@ -965,6 +1000,11 @@ function buildEmployeeFormValues(
       employment.overtimeHourlyRate === 0
         ? "0"
         : pickText(employment.overtimeHourlyRate),
+    overtimeMultiplier:
+      employment.overtimeMultiplier === 0
+        ? "0"
+        : pickText(employment.overtimeMultiplier) ||
+          String(DEFAULT_OVERTIME_MULTIPLIER),
     insuranceDeduction:
       employment.insuranceDeduction === 0
         ? "0"
@@ -1971,6 +2011,8 @@ export default function EmployeesManagementPage() {
     null
   );
   const [creatingPayrollRecord, setCreatingPayrollRecord] = useState(false);
+  const [includeOvertimeInPayroll, setIncludeOvertimeInPayroll] =
+    useState(false);
   const [attendancePayrollSummary, setAttendancePayrollSummary] =
     useState<AttendancePayrollSummary | null>(null);
   const [attendancePayrollLoading, setAttendancePayrollLoading] =
@@ -2948,6 +2990,26 @@ export default function EmployeesManagementPage() {
         : null,
     [employeePayrollRecords, selectedPayrollMonthMeta]
   );
+  const selectedPayrollRecordAttendanceSummary = useMemo(
+    () =>
+      selectedPayrollRecord?.attendanceSummary &&
+      typeof selectedPayrollRecord.attendanceSummary === "object"
+        ? selectedPayrollRecord.attendanceSummary
+        : null,
+    [selectedPayrollRecord]
+  );
+
+  useEffect(() => {
+    setIncludeOvertimeInPayroll(
+      selectedPayrollRecordAttendanceSummary?.["includeOvertimeInPayroll"] ===
+        true
+    );
+  }, [
+    selectedEmployeeDocumentId,
+    selectedPayrollMonthMeta?.payrollMonth,
+    selectedPayrollRecord?.id,
+    selectedPayrollRecordAttendanceSummary,
+  ]);
 
   useEffect(() => {
     setAttendancePayrollSummary(null);
@@ -3722,10 +3784,15 @@ export default function EmployeesManagementPage() {
   const expectedWorkHoursNumber = Number(form.expectedWorkHours || 0);
   const payrollWorkingDaysNumber = payrollWorkingDateKeys.length;
   const payrollExpectedWorkDaysNumber =
-    payrollWorkingDaysNumber > 0
-      ? payrollWorkingDaysNumber
-      : expectedWorkDaysNumber;
-  const overtimeHourlyRateInputNumber = Number(form.overtimeHourlyRate || 0);
+    Number.isFinite(expectedWorkDaysNumber) && expectedWorkDaysNumber > 0
+      ? expectedWorkDaysNumber
+      : payrollWorkingDaysNumber;
+  const overtimeMultiplierInputNumber = Number(form.overtimeMultiplier || 0);
+  const calculatedOvertimeMultiplier = normalizeOvertimeMultiplier(
+    Number.isFinite(overtimeMultiplierInputNumber)
+      ? overtimeMultiplierInputNumber
+      : null
+  );
   const shiftSchedule = useMemo(
     () => ({
       startTime: form.shiftStartTime,
@@ -3739,23 +3806,18 @@ export default function EmployeesManagementPage() {
   );
   const scheduledMonthlyWorkHours = useMemo(() => {
     if (
-      Number.isFinite(expectedWorkDaysNumber) &&
-      payrollExpectedWorkDaysNumber > 0 &&
+      payrollWorkingDaysNumber > 0 &&
       shiftExpectedHoursNumber > 0
     ) {
-      return payrollExpectedWorkDaysNumber * shiftExpectedHoursNumber;
+      return payrollWorkingDaysNumber * shiftExpectedHoursNumber;
     }
 
     return 0;
-  }, [
-    expectedWorkDaysNumber,
-    payrollExpectedWorkDaysNumber,
-    shiftExpectedHoursNumber,
-  ]);
+  }, [payrollWorkingDaysNumber, shiftExpectedHoursNumber]);
   const payrollRateWorkHours =
-    scheduledMonthlyWorkHours > 0
-      ? scheduledMonthlyWorkHours
-      : expectedWorkHoursNumber;
+    Number.isFinite(expectedWorkHoursNumber) && expectedWorkHoursNumber > 0
+      ? expectedWorkHoursNumber
+      : scheduledMonthlyWorkHours;
   const attendanceMissingHoursNumber =
     attendancePayrollSummary?.missingHours ?? 0;
   const attendanceOvertimeHoursNumber =
@@ -3813,20 +3875,17 @@ export default function EmployeesManagementPage() {
     return Math.max(0, attendanceOvertimeHoursNumber);
   }, [attendanceOvertimeHoursNumber]);
 
+  const calculatedFinancialOvertimeHours = useMemo(() => {
+    return includeOvertimeInPayroll ? calculatedOvertimeHours : 0;
+  }, [calculatedOvertimeHours, includeOvertimeInPayroll]);
+
   const calculatedMissingHours = useMemo(() => {
     return Math.max(0, attendanceMissingHoursNumber);
   }, [attendanceMissingHoursNumber]);
 
   const effectiveOvertimeHourlyRate = useMemo(() => {
-    if (
-      Number.isFinite(overtimeHourlyRateInputNumber) &&
-      overtimeHourlyRateInputNumber > 0
-    ) {
-      return overtimeHourlyRateInputNumber;
-    }
-
-    return calculatedHourlyRate;
-  }, [overtimeHourlyRateInputNumber, calculatedHourlyRate]);
+    return calculatedHourlyRate * calculatedOvertimeMultiplier;
+  }, [calculatedHourlyRate, calculatedOvertimeMultiplier]);
 
   const calculatedOvertimeAmount = useMemo(() => {
     if (
@@ -3835,8 +3894,8 @@ export default function EmployeesManagementPage() {
     )
       return 0;
 
-    return calculatedOvertimeHours * effectiveOvertimeHourlyRate;
-  }, [calculatedOvertimeHours, effectiveOvertimeHourlyRate]);
+    return calculatedFinancialOvertimeHours * effectiveOvertimeHourlyRate;
+  }, [calculatedFinancialOvertimeHours, effectiveOvertimeHourlyRate]);
 
   const calculatedMissingDeduction = useMemo(() => {
     if (!Number.isFinite(calculatedHourlyRate) || calculatedHourlyRate <= 0)
@@ -4324,7 +4383,9 @@ export default function EmployeesManagementPage() {
     const expectedWorkDays = toNullableNumber(form.expectedWorkDays);
     const expectedWorkHours = toNullableNumber(form.expectedWorkHours);
     const actualWorkedHours = toNullableNumber(form.actualWorkedHours);
-    const overtimeHourlyRate = toNullableNumber(form.overtimeHourlyRate);
+    const overtimeMultiplier = normalizeOvertimeMultiplier(
+      toNullableNumber(form.overtimeMultiplier)
+    );
     const insuranceDeduction = toNullableNumber(form.insuranceDeduction);
     const housingAllowance = toNullableNumber(form.housingAllowance);
     const transportationAllowance = toNullableNumber(form.transportationAllowance);
@@ -4405,11 +4466,19 @@ export default function EmployeesManagementPage() {
         attendanceMissingHours: attendanceSummary?.missingHours ?? 0,
         attendanceOvertimeHours: attendanceSummary?.overtimeHours ?? 0,
         actualWorkedHours: effectiveActualWorkedHours,
-        overtimeHourlyRate,
+        overtimeMultiplier,
+        includeOvertime: includeOvertimeInPayroll,
         insuranceDeduction,
         salaryDeductions: effectiveSalaryDeductions,
         absences: payrollAbsences,
       });
+      const payrollAttendanceSummary = {
+        ...(attendanceSummary || {}),
+        includeOvertimeInPayroll,
+        overtimeMultiplier: payrollComputation.overtimeMultiplier,
+        detectedOvertimeHours: payrollComputation.detectedOvertimeHours,
+        financialOvertimeHours: payrollComputation.financialOvertimeHours,
+      };
       const combinedAbsenceDays =
         payrollComputation.absenceDays + payrollComputation.attendanceAbsentDays;
       const combinedAbsenceDeduction =
@@ -4477,7 +4546,7 @@ export default function EmployeesManagementPage() {
         attendanceAbsentDays: payrollComputation.attendanceAbsentDays,
         attendanceAbsenceDeduction: payrollComputation.attendanceAbsenceDeduction,
         attendanceSource: "cloudflare_attendance",
-        attendanceSummary: attendanceSummary || {},
+        attendanceSummary: payrollAttendanceSummary,
         scheduleSnapshot,
         absenceEntries: payrollAbsences.map(absence => ({
           date: absence.date,
@@ -5498,7 +5567,7 @@ export default function EmployeesManagementPage() {
     const expectedWorkDays = toNullableNumber(form.expectedWorkDays);
     const expectedWorkHours = toNullableNumber(form.expectedWorkHours);
     const actualWorkedHours = toNullableNumber(form.actualWorkedHours);
-    const overtimeHourlyRate = toNullableNumber(form.overtimeHourlyRate);
+    const overtimeMultiplier = toNullableNumber(form.overtimeMultiplier);
     const insuranceDeduction = toNullableNumber(form.insuranceDeduction);
     const housingAllowance = toNullableNumber(form.housingAllowance);
     const transportationAllowance = toNullableNumber(
@@ -5570,8 +5639,8 @@ export default function EmployeesManagementPage() {
       return;
     }
 
-    if (form.overtimeHourlyRate.trim() && overtimeHourlyRate === null) {
-      toast.error("سعر ساعة الأوفر تايم يجب أن يكون رقمًا صالحًا.");
+    if (form.overtimeMultiplier.trim() && overtimeMultiplier === null) {
+      toast.error("معامل الأوفر تايم يجب أن يكون رقمًا صالحًا.");
       return;
     }
 
@@ -5659,6 +5728,7 @@ export default function EmployeesManagementPage() {
         overtimeHours: calculatedOvertimeHours,
         missingHours: calculatedMissingHours,
         hoursDifference: calculatedHoursDifference,
+        overtimeMultiplier: normalizeOvertimeMultiplier(overtimeMultiplier),
         overtimeHourlyRate: effectiveOvertimeHourlyRate,
         calculatedDailyRate,
         calculatedHourlyRate,
@@ -8254,8 +8324,8 @@ export default function EmployeesManagementPage() {
                                   </div>
                                   <p className="text-xs leading-6 text-slate-500">
                                     يقرأ وقت الدوام من بيانات الموظف المحفوظة
-                                    ويستخدمه في حساب التأخير والأوفر تايم لهذا
-                                    الشهر.
+                                    ويستخدمه في حساب التأخير ونقص الساعات
+                                    والزيادة الصافية لهذا الشهر.
                                   </p>
                                   {selectedPayrollMonthMeta ? (
                                     <div className="space-y-1 text-xs leading-6 text-slate-500">
@@ -8347,19 +8417,19 @@ export default function EmployeesManagementPage() {
                               {attendancePayrollSummary ? (
                                 <div className="grid gap-3 text-sm sm:grid-cols-2">
                                   <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                                    التأخير:{" "}
+                                    التأخير الفعلي:{" "}
                                     {formatHoursDuration(
                                       attendancePayrollSummary.lateHours
                                     )}
                                   </div>
                                   <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                                    النقص:{" "}
+                                    نقص ساعات مالي:{" "}
                                     {formatHoursDuration(
                                       attendancePayrollSummary.missingHours
                                     )}
                                   </div>
                                   <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                                    الأوفر تايم:{" "}
+                                    الساعات الزائدة المكتشفة:{" "}
                                     {formatHoursDuration(
                                       attendancePayrollSummary.overtimeHours
                                     )}
@@ -8377,6 +8447,41 @@ export default function EmployeesManagementPage() {
                                   </div>
                                 </div>
                               ) : null}
+
+                              <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-4">
+                                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                  <div className="space-y-1">
+                                    <div className="text-sm font-semibold text-slate-950">
+                                      احتساب الأوفر تايم
+                                    </div>
+                                    <p className="text-xs leading-6 text-slate-500">
+                                      الساعات الزائدة تُعرض كمعلومة، ولا تدخل في
+                                      الراتب إلا عند تفعيل احتسابها ماليًا لهذا
+                                      السجل.
+                                    </p>
+                                  </div>
+                                  <div className="flex items-center gap-3">
+                                    <span className="text-xs font-semibold text-slate-500">
+                                      {includeOvertimeInPayroll
+                                        ? "مفعّل"
+                                        : "غير مفعّل"}
+                                    </span>
+                                    <Switch
+                                      checked={includeOvertimeInPayroll}
+                                      onCheckedChange={checked =>
+                                        setIncludeOvertimeInPayroll(
+                                          checked === true
+                                        )
+                                      }
+                                      disabled={
+                                        !canManageEmployees ||
+                                        creatingPayrollRecord ||
+                                        !!selectedPayrollRecord
+                                      }
+                                    />
+                                  </div>
+                                </div>
+                              </div>
 
                               {approvedPayrollAdvancesLoading ? (
                                 <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
@@ -8550,7 +8655,7 @@ export default function EmployeesManagementPage() {
                               <div className="grid gap-3 sm:grid-cols-2">
                                 <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-4">
                                   <div className="text-xs font-semibold text-slate-500">
-                                    فرق الساعات
+                                    صافي فرق الساعات
                                   </div>
                                   <div
                                     className={cn(
@@ -8563,8 +8668,37 @@ export default function EmployeesManagementPage() {
                                         "text-slate-950"
                                     )}
                                   >
-                                    {formatHoursDifferenceLabel(
+                                    {formatPayrollHoursDifferenceLabel(
                                       calculatedHoursDifference
+                                    )}
+                                  </div>
+                                </div>
+
+                                <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-4">
+                                  <div className="text-xs font-semibold text-slate-500">
+                                    نقص ساعات مالي
+                                  </div>
+                                  <div className="mt-2 text-base font-semibold text-rose-600">
+                                    {formatHoursDuration(calculatedMissingHours)}
+                                  </div>
+                                </div>
+
+                                <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-4">
+                                  <div className="text-xs font-semibold text-slate-500">
+                                    الساعات الزائدة المكتشفة
+                                  </div>
+                                  <div className="mt-2 text-base font-semibold text-emerald-600">
+                                    {formatHoursDuration(calculatedOvertimeHours)}
+                                  </div>
+                                </div>
+
+                                <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-4">
+                                  <div className="text-xs font-semibold text-slate-500">
+                                    الأوفر تايم المحتسب ماليًا
+                                  </div>
+                                  <div className="mt-2 text-base font-semibold text-slate-950">
+                                    {formatHoursDuration(
+                                      calculatedFinancialOvertimeHours
                                     )}
                                   </div>
                                 </div>
@@ -8592,6 +8726,9 @@ export default function EmployeesManagementPage() {
                                 <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-4">
                                   <div className="text-xs font-semibold text-slate-500">
                                     قيمة الأوفر تايم
+                                  </div>
+                                  <div className="mt-1 text-xs leading-5 text-slate-500">
+                                    {formatNumberEN(calculatedOvertimeMultiplier)} × راتب الساعة
                                   </div>
                                   <div className="mt-2 text-base font-semibold text-slate-950">
                                     {formatNumberEN(
@@ -8958,13 +9095,52 @@ export default function EmployeesManagementPage() {
                                   <div className="mt-3 grid gap-3 md:grid-cols-3">
                                     <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3">
                                       <div className="text-xs font-semibold tracking-[0.14em] text-slate-500">
-                                        خصم التأخير / نقص الساعات
+                                        خصم نقص الساعات
                                       </div>
                                       <div className="mt-2 text-sm font-semibold text-slate-900">
                                         {formatNumberEN(
                                           record.delayDeduction || 0
                                         )}{" "}
                                         ر.س
+                                      </div>
+                                    </div>
+
+                                    <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3">
+                                      <div className="text-xs font-semibold tracking-[0.14em] text-slate-500">
+                                        الساعات الزائدة المكتشفة
+                                      </div>
+                                      <div className="mt-2 text-sm font-semibold text-slate-900">
+                                        {formatHoursDuration(
+                                          record.attendanceOvertimeHours || 0
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3">
+                                      <div className="text-xs font-semibold tracking-[0.14em] text-slate-500">
+                                        احتساب الأوفر تايم
+                                      </div>
+                                      <div className="mt-2 text-sm font-semibold text-slate-900">
+                                        {getPayrollRecordIncludeOvertime(record)
+                                          ? "مفعّل"
+                                          : "غير مفعّل"}
+                                      </div>
+                                    </div>
+
+                                    <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3">
+                                      <div className="text-xs font-semibold tracking-[0.14em] text-slate-500">
+                                        الأوفر تايم المحتسب ماليًا
+                                      </div>
+                                      <div className="mt-2 text-sm font-semibold text-slate-900">
+                                        {formatHoursDuration(
+                                          getPayrollRecordSummaryNumber(
+                                            record,
+                                            "financialOvertimeHours",
+                                            record.overtimeBonus
+                                              ? record.attendanceOvertimeHours || 0
+                                              : 0
+                                          )
+                                        )}
                                       </div>
                                     </div>
 
@@ -8994,7 +9170,7 @@ export default function EmployeesManagementPage() {
 
                                     <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3">
                                       <div className="text-xs font-semibold tracking-[0.14em] text-slate-500">
-                                        مكافأة الإضافي
+                                        قيمة الأوفر تايم
                                       </div>
                                       <div className="mt-2 text-sm font-semibold text-slate-900">
                                         {formatNumberEN(
@@ -10364,20 +10540,23 @@ export default function EmployeesManagementPage() {
                             />
                           </Field>
 
-                          <Field label="سعر ساعة الأوفر تايم">
+                          <Field
+                            label="معامل الأوفر تايم"
+                            description="يُستخدم في سجل الرواتب عند تفعيل احتساب الأوفر تايم ماليًا. مثال: 1.5"
+                          >
                             <Input
                               type="text"
                               dir="ltr"
                               inputMode="decimal"
                               step="0.01"
-                              value={form.overtimeHourlyRate}
+                              value={form.overtimeMultiplier}
                               onChange={event =>
                                 handleFormChange(
-                                  "overtimeHourlyRate",
+                                  "overtimeMultiplier",
                                   normalizeEnglishDigits(event.target.value)
                                 )
                               }
-                              placeholder="إذا تركته فارغًا سيُستخدم سعر الساعة العادي"
+                              placeholder="مثال: 1.5"
                               className="text-right tabular-nums"
                               disabled={!canManageEmployees || saving}
                             />

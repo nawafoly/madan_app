@@ -16,6 +16,10 @@ export type AttendanceDayComputation = {
   expectedHours: number;
   actualHours: number;
   lateHours: number;
+  earlyLeaveHours: number;
+  afterScheduleWorkHours: number;
+  compensatedLateHours: number;
+  netHoursDifference: number;
   missingHours: number;
   overtimeHours: number;
   isComplete: boolean;
@@ -54,6 +58,12 @@ export type AttendancePayrollSummaryOptions = {
 function roundHours(value: number) {
   if (!Number.isFinite(value) || value <= 0) return 0;
   return Math.round(value * 100) / 100;
+}
+
+function roundSignedHours(value: number) {
+  if (!Number.isFinite(value)) return 0;
+  const rounded = Math.round(value * 100) / 100;
+  return Object.is(rounded, -0) ? 0 : rounded;
 }
 
 function parseTimeParts(value?: string | null) {
@@ -128,11 +138,10 @@ export function getAttendanceDayStatus(input: {
   if (absenceDateKeys.has(input.date)) return "absent";
 
   if (input.hasAttendance) {
-    if (
-      !input.computation?.isComplete ||
-      input.computation.lateHours > 0 ||
-      (input.checkOut && input.computation.missingHours > 0)
-    ) {
+    if (!input.computation?.isComplete) {
+      return "partial";
+    }
+    if (input.checkOut && input.computation.missingHours > 0) {
       return "partial";
     }
     return "present";
@@ -199,13 +208,25 @@ export function computeAttendanceDay(
     checkInMs > scheduleStartMs
       ? roundHours((checkInMs - scheduleStartMs) / 3600000)
       : 0;
-  const overtimeHours =
+  const earlyLeaveHours =
+    Number.isFinite(checkOutMs) &&
+    scheduleEndMs !== null &&
+    checkOutMs < scheduleEndMs
+      ? roundHours((scheduleEndMs - checkOutMs) / 3600000)
+      : 0;
+  const afterScheduleWorkHours =
     Number.isFinite(checkOutMs) &&
     scheduleEndMs !== null &&
     checkOutMs > scheduleEndMs
       ? roundHours((checkOutMs - scheduleEndMs) / 3600000)
       : 0;
-  const missingHours = roundHours(Math.max(0, expectedHours - actualHours));
+  const compensatedLateHours = roundHours(
+    Math.min(lateHours, afterScheduleWorkHours)
+  );
+  const netHoursDifference =
+    expectedHours > 0 ? roundSignedHours(actualHours - expectedHours) : 0;
+  const missingHours = roundHours(Math.max(0, -netHoursDifference));
+  const netOvertimeHours = roundHours(Math.max(0, netHoursDifference));
 
   return {
     date,
@@ -214,8 +235,12 @@ export function computeAttendanceDay(
     expectedHours,
     actualHours,
     lateHours,
+    earlyLeaveHours,
+    afterScheduleWorkHours,
+    compensatedLateHours,
+    netHoursDifference,
     missingHours,
-    overtimeHours,
+    overtimeHours: netOvertimeHours,
     isComplete,
   };
 }

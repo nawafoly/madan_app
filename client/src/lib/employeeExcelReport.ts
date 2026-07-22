@@ -719,6 +719,17 @@ export async function generateEmployeeExcelReport(
   const overtimeBonus = payrollRecord
     ? toNumber(payroll.overtimeBonus)
     : toNumber(employment.calculatedOvertimeAmount);
+  const payrollAttendanceSummary =
+    payroll.attendanceSummary && typeof payroll.attendanceSummary === "object"
+      ? (payroll.attendanceSummary as Record<string, unknown>)
+      : {};
+  const detectedOvertimeHours = toNumber(payroll.attendanceOvertimeHours);
+  const financialOvertimeHours = payrollRecord
+    ? toNumber(
+        payrollAttendanceSummary["financialOvertimeHours"] ??
+          (overtimeBonus > 0 ? detectedOvertimeHours : 0),
+      )
+    : detectedOvertimeHours;
   const delayDeduction = payrollRecord
     ? toNumber(payroll.delayDeduction)
     : toNumber(employment.calculatedMissingDeduction);
@@ -837,10 +848,10 @@ export async function generateEmployeeExcelReport(
       __style: "total",
     },
     {
-      item: "مكافأة العمل الإضافي",
+      item: "قيمة الأوفر تايم",
       value: round(overtimeBonus),
       unit: "ر.س",
-      notes: `${round(payroll.attendanceOvertimeHours)} ساعة`,
+      notes: `المحتسب ماليًا: ${round(financialOvertimeHours)} ساعة، المكتشف: ${round(detectedOvertimeHours)} ساعة`,
     },
     {
       item: "إجمالي المستحقات",

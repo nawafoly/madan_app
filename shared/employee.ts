@@ -92,6 +92,7 @@ export type EmployeeEmploymentDoc = {
   missingHours?: number | null;
 
   overtimeHourlyRate?: number | null;
+  overtimeMultiplier?: number | null;
   calculatedHourlyRate?: number | null;
   calculatedOvertimeAmount?: number | null;
   calculatedMissingDeduction?: number | null;
@@ -267,6 +268,7 @@ export type EmployeePayrollRecordDoc = {
   attendanceIncompleteDays?: number | null;
   attendanceAbsentDays?: number | null;
   attendanceAbsenceDeduction?: number | null;
+  attendanceSummary?: Record<string, unknown> | null;
   scheduleSnapshot?: EmployeeWorkScheduleDoc | null;
   delayDeduction?: number | null;
   overtimeBonus?: number | null;

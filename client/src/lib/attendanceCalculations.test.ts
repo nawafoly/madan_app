@@ -51,7 +51,64 @@ describe("attendance payroll calculations", () => {
     expect(day.expectedHours).toBe(9);
     expect(day.actualHours).toBe(9.25);
     expect(day.lateHours).toBe(0.25);
-    expect(day.overtimeHours).toBe(0.5);
+    expect(day.afterScheduleWorkHours).toBe(0.5);
+    expect(day.compensatedLateHours).toBe(0.25);
+    expect(day.netHoursDifference).toBe(0.25);
+    expect(day.overtimeHours).toBe(0.25);
+    expect(day.missingHours).toBe(0);
+  });
+
+  it("keeps compensated lateness visible without counting it as net overtime", () => {
+    const day = computeAttendanceDay(
+      "2024-01-03",
+      [
+        record("check_in", "2024-01-03T07:00:00.000Z"),
+        record("check_out", "2024-01-03T15:00:00.000Z"),
+      ],
+      { startTime: "09:00", endTime: "17:00" }
+    );
+
+    expect(day.expectedHours).toBe(8);
+    expect(day.actualHours).toBe(8);
+    expect(day.lateHours).toBe(1);
+    expect(day.compensatedLateHours).toBe(1);
+    expect(day.netHoursDifference).toBe(0);
+    expect(day.missingHours).toBe(0);
+    expect(day.overtimeHours).toBe(0);
+  });
+
+  it("counts uncompensated lateness as missing hours", () => {
+    const day = computeAttendanceDay(
+      "2024-01-03",
+      [
+        record("check_in", "2024-01-03T07:00:00.000Z"),
+        record("check_out", "2024-01-03T14:00:00.000Z"),
+      ],
+      { startTime: "09:00", endTime: "17:00" }
+    );
+
+    expect(day.lateHours).toBe(1);
+    expect(day.compensatedLateHours).toBe(0);
+    expect(day.netHoursDifference).toBe(-1);
+    expect(day.missingHours).toBe(1);
+    expect(day.overtimeHours).toBe(0);
+  });
+
+  it("counts only net extra hours after compensated lateness", () => {
+    const day = computeAttendanceDay(
+      "2024-01-03",
+      [
+        record("check_in", "2024-01-03T07:00:00.000Z"),
+        record("check_out", "2024-01-03T16:00:00.000Z"),
+      ],
+      { startTime: "09:00", endTime: "17:00" }
+    );
+
+    expect(day.lateHours).toBe(1);
+    expect(day.afterScheduleWorkHours).toBe(2);
+    expect(day.compensatedLateHours).toBe(1);
+    expect(day.netHoursDifference).toBe(1);
+    expect(day.overtimeHours).toBe(1);
     expect(day.missingHours).toBe(0);
   });
 
