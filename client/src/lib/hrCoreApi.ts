@@ -199,6 +199,34 @@ async function requestHrCore<T>(
   return payload;
 }
 
+async function requestPublicHrCore<T>(pathname: string, init: RequestInit = {}): Promise<T> {
+  const hasBody = init.body !== undefined && init.body !== null;
+  const response = await fetch(buildHrCoreUrl(pathname), {
+    ...init,
+    headers: {
+      Accept: "application/json",
+      ...(hasBody ? { "Content-Type": "application/json" } : {}),
+      ...(init.headers || {}),
+    },
+  });
+  const payload = (await response.json().catch(() => null)) as (T & HrCoreApiErrorPayload) | null;
+  if (!response.ok || !payload) {
+    const error = new Error(payload?.message || payload?.detail || `HR Core public request failed (${response.status}).`) as Error & { status?: number; code?: string; payload?: HrCoreApiErrorPayload | null };
+    error.status = response.status;
+    error.code = payload?.message;
+    error.payload = payload;
+    throw error;
+  }
+  return payload;
+}
+
+export async function resolveHrCoreLoginIdentity(username: string) {
+  return requestPublicHrCore<{ ok: true; found: boolean; email: string | null; emailMissing?: boolean }>(
+    "/api/hr/auth/resolve-login-email",
+    { method: "POST", body: JSON.stringify({ username }) }
+  );
+}
+
 export async function getHrCoreMe() {
   return requestHrCore<{
     ok: true;

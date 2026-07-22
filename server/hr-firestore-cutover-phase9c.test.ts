@@ -68,7 +68,7 @@ describe("HR Firestore cutover phase 9C", () => {
 
     expect(api).toContain("listHrCoreLeaveBalanceAdjustments");
     expect(api).toContain("adjustHrCoreEmployeeLeaveBalance");
-    expect(worker).toContain("phase9c-employee-admin-cutover-v1");
+    expect(worker).toContain("phase9d-d1-login-identity-v1");
     expect(worker).toContain("/api/hr/leave-balance-adjustments");
     expect(worker).toContain("adjustEmployeeLeaveBalance");
     expect(migration).toContain(

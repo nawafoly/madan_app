@@ -14,7 +14,7 @@ const ACCOUNT_MANAGE_ROLES = new Set(["owner", "admin"]);
 const DEFAULT_LIST_LIMIT = 50;
 const MAX_LIST_LIMIT = 200;
 const MAX_IMPORT_ROWS = 250;
-const HR_WORKER_RELEASE = "phase9c-employee-admin-cutover-v1";
+const HR_WORKER_RELEASE = "phase9d-d1-login-identity-v1";
 const FIREBASE_JWKS_URL =
   "https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com";
 
@@ -29,6 +29,24 @@ export default {
     return withCors(response, request, env);
   },
 };
+
+async function resolveLoginEmailFromUsername(request, db) {
+  const body = await readJsonBody(request, 8192);
+  if (!body.ok) return body.response;
+  const username = normalizeText(body.value?.username).toLowerCase();
+  if (username.length < 2 || username.length > 32 || !/^[a-z0-9._-]+$/.test(username)) {
+    return json(200, { ok: true, found: false, email: null });
+  }
+  try {
+    const account = await db.prepare(`SELECT email, is_active FROM accounts WHERE LOWER(TRIM(username)) = ? LIMIT 1`).bind(username).first();
+    if (!account || !Boolean(account.is_active)) return json(200, { ok: true, found: false, email: null });
+    const email = nullableEmail(account.email);
+    if (!email) return json(200, { ok: true, found: true, email: null, emailMissing: true });
+    return json(200, { ok: true, found: true, email });
+  } catch (error) {
+    return serverError("login_identity_lookup_failed", error);
+  }
+}
 
 async function routeRequest(request, env) {
   if (request.method === "OPTIONS") {
@@ -47,6 +65,13 @@ async function routeRequest(request, env) {
 
   if (pathname === "/health" && request.method === "GET") {
     return healthCheck(env.HR_DB);
+  }
+
+  if (pathname === "/api/hr/auth/resolve-login-email") {
+    if (request.method !== "POST") {
+      return json(405, { ok: false, message: "login_identity_method_not_allowed" });
+    }
+    return resolveLoginEmailFromUsername(request, env.HR_DB);
   }
 
   if (pathname === "/internal/hr/import" && request.method === "POST") {

@@ -85,6 +85,6 @@ describe("HR Phase 9B Firestore cutover", () => {
     expect(api).toContain("/api/hr/employee-directory");
     expect(worker).toContain('pathname === "/api/hr/employee-directory"');
     expect(worker).toContain("updateOwnEmployeeProfile");
-    expect(worker).toContain('phase9c-employee-admin-cutover-v1');
+    expect(worker).toContain('phase9d-d1-login-identity-v1');
   });
 });
