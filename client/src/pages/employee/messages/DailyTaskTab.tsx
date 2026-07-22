@@ -277,22 +277,46 @@ export function DailyTaskTab({
     setCameraStarting(true);
     setCameraError("");
 
+    const cameraUnavailableMessage =
+      "تعذر تشغيل الكاميرا. تأكد من صلاحية الكاميرا أو اختر صورة من الجهاز.";
+    const shouldFallbackToAnyCamera = (error: unknown) => {
+      const name = String((error as { name?: unknown })?.name || "").toLowerCase();
+      const message = String((error as { message?: unknown })?.message || error || "").toLowerCase();
+      return (
+        name === "notfounderror" ||
+        name === "overconstrainederror" ||
+        message.includes("requested device not found") ||
+        message.includes("device not found") ||
+        message.includes("overconstrained")
+      );
+    };
+
     const startCamera = async () => {
       if (!navigator.mediaDevices?.getUserMedia) {
-        setCameraError("الكاميرا غير مدعومة داخل هذا المتصفح. اختر صورة من الجهاز.");
+        setCameraError(cameraUnavailableMessage);
         setCameraStarting(false);
+        toast.error(cameraUnavailableMessage);
+        setCameraOpen(false);
         return;
       }
 
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: false,
-          video: {
-            facingMode: { ideal: "environment" },
-            width: { ideal: 1280 },
-            height: { ideal: 960 },
-          },
-        });
+        let stream: MediaStream;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: false,
+            video: { facingMode: { ideal: "environment" } },
+          });
+        } catch (preferredCameraError) {
+          if (!shouldFallbackToAnyCamera(preferredCameraError)) {
+            throw preferredCameraError;
+          }
+          console.warn("daily_task_preferred_camera_unavailable", preferredCameraError);
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: false,
+            video: true,
+          });
+        }
 
         if (cancelled) {
           stream.getTracks().forEach(track => track.stop());
@@ -306,7 +330,10 @@ export function DailyTaskTab({
         }
       } catch (error) {
         console.error("daily_task_camera_start_failed", error);
-        setCameraError("تعذر تشغيل الكاميرا. تأكد من السماح للتطبيق باستخدام الكاميرا.");
+        setCameraError(cameraUnavailableMessage);
+        toast.error(cameraUnavailableMessage);
+        stopCameraStream();
+        setCameraOpen(false);
       } finally {
         if (!cancelled) setCameraStarting(false);
       }
@@ -901,15 +928,15 @@ export function DailyTaskTab({
       {cameraOpen && typeof document !== "undefined"
         ? createPortal(
             <div
-              className="fixed inset-0 z-[9999] overflow-y-auto overscroll-contain bg-slate-950/85"
+              className="fixed inset-0 z-[9999] flex h-[100dvh] items-center justify-center overflow-hidden bg-slate-950/85 px-4 pb-[calc(env(safe-area-inset-bottom)_+_96px)] pt-[calc(env(safe-area-inset-top)_+_16px)] sm:h-screen sm:p-4"
               dir={dir}
             >
-              <div className="flex min-h-[100dvh] items-center justify-center px-3 pb-[max(1rem,env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))] sm:min-h-screen sm:p-4">
+              <div className="m-auto flex w-full justify-center">
                 <div
                   role="dialog"
                   aria-modal="true"
                   aria-label={tr(language, "تصوير مباشر", "Live Camera")}
-                  className="flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col overflow-hidden rounded-[24px] border border-white/10 bg-slate-950 text-white shadow-2xl sm:max-h-[calc(100vh-2rem)]"
+                  className="m-auto flex max-h-[calc(100dvh_-_env(safe-area-inset-top)_-_env(safe-area-inset-bottom)_-_120px)] w-[calc(100vw_-_32px)] max-w-[420px] flex-col overflow-hidden rounded-[24px] border border-white/10 bg-slate-950 text-white shadow-2xl sm:max-h-[calc(100vh_-_2rem)]"
                 >
             <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
               <div>
@@ -934,7 +961,7 @@ export function DailyTaskTab({
             <div className="min-h-0 bg-black">
               <video
                 ref={videoRef}
-                className="aspect-[3/4] max-h-[calc(100dvh-13rem)] w-full bg-black object-contain sm:max-h-[70vh]"
+                className="aspect-[3/4] max-h-[min(58dvh,520px)] w-full bg-black object-cover sm:max-h-[70vh] sm:object-contain"
                 playsInline
                 muted
                 autoPlay
