@@ -419,8 +419,11 @@ function exportAttendanceExcel(input: {
 
   const detailsRows = [...records]
     .sort((left, right) => {
-      const nameCompare = String(left.employeeName || left.employeeUid).localeCompare(
-        String(right.employeeName || right.employeeUid),
+      const nameCompare = getAttendanceEmployeeDisplayName(
+        left,
+        isArabic ? "ar" : "en",
+      ).localeCompare(
+        getAttendanceEmployeeDisplayName(right, isArabic ? "ar" : "en"),
         isArabic ? "ar" : "en",
       );
       if (nameCompare !== 0) return nameCompare;
@@ -430,7 +433,7 @@ function exportAttendanceExcel(input: {
       );
     })
     .map((record) => [
-    record.employeeName || record.employeeUid,
+    getAttendanceEmployeeDisplayName(record, isArabic ? "ar" : "en"),
     employeeCodeByUid.get(record.employeeUid) || "-",
     record.type === "check_in"
       ? isArabic
@@ -813,6 +816,35 @@ function exportAttendanceExcel(input: {
 }
 
 
+function isAttendanceInternalIdentifier(
+  value: string,
+  record: Pick<AttendanceRecord, "employeeUid" | "employeeDocId">,
+) {
+  const normalized = normalizeLookupKey(value).toLowerCase();
+  if (!normalized) return true;
+
+  const uid = normalizeLookupKey(record.employeeUid).toLowerCase();
+  const documentId = normalizeLookupKey(record.employeeDocId).toLowerCase();
+
+  return (
+    normalized === uid ||
+    normalized === documentId ||
+    (/^[a-z0-9_-]{24,}$/i.test(normalized) && !normalized.includes(" "))
+  );
+}
+
+function getAttendanceEmployeeDisplayName(
+  record: Pick<AttendanceRecord, "employeeName" | "employeeUid" | "employeeDocId">,
+  language: "ar" | "en",
+) {
+  const employeeName = normalizeLookupKey(record.employeeName);
+  if (employeeName && !isAttendanceInternalIdentifier(employeeName, record)) {
+    return employeeName;
+  }
+
+  return tr(language, "موظف غير مرتبط", "Unlinked employee");
+}
+
 function normalizeLookupKey(value: string | null | undefined) {
   return String(value || "").trim();
 }
@@ -934,18 +966,17 @@ function ResultBadge({
   );
 }
 
-function EmployeeIdentity({ record }: { record: AttendanceRecord }) {
+function EmployeeIdentity({
+  record,
+  language,
+}: {
+  record: AttendanceRecord;
+  language: "ar" | "en";
+}) {
   return (
     <div className="min-w-0 rounded-2xl border border-slate-200 bg-slate-50/70 px-3 py-3">
       <div className="truncate text-sm font-semibold text-slate-950">
-        {record.employeeName || record.employeeUid}
-      </div>
-      <div
-        dir="ltr"
-        className="mt-1 max-w-full truncate font-mono text-[11px] leading-5 text-slate-500"
-        title={record.employeeUid}
-      >
-        {record.employeeUid}
+        {getAttendanceEmployeeDisplayName(record, language)}
       </div>
     </div>
   );
@@ -1025,20 +1056,13 @@ function AttendanceEventBlock({
           : "border-rose-100 bg-rose-50/40",
       )}
     >
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <div className="truncate text-sm font-semibold text-slate-950">
-            {record.employeeName || record.employeeUid}
-          </div>
-          <div
-            dir="ltr"
-            className="mt-1 max-w-full truncate font-mono text-[11px] leading-5 text-slate-500"
-            title={record.employeeUid}
-          >
-            {record.employeeUid}
+          <div className="break-words text-sm font-semibold text-slate-950 sm:truncate">
+            {getAttendanceEmployeeDisplayName(record, language)}
           </div>
         </div>
-        <div className="shrink-0 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-left shadow-sm">
+        <div className="w-full shrink-0 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-left shadow-sm sm:w-auto">
           <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500">
             <Clock3 className="h-3.5 w-3.5" />
             {tr(language, "الوقت", "Time")}
@@ -1132,11 +1156,11 @@ function DeviceBlock({
     : "-";
 
   return (
-    <div className="min-w-0 space-y-2.5 rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
+    <div className="min-w-0 max-w-full space-y-2.5 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span
           className={cn(
-            "inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs font-semibold",
+            "inline-flex min-h-7 max-w-full items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold leading-4",
             isSharedDevice
               ? "border-rose-200 bg-rose-50 text-rose-800"
               : record.deviceInfo.deviceChanged
@@ -1204,8 +1228,8 @@ function DeviceBlock({
 
       {isSharedDevice ? (
         <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-rose-800">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex min-w-0 flex-1 items-center gap-1.5 text-[11px] font-semibold text-rose-800">
               <AlertTriangle className="h-3.5 w-3.5" />
               {tr(
                 language,
@@ -1224,7 +1248,7 @@ function DeviceBlock({
                 className="max-w-full truncate rounded-full border border-rose-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-rose-800"
                 title={employee.uid}
               >
-                {employee.name || employee.uid}
+                {employee.name || tr(language, "موظف غير مرتبط", "Unlinked employee")}
               </span>
             ))}
           </div>
@@ -1379,53 +1403,21 @@ function AttendanceMobileCard({
   onToggleDevice: (key: string) => void;
 }) {
   return (
-    <article className="relative overflow-hidden rounded-[1.75rem] border border-slate-200 bg-[linear-gradient(135deg,#ffffff_0%,#f8fbff_100%)] p-4 shadow-sm shadow-slate-200/80">
-      <span className="absolute inset-x-0 top-0 h-1 bg-slate-950" />
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="truncate text-sm font-semibold text-slate-950">
-            {record.employeeName || record.employeeUid}
-          </div>
-          <div
-            dir="ltr"
-            className="mt-1 truncate font-mono text-[11px] text-slate-500"
-            title={record.employeeUid}
-          >
-            {record.employeeUid}
-          </div>
-        </div>
-        <div className="flex shrink-0 flex-col items-end gap-1.5">
-          <TypeBadge record={record} language={language} />
-          <ResultBadge record={record} language={language} />
-        </div>
-      </div>
-
-      <div className="mt-4 rounded-2xl bg-slate-50 px-3 py-3">
-        <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
-          <Clock3 className="h-4 w-4" />
-          {tr(language, "التاريخ والوقت", "Date and time")}
-        </div>
-        <div dir="ltr" className="mt-1 text-sm font-semibold text-slate-950">
-          {formatDateTime(record.serverTime)}
-        </div>
-      </div>
-
-      <div className="mt-3 space-y-3">
+    <article
+      className={cn(
+        "min-w-0 rounded-[1.25rem] border bg-white p-3 shadow-sm shadow-slate-200/60",
+        record.result === "allowed" ? "border-slate-200" : "border-rose-200",
+      )}
+    >
+      <div className="grid min-w-0 gap-3">
+        <AttendanceEventBlock record={record} language={language} />
         <LocationBlock record={record} language={language} compact />
-        <div className="rounded-2xl border border-slate-200 bg-white px-3 py-3">
-          <DeviceBlock
-            record={record}
-            language={language}
-            visibleDeviceIds={visibleDeviceIds}
-            onToggleDevice={onToggleDevice}
-          />
-        </div>
-        {record.rejectionReason ? (
-          <div className="rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">
-            {tr(language, "سبب الرفض", "Rejection")}:{" "}
-            {rejectionLabel(record.rejectionReason, language)}
-          </div>
-        ) : null}
+        <DeviceBlock
+          record={record}
+          language={language}
+          visibleDeviceIds={visibleDeviceIds}
+          onToggleDevice={onToggleDevice}
+        />
       </div>
     </article>
   );
@@ -1603,7 +1595,7 @@ export default function HrAttendancePage() {
       ) {
         options.set(
           record.employeeUid,
-          record.employeeName || record.employeeUid,
+          getAttendanceEmployeeDisplayName(record, language),
         );
       }
     }
@@ -1776,10 +1768,10 @@ export default function HrAttendancePage() {
     <DashboardLayout area="hr">
       <main
         dir={languageDir(language)}
-        className="min-h-screen bg-[linear-gradient(180deg,#f8fafc_0%,#eef4ff_42%,#f8fafc_100%)] px-3 py-4 text-slate-950 sm:px-5 lg:px-7"
+        className="min-h-screen min-w-0 overflow-x-hidden bg-[linear-gradient(180deg,#f8fafc_0%,#eef4ff_42%,#f8fafc_100%)] px-3 py-4 text-slate-950 sm:px-5 lg:px-7"
       >
-        <div className="mx-auto flex w-full max-w-[1680px] flex-col gap-5">
-          <header className="overflow-hidden rounded-[2rem] border border-slate-200/80 bg-white shadow-[0_24px_70px_rgba(15,23,42,0.08)]">
+        <div className="mx-auto flex min-w-0 w-full max-w-[1680px] flex-col gap-5">
+          <header className="min-w-0 overflow-hidden rounded-[2rem] border border-slate-200/80 bg-white shadow-[0_24px_70px_rgba(15,23,42,0.08)]">
             <div className="grid gap-5 bg-[linear-gradient(135deg,#ffffff_0%,#f8fbff_52%,#eefdf8_100%)] px-5 py-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center lg:px-6">
               <div className="min-w-0">
                 <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
@@ -1836,7 +1828,7 @@ export default function HrAttendancePage() {
             </div>
           </header>
 
-          <section className="rounded-[2rem] border border-slate-200 bg-white p-4 shadow-[0_18px_50px_rgba(15,23,42,0.06)]">
+          <section className="min-w-0 rounded-[2rem] border border-slate-200 bg-white p-4 shadow-[0_18px_50px_rgba(15,23,42,0.06)]">
             <div className="mb-4 flex flex-col gap-3 border-b border-slate-100 pb-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-start gap-3">
                 <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-950 text-white">
@@ -2075,7 +2067,7 @@ export default function HrAttendancePage() {
             </div>
           </section>
 
-          <section className="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.06)]">
+          <section className="min-w-0 overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.06)]">
             <div className="flex flex-col gap-3 border-b border-slate-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-start gap-3">
                 <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
@@ -2133,7 +2125,7 @@ export default function HrAttendancePage() {
               </div>
             ) : (
               <>
-                <div className="space-y-3 p-3 xl:hidden">
+                <div className="min-w-0 space-y-3 bg-slate-50/60 p-3 xl:hidden">
                   {displayRecords.map((record) => (
                     <AttendanceMobileCard
                       key={record.id}
