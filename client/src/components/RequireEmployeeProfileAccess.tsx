@@ -33,8 +33,7 @@ export default function RequireEmployeeProfileAccess({
       (allowStaffAdmin &&
         (hasStaffAdminPermission(user, "employees.view") ||
           hasStaffAdminPermission(user, "employees.manage") ||
-          hasStaffAreaPermission(user, "weekly_reports.manager_notes") ||
-          hasStaffAreaPermission(user, "daily_tasks.manager_notes"))),
+          hasStaffAreaPermission(user, "weekly_reports.manager_notes"))),
     [allowStaffAdmin, user]
   );
 

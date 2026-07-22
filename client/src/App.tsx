@@ -312,7 +312,7 @@ function Router() {
         </Route>
 
         <Route path="/hr/daily-tasks">
-          <RequireAdminPermission permission="daily_tasks.manager_notes" area="staff">
+          <RequireAdminPermission permission="weekly_reports.manager_notes" area="staff">
             <HrDailyTasksPage />
           </RequireAdminPermission>
         </Route>

@@ -56,7 +56,6 @@ export default function EmployeeLayout({
     ? hasStaffAdminPermission(user, "recruitment.manage") ||
       hasStaffAdminPermission(user, "employees.manage") ||
       hasStaffAdminPermission(user, "weekly_reports.manager_notes") ||
-      hasStaffAdminPermission(user, "daily_tasks.manager_notes") ||
       hasStaffAdminPermission(user, "settings.manage")
     : false;
   const employeeReturnPath = "/hr";

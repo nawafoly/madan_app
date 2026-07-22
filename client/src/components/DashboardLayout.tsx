@@ -204,7 +204,7 @@ const hrMenuItems: MenuItem[] = [
     label: "المهام اليومية",
     path: "/hr/daily-tasks",
     allow: ["owner", "admin", "hr", "staff"],
-    permission: "daily_tasks.manager_notes",
+    permission: "weekly_reports.manager_notes",
   },
   {
     icon: Settings,
