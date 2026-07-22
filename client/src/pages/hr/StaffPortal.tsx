@@ -666,7 +666,7 @@ export default function StaffPortalPage() {
   return (
     <div
       dir={languageDir(language)}
-      className="min-h-screen bg-[linear-gradient(135deg,#f8fafc_0%,#ffffff_44%,#101827_44%,#07111f_100%)] text-slate-950"
+      className="hr-portal-shell min-h-screen bg-[linear-gradient(135deg,#f8fafc_0%,#ffffff_44%,#101827_44%,#07111f_100%)] text-slate-950"
     >
       <main className="min-h-screen px-4 py-6 sm:px-6 lg:px-10">
         <div className="mx-auto grid min-h-[calc(100vh-3rem)] max-w-7xl gap-6 lg:grid-cols-[minmax(0,0.95fr)_minmax(420px,1fr)] lg:items-stretch">

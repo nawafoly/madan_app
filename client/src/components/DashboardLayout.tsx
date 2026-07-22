@@ -527,7 +527,10 @@ export default function DashboardLayout({
       open={isSidebarOpen}
       onOpenChange={setIsSidebarOpen}
       dir={layoutDir}
-      className="min-h-screen max-w-full flex-row items-stretch overflow-x-hidden bg-[#F8F9FA]"
+      className={cn(
+        "dashboard-shell min-h-screen max-w-full flex-row items-stretch overflow-x-hidden bg-[#F8F9FA] dark:bg-background",
+        area === "hr" ? "hr-dashboard-shell" : "admin-dashboard-shell"
+      )}
       style={
         {
           "--sidebar-width": `${sidebarWidth}px`,
@@ -1264,7 +1267,12 @@ function DashboardLayoutContent({
         ) : null}
       </div>
 
-      <SidebarInset className="relative z-10 max-w-full overflow-x-hidden bg-[#F8F9FA]">
+      <SidebarInset
+        className={cn(
+          "dashboard-surface dashboard-content-surface relative z-10 max-w-full overflow-x-hidden bg-[#F8F9FA] dark:bg-background",
+          area === "hr" ? "hr-dashboard-surface" : "admin-dashboard-surface"
+        )}
+      >
         {isMobile && (
           <div className="flex border-b h-14 items-center justify-between bg-transparent px-2 backdrop-blur supports-[backdrop-filter]:backdrop-blur sticky top-0 z-40">
             <div className="flex items-center gap-2">
@@ -1311,7 +1319,7 @@ function DashboardLayoutContent({
 
         <main
           ref={mainRef}
-          className="min-h-screen min-w-0 max-w-full flex-1 overflow-x-hidden bg-[#F8F9FA] px-3 py-4 sm:px-4 md:px-6 md:py-6 lg:px-8"
+          className="min-h-screen min-w-0 max-w-full flex-1 overflow-x-hidden bg-[#F8F9FA] px-3 py-4 dark:bg-background sm:px-4 md:px-6 md:py-6 lg:px-8"
         >
           {!isMobile ? (
             <div className="mb-5 flex items-center justify-end gap-2">
