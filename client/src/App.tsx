@@ -63,6 +63,7 @@ import {
   isStaffSurfaceAllowedPath,
   normalizePathname,
 } from "@/lib/appSurface";
+import { useAndroidBackButton } from "@/lib/useAndroidBackButton";
 
 function isEmployeeSelfServicePath(pathname: string) {
   const path = normalizePathname(pathname);
@@ -140,6 +141,8 @@ function LoginRoute() {
 }
 
 function Router() {
+  useAndroidBackButton();
+
   return (
     <PlatformBoundary>
       {/* ✅ Global scroll to top on route change */}
