@@ -1,6 +1,6 @@
 export const PROJECT_IMAGE_FALLBACK = "/HOOM-HERO.png";
 
-export function pickAssetPath(...values: unknown[]) {
+export function pickAssetPath(...values: unknown[]): string {
   for (const value of values) {
     if (!value) continue;
 
@@ -11,14 +11,14 @@ export function pickAssetPath(...values: unknown[]) {
     }
 
     if (Array.isArray(value)) {
-      const fromArray = pickAssetPath(...value);
+      const fromArray: string = pickAssetPath(...value);
       if (fromArray) return fromArray;
       continue;
     }
 
     if (typeof value === "object") {
       const item = value as Record<string, unknown>;
-      const fromObject = pickAssetPath(
+      const fromObject: string = pickAssetPath(
         item.coverImage,
         item.coverImageUrl,
         item.heroImage,

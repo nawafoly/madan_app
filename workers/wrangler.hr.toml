@@ -1,0 +1,16 @@
+﻿name = "maedin-hr-api"
+main = "hr-core-worker.js"
+compatibility_date = "2026-07-21"
+workers_dev = true
+
+[vars]
+FIREBASE_PROJECT_ID = "index-599e8"
+ALLOWED_ORIGINS = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174,https://madan-app.vercel.app"
+
+[[d1_databases]]
+binding = "HR_DB"
+database_name = "maedin-hr"
+database_id = "a9435ad2-4430-47b2-a5e6-ad2448ed9b0b"
+migrations_dir = "hr-migrations"
+
+

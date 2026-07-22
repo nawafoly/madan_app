@@ -276,6 +276,9 @@ export type EmployeePayrollRecordDoc = {
     title?: string;
     amount?: number;
   }> | null;
+  salaryAdvanceDeduction?: number | null;
+  salaryAdvanceRequestIds?: string[] | null;
+  grossSalary?: number | null;
   totalSalaryDeductions?: number | null;
   absenceEntries?: Array<{
     date: string;
@@ -386,5 +389,9 @@ export type EmployeeServiceRequestDoc = {
   reviewedBy?: string | null;
   reviewedByEmail?: string | null;
   reviewedByName?: string | null;
+  payrollRecordId?: string | null;
+  payrollMonth?: string | null;
+  settledAt?: unknown;
+  settledBy?: string | null;
   updatedAt?: unknown;
 };

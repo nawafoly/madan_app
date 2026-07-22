@@ -1,14 +1,10 @@
 import { useEffect } from "react";
-import { collection, getDocs, query, where } from "firebase/firestore";
-
-import { db } from "@/_core/firebase";
 import { useAuth } from "@/_core/hooks/useAuth";
 import EmployeeLayout from "@/components/EmployeeLayout";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { markInAppNotificationsRead } from "@/lib/inAppNotifications";
+import { listInAppNotifications, markInAppNotificationsRead } from "@/lib/inAppNotifications";
 import { tr } from "@/lib/i18n";
 import { WeeklyReportTab } from "@/pages/employee/messages/WeeklyReportTab";
-import { EMPLOYEE_NOTIFICATIONS_COLLECTION } from "@shared/employee";
 
 export default function EmployeeWeeklyReportsPage() {
   const { user } = useAuth();
@@ -16,30 +12,15 @@ export default function EmployeeWeeklyReportsPage() {
 
   useEffect(() => {
     if (!user?.uid) return;
-
     let cancelled = false;
 
-    void getDocs(
-      query(
-        collection(db, EMPLOYEE_NOTIFICATIONS_COLLECTION),
-        where("targetUid", "==", user.uid)
-      )
-    )
-      .then(snapshot => {
+    void listInAppNotifications(user.uid)
+      .then(items => {
         if (cancelled) return;
-        const unreadWeeklyReportIds = snapshot.docs
-          .filter(docSnapshot => {
-            const data = docSnapshot.data() as Record<string, unknown>;
-            return (
-              data.relatedTo === "weekly_report" &&
-              data.isRead !== true
-            );
-          })
-          .map(docSnapshot => docSnapshot.id);
-
-        if (unreadWeeklyReportIds.length) {
-          void markInAppNotificationsRead(unreadWeeklyReportIds);
-        }
+        const unreadIds = items
+          .filter(item => item.relatedTo === "weekly_report" && !item.isRead)
+          .map(item => item.id);
+        if (unreadIds.length) void markInAppNotificationsRead(unreadIds);
       })
       .catch(error => {
         console.error("weekly_report_notifications_mark_read_failed", error);

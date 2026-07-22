@@ -1,15 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  collection,
-  doc,
-  getDoc,
-  onSnapshot,
-  query,
-  serverTimestamp,
-  setDoc,
-  where,
-} from "firebase/firestore";
-import {
   CheckCircle2,
   Clock3,
   Download,
@@ -24,7 +14,6 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { db } from "@/_core/firebase";
 import { hasPermission, type AppUser } from "@/_core/hooks/useAuth";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Badge } from "@/components/ui/badge";
@@ -32,6 +21,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { createInAppNotification } from "@/lib/inAppNotifications";
+import {
+  HR_CORE_D1_ENABLED,
+  createHrCoreWeeklyReport,
+  isHrCoreConfigured,
+  listHrCoreWeeklyReports,
+  updateHrCoreWeeklyReport,
+} from "@/lib/hrCoreApi";
 import { languageDir, tr } from "@/lib/i18n";
 import {
   WEEKLY_REPORT_DIRECT_MANAGER_NAME,
@@ -50,7 +46,6 @@ export const WEEKLY_REPORT_RECEIVER = {
   displayName: "شهد زيني",
 };
 
-const WEEKLY_REPORTS_COLLECTION = "weekly_reports";
 const EMPTY_TASK: WeeklyReportTask = {
   index: 1,
   title: "",
@@ -284,98 +279,79 @@ export function WeeklyReportTab({
   ]);
 
   useEffect(() => {
-    let cancelled = false;
-    void getDoc(doc(db, "users", user.uid))
-      .then(snapshot => {
-        if (cancelled || !snapshot.exists()) return;
-        const data = snapshot.data() as Record<string, any>;
-        const employeeProfile = data.employeeProfile || {};
-        const personal = employeeProfile.personal || data.personal || {};
-        const employment = employeeProfile.employment || data.employment || {};
-        const defaults = {
-          name:
-            cleanText(data.displayName) ||
-            cleanText(data.name) ||
-            cleanText(personal.name) ||
-            cleanText(user.displayName),
-          title:
-            cleanText(employment.title) ||
-            cleanText(data.title) ||
-            cleanText(employment.jobTitle) ||
-            cleanText(user.title),
-        };
-        setProfileDefaults(defaults);
-        setForm(current =>
-          current.id
-            ? current
-            : {
-                ...current,
-                createdByName: current.createdByName || defaults.name,
-                jobTitle: current.jobTitle || defaults.title,
-              }
-        );
-      })
-      .catch(error => {
-        console.error("weekly_report_profile_defaults_failed", error);
-      });
-
-    return () => {
-      cancelled = true;
+    const defaults = {
+      name: cleanText(user.displayName) || cleanText(user.email),
+      title: cleanText(user.title),
     };
-  }, [user.displayName, user.title, user.uid]);
-
-  useEffect(() => {
-    setLoadingOwn(true);
-    const unsubscribe = onSnapshot(
-      query(
-        collection(db, WEEKLY_REPORTS_COLLECTION),
-        where("createdByUid", "==", user.uid)
-      ),
-      snapshot => {
-        setOwnReports(
-          snapshot.docs.map(docSnapshot =>
-            normalizeReport(docSnapshot.id, docSnapshot.data())
-          )
-        );
-        setLoadingOwn(false);
-      },
-      error => {
-        console.error("weekly_reports_own_snapshot_failed", error);
-        setOwnReports([]);
-        setLoadingOwn(false);
-      }
+    setProfileDefaults(defaults);
+    setForm(current =>
+      current.id
+        ? current
+        : {
+            ...current,
+            createdByName: current.createdByName || defaults.name,
+            jobTitle: current.jobTitle || defaults.title,
+          }
     );
-    return unsubscribe;
-  }, [user.uid]);
+  }, [user.displayName, user.email, user.title]);
 
-  useEffect(() => {
+  const loadOwnReports = async () => {
+    setLoadingOwn(true);
+    try {
+      if (!HR_CORE_D1_ENABLED || !isHrCoreConfigured()) {
+        throw new Error("HR Core D1 is not configured.");
+      }
+      const result = await listHrCoreWeeklyReports({
+        createdByUid: user.uid,
+        limit: 200,
+      });
+      setOwnReports(
+        result.weeklyReports.map(report =>
+          normalizeReport(String(report.id), report as Record<string, unknown>)
+        )
+      );
+    } catch (error) {
+      console.error("weekly_reports_own_d1_load_failed", error);
+      setOwnReports([]);
+    } finally {
+      setLoadingOwn(false);
+    }
+  };
+
+  const loadReceivedReports = async () => {
     if (!canReviewWeeklyReports) {
       setReceivedReports([]);
       setLoadingReceived(false);
       return;
     }
-
     setLoadingReceived(true);
-    const unsubscribe = onSnapshot(
-      query(
-        collection(db, WEEKLY_REPORTS_COLLECTION),
-        where("status", "==", "sent")
-      ),
-      snapshot => {
-        setReceivedReports(
-          snapshot.docs.map(docSnapshot =>
-            normalizeReport(docSnapshot.id, docSnapshot.data())
-          )
-        );
-        setLoadingReceived(false);
-      },
-      error => {
-        console.error("weekly_reports_received_snapshot_failed", error);
-        setReceivedReports([]);
-        setLoadingReceived(false);
+    try {
+      if (!HR_CORE_D1_ENABLED || !isHrCoreConfigured()) {
+        throw new Error("HR Core D1 is not configured.");
       }
-    );
-    return unsubscribe;
+      const result = await listHrCoreWeeklyReports({
+        status: "sent",
+        limit: 200,
+      });
+      setReceivedReports(
+        result.weeklyReports.map(report =>
+          normalizeReport(String(report.id), report as Record<string, unknown>)
+        )
+      );
+    } catch (error) {
+      console.error("weekly_reports_received_d1_load_failed", error);
+      setReceivedReports([]);
+    } finally {
+      setLoadingReceived(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadOwnReports();
+  }, [user.uid]);
+
+  useEffect(() => {
+    void loadReceivedReports();
   }, [canReviewWeeklyReports]);
 
   const resetForm = () => {
@@ -426,9 +402,14 @@ export function WeeklyReportTab({
 
     setSaving(true);
     try {
-      const reportRef = form.id
-        ? doc(db, WEEKLY_REPORTS_COLLECTION, form.id)
-        : doc(collection(db, WEEKLY_REPORTS_COLLECTION));
+      if (!HR_CORE_D1_ENABLED || !isHrCoreConfigured()) {
+        throw new Error("HR Core D1 is not configured.");
+      }
+      const reportId =
+        form.id ||
+        (typeof crypto !== "undefined" && "randomUUID" in crypto
+          ? crypto.randomUUID()
+          : `weekly-report-${Date.now()}`);
       const normalizedTasks = form.tasks.map((task, index) => ({
         index: index + 1,
         title: cleanText(task.title),
@@ -437,7 +418,9 @@ export function WeeklyReportTab({
         progress: cleanText(task.progress),
       }));
 
+      const now = new Date().toISOString();
       const payload = {
+        id: reportId,
         createdByUid: user.uid,
         createdByEmail: cleanText(user.email),
         createdByName: cleanText(form.createdByName),
@@ -449,14 +432,29 @@ export function WeeklyReportTab({
         tasks: normalizedTasks,
         managerNotes: cleanText(form.managerNotes),
         status,
-        updatedAt: serverTimestamp(),
-        sentAt: status === "sent" ? serverTimestamp() : null,
-        ...(form.id ? {} : { createdAt: serverTimestamp() }),
+        updatedAt: now,
+        sentAt: status === "sent" ? now : null,
+        ...(form.id ? {} : { createdAt: now }),
       };
 
-      await setDoc(reportRef, payload, { merge: true });
-
-      setForm(current => ({ ...current, id: reportRef.id, status }));
+      const result = form.id
+        ? await updateHrCoreWeeklyReport(reportId, payload)
+        : await createHrCoreWeeklyReport(payload);
+      const savedReport = normalizeReport(
+        String(result.weeklyReport.id),
+        result.weeklyReport as Record<string, unknown>
+      );
+      setOwnReports(current => {
+        const next = current.filter(report => report.id !== savedReport.id);
+        return [savedReport, ...next];
+      });
+      if (canReviewWeeklyReports && savedReport.status === "sent") {
+        setReceivedReports(current => {
+          const next = current.filter(report => report.id !== savedReport.id);
+          return [savedReport, ...next];
+        });
+      }
+      setForm(current => ({ ...current, id: savedReport.id, status }));
 
       if (status === "sent") {
         await createInAppNotification({
@@ -464,7 +462,7 @@ export function WeeklyReportTab({
           title: "تقرير عمل أسبوعي جديد",
           body: `تم إرسال تقرير عمل أسبوعي من ${cleanText(form.createdByName) || cleanText(user.email)}.`,
           type: "message",
-          relatedId: reportRef.id,
+          relatedId: reportId,
           relatedTo: "weekly_report",
           relatedPath: "/hr/weekly-reports",
         }).catch(error => {
@@ -486,18 +484,28 @@ export function WeeklyReportTab({
 
     setSavingManagerNotes(true);
     try {
-      await setDoc(
-        doc(db, WEEKLY_REPORTS_COLLECTION, selectedReport.id),
-        {
-          managerNotes: cleanText(form.managerNotes),
-          managerNotesUpdatedAt: serverTimestamp(),
-          managerNotesUpdatedByUid: user.uid,
-          managerNotesUpdatedByEmail: cleanText(user.email),
-          managerNotesUpdatedByName:
-            cleanText(user.displayName) || cleanText(user.email),
-          updatedAt: serverTimestamp(),
-        },
-        { merge: true }
+      if (!HR_CORE_D1_ENABLED || !isHrCoreConfigured()) {
+        throw new Error("HR Core D1 is not configured.");
+      }
+      const now = new Date().toISOString();
+      const result = await updateHrCoreWeeklyReport(selectedReport.id, {
+        managerNotes: cleanText(form.managerNotes),
+        managerNotesUpdatedAt: now,
+        managerNotesUpdatedByUid: user.uid,
+        managerNotesUpdatedByEmail: cleanText(user.email),
+        managerNotesUpdatedByName:
+          cleanText(user.displayName) || cleanText(user.email),
+        updatedAt: now,
+      });
+      const savedReport = normalizeReport(
+        String(result.weeklyReport.id),
+        result.weeklyReport as Record<string, unknown>
+      );
+      setReceivedReports(current =>
+        current.map(report => (report.id === savedReport.id ? savedReport : report))
+      );
+      setOwnReports(current =>
+        current.map(report => (report.id === savedReport.id ? savedReport : report))
       );
 
       if (selectedReport.createdByUid && selectedReport.createdByUid !== user.uid) {

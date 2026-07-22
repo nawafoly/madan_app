@@ -6,8 +6,7 @@ import {
   useAuth,
   type Permission,
 } from "@/_core/hooks/useAuth";
-import { auth, db } from "@/_core/firebase";
-import { doc, getDoc, onSnapshot } from "firebase/firestore";
+import { auth } from "@/_core/firebase";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Sidebar,
@@ -67,6 +66,7 @@ import {
 } from "@/lib/employeeProfile";
 import { NotificationBell } from "@/components/NotificationBell";
 import { cn } from "@/lib/utils";
+import { getHrCoreEmployee, isHrCoreConfigured } from "@/lib/hrCoreApi";
 
 type RoleKey = "owner" | "admin" | "accountant" | "hr" | "staff";
 
@@ -567,10 +567,6 @@ function DashboardLayoutContent({
   const isCollapsed = state === "collapsed";
   const [isResizing, setIsResizing] = useState(false);
   const [isSettingsMenuOpen, setIsSettingsMenuOpen] = useState(false);
-  const [sidebarProfileSource, setSidebarProfileSource] = useState<{
-    collectionName: "employees" | "users";
-    docId: string;
-  } | null>(null);
   const [sidebarProfileDoc, setSidebarProfileDoc] =
     useState<EmployeeProfileUserDoc | null>(null);
 
@@ -622,7 +618,8 @@ function DashboardLayoutContent({
   const visibleHrSettingsSubItems = useMemo(
     () =>
       HR_SETTINGS_SUB_ITEMS.filter(subItem => {
-        const permission = subItem.permission;
+        const permission =
+          "permission" in subItem ? subItem.permission : undefined;
         return !permission || hasStaffAdminPermission(user, permission);
       }),
     [user]
@@ -735,82 +732,64 @@ function DashboardLayoutContent({
 
   useEffect(() => {
     if (!user?.uid) {
-      setSidebarProfileSource(null);
+      setSidebarProfileDoc(null);
+      return;
+    }
+
+    const employeeId = String(user.linkedEmployeeId || user.uid || "").trim();
+    if (!employeeId || !isHrCoreConfigured()) {
       setSidebarProfileDoc(null);
       return;
     }
 
     let cancelled = false;
 
-    const resolveSidebarProfileSource = async () => {
-      const linkedEmployeeId = String(user.linkedEmployeeId || "").trim();
-      const candidateEmployeeDocIds = Array.from(
-        new Set([linkedEmployeeId, user.uid].filter(Boolean))
-      );
-
-      for (const docId of candidateEmployeeDocIds) {
-        try {
-          const employeeSnapshot = await getDoc(doc(db, "employees", docId));
-          if (employeeSnapshot.exists()) {
-            if (!cancelled) {
-              setSidebarProfileSource({
-                collectionName: "employees",
-                docId,
-              });
-            }
-            return;
-          }
-        } catch (error) {
-          console.error("sidebar_profile_source_lookup_failed", error);
-        }
-      }
-
-      if (!cancelled) {
-        setSidebarProfileSource({
-          collectionName: "users",
-          docId: user.uid,
-        });
-      }
-    };
-
-    void resolveSidebarProfileSource();
+    void getHrCoreEmployee(employeeId)
+      .then(({ employee }) => {
+        if (cancelled) return;
+        setSidebarProfileDoc({
+          uid: employee.authUid || user.uid,
+          displayName: employee.name,
+          name: employee.name,
+          email: employee.email,
+          phone: employee.phone,
+          photoURL: employee.avatarUrl,
+          avatarUrl: employee.avatarUrl,
+          title: employee.title,
+          jobTitle: employee.title,
+          employeeProfile: {
+            personal: {
+              name: employee.name,
+              email: employee.email,
+              phone: employee.phone,
+              avatar: employee.avatarUrl
+                ? { fileUrl: employee.avatarUrl, url: employee.avatarUrl }
+                : null,
+            },
+            employment: {
+              ...(employee.employment || {}),
+              title: employee.title,
+              jobTitle: employee.title,
+              department: employee.department,
+            },
+          },
+          employment: {
+            ...(employee.employment || {}),
+            title: employee.title,
+            jobTitle: employee.title,
+            department: employee.department,
+          },
+        } as EmployeeProfileUserDoc);
+      })
+      .catch(error => {
+        console.error("sidebar_profile_d1_lookup_failed", error);
+        if (!cancelled) setSidebarProfileDoc(null);
+      });
 
     return () => {
       cancelled = true;
     };
   }, [user?.linkedEmployeeId, user?.uid]);
-
-  useEffect(() => {
-    if (!user?.uid || !sidebarProfileSource) {
-      setSidebarProfileDoc(null);
-      return;
-    }
-
-    const unsubscribe = onSnapshot(
-      doc(db, sidebarProfileSource.collectionName, sidebarProfileSource.docId),
-      snapshot => {
-        const snapshotData = snapshot.data() as
-          | EmployeeProfileUserDoc
-          | undefined;
-        setSidebarProfileDoc(
-          snapshot.exists()
-            ? ({
-                ...(snapshotData || {}),
-                uid:
-                  String(snapshotData?.uid || user.uid || snapshot.id).trim() ||
-                  snapshot.id,
-              } as EmployeeProfileUserDoc)
-            : null
-        );
-      },
-      error => {
-        console.error("sidebar_profile_snapshot_error", error);
-        setSidebarProfileDoc(null);
-      }
-    );
-
-    return () => unsubscribe();
-  }, [sidebarProfileSource, user?.uid]);
 
   useEffect(() => {
     if (isCollapsed) setIsResizing(false);

@@ -10,20 +10,6 @@ import {
 } from "react";
 import { useSearch } from "wouter";
 import {
-  collection,
-  doc,
-  getDocs,
-  onSnapshot,
-  orderBy,
-  or,
-  query,
-  runTransaction,
-  serverTimestamp,
-  setDoc,
-  writeBatch,
-  where,
-} from "firebase/firestore";
-import {
   BriefcaseBusiness,
   BadgeCheck,
   CalendarDays,
@@ -92,12 +78,9 @@ import {
 } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Textarea } from "@/components/ui/textarea";
-import { auth, db } from "@/_core/firebase";
+import { auth } from "@/_core/firebase";
 import { hasPermission, useAuth } from "@/_core/hooks/useAuth";
 import {
-  AUDIT_ACTIONS,
-  auditedDeleteDoc,
-  auditedUpdateDoc,
   buildAuditSource,
   logAuditEvent,
 } from "@/lib/auditLog";
@@ -119,10 +102,8 @@ import {
   type WorkScheduleWeekday,
 } from "@/lib/workSchedule";
 import {
-  EMPLOYEE_ABSENCES_COLLECTION,
   EMPLOYEE_ABSENCE_TYPE_OPTIONS,
   buildEmployeeAbsenceDateInput,
-  buildEmployeeAbsencePayload,
   formatEmployeeAbsenceDate,
   formatEmployeeAbsenceDays,
   getEmployeeAbsenceTypeLabel,
@@ -134,7 +115,6 @@ import {
 import {
   EMPLOYEE_DEFAULT_FILE_TYPE,
   EMPLOYEE_FILE_CATEGORY,
-  EMPLOYEE_FILES_COLLECTION,
   EMPLOYEE_FILE_TYPE_OPTIONS,
   filterActiveEmployeeFiles,
   isOfficialEmployeeFile,
@@ -156,22 +136,45 @@ import {
 import { sendPasswordResetEmail, updateProfile } from "firebase/auth";
 import {
   createInAppNotification,
+  listInAppNotifications,
   markInAppNotificationsRead,
-  normalizeInAppNotificationRecord,
   type InAppNotificationRecord,
 } from "@/lib/inAppNotifications";
 import {
   EMPLOYEE_AVATAR_CATEGORY,
   EMPLOYEE_EMPTY_VALUE,
-  buildEmployeeAvatarPatch,
   normalizeEmployeeProfile,
   type EmployeeAvatarDoc,
   type EmployeeProfileUserDoc,
 } from "@/lib/employeeProfile";
 import {
-  EMPLOYEE_LEAVE_REQUESTS_COLLECTION,
+  cancelHrCoreLeaveDate,
+  createHrCoreEmployeeFile,
+  createHrCoreEmployeeMessage,
+  createHrCoreAbsence,
+  createHrCoreLeaveRequest,
+  createHrCorePayrollRecord,
+  deleteHrCoreAbsence,
+  deleteHrCoreEmployeeFile,
+  listHrCoreAbsences,
+  listHrCoreEmployees,
+  listHrCoreEmployeeFiles,
+  listHrCoreEmployeeMessages,
+  listHrCoreLeaveRequests,
+  listHrCoreLeaveBalanceAdjustments,
+  listHrCorePayrollAdvances,
+  listHrCorePayrollRecords,
+  listHrCoreServiceRequests,
+  markHrCoreEmployeeMessagesRead,
+  reviewHrCoreLeaveRequest,
+  reviewHrCoreServiceRequest,
+  updateHrCoreEmployee,
+  adjustHrCoreEmployeeLeaveBalance,
+  type HrCoreEmployee,
+  type HrCoreServiceRequest,
+} from "@/lib/hrCoreApi";
+import {
   buildActiveApprovedLeaveDateKeySet,
-  buildEmployeeLeaveRequestPayload,
   buildLeaveDateFromInput,
   getActiveApprovedLeaveDateKeys,
   getLatestApprovedEmployeeLeaveRequest,
@@ -186,7 +189,6 @@ import {
   type EmployeeLeaveRequestRecord,
 } from "@/lib/employeeLeave";
 import {
-  EMPLOYEE_SERVICE_REQUESTS_COLLECTION,
   getEmployeeServiceRequestStatusLabel,
   getEmployeeServiceRequestTypeLabel,
   normalizeEmployeeServiceRequest,
@@ -195,7 +197,6 @@ import {
 } from "@/lib/employeeServiceRequests";
 import type { EmployeeServiceRequestStatus } from "@shared/employee";
 import {
-  EMPLOYEE_PAYROLL_RECORDS_COLLECTION,
   buildEmployeePayrollMonthInput,
   buildEmployeePayrollRecordId,
   computeEmployeePayroll,
@@ -229,14 +230,9 @@ import type {
   EmployeeEmploymentDoc,
   EmployeeEmploymentStatus,
   EmployeeFileDoc,
-  EmployeeLeaveRequestDoc,
   EmployeeLeaveRequestStatus,
   EmployeeMessageDoc,
   EmployeeMessageType,
-} from "@shared/employee";
-import {
-  EMPLOYEE_MESSAGES_COLLECTION,
-  EMPLOYEE_NOTIFICATIONS_COLLECTION,
 } from "@shared/employee";
 
 type EmployeeRecord = EmployeeProfileUserDoc & {
@@ -297,11 +293,7 @@ type EmployeePasswordResetStatus = {
 };
 
 const DEFAULT_WORK_ZONE_CENTER = { lat: 24.7136, lng: 46.6753 };
-const EMPLOYEE_PASSWORD_RESET_ALLOWED_ROLES = new Set([
-  "owner",
-  "admin",
-  "hr",
-]);
+const EMPLOYEE_PASSWORD_RESET_ALLOWED_ROLES = new Set(["owner", "admin", "hr"]);
 
 function buildEmployeeWorkZoneFormValues(): EmployeeWorkZoneFormValues {
   return {
@@ -480,8 +472,6 @@ function createEmptyEmployeeWorkspaceNotificationBucket(): EmployeeWorkspaceNoti
   };
 }
 
-const EMPLOYEE_LEAVE_BALANCE_ADJUSTMENTS_COLLECTION =
-  "employee_leave_balance_adjustments";
 
 const OFFICIAL_DOCUMENT_TYPE_OPTIONS = [
   { value: "contract", label: "عقد" },
@@ -814,6 +804,94 @@ function buildMergedEmployeeRecord(input: {
     employment: mergedEmployment,
     photoURL: pickText(userData.photoURL, employeeData?.photoURL) || null,
   } as EmployeeRecord;
+}
+
+function buildEmployeeRecordFromHrCore(
+  employee: HrCoreEmployee
+): EmployeeRecord {
+  const authUid = pickText(employee.authUid, employee.id) || employee.id;
+  const personal = {
+    ...(employee.personal || {}),
+    name: employee.name,
+    email: employee.email,
+    phone: employee.phone,
+    avatarUrl: employee.avatarUrl,
+  };
+  const employment = {
+    ...(employee.employment || {}),
+    title: employee.title,
+    jobTitle: employee.title,
+    department: employee.department,
+    employeeCode: employee.employeeCode,
+    fingerprintNumber: employee.fingerprintNumber,
+    status: employee.employmentStatus,
+    employmentStatus: employee.employmentStatus,
+    startDate: employee.startDate,
+    leaveBalance: employee.leaveBalance,
+    baseSalary: employee.salary.baseSalary,
+    housingAllowance: employee.salary.housingAllowance,
+    transportationAllowance: employee.salary.transportationAllowance,
+    otherAllowances: employee.salary.otherAllowances,
+    insuranceDeduction: employee.salary.insuranceDeduction,
+    salaryDeductions: employee.salary.deductions,
+    workSchedule: employee.workSchedule,
+    shiftStartTime: employee.workSchedule.startTime,
+    shiftEndTime: employee.workSchedule.endTime,
+    weeklyOffDays: employee.workSchedule.weeklyOffDays,
+    allowedZoneIds: employee.allowedZoneIds,
+    adminNotes: employee.adminNotes,
+  };
+
+  return buildMergedEmployeeRecord({
+    userId: authUid,
+    userData: {
+      uid: authUid,
+      email: employee.email,
+      displayName: employee.name,
+      name: employee.name,
+      fullName: employee.name,
+      phone: employee.phone,
+      photoURL: employee.avatarUrl,
+      title: employee.title,
+      department: employee.department,
+      role: employee.account?.role || "staff",
+      isActive: employee.account?.isActive ?? employee.isActive,
+      employeeProfileEnabled: employee.account?.employeeProfileEnabled ?? true,
+      includeInEmployeeManagement: true,
+      linkedEmployeeId: employee.id,
+      allowedZoneIds: employee.allowedZoneIds,
+      startDate: employee.startDate,
+      leaveBalance: employee.leaveBalance,
+      personal,
+      employment,
+      employeeProfile: { personal, employment },
+    },
+    employeeDocId: employee.id,
+    employeeData: {
+      id: employee.id,
+      uid: authUid,
+      linkedUserUid: authUid,
+      email: employee.email,
+      displayName: employee.name,
+      name: employee.name,
+      fullName: employee.name,
+      phone: employee.phone,
+      photoURL: employee.avatarUrl,
+      title: employee.title,
+      department: employee.department,
+      employeeCode: employee.employeeCode,
+      fingerprintNumber: employee.fingerprintNumber,
+      employmentStatus: employee.employmentStatus,
+      isActive: employee.isActive,
+      startDate: employee.startDate,
+      leaveBalance: employee.leaveBalance,
+      allowedZoneIds: employee.allowedZoneIds,
+      personal,
+      employment,
+      employeeProfile: { personal, employment },
+      includeInEmployeeManagement: true,
+    },
+  });
 }
 
 function buildEmployeeFormValues(
@@ -1264,9 +1342,8 @@ function showNativeInputPicker(input: HTMLInputElement | null) {
   if (input.disabled || input.readOnly) return;
 
   try {
-    const showPicker = (
-      input as HTMLInputElement & { showPicker?: () => void }
-    ).showPicker;
+    const showPicker = (input as HTMLInputElement & { showPicker?: () => void })
+      .showPicker;
     if (showPicker) {
       showPicker.call(input);
       return;
@@ -1878,6 +1955,12 @@ export default function EmployeesManagementPage() {
   >([]);
   const [employeePayrollRecordsLoading, setEmployeePayrollRecordsLoading] =
     useState(false);
+  const [approvedPayrollAdvances, setApprovedPayrollAdvances] = useState<
+    HrCoreServiceRequest[]
+  >([]);
+  const [approvedPayrollAdvancesLoading, setApprovedPayrollAdvancesLoading] =
+    useState(false);
+  const [payrollRevision, setPayrollRevision] = useState(0);
   const [payrollMonthInput, setPayrollMonthInput] = useState(
     buildEmployeePayrollMonthInput
   );
@@ -1905,6 +1988,9 @@ export default function EmployeesManagementPage() {
     EmployeeServiceRequestRecord[]
   >([]);
   const [serviceRequestsLoading, setServiceRequestsLoading] = useState(false);
+  const [hrOperationsRevision, setHrOperationsRevision] = useState(0);
+  const refreshHrOperations = () =>
+    setHrOperationsRevision(current => current + 1);
   const [reviewNotes, setReviewNotes] = useState<Record<string, string>>({});
   const [manualLeaveBalance, setManualLeaveBalance] = useState("");
   const [manualLeaveBalanceOperation, setManualLeaveBalanceOperation] =
@@ -2102,121 +2188,34 @@ export default function EmployeesManagementPage() {
   }, []);
 
   useEffect(() => {
+    let active = true;
     setLoading(true);
     setError("");
 
-    let usersReady = false;
-    let employeesReady = false;
-    let usersMap = new Map<string, Record<string, any>>();
-    let employeesMap = new Map<string, Record<string, any>>();
-
-    const rebuildEmployees = () => {
-      if (!usersReady || !employeesReady) return;
-      const employeesByLinkedUserId = new Map<
-        string,
-        { docId: string; data: Record<string, any> }
-      >();
-
-      employeesMap.forEach((employeeData, employeeDocId) => {
-        const linkedUserId = pickText(
-          employeeData.linkedUserUid,
-          employeeData.uid,
-          employeeData.userId
-        );
-
-        if (linkedUserId && !employeesByLinkedUserId.has(linkedUserId)) {
-          employeesByLinkedUserId.set(linkedUserId, {
-            docId: employeeDocId,
-            data: employeeData,
+    void listHrCoreEmployees({ limit: 500, offset: 0 })
+      .then(result => {
+        if (!active) return;
+        const rows = result.employees
+          .map(buildEmployeeRecordFromHrCore)
+          .sort((a, b) => {
+            const aName = pickText(a.displayName, a.name, a.email).toLowerCase();
+            const bName = pickText(b.displayName, b.name, b.email).toLowerCase();
+            return aName.localeCompare(bName);
           });
-        }
+        setEmployees(rows);
+      })
+      .catch(error => {
+        console.error("employees_hr_core_load_error", error);
+        if (!active) return;
+        setEmployees([]);
+        setError("تعذر تحميل قائمة الموظفين من Cloudflare.");
+      })
+      .finally(() => {
+        if (active) setLoading(false);
       });
 
-      const rows = Array.from(usersMap.entries())
-        .map(([userId, userData]) => {
-          const linkedEmployeeId = pickText(userData.linkedEmployeeId);
-          const linkedEmployee =
-            (linkedEmployeeId && employeesMap.has(linkedEmployeeId)
-              ? {
-                  docId: linkedEmployeeId,
-                  data: employeesMap.get(linkedEmployeeId) as Record<
-                    string,
-                    any
-                  >,
-                }
-              : employeesByLinkedUserId.get(userId)) ||
-            (employeesMap.has(userId)
-              ? {
-                  docId: userId,
-                  data: employeesMap.get(userId) as Record<string, any>,
-                }
-              : null);
-
-          if (!hasEmployeeProfileSignal(userData, linkedEmployee?.data)) {
-            return null;
-          }
-
-          return buildMergedEmployeeRecord({
-            userId,
-            userData,
-            employeeDocId: linkedEmployee?.docId ?? null,
-            employeeData: linkedEmployee?.data ?? null,
-          });
-        })
-        .filter((employee): employee is EmployeeRecord => !!employee)
-        .sort((a, b) => {
-          const aName = pickText(a.displayName, a.name, a.email).toLowerCase();
-          const bName = pickText(b.displayName, b.name, b.email).toLowerCase();
-          return aName.localeCompare(bName);
-        });
-
-      setEmployees(rows);
-      setLoading(false);
-    };
-
-    const unsubscribeUsers = onSnapshot(
-      collection(db, "users"),
-      snapshot => {
-        usersMap = new Map(
-          snapshot.docs.map(docSnapshot => [
-            docSnapshot.id,
-            docSnapshot.data() as Record<string, any>,
-          ])
-        );
-        usersReady = true;
-        rebuildEmployees();
-      },
-      snapshotError => {
-        console.error("employees_snapshot_error", snapshotError);
-        setEmployees([]);
-        setError("تعذر تحميل قائمة الموظفين.");
-        setLoading(false);
-      }
-    );
-
-    const unsubscribeEmployeeDirectory = onSnapshot(
-      collection(db, "employees"),
-      snapshot => {
-        employeesMap = new Map(
-          snapshot.docs.map(docSnapshot => [
-            docSnapshot.id,
-            docSnapshot.data() as Record<string, any>,
-          ])
-        );
-        employeesReady = true;
-        rebuildEmployees();
-      },
-      snapshotError => {
-        console.error("employee_directory_snapshot_error", snapshotError);
-        employeesMap = new Map();
-        employeesReady = true;
-        rebuildEmployees();
-      }
-    );
-
     return () => {
-      unsubscribeUsers();
-      unsubscribeEmployeeDirectory();
+      active = false;
     };
   }, []);
 
@@ -2400,8 +2399,7 @@ export default function EmployeesManagementPage() {
       statusTone,
       employeeCode: employment?.employeeCode || EMPLOYEE_EMPTY_VALUE,
       startDate: employment?.startDate || null,
-      fingerprintNumber:
-        employment?.fingerprintNumber || EMPLOYEE_EMPTY_VALUE,
+      fingerprintNumber: employment?.fingerprintNumber || EMPLOYEE_EMPTY_VALUE,
     };
   }, [language, selectedEmployee, selectedEmployeeProfile]);
   const selectedEmployeeShiftSchedule = useMemo(() => {
@@ -2538,192 +2536,215 @@ export default function EmployeesManagementPage() {
       return;
     }
 
-    const notificationsQuery = query(
-      collection(db, EMPLOYEE_NOTIFICATIONS_COLLECTION),
-      where("targetUid", "==", user.uid),
-      orderBy("createdAt", "desc")
-    );
-
-    const unsubscribe = onSnapshot(
-      notificationsQuery,
-      snapshot => {
-        setAdminNotifications(
-          snapshot.docs.map(docSnapshot =>
-            normalizeInAppNotificationRecord(
-              docSnapshot.id,
-              (docSnapshot.data() as Record<string, any>) || {}
-            )
-          )
-        );
-      },
-      error => {
-        console.error("employee_admin_notifications_snapshot_error", error);
-        setAdminNotifications([]);
+    let active = true;
+    const loadNotifications = async () => {
+      try {
+        const rows = await listInAppNotifications(user.uid);
+        if (active) setAdminNotifications(rows);
+      } catch (error) {
+        console.error("employee_admin_notifications_load_error", error);
+        if (active) setAdminNotifications([]);
       }
-    );
+    };
 
-    return () => unsubscribe();
+    void loadNotifications();
+    const timer = window.setInterval(() => void loadNotifications(), 30_000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
   }, [user?.uid]);
 
   useEffect(() => {
-    if (!selectedEmployeeDocumentId) {
+    if (!selectedEmployeeDocumentId && !selectedEmployeeAuthUid) {
       setEmployeeAbsences([]);
       setEmployeeAbsencesLoading(false);
       return;
     }
 
+    let active = true;
     setEmployeeAbsencesLoading(true);
 
-    const unsubscribe = onSnapshot(
-      query(
-        collection(db, EMPLOYEE_ABSENCES_COLLECTION),
-        where("employeeId", "==", selectedEmployeeDocumentId)
-      ),
-      snapshot => {
-        const rows = sortEmployeeAbsences(
-          snapshot.docs.map(docSnapshot =>
-            normalizeEmployeeAbsence(
-              docSnapshot.id,
-              (docSnapshot.data() as Record<string, any>) || {}
+    void listHrCoreAbsences({
+      employeeId: selectedEmployeeDocumentId || undefined,
+      employeeUid: selectedEmployeeAuthUid || undefined,
+      limit: 500,
+      offset: 0,
+    })
+      .then(result => {
+        if (!active) return;
+        setEmployeeAbsences(
+          sortEmployeeAbsences(
+            result.absences.map(absence =>
+              normalizeEmployeeAbsence(absence.id, absence)
             )
           )
         );
-        setEmployeeAbsences(rows);
-        setEmployeeAbsencesLoading(false);
-      },
-      error => {
-        console.error("employee_absences_admin_snapshot_error", error);
-        setEmployeeAbsences([]);
-        setEmployeeAbsencesLoading(false);
-      }
-    );
+      })
+      .catch(error => {
+        console.error("employee_absences_hr_core_error", error);
+        if (active) setEmployeeAbsences([]);
+      })
+      .finally(() => {
+        if (active) setEmployeeAbsencesLoading(false);
+      });
 
-    return () => unsubscribe();
-  }, [selectedEmployeeDocumentId]);
+    return () => {
+      active = false;
+    };
+  }, [
+    selectedEmployeeDocumentId,
+    selectedEmployeeAuthUid,
+    hrOperationsRevision,
+  ]);
 
   useEffect(() => {
-    if (!selectedEmployeeDocumentId) {
+    if (!selectedEmployeeDocumentId && !selectedEmployeeAuthUid) {
       setEmployeePayrollRecords([]);
+      setApprovedPayrollAdvances([]);
       setEmployeePayrollRecordsLoading(false);
+      setApprovedPayrollAdvancesLoading(false);
       resetPayrollMudadDocument();
       return;
     }
 
+    let active = true;
     setEmployeePayrollRecordsLoading(true);
+    setApprovedPayrollAdvancesLoading(true);
 
-    const unsubscribe = onSnapshot(
-      query(
-        collection(db, EMPLOYEE_PAYROLL_RECORDS_COLLECTION),
-        where("employeeId", "==", selectedEmployeeDocumentId)
-      ),
-      snapshot => {
-        const rows = sortEmployeePayrollRecords(
-          snapshot.docs.map(docSnapshot =>
-            normalizeEmployeePayrollRecord(
-              docSnapshot.id,
-              (docSnapshot.data() as Record<string, any>) || {}
+    void Promise.all([
+      listHrCorePayrollRecords({
+        employeeId: selectedEmployeeDocumentId || undefined,
+        employeeUid: selectedEmployeeAuthUid || undefined,
+        limit: 200,
+      }),
+      listHrCorePayrollAdvances({
+        employeeId: selectedEmployeeDocumentId || undefined,
+        employeeUid: selectedEmployeeAuthUid || undefined,
+      }),
+    ])
+      .then(([payrollResult, advancesResult]) => {
+        if (!active) return;
+        setEmployeePayrollRecords(
+          sortEmployeePayrollRecords(
+            payrollResult.payrollRecords.map(record =>
+              normalizeEmployeePayrollRecord(
+                record.id,
+                record as Record<string, any>
+              )
             )
           )
         );
-        setEmployeePayrollRecords(rows);
-        setEmployeePayrollRecordsLoading(false);
-      },
-      error => {
-        console.error("employee_payroll_records_admin_snapshot_error", error);
+        setApprovedPayrollAdvances(advancesResult.advances || []);
+      })
+      .catch(error => {
+        console.error("employee_payroll_records_hr_core_error", error);
+        if (!active) return;
         setEmployeePayrollRecords([]);
+        setApprovedPayrollAdvances([]);
+      })
+      .finally(() => {
+        if (!active) return;
         setEmployeePayrollRecordsLoading(false);
-      }
-    );
+        setApprovedPayrollAdvancesLoading(false);
+      });
 
-    return () => unsubscribe();
-  }, [selectedEmployeeDocumentId]);
+    return () => {
+      active = false;
+    };
+  }, [selectedEmployeeDocumentId, selectedEmployeeAuthUid, payrollRevision]);
 
   useEffect(() => {
     resetPayrollMudadDocument();
   }, [payrollMonthInput, selectedEmployeeDocumentId]);
 
   useEffect(() => {
-    if (!selectedEmployeeAuthUid) {
+    if (!selectedEmployeeAuthUid && !selectedEmployeeDocumentId) {
       setLeaveRequests([]);
       setLeaveRequestsLoading(false);
       setReviewNotes({});
       return;
     }
 
+    let active = true;
     setReviewNotes({});
     setLeaveRequestsLoading(true);
 
-    const unsubscribe = onSnapshot(
-      query(
-        collection(db, EMPLOYEE_LEAVE_REQUESTS_COLLECTION),
-        or(
-          where("userId", "==", selectedEmployeeAuthUid),
-          where("employeeUid", "==", selectedEmployeeAuthUid)
-        )
-      ),
-      snapshot => {
-        const rows = sortEmployeeLeaveRequests(
-          snapshot.docs.map(docSnapshot =>
-            normalizeEmployeeLeaveRequest(
-              docSnapshot.id,
-              (docSnapshot.data() as Record<string, any>) || {}
+    void listHrCoreLeaveRequests({
+      employeeId: selectedEmployeeDocumentId || undefined,
+      employeeUid: selectedEmployeeAuthUid || undefined,
+      limit: 500,
+      offset: 0,
+    })
+      .then(result => {
+        if (!active) return;
+        setLeaveRequests(
+          sortEmployeeLeaveRequests(
+            result.leaveRequests.map(request =>
+              normalizeEmployeeLeaveRequest(request.id, request)
             )
           )
         );
-        setLeaveRequests(rows);
-        setLeaveRequestsLoading(false);
-      },
-      snapshotError => {
-        console.error(
-          "employee_leave_requests_admin_snapshot_error",
-          snapshotError
-        );
-        setLeaveRequests([]);
-        setLeaveRequestsLoading(false);
-      }
-    );
+      })
+      .catch(error => {
+        console.error("employee_leave_requests_hr_core_error", error);
+        if (active) setLeaveRequests([]);
+      })
+      .finally(() => {
+        if (active) setLeaveRequestsLoading(false);
+      });
 
-    return () => unsubscribe();
-  }, [selectedEmployeeAuthUid]);
+    return () => {
+      active = false;
+    };
+  }, [
+    selectedEmployeeAuthUid,
+    selectedEmployeeDocumentId,
+    hrOperationsRevision,
+  ]);
 
   useEffect(() => {
-    if (!selectedEmployeeAuthUid) {
+    if (!selectedEmployeeAuthUid && !selectedEmployeeDocumentId) {
       setServiceRequests([]);
       setServiceRequestsLoading(false);
       return;
     }
 
+    let active = true;
     setServiceRequestsLoading(true);
 
-    const unsubscribe = onSnapshot(
-      query(
-        collection(db, EMPLOYEE_SERVICE_REQUESTS_COLLECTION),
-        where("employeeUid", "==", selectedEmployeeAuthUid)
-      ),
-      snapshot => {
-        const rows = sortEmployeeServiceRequests(
-          snapshot.docs.map(docSnapshot =>
-            normalizeEmployeeServiceRequest(
-              docSnapshot.id,
-              (docSnapshot.data() as Record<string, any>) || {}
+    void listHrCoreServiceRequests({
+      employeeId: selectedEmployeeDocumentId || undefined,
+      employeeUid: selectedEmployeeAuthUid || undefined,
+      limit: 500,
+      offset: 0,
+    })
+      .then(result => {
+        if (!active) return;
+        setServiceRequests(
+          sortEmployeeServiceRequests(
+            result.serviceRequests.map(request =>
+              normalizeEmployeeServiceRequest(request.id, request)
             )
           )
         );
-        setServiceRequests(rows);
-        setServiceRequestsLoading(false);
-      },
-      snapshotError => {
-        console.error(
-          "employee_service_requests_admin_snapshot_error",
-          snapshotError
-        );
-        setServiceRequests([]);
-        setServiceRequestsLoading(false);
-      }
-    );
+      })
+      .catch(error => {
+        console.error("employee_service_requests_hr_core_error", error);
+        if (active) setServiceRequests([]);
+      })
+      .finally(() => {
+        if (active) setServiceRequestsLoading(false);
+      });
 
-    return () => unsubscribe();
-  }, [selectedEmployeeAuthUid]);
+    return () => {
+      active = false;
+    };
+  }, [
+    selectedEmployeeAuthUid,
+    selectedEmployeeDocumentId,
+    hrOperationsRevision,
+  ]);
 
   useEffect(() => {
     setEmployeePasswordResetStatus(null);
@@ -2731,47 +2752,46 @@ export default function EmployeesManagementPage() {
   }, [selectedEmployeeId]);
 
   useEffect(() => {
-    if (!selectedEmployeeAuthUid) {
+    if (!selectedEmployeeAuthUid && !selectedEmployeeDocumentId) {
       setLeaveBalanceAdjustments([]);
       setLeaveBalanceAdjustmentsLoading(false);
       return;
     }
 
+    let active = true;
     setLeaveBalanceAdjustmentsLoading(true);
 
-    const unsubscribe = onSnapshot(
-      query(
-        collection(db, EMPLOYEE_LEAVE_BALANCE_ADJUSTMENTS_COLLECTION),
-        where("employeeUid", "==", selectedEmployeeAuthUid)
-      ),
-      snapshot => {
-        const rows = snapshot.docs
-          .map(docSnapshot => {
-            const data = (docSnapshot.data() as Record<string, any>) || {};
-            return {
-              id: docSnapshot.id,
-              ...data,
-              createdAtDate: toDateSafe(data.createdAt),
-            };
-          })
-          .sort((a, b) => {
-            const aTime = a.createdAtDate?.getTime() || 0;
-            const bTime = b.createdAtDate?.getTime() || 0;
-            return bTime - aTime;
-          });
+    void listHrCoreLeaveBalanceAdjustments({
+      employeeId: selectedEmployeeDocumentId || undefined,
+      employeeUid: selectedEmployeeAuthUid || undefined,
+      limit: 200,
+      offset: 0,
+    })
+      .then(result => {
+        if (!active) return;
+        setLeaveBalanceAdjustments(
+          result.adjustments.map(adjustment => ({
+            ...adjustment,
+            createdAtDate: toDateSafe(adjustment.createdAt),
+          }))
+        );
+      })
+      .catch(error => {
+        console.error("leave_balance_adjustments_hr_core_error", error);
+        if (active) setLeaveBalanceAdjustments([]);
+      })
+      .finally(() => {
+        if (active) setLeaveBalanceAdjustmentsLoading(false);
+      });
 
-        setLeaveBalanceAdjustments(rows);
-        setLeaveBalanceAdjustmentsLoading(false);
-      },
-      error => {
-        console.error("leave_balance_adjustments_snapshot_error", error);
-        setLeaveBalanceAdjustments([]);
-        setLeaveBalanceAdjustmentsLoading(false);
-      }
-    );
-
-    return () => unsubscribe();
-  }, [selectedEmployeeAuthUid]);
+    return () => {
+      active = false;
+    };
+  }, [
+    selectedEmployeeAuthUid,
+    selectedEmployeeDocumentId,
+    hrOperationsRevision,
+  ]);
 
   useEffect(() => {
     resetEmployeeFileForm();
@@ -2803,33 +2823,38 @@ export default function EmployeesManagementPage() {
       return;
     }
 
+    let active = true;
     setEmployeeFilesLoading(true);
-    const unsubscribe = onSnapshot(
-      query(
-        collection(db, EMPLOYEE_FILES_COLLECTION),
-        where("employeeUid", "==", selectedEmployeeAuthUid)
-      ),
-      snapshot => {
-        const rows = sortEmployeeFiles(
-          snapshot.docs.map(docSnapshot =>
-            normalizeEmployeeFileRecord(
-              docSnapshot.id,
-              (docSnapshot.data() as Record<string, any>) || {}
+
+    void listHrCoreEmployeeFiles({
+      employeeUid: selectedEmployeeAuthUid,
+      limit: 200,
+    })
+      .then(response => {
+        if (!active) return;
+        setEmployeeFiles(
+          sortEmployeeFiles(
+            response.employeeFiles.map(file =>
+              normalizeEmployeeFileRecord(
+                file.id,
+                file as Record<string, unknown>
+              )
             )
           )
         );
-        setEmployeeFiles(rows);
-        setEmployeeFilesLoading(false);
-      },
-      snapshotError => {
-        console.error("employee_files_admin_snapshot_error", snapshotError);
-        setEmployeeFiles([]);
-        setEmployeeFilesLoading(false);
-      }
-    );
+      })
+      .catch(error => {
+        console.error("employee_files_hr_core_admin_load_failed", error);
+        if (active) setEmployeeFiles([]);
+      })
+      .finally(() => {
+        if (active) setEmployeeFilesLoading(false);
+      });
 
-    return () => unsubscribe();
-  }, [selectedEmployeeAuthUid]);
+    return () => {
+      active = false;
+    };
+  }, [selectedEmployeeAuthUid, hrOperationsRevision]);
 
   useEffect(() => {
     if (!selectedEmployeeAuthUid) {
@@ -2838,31 +2863,36 @@ export default function EmployeesManagementPage() {
       return;
     }
 
+    let active = true;
     setEmployeeMessagesLoading(true);
-    const unsubscribe = onSnapshot(
-      query(
-        collection(db, EMPLOYEE_MESSAGES_COLLECTION),
-        where("employeeUid", "==", selectedEmployeeAuthUid)
-      ),
-      snapshot => {
-        const rows = snapshot.docs.map(docSnapshot =>
-          normalizeEmployeeMessageRecord(
-            docSnapshot.id,
-            (docSnapshot.data() as Record<string, any>) || {}
+
+    void listHrCoreEmployeeMessages({
+      employeeUid: selectedEmployeeAuthUid,
+      limit: 200,
+    })
+      .then(response => {
+        if (!active) return;
+        setEmployeeMessages(
+          response.employeeMessages.map(message =>
+            normalizeEmployeeMessageRecord(
+              message.id,
+              message as Record<string, any>
+            )
           )
         );
-        setEmployeeMessages(rows);
-        setEmployeeMessagesLoading(false);
-      },
-      snapshotError => {
-        console.error("employee_messages_admin_snapshot_error", snapshotError);
-        setEmployeeMessages([]);
-        setEmployeeMessagesLoading(false);
-      }
-    );
+      })
+      .catch(error => {
+        console.error("employee_messages_hr_core_admin_load_failed", error);
+        if (active) setEmployeeMessages([]);
+      })
+      .finally(() => {
+        if (active) setEmployeeMessagesLoading(false);
+      });
 
-    return () => unsubscribe();
-  }, [selectedEmployeeAuthUid]);
+    return () => {
+      active = false;
+    };
+  }, [selectedEmployeeAuthUid, hrOperationsRevision]);
 
   const initialForm = useMemo(
     () => buildEmployeeFormValues(selectedEmployee),
@@ -3020,7 +3050,8 @@ export default function EmployeesManagementPage() {
     }
 
     if (!employeeEmail) {
-      const message = "لا يوجد بريد مسجل لهذا الموظف لإرسال رابط إعادة التعيين.";
+      const message =
+        "لا يوجد بريد مسجل لهذا الموظف لإرسال رابط إعادة التعيين.";
       setEmployeePasswordResetStatus({ type: "error", message });
       toast.error(message);
       return;
@@ -3157,9 +3188,7 @@ export default function EmployeesManagementPage() {
     } catch (error) {
       console.error("employee_payroll_approval_excel_failed", error);
       toast.error(
-        error instanceof Error
-          ? error.message
-          : "تعذر إنشاء ملف اعتماد الراتب."
+        error instanceof Error ? error.message : "تعذر إنشاء ملف اعتماد الراتب."
       );
     } finally {
       setPayrollReportExportingId(current =>
@@ -3746,6 +3775,16 @@ export default function EmployeesManagementPage() {
       }, 0),
     [salaryDeductions]
   );
+  const approvedPayrollAdvanceTotal = useMemo(
+    () =>
+      approvedPayrollAdvances.reduce((sum, request) => {
+        const amount = Number(request.amount || 0);
+        return sum + (Number.isFinite(amount) ? Math.max(0, amount) : 0);
+      }, 0),
+    [approvedPayrollAdvances]
+  );
+  const payrollTotalDeductions =
+    totalSalaryDeductions + approvedPayrollAdvanceTotal;
 
   const calculatedDailyRate = useMemo(() => {
     if (!Number.isFinite(baseSalaryNumber) || baseSalaryNumber <= 0) return 0;
@@ -3846,10 +3885,10 @@ export default function EmployeesManagementPage() {
       Math.max(
         0,
         calculatedGrossSalary -
-          totalSalaryDeductions -
+          payrollTotalDeductions -
           effectiveInsuranceDeduction
       ),
-    [calculatedGrossSalary, effectiveInsuranceDeduction, totalSalaryDeductions]
+    [calculatedGrossSalary, effectiveInsuranceDeduction, payrollTotalDeductions]
   );
 
   const handleFormChange = <K extends keyof EmployeeFormValues>(
@@ -4055,40 +4094,18 @@ export default function EmployeesManagementPage() {
       return nextAllowedZoneIds;
     }
 
-    const linkedEmployeeId =
+    const employeeId =
       String(selectedEmployee.linkedEmployeeId || "").trim() ||
       selectedEmployee.id;
-    const zonePatch = {
+    const result = await updateHrCoreEmployee(employeeId, {
       allowedZoneIds: nextAllowedZoneIds,
-      employment: {
-        allowedZoneIds: nextAllowedZoneIds,
-        updatedAt: serverTimestamp(),
-      },
-      employeeProfile: {
-        employment: {
-          allowedZoneIds: nextAllowedZoneIds,
-          updatedAt: serverTimestamp(),
-        },
-      },
-      updatedAt: serverTimestamp(),
-    };
-
-    if (linkedEmployeeId) {
-      await setDoc(doc(db, "employees", linkedEmployeeId), zonePatch, {
-        merge: true,
-      });
-    }
-
-    try {
-      await setDoc(doc(db, "users", selectedEmployee.id), zonePatch, {
-        merge: true,
-      });
-    } catch (error) {
-      console.warn("employee_work_zone_user_link_best_effort_failed", {
-        userId: selectedEmployee.id,
-        error,
-      });
-    }
+    });
+    const refreshedEmployee = buildEmployeeRecordFromHrCore(result.employee);
+    setEmployees(current =>
+      current.map(employee =>
+        employee.id === selectedEmployee.id ? refreshedEmployee : employee
+      )
+    );
 
     return nextAllowedZoneIds;
   };
@@ -4127,7 +4144,9 @@ export default function EmployeesManagementPage() {
         center: { lat, lng },
         radiusMeters,
         active: true,
-        officeIp: workZones.find(zone => zone.id === editingWorkZoneId)?.officeIp ?? null,
+        officeIp:
+          workZones.find(zone => zone.id === editingWorkZoneId)?.officeIp ??
+          null,
       } as const;
 
       const savedZone = editingWorkZoneId
@@ -4220,47 +4239,16 @@ export default function EmployeesManagementPage() {
 
     setSavingAbsence(true);
     try {
-      const absenceRef = doc(collection(db, EMPLOYEE_ABSENCES_COLLECTION));
-      await setDoc(absenceRef, {
-        ...buildEmployeeAbsencePayload({
-          employeeId: selectedEmployeeDocumentId,
-          employeeUid: selectedEmployeeAuthUid || selectedEmployee.id,
-          date: normalizedDate,
-          type: normalizedType as EmployeeAbsenceType,
-          note: absenceForm.note,
-          createdByUid: user?.uid || "",
-        }),
-        createdAt: serverTimestamp(),
+      await createHrCoreAbsence({
+        employeeId: selectedEmployeeDocumentId,
+        employeeUid: selectedEmployeeAuthUid || selectedEmployee.id,
+        date: normalizedDate,
+        type: normalizedType === "half_day" ? "half_day" : "full_day",
+        note: String(absenceForm.note || "").trim() || null,
       });
-
-      try {
-        await logAuditEvent({
-          action: "employee_absence_created",
-          category: "user",
-          entityType: "employee_absence",
-          entityId: absenceRef.id,
-          entityPath: absenceRef.path,
-          relatedIds: { userId: selectedEmployee.id },
-          source: buildAuditSource({
-            area: "hr",
-            page: "Employees",
-            method: "create_employee_absence",
-          }),
-          message: `Recorded absence for ${selectedEmployeeLabel}`,
-          meta: {
-            employeeId: selectedEmployeeDocumentId,
-            employeeUid: selectedEmployeeAuthUid || selectedEmployee.id,
-            date: normalizedDate,
-            type: normalizedType,
-            note: String(absenceForm.note || "").trim() || null,
-          },
-        });
-      } catch (auditError) {
-        console.error("employee_absence_audit_failed", auditError);
-      }
-
       setAbsenceForm(buildEmployeeAbsenceFormValues());
-      toast.success("تم تسجيل الغياب بنجاح.");
+      refreshHrOperations();
+      toast.success("تم تسجيل الغياب بنجاح في Cloudflare.");
     } catch (error) {
       console.error("employee_absence_create_failed", error);
       toast.error("تعذر تسجيل الغياب.");
@@ -4285,31 +4273,9 @@ export default function EmployeesManagementPage() {
 
     setDeletingAbsenceId(absence.id);
     try {
-      await auditedDeleteDoc({
-        ref: doc(db, EMPLOYEE_ABSENCES_COLLECTION, absence.id),
-        action: "employee_absence_deleted",
-        category: "user",
-        entityType: "employee_absence",
-        source: buildAuditSource({
-          area: "hr",
-          page: "Employees",
-          method: "delete_employee_absence",
-        }),
-        relatedIds: {
-          userId: selectedEmployee.id,
-        },
-        message: `Deleted employee absence for ${selectedEmployeeLabel}`,
-        meta: {
-          employeeId: absence.employeeId,
-          employeeUid: absence.employeeUid,
-          date: absence.date,
-          type: absence.type,
-          note: absence.note || null,
-          reason: "excuse_provided",
-        },
-      });
-
-      toast.success("تم حذف الغياب من سجل الموظف.");
+      await deleteHrCoreAbsence(absence.id);
+      refreshHrOperations();
+      toast.success("تم حذف الغياب من سجل الموظف في Cloudflare.");
     } catch (error) {
       console.error("employee_absence_delete_failed", error);
       toast.error("تعذر حذف الغياب.");
@@ -4361,15 +4327,9 @@ export default function EmployeesManagementPage() {
     const overtimeHourlyRate = toNullableNumber(form.overtimeHourlyRate);
     const insuranceDeduction = toNullableNumber(form.insuranceDeduction);
     const housingAllowance = toNullableNumber(form.housingAllowance);
-    const transportationAllowance = toNullableNumber(
-      form.transportationAllowance
-    );
+    const transportationAllowance = toNullableNumber(form.transportationAllowance);
     const otherAllowances = toNullableNumber(form.otherAllowances);
-    const allowances = [
-      housingAllowance,
-      transportationAllowance,
-      otherAllowances,
-    ]
+    const allowances = [housingAllowance, transportationAllowance, otherAllowances]
       .filter((value): value is number => typeof value === "number")
       .reduce((sum, value) => sum + value, 0);
     const scheduleSnapshot = {
@@ -4378,83 +4338,63 @@ export default function EmployeesManagementPage() {
       weeklyOffDays: selectedEmployeeShiftSchedule.weeklyOffDays,
     };
     const payrollCalculationStartDate =
-      activePayrollCalculationRange?.calculationStartDate ||
-      selectedPayrollMonthMeta.monthStart;
+      activePayrollCalculationRange?.calculationStartDate || selectedPayrollMonthMeta.monthStart;
     const payrollCalculationEndDate =
-      activePayrollCalculationRange?.calculationEndDate ||
-      selectedPayrollMonthMeta.monthEnd;
+      activePayrollCalculationRange?.calculationEndDate || selectedPayrollMonthMeta.monthEnd;
+
     if (baseSalary === null || baseSalary <= 0) {
       toast.error("يجب إدخال الراتب الأساسي أولًا.");
       return;
     }
-
     if (!scheduleSnapshot.startTime || !scheduleSnapshot.endTime) {
-      toast.error(
-        "يجب تحديد وقت الدوام من بيانات الموظف قبل الاحتساب من الحضور"
-      );
+      toast.error("يجب تحديد وقت الدوام من بيانات الموظف قبل الاحتساب من الحضور");
       return;
     }
-
     if (!selectedEmployeeAuthUid) {
       toast.error("لا يوجد معرف حضور مرتبط بالموظف.");
       return;
     }
-
-    if (
-      payrollMudadDocument &&
-      !isSupportedMudadPayrollDocument(payrollMudadDocument)
-    ) {
+    if (payrollMudadDocument && !isSupportedMudadPayrollDocument(payrollMudadDocument)) {
       toast.error("الصيغ المدعومة لمستند مدد هي PDF أو PNG أو JPG فقط.");
       return;
     }
 
     setCreatingPayrollRecord(true);
     try {
-      const absencesSnapshot = await getDocs(
-        query(
-          collection(db, EMPLOYEE_ABSENCES_COLLECTION),
-          where("employeeId", "==", selectedEmployeeDocumentId)
-        )
-      );
-
-      const monthlyAbsences = sortEmployeeAbsences(
-        absencesSnapshot.docs.map(docSnapshot =>
-          normalizeEmployeeAbsence(
-            docSnapshot.id,
-            (docSnapshot.data() as Record<string, any>) || {}
-          )
-        )
-      ).filter(
+      const monthlyAbsences = employeeAbsences.filter(
         absence =>
           absence.date >= payrollCalculationStartDate &&
           absence.date <= payrollCalculationEndDate
       );
 
-      const normalizedSalaryDeductions =
+      const manualSalaryDeductions =
         normalizeSalaryDeductionsForPersistence(salaryDeductions);
+      const advanceSalaryDeductions = approvedPayrollAdvances.map(advance => ({
+        id: `salary-advance-${advance.id}`,
+        title: `سلفة راتب معتمدة${advance.requestDate ? ` - ${advance.requestDate}` : ""}`,
+        amount: Math.max(0, Number(advance.amount || 0)),
+      }));
+      const effectiveSalaryDeductions = [
+        ...manualSalaryDeductions,
+        ...advanceSalaryDeductions,
+      ];
+
       const attendanceSummary = await buildAttendancePayrollSummary(
         activePayrollCalculationRange,
         payrollCalculationDate,
         monthlyAbsences.map(absence => absence.date)
       );
-      if (attendanceSummary) {
-        setAttendancePayrollSummary(attendanceSummary);
-      }
-      const effectiveExpectedWorkHours =
-        payrollRateWorkHours || expectedWorkHours;
-      const effectiveAttendanceExpectedHours =
-        attendanceSummary?.expectedHours ?? 0;
-      const effectiveActualWorkedHours =
-        attendanceSummary?.actualHours ?? actualWorkedHours;
+      if (attendanceSummary) setAttendancePayrollSummary(attendanceSummary);
+
+      const effectiveExpectedWorkHours = payrollRateWorkHours || expectedWorkHours;
+      const effectiveAttendanceExpectedHours = attendanceSummary?.expectedHours ?? 0;
+      const effectiveActualWorkedHours = attendanceSummary?.actualHours ?? actualWorkedHours;
       const effectiveAttendanceAbsentDays = attendanceSummary?.absentDays ?? 0;
-      const attendanceAbsentDateKeys = new Set(
-        attendanceSummary?.absentDateKeys || []
-      );
+      const attendanceAbsentDateKeys = new Set(attendanceSummary?.absentDateKeys || []);
       const payrollAbsences = monthlyAbsences.filter(
         absence => !attendanceAbsentDateKeys.has(absence.date)
       );
-      const effectiveExpectedWorkDays =
-        payrollExpectedWorkDaysNumber || expectedWorkDays;
+      const effectiveExpectedWorkDays = payrollExpectedWorkDaysNumber || expectedWorkDays;
       const payrollComputation = computeEmployeePayroll({
         baseSalary,
         allowances,
@@ -4467,28 +4407,22 @@ export default function EmployeesManagementPage() {
         actualWorkedHours: effectiveActualWorkedHours,
         overtimeHourlyRate,
         insuranceDeduction,
-        salaryDeductions: normalizedSalaryDeductions,
+        salaryDeductions: effectiveSalaryDeductions,
         absences: payrollAbsences,
       });
       const combinedAbsenceDays =
-        payrollComputation.absenceDays +
-        payrollComputation.attendanceAbsentDays;
+        payrollComputation.absenceDays + payrollComputation.attendanceAbsentDays;
       const combinedAbsenceDeduction =
-        payrollComputation.absenceDeduction +
-        payrollComputation.attendanceAbsenceDeduction;
-
-      const payrollRef = doc(
-        db,
-        EMPLOYEE_PAYROLL_RECORDS_COLLECTION,
-        buildEmployeePayrollRecordId(
-          selectedEmployeeDocumentId,
-          selectedPayrollMonthMeta.payrollMonth
-        )
+        payrollComputation.absenceDeduction + payrollComputation.attendanceAbsenceDeduction;
+      const payrollRecordId = buildEmployeePayrollRecordId(
+        selectedEmployeeDocumentId,
+        selectedPayrollMonthMeta.payrollMonth
       );
+
       const uploadedMudadDocument = payrollMudadDocument
         ? await uploadDocumentToCloudflare({
             entityType: "employee_payroll_record",
-            entityId: payrollRef.id,
+            entityId: payrollRecordId,
             category: "employee_payroll_mudad_document",
             file: payrollMudadDocument,
             kind: "attachment",
@@ -4511,63 +4445,72 @@ export default function EmployeesManagementPage() {
           }
         : null;
 
-      await runTransaction(db, async tx => {
-        const existingRecord = await tx.get(payrollRef);
-        if (existingRecord.exists()) {
-          throw new Error("payroll_record_exists");
-        }
+      const payrollPayload = {
+        id: payrollRecordId,
+        employeeId: selectedEmployeeDocumentId,
+        employeeUid: selectedEmployeeAuthUid || selectedEmployee.id,
+        payrollMonth: selectedPayrollMonthMeta.payrollMonth,
+        monthStart: selectedPayrollMonthMeta.monthStart,
+        monthEnd: selectedPayrollMonthMeta.monthEnd,
+        calculationStartDate: payrollCalculationStartDate,
+        calculationEndDate: payrollCalculationEndDate,
+        baseSalary: payrollComputation.baseSalary,
+        allowances: payrollComputation.allowances,
+        housingAllowance,
+        transportationAllowance,
+        otherAllowances,
+        absenceDays: combinedAbsenceDays,
+        absenceDeduction: combinedAbsenceDeduction,
+        delayDeduction: payrollComputation.delayDeduction,
+        overtimeBonus: payrollComputation.overtimeBonus,
+        insuranceDeduction: payrollComputation.insuranceDeduction,
+        salaryDeductions: manualSalaryDeductions,
+        salaryAdvanceRequestIds: approvedPayrollAdvances.map(advance => advance.id),
+        totalSalaryDeductions: payrollComputation.totalSalaryDeductions,
+        expectedWorkHours: effectiveExpectedWorkHours,
+        actualWorkedHours: effectiveActualWorkedHours,
+        attendanceLateHours: attendanceSummary?.lateHours ?? null,
+        attendanceMissingHours: attendanceSummary?.missingHours ?? null,
+        attendanceOvertimeHours: attendanceSummary?.overtimeHours ?? null,
+        attendanceCompleteDays: attendanceSummary?.completeDays ?? null,
+        attendanceIncompleteDays: attendanceSummary?.incompleteDays ?? null,
+        attendanceAbsentDays: payrollComputation.attendanceAbsentDays,
+        attendanceAbsenceDeduction: payrollComputation.attendanceAbsenceDeduction,
+        attendanceSource: "cloudflare_attendance",
+        attendanceSummary: attendanceSummary || {},
+        scheduleSnapshot,
+        absenceEntries: payrollAbsences.map(absence => ({
+          date: absence.date,
+          type: absence.type,
+          note: absence.note || null,
+        })),
+        finalSalary: payrollComputation.finalSalary,
+        mudadDocument: mudadDocumentPayload,
+      };
 
-        tx.set(payrollRef, {
-          employeeId: selectedEmployeeDocumentId,
-          employeeUid: selectedEmployeeAuthUid || selectedEmployee.id,
-          payrollMonth: selectedPayrollMonthMeta.payrollMonth,
-          monthStart: selectedPayrollMonthMeta.monthStart,
-          monthEnd: selectedPayrollMonthMeta.monthEnd,
-          calculationStartDate: payrollCalculationStartDate,
-          calculationEndDate: payrollCalculationEndDate,
-          baseSalary: payrollComputation.baseSalary,
-          allowances: payrollComputation.allowances,
-          housingAllowance,
-          transportationAllowance,
-          otherAllowances,
-          absenceDays: combinedAbsenceDays,
-          absenceDeduction: combinedAbsenceDeduction,
-          delayDeduction: payrollComputation.delayDeduction,
-          overtimeBonus: payrollComputation.overtimeBonus,
-          insuranceDeduction: payrollComputation.insuranceDeduction,
-          salaryDeductions: normalizedSalaryDeductions,
-          totalSalaryDeductions: payrollComputation.totalSalaryDeductions,
-          expectedWorkHours: effectiveExpectedWorkHours,
-          actualWorkedHours: effectiveActualWorkedHours,
-          attendanceLateHours: attendanceSummary?.lateHours ?? null,
-          attendanceMissingHours: attendanceSummary?.missingHours ?? null,
-          attendanceOvertimeHours: attendanceSummary?.overtimeHours ?? null,
-          attendanceCompleteDays: attendanceSummary?.completeDays ?? null,
-          attendanceIncompleteDays: attendanceSummary?.incompleteDays ?? null,
-          attendanceAbsentDays: payrollComputation.attendanceAbsentDays,
-          attendanceAbsenceDeduction:
-            payrollComputation.attendanceAbsenceDeduction,
-          scheduleSnapshot,
-          absenceCount: payrollAbsences.length,
-          absenceEntriesSummary: payrollAbsences.map(absence => ({
-            date: absence.date,
-            type: absence.type,
-          })),
-          finalSalary: payrollComputation.finalSalary,
-          mudadDocument: mudadDocumentPayload,
-          createdAt: serverTimestamp(),
-          createdByUid: user?.uid || null,
-          createdByEmail: user?.email || null,
-        });
-      });
+
+        const created = await createHrCorePayrollRecord(payrollPayload);
+        const normalizedRecord = normalizeEmployeePayrollRecord(
+          created.payrollRecord.id,
+          created.payrollRecord as Record<string, any>
+        );
+        setEmployeePayrollRecords(current =>
+          sortEmployeePayrollRecords([
+            normalizedRecord,
+            ...current.filter(record => record.id !== normalizedRecord.id),
+          ])
+        );
+        setApprovedPayrollAdvances([]);
+        setPayrollRevision(current => current + 1);
+
 
       try {
         await logAuditEvent({
           action: "employee_payroll_record_created",
           category: "finance",
           entityType: "employee_payroll_record",
-          entityId: payrollRef.id,
-          entityPath: payrollRef.path,
+          entityId: payrollRecordId,
+          entityPath: `cloudflare:employee_payroll_records/${payrollRecordId}`,
           relatedIds: { userId: selectedEmployee.id },
           source: buildAuditSource({
             area: "hr",
@@ -4576,45 +4519,27 @@ export default function EmployeesManagementPage() {
           }),
           message: `Created payroll record for ${selectedEmployeeLabel}`,
           meta: {
-            employeeId: selectedEmployeeDocumentId,
-            employeeUid: selectedEmployeeAuthUid || selectedEmployee.id,
-            payrollMonth: selectedPayrollMonthMeta.payrollMonth,
-            baseSalary: payrollComputation.baseSalary,
-            allowances: payrollComputation.allowances,
-            housingAllowance,
-            transportationAllowance,
-            otherAllowances,
-            absenceDays: combinedAbsenceDays,
-            absenceDeduction: combinedAbsenceDeduction,
-            delayDeduction: payrollComputation.delayDeduction,
-            overtimeBonus: payrollComputation.overtimeBonus,
-            totalSalaryDeductions: payrollComputation.totalSalaryDeductions,
-            finalSalary: payrollComputation.finalSalary,
-            scheduleSnapshot,
-            mudadDocument: mudadDocumentPayload
-              ? {
-                  id: mudadDocumentPayload.id,
-                  fileName: mudadDocumentPayload.fileName,
-                  filePath: mudadDocumentPayload.filePath,
-                  contentType: mudadDocumentPayload.contentType,
-                  fileSize: mudadDocumentPayload.fileSize,
-                }
-              : null,
+            ...payrollPayload,
+            salaryAdvanceDeduction: advanceSalaryDeductions.reduce(
+              (sum, item) => sum + item.amount,
+              0
+            ),
           },
         });
       } catch (auditError) {
         console.error("employee_payroll_record_audit_failed", auditError);
       }
 
-      toast.success(
-        `تم إنشاء سجل راتب ${selectedPayrollMonthMeta.label} بنجاح.`
-      );
+      toast.success(`تم إنشاء سجل راتب ${selectedPayrollMonthMeta.label} بنجاح.`);
       resetPayrollMudadDocument();
     } catch (error) {
       console.error("employee_payroll_record_create_failed", error);
-
-      if (error instanceof Error && error.message === "payroll_record_exists") {
+      const code = error instanceof Error ? (error as Error & { code?: string }).code || error.message : "";
+      if (code === "payroll_record_exists") {
         toast.error("يوجد سجل راتب محفوظ لهذا الشهر بالفعل.");
+      } else if (code === "invalid_or_settled_salary_advance") {
+        toast.error("إحدى السلف المعتمدة خُصمت سابقًا أو لم تعد صالحة.");
+        setPayrollRevision(current => current + 1);
       } else {
         toast.error("تعذر إنشاء سجل راتب نهاية الشهر.");
       }
@@ -4892,30 +4817,17 @@ export default function EmployeesManagementPage() {
         uploadedAt: uploaded.uploadedAt,
       };
 
-      const userRef = doc(db, "users", selectedEmployee.id);
-      const employeeRef = selectedEmployee.linkedEmployeeId
-        ? doc(db, "employees", selectedEmployee.linkedEmployeeId)
-        : null;
-
-      await setDoc(
-        userRef,
-        {
-          ...buildEmployeeAvatarPatch(avatarPayload),
-          updatedAt: serverTimestamp(),
-        },
-        { merge: true }
+      const hrCoreResult = await updateHrCoreEmployee(employeeId, {
+        avatarUrl: avatarPayload.fileUrl || null,
+      });
+      const refreshedEmployee = buildEmployeeRecordFromHrCore(
+        hrCoreResult.employee
       );
-
-      if (employeeRef) {
-        await setDoc(
-          employeeRef,
-          {
-            ...buildEmployeeAvatarPatch(avatarPayload),
-            updatedAt: serverTimestamp(),
-          },
-          { merge: true }
-        );
-      }
+      setEmployees(current =>
+        current.map(employee =>
+          employee.id === selectedEmployee.id ? refreshedEmployee : employee
+        )
+      );
 
       const currentAuthUser = auth.currentUser;
       if (
@@ -4969,16 +4881,18 @@ export default function EmployeesManagementPage() {
 
     setOpeningEmployeeConversationId(conversation.id);
     try {
-      const batch = writeBatch(db);
-      unreadIncomingMessages.forEach(message => {
-        batch.update(doc(db, EMPLOYEE_MESSAGES_COLLECTION, message.id), {
-          isRead: true,
-          readAt: serverTimestamp(),
-          status: "read",
-          updatedAt: serverTimestamp(),
-        });
-      });
-      await batch.commit();
+
+        const ids = unreadIncomingMessages.map(message => message.id);
+        await markHrCoreEmployeeMessagesRead(ids);
+        const now = new Date();
+        setEmployeeMessages(current =>
+          current.map(message =>
+            ids.includes(message.id)
+              ? { ...message, isRead: true, status: "read", readAt: now, readAtDate: now }
+              : message
+          )
+        );
+
     } catch (error) {
       console.error("employee_conversation_mark_read_failed", error);
     } finally {
@@ -5035,7 +4949,7 @@ export default function EmployeesManagementPage() {
 
     setSendingEmployeeMessage(true);
     try {
-      const messageRef = doc(collection(db, EMPLOYEE_MESSAGES_COLLECTION));
+      const messageId = crypto.randomUUID();
       const isReply = Boolean(
         activeEmployeeConversation && !composeEmployeeMessageAsNew
       );
@@ -5045,8 +4959,8 @@ export default function EmployeesManagementPage() {
           ] || null
         : null;
       const conversationId = isReply
-        ? activeEmployeeConversation?.conversationId || messageRef.id
-        : messageRef.id;
+        ? activeEmployeeConversation?.conversationId || messageId
+        : messageId;
       const employeeDisplayName =
         selectedEmployeeLabel !== EMPLOYEE_EMPTY_VALUE
           ? selectedEmployeeLabel
@@ -5056,7 +4970,7 @@ export default function EmployeesManagementPage() {
             "الموظف";
       const senderDisplayName = user?.displayName || user?.email || "HR";
 
-      await setDoc(messageRef, {
+      const messagePayload = {
         employeeId: selectedEmployee.id,
         employeeUid: selectedEmployeeAuthUid,
         conversationId,
@@ -5075,11 +4989,27 @@ export default function EmployeesManagementPage() {
         type: normalizedType,
         relatedTo: parentMessage ? "employee_message" : null,
         relatedId: parentMessage?.id || null,
-        createdAt: serverTimestamp(),
+        createdAt: new Date().toISOString(),
         isRead: false,
         readAt: null,
-        updatedAt: serverTimestamp(),
-      } satisfies EmployeeMessageDoc);
+        updatedAt: new Date().toISOString(),
+      } satisfies EmployeeMessageDoc;
+
+
+        const response = await createHrCoreEmployeeMessage({
+          id: messageId,
+          ...messagePayload,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+        setEmployeeMessages(current => [
+          ...current,
+          normalizeEmployeeMessageRecord(
+            response.employeeMessage.id,
+            response.employeeMessage as Record<string, any>
+          ),
+        ]);
+
 
       let notificationFailed = false;
       try {
@@ -5093,9 +5023,9 @@ export default function EmployeesManagementPage() {
                 : "رسالة جديدة من HR",
           body: normalizedMessage,
           type: "message",
-          relatedId: messageRef.id,
+          relatedId: messageId,
           relatedTo: "employee_message",
-          relatedPath: `/hr/messages?messageId=${messageRef.id}`,
+          relatedPath: `/hr/messages?messageId=${messageId}`,
         });
       } catch (notificationError) {
         notificationFailed = true;
@@ -5185,7 +5115,7 @@ export default function EmployeesManagementPage() {
         storageFolder: "official_documents",
       });
 
-      const fileRef = doc(collection(db, EMPLOYEE_FILES_COLLECTION));
+      const fileRecordId = crypto.randomUUID();
       const uploadedByName = user?.displayName || user?.email || "HR";
       const replacedCandidates = employeeOfficialFiles.filter(file => {
         if (!file.active) return false;
@@ -5233,24 +5163,33 @@ export default function EmployeesManagementPage() {
         replacesFileId: replacedCandidates[0]?.id || null,
         isRead: false,
         readAt: null,
-        updatedAt: serverTimestamp(),
+        updatedAt: new Date().toISOString(),
       };
 
-      await runTransaction(db, async tx => {
-        replacedCandidates.forEach(file => {
-          tx.update(doc(db, EMPLOYEE_FILES_COLLECTION, file.id), {
-            status: "replaced",
-            active: false,
-            replacedAt: serverTimestamp(),
-            replacedBy: user?.uid || null,
-            replacedByName: uploadedByName,
-            replacedByFileId: fileRef.id,
-            updatedAt: serverTimestamp(),
-          });
-        });
 
-        tx.set(fileRef, fileDoc);
-      });
+        const response = await createHrCoreEmployeeFile({
+          id: fileRecordId,
+          ...fileDoc,
+          replaceFileIds: replacedCandidates.map(file => file.id),
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+        const created = normalizeEmployeeFileRecord(
+          response.employeeFile.id,
+          response.employeeFile as Record<string, unknown>
+        );
+        const replacedIds = new Set(replacedCandidates.map(file => file.id));
+        setEmployeeFiles(current =>
+          sortEmployeeFiles([
+            created,
+            ...current.map(file =>
+              replacedIds.has(file.id)
+                ? { ...file, active: false, status: "replaced" }
+                : file
+            ),
+          ])
+        );
+
 
       await logAuditEvent({
         action: replacedCandidates.length
@@ -5258,8 +5197,8 @@ export default function EmployeesManagementPage() {
           : "employee_file_uploaded",
         category: "user",
         entityType: "employee_file",
-        entityId: fileRef.id,
-        entityPath: fileRef.path,
+        entityId: fileRecordId,
+        entityPath: `cloudflare:hr_employee_files/${fileRecordId}`,
         source: buildAuditSource({
           area: "hr",
           page: "Employees",
@@ -5296,7 +5235,7 @@ export default function EmployeesManagementPage() {
             ? `تم تحديث "${normalizedTitle}" داخل ملفك الوظيفي.`
             : `تمت إضافة "${normalizedTitle}" إلى ملفك الوظيفي.`,
           type: "file",
-          relatedId: fileRef.id,
+          relatedId: fileRecordId,
           relatedTo: "employee_file",
           relatedPath: "/hr/profile",
         });
@@ -5336,32 +5275,10 @@ export default function EmployeesManagementPage() {
 
     setDeletingEmployeeFileId(file.id);
     try {
-      // The current Cloudflare Worker does not expose a delete endpoint for R2 objects.
-      // This action removes only the Firestore employee_files record.
-      await auditedDeleteDoc({
-        ref: doc(db, EMPLOYEE_FILES_COLLECTION, file.id),
-        action: "employee_file_deleted",
-        category: "user",
-        entityType: "employee_file",
-        source: buildAuditSource({
-          area: "hr",
-          page: "Employees",
-          method: "delete_employee_file",
-        }),
-        relatedIds: {
-          userId: selectedEmployee.id,
-        },
-        message: `Deleted employee file for ${selectedEmployeeLabel}`,
-        meta: {
-          employeeId: file.employeeId,
-          employeeUid: file.employeeUid,
-          employeeName: file.employeeName || null,
-          title: file.title,
-          fileName: file.fileName,
-          fileType: file.fileType || EMPLOYEE_DEFAULT_FILE_TYPE,
-          storageCleanupSupported: false,
-        },
-      });
+
+        await deleteHrCoreEmployeeFile(file.id);
+        setEmployeeFiles(current => current.filter(item => item.id !== file.id));
+
 
       if (replacingEmployeeFileId === file.id) {
         resetEmployeeFileForm();
@@ -5423,7 +5340,7 @@ export default function EmployeesManagementPage() {
         storageFolder: "internal_files",
       });
 
-      const fileRef = doc(collection(db, EMPLOYEE_FILES_COLLECTION));
+      const fileRecordId = crypto.randomUUID();
       const uploadedByName = user?.displayName || user?.email || "HR";
       const replacedCandidates = employeeFiles.filter(file => {
         if (!file.active) return false;
@@ -5470,24 +5387,33 @@ export default function EmployeesManagementPage() {
           replacingEmployeeFileId || replacedCandidates[0]?.id || null,
         isRead: false,
         readAt: null,
-        updatedAt: serverTimestamp(),
+        updatedAt: new Date().toISOString(),
       };
 
-      await runTransaction(db, async tx => {
-        replacedCandidates.forEach(file => {
-          tx.update(doc(db, EMPLOYEE_FILES_COLLECTION, file.id), {
-            status: "replaced",
-            active: false,
-            replacedAt: serverTimestamp(),
-            replacedBy: user?.uid || null,
-            replacedByName: uploadedByName,
-            replacedByFileId: fileRef.id,
-            updatedAt: serverTimestamp(),
-          });
-        });
 
-        tx.set(fileRef, fileDoc as any);
-      });
+        const response = await createHrCoreEmployeeFile({
+          id: fileRecordId,
+          ...fileDoc,
+          replaceFileIds: replacedCandidates.map(file => file.id),
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+        const created = normalizeEmployeeFileRecord(
+          response.employeeFile.id,
+          response.employeeFile as Record<string, unknown>
+        );
+        const replacedIds = new Set(replacedCandidates.map(file => file.id));
+        setEmployeeFiles(current =>
+          sortEmployeeFiles([
+            created,
+            ...current.map(file =>
+              replacedIds.has(file.id)
+                ? { ...file, active: false, status: "replaced" }
+                : file
+            ),
+          ])
+        );
+
 
       await logAuditEvent({
         action: replacedCandidates.length
@@ -5495,8 +5421,8 @@ export default function EmployeesManagementPage() {
           : "employee_file_uploaded",
         category: "user",
         entityType: "employee_file",
-        entityId: fileRef.id,
-        entityPath: fileRef.path,
+        entityId: fileRecordId,
+        entityPath: `cloudflare:hr_employee_files/${fileRecordId}`,
         source: buildAuditSource({
           area: "hr",
           page: "Employees",
@@ -5532,7 +5458,7 @@ export default function EmployeesManagementPage() {
             ? `تم استبدال "${normalizedTitle}" بنسخة محدثة داخل ملفك الوظيفي.`
             : `تمت إضافة "${normalizedTitle}" إلى ملفك الوظيفي.`,
           type: "file",
-          relatedId: fileRef.id,
+          relatedId: fileRecordId,
           relatedTo: "employee_file",
           relatedPath: "/hr/files",
         });
@@ -5748,130 +5674,56 @@ export default function EmployeesManagementPage() {
         fingerprintNumber: normalizedFingerprintNumber || null,
         allowedZoneIds,
         adminNotes: form.adminNotes.trim() || null,
-        updatedAt: serverTimestamp(),
+        updatedAt: new Date().toISOString(),
         updatedByUid: user?.uid || null,
         updatedByEmail: user?.email || null,
       };
 
-      try {
-        await auditedUpdateDoc({
-          ref: doc(db, "users", selectedEmployee.id),
-          data: {
-            displayName: normalizedFullName,
-            name: normalizedFullName,
-            fullName: normalizedFullName,
-            email: normalizedEmail,
-            phone: normalizedPhone || null,
-            "profile.name": normalizedFullName,
-            "profile.displayName": normalizedFullName,
-            "profile.email": normalizedEmail,
-            "profile.phone": normalizedPhone || null,
-            title: form.jobTitle.trim() || null,
-            department: form.department.trim() || null,
-            employeeProfileEnabled: true,
-            includeInEmployeeManagement: true,
-            linkedEmployeeId,
-            allowedZoneIds,
-            startDate: form.startDate || null,
-            leaveBalance,
-            updatedAt: serverTimestamp(),
-            employment: nextEmployment,
-            "employeeProfile.personal": nextPersonal,
-            "employeeProfile.employment": nextEmployment,
-          } as any,
-          action: AUDIT_ACTIONS.USER_UPDATED,
-          category: "user",
-          entityType: "user",
-          source: buildAuditSource({
-            area: "hr",
-            page: "Employees",
-            method: "update_employment_profile",
-          }),
-          relatedIds: { userId: selectedEmployee.id },
-          message: `Updated employee employment profile for ${selectedEmployeeLabel}`,
-          meta: {
-            targetUserEmail: normalizedEmail,
-            targetUserName: normalizedFullName,
-            phone: normalizedPhone || null,
-            jobTitle: nextEmployment.jobTitle || null,
-            department: nextEmployment.department || null,
-            employmentStatus: nextEmployment.employmentStatus || null,
-            fingerprintNumber: nextEmployment.fingerprintNumber || null,
-            allowedZoneIds,
-            leaveBalance,
-            baseSalary,
-            housingAllowance,
-            transportationAllowance,
-            otherAllowances,
-            allowances,
-            expectedWorkDays,
-            expectedWorkHours,
-            actualWorkedHours,
-            shiftStartTime,
-            shiftEndTime,
-            workSchedule,
-            overtimeHours: calculatedOvertimeHours,
-            missingHours: calculatedMissingHours,
-            hoursDifference: calculatedHoursDifference,
-            overtimeHourlyRate: effectiveOvertimeHourlyRate,
-            calculatedDailyRate,
-            calculatedHourlyRate,
-            calculatedOvertimeAmount,
-            calculatedMissingDeduction,
-            insuranceDeduction,
-            totalSalaryDeductions,
-            calculatedGrossSalary,
-            calculatedNetSalary,
-          },
-        });
-      } catch (error) {
-        console.error("save_employee_profile_user_update_error", {
-          userId: selectedEmployee.id,
-          error,
-        });
-        throw error;
-      }
 
-      if (linkedEmployeeId) {
-        try {
-          await setDoc(
-            doc(db, "employees", linkedEmployeeId),
-            {
-              uid: linkedUserUid,
-              linkedUserUid: linkedUserUid,
-              name: normalizedFullName,
-              displayName: normalizedFullName,
-              fullName: normalizedFullName,
-              email: normalizedEmail,
-              phone: normalizedPhone || null,
-              profile: {
-                name: normalizedFullName,
-                displayName: normalizedFullName,
-                email: normalizedEmail,
-                phone: normalizedPhone || null,
-              },
-              title: form.jobTitle.trim() || null,
-              department: form.department.trim() || null,
-              allowedZoneIds,
-              startDate: form.startDate || null,
-              leaveBalance,
-              updatedAt: serverTimestamp(),
-              employment: nextEmployment,
-              employeeProfile: {
-                personal: nextPersonal,
-                employment: nextEmployment,
-              },
-            },
-            { merge: true }
-          );
-        } catch (error) {
-          console.error("save_employee_profile_employee_update_error", {
-            employeeDocId: linkedEmployeeId,
-            error,
-          });
-          throw error;
-        }
-      }
+        const hrCoreResult = await updateHrCoreEmployee(linkedEmployeeId, {
+          authUid: linkedUserUid,
+          name: normalizedFullName,
+          email: normalizedEmail,
+          phone: normalizedPhone || null,
+          avatarUrl:
+            pickText(
+              selectedEmployee.photoURL,
+              selectedEmployeeProfile?.personal?.avatarUrl
+            ) || null,
+          title: form.jobTitle.trim() || null,
+          department: form.department.trim() || null,
+          employeeCode: pickText(nextEmployment.employeeCode) || null,
+          fingerprintNumber: normalizedFingerprintNumber || null,
+          employmentStatus: form.employmentStatus || "active",
+          isActive: !["inactive", "suspended", "terminated"].includes(
+            String(form.employmentStatus || "active").toLowerCase()
+          ),
+          startDate: form.startDate || null,
+          leaveBalance,
+          baseSalary,
+          housingAllowance,
+          transportationAllowance,
+          otherAllowances,
+          insuranceDeduction,
+          shiftStartTime,
+          shiftEndTime,
+          weeklyOffDays,
+          allowedZoneIds,
+          salaryDeductions: normalizedSalaryDeductions,
+          adminNotes: form.adminNotes.trim() || null,
+          personal: nextPersonal,
+          employment: nextEmployment as unknown as Record<string, unknown>,
+        });
+
+        const refreshedEmployee = buildEmployeeRecordFromHrCore(
+          hrCoreResult.employee
+        );
+        setEmployees(current =>
+          current.map(employee =>
+            employee.id === selectedEmployee.id ? refreshedEmployee : employee
+          )
+        );
+
 
       toast.success("تم حفظ بيانات الموظف الوظيفية.");
     } catch {
@@ -5902,16 +5754,13 @@ export default function EmployeesManagementPage() {
       return;
     }
 
-    if (operationType === "deduct") {
-      if (manualBalanceValue <= 0) {
-        toast.error("أدخل عدد أيام صالحًا للخصم.");
-        return;
-      }
-
-      if (manualBalanceValue > currentLeaveBalanceNumber) {
-        toast.error("لا يمكن خصم عدد أيام أكبر من الرصيد الحالي.");
-        return;
-      }
+    if (
+      operationType === "deduct" &&
+      (manualBalanceValue <= 0 ||
+        manualBalanceValue > currentLeaveBalanceNumber)
+    ) {
+      toast.error("لا يمكن خصم عدد أيام غير صالح أو أكبر من الرصيد الحالي.");
+      return;
     }
 
     if (!reason) {
@@ -5921,159 +5770,38 @@ export default function EmployeesManagementPage() {
 
     setSavingManualLeaveBalance(true);
     try {
-      const linkedUserUid =
-        String(selectedEmployee.uid || selectedEmployee.id || "").trim() ||
+      const employeeId =
+        selectedEmployeeDocumentId ||
+        String(selectedEmployee.linkedEmployeeId || "").trim() ||
         selectedEmployee.id;
-
-      const userRef = doc(db, "users", selectedEmployee.id);
-      const employeeDocId = String(
-        selectedEmployee.linkedEmployeeId || ""
-      ).trim();
-      const employeeRef = employeeDocId
-        ? doc(db, "employees", employeeDocId)
-        : null;
-
-      const adjustmentRef = doc(
-        collection(db, EMPLOYEE_LEAVE_BALANCE_ADJUSTMENTS_COLLECTION)
-      );
-      let persistedNextBalance = manualBalanceValue;
-
-      await runTransaction(db, async tx => {
-        const userSnap = await tx.get(userRef);
-        if (!userSnap.exists()) {
-          throw new Error("employee_user_not_found");
-        }
-
-        const userData = (userSnap.data() as Record<string, any>) || {};
-        const userEmployment = (userData.employeeProfile?.employment ||
-          userData.employment ||
-          {}) as Record<string, any>;
-
-        const employeeSnap = employeeRef ? await tx.get(employeeRef) : null;
-        const employeeData =
-          employeeSnap?.exists() && employeeSnap.data()
-            ? (employeeSnap.data() as Record<string, any>) || {}
-            : null;
-
-        const employeeEmployment = (employeeData?.employeeProfile?.employment ||
-          employeeData?.employment ||
-          {}) as Record<string, any>;
-
-        const previousBalance = resolveEmploymentLeaveBalance(
-          userData,
-          employeeData
-        );
-        const nextBalance =
-          operationType === "deduct"
-            ? previousBalance - manualBalanceValue
-            : manualBalanceValue;
-        const operationLabel = operationType === "deduct" ? "خصم" : "إضافة";
-
-        if (!Number.isFinite(nextBalance) || nextBalance < 0) {
-          throw new Error("leave_balance_invalid_operation");
-        }
-        persistedNextBalance = nextBalance;
-
-        const leaveBalanceAdjustmentMeta = {
-          previousBalance,
-          nextBalance,
-          operationType,
-          operationLabel,
-          reason,
-          adjustedAt: serverTimestamp(),
-          adjustedByUid: user?.uid || null,
-          adjustedByEmail: user?.email || null,
-          adjustedByName: user?.displayName || user?.email || null,
-        };
-
-        const nextUserEmployment = {
-          ...userEmployment,
-          leaveBalance: nextBalance,
-          leaveBalanceAdjustmentMeta,
-          updatedAt: serverTimestamp(),
-          updatedByUid: user?.uid || null,
-          updatedByEmail: user?.email || null,
-        };
-
-        tx.set(
-          userRef,
-          {
-            leaveBalance: nextBalance,
-            updatedAt: serverTimestamp(),
-            employment: nextUserEmployment,
-            employeeProfile: {
-              personal: (userData.employeeProfile?.personal ||
-                userData.personal ||
-                null) as Record<string, any> | null,
-              employment: nextUserEmployment,
-            },
-          },
-          { merge: true }
-        );
-
-        if (employeeRef) {
-          const nextEmployeeEmployment = {
-            ...employeeEmployment,
-            leaveBalance: nextBalance,
-            leaveBalanceAdjustmentMeta,
-            updatedAt: serverTimestamp(),
-            updatedByUid: user?.uid || null,
-            updatedByEmail: user?.email || null,
-          };
-
-          tx.set(
-            employeeRef,
-            {
-              uid: linkedUserUid,
-              linkedUserUid,
-              leaveBalance: nextBalance,
-              updatedAt: serverTimestamp(),
-              employment: nextEmployeeEmployment,
-              employeeProfile: {
-                personal: (employeeData?.employeeProfile?.personal ||
-                  employeeData?.personal ||
-                  null) as Record<string, any> | null,
-                employment: nextEmployeeEmployment,
-              },
-            },
-            { merge: true }
-          );
-        }
-
-        tx.set(adjustmentRef, {
-          employeeId:
-            String(selectedEmployee.linkedEmployeeId || "").trim() ||
-            selectedEmployee.id,
-          employeeUid: selectedEmployeeAuthUid || selectedEmployee.id,
-          userId: selectedEmployee.id,
-          employeeName:
-            selectedEmployeeLabel !== EMPLOYEE_EMPTY_VALUE
-              ? selectedEmployeeLabel
-              : selectedEmployee.displayName ||
-                selectedEmployee.name ||
-                selectedEmployee.email ||
-                "الموظف",
-          previousBalance,
-          nextBalance,
-          difference: nextBalance - previousBalance,
-          operationType,
-          operationLabel,
-          reason,
-          createdAt: serverTimestamp(),
-          createdByUid: user?.uid || null,
-          createdByEmail: user?.email || null,
-          createdByName: user?.displayName || user?.email || null,
-        });
+      const result = await adjustHrCoreEmployeeLeaveBalance(employeeId, {
+        value: manualBalanceValue,
+        operationType,
+        reason,
       });
+      const persistedNextBalance = Number(result.adjustment.nextBalance || 0);
+      const refreshedEmployee = buildEmployeeRecordFromHrCore(result.employee);
 
+      setEmployees(current =>
+        current.map(employee =>
+          employee.id === selectedEmployee.id ? refreshedEmployee : employee
+        )
+      );
+      setLeaveBalanceAdjustments(current => [
+        {
+          ...result.adjustment,
+          createdAtDate: toDateSafe(result.adjustment.createdAt),
+        },
+        ...current.filter(item => item.id !== result.adjustment.id),
+      ]);
       setForm(current => ({
         ...current,
         leaveBalance: String(persistedNextBalance),
       }));
-
       setManualLeaveBalance(String(persistedNextBalance));
       setManualLeaveBalanceOperation("add");
       setManualLeaveAdjustmentReason("");
+      refreshHrOperations();
 
       toast.success(
         tr(
@@ -6131,7 +5859,11 @@ export default function EmployeesManagementPage() {
     const startDate = buildLeaveDateFromInput(dateKey);
     if (!startDate) {
       toast.error(
-        tr(language, "تعذر تحديد تاريخ الإجازة.", "Could not resolve leave date.")
+        tr(
+          language,
+          "تعذر تحديد تاريخ الإجازة.",
+          "Could not resolve leave date."
+        )
       );
       return;
     }
@@ -6160,131 +5892,41 @@ export default function EmployeesManagementPage() {
     setSavingEmergencyLeave(true);
     try {
       let createdLeaveRequestId = "";
-      await runTransaction(db, async tx => {
-        const userRef = doc(db, "users", selectedEmployee.id);
-        const userSnap = await tx.get(userRef);
-        if (!userSnap.exists()) {
-          throw new Error("employee_user_not_found");
-        }
 
-        const userData = (userSnap.data() as Record<string, any>) || {};
-        const userEmployment = (userData.employeeProfile?.employment ||
-          userData.employment ||
-          {}) as Record<string, any>;
 
-        const employeeDocId = String(selectedEmployeeDocumentId || "").trim();
-        const employeeRef = employeeDocId
-          ? doc(db, "employees", employeeDocId)
-          : null;
-        const employeeSnap = employeeRef ? await tx.get(employeeRef) : null;
-        const employeeData =
-          employeeSnap?.exists() && employeeSnap.data()
-            ? (employeeSnap.data() as Record<string, any>) || {}
-            : null;
-        const employeeEmployment = (employeeData?.employeeProfile?.employment ||
-          employeeData?.employment ||
-          {}) as Record<string, any>;
-
-        const currentLeaveBalance = resolveEmploymentLeaveBalance(
-          userData,
-          employeeData
-        );
-        if (currentLeaveBalance < 1) {
-          throw new Error("leave_balance_insufficient");
-        }
-
-        const balanceDeductedDays = 1;
-        const nextLeaveBalance = currentLeaveBalance - 1;
-        const nextUserEmployment = {
-          ...userEmployment,
-          leaveBalance: nextLeaveBalance,
-          updatedAt: serverTimestamp(),
-          updatedByUid: user?.uid || null,
-          updatedByEmail: user?.email || null,
-        };
-
-        tx.set(
-          userRef,
-          {
-            leaveBalance: nextLeaveBalance,
-            updatedAt: serverTimestamp(),
-            employment: nextUserEmployment,
-            employeeProfile: {
-              personal: (userData.employeeProfile?.personal ||
-                userData.personal ||
-                null) as Record<string, any> | null,
-              employment: nextUserEmployment,
-            },
-          },
-          { merge: true }
-        );
-
-        if (employeeRef) {
-          const nextEmployeeEmployment = {
-            ...employeeEmployment,
-            leaveBalance: nextLeaveBalance,
-            updatedAt: serverTimestamp(),
-            updatedByUid: user?.uid || null,
-            updatedByEmail: user?.email || null,
-          };
-
-          tx.set(
-            employeeRef,
-            {
-              uid: employeeUid,
-              linkedUserUid: employeeUid,
-              leaveBalance: nextLeaveBalance,
-              updatedAt: serverTimestamp(),
-              employment: nextEmployeeEmployment,
-              employeeProfile: {
-                personal: (employeeData?.employeeProfile?.personal ||
-                  employeeData?.personal ||
-                  null) as Record<string, any> | null,
-                employment: nextEmployeeEmployment,
-              },
-            },
-            { merge: true }
-          );
-        }
-
-        const leaveRequestRef = doc(collection(db, EMPLOYEE_LEAVE_REQUESTS_COLLECTION));
-        createdLeaveRequestId = leaveRequestRef.id;
-        tx.set(leaveRequestRef, {
-          ...buildEmployeeLeaveRequestPayload({
-            authUid: employeeUid,
-            employeeDocId: employeeDocId || null,
-            employeeName:
-              selectedEmployeeLabel !== EMPLOYEE_EMPTY_VALUE
-                ? selectedEmployeeLabel
-                : selectedEmployee.displayName ||
-                  selectedEmployee.name ||
-                  selectedEmployee.email ||
-                  "موظف",
-            employeeEmail:
-              selectedEmployeeProfile.personal.email !== EMPLOYEE_EMPTY_VALUE
-                ? selectedEmployeeProfile.personal.email
-                : selectedEmployee.email || null,
-            leaveType: "emergency",
-            startDate,
-            endDate: startDate,
-            daysCount: 1,
-            employeeNote: "إجازة مفاجئة من إدارة الحضور",
-          }),
-          status: "approved",
-          balanceDeductedDays,
-          hrNote: "إجازة مفاجئة معتمدة من إدارة الحضور",
-          decidedAt: serverTimestamp(),
-          decidedBy: user?.uid || null,
-          decidedByEmail: user?.email || null,
-          decidedByName: user?.displayName || user?.email || null,
-          reviewedAt: serverTimestamp(),
-          reviewedBy: user?.uid || null,
-          reviewedByEmail: user?.email || null,
-          reviewedByName: user?.displayName || user?.email || null,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
+        const created = await createHrCoreLeaveRequest({
+          employeeId: selectedEmployeeDocumentId || null,
+          employeeUid,
+          employeeName:
+            selectedEmployeeLabel !== EMPLOYEE_EMPTY_VALUE
+              ? selectedEmployeeLabel
+              : selectedEmployee.displayName ||
+                selectedEmployee.name ||
+                selectedEmployee.email ||
+                "موظف",
+          employeeEmail:
+            selectedEmployeeProfile.personal.email !== EMPLOYEE_EMPTY_VALUE
+              ? selectedEmployeeProfile.personal.email
+              : selectedEmployee.email || null,
+          leaveType: "emergency",
+          startDate: dateKey,
+          endDate: dateKey,
+          employeeNote: "إجازة مفاجئة من إدارة الحضور",
         });
-      });
+        createdLeaveRequestId = created.leaveRequest.id;
+        await reviewHrCoreLeaveRequest(createdLeaveRequestId, {
+          status: "approved",
+          hrNote: "إجازة مفاجئة معتمدة من إدارة الحضور",
+        });
+        refreshHrOperations();
+        setForm(current => {
+          const currentBalance = Number(current.leaveBalance || 0);
+          return {
+            ...current,
+            leaveBalance: String(Math.max(0, currentBalance - 1)),
+          };
+        });
+
 
       try {
         await createInAppNotification({
@@ -6317,7 +5959,10 @@ export default function EmployeesManagementPage() {
       );
     } catch (error) {
       console.error("create_emergency_leave_error", error);
-      if (error instanceof Error && error.message === "leave_balance_insufficient") {
+      if (
+        error instanceof Error &&
+        error.message === "leave_balance_insufficient"
+      ) {
         toast.error(
           tr(
             language,
@@ -6390,231 +6035,65 @@ export default function EmployeesManagementPage() {
 
     setCancellingLeaveDate(normalizedDateKey);
     try {
-      await runTransaction(db, async tx => {
-        const leaveRequestRef = doc(
-          db,
-          EMPLOYEE_LEAVE_REQUESTS_COLLECTION,
-          leaveRequest.id
-        );
-        const leaveRequestSnap = await tx.get(leaveRequestRef);
-        if (!leaveRequestSnap.exists()) {
-          throw new Error("leave_request_not_found");
-        }
 
-        const currentLeaveRequest =
-          leaveRequestSnap.data() as EmployeeLeaveRequestDoc;
-        const currentStatus = String(currentLeaveRequest.status || "")
-          .trim()
-          .toLowerCase();
-        if (currentStatus !== "approved") {
-          throw new Error("leave_request_not_approved");
-        }
-
-        const startDateKey =
-          formatLeaveDateInput(currentLeaveRequest.startDate) ||
-          formatLeaveDateInput(leaveRequest.startDate);
-        const endDateKey =
-          formatLeaveDateInput(
-            currentLeaveRequest.endDate ||
-              currentLeaveRequest.startDate ||
-              leaveRequest.endDate ||
-              leaveRequest.startDate
-          ) || startDateKey;
-        const allDateKeys = buildDateKeysInRange(startDateKey, endDateKey);
-        const currentCancelledDateKeys = normalizeLeaveCancelledDateKeys(
-          currentLeaveRequest.cancelledDateKeys
+        const previousRestoredDays = Number(
+          leaveRequest.balanceRestoredDays || 0
         );
-        const cancelledDateKeySet = new Set(currentCancelledDateKeys);
-
-        if (
-          !startDateKey ||
-          !allDateKeys.includes(normalizedDateKey) ||
-          cancelledDateKeySet.has(normalizedDateKey)
-        ) {
-          throw new Error("leave_request_date_mismatch");
-        }
-
-        const activeDateKeys = allDateKeys.filter(
-          currentDateKey => !cancelledDateKeySet.has(currentDateKey)
+        const result = await cancelHrCoreLeaveDate(
+          leaveRequest.id,
+          normalizedDateKey
         );
-        if (!activeDateKeys.includes(normalizedDateKey)) {
-          throw new Error("leave_request_date_inactive");
-        }
-
-        const remainingActiveDateKeys = activeDateKeys.filter(
-          currentDateKey => currentDateKey !== normalizedDateKey
+        const nextRestoredDays = Number(
+          result.leaveRequest.balanceRestoredDays || 0
         );
-        const parsedDeductedDays = Number(
-          currentLeaveRequest.balanceDeductedDays
-        );
-        const hasStoredDeduction =
-          currentLeaveRequest.balanceDeductedDays !== undefined &&
-          currentLeaveRequest.balanceDeductedDays !== null &&
-          Number.isFinite(parsedDeductedDays);
-        const currentDeductedDays = Math.max(
+        const restoredDelta = Math.max(
           0,
-          Math.min(
-            hasStoredDeduction ? parsedDeductedDays : activeDateKeys.length,
-            activeDateKeys.length
+          nextRestoredDays - previousRestoredDays
+        );
+        if (restoredDelta > 0) {
+          setForm(current => ({
+            ...current,
+            leaveBalance: String(
+              Math.max(0, Number(current.leaveBalance || 0)) + restoredDelta
+            ),
+          }));
+        }
+        refreshHrOperations();
+
+        try {
+          await createInAppNotification({
+            userId:
+              leaveRequest.employeeUid ||
+              selectedEmployeeAuthUid ||
+              selectedEmployee.id,
+            title: tr(
+              language,
+              "تم إلغاء يوم من الإجازة",
+              "Leave Day Cancelled"
+            ),
+            body: tr(
+              language,
+              `تم إلغاء يوم ${normalizedDateKey} فقط من الإجازة، مع إبقاء بقية الأيام معتمدة وإرجاع اليوم إلى الرصيد إن كان مخصومًا.`,
+              `Only ${normalizedDateKey} was cancelled from the leave. The remaining days stay approved, and the day was restored if previously deducted.`
+            ),
+            type: "leave",
+            relatedId: leaveRequest.id,
+            relatedTo: "employee_leave_request",
+            relatedPath: "/hr/profile",
+          });
+        } catch (notificationError) {
+          console.error("cancel_leave_notification_failed", notificationError);
+        }
+
+        toast.success(
+          tr(
+            language,
+            "تم إلغاء اليوم المحدد فقط من الإجازة.",
+            "Only the selected leave day was cancelled."
           )
         );
-        const restoreDays = currentDeductedDays > 0 ? 1 : 0;
-        const nextDeductedDays = Math.max(0, currentDeductedDays - restoreDays);
-        const parsedRestoredDays = Number(
-          currentLeaveRequest.balanceRestoredDays
-        );
-        const currentRestoredDays = Number.isFinite(parsedRestoredDays)
-          ? Math.max(0, parsedRestoredDays)
-          : 0;
+        return;
 
-        const employeeUid = selectedEmployeeAuthUid || selectedEmployee.id;
-        const userRef = doc(db, "users", selectedEmployee.id);
-        const userSnap = await tx.get(userRef);
-        if (!userSnap.exists()) {
-          throw new Error("employee_user_not_found");
-        }
-
-        const userData = (userSnap.data() as Record<string, any>) || {};
-        const userEmployment = (userData.employeeProfile?.employment ||
-          userData.employment ||
-          {}) as Record<string, any>;
-
-        const employeeDocId = String(
-          selectedEmployeeDocumentId ||
-            selectedEmployee.linkedEmployeeId ||
-            currentLeaveRequest.employeeDocId ||
-            currentLeaveRequest.employeeId ||
-            ""
-        ).trim();
-        const employeeRef = employeeDocId
-          ? doc(db, "employees", employeeDocId)
-          : null;
-        const employeeSnap = employeeRef ? await tx.get(employeeRef) : null;
-        const employeeData =
-          employeeSnap?.exists() && employeeSnap.data()
-            ? (employeeSnap.data() as Record<string, any>) || {}
-            : null;
-        const employeeEmployment = (employeeData?.employeeProfile?.employment ||
-          employeeData?.employment ||
-          {}) as Record<string, any>;
-
-        if (restoreDays > 0) {
-          const currentLeaveBalance = resolveEmploymentLeaveBalance(
-            userData,
-            employeeData
-          );
-          const nextLeaveBalance = currentLeaveBalance + restoreDays;
-          const nextUserEmployment = {
-            ...userEmployment,
-            leaveBalance: nextLeaveBalance,
-            updatedAt: serverTimestamp(),
-            updatedByUid: user?.uid || null,
-            updatedByEmail: user?.email || null,
-          };
-
-          tx.set(
-            userRef,
-            {
-              leaveBalance: nextLeaveBalance,
-              updatedAt: serverTimestamp(),
-              employment: nextUserEmployment,
-              employeeProfile: {
-                personal: (userData.employeeProfile?.personal ||
-                  userData.personal ||
-                  null) as Record<string, any> | null,
-                employment: nextUserEmployment,
-              },
-            },
-            { merge: true }
-          );
-
-          if (employeeRef) {
-            const nextEmployeeEmployment = {
-              ...employeeEmployment,
-              leaveBalance: nextLeaveBalance,
-              updatedAt: serverTimestamp(),
-              updatedByUid: user?.uid || null,
-              updatedByEmail: user?.email || null,
-            };
-
-            tx.set(
-              employeeRef,
-              {
-                uid: employeeUid,
-                linkedUserUid: employeeUid,
-                leaveBalance: nextLeaveBalance,
-                updatedAt: serverTimestamp(),
-                employment: nextEmployeeEmployment,
-                employeeProfile: {
-                  personal: (employeeData?.employeeProfile?.personal ||
-                    employeeData?.personal ||
-                    null) as Record<string, any> | null,
-                  employment: nextEmployeeEmployment,
-                },
-              },
-              { merge: true }
-            );
-          }
-        }
-
-        const nextCancelledDateKeys = [
-          ...currentCancelledDateKeys,
-          normalizedDateKey,
-        ].sort();
-        const nextStatus = remainingActiveDateKeys.length
-          ? "approved"
-          : "cancelled";
-        const previousHrNote = String(
-          currentLeaveRequest.hrNote || leaveRequest.hrNote || ""
-        ).trim();
-        const cancellationNote = `تم إلغاء يوم ${normalizedDateKey} فقط من الإجازة بواسطة إدارة الحضور.`;
-
-        tx.update(leaveRequestRef, {
-          status: nextStatus,
-          daysCount: remainingActiveDateKeys.length,
-          balanceDeductedDays: nextDeductedDays,
-          balanceRestoredDays: currentRestoredDays + restoreDays,
-          cancelledDateKeys: nextCancelledDateKeys,
-          cancellationDate: normalizedDateKey,
-          cancelledAt: serverTimestamp(),
-          cancelledBy: user?.uid || null,
-          cancelledByEmail: user?.email || null,
-          cancelledByName: user?.displayName || user?.email || null,
-          hrNote: previousHrNote
-            ? `${previousHrNote}\n${cancellationNote}`
-            : cancellationNote,
-          updatedAt: serverTimestamp(),
-        });
-      });
-
-      try {
-        await createInAppNotification({
-          userId:
-            leaveRequest.employeeUid ||
-            selectedEmployeeAuthUid ||
-            selectedEmployee.id,
-          title: tr(language, "تم إلغاء يوم من الإجازة", "Leave Day Cancelled"),
-          body: tr(
-            language,
-            `تم إلغاء يوم ${normalizedDateKey} فقط من الإجازة، وإرجاع يوم إلى الرصيد إذا كان قد خُصم.`,
-            `Only ${normalizedDateKey} was cancelled from the leave, and one day was restored if it had been deducted.`
-          ),
-          type: "leave",
-          relatedId: leaveRequest.id,
-          relatedTo: "employee_leave_request",
-          relatedPath: "/hr/profile",
-        });
-      } catch (notificationError) {
-        console.error("cancel_leave_notification_failed", notificationError);
-      }
-
-      toast.success(
-        tr(
-          language,
-          "تم إلغاء اليوم المحدد فقط مع الحفاظ على بقية أيام الإجازة.",
-          "Only the selected day was cancelled; the remaining leave days were preserved."
-        )
-      );
     } catch (error) {
       console.error("cancel_approved_leave_error", error);
       toast.error(
@@ -6634,6 +6113,7 @@ export default function EmployeesManagementPage() {
     nextStatus: EmployeeLeaveRequestStatus
   ) => {
     if (!selectedEmployee || !selectedEmployeeProfile) return;
+    if (nextStatus !== "approved" && nextStatus !== "rejected") return;
     if (!canManageEmployees) {
       toast.error(
         tr(
@@ -6645,153 +6125,38 @@ export default function EmployeesManagementPage() {
       return;
     }
 
+    const hrNote = String(
+      reviewNotes[request.id] ?? request.hrNote ?? ""
+    ).trim();
+    if (nextStatus === "rejected" && !hrNote) {
+      toast.error(
+        tr(
+          language,
+          "يجب كتابة ملاحظة عند رفض طلب الإجازة.",
+          "A note is required when rejecting a leave request."
+        )
+      );
+      return;
+    }
+
     setReviewingLeaveRequestId(request.id);
     try {
-      await runTransaction(db, async tx => {
-        const leaveRequestRef = doc(
-          db,
-          EMPLOYEE_LEAVE_REQUESTS_COLLECTION,
-          request.id
-        );
-        const leaveRequestSnap = await tx.get(leaveRequestRef);
-        if (!leaveRequestSnap.exists()) {
-          throw new Error("leave_request_not_found");
-        }
 
-        const currentLeaveRequest =
-          leaveRequestSnap.data() as EmployeeLeaveRequestDoc;
-        const currentStatus = String(currentLeaveRequest.status || "pending")
-          .trim()
-          .toLowerCase();
-        if (currentStatus !== "pending") {
-          throw new Error("leave_request_already_reviewed");
-        }
-
-        const daysCount = Number(
-          currentLeaveRequest.daysCount ?? request.daysCount ?? 0
-        );
-        if (!Number.isFinite(daysCount) || daysCount <= 0) {
-          throw new Error("leave_request_invalid_days");
-        }
-
-        const hrNote = String(
-          reviewNotes[request.id] ?? request.hrNote ?? ""
-        ).trim();
-
-        if (nextStatus === "rejected" && !hrNote) {
-          throw new Error("leave_rejection_note_required");
-        }
-
-        const userRef = doc(db, "users", selectedEmployee.id);
-        const userSnap = await tx.get(userRef);
-        if (!userSnap.exists()) {
-          throw new Error("employee_user_not_found");
-        }
-
-        const userData = (userSnap.data() as Record<string, any>) || {};
-        const userEmployment = (userData.employeeProfile?.employment ||
-          userData.employment ||
-          {}) as Record<string, any>;
-        const linkedUserUid = selectedEmployeeAuthUid || selectedEmployee.id;
-
-        const employeeDocId = String(
-          selectedEmployee.linkedEmployeeId ||
-            currentLeaveRequest.employeeDocId ||
-            currentLeaveRequest.employeeId ||
-            ""
-        ).trim();
-        const employeeRef = employeeDocId
-          ? doc(db, "employees", employeeDocId)
-          : null;
-        const employeeSnap = employeeRef ? await tx.get(employeeRef) : null;
-        const employeeData =
-          employeeSnap?.exists() && employeeSnap.data()
-            ? (employeeSnap.data() as Record<string, any>) || {}
-            : null;
-        const employeeEmployment = (employeeData?.employeeProfile?.employment ||
-          employeeData?.employment ||
-          {}) as Record<string, any>;
-        let balanceDeductedDays: number | null = null;
-
-        if (nextStatus === "approved") {
-          const currentLeaveBalance = resolveEmploymentLeaveBalance(
-            userData,
-            employeeData
-          );
-          if (currentLeaveBalance < daysCount) {
-            throw new Error("leave_balance_insufficient");
-          }
-
-          const nextLeaveBalance = currentLeaveBalance - daysCount;
-          balanceDeductedDays = daysCount;
-          const nextUserEmployment = {
-            ...userEmployment,
-            leaveBalance: nextLeaveBalance,
-            updatedAt: serverTimestamp(),
-            updatedByUid: user?.uid || null,
-            updatedByEmail: user?.email || null,
-          };
-
-          tx.set(
-            userRef,
-            {
-              leaveBalance: nextLeaveBalance,
-              updatedAt: serverTimestamp(),
-              employment: nextUserEmployment,
-              employeeProfile: {
-                personal: (userData.employeeProfile?.personal ||
-                  userData.personal ||
-                  null) as Record<string, any> | null,
-                employment: nextUserEmployment,
-              },
-            },
-            { merge: true }
-          );
-
-          if (employeeRef) {
-            const nextEmployeeEmployment = {
-              ...employeeEmployment,
-              leaveBalance: nextLeaveBalance,
-              updatedAt: serverTimestamp(),
-              updatedByUid: user?.uid || null,
-              updatedByEmail: user?.email || null,
-            };
-
-            tx.set(
-              employeeRef,
-              {
-                uid: linkedUserUid,
-                linkedUserUid: linkedUserUid,
-                leaveBalance: nextLeaveBalance,
-                updatedAt: serverTimestamp(),
-                employment: nextEmployeeEmployment,
-                employeeProfile: {
-                  personal: (employeeData?.employeeProfile?.personal ||
-                    employeeData?.personal ||
-                    null) as Record<string, any> | null,
-                  employment: nextEmployeeEmployment,
-                },
-              },
-              { merge: true }
-            );
-          }
-        }
-
-        tx.update(leaveRequestRef, {
+        await reviewHrCoreLeaveRequest(request.id, {
           status: nextStatus,
           hrNote,
-          ...(nextStatus === "approved" ? { balanceDeductedDays } : {}),
-          decidedAt: serverTimestamp(),
-          decidedBy: user?.uid || null,
-          decidedByEmail: user?.email || null,
-          decidedByName: user?.displayName || user?.email || null,
-          reviewedAt: serverTimestamp(),
-          reviewedBy: user?.uid || null,
-          reviewedByEmail: user?.email || null,
-          reviewedByName: user?.displayName || user?.email || null,
-          updatedAt: serverTimestamp(),
         });
-      });
+        if (nextStatus === "approved") {
+          const deductedDays = Math.max(0, Number(request.daysCount || 0));
+          setForm(current => ({
+            ...current,
+            leaveBalance: String(
+              Math.max(0, Number(current.leaveBalance || 0) - deductedDays)
+            ),
+          }));
+        }
+        refreshHrOperations();
+
 
       try {
         await createInAppNotification({
@@ -6890,6 +6255,7 @@ export default function EmployeesManagementPage() {
     request: EmployeeServiceRequestRecord,
     nextStatus: EmployeeServiceRequestStatus
   ) => {
+    if (nextStatus !== "approved" && nextStatus !== "rejected") return;
     if (!canManageEmployees) {
       toast.error("لا تملك صلاحية مراجعة طلبات الموظفين.");
       return;
@@ -6905,38 +6271,13 @@ export default function EmployeesManagementPage() {
 
     setReviewingServiceRequestId(request.id);
     try {
-      await runTransaction(db, async tx => {
-        const requestRef = doc(
-          db,
-          EMPLOYEE_SERVICE_REQUESTS_COLLECTION,
-          request.id
-        );
-        const requestSnap = await tx.get(requestRef);
-        if (!requestSnap.exists()) {
-          throw new Error("service_request_not_found");
-        }
 
-        const currentStatus = String(requestSnap.data()?.status || "pending")
-          .trim()
-          .toLowerCase();
-        if (currentStatus !== "pending") {
-          throw new Error("service_request_already_reviewed");
-        }
-
-        tx.update(requestRef, {
+        await reviewHrCoreServiceRequest(request.id, {
           status: nextStatus,
           hrNote,
-          decidedAt: serverTimestamp(),
-          decidedBy: user?.uid || null,
-          decidedByEmail: user?.email || null,
-          decidedByName: user?.displayName || user?.email || null,
-          reviewedAt: serverTimestamp(),
-          reviewedBy: user?.uid || null,
-          reviewedByEmail: user?.email || null,
-          reviewedByName: user?.displayName || user?.email || null,
-          updatedAt: serverTimestamp(),
         });
-      });
+        refreshHrOperations();
+
 
       try {
         const requestLabel = getEmployeeServiceRequestTypeLabel(
@@ -7488,7 +6829,8 @@ export default function EmployeesManagementPage() {
                         إعادة تعيين كلمة مرور الموظف
                       </CardTitle>
                       <CardDescription className="text-sm leading-6 text-slate-500">
-                        استخدم هذا القسم عند نسيان الموظف كلمة المرور لإرسال رابط إعادة التعيين إلى بريده المسجل.
+                        استخدم هذا القسم عند نسيان الموظف كلمة المرور لإرسال
+                        رابط إعادة التعيين إلى بريده المسجل.
                       </CardDescription>
                     </div>
                   </CardHeader>
@@ -7497,7 +6839,9 @@ export default function EmployeesManagementPage() {
                     <div className="flex gap-3 rounded-[20px] border border-amber-200 bg-amber-50/80 px-4 py-3 text-sm leading-6 text-amber-900">
                       <TriangleAlert className="mt-0.5 h-5 w-5 shrink-0" />
                       <div>
-                        سيتم إرسال رابط إعادة تعيين كلمة المرور إلى بريد الموظف. لن يتم تغيير كلمة المرور مباشرة من الواجهة ولن يتم حفظ أي كلمة مرور داخل Firestore.
+                        سيتم إرسال رابط إعادة تعيين كلمة المرور إلى بريد الموظف.
+                        لن يتم تغيير كلمة المرور مباشرة من الواجهة ولن يتم حفظ
+                        أي كلمة مرور داخل Firestore.
                       </div>
                     </div>
 
@@ -7742,13 +7086,16 @@ export default function EmployeesManagementPage() {
                             إجازة مفاجئة لليوم
                           </div>
                           <p className="text-xs leading-6 text-emerald-800">
-                            يسجل اليوم كإجازة اضطرارية معتمدة ويستبعده من الغياب والحسابات المرتبطة بالحضور.
+                            يسجل اليوم كإجازة اضطرارية معتمدة ويستبعده من الغياب
+                            والحسابات المرتبطة بالحضور.
                           </p>
                         </div>
                         <Button
                           type="button"
                           className="bg-emerald-600 text-white hover:bg-emerald-700"
-                          onClick={() => void handleCreateEmergencyLeaveForToday()}
+                          onClick={() =>
+                            void handleCreateEmergencyLeaveForToday()
+                          }
                           disabled={
                             savingEmergencyLeave ||
                             approvedLeaveDateKeys.has(getRiyadhTodayDateKey())
@@ -8924,13 +8271,11 @@ export default function EmployeesManagementPage() {
                                               )}`}
                                         </p>
                                       ) : null}
-                                      {selectedPayrollCalculationRange
-                                        ?.isFutureMonth ? (
+                                      {selectedPayrollCalculationRange?.isFutureMonth ? (
                                         <p className="font-semibold text-red-600">
                                           لا يمكن احتساب الحضور لشهر مستقبلي.
                                         </p>
-                                      ) : selectedPayrollCalculationRange
-                                          ?.excludesFutureDays ? (
+                                      ) : selectedPayrollCalculationRange?.excludesFutureDays ? (
                                         <p className="font-semibold text-slate-600">
                                           الأيام المستقبلية غير محسوبة.
                                         </p>
@@ -8950,8 +8295,7 @@ export default function EmployeesManagementPage() {
                                     saving ||
                                     attendancePayrollLoading ||
                                     !selectedPayrollMonthMeta ||
-                                    selectedPayrollCalculationRange
-                                      ?.isFutureMonth
+                                    selectedPayrollCalculationRange?.isFutureMonth
                                   }
                                 >
                                   {attendancePayrollLoading ? (
@@ -8961,8 +8305,7 @@ export default function EmployeesManagementPage() {
                                   )}
                                   {attendancePayrollLoading
                                     ? "جاري احتساب الحضور..."
-                                    : selectedPayrollCalculationRange
-                                        ?.isCurrentMonth
+                                    : selectedPayrollCalculationRange?.isCurrentMonth
                                       ? "احتساب الحضور حتى اليوم"
                                       : "احتساب حضور الشهر"}
                                 </Button>
@@ -9034,6 +8377,29 @@ export default function EmployeesManagementPage() {
                                   </div>
                                 </div>
                               ) : null}
+
+                              {approvedPayrollAdvancesLoading ? (
+                                <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                                  جاري تحميل السلف المعتمدة...
+                                </div>
+                              ) : approvedPayrollAdvances.length ? (
+                                <div className="rounded-[18px] border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-950">
+                                  <div className="font-semibold">
+                                    سلف راتب معتمدة ستُخصم تلقائيًا
+                                  </div>
+                                  <div className="mt-1 text-xs leading-6 text-violet-800">
+                                    {approvedPayrollAdvances
+                                      .map(
+                                        request =>
+                                          `${formatNumberEN(Number(request.amount || 0))} ر.س${request.requestDate ? ` (${request.requestDate})` : ""}`
+                                      )
+                                      .join("، ")}
+                                  </div>
+                                  <div className="mt-2 font-semibold">
+                                    الإجمالي: {formatNumberEN(approvedPayrollAdvanceTotal)} ر.س
+                                  </div>
+                                </div>
+                              ) : null}
                             </div>
 
                             <div className="space-y-4 rounded-[22px] border border-slate-200 bg-white p-4">
@@ -9056,7 +8422,7 @@ export default function EmployeesManagementPage() {
                                     </div>
                                     <div className="mt-1 text-lg font-semibold text-slate-950 tabular-nums">
                                       {formatNumberEN(
-                                        totalSalaryDeductions || 0
+                                        payrollTotalDeductions || 0
                                       )}{" "}
                                       ر.س
                                     </div>
@@ -9099,8 +8465,9 @@ export default function EmployeesManagementPage() {
                                           employeeAbsences.length - 3
                                         )} أخرى`
                                       : ""}
-                                    . هذه ملاحظة فقط ولا تضيف خصمًا يدويًا مكررًا؛
-                                    خصم الغياب يتم من سجل الغياب عند إنشاء الراتب.
+                                    . هذه ملاحظة فقط ولا تضيف خصمًا يدويًا
+                                    مكررًا؛ خصم الغياب يتم من سجل الغياب عند
+                                    إنشاء الراتب.
                                   </div>
                                 </div>
                               ) : null}
@@ -11990,7 +11357,10 @@ export default function EmployeesManagementPage() {
                                     <div className="text-xs text-slate-500">
                                       اسم الملف
                                     </div>
-                                    <div className="mt-0.5 truncate font-semibold text-slate-800" dir="ltr">
+                                    <div
+                                      className="mt-0.5 truncate font-semibold text-slate-800"
+                                      dir="ltr"
+                                    >
                                       {file.fileName}
                                     </div>
                                   </div>

@@ -59,7 +59,7 @@ export function normalizeAdminUsername(value: unknown) {
 
 export function isValidAdminUsername(value: unknown) {
   const username = normalizeAdminUsername(value);
-  return username.length >= 3 && username.length <= 32;
+  return username.length >= 2 && username.length <= 32;
 }
 
 export function buildAdminUsernameSeed(...values: unknown[]) {

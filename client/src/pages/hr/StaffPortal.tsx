@@ -22,9 +22,8 @@ import {
   signInWithEmailAndPassword,
   signOut,
 } from "firebase/auth";
-import { collection, onSnapshot, query, where } from "firebase/firestore";
 
-import { auth, db } from "@/_core/firebase";
+import { auth } from "@/_core/firebase";
 import {
   getHomePathForUser,
   hasPermission,
@@ -47,7 +46,8 @@ import {
 import { useLanguage } from "@/contexts/LanguageContext";
 import { languageDir, tr } from "@/lib/i18n";
 import { WEEKLY_REPORT_MANAGER_NOTES_PERMISSION } from "@/lib/weeklyReportConfig";
-import { EMPLOYEE_NOTIFICATIONS_COLLECTION } from "@shared/employee";
+import { listInAppNotifications } from "@/lib/inAppNotifications";
+import { listHrCoreWeeklyReports } from "@/lib/hrCoreApi";
 
 function PortalAlert({
   tone,
@@ -214,58 +214,68 @@ export default function StaffPortalPage() {
       return;
     }
 
-    const unsubscribe = onSnapshot(
-      query(
-        collection(db, EMPLOYEE_NOTIFICATIONS_COLLECTION),
-        where("targetUid", "==", user.uid)
-      ),
-      snapshot => {
+    let active = true;
+    const loadNotifications = async () => {
+      try {
+        const items = await listInAppNotifications(user.uid);
+        if (!active) return;
         const counts = createEmptyPortalNotificationCounts();
-        snapshot.docs.forEach(docSnapshot => {
-          const data = docSnapshot.data() as Record<string, unknown>;
-          if (data.isRead === true) return;
-
-          const bucket = resolvePortalNotificationBucket(data);
+        items.forEach(item => {
+          if (item.isRead) return;
+          const bucket = resolvePortalNotificationBucket(item as unknown as Record<string, unknown>);
           if (bucket) counts[bucket] += 1;
         });
-
         setPortalNotificationCounts(counts);
-        if (!canWriteWeeklyReportNotes) {
-          setWeeklyReportBadgeCount(counts.reports);
-        }
-      },
-      error => {
+        if (!canWriteWeeklyReportNotes) setWeeklyReportBadgeCount(counts.reports);
+      } catch (error) {
         console.error("staff_portal_notifications_badge_failed", error);
+        if (!active) return;
         setPortalNotificationCounts(createEmptyPortalNotificationCounts());
-        if (!canWriteWeeklyReportNotes) {
-          setWeeklyReportBadgeCount(0);
-        }
+        if (!canWriteWeeklyReportNotes) setWeeklyReportBadgeCount(0);
       }
-    );
+    };
 
-    return () => unsubscribe();
+    void loadNotifications();
+    const timer = window.setInterval(() => void loadNotifications(), 30_000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
   }, [canWriteWeeklyReportNotes, user?.uid]);
 
   useEffect(() => {
     if (!user?.uid || !canWriteWeeklyReportNotes) return;
 
-    const unsubscribe = onSnapshot(
-      query(collection(db, "weekly_reports"), where("status", "==", "sent")),
-      snapshot => {
+    let active = true;
+    const loadPendingWeeklyReports = async () => {
+      try {
+        const result = await listHrCoreWeeklyReports({
+          status: "sent",
+          limit: 200,
+          offset: 0,
+        });
+        if (!active) return;
         setWeeklyReportBadgeCount(
-          snapshot.docs.filter(docSnapshot => {
-            const data = docSnapshot.data() as Record<string, unknown>;
-            return !String(data.managerNotes ?? "").trim();
-          }).length
+          result.weeklyReports.filter(report =>
+            !String(report.managerNotes ?? "").trim()
+          ).length
         );
-      },
-      error => {
+      } catch (error) {
         console.error("weekly_report_pending_badge_failed", error);
-        setWeeklyReportBadgeCount(0);
+        if (active) setWeeklyReportBadgeCount(0);
       }
+    };
+
+    void loadPendingWeeklyReports();
+    const timer = window.setInterval(
+      () => void loadPendingWeeklyReports(),
+      30_000
     );
 
-    return () => unsubscribe();
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
   }, [canWriteWeeklyReportNotes, user?.uid]);
 
   const portalLinks = useMemo(

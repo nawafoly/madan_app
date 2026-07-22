@@ -14,19 +14,6 @@ import {
   updateProfile,
 } from "firebase/auth";
 import {
-  addDoc,
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  onSnapshot,
-  or,
-  query,
-  serverTimestamp,
-  setDoc,
-  where,
-} from "firebase/firestore";
-import {
   BriefcaseBusiness,
   Clock3,
   Camera,
@@ -78,7 +65,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
-import { auth, db } from "@/_core/firebase";
+import { auth } from "@/_core/firebase";
 import { hasPermission, useAuth } from "@/_core/hooks/useAuth";
 import {
   EMPLOYEE_AVATAR_CATEGORY,
@@ -89,7 +76,19 @@ import {
   type EmployeeProfileUserDoc,
 } from "@/lib/employeeProfile";
 import {
-  EMPLOYEE_FILES_COLLECTION,
+  createHrCoreLeaveRequest,
+  createHrCoreServiceRequest,
+  getHrCoreEmployee,
+  getHrCoreMe,
+  isHrCoreConfigured,
+  listHrCoreEmployeeFiles,
+  listHrCoreLeaveRequests,
+  listHrCorePayrollRecords,
+  listHrCoreServiceRequests,
+  updateHrCoreEmployee,
+  type HrCoreEmployee,
+} from "@/lib/hrCoreApi";
+import {
   filterActiveEmployeeFiles,
   isOfficialEmployeeFile,
   normalizeEmployeeFileRecord,
@@ -97,10 +96,8 @@ import {
   type EmployeeFileRecord,
 } from "@/lib/employeeFiles";
 import {
-  EMPLOYEE_LEAVE_REQUESTS_COLLECTION,
   EMPLOYEE_LEAVE_TYPE_OPTIONS,
   buildLeaveDateFromInput,
-  buildEmployeeLeaveRequestPayload,
   calculateLeaveDaysCount,
   formatLeaveDateRange,
   formatLeaveDaysLabel,
@@ -113,8 +110,6 @@ import {
   type EmployeeLeaveRequestRecord,
 } from "@/lib/employeeLeave";
 import {
-  EMPLOYEE_SERVICE_REQUESTS_COLLECTION,
-  buildEmployeeServiceRequestPayload,
   getEmployeeServiceRequestStatusLabel,
   getEmployeeServiceRequestTypeLabel,
   normalizeEmployeeServiceRequest,
@@ -122,7 +117,6 @@ import {
   type EmployeeServiceRequestRecord,
 } from "@/lib/employeeServiceRequests";
 import {
-  EMPLOYEE_PAYROLL_RECORDS_COLLECTION,
   formatEmployeePayrollMonthLabel,
   normalizeEmployeePayrollRecord,
   sortEmployeePayrollRecords,
@@ -259,7 +253,6 @@ type EmployeePortalView =
   | "documents";
 
 type EmployeeProfileSource = {
-  collectionName: "employees" | "users";
   docId: string;
   entityId: string;
 };
@@ -368,10 +361,7 @@ function buildEmployeeRecordScope(
 
   return {
     authUid: normalizedAuthUid,
-    employeeDocId:
-      source.collectionName === "employees"
-        ? normalizeScopeValue(source.docId) || null
-        : null,
+    employeeDocId: normalizeScopeValue(source.docId) || null,
   };
 }
 
@@ -406,6 +396,80 @@ function employeeRecordBelongsToScope(
   }
 
   return recordAuthIds.includes(scope.authUid);
+}
+
+function mapHrCoreEmployeeToProfileDoc(
+  employee: HrCoreEmployee
+): EmployeeProfileUserDoc {
+  const rawPersonal = (employee.personal || {}) as Record<string, any>;
+  const rawEmployment = (employee.employment || {}) as Record<string, any>;
+  const personal = {
+    ...rawPersonal,
+    name: employee.name,
+    email: employee.email,
+    phone: employee.phone,
+    avatar: employee.avatarUrl
+      ? {
+          ...(rawPersonal.avatar && typeof rawPersonal.avatar === "object"
+            ? rawPersonal.avatar
+            : {}),
+          fileUrl: employee.avatarUrl,
+        }
+      : rawPersonal.avatar || null,
+  };
+  const employment = {
+    ...rawEmployment,
+    title: employee.title,
+    department: employee.department,
+    employeeCode: employee.employeeCode,
+    fingerprintNumber: employee.fingerprintNumber,
+    employmentStatus: employee.employmentStatus,
+    status: employee.employmentStatus,
+    startDate: employee.startDate,
+    leaveBalance: employee.leaveBalance,
+    baseSalary: employee.salary.baseSalary,
+    housingAllowance: employee.salary.housingAllowance,
+    transportationAllowance: employee.salary.transportationAllowance,
+    otherAllowances: employee.salary.otherAllowances,
+    insuranceDeduction: employee.salary.insuranceDeduction,
+    salaryDeductions: employee.salary.deductions,
+    shiftStartTime: employee.workSchedule.startTime,
+    shiftEndTime: employee.workSchedule.endTime,
+    workSchedule: {
+      ...(rawEmployment.workSchedule &&
+      typeof rawEmployment.workSchedule === "object"
+        ? rawEmployment.workSchedule
+        : {}),
+      startTime: employee.workSchedule.startTime,
+      endTime: employee.workSchedule.endTime,
+      weeklyOffDays: employee.workSchedule.weeklyOffDays,
+    },
+    allowedZoneIds: employee.allowedZoneIds,
+    adminNotes: employee.adminNotes,
+  };
+
+  return {
+    uid: employee.authUid || employee.id,
+    displayName: employee.name,
+    name: employee.name,
+    fullName: employee.name,
+    email: employee.email,
+    phone: employee.phone,
+    photoURL: employee.avatarUrl,
+    employeeId: employee.id,
+    title: employee.title,
+    department: employee.department,
+    employeeCode: employee.employeeCode,
+    fingerprintNumber: employee.fingerprintNumber,
+    startDate: employee.startDate,
+    leaveBalance: employee.leaveBalance,
+    active: employee.isActive,
+    isActive: employee.isActive,
+    status: employee.employmentStatus,
+    personal,
+    employment,
+    employeeProfile: { personal, employment },
+  } as EmployeeProfileUserDoc;
 }
 
 function getEmployeePortalViewFromHash(): EmployeePortalView {
@@ -1214,6 +1278,7 @@ export default function EmployeeProfilePage() {
     EmployeeServiceRequestRecord[]
   >([]);
   const [serviceRequestsLoading, setServiceRequestsLoading] = useState(true);
+  const [hrOperationsRevision, setHrOperationsRevision] = useState(0);
   const [leaveForm, setLeaveForm] = useState({
     leaveType: "annual",
     startDate: "",
@@ -1261,45 +1326,44 @@ export default function EmployeeProfilePage() {
   useEffect(() => {
     if (!user?.uid) {
       setEmployeeProfileSource(null);
+      setUserDoc(null);
+      setLoading(false);
+      return;
+    }
+
+    if (!isHrCoreConfigured()) {
+      setEmployeeProfileSource(null);
+      setUserDoc(null);
+      setLoading(false);
       return;
     }
 
     let cancelled = false;
+    setLoading(true);
 
-    const resolveSource = async () => {
-      const linkedEmployeeId = String(user.linkedEmployeeId || "").trim();
-      const candidateEmployeeDocIds = Array.from(
-        new Set([linkedEmployeeId, user.uid].filter(Boolean))
-      );
+    void (async () => {
+      const me = await getHrCoreMe();
+      const employeeId = String(
+        me.account.linkedEmployeeId || user.linkedEmployeeId || user.uid
+      ).trim();
+      if (!employeeId) throw new Error("employee_profile_link_missing");
 
-      for (const docId of candidateEmployeeDocIds) {
-        try {
-          const employeeSnapshot = await getDoc(doc(db, "employees", docId));
-          if (employeeSnapshot.exists()) {
-            if (!cancelled) {
-              setEmployeeProfileSource({
-                collectionName: "employees",
-                docId,
-                entityId: docId,
-              });
-            }
-            return;
-          }
-        } catch (error) {
-          console.error("employee_profile_source_lookup_failed", error);
-        }
-      }
+      const response = await getHrCoreEmployee(employeeId);
+      if (cancelled) return;
 
-      if (!cancelled) {
-        setEmployeeProfileSource({
-          collectionName: "users",
-          docId: user.uid,
-          entityId: user.uid,
-        });
-      }
-    };
-
-    void resolveSource();
+      setEmployeeProfileSource({
+        docId: response.employee.id,
+        entityId: response.employee.id,
+      });
+      setUserDoc(mapHrCoreEmployeeToProfileDoc(response.employee));
+      setLoading(false);
+    })().catch(error => {
+      if (cancelled) return;
+      console.error("employee_profile_d1_load_failed", error);
+      setEmployeeProfileSource(null);
+      setUserDoc(null);
+      setLoading(false);
+    });
 
     return () => {
       cancelled = true;
@@ -1310,51 +1374,6 @@ export default function EmployeeProfilePage() {
     user?.role,
     user?.uid,
   ]);
-
-  useEffect(() => {
-    if (!user?.uid) {
-      setUserDoc(null);
-      setLoading(false);
-      return;
-    }
-
-    if (!employeeProfileSource) {
-      setLoading(true);
-      return;
-    }
-
-    setLoading(true);
-    const unsubscribe = onSnapshot(
-      doc(
-        db,
-        employeeProfileSource.collectionName,
-        employeeProfileSource.docId
-      ),
-      snapshot => {
-        const snapshotData = snapshot.data() as
-          | EmployeeProfileUserDoc
-          | undefined;
-        setUserDoc(
-          snapshot.exists()
-            ? ({
-                ...(snapshotData || {}),
-                uid:
-                  String(snapshotData?.uid || user.uid || snapshot.id).trim() ||
-                  snapshot.id,
-              } as EmployeeProfileUserDoc)
-            : null
-        );
-        setLoading(false);
-      },
-      error => {
-        console.error("employee_profile_snapshot_error", error);
-        setUserDoc(null);
-        setLoading(false);
-      }
-    );
-
-    return () => unsubscribe();
-  }, [employeeProfileSource, user?.uid]);
 
   const profile = useMemo(
     () =>
@@ -1472,34 +1491,43 @@ export default function EmployeeProfilePage() {
       return;
     }
 
+    let active = true;
     setEmployeeFilesLoading(true);
-    const unsubscribe = onSnapshot(
-      query(
-        collection(db, EMPLOYEE_FILES_COLLECTION),
-        where("employeeUid", "==", user.uid)
-      ),
-      snapshot => {
-        const rows = sortEmployeeFiles(
-          snapshot.docs.map(docSnapshot =>
-            normalizeEmployeeFileRecord(
-              docSnapshot.id,
-              (docSnapshot.data() as Record<string, any>) || {}
-            )
-          ).filter(record =>
-            employeeRecordBelongsToScope(record, employeeRecordScope)
+
+    void listHrCoreEmployeeFiles({
+      employeeUid: user.uid,
+      active: true,
+      limit: 200,
+      offset: 0,
+    })
+      .then(result => {
+        if (!active) return;
+        setEmployeeFiles(
+          sortEmployeeFiles(
+            result.employeeFiles
+              .map(file =>
+                normalizeEmployeeFileRecord(
+                  file.id,
+                  file as Record<string, any>
+                )
+              )
+              .filter(record =>
+                employeeRecordBelongsToScope(record, employeeRecordScope)
+              )
           )
         );
-        setEmployeeFiles(rows);
         setEmployeeFilesLoading(false);
-      },
-      error => {
-        console.error("employee_profile_files_snapshot_error", error);
+      })
+      .catch(error => {
+        if (!active) return;
+        console.error("employee_profile_files_hr_core_error", error);
         setEmployeeFiles([]);
         setEmployeeFilesLoading(false);
-      }
-    );
+      });
 
-    return () => unsubscribe();
+    return () => {
+      active = false;
+    };
   }, [employeeRecordScope, user?.uid]);
 
   useEffect(() => {
@@ -1509,53 +1537,51 @@ export default function EmployeeProfilePage() {
       return;
     }
 
-    const linkedEmployeeId = String(user.linkedEmployeeId || "").trim();
-    const payrollQuery =
-      linkedEmployeeId && linkedEmployeeId !== user.uid
-        ? query(
-            collection(db, EMPLOYEE_PAYROLL_RECORDS_COLLECTION),
-            or(
-              where("employeeUid", "==", user.uid),
-              where("employeeId", "==", linkedEmployeeId)
-            )
-          )
-        : query(
-            collection(db, EMPLOYEE_PAYROLL_RECORDS_COLLECTION),
-            where("employeeUid", "==", user.uid)
-          );
-
+    const linkedEmployeeId = String(
+      employeeProfileSource?.entityId || user.linkedEmployeeId || ""
+    ).trim();
+    let active = true;
     setEmployeePayrollRecordsLoading(true);
-    const unsubscribe = onSnapshot(
-      payrollQuery,
-      snapshot => {
-        const rowsById = new Map<string, EmployeePayrollRecord>();
-        snapshot.docs.forEach(docSnapshot => {
-          rowsById.set(
-            docSnapshot.id,
-            normalizeEmployeePayrollRecord(
-              docSnapshot.id,
-              (docSnapshot.data() as Record<string, any>) || {}
-            )
-          );
-        });
+
+    void listHrCorePayrollRecords({
+      employeeUid: user.uid,
+      employeeId: linkedEmployeeId || undefined,
+      limit: 200,
+    })
+      .then(result => {
+        if (!active) return;
         setEmployeePayrollRecords(
           sortEmployeePayrollRecords(
-            Array.from(rowsById.values()).filter(record =>
-              employeeRecordBelongsToScope(record, employeeRecordScope)
-            )
+            result.payrollRecords
+              .map(record =>
+                normalizeEmployeePayrollRecord(
+                  record.id,
+                  record as Record<string, any>
+                )
+              )
+              .filter(record =>
+                employeeRecordBelongsToScope(record, employeeRecordScope)
+              )
           )
         );
         setEmployeePayrollRecordsLoading(false);
-      },
-      error => {
-        console.error("employee_payroll_records_snapshot_error", error);
+      })
+      .catch(error => {
+        if (!active) return;
+        console.error("employee_payroll_records_hr_core_error", error);
         setEmployeePayrollRecords([]);
         setEmployeePayrollRecordsLoading(false);
-      }
-    );
+      });
 
-    return () => unsubscribe();
-  }, [employeeRecordScope, user?.linkedEmployeeId, user?.uid]);
+    return () => {
+      active = false;
+    };
+  }, [
+    employeeProfileSource?.entityId,
+    employeeRecordScope,
+    user?.linkedEmployeeId,
+    user?.uid,
+  ]);
 
   useEffect(() => {
     if (!user?.uid) {
@@ -1564,38 +1590,40 @@ export default function EmployeeProfilePage() {
       return;
     }
 
+    let active = true;
     setLeaveRequestsLoading(true);
-    const unsubscribe = onSnapshot(
-      query(
-        collection(db, EMPLOYEE_LEAVE_REQUESTS_COLLECTION),
-        or(
-          where("userId", "==", user.uid),
-          where("employeeUid", "==", user.uid)
-        )
-      ),
-      snapshot => {
-        const rows = sortEmployeeLeaveRequests(
-          snapshot.docs.map(docSnapshot =>
-            normalizeEmployeeLeaveRequest(
-              docSnapshot.id,
-              (docSnapshot.data() as Record<string, any>) || {}
-            )
-          ).filter(request =>
-            employeeRecordBelongsToScope(request, employeeRecordScope)
+
+    void listHrCoreLeaveRequests({
+      employeeUid: user.uid,
+      limit: 500,
+      offset: 0,
+    })
+      .then(result => {
+        if (!active) return;
+        setLeaveRequests(
+          sortEmployeeLeaveRequests(
+            result.leaveRequests
+              .map(request =>
+                normalizeEmployeeLeaveRequest(request.id, request)
+              )
+              .filter(request =>
+                employeeRecordBelongsToScope(request, employeeRecordScope)
+              )
           )
         );
-        setLeaveRequests(rows);
         setLeaveRequestsLoading(false);
-      },
-      error => {
-        console.error("employee_leave_requests_snapshot_error", error);
+      })
+      .catch(error => {
+        if (!active) return;
+        console.error("employee_leave_requests_hr_core_error", error);
         setLeaveRequests([]);
         setLeaveRequestsLoading(false);
-      }
-    );
+      });
 
-    return () => unsubscribe();
-  }, [employeeRecordScope, user?.uid]);
+    return () => {
+      active = false;
+    };
+  }, [employeeRecordScope, hrOperationsRevision, user?.uid]);
 
   useEffect(() => {
     if (!user?.uid) {
@@ -1604,35 +1632,40 @@ export default function EmployeeProfilePage() {
       return;
     }
 
+    let active = true;
     setServiceRequestsLoading(true);
-    const unsubscribe = onSnapshot(
-      query(
-        collection(db, EMPLOYEE_SERVICE_REQUESTS_COLLECTION),
-        where("employeeUid", "==", user.uid)
-      ),
-      snapshot => {
-        const rows = sortEmployeeServiceRequests(
-          snapshot.docs.map(docSnapshot =>
-            normalizeEmployeeServiceRequest(
-              docSnapshot.id,
-              (docSnapshot.data() as Record<string, any>) || {}
-            )
-          ).filter(request =>
-            employeeRecordBelongsToScope(request, employeeRecordScope)
+
+    void listHrCoreServiceRequests({
+      employeeUid: user.uid,
+      limit: 500,
+      offset: 0,
+    })
+      .then(result => {
+        if (!active) return;
+        setServiceRequests(
+          sortEmployeeServiceRequests(
+            result.serviceRequests
+              .map(request =>
+                normalizeEmployeeServiceRequest(request.id, request)
+              )
+              .filter(request =>
+                employeeRecordBelongsToScope(request, employeeRecordScope)
+              )
           )
         );
-        setServiceRequests(rows);
         setServiceRequestsLoading(false);
-      },
-      error => {
-        console.error("employee_service_requests_snapshot_error", error);
+      })
+      .catch(error => {
+        if (!active) return;
+        console.error("employee_service_requests_hr_core_error", error);
         setServiceRequests([]);
         setServiceRequestsLoading(false);
-      }
-    );
+      });
 
-    return () => unsubscribe();
-  }, [employeeRecordScope, user?.uid]);
+    return () => {
+      active = false;
+    };
+  }, [employeeRecordScope, hrOperationsRevision, user?.uid]);
 
   useEffect(() => {
     setPhoneInput(profile.personal.phone || "");
@@ -1689,18 +1722,11 @@ export default function EmployeeProfilePage() {
 
     setSavingPhone(true);
     try {
-      await setDoc(
-        doc(
-          db,
-          employeeProfileSource.collectionName,
-          employeeProfileSource.docId
-        ),
-        {
-          ...buildEmployeePhonePatch(normalizedPhone),
-          updatedAt: serverTimestamp(),
-        },
-        { merge: true }
+      const response = await updateHrCoreEmployee(
+        employeeProfileSource.entityId,
+        { phone: normalizedPhone }
       );
+      setUserDoc(mapHrCoreEmployeeToProfileDoc(response.employee));
       toast.success("تم تحديث رقم الجوال.");
     } catch (error) {
       console.error("employee_phone_update_failed", error);
@@ -1750,57 +1776,6 @@ export default function EmployeeProfilePage() {
     }
   };
 
-  /*
-      const uploaded = await uploadDocumentToCloudflare({
-        entityType: "employee",
-        entityId: employeeProfileSource.entityId,
-        category: EMPLOYEE_AVATAR_CATEGORY,
-        file,
-        kind: "attachment",
-        uploadedBy: user.uid,
-        storageFolder: "profile_avatar",
-      });
-
-      const avatarPayload = {
-        id: uploaded.id,
-        fileName: uploaded.fileName,
-        filePath: uploaded.filePath,
-        fileUrl: uploaded.fileUrl,
-        contentType: uploaded.contentType,
-        fileSize: uploaded.fileSize,
-        uploadedAt: uploaded.uploadedAt,
-      };
-
-      await setDoc(
-        doc(
-          db,
-          employeeProfileSource.collectionName,
-          employeeProfileSource.docId
-        ),
-        {
-          ...buildEmployeeAvatarPatch(avatarPayload),
-          updatedAt: serverTimestamp(),
-        },
-        { merge: true }
-      );
-
-      if (auth.currentUser) {
-        await updateProfile(auth.currentUser, {
-          photoURL: uploaded.fileUrl,
-        });
-      }
-
-      toast.success("تم تحديث الصورة الشخصية.");
-    } catch (error) {
-      console.error("employee_avatar_upload_failed", error);
-      toast.error("تعذر رفع الصورة الشخصية.");
-    } finally {
-      setUploadingAvatar(false);
-      event.target.value = "";
-    }
-  };
-
-    */
 
   const handleAvatarCropPointerDown = (
     event: ReactPointerEvent<HTMLDivElement>
@@ -1896,18 +1871,11 @@ export default function EmployeeProfilePage() {
         uploadedAt: uploaded.uploadedAt,
       };
 
-      await setDoc(
-        doc(
-          db,
-          employeeProfileSource.collectionName,
-          employeeProfileSource.docId
-        ),
-        {
-          ...buildEmployeeAvatarPatch(avatarPayload),
-          updatedAt: serverTimestamp(),
-        },
-        { merge: true }
+      const response = await updateHrCoreEmployee(
+        employeeProfileSource.entityId,
+        { avatarUrl: uploaded.fileUrl }
       );
+      setUserDoc(mapHrCoreEmployeeToProfileDoc(response.employee));
 
       if (auth.currentUser) {
         await updateProfile(auth.currentUser, {
@@ -2021,66 +1989,53 @@ export default function EmployeeProfilePage() {
 
     setSubmittingServiceRequest(true);
     try {
-      const employeeDocId =
-        (employeeProfileSource.collectionName === "employees"
-          ? employeeProfileSource.docId
-          : String(user.linkedEmployeeId || "").trim()) || null;
+      const employeeDocId = employeeProfileSource.docId || null;
       const requestLabel = getEmployeeServiceRequestTypeLabel(requestType);
-      const docRef = await addDoc(
-        collection(db, EMPLOYEE_SERVICE_REQUESTS_COLLECTION),
-        {
-          ...buildEmployeeServiceRequestPayload({
-            authUid: user.uid,
-            employeeDocId,
-            employeeName:
-              profile.personal.name !== EMPLOYEE_EMPTY_VALUE
-                ? profile.personal.name
-                : user.displayName || user.email || "موظف",
-            employeeEmail:
-              profile.personal.email !== EMPLOYEE_EMPTY_VALUE
-                ? profile.personal.email
-                : user.email || null,
-            requestType,
-            requestDate: serviceRequestForm.requestDate,
-            startDate: serviceRequestForm.startDate,
-            endDate: serviceRequestForm.endDate,
-            startTime: serviceRequestForm.startTime,
-            endTime: serviceRequestForm.endTime,
-            amount: requestType === "salary_advance" ? amount : null,
-            letterType: serviceRequestForm.letterType,
-            employeeNote: serviceRequestForm.employeeNote,
-          }),
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        }
-      );
+      const employeeName =
+        profile.personal.name !== EMPLOYEE_EMPTY_VALUE
+          ? profile.personal.name
+          : user.displayName || user.email || "موظف";
+      const employeeEmail =
+        profile.personal.email !== EMPLOYEE_EMPTY_VALUE
+          ? profile.personal.email
+          : user.email || null;
+      let createdRequestId = "";
 
-      const hrUsers = await getDocs(
-        query(
-          collection(db, "users"),
-          where("role", "in", ["owner", "admin", "hr"])
-        )
-      );
+      const created = await createHrCoreServiceRequest({
+        employeeId: employeeDocId,
+        employeeUid: user.uid,
+        employeeName,
+        employeeEmail,
+        requestType,
+        requestDate: serviceRequestForm.requestDate || null,
+        startDate: serviceRequestForm.startDate || null,
+        endDate: serviceRequestForm.endDate || null,
+        startTime: serviceRequestForm.startTime || null,
+        endTime: serviceRequestForm.endTime || null,
+        amount: requestType === "salary_advance" ? amount : null,
+        letterType: serviceRequestForm.letterType || null,
+        employeeNote: serviceRequestForm.employeeNote,
+      });
+      createdRequestId = created.serviceRequest.id;
+      setHrOperationsRevision(current => current + 1);
 
-      const recipients = hrUsers.docs.filter(
-        docSnap =>
-          docSnap.id !== user.uid &&
-          shouldReceiveLeaveNotification(docSnap.data() as Record<string, any>)
-      );
-
-      await Promise.all(
-        recipients.map(docSnap =>
-          createInAppNotification({
-            userId: docSnap.id,
-            title: `${requestLabel} جديد`,
-            body: `${requestLabel} جديد من ${user.displayName || user.email}`,
-            type: "system",
-            relatedId: docRef.id,
-            relatedTo: "employee_service_request",
-            relatedPath: `/hr/employees?employeeId=${user.uid}&panel=requests`,
-          })
-        )
-      );
+      try {
+        await createInAppNotification({
+          targetRoles: ["owner", "admin", "hr"],
+          excludeUid: user.uid,
+          title: `${requestLabel} جديد`,
+          body: `${requestLabel} جديد من ${user.displayName || user.email}`,
+          type: "system",
+          relatedId: createdRequestId,
+          relatedTo: "employee_service_request",
+          relatedPath: `/hr/employees?employeeId=${user.uid}&panel=requests`,
+        });
+      } catch (notificationError) {
+        console.error(
+          "employee_service_request_notification_failed",
+          notificationError
+        );
+      }
 
       resetServiceRequestForm();
       toast.success("تم رفع الطلب بنجاح.");
@@ -2118,62 +2073,48 @@ export default function EmployeeProfilePage() {
 
     setSubmittingLeaveRequest(true);
     try {
-      const employeeDocId =
-        (employeeProfileSource.collectionName === "employees"
-          ? employeeProfileSource.docId
-          : String(user.linkedEmployeeId || "").trim()) || null;
+      const employeeDocId = employeeProfileSource.docId || null;
 
-      const docRef = await addDoc(
-        collection(db, EMPLOYEE_LEAVE_REQUESTS_COLLECTION),
-        {
-          ...buildEmployeeLeaveRequestPayload({
-            authUid: user.uid,
-            employeeDocId,
-            employeeName:
-              profile.personal.name !== EMPLOYEE_EMPTY_VALUE
-                ? profile.personal.name
-                : user.displayName || user.email || "موظف",
-            employeeEmail:
-              profile.personal.email !== EMPLOYEE_EMPTY_VALUE
-                ? profile.personal.email
-                : user.email || null,
-            leaveType: leaveForm.leaveType,
-            startDate,
-            endDate,
-            daysCount,
-            employeeNote: leaveForm.employeeNote,
-          }),
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        }
-      );
+      const employeeName =
+        profile.personal.name !== EMPLOYEE_EMPTY_VALUE
+          ? profile.personal.name
+          : user.displayName || user.email || "موظف";
+      const employeeEmail =
+        profile.personal.email !== EMPLOYEE_EMPTY_VALUE
+          ? profile.personal.email
+          : user.email || null;
+      let createdRequestId = "";
 
-      const hrUsers = await getDocs(
-        query(
-          collection(db, "users"),
-          where("role", "in", ["owner", "admin", "hr"])
-        )
-      );
+      const created = await createHrCoreLeaveRequest({
+        employeeId: employeeDocId,
+        employeeUid: user.uid,
+        employeeName,
+        employeeEmail,
+        leaveType: leaveForm.leaveType,
+        startDate: leaveForm.startDate,
+        endDate: leaveForm.endDate,
+        employeeNote: leaveForm.employeeNote,
+      });
+      createdRequestId = created.leaveRequest.id;
+      setHrOperationsRevision(current => current + 1);
 
-      const leaveNotificationRecipients = hrUsers.docs.filter(
-        docSnap =>
-          docSnap.id !== user.uid &&
-          shouldReceiveLeaveNotification(docSnap.data() as Record<string, any>)
-      );
-
-      await Promise.all(
-        leaveNotificationRecipients.map(docSnap => {
-          return createInAppNotification({
-            userId: docSnap.id,
-            title: "طلب إجازة جديد",
-            body: `طلب إجازة جديد من ${user.displayName || user.email}`,
-            type: "leave_request_submitted",
-            relatedId: docRef.id,
-            relatedTo: "leave_request",
-            relatedPath: `/hr/employees?employeeId=${user.uid}&panel=leave`,
-          });
-        })
-      );
+      try {
+        await createInAppNotification({
+          targetRoles: ["owner", "admin", "hr"],
+          excludeUid: user.uid,
+          title: "طلب إجازة جديد",
+          body: `طلب إجازة جديد من ${user.displayName || user.email}`,
+          type: "leave",
+          relatedId: createdRequestId,
+          relatedTo: "leave_request",
+          relatedPath: `/hr/employees?employeeId=${user.uid}&panel=leave`,
+        });
+      } catch (notificationError) {
+        console.error(
+          "employee_leave_request_notification_failed",
+          notificationError
+        );
+      }
 
       setLeaveForm({
         leaveType: "annual",

@@ -39,6 +39,11 @@ import { toast } from "sonner";
 import { collection, limit, onSnapshot, orderBy, query, Timestamp } from "firebase/firestore";
 import { db } from "@/_core/firebase";
 import {
+  HR_CORE_D1_ENABLED,
+  isHrCoreConfigured,
+  listHrCoreAuditLogs,
+} from "@/lib/hrCoreApi";
+import {
   Activity,
   Copy,
   Database,
@@ -615,6 +620,34 @@ export default function AuditLogPage() {
   useEffect(() => {
     setLoading(true);
     setError("");
+
+    if (HR_CORE_D1_ENABLED && isHrCoreConfigured()) {
+      let active = true;
+      const load = async () => {
+        try {
+          const result = await listHrCoreAuditLogs({ limit: 200, offset: 0 });
+          if (!active) return;
+          setAuditLogs(
+            result.auditLogs.map(log =>
+              normalizeLog({ id: log.id, ...(log as unknown as Record<string, unknown>) })
+            )
+          );
+          setLastSyncedAt(new Date());
+          setLoading(false);
+        } catch (loadError) {
+          console.error("audit log D1 load error", loadError);
+          if (!active) return;
+          setError("تعذر تحميل سجل التدقيق من Cloudflare D1.");
+          setLoading(false);
+        }
+      };
+      void load();
+      const timer = window.setInterval(() => void load(), 30_000);
+      return () => {
+        active = false;
+        window.clearInterval(timer);
+      };
+    }
 
     const auditQuery = query(
       collection(db, "audit_logs"),

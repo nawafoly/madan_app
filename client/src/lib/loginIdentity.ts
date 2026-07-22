@@ -1,21 +1,8 @@
-import { httpsCallable } from "firebase/functions";
-import { doc, getDoc } from "firebase/firestore";
-
-import { db, firebaseFunctions } from "@/_core/firebase";
 import {
   buildAdminEmailFromUsername,
   normalizeAdminUsername,
 } from "@/lib/adminUsername";
-
-type ResolveLoginEmailRequest = {
-  username: string;
-};
-
-type ResolveLoginEmailResponse = {
-  found?: boolean;
-  email?: string | null;
-  emailMissing?: boolean;
-};
+import { resolveHrCoreLoginIdentity } from "@/lib/hrCoreApi";
 
 export type LoginIdentityErrorCode =
   | "username-not-found"
@@ -31,11 +18,6 @@ export class LoginIdentityError extends Error {
   }
 }
 
-const resolveLoginEmailCallable = httpsCallable<
-  ResolveLoginEmailRequest,
-  ResolveLoginEmailResponse
->(firebaseFunctions, "resolveLoginEmail");
-
 export function normalizeLoginEmail(value: string) {
   return value.trim().toLowerCase();
 }
@@ -44,67 +26,32 @@ export function isEmailLoginInput(value: string) {
   return normalizeLoginEmail(value).includes("@");
 }
 
-export function isLoginIdentityError(
-  error: unknown
-): error is LoginIdentityError {
+export function isLoginIdentityError(error: unknown): error is LoginIdentityError {
   return error instanceof LoginIdentityError;
 }
 
-function isLocalhostRuntime() {
-  if (typeof window === "undefined") return false;
-  return ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname);
-}
-
 function getUsernameFallbackDomains() {
-  const configured = String(
-    import.meta.env.VITE_LOGIN_USERNAME_EMAIL_DOMAINS || ""
-  )
+  const configured = String(import.meta.env.VITE_LOGIN_USERNAME_EMAIL_DOMAINS || "")
     .split(",")
     .map(domain => domain.trim().toLowerCase())
     .filter(Boolean);
 
-  return Array.from(
-    new Set([
-      "madanalbena.com",
-      ...configured,
-      "maedin.com",
-      "maedin.sa",
-      "gmail.com",
-    ])
-  );
+  return Array.from(new Set([
+    "madanalbena.com",
+    ...configured,
+    "maedin.com",
+    "maedin.sa",
+    "gmail.com",
+  ]));
 }
 
-function isCallableUnavailable(error: unknown) {
-  const code = String((error as { code?: unknown })?.code || "").toLowerCase();
-  const message = String(
-    (error as { message?: unknown })?.message || ""
-  ).toLowerCase();
-
-  return (
-    code.includes("functions/not-found") ||
-    code.includes("not-found") ||
-    code.includes("unavailable") ||
-    code.includes("internal") ||
-    message.includes("not found") ||
-    message.includes("not-found") ||
-    message.includes("cors") ||
-    message.includes("network")
-  );
-}
-
-async function resolveLoginEmailFromUsernameIndex(username: string) {
-  let usernameSnap;
-
-  try {
-    usernameSnap = await getDoc(doc(db, "admin_usernames", username));
-  } catch (error) {
-    console.warn("[HR Login] username index lookup skipped");
-    return "";
-  }
-
-  if (!usernameSnap.exists()) return "";
-
-  return normalizeLoginEmail(String(usernameSnap.data()?.email || ""));
+function isHrCoreLookupUnavailable(error: unknown) {
+  const status = Number((error as { status?: unknown })?.status || 0);
+  const message = String((error as { message?: unknown })?.message || "").toLowerCase();
+  return status === 0 || status === 404 || status >= 500 ||
+    message.includes("not configured") ||
+    message.includes("failed to fetch") ||
+    message.includes("network");
 }
 
 export async function resolveLoginEmailCandidatesForAuth(value: string) {
@@ -116,37 +63,21 @@ export async function resolveLoginEmailCandidatesForAuth(value: string) {
   if (!username) throw new LoginIdentityError("username-not-found");
 
   const candidates = new Set<string>();
-  const indexedEmail = await resolveLoginEmailFromUsernameIndex(username);
-  if (indexedEmail) candidates.add(indexedEmail);
 
-  let result: { data?: ResolveLoginEmailResponse } | null = null;
-
-  if (!isLocalhostRuntime()) {
-    try {
-      result = await resolveLoginEmailCallable({ username });
-    } catch (error) {
-      if (!isCallableUnavailable(error)) throw error;
-    }
-  }
-
-  const email = normalizeLoginEmail(String(result?.data?.email || ""));
-
-  if (result?.data?.emailMissing) {
-    throw new LoginIdentityError("email-missing");
-  }
-
-  if (result?.data?.found && email) {
-    candidates.add(email);
+  try {
+    const result = await resolveHrCoreLoginIdentity(username);
+    const email = normalizeLoginEmail(String(result.email || ""));
+    if (result.emailMissing) throw new LoginIdentityError("email-missing");
+    if (result.found && email) candidates.add(email);
+  } catch (error) {
+    if (isLoginIdentityError(error)) throw error;
+    if (!isHrCoreLookupUnavailable(error)) throw error;
+    console.warn("[HR Login] D1 username lookup unavailable");
   }
 
   const generatedEmail = normalizeLoginEmail(buildAdminEmailFromUsername(username));
-  if (generatedEmail) {
-    candidates.add(generatedEmail);
-  }
-
-  for (const domain of getUsernameFallbackDomains()) {
-    candidates.add(`${username}@${domain}`);
-  }
+  if (generatedEmail) candidates.add(generatedEmail);
+  for (const domain of getUsernameFallbackDomains()) candidates.add(`${username}@${domain}`);
 
   if (candidates.size === 0) throw new LoginIdentityError("username-not-found");
   return Array.from(candidates);
