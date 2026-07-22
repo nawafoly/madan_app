@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   Camera,
   CheckCircle2,
@@ -897,10 +898,20 @@ export function DailyTaskTab({
 
   return (
     <div className="grid gap-5 xl:grid-cols-[320px_minmax(0,1fr)]" dir={dir}>
-      {cameraOpen ? (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/85 p-4">
-          <div className="w-full max-w-lg overflow-hidden rounded-[24px] border border-white/10 bg-slate-950 text-white shadow-2xl">
-            <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
+      {cameraOpen && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              className="fixed inset-0 z-[9999] overflow-y-auto overscroll-contain bg-slate-950/85"
+              dir={dir}
+            >
+              <div className="flex min-h-[100dvh] items-center justify-center px-3 pb-[max(1rem,env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))] sm:min-h-screen sm:p-4">
+                <div
+                  role="dialog"
+                  aria-modal="true"
+                  aria-label={tr(language, "تصوير مباشر", "Live Camera")}
+                  className="flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col overflow-hidden rounded-[24px] border border-white/10 bg-slate-950 text-white shadow-2xl sm:max-h-[calc(100vh-2rem)]"
+                >
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
               <div>
                 <h3 className="text-base font-semibold">
                   {tr(language, "تصوير مباشر", "Live Camera")}
@@ -920,10 +931,10 @@ export function DailyTaskTab({
               </Button>
             </div>
 
-            <div className="bg-black">
+            <div className="min-h-0 bg-black">
               <video
                 ref={videoRef}
-                className="aspect-[3/4] max-h-[70vh] w-full bg-black object-contain"
+                className="aspect-[3/4] max-h-[calc(100dvh-13rem)] w-full bg-black object-contain sm:max-h-[70vh]"
                 playsInline
                 muted
                 autoPlay
@@ -936,7 +947,7 @@ export function DailyTaskTab({
               </div>
             ) : null}
 
-            <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-4">
+            <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 sm:py-4">
               <Button
                 type="button"
                 variant="outline"
@@ -955,9 +966,12 @@ export function DailyTaskTab({
                 {tr(language, "التقاط الصورة", "Capture Photo")}
               </Button>
             </div>
-          </div>
-        </div>
-      ) : null}
+                </div>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
 
       <aside className="space-y-4 xl:sticky xl:top-24 xl:self-start">
         <Button
