@@ -1,29 +1,22 @@
-import { doc, getDoc } from "firebase/firestore";
-import { db } from "./firebase";
+import { getHrCoreMe } from "@/lib/hrCoreApi";
 
-export type AppRole =
-  | "user"
-  | "owner"
-  | "admin"
-  | "accountant"
-  | "hr"
-  | "staff";
+export type AppRole = "user" | "owner" | "admin" | "accountant" | "hr" | "staff";
 
-export async function getUserRole(uid: string): Promise<AppRole> {
-  const snap = await getDoc(doc(db, "users", uid));
-  if (!snap.exists()) return "user";
-  const role = String((snap.data() as any)?.role || "")
-    .trim()
-    .toLowerCase();
-  if (
-    role === "owner" ||
-    role === "admin" ||
-    role === "accountant" ||
-    role === "hr" ||
-    role === "staff"
-  ) {
-    return role;
-  }
+function normalizeRole(value: unknown): AppRole {
+  const role = String(value ?? "").trim().toLowerCase();
+  if (["owner", "admin", "accountant", "hr", "staff"].includes(role)) return role as AppRole;
   if (role === "employee") return "staff";
   return "user";
+}
+
+export async function getUserRole(uid: string): Promise<AppRole> {
+  const normalizedUid = String(uid || "").trim();
+  if (!normalizedUid) return "user";
+  try {
+    const result = await getHrCoreMe();
+    if (result.account.uid !== normalizedUid) return "user";
+    return normalizeRole(result.account.role);
+  } catch {
+    return "user";
+  }
 }

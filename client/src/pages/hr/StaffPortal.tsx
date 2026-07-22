@@ -206,6 +206,8 @@ export default function StaffPortalPage() {
   const canWriteWeeklyReportNotes =
     !!user &&
     hasStaffAreaPermission(user, WEEKLY_REPORT_MANAGER_NOTES_PERMISSION);
+  const canReviewDailyTasks =
+    !!user && hasStaffAreaPermission(user, "daily_tasks.manager_notes");
 
   useEffect(() => {
     if (!user?.uid) {
@@ -333,7 +335,7 @@ export default function StaffPortalPage() {
         ),
         href: "/hr/daily-tasks",
         icon: CalendarDays,
-        canEnter: canWriteWeeklyReportNotes,
+        canEnter: canReviewDailyTasks,
       },
       {
         title: tr(language, "إعدادات الإدارة", "Administration Settings"),
@@ -351,7 +353,7 @@ export default function StaffPortalPage() {
         !["/hr/weekly-reports", "/hr/daily-tasks"].includes(item.href) ||
         item.canEnter
     ),
-    [canWriteWeeklyReportNotes, language, user]
+    [canReviewDailyTasks, canWriteWeeklyReportNotes, language, user]
   );
 
   const accountDisplayName =

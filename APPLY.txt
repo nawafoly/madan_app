@@ -1,0 +1,3 @@
+Copy the package contents into C:\Users\nawaf\Downloads\madan, preserving directories.
+Do not copy .env files or secrets.
+Run the checks and deployment commands supplied in the ChatGPT response.

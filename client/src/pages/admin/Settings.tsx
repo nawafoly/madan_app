@@ -192,6 +192,11 @@ import {
   type Permission,
 } from "@/_core/hooks/useAuth";
 import {
+  isHrCoreConfigured,
+  replaceHrCoreAccountPermissions,
+  updateHrCoreAccount,
+} from "@/lib/hrCoreApi";
+import {
   DEFAULT_RECRUITMENT_SETTINGS,
   RECRUITMENT_SETTINGS_DOC_ID,
   type RecruitmentFieldDefinition,
@@ -844,6 +849,10 @@ const DEFAULT_PERMISSIONS: Array<{ key: string; label: string }> = [
     key: "weekly_reports.manager_notes",
     label: "كتابة ملاحظات المدير في التقرير الأسبوعي",
   },
+  {
+    key: "daily_tasks.manager_notes",
+    label: "مراجعة المهام اليومية وكتابة ملاحظات الإدارة",
+  },
   { key: "reports.view", label: "عرض التقارير" },
   { key: "financial.view", label: "عرض المالية" },
   { key: "financial.edit", label: "تعديل المالية" },
@@ -901,6 +910,7 @@ const HR_ONLY_PERMISSION_KEYS = new Set<Permission>([
   "employees.manage",
   "attendance.view",
   "weekly_reports.manager_notes",
+  "daily_tasks.manager_notes",
   "admin_accounts.manage",
 ]);
 
@@ -911,6 +921,7 @@ const STAFF_PERMISSION_KEYS = new Set<Permission>([
   "employees.manage",
   "attendance.view",
   "weekly_reports.manager_notes",
+  "daily_tasks.manager_notes",
   "settings.manage",
   "admin_accounts.manage",
 ]);
@@ -3045,7 +3056,7 @@ export default function Settings({
     if (!username) return toast.error("اسم المستخدم مطلوب");
     if (!isValidAdminUsername(username)) {
       return toast.error(
-        "اسم المستخدم يجب أن يكون 3 إلى 32 حرفًا بالإنجليزية أو أرقامًا أو نقاطًا أو شرطات."
+        "اسم المستخدم يجب أن يكون من حرفين إلى 32 حرفًا بالإنجليزية أو أرقامًا أو نقاطًا أو شرطات."
       );
     }
     if (!email || !email.includes("@")) return toast.error("البريد غير صحيح");
@@ -3097,6 +3108,13 @@ export default function Settings({
       );
       const linkedUserDoc = linkedUserDocs[0] || null;
       const linkedUserUid = linkedUserDoc?.id || null;
+      const hrCoreUid =
+        linkedUserUid || String(adminForm.linkedUserUid || "").trim();
+      if (area === "staff" && !hrCoreUid) {
+        throw new Error(
+          "لا يمكن حفظ صلاحيات حساب HR قبل ربطه بمعرف المصادقة UID."
+        );
+      }
       const linkedEmployeeId = await ensureLinkedEmployeeRecord({
         employeeProfileEnabled,
         includeInEmployeeManagement,
@@ -3240,6 +3258,26 @@ export default function Settings({
         }
       }
 
+      if (area === "staff") {
+        if (!isHrCoreConfigured()) {
+          throw new Error("HR Core API is not configured.");
+        }
+        await updateHrCoreAccount(hrCoreUid, {
+          email,
+          username,
+          displayName,
+          title: title || null,
+          role: roleKey,
+          isActive: adminForm.isActive,
+          employeeProfileEnabled,
+          linkedEmployeeId,
+        });
+        await replaceHrCoreAccountPermissions(hrCoreUid, {
+          allow: permissionsAllow,
+          deny: permissionsDeny,
+        });
+      }
+
       toast.success(
         linkedUserDoc
           ? editingAdminId
@@ -3260,6 +3298,16 @@ export default function Settings({
     try {
       const id = (u.email || u.id || "").trim().toLowerCase(); // ✅ canonical
       const nextIsActive = !u.isActive;
+      const hrCoreUid = String(u.linkedUserUid || "").trim();
+      if (area === "staff") {
+        if (!hrCoreUid) {
+          throw new Error("لا يوجد UID مرتبط بهذا الحساب داخل HR Core.");
+        }
+        if (!isHrCoreConfigured()) {
+          throw new Error("HR Core API is not configured.");
+        }
+        await updateHrCoreAccount(hrCoreUid, { isActive: nextIsActive });
+      }
       await auditedSetDoc({
         ref: doc(db, "admin_users", id),
         data: {
@@ -3343,6 +3391,15 @@ export default function Settings({
           ...linkedUserDocs.map(linkedUserDoc => linkedUserDoc.id),
         ],
       });
+      const hrCoreUid = String(
+        u.linkedUserUid || linkedUserDocs[0]?.id || ""
+      ).trim();
+      if (area === "staff" && hrCoreUid) {
+        if (!isHrCoreConfigured()) {
+          throw new Error("HR Core API is not configured.");
+        }
+        await updateHrCoreAccount(hrCoreUid, { isActive: false });
+      }
       await auditedDeleteDoc({
         ref: doc(db, "admin_users", id),
         action: AUDIT_ACTIONS.USER_UPDATED,
