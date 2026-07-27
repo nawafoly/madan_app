@@ -8,6 +8,7 @@ import {
   Fingerprint,
   Loader2,
   MapPin,
+  SwitchCamera,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -48,6 +49,8 @@ import {
 import { cn } from "@/lib/utils";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { languageDir, tr } from "@/lib/i18n";
+
+type CameraFacingMode = "user" | "environment";
 
 type EmployeeAttendanceCardProps = {
   employeeId?: string | null;
@@ -150,6 +153,11 @@ export default function EmployeeAttendanceCard({
   const [cameraOpen, setCameraOpen] = useState(false);
   const [cameraStarting, setCameraStarting] = useState(false);
   const [cameraError, setCameraError] = useState("");
+  const [cameraFacingMode, setCameraFacingMode] =
+    useState<CameraFacingMode>("user");
+  const [activeCameraFacingMode, setActiveCameraFacingMode] =
+    useState<CameraFacingMode>("user");
+  const [hasMultipleCameras, setHasMultipleCameras] = useState(false);
   const [preparedAttendance, setPreparedAttendance] = useState<{
     type: AttendanceType;
     location: AttendanceLocation;
@@ -230,6 +238,7 @@ export default function EmployeeAttendanceCard({
     let cancelled = false;
     setCameraStarting(true);
     setCameraError("");
+    stopCameraStream();
 
     const startCamera = async () => {
       if (!navigator.mediaDevices?.getUserMedia) {
@@ -250,14 +259,14 @@ export default function EmployeeAttendanceCard({
           stream = await navigator.mediaDevices.getUserMedia({
             audio: false,
             video: {
-              facingMode: { ideal: "user" },
+              facingMode: { ideal: cameraFacingMode },
               width: { ideal: 1280 },
               height: { ideal: 960 },
             },
           });
         } catch (preferredCameraError) {
           console.warn(
-            "attendance_front_camera_unavailable",
+            "attendance_preferred_camera_unavailable",
             preferredCameraError
           );
           stream = await navigator.mediaDevices.getUserMedia({
@@ -272,6 +281,22 @@ export default function EmployeeAttendanceCard({
         }
 
         cameraStreamRef.current = stream;
+        const activeTrack = stream.getVideoTracks()[0] || null;
+        const activeFacingMode = activeTrack?.getSettings?.().facingMode;
+        setActiveCameraFacingMode(
+          activeFacingMode === "environment" ? "environment" : cameraFacingMode
+        );
+
+        try {
+          const devices = await navigator.mediaDevices.enumerateDevices();
+          setHasMultipleCameras(
+            devices.filter(device => device.kind === "videoinput").length > 1
+          );
+        } catch (deviceError) {
+          console.warn("attendance_camera_list_failed", deviceError);
+          setHasMultipleCameras(false);
+        }
+
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
           await videoRef.current.play().catch(() => undefined);
@@ -295,7 +320,15 @@ export default function EmployeeAttendanceCard({
       cancelled = true;
       stopCameraStream();
     };
-  }, [cameraOpen, language, stopCameraStream]);
+  }, [cameraFacingMode, cameraOpen, language, stopCameraStream]);
+
+  const switchCamera = useCallback(() => {
+    if (cameraStarting) return;
+    setCameraError("");
+    setCameraFacingMode(current =>
+      current === "user" ? "environment" : "user"
+    );
+  }, [cameraStarting]);
 
   const applyAttendanceResponse = useCallback(
     async (response: AttendanceResponse) => {
@@ -393,6 +426,8 @@ export default function EmployeeAttendanceCard({
       if (prepared.requirements.photoRequired) {
         waitingForPhoto = true;
         setPreparedAttendance({ type, location: prepared.location });
+        setCameraFacingMode("user");
+        setActiveCameraFacingMode("user");
         setCameraOpen(true);
         return;
       }
@@ -454,8 +489,10 @@ export default function EmployeeAttendanceCard({
       return;
     }
 
-    context.translate(canvas.width, 0);
-    context.scale(-1, 1);
+    if (activeCameraFacingMode === "user") {
+      context.translate(canvas.width, 0);
+      context.scale(-1, 1);
+    }
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
     const blob = await new Promise<Blob | null>(resolve =>
@@ -563,8 +600,28 @@ export default function EmployeeAttendanceCard({
                     playsInline
                     muted
                     autoPlay
-                    className="aspect-[3/4] max-h-[65dvh] w-full scale-x-[-1] bg-black object-cover"
+                    className={cn(
+                      "aspect-[3/4] max-h-[65dvh] w-full bg-black object-cover",
+                      activeCameraFacingMode === "user" && "scale-x-[-1]"
+                    )}
                   />
+                  {hasMultipleCameras ? (
+                    <Button
+                      type="button"
+                      size="icon"
+                      className="absolute end-3 top-3 z-10 rounded-full border border-white/20 bg-black/55 text-white backdrop-blur hover:bg-black/75 hover:text-white"
+                      disabled={cameraStarting}
+                      aria-label={tr(language, "تبديل الكاميرا", "Switch camera")}
+                      title={tr(language, "تبديل الكاميرا", "Switch camera")}
+                      onClick={switchCamera}
+                    >
+                      {cameraStarting ? (
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                      ) : (
+                        <SwitchCamera className="h-5 w-5" />
+                      )}
+                    </Button>
+                  ) : null}
                   {cameraStarting ? (
                     <div className="absolute inset-0 flex items-center justify-center bg-black/55">
                       <Loader2 className="h-9 w-9 animate-spin text-[#F2B705]" />
