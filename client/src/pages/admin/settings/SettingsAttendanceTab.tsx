@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Camera,
   CheckCircle2,
   Loader2,
   LocateFixed,
@@ -44,6 +45,7 @@ type AttendanceZoneForm = {
   lng: string;
   radiusMeters: string;
   officeIp: string;
+  photoAttendanceEnabled: boolean;
   active: boolean;
 };
 
@@ -59,6 +61,7 @@ const createEmptyForm = (): AttendanceZoneForm => ({
   lng: String(DEFAULT_CENTER.lng),
   radiusMeters: "100",
   officeIp: "",
+  photoAttendanceEnabled: false,
   active: true,
 });
 
@@ -466,6 +469,7 @@ export default function SettingsAttendanceTab() {
       lng: formatCoordinate(zone.center.lng),
       radiusMeters: String(Math.round(zone.radiusMeters)),
       officeIp: zone.officeIp || "",
+      photoAttendanceEnabled: zone.photoAttendanceEnabled,
       active: zone.active,
     });
   };
@@ -527,6 +531,7 @@ export default function SettingsAttendanceTab() {
         center: { lat, lng },
         radiusMeters,
         officeIp: officeIp || null,
+        photoAttendanceEnabled: form.photoAttendanceEnabled,
         active: form.active,
       };
 
@@ -575,7 +580,8 @@ export default function SettingsAttendanceTab() {
                   مناطق العمل
                 </CardTitle>
                 <CardDescription>
-                  إدارة نطاق GPS وإضافة شرط شبكة الفرع عند الحاجة.
+                  إدارة نطاق GPS وشبكة الفرع وتحديد المناطق التي تتطلب صورة
+                  مباشرة مع الحضور والانصراف.
                 </CardDescription>
               </div>
               <Badge
@@ -645,6 +651,20 @@ export default function SettingsAttendanceTab() {
                         </Badge>
                         <Badge
                           variant="outline"
+                          className={cn(
+                            "rounded-full bg-white",
+                            zone.photoAttendanceEnabled
+                              ? "border-violet-200 text-violet-700"
+                              : "text-slate-500"
+                          )}
+                        >
+                          <Camera className="ml-1 h-3.5 w-3.5" />
+                          {zone.photoAttendanceEnabled
+                            ? "الحضور بالتصوير"
+                            : "التصوير غير مفعّل"}
+                        </Badge>
+                        <Badge
+                          variant="outline"
                           className="rounded-full bg-white"
                         >
                           lat {zone.center.lat.toFixed(5)}
@@ -698,7 +718,8 @@ export default function SettingsAttendanceTab() {
                   {editingZone ? "تعديل منطقة العمل" : "منطقة عمل جديدة"}
                 </CardTitle>
                 <CardDescription>
-                  اختر نقطة المركز، وحدد نصف القطر، وأضف IP الفرع اختياريًا.
+                  اختر نقطة المركز ونصف القطر، ثم حدد IP وطريقة البصمة لهذا
+                  الفرع.
                 </CardDescription>
               </div>
               <Button
@@ -808,6 +829,33 @@ export default function SettingsAttendanceTab() {
                   عند إدخاله يجب أن يتطابق IP الموظف معه بالإضافة إلى نجاح
                   فحص الموقع. اتركه فارغًا للاستمرار بفحص GPS الحالي فقط.
                 </p>
+              </div>
+
+              <div className="space-y-2 md:col-span-2">
+                <Label>طريقة تسجيل الحضور</Label>
+                <label className="flex min-h-14 items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                  <Checkbox
+                    checked={form.photoAttendanceEnabled}
+                    onCheckedChange={checked =>
+                      setForm(current => ({
+                        ...current,
+                        photoAttendanceEnabled: checked === true,
+                      }))
+                    }
+                    disabled={saving}
+                    className="mt-0.5"
+                  />
+                  <Camera className="mt-0.5 h-4 w-4 shrink-0 text-violet-600" />
+                  <span className="space-y-1">
+                    <span className="block font-semibold text-slate-900">
+                      تفعيل الحضور والانصراف بالتصوير
+                    </span>
+                    <span className="block text-xs leading-5 text-slate-500">
+                      عند تفعيله يجب على موظفي هذه المنطقة التقاط صورة مباشرة
+                      لكل حضور وانصراف. يبقى فحص GPS وIP مطبقًا كالمعتاد.
+                    </span>
+                  </span>
+                </label>
               </div>
 
               <div className="space-y-2">

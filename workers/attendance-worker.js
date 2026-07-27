@@ -12,6 +12,12 @@ const ATTENDANCE_BASE_MAX_ACCURACY_METERS = 150;
 const ATTENDANCE_MAX_ACCURACY_METERS = 200;
 const ATTENDANCE_RECORDS_DEFAULT_LIMIT = 50;
 const ATTENDANCE_RECORDS_MAX_LIMIT = 200;
+const ATTENDANCE_PHOTO_MAX_BYTES = 2.5 * 1024 * 1024;
+const ATTENDANCE_PHOTO_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+]);
 const EARTH_RADIUS_METERS = 6371008.8;
 
 export async function handleAttendanceRequest({
@@ -19,14 +25,27 @@ export async function handleAttendanceRequest({
   url,
   db,
   directoryDb,
+  bucket,
   resolveRequesterContext,
   fetchFirestoreDocument,
 }) {
   const pathname = url.pathname;
   const zoneMatch = pathname.match(/^\/attendance\/work-zones\/([^/]+)$/);
+  const photoMatch = pathname.match(
+    /^\/attendance\/records\/([^/]+)\/photo$/
+  );
 
   if (pathname === "/attendance/record" && request.method !== "POST") {
     return methodNotAllowed(["POST"]);
+  }
+  if (
+    pathname === "/attendance/requirements" &&
+    request.method !== "POST"
+  ) {
+    return methodNotAllowed(["POST"]);
+  }
+  if (photoMatch && request.method !== "GET") {
+    return methodNotAllowed(["GET"]);
   }
   if (
     pathname === "/attendance/admin-adjustment" &&
@@ -60,12 +79,14 @@ export async function handleAttendanceRequest({
   }
   if (
     pathname !== "/attendance/record" &&
+    pathname !== "/attendance/requirements" &&
     pathname !== "/attendance/admin-adjustment" &&
     pathname !== "/attendance/monthly-summary/generate" &&
     pathname !== "/attendance/monthly-summaries" &&
     pathname !== "/attendance/records" &&
     pathname !== "/attendance/work-zones" &&
-    !zoneMatch
+    !zoneMatch &&
+    !photoMatch
   ) {
     return json(404, { ok: false, message: "not_found" });
   }
@@ -80,6 +101,15 @@ export async function handleAttendanceRequest({
   if (pathname === "/attendance/work-zones" && request.method === "GET") {
     if (!canManageAttendance(requester.runtime)) return forbidden();
     return listWorkZones(db);
+  }
+
+  if (photoMatch && request.method === "GET") {
+    return getAttendancePhoto({
+      db,
+      bucket,
+      requester,
+      recordId: decodeURIComponent(photoMatch[1]),
+    });
   }
 
   if (pathname === "/attendance/records" && request.method === "GET") {
@@ -135,6 +165,19 @@ export async function handleAttendanceRequest({
     return recordAttendance({
       request,
       db,
+      bucket,
+      requester,
+      fetchFirestoreDocument,
+    });
+  }
+
+  if (
+    pathname === "/attendance/requirements" &&
+    request.method === "POST"
+  ) {
+    return getAttendanceRequirements({
+      request,
+      db,
       requester,
       fetchFirestoreDocument,
     });
@@ -181,7 +224,7 @@ async function listWorkZones(db) {
       .prepare(
         `
       SELECT id, name, type, center_lat, center_lng, radius_meters, active,
-             office_ip, created_at, updated_at
+             office_ip, photo_attendance_enabled, created_at, updated_at
       FROM work_zones
       ORDER BY name COLLATE NOCASE ASC, id ASC
     `
@@ -193,6 +236,65 @@ async function listWorkZones(db) {
     });
   } catch (error) {
     return serverError("work_zones_query_failed", error);
+  }
+}
+
+async function getAttendancePhoto({ db, bucket, requester, recordId }) {
+  if (!recordId) {
+    return json(400, { ok: false, message: "invalid_attendance_record_id" });
+  }
+  if (!bucket) {
+    return json(500, {
+      ok: false,
+      message: "attendance_photo_storage_unavailable",
+    });
+  }
+
+  try {
+    const row = await db
+      .prepare(
+        `
+          SELECT employee_uid, photo_path, photo_content_type
+          FROM attendance_records
+          WHERE id = ?
+          LIMIT 1
+        `
+      )
+      .bind(recordId)
+      .first();
+    if (!row) {
+      return json(404, { ok: false, message: "attendance_record_not_found" });
+    }
+    if (
+      !canReadAttendanceRecords(
+        requester.runtime,
+        requester.uid,
+        normalizeText(row.employee_uid)
+      )
+    ) {
+      return json(403, { ok: false, message: "attendance_photo_forbidden" });
+    }
+
+    const photoPath = normalizeText(row.photo_path);
+    if (!photoPath) {
+      return json(404, { ok: false, message: "attendance_photo_not_found" });
+    }
+    const object = await bucket.get(photoPath);
+    if (!object) {
+      return json(404, { ok: false, message: "attendance_photo_not_found" });
+    }
+
+    const headers = new Headers({
+      "content-type":
+        normalizeText(row.photo_content_type) || "application/octet-stream",
+      "cache-control": "private, no-store, max-age=0",
+      "content-disposition": `inline; filename="attendance-${recordId}.jpg"`,
+      "x-content-type-options": "nosniff",
+    });
+    if (object.etag) headers.set("etag", object.etag);
+    return new Response(object.body, { status: 200, headers });
+  } catch (error) {
+    return serverError("attendance_photo_read_failed", error);
   }
 }
 
@@ -228,7 +330,8 @@ async function listAttendanceRecords(url, db, directoryDb) {
             location_lat, location_lng, location_accuracy,
             zone_id, zone_name, zone_type, allowed_zone_ids, distance_meters,
             result, rejection_reason, accuracy_accepted, device_info,
-            created_by_email, created_by_role
+            photo_required, photo_path, photo_content_type, photo_size_bytes,
+            photo_captured_at, created_by_email, created_by_role
           FROM attendance_records
           ${cursorWhereSql}
           ORDER BY server_time DESC, id DESC
@@ -833,6 +936,14 @@ function mapAttendanceRecordRow(row, employeeName, sharedDeviceUsage = null) {
       row.distance_meters == null ? null : Number(row.distance_meters),
     rejectionReason: row.rejection_reason || null,
     accuracyAccepted: Number(row.accuracy_accepted) === 1,
+    photo: {
+      required: Number(row.photo_required) === 1,
+      available: Boolean(normalizeText(row.photo_path)),
+      contentType: normalizeText(row.photo_content_type) || null,
+      sizeBytes:
+        row.photo_size_bytes == null ? null : Number(row.photo_size_bytes),
+      capturedAt: normalizeText(row.photo_captured_at) || null,
+    },
     deviceInfo: {
       ...deviceInfo,
       sharedDevice: sharedDeviceUsage
@@ -1171,8 +1282,9 @@ async function createWorkZone(request, db, requester) {
         `
       INSERT INTO work_zones (
         id, name, type, center_lat, center_lng, radius_meters, active, office_ip,
-        created_by_uid, created_at, updated_by_uid, updated_at
-      ) VALUES (?, ?, 'radius', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        photo_attendance_enabled, created_by_uid, created_at, updated_by_uid,
+        updated_at
+      ) VALUES (?, ?, 'radius', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `
       )
       .bind(
@@ -1183,6 +1295,7 @@ async function createWorkZone(request, db, requester) {
         zone.value.radiusMeters,
         zone.value.active ? 1 : 0,
         zone.value.officeIp,
+        zone.value.photoAttendanceEnabled ? 1 : 0,
         requester.uid,
         now,
         requester.uid,
@@ -1212,8 +1325,8 @@ async function updateWorkZone(request, db, requester, id) {
         `
       UPDATE work_zones
       SET name = ?, type = 'radius', center_lat = ?, center_lng = ?,
-          radius_meters = ?, active = ?, office_ip = ?, updated_by_uid = ?,
-          updated_at = ?
+          radius_meters = ?, active = ?, office_ip = ?,
+          photo_attendance_enabled = ?, updated_by_uid = ?, updated_at = ?
       WHERE id = ?
     `
       )
@@ -1224,6 +1337,7 @@ async function updateWorkZone(request, db, requester, id) {
         zone.value.radiusMeters,
         zone.value.active ? 1 : 0,
         zone.value.officeIp,
+        zone.value.photoAttendanceEnabled ? 1 : 0,
         requester.uid,
         now,
         id
@@ -1252,13 +1366,145 @@ async function deleteWorkZone(db, id) {
   }
 }
 
-async function recordAttendance({
+async function getAttendanceRequirements({
   request,
   db,
   requester,
   fetchFirestoreDocument,
 }) {
   const input = await readJsonBody(request);
+  if (!input.ok) return input.response;
+
+  const type = normalizeText(input.data?.type);
+  const location = normalizeLocation(
+    input.data?.location || input.data?.clientLocation
+  );
+  if (!ATTENDANCE_TYPES.has(type)) {
+    return json(400, { ok: false, message: "invalid_attendance_type" });
+  }
+  if (!location) {
+    return json(400, { ok: false, message: "invalid_gps_location" });
+  }
+
+  const context = await resolveAttendanceContext({
+    inputData: input.data,
+    request,
+    db,
+    requester,
+    fetchFirestoreDocument,
+    location,
+  });
+  if (!context.ok) return context.response;
+
+  const { zoneCheck, locationDecision } = context.value;
+  const zone = zoneCheck.zone;
+  return json(200, {
+    ok: true,
+    eligible: locationDecision.result === "allowed",
+    result: locationDecision.result,
+    rejectionReason: locationDecision.rejectionReason || null,
+    zoneId: zone?.id || null,
+    zoneName: zone?.name || null,
+    distanceMeters: zoneCheck.distanceMeters,
+    allowedRadiusMeters: zone?.radiusMeters ?? null,
+    accuracy: location.accuracy,
+    photoRequired: Boolean(zone?.photoAttendanceEnabled),
+  });
+}
+
+async function resolveAttendanceContext({
+  inputData,
+  request,
+  db,
+  requester,
+  fetchFirestoreDocument,
+  location,
+}) {
+  const userData = requester.userData || {};
+  const linkedEmployeeId = normalizeText(userData.linkedEmployeeId);
+  const requestedEmployeeId = normalizeText(inputData?.employeeId);
+  if (
+    requestedEmployeeId &&
+    requestedEmployeeId !== requester.uid &&
+    requestedEmployeeId !== linkedEmployeeId
+  ) {
+    return {
+      ok: false,
+      response: json(403, {
+        ok: false,
+        message: "attendance_employee_mismatch",
+      }),
+    };
+  }
+
+  if (
+    !ATTENDANCE_ALLOWED_ROLES.has(requester.runtime?.role) &&
+    !userData.employeeProfileEnabled &&
+    !linkedEmployeeId &&
+    !requestedEmployeeId
+  ) {
+    return {
+      ok: false,
+      response: json(403, { ok: false, message: "attendance_not_enabled" }),
+    };
+  }
+
+  const employeeDocId = requestedEmployeeId || linkedEmployeeId || requester.uid;
+  const employeeResult = await fetchFirestoreDocument({
+    projectId: requester.projectId,
+    idToken: requester.idToken,
+    documentPath: `employees/${employeeDocId}`,
+  });
+  if (!employeeResult.ok) {
+    return {
+      ok: false,
+      response: json(employeeResult.status || 403, {
+        ok: false,
+        message: "firebase_employee_lookup_failed",
+        detail: employeeResult.error || null,
+      }),
+    };
+  }
+
+  const employeeData = employeeResult.found
+    ? employeeResult.data?.data || {}
+    : {};
+  const allowedZoneIds = pickAllowedZoneIds(employeeData, userData);
+  const zoneResolution = await resolveZones(db, allowedZoneIds);
+  const zoneCheck = evaluateAttendanceZones(location, zoneResolution.zones);
+  const clientIp = getRequestClientIp(request);
+  const locationDecision = evaluateLocationDecision({
+    location,
+    zoneError: zoneResolution.error,
+    zoneCheck,
+    clientIp,
+  });
+
+  return {
+    ok: true,
+    value: {
+      userData,
+      linkedEmployeeId,
+      requestedEmployeeId,
+      employeeDocId,
+      employeeResult,
+      allowedZoneIds,
+      zoneResolution,
+      zoneCheck,
+      clientIp,
+      locationDecision,
+    },
+  };
+}
+
+async function recordAttendance({
+  request,
+  db,
+  bucket,
+  requester,
+  fetchFirestoreDocument,
+}) {
+  const input = await readAttendanceRecordBody(request);
   if (!input.ok) return input.response;
   const debugRequest = normalizeAttendanceDebug(input.data?.debug);
 
@@ -1269,56 +1515,42 @@ async function recordAttendance({
   if (!ATTENDANCE_TYPES.has(type)) {
     return json(400, { ok: false, message: "invalid_attendance_type" });
   }
-  if (!location)
+  if (!location) {
     return json(400, { ok: false, message: "invalid_gps_location" });
-
-  const userData = requester.userData || {};
-  const linkedEmployeeId = normalizeText(userData.linkedEmployeeId);
-  const requestedEmployeeId = normalizeText(input.data?.employeeId);
-  if (
-    requestedEmployeeId &&
-    requestedEmployeeId !== requester.uid &&
-    requestedEmployeeId !== linkedEmployeeId
-  ) {
-    return json(403, { ok: false, message: "attendance_employee_mismatch" });
   }
 
-  if (
-    !ATTENDANCE_ALLOWED_ROLES.has(requester.runtime?.role) &&
-    !userData.employeeProfileEnabled &&
-    !linkedEmployeeId &&
-    !requestedEmployeeId
-  ) {
-    return json(403, { ok: false, message: "attendance_not_enabled" });
-  }
-
-  const employeeDocId = requestedEmployeeId || linkedEmployeeId || requester.uid;
-  const employeeResult = await fetchFirestoreDocument({
-    projectId: requester.projectId,
-    idToken: requester.idToken,
-    documentPath: `employees/${employeeDocId}`,
-  });
-  if (!employeeResult.ok) {
-    return json(employeeResult.status || 403, {
-      ok: false,
-      message: "firebase_employee_lookup_failed",
-      detail: employeeResult.error || null,
-    });
-  }
-  const employeeData = employeeResult.found
-    ? employeeResult.data?.data || {}
-    : {};
-  const allowedZoneIds = pickAllowedZoneIds(employeeData, userData);
-  const zoneResolution = await resolveZones(db, allowedZoneIds);
-  const zoneCheck = evaluateAttendanceZones(location, zoneResolution.zones);
-  const clientIp = getRequestClientIp(request);
-
-  const locationDecision = evaluateLocationDecision({
+  const context = await resolveAttendanceContext({
+    inputData: input.data,
+    request,
+    db,
+    requester,
+    fetchFirestoreDocument,
     location,
-    zoneError: zoneResolution.error,
+  });
+  if (!context.ok) return context.response;
+
+  const {
+    linkedEmployeeId,
+    requestedEmployeeId,
+    employeeDocId,
+    employeeResult,
+    allowedZoneIds,
+    zoneResolution,
     zoneCheck,
     clientIp,
-  });
+    locationDecision,
+  } = context.value;
+
+  const zone = zoneCheck.zone;
+  const photoRequired = Boolean(zone?.photoAttendanceEnabled);
+  const photoValidation = validateAttendancePhoto(input.photo);
+  let initialResult = locationDecision.result;
+  let initialReason = locationDecision.rejectionReason;
+  if (initialResult === "allowed" && photoRequired && !photoValidation.ok) {
+    initialResult = "rejected";
+    initialReason = photoValidation.reason;
+  }
+
   const attendanceDebug = buildAttendanceDebug({
     debugRequest,
     requester,
@@ -1330,21 +1562,28 @@ async function recordAttendance({
     zoneResolution,
     zoneCheck,
     location,
-    locationDecision,
+    locationDecision: {
+      result: initialResult,
+      rejectionReason: initialReason,
+    },
   });
   if (attendanceDebug) {
+    attendanceDebug.photoRequired = photoRequired;
+    attendanceDebug.photoProvided = Boolean(input.photo);
     console.log("attendance_debug", attendanceDebug);
   }
-  const initialResult = locationDecision.result;
-  const initialReason = locationDecision.rejectionReason;
 
   const recordId = crypto.randomUUID();
   const now = new Date().toISOString();
   const clientTime = clampText(input.data?.clientTime, 80) || null;
   const deviceInfo = normalizeDeviceInfo(input.data?.deviceInfo);
-  const zone = zoneCheck.zone;
   const role = normalizeText(requester.runtime?.role) || "guest";
-  const source = buildAttendanceSource({ clientIp, zone });
+  const source = buildAttendanceSource({
+    clientIp,
+    zone,
+    photoRequired,
+  });
+  let photoMetadata = null;
 
   try {
     if (initialResult === "rejected") {
@@ -1363,6 +1602,8 @@ async function recordAttendance({
         deviceInfo,
         role,
         source,
+        photoRequired,
+        photo: null,
       });
       const currentState = await readAttendanceState(db, requester.uid);
       return attendanceResponse({
@@ -1375,7 +1616,25 @@ async function recordAttendance({
         distanceMeters: zoneCheck.distanceMeters,
         previousStatus: currentState?.status || null,
         currentStatus: currentState?.status || null,
+        photoRequired,
+        photoAttached: false,
         debug: attendanceDebug,
+      });
+    }
+
+    if (photoRequired) {
+      if (!bucket) {
+        return json(500, {
+          ok: false,
+          message: "attendance_photo_storage_unavailable",
+        });
+      }
+      photoMetadata = await storeAttendancePhoto(bucket, {
+        file: photoValidation.file,
+        recordId,
+        employeeUid: requester.uid,
+        zoneId: zone?.id || "unassigned",
+        capturedAt: now,
       });
     }
 
@@ -1414,6 +1673,8 @@ async function recordAttendance({
         deviceInfo,
         role,
         source,
+        photoRequired,
+        photo: photoMetadata,
       }),
       db
         .prepare(
@@ -1506,6 +1767,17 @@ async function recordAttendance({
       savedResult === "allowed" ? stateRequirement : targetStatus;
     const currentStatus =
       savedResult === "allowed" ? targetStatus : previousStatus;
+
+    if (savedResult === "rejected" && photoMetadata) {
+      await clearAttendancePhotoFromRecord(db, recordId).catch(error => {
+        console.error("[attendance] rejected photo metadata cleanup failed", error);
+      });
+      await deleteAttendancePhoto(bucket, photoMetadata.path).catch(error => {
+        console.error("[attendance] rejected photo object cleanup failed", error);
+      });
+      photoMetadata = null;
+    }
+
     return attendanceResponse({
       recordId,
       type,
@@ -1516,9 +1788,14 @@ async function recordAttendance({
       distanceMeters: zoneCheck.distanceMeters,
       previousStatus,
       currentStatus,
+      photoRequired,
+      photoAttached: savedResult === "allowed" && Boolean(photoMetadata),
       debug: attendanceDebug,
     });
   } catch (error) {
+    if (photoMetadata?.path) {
+      await deleteAttendancePhoto(bucket, photoMetadata.path).catch(() => undefined);
+    }
     return serverError("attendance_record_failed", error);
   }
 }
@@ -1531,9 +1808,10 @@ function buildRecordInsert(db, values) {
       id, employee_uid, employee_doc_id, type, server_time, client_time,
       location_lat, location_lng, location_accuracy, zone_id, zone_name, zone_type,
       allowed_zone_ids, distance_meters, result, rejection_reason, accuracy_accepted,
-      device_info, source, created_by_uid, created_by_email, created_by_role,
-      created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      photo_required, photo_path, photo_content_type, photo_size_bytes,
+      photo_captured_at, device_info, source, created_by_uid, created_by_email,
+      created_by_role, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `
     )
     .bind(
@@ -1554,6 +1832,11 @@ function buildRecordInsert(db, values) {
       values.result,
       values.rejectionReason,
       values.location.accuracy <= getAllowedAccuracyMeters(values.zone) ? 1 : 0,
+      values.photoRequired ? 1 : 0,
+      values.photo?.path || null,
+      values.photo?.contentType || null,
+      values.photo?.sizeBytes ?? null,
+      values.photo?.capturedAt || null,
       JSON.stringify(values.deviceInfo),
       values.source ||
         JSON.stringify({
@@ -1676,7 +1959,7 @@ async function resolveZones(db, allowedZoneIds) {
     .prepare(
       `
     SELECT id, name, type, center_lat, center_lng, radius_meters, active,
-           office_ip, created_at, updated_at
+           office_ip, photo_attendance_enabled, created_at, updated_at
     FROM work_zones WHERE id IN (${placeholders})
   `
     )
@@ -1974,6 +2257,10 @@ function normalizeWorkZoneInput(value) {
   const lng = finiteNumber(center.lng ?? center.longitude);
   const radiusMeters = finiteNumber(data.radiusMeters);
   const officeIp = normalizeIpAddress(data.officeIp ?? data.office_ip);
+  const photoAttendanceEnabled =
+    data.photoAttendanceEnabled === true ||
+    data.photo_attendance_enabled === true ||
+    Number(data.photo_attendance_enabled) === 1;
   const hasOfficeIpInput = Boolean(
     normalizeText(data.officeIp ?? data.office_ip)
   );
@@ -2004,6 +2291,7 @@ function normalizeWorkZoneInput(value) {
       radiusMeters,
       active: data.active !== false,
       officeIp,
+      photoAttendanceEnabled,
     },
   };
 }
@@ -2049,6 +2337,7 @@ function mapWorkZoneRow(row) {
     radiusMeters: Number(row.radius_meters),
     active: Number(row.active) === 1,
     officeIp: normalizeIpAddress(row.office_ip),
+    photoAttendanceEnabled: Number(row.photo_attendance_enabled) === 1,
     createdAt: row.created_at || null,
     updatedAt: row.updated_at || null,
   };
@@ -2089,14 +2378,15 @@ function isValidIpv4(value) {
   );
 }
 
-function buildAttendanceSource({ clientIp, zone }) {
+function buildAttendanceSource({ clientIp, zone, photoRequired = false }) {
   const requiredOfficeIp = normalizeIpAddress(zone?.officeIp);
   const normalizedClientIp = normalizeIpAddress(clientIp);
   return JSON.stringify({
     area: "employee",
     page: "employee_profile",
     route: "worker.attendance.record",
-    method: "gps_button",
+    method: photoRequired ? "photo_camera" : "gps_button",
+    photoRequired: Boolean(photoRequired),
     network: {
       clientIp: normalizedClientIp,
       officeIpRequired: Boolean(requiredOfficeIp),
@@ -2203,6 +2493,8 @@ function attendanceResponse({
   distanceMeters,
   previousStatus,
   currentStatus,
+  photoRequired = false,
+  photoAttached = false,
   debug,
 }) {
   const body = {
@@ -2217,6 +2509,8 @@ function attendanceResponse({
     allowedRadiusMeters: zone?.radiusMeters ?? null,
     previousStatus: previousStatus || null,
     currentStatus: currentStatus || null,
+    photoRequired: Boolean(photoRequired),
+    photoAttached: Boolean(photoAttached),
   };
   if (debug) body.debug = debug;
   return json(200, body);
@@ -2231,6 +2525,129 @@ async function readJsonBody(request) {
       response: json(400, { ok: false, message: "invalid_json_body" }),
     };
   }
+}
+
+async function readAttendanceRecordBody(request) {
+  const contentType = normalizeText(request.headers.get("content-type")).toLowerCase();
+  if (!contentType.includes("multipart/form-data")) {
+    const jsonInput = await readJsonBody(request);
+    return jsonInput.ok
+      ? { ok: true, data: jsonInput.data, photo: null }
+      : jsonInput;
+  }
+
+  try {
+    const form = await request.formData();
+    const payloadText = normalizeText(form.get("payload"));
+    if (!payloadText) {
+      return {
+        ok: false,
+        response: json(400, {
+          ok: false,
+          message: "invalid_attendance_payload",
+        }),
+      };
+    }
+    const data = JSON.parse(payloadText);
+    const rawPhoto = form.get("photo");
+    const photo =
+      typeof File !== "undefined" && rawPhoto instanceof File
+        ? rawPhoto
+        : null;
+    return { ok: true, data, photo };
+  } catch {
+    return {
+      ok: false,
+      response: json(400, {
+        ok: false,
+        message: "invalid_attendance_multipart_body",
+      }),
+    };
+  }
+}
+
+function validateAttendancePhoto(file) {
+  if (!file) {
+    return { ok: false, reason: "photo_required", file: null };
+  }
+
+  const contentType = normalizeText(file.type).toLowerCase();
+  if (!ATTENDANCE_PHOTO_TYPES.has(contentType)) {
+    return { ok: false, reason: "invalid_attendance_photo", file: null };
+  }
+  if (!Number.isFinite(file.size) || file.size <= 0) {
+    return { ok: false, reason: "invalid_attendance_photo", file: null };
+  }
+  if (file.size > ATTENDANCE_PHOTO_MAX_BYTES) {
+    return { ok: false, reason: "attendance_photo_too_large", file: null };
+  }
+
+  return { ok: true, reason: null, file };
+}
+
+async function storeAttendancePhoto(
+  bucket,
+  { file, recordId, employeeUid, zoneId, capturedAt }
+) {
+  const contentType = normalizeText(file?.type).toLowerCase();
+  const extension =
+    contentType === "image/png"
+      ? "png"
+      : contentType === "image/webp"
+        ? "webp"
+        : "jpg";
+  const month = normalizeText(capturedAt).slice(0, 7) || "unknown-month";
+  const path = [
+    "attendance-photos",
+    sanitizeAttendancePathPart(zoneId),
+    month,
+    sanitizeAttendancePathPart(employeeUid),
+    `${sanitizeAttendancePathPart(recordId)}.${extension}`,
+  ].join("/");
+
+  await bucket.put(path, await file.arrayBuffer(), {
+    httpMetadata: { contentType },
+    customMetadata: {
+      recordId,
+      employeeUid,
+      zoneId,
+      capturedAt,
+      category: "attendance_photo",
+    },
+  });
+
+  return {
+    path,
+    contentType,
+    sizeBytes: Number(file.size),
+    capturedAt,
+  };
+}
+
+function sanitizeAttendancePathPart(value) {
+  return normalizeText(value).replace(/[^A-Za-z0-9_-]/g, "_") || "unknown";
+}
+
+async function clearAttendancePhotoFromRecord(db, recordId) {
+  await db
+    .prepare(
+      `
+        UPDATE attendance_records
+        SET photo_path = NULL,
+            photo_content_type = NULL,
+            photo_size_bytes = NULL,
+            photo_captured_at = NULL,
+            updated_at = ?
+        WHERE id = ?
+      `
+    )
+    .bind(new Date().toISOString(), recordId)
+    .run();
+}
+
+async function deleteAttendancePhoto(bucket, path) {
+  if (!bucket || !normalizeText(path)) return;
+  await bucket.delete(path);
 }
 
 function finiteNumber(value) {

@@ -151,6 +151,7 @@ export default {
             url,
             db: attendanceDb,
             directoryDb: db,
+            bucket,
             resolveRequesterContext,
             fetchFirestoreDocument,
           })

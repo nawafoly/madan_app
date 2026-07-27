@@ -96,12 +96,13 @@ function createAttendanceClearFakeDb() {
                 const [employeeUid, ...recordIds] = bindings;
                 let changes = 0;
                 for (const recordId of recordIds) {
-                  for (const row of state.values()) {
-                    if (row.last_record_id === recordId) {
-                      throw new Error(
-                        "D1_ERROR: FOREIGN KEY constraint failed: SQLITE_CONSTRAINT_FOREIGNKEY"
-                      );
-                    }
+                  const referencesRecord = Array.from(state.values()).some(
+                    row => row.last_record_id === recordId
+                  );
+                  if (referencesRecord) {
+                    throw new Error(
+                      "D1_ERROR: FOREIGN KEY constraint failed: SQLITE_CONSTRAINT_FOREIGNKEY"
+                    );
                   }
                   const record = records.get(recordId);
                   if (record?.employee_uid === employeeUid) {

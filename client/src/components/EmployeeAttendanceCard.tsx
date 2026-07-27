@@ -1,11 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   AlertCircle,
+  Camera,
   CheckCircle2,
   Clock3,
   Fingerprint,
   Loader2,
   MapPin,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -25,7 +28,9 @@ import {
   isGeolocationPositionError,
   isGeolocationPermissionDenied,
   logAttendanceDebug,
+  prepareEmployeeAttendance,
   submitEmployeeAttendance,
+  type AttendanceLocation,
   type AttendanceResponse,
   type AttendanceType,
 } from "@/lib/attendance";
@@ -142,6 +147,15 @@ export default function EmployeeAttendanceCard({
   const [loadingToday, setLoadingToday] = useState(false);
   const [showLocationPermissionHelp, setShowLocationPermissionHelp] =
     useState(false);
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [cameraStarting, setCameraStarting] = useState(false);
+  const [cameraError, setCameraError] = useState("");
+  const [preparedAttendance, setPreparedAttendance] = useState<{
+    type: AttendanceType;
+    location: AttendanceLocation;
+  } | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const cameraStreamRef = useRef<MediaStream | null>(null);
 
   const [todayKey, setTodayKey] = useState(() => getRiyadhTodayKey());
   const todayState = useMemo(
@@ -188,6 +202,121 @@ export default function EmployeeAttendanceCard({
 
     return () => window.clearInterval(timer);
   }, []);
+
+  const stopCameraStream = useCallback(() => {
+    cameraStreamRef.current?.getTracks().forEach(track => track.stop());
+    cameraStreamRef.current = null;
+    if (videoRef.current) videoRef.current.srcObject = null;
+  }, []);
+
+  const closeCamera = useCallback(
+    (cancelAttendance = false) => {
+      setCameraOpen(false);
+      stopCameraStream();
+      if (cancelAttendance) {
+        setPreparedAttendance(null);
+        setPendingType(null);
+      }
+    },
+    [stopCameraStream]
+  );
+
+  useEffect(() => {
+    if (!cameraOpen) {
+      stopCameraStream();
+      return;
+    }
+
+    let cancelled = false;
+    setCameraStarting(true);
+    setCameraError("");
+
+    const startCamera = async () => {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setCameraError(
+          tr(
+            language,
+            "الكاميرا غير مدعومة في هذا الجهاز.",
+            "Camera access is not supported on this device."
+          )
+        );
+        setCameraStarting(false);
+        return;
+      }
+
+      try {
+        let stream: MediaStream;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: false,
+            video: {
+              facingMode: { ideal: "user" },
+              width: { ideal: 1280 },
+              height: { ideal: 960 },
+            },
+          });
+        } catch (preferredCameraError) {
+          console.warn(
+            "attendance_front_camera_unavailable",
+            preferredCameraError
+          );
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: false,
+            video: true,
+          });
+        }
+
+        if (cancelled) {
+          stream.getTracks().forEach(track => track.stop());
+          return;
+        }
+
+        cameraStreamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play().catch(() => undefined);
+        }
+      } catch (error) {
+        console.error("attendance_camera_start_failed", error);
+        setCameraError(
+          tr(
+            language,
+            "تعذر تشغيل الكاميرا. فعّل صلاحية الكاميرا ثم حاول مرة أخرى.",
+            "Could not start the camera. Enable camera permission and try again."
+          )
+        );
+      } finally {
+        if (!cancelled) setCameraStarting(false);
+      }
+    };
+
+    void startCamera();
+    return () => {
+      cancelled = true;
+      stopCameraStream();
+    };
+  }, [cameraOpen, language, stopCameraStream]);
+
+  const applyAttendanceResponse = useCallback(
+    async (response: AttendanceResponse) => {
+      const locationFeedback = buildAttendanceLocationFeedback(response);
+      setLastResponse(response);
+      setLastLocationFeedback(locationFeedback);
+      onRecorded?.(response);
+      setShowLocationPermissionHelp(false);
+
+      if (response.result === "allowed") {
+        toast.success(getAttendanceSuccessLabel(response.type));
+      } else {
+        toast.error(
+          locationFeedback?.message ||
+            getAttendanceRejectionLabel(response.rejectionReason)
+        );
+      }
+      await loadTodayRecords();
+    },
+    [loadTodayRecords, onRecorded]
+  );
 
   const handleAttendance = async () => {
     const type = todayState.nextType;
@@ -237,33 +366,43 @@ export default function EmployeeAttendanceCard({
     }
 
     setPendingType(type);
+    let waitingForPhoto = false;
     try {
-      const response = await submitEmployeeAttendance({
+      const prepared = await prepareEmployeeAttendance({
         employeeId: employeeId || null,
         type,
       });
-      const locationFeedback = buildAttendanceLocationFeedback(response);
-      setLastResponse(response);
-      setLastLocationFeedback(locationFeedback);
-      logAttendanceDebug("button-response-applied", {
-        employeeId: employeeId || null,
-        employeeUid: employeeUid || null,
-        response,
-        locationFeedback,
-      });
-      onRecorded?.(response);
-      setShowLocationPermissionHelp(false);
-
-      if (response.result === "allowed") {
-        toast.success(getAttendanceSuccessLabel(response.type));
-        await loadTodayRecords();
-      } else {
-        toast.error(
-          locationFeedback?.message ||
-            getAttendanceRejectionLabel(response.rejectionReason)
-        );
-        await loadTodayRecords();
+      if (prepared.requirements.result === "rejected") {
+        await applyAttendanceResponse({
+          ok: false,
+          id: "attendance-preflight",
+          result: "rejected",
+          type,
+          rejectionReason: prepared.requirements.rejectionReason || null,
+          accuracy: prepared.requirements.accuracy ?? prepared.location.accuracy,
+          zoneId: prepared.requirements.zoneId || null,
+          distanceMeters: prepared.requirements.distanceMeters ?? null,
+          allowedRadiusMeters:
+            prepared.requirements.allowedRadiusMeters ?? null,
+          photoRequired: prepared.requirements.photoRequired,
+          photoAttached: false,
+        });
+        return;
       }
+
+      if (prepared.requirements.photoRequired) {
+        waitingForPhoto = true;
+        setPreparedAttendance({ type, location: prepared.location });
+        setCameraOpen(true);
+        return;
+      }
+
+      const response = await submitEmployeeAttendance({
+        employeeId: employeeId || null,
+        type,
+        location: prepared.location,
+      });
+      await applyAttendanceResponse(response);
     } catch (error) {
       const locationFeedback = buildGeolocationErrorFeedback(error);
       setLastLocationFeedback(locationFeedback);
@@ -283,6 +422,69 @@ export default function EmployeeAttendanceCard({
         locationFeedback?.message || getAttendanceSubmitErrorMessage(error)
       );
     } finally {
+      if (!waitingForPhoto) setPendingType(null);
+    }
+  };
+
+  const captureAttendancePhoto = async () => {
+    const video = videoRef.current;
+    const prepared = preparedAttendance;
+    if (!video || !video.videoWidth || !video.videoHeight || !prepared) {
+      toast.error(
+        tr(
+          language,
+          "الكاميرا غير جاهزة، حاول مرة أخرى.",
+          "The camera is not ready. Try again."
+        )
+      );
+      return;
+    }
+
+    const maxDimension = 1280;
+    const scale = Math.min(
+      1,
+      maxDimension / Math.max(video.videoWidth, video.videoHeight)
+    );
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+    canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+    const context = canvas.getContext("2d");
+    if (!context) {
+      toast.error(tr(language, "تعذر تجهيز الصورة.", "Could not prepare the photo."));
+      return;
+    }
+
+    context.translate(canvas.width, 0);
+    context.scale(-1, 1);
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    const blob = await new Promise<Blob | null>(resolve =>
+      canvas.toBlob(resolve, "image/jpeg", 0.78)
+    );
+    if (!blob) {
+      toast.error(tr(language, "تعذر التقاط الصورة.", "Could not capture the photo."));
+      return;
+    }
+
+    const photo = new File(
+      [blob],
+      `attendance-${prepared.type}-${Date.now()}.jpg`,
+      { type: "image/jpeg", lastModified: Date.now() }
+    );
+
+    closeCamera(false);
+    try {
+      const response = await submitEmployeeAttendance({
+        employeeId: employeeId || null,
+        type: prepared.type,
+        photo,
+      });
+      await applyAttendanceResponse(response);
+    } catch (error) {
+      console.error("employee_photo_attendance_submit_failed", error);
+      toast.error(getAttendanceSubmitErrorMessage(error));
+    } finally {
+      setPreparedAttendance(null);
       setPendingType(null);
     }
   };
@@ -316,6 +518,91 @@ export default function EmployeeAttendanceCard({
   const nextActionIsCheckout = todayState.nextType === "check_out";
 
   return (
+    <>
+      {cameraOpen && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              className="fixed inset-0 z-[9999] flex h-[100dvh] items-center justify-center bg-slate-950/90 p-4"
+              dir={languageDir(language)}
+            >
+              <div
+                role="dialog"
+                aria-modal="true"
+                className="flex max-h-[calc(100dvh-2rem)] w-full max-w-[430px] flex-col overflow-hidden rounded-[28px] border border-white/10 bg-slate-950 text-white shadow-2xl"
+              >
+                <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-4">
+                  <div>
+                    <div className="flex items-center gap-2 text-base font-semibold">
+                      <Camera className="h-5 w-5 text-[#F2B705]" />
+                      {preparedAttendance?.type === "check_out"
+                        ? tr(language, "صورة الانصراف", "Check-out Photo")
+                        : tr(language, "صورة الحضور", "Check-in Photo")}
+                    </div>
+                    <p className="mt-1 text-xs leading-5 text-slate-300">
+                      {tr(
+                        language,
+                        "اجعل الوجه ظاهرًا بوضوح ثم التقط الصورة لإكمال العملية.",
+                        "Keep your face clearly visible, then capture the photo to complete the action."
+                      )}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="rounded-full text-white hover:bg-white/10 hover:text-white"
+                    onClick={() => closeCamera(true)}
+                  >
+                    <X className="h-5 w-5" />
+                  </Button>
+                </div>
+
+                <div className="relative min-h-0 flex-1 overflow-hidden bg-black">
+                  <video
+                    ref={videoRef}
+                    playsInline
+                    muted
+                    autoPlay
+                    className="aspect-[3/4] max-h-[65dvh] w-full scale-x-[-1] bg-black object-cover"
+                  />
+                  {cameraStarting ? (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/55">
+                      <Loader2 className="h-9 w-9 animate-spin text-[#F2B705]" />
+                    </div>
+                  ) : null}
+                </div>
+
+                {cameraError ? (
+                  <div className="border-t border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
+                    {cameraError}
+                  </div>
+                ) : null}
+
+                <div className="flex items-center justify-between gap-3 border-t border-white/10 px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="rounded-full border-white/20 bg-white/10 text-white hover:bg-white/20 hover:text-white"
+                    onClick={() => closeCamera(true)}
+                  >
+                    {tr(language, "إلغاء", "Cancel")}
+                  </Button>
+                  <Button
+                    type="button"
+                    className="rounded-full bg-[#F2B705] px-6 text-slate-950 hover:bg-[#e0ab00]"
+                    disabled={cameraStarting || Boolean(cameraError)}
+                    onClick={() => void captureAttendancePhoto()}
+                  >
+                    <Camera className="h-4 w-4" />
+                    {tr(language, "التقاط وتسجيل", "Capture & Record")}
+                  </Button>
+                </div>
+              </div>
+            </div>,
+            document.body
+          )
+        : null}
+
     <Card
       dir={languageDir(language)}
       className={cn(
@@ -333,7 +620,7 @@ export default function EmployeeAttendanceCard({
             variant="outline"
             className="rounded-full border-[#F2B705]/35 bg-[#F2B705]/10 text-[#8b6700] shadow-none"
           >
-            GPS
+            {tr(language, "GPS + تصوير حسب الفرع", "GPS + branch photo")}
           </Badge>
         </div>
         <CardTitle className="text-xl font-semibold text-slate-950">
@@ -565,5 +852,6 @@ export default function EmployeeAttendanceCard({
         </div>
       </CardContent>
     </Card>
+    </>
   );
 }

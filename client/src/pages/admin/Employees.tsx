@@ -4206,6 +4206,9 @@ export default function EmployeesManagementPage() {
         officeIp:
           workZones.find(zone => zone.id === editingWorkZoneId)?.officeIp ??
           null,
+        photoAttendanceEnabled:
+          workZones.find(zone => zone.id === editingWorkZoneId)
+            ?.photoAttendanceEnabled ?? false,
       } as const;
 
       const savedZone = editingWorkZoneId

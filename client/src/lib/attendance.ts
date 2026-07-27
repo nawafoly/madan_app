@@ -21,7 +21,28 @@ export type AttendanceResponse = {
   allowedRadiusMeters?: number | null;
   previousStatus?: string | null;
   currentStatus?: string | null;
+  photoRequired?: boolean;
+  photoAttached?: boolean;
   debug?: Record<string, unknown> | null;
+};
+
+export type AttendanceLocation = {
+  lat: number;
+  lng: number;
+  accuracy: number;
+};
+
+export type AttendanceRequirements = {
+  ok: boolean;
+  eligible: boolean;
+  result: AttendanceResult;
+  rejectionReason?: string | null;
+  accuracy?: number | null;
+  zoneId?: string | null;
+  zoneName?: string | null;
+  distanceMeters?: number | null;
+  allowedRadiusMeters?: number | null;
+  photoRequired: boolean;
 };
 
 type AttendanceDebugPayload = {
@@ -36,11 +57,7 @@ type AttendanceRequest = {
   type: AttendanceType;
   clientTime: string;
   debug?: AttendanceDebugPayload;
-  location: {
-    lat: number;
-    lng: number;
-    accuracy: number;
-  };
+  location: AttendanceLocation;
   deviceInfo: {
     deviceId: string;
     userAgent: string;
@@ -151,7 +168,7 @@ function buildStableAttendanceDeviceId() {
   return `${ATTENDANCE_DEVICE_ID_VERSION_PREFIX}${randomId}`;
 }
 
-async function recordAttendance(requestBody: AttendanceRequest) {
+async function recordAttendance(requestBody: AttendanceRequest, photo?: File | null) {
   const currentUser = auth.currentUser;
   if (!currentUser) throw new Error("Authentication required.");
 
@@ -180,15 +197,31 @@ async function recordAttendance(requestBody: AttendanceRequest) {
     },
   });
 
-  const response = await fetch(requestUrl, {
-    method: "POST",
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${await currentUser.getIdToken()}`,
-    },
-    body: JSON.stringify(requestBody),
-  });
+  const idToken = await currentUser.getIdToken();
+  const init: RequestInit = photo
+    ? (() => {
+        const form = new FormData();
+        form.append("payload", JSON.stringify(requestBody));
+        form.append("photo", photo, photo.name || `attendance-${Date.now()}.jpg`);
+        return {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+            Authorization: `Bearer ${idToken}`,
+          },
+          body: form,
+        };
+      })()
+    : {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify(requestBody),
+      };
+  const response = await fetch(requestUrl, init);
   const payload = (await response.json().catch(() => null)) as
     | (AttendanceResponse & { message?: string; detail?: string })
     | null;
@@ -304,6 +337,12 @@ export function getAttendanceRejectionLabel(reason?: string | null) {
       return "يوجد حضور مسجل بالفعل ولم يتم تسجيل انصراف بعد.";
     case "not_checked_in":
       return "لا يوجد حضور مفتوح لتسجيل الانصراف.";
+    case "photo_required":
+      return "يجب التقاط صورة مباشرة لإكمال تسجيل الحضور أو الانصراف.";
+    case "invalid_attendance_photo":
+      return "الصورة غير صالحة. أعد التقاطها من الكاميرا.";
+    case "attendance_photo_too_large":
+      return "حجم الصورة كبير. أعد التقاط الصورة بجودة أقل.";
     case "zone_not_found":
       return "لم يتم العثور على نطاق دوام مرتبط بالموظف.";
     case "zone_invalid":
@@ -364,6 +403,8 @@ export function getAttendanceSubmitErrorMessage(error: unknown) {
 export async function submitEmployeeAttendance(input: {
   employeeId?: string | null;
   type: AttendanceType;
+  location?: AttendanceLocation | null;
+  photo?: File | null;
 }) {
   const requestId = createAttendanceDebugRequestId();
 
@@ -379,6 +420,45 @@ export async function submitEmployeeAttendance(input: {
     pageUrl: getDebugPageUrl(),
   });
 
+  const location = input.location || (await resolveCurrentAttendanceLocation(requestId));
+  const debug: AttendanceDebugPayload = {
+    enabled: true,
+    requestId,
+    startedAt: new Date().toISOString(),
+    pageUrl: getDebugPageUrl(),
+  };
+
+  try {
+    const response = await recordAttendance(
+      {
+        employeeId: input.employeeId || null,
+        type: input.type,
+        clientTime: new Date().toISOString(),
+        debug,
+        location,
+        deviceInfo: getDeviceInfo(),
+      },
+      input.photo || null
+    );
+    logAttendanceDebug("submit-complete", {
+      requestId,
+      result: response.result,
+      rejectionReason: response.rejectionReason || null,
+      response,
+    });
+    return response;
+  } catch (error) {
+    logAttendanceDebug("submit-error", {
+      requestId,
+      error: serializeAttendanceError(error),
+    });
+    throw error;
+  }
+}
+
+async function resolveCurrentAttendanceLocation(
+  requestId: string
+): Promise<AttendanceLocation> {
   let position: GeolocationPosition;
   try {
     logAttendanceDebug("gps-request", { requestId });
@@ -404,39 +484,60 @@ export async function submitEmployeeAttendance(input: {
     throw error;
   }
 
-  const location = {
+  return {
     lat: position.coords.latitude,
     lng: position.coords.longitude,
     accuracy: position.coords.accuracy,
   };
-  const debug: AttendanceDebugPayload = {
-    enabled: true,
-    requestId,
-    startedAt: new Date().toISOString(),
-    pageUrl: getDebugPageUrl(),
-  };
+}
 
-  try {
-    const response = await recordAttendance({
+export async function prepareEmployeeAttendance(input: {
+  employeeId?: string | null;
+  type: AttendanceType;
+}): Promise<{
+  location: AttendanceLocation;
+  requirements: AttendanceRequirements;
+}> {
+  const currentUser = auth.currentUser;
+  if (!currentUser) throw new Error("Authentication required.");
+
+  const requestId = createAttendanceDebugRequestId();
+  const location = await resolveCurrentAttendanceLocation(requestId);
+  const requestUrl = buildDocumentWorkerUrl("/attendance/requirements");
+  if (!requestUrl) throw new Error("Attendance worker URL is not configured.");
+
+  const response = await fetch(requestUrl, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${await currentUser.getIdToken()}`,
+    },
+    body: JSON.stringify({
       employeeId: input.employeeId || null,
       type: input.type,
-      clientTime: new Date().toISOString(),
-      debug,
       location,
-      deviceInfo: getDeviceInfo(),
-    });
-    logAttendanceDebug("submit-complete", {
-      requestId,
-      result: response.result,
-      rejectionReason: response.rejectionReason || null,
-      response,
-    });
-    return response;
-  } catch (error) {
-    logAttendanceDebug("submit-error", {
-      requestId,
-      error: serializeAttendanceError(error),
-    });
-    throw error;
+    }),
+  });
+  const payload = (await response.json().catch(() => null)) as
+    | (AttendanceRequirements & { message?: string; detail?: string })
+    | null;
+
+  if (!response.ok || !payload) {
+    throw new Error(
+      String(
+        payload?.message ||
+          payload?.detail ||
+          "Attendance requirements request failed."
+      )
+    );
   }
+
+  return {
+    location,
+    requirements: {
+      ...payload,
+      photoRequired: payload.photoRequired === true,
+    },
+  };
 }

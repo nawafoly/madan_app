@@ -27,6 +27,13 @@ function record(
     distanceMeters: null,
     rejectionReason: null,
     accuracyAccepted: true,
+    photo: {
+      required: false,
+      available: false,
+      contentType: null,
+      sizeBytes: null,
+      capturedAt: null,
+    },
     deviceInfo: {},
     createdByEmail: null,
     createdByRole: null,

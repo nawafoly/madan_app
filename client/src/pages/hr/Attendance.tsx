@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   AlertTriangle,
+  Camera,
   CalendarCheck2,
   CheckCircle2,
   Clock3,
@@ -12,6 +13,7 @@ import {
   Filter,
   LogIn,
   LogOut,
+  Loader2,
   MapPin,
   Navigation,
   RefreshCw,
@@ -31,6 +33,13 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -49,6 +58,7 @@ import {
 import { useLanguage } from "@/contexts/LanguageContext";
 import {
   fetchAttendanceRecords,
+  fetchAttendancePhoto,
   type AttendanceRecord,
   type AttendanceRecordsFilters,
   type AttendanceRecordsResponse,
@@ -203,6 +213,9 @@ function rejectionLabel(reason: string | null, language: "ar" | "en") {
     office_ip_unavailable: { ar: "تعذر التحقق من الشبكة", en: "Office network unavailable" },
     duplicate_check_in: { ar: "حضور مكرر", en: "Duplicate check-in" },
     not_checked_in: { ar: "لا يوجد حضور مفتوح", en: "No open check-in" },
+    photo_required: { ar: "صورة البصمة مطلوبة", en: "Attendance photo required" },
+    invalid_attendance_photo: { ar: "صورة البصمة غير صالحة", en: "Invalid attendance photo" },
+    attendance_photo_too_large: { ar: "صورة البصمة كبيرة", en: "Attendance photo too large" },
     zone_not_found: { ar: "النطاق غير موجود", en: "Zone not found" },
     zone_invalid: { ar: "النطاق غير صالح", en: "Invalid zone" },
   };
@@ -1198,6 +1211,109 @@ function ResultBadge({
   );
 }
 
+function AttendancePhotoBlock({
+  record,
+  language,
+}: {
+  record: AttendanceRecord;
+  language: "ar" | "en";
+}) {
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [photoUrl, setPhotoUrl] = useState("");
+  const [photoError, setPhotoError] = useState("");
+
+  useEffect(() => {
+    return () => {
+      if (photoUrl) URL.revokeObjectURL(photoUrl);
+    };
+  }, [photoUrl]);
+
+  if (!record.photo?.required && !record.photo?.available) return null;
+
+  const openPhoto = async () => {
+    if (!record.photo.available) return;
+    setOpen(true);
+    if (photoUrl || loading) return;
+
+    setLoading(true);
+    setPhotoError("");
+    try {
+      const blob = await fetchAttendancePhoto(record.id);
+      setPhotoUrl(URL.createObjectURL(blob));
+    } catch (error) {
+      console.error("attendance_photo_load_failed", error);
+      setPhotoError(
+        tr(
+          language,
+          "تعذر تحميل صورة الحضور.",
+          "Could not load the attendance photo."
+        )
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <>
+      <div className="mt-3">
+        {record.photo.available ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 rounded-full border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100 hover:text-violet-800"
+            onClick={() => void openPhoto()}
+          >
+            <Camera className="h-3.5 w-3.5" />
+            {tr(language, "عرض صورة البصمة", "View attendance photo")}
+          </Button>
+        ) : (
+          <Badge
+            variant="outline"
+            className="rounded-full border-amber-200 bg-amber-50 text-amber-700"
+          >
+            <Camera className="h-3.5 w-3.5" />
+            {tr(language, "الصورة مطلوبة وغير مرفقة", "Required photo missing")}
+          </Badge>
+        )}
+      </div>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="w-[calc(100vw-2rem)] max-w-[560px] overflow-hidden rounded-[28px] border-slate-200 bg-white p-0">
+          <DialogHeader className="border-b border-slate-200 px-5 py-4 text-start">
+            <DialogTitle className="flex items-center gap-2 text-slate-950">
+              <Camera className="h-5 w-5 text-violet-600" />
+              {record.type === "check_in"
+                ? tr(language, "صورة تسجيل الحضور", "Check-in Photo")
+                : tr(language, "صورة تسجيل الانصراف", "Check-out Photo")}
+            </DialogTitle>
+            <DialogDescription>
+              {getAttendanceEmployeeDisplayName(record, language)} · {formatDateTime(record.serverTime)}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex min-h-[280px] items-center justify-center bg-slate-950">
+            {loading ? (
+              <Loader2 className="h-9 w-9 animate-spin text-[#F2B705]" />
+            ) : photoError ? (
+              <div className="px-6 text-center text-sm text-rose-200">
+                {photoError}
+              </div>
+            ) : photoUrl ? (
+              <img
+                src={photoUrl}
+                alt={tr(language, "صورة بصمة الحضور", "Attendance photo")}
+                className="max-h-[70dvh] w-full object-contain"
+              />
+            ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 function EmployeeIdentity({
   record,
   language,
@@ -1309,6 +1425,8 @@ function AttendanceEventBlock({
         <TypeBadge record={record} language={language} />
         <ResultBadge record={record} language={language} />
       </div>
+
+      <AttendancePhotoBlock record={record} language={language} />
 
       {record.rejectionReason ? (
         <div className="mt-3 rounded-xl border border-rose-200 bg-white/85 px-3 py-2">

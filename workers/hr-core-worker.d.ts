@@ -111,3 +111,34 @@ export function normalizeEmployeeMessagePayload(
   requester: { uid: string; permissions?: string[]; account?: Record<string, any> },
   existing?: Record<string, any> | null
 ): Record<string, any>;
+
+export function isPayrollImportPath(pathname: unknown): boolean;
+
+export function normalizeEmployeeSelfServicePayload(
+  value: unknown
+):
+  | {
+      ok: true;
+      value: { phone?: string; avatarUrl?: string };
+    }
+  | {
+      ok: false;
+      message: string;
+      unknown?: string[];
+    };
+
+export function normalizeLeaveBalanceAdjustmentPayload(
+  value: unknown
+):
+  | {
+      ok: true;
+      value: {
+        operationType: "add" | "deduct";
+        amount: number;
+        reason: string;
+      };
+    }
+  | {
+      ok: false;
+      message: string;
+    };

@@ -11,6 +11,7 @@ export type WorkZone = {
   radiusMeters: number;
   active: boolean;
   officeIp: string | null;
+  photoAttendanceEnabled: boolean;
   createdAt?: unknown;
   updatedAt?: unknown;
 };
@@ -46,6 +47,10 @@ export function normalizeWorkZone(id: string, data: Record<string, any>) {
     radiusMeters: Math.max(1, finiteNumber(data?.radiusMeters, 100)),
     active: data?.active !== false,
     officeIp: String(data?.officeIp ?? data?.office_ip ?? "").trim() || null,
+    photoAttendanceEnabled:
+      data?.photoAttendanceEnabled === true ||
+      data?.photo_attendance_enabled === true ||
+      Number(data?.photo_attendance_enabled) === 1,
     createdAt: data?.createdAt,
     updatedAt: data?.updatedAt,
   } satisfies WorkZone;

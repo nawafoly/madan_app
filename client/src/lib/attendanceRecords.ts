@@ -20,6 +20,13 @@ export type AttendanceRecord = {
   distanceMeters: number | null;
   rejectionReason: string | null;
   accuracyAccepted: boolean;
+  photo: {
+    required: boolean;
+    available: boolean;
+    contentType: string | null;
+    sizeBytes: number | null;
+    capturedAt: string | null;
+  };
   deviceInfo: {
     deviceId?: string | null;
     deviceChanged?: boolean;
@@ -242,6 +249,44 @@ export async function fetchAttendanceRecords(
       date: String(payload.summary?.date || ""),
     },
   };
+}
+
+export async function fetchAttendancePhoto(recordId: string): Promise<Blob> {
+  const currentUser = auth.currentUser;
+  if (!currentUser) throw new Error("Authentication required.");
+
+  const normalizedRecordId = String(recordId || "").trim();
+  if (!normalizedRecordId) throw new Error("Attendance record ID is required.");
+
+  const requestUrl = buildDocumentWorkerUrl(
+    `/attendance/records/${encodeURIComponent(normalizedRecordId)}/photo`
+  );
+  if (!requestUrl) throw new Error("Attendance worker URL is not configured.");
+
+  const response = await fetch(requestUrl, {
+    method: "GET",
+    headers: {
+      Accept: "image/*",
+      Authorization: `Bearer ${await currentUser.getIdToken()}`,
+    },
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as {
+      message?: string;
+      detail?: string;
+    } | null;
+    throw new Error(
+      String(
+        payload?.message ||
+          payload?.detail ||
+          `Attendance photo request failed (${response.status}).`
+      )
+    );
+  }
+
+  return response.blob();
 }
 
 export async function adjustAttendanceRecordsAsAdmin(
