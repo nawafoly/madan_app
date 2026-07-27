@@ -163,7 +163,6 @@ import {
   listHrCoreEmployeeMessages,
   listHrCoreLeaveRequests,
   listHrCoreLeaveBalanceAdjustments,
-  listHrCorePayrollAdvances,
   listHrCorePayrollRecords,
   listHrCoreServiceRequests,
   markHrCoreEmployeeMessagesRead,
@@ -2652,20 +2651,15 @@ export default function EmployeesManagementPage() {
 
     let active = true;
     setEmployeePayrollRecordsLoading(true);
-    setApprovedPayrollAdvancesLoading(true);
+    setApprovedPayrollAdvances([]);
+    setApprovedPayrollAdvancesLoading(false);
 
-    void Promise.all([
-      listHrCorePayrollRecords({
-        employeeId: selectedEmployeeDocumentId || undefined,
-        employeeUid: selectedEmployeeAuthUid || undefined,
-        limit: 200,
-      }),
-      listHrCorePayrollAdvances({
-        employeeId: selectedEmployeeDocumentId || undefined,
-        employeeUid: selectedEmployeeAuthUid || undefined,
-      }),
-    ])
-      .then(([payrollResult, advancesResult]) => {
+    void listHrCorePayrollRecords({
+      employeeId: selectedEmployeeDocumentId || undefined,
+      employeeUid: selectedEmployeeAuthUid || undefined,
+      limit: 200,
+    })
+      .then(payrollResult => {
         if (!active) return;
         setEmployeePayrollRecords(
           sortEmployeePayrollRecords(
@@ -2677,18 +2671,15 @@ export default function EmployeesManagementPage() {
             )
           )
         );
-        setApprovedPayrollAdvances(advancesResult.advances || []);
       })
       .catch(error => {
         console.error("employee_payroll_records_hr_core_error", error);
         if (!active) return;
         setEmployeePayrollRecords([]);
-        setApprovedPayrollAdvances([]);
       })
       .finally(() => {
         if (!active) return;
         setEmployeePayrollRecordsLoading(false);
-        setApprovedPayrollAdvancesLoading(false);
       });
 
     return () => {
@@ -4419,7 +4410,7 @@ export default function EmployeesManagementPage() {
       return;
     }
     if (payrollMudadDocument && !isSupportedMudadPayrollDocument(payrollMudadDocument)) {
-      toast.error("الصيغ المدعومة لمستند مدد هي PDF أو PNG أو JPG فقط.");
+      toast.error("الصيغ المدعومة لمرفقات الراتب هي PDF أو PNG أو JPG فقط.");
       return;
     }
 
@@ -4645,7 +4636,7 @@ export default function EmployeesManagementPage() {
   ) => {
     const file = event.target.files?.[0] || null;
     if (file && !isSupportedMudadPayrollDocument(file)) {
-      toast.error("الصيغ المدعومة لمستند مدد هي PDF أو PNG أو JPG فقط.");
+      toast.error("الصيغ المدعومة لمرفقات الراتب هي PDF أو PNG أو JPG فقط.");
       resetPayrollMudadDocument();
       return;
     }
@@ -4661,7 +4652,7 @@ export default function EmployeesManagementPage() {
     if (!file) return;
 
     if (!isSupportedMudadPayrollDocument(file)) {
-      toast.error("الصيغ المدعومة لمستند مدد هي PDF أو PNG أو JPG فقط.");
+      toast.error("الصيغ المدعومة لمرفقات الراتب هي PDF أو PNG أو JPG فقط.");
       return;
     }
 
@@ -8255,11 +8246,10 @@ export default function EmployeesManagementPage() {
                           الرواتب
                         </div>
                         <div className="text-2xl font-semibold tracking-tight text-slate-950">
-                          قفل الراتب وسجل الرواتب
+                          إعدادات وسجل الرواتب
                         </div>
                         <p className="max-w-2xl text-sm leading-7 text-slate-500">
-                          احتساب راتب نهاية الشهر من الحضور والغياب والتأخير
-                          والأوفر تايم، ثم حفظ السجل الشهري.
+                          إدارة إعدادات راتب الموظف والاطلاع على السجلات السابقة، بينما تتم الحسبة والاعتماد من مركز الرواتب الموحد.
                         </p>
                       </div>
 
@@ -8290,633 +8280,43 @@ export default function EmployeesManagementPage() {
 
                   <CardContent className="space-y-4 p-4">
                     <div className="space-y-4">
-                      <div className="space-y-4 rounded-[24px] border border-slate-200 bg-slate-50/70 p-4 sm:p-5">
-                        <div className="space-y-4">
+                      <div className="rounded-[24px] border border-[#e8cfda] bg-gradient-to-l from-[#fff8fb] via-white to-[#fffdf8] p-5 sm:p-6">
+                        <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
                           <div className="max-w-3xl space-y-2">
-                            <div className="text-base font-semibold text-slate-950">
-                              قفل راتب نهاية الشهر
+                            <div className="flex items-center gap-2 text-base font-semibold text-slate-950">
+                              <BadgeCheck className="h-5 w-5 text-[#9b2457]" />
+                              إدارة الراتب من مركز الرواتب الموحد
                             </div>
-                            <p className="text-sm leading-7 text-slate-500">
-                              اضبط شهر الراتب، احسب الحضور، أضف الخصومات
-                              الداخلية ثم أنشئ سجلًا مستقلًا يحفظ نتيجة هذا
-                              الشهر.
+                            <p className="text-sm leading-7 text-slate-600">
+                              تم نقل احتساب الحضور والغياب والتأخير ونقص الساعات والأوفر تايم والإضافات والخصومات والاعتماد إلى صفحة الرواتب المركزية. تبقى هذه الصفحة لإعدادات راتب الموظف وسجل الرواتب السابقة فقط.
                             </p>
-                          </div>
-
-                          <div className="space-y-4">
-                            <div className="max-w-xs">
-                              <Field label="الشهر المستهدف">
-                                <NativeDatePickerInput
-                                  type="month"
-                                  value={payrollMonthInput}
-                                  onValueChange={value =>
-                                    setPayrollMonthInput(value)
-                                  }
-                                  disabled={
-                                    !canManageEmployees || creatingPayrollRecord
-                                  }
-                                />
-                              </Field>
-                            </div>
-
-                            <div className="space-y-4 rounded-[22px] border border-slate-200 bg-white p-4">
-                              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                                <div className="space-y-1">
-                                  <div className="text-sm font-semibold text-slate-950">
-                                    وقت الدوام واحتساب الحضور
-                                  </div>
-                                  <p className="text-xs leading-6 text-slate-500">
-                                    يقرأ وقت الدوام من بيانات الموظف المحفوظة
-                                    ويستخدمه في حساب التأخير ونقص الساعات
-                                    والزيادة الصافية لهذا الشهر.
-                                  </p>
-                                  {selectedPayrollMonthMeta ? (
-                                    <div className="space-y-1 text-xs leading-6 text-slate-500">
-                                      {selectedPayrollCalculationRange ? (
-                                        <p>
-                                          نطاق الاحتساب:{" "}
-                                          {selectedPayrollCalculationRange.isCurrentMonth
-                                            ? "من بداية الشهر حتى اليوم"
-                                            : `${formatPayrollCalculationDate(
-                                                selectedPayrollCalculationRange.calculationStartDate
-                                              )} إلى ${formatPayrollCalculationDate(
-                                                selectedPayrollCalculationRange.calculationEndDate
-                                              )}`}
-                                        </p>
-                                      ) : null}
-                                      {selectedPayrollCalculationRange?.isFutureMonth ? (
-                                        <p className="font-semibold text-red-600">
-                                          لا يمكن احتساب الحضور لشهر مستقبلي.
-                                        </p>
-                                      ) : selectedPayrollCalculationRange?.excludesFutureDays ? (
-                                        <p className="font-semibold text-slate-600">
-                                          الأيام المستقبلية غير محسوبة.
-                                        </p>
-                                      ) : null}
-                                    </div>
-                                  ) : null}
-                                </div>
-
-                                <Button
-                                  type="button"
-                                  className="h-11 w-full rounded-[16px] bg-[#030640] px-5 text-white shadow-sm hover:bg-[#11154d] lg:w-auto"
-                                  onClick={() =>
-                                    void handleCalculatePayrollFromAttendance()
-                                  }
-                                  disabled={
-                                    !canManageEmployees ||
-                                    saving ||
-                                    attendancePayrollLoading ||
-                                    !selectedPayrollMonthMeta ||
-                                    selectedPayrollCalculationRange?.isFutureMonth
-                                  }
-                                >
-                                  {attendancePayrollLoading ? (
-                                    <Loader2 className="ml-2 h-4 w-4 animate-spin" />
-                                  ) : (
-                                    <Clock3 className="ml-2 h-4 w-4" />
-                                  )}
-                                  {attendancePayrollLoading
-                                    ? "جاري احتساب الحضور..."
-                                    : selectedPayrollCalculationRange?.isCurrentMonth
-                                      ? "احتساب الحضور حتى اليوم"
-                                      : "احتساب حضور الشهر"}
-                                </Button>
-                              </div>
-
-                              <div
-                                className={cn(
-                                  "rounded-[18px] border px-4 py-3 text-sm font-semibold",
-                                  selectedEmployeeShiftSchedule.startTime &&
-                                    selectedEmployeeShiftSchedule.endTime
-                                    ? "border-slate-200 bg-slate-50 text-slate-800"
-                                    : "border-red-200 bg-red-50 text-red-700"
-                                )}
-                              >
-                                وقت الدوام المعتمد لهذا الموظف:{" "}
-                                {selectedEmployeeScheduleLabel}
-                                <div className="mt-1 text-xs font-medium leading-5 text-slate-500">
-                                  أيام الراحة:{" "}
-                                  {formatWeeklyOffDaysLabel(
-                                    selectedEmployeeShiftSchedule.weeklyOffDays
-                                  )}{" "}
-                                  · أيام العمل داخل نطاق الاحتساب:{" "}
-                                  {formatNumberEN(
-                                    selectedPayrollCalculationRange?.isFutureMonth
-                                      ? 0
-                                      : payrollAttendanceWorkDateKeys.length
-                                  )}{" "}
-                                  يوم
-                                </div>
-                                {!selectedEmployeeShiftSchedule.startTime ||
-                                !selectedEmployeeShiftSchedule.endTime ? (
-                                  <div className="mt-1 text-xs font-medium leading-5">
-                                    يجب تحديد وقت الدوام من بيانات الموظف قبل
-                                    الاحتساب من الحضور
-                                  </div>
-                                ) : null}
-                              </div>
-
-                              {attendancePayrollSummary ? (
-                                <div className="grid gap-3 text-sm sm:grid-cols-2">
-                                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                                    التأخير الفعلي:{" "}
-                                    {formatHoursDuration(
-                                      attendancePayrollSummary.lateHours
-                                    )}
-                                  </div>
-                                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                                    نقص ساعات مالي:{" "}
-                                    {formatHoursDuration(
-                                      attendancePayrollSummary.missingHours
-                                    )}
-                                  </div>
-                                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                                    الساعات الزائدة المكتشفة:{" "}
-                                    {formatHoursDuration(
-                                      attendancePayrollSummary.overtimeHours
-                                    )}
-                                  </div>
-                                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                                    أيام مكتملة:{" "}
-                                    {formatNumberEN(
-                                      attendancePayrollSummary.completeDays
-                                    )}
-                                  </div>
-                                  <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-red-700">
-                                    غياب:{" "}
-                                    {formatNumberEN(attendanceAbsentDaysNumber)}{" "}
-                                    أيام
-                                  </div>
-                                </div>
-                              ) : null}
-
-                              <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-4">
-                                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                                  <div className="space-y-1">
-                                    <div className="text-sm font-semibold text-slate-950">
-                                      احتساب الأوفر تايم
-                                    </div>
-                                    <p className="text-xs leading-6 text-slate-500">
-                                      الساعات الزائدة تُعرض كمعلومة، ولا تدخل في
-                                      الراتب إلا عند تفعيل احتسابها ماليًا لهذا
-                                      السجل.
-                                    </p>
-                                  </div>
-                                  <div className="flex items-center gap-3">
-                                    <span className="text-xs font-semibold text-slate-500">
-                                      {includeOvertimeInPayroll
-                                        ? "مفعّل"
-                                        : "غير مفعّل"}
-                                    </span>
-                                    <Switch
-                                      checked={includeOvertimeInPayroll}
-                                      onCheckedChange={checked =>
-                                        setIncludeOvertimeInPayroll(
-                                          checked === true
-                                        )
-                                      }
-                                      disabled={
-                                        !canManageEmployees ||
-                                        creatingPayrollRecord ||
-                                        !!selectedPayrollRecord
-                                      }
-                                    />
-                                  </div>
-                                </div>
-                              </div>
-
-                              {approvedPayrollAdvancesLoading ? (
-                                <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                                  جاري تحميل السلف المعتمدة...
-                                </div>
-                              ) : approvedPayrollAdvances.length ? (
-                                <div className="rounded-[18px] border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-950">
-                                  <div className="font-semibold">
-                                    سلف راتب معتمدة ستُخصم تلقائيًا
-                                  </div>
-                                  <div className="mt-1 text-xs leading-6 text-violet-800">
-                                    {approvedPayrollAdvances
-                                      .map(
-                                        request =>
-                                          `${formatNumberEN(Number(request.amount || 0))} ر.س${request.requestDate ? ` (${request.requestDate})` : ""}`
-                                      )
-                                      .join("، ")}
-                                  </div>
-                                  <div className="mt-2 font-semibold">
-                                    الإجمالي: {formatNumberEN(approvedPayrollAdvanceTotal)} ر.س
-                                  </div>
-                                </div>
-                              ) : null}
-                            </div>
-
-                            <div className="space-y-4 rounded-[22px] border border-slate-200 bg-white p-4">
-                              <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
-                                <div className="space-y-1">
-                                  <div className="text-sm font-semibold text-slate-950">
-                                    الخصومات اليدوية
-                                  </div>
-                                  <p className="text-xs leading-6 text-slate-500">
-                                    أضف خصومات داخلية فقط مثل الغياب أو التأخير
-                                    أو أي استقطاع آخر. التأمينات تظهر كحقل مستقل
-                                    ولا تدخل في إجمالي الخصومات.
-                                  </p>
-                                </div>
-
-                                <div className="flex flex-col gap-3 sm:flex-row lg:flex-col">
-                                  <div className="rounded-[16px] border border-slate-200 bg-slate-50 px-4 py-3 text-right">
-                                    <div className="text-xs font-semibold text-slate-500">
-                                      إجمالي الخصومات
-                                    </div>
-                                    <div className="mt-1 text-lg font-semibold text-slate-950 tabular-nums">
-                                      {formatNumberEN(
-                                        payrollTotalDeductions || 0
-                                      )}{" "}
-                                      ر.س
-                                    </div>
-                                  </div>
-
-                                  {salaryDeductions.length ? (
-                                    <Button
-                                      type="button"
-                                      onClick={handleAddSalaryDeduction}
-                                      disabled={!canManageEmployees || saving}
-                                      className="h-11 rounded-[16px] bg-slate-950 px-5 text-white hover:bg-slate-900"
-                                    >
-                                      <Plus className="ml-2 h-4 w-4" />
-                                      إضافة خصم جديد
-                                    </Button>
-                                  ) : null}
-                                </div>
-                              </div>
-
-                              {employeeAbsences.length ? (
-                                <div className="rounded-[18px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900">
-                                  <div className="font-semibold">
-                                    ملاحظة غياب مسجل
-                                  </div>
-                                  <div className="mt-1 text-xs leading-6">
-                                    لدى الموظف غياب مسجل سابقًا:{" "}
-                                    {employeeAbsences
-                                      .slice(0, 3)
-                                      .map(
-                                        absence =>
-                                          `${formatEmployeeAbsenceDate(
-                                            absence.date
-                                          )} (${getEmployeeAbsenceTypeLabel(
-                                            absence.type
-                                          )})`
-                                      )
-                                      .join("، ")}
-                                    {employeeAbsences.length > 3
-                                      ? `، و${formatNumberEN(
-                                          employeeAbsences.length - 3
-                                        )} أخرى`
-                                      : ""}
-                                    . هذه ملاحظة فقط ولا تضيف خصمًا يدويًا
-                                    مكررًا؛ خصم الغياب يتم من سجل الغياب عند
-                                    إنشاء الراتب.
-                                  </div>
-                                </div>
-                              ) : null}
-
-                              {salaryDeductions.length ? (
-                                <div className="space-y-3">
-                                  {salaryDeductions.map(item => (
-                                    <div
-                                      key={item.id}
-                                      className="grid gap-3 rounded-[18px] border border-slate-200 bg-slate-50/70 p-4 md:grid-cols-[minmax(0,1fr)_160px_auto]"
-                                    >
-                                      <Input
-                                        value={item.title}
-                                        onChange={event =>
-                                          handleSalaryDeductionChange(
-                                            item.id,
-                                            "title",
-                                            event.target.value
-                                          )
-                                        }
-                                        placeholder="مثال: خصم غياب"
-                                        disabled={!canManageEmployees || saving}
-                                      />
-
-                                      <Input
-                                        type="number"
-                                        dir="rtl"
-                                        inputMode="decimal"
-                                        step="0.01"
-                                        value={item.amount}
-                                        onChange={event =>
-                                          handleSalaryDeductionChange(
-                                            item.id,
-                                            "amount",
-                                            normalizeEnglishDigits(
-                                              event.target.value
-                                            )
-                                          )
-                                        }
-                                        placeholder="قيمة الخصم"
-                                        className="text-right tabular-nums"
-                                        disabled={!canManageEmployees || saving}
-                                      />
-
-                                      <Button
-                                        type="button"
-                                        variant="outline"
-                                        className="border-rose-200 text-rose-700 hover:bg-rose-50 hover:text-rose-800"
-                                        onClick={() =>
-                                          handleRemoveSalaryDeduction(item.id)
-                                        }
-                                        disabled={!canManageEmployees || saving}
-                                      >
-                                        حذف
-                                      </Button>
-                                    </div>
-                                  ))}
-                                </div>
-                              ) : (
-                                <div className="rounded-[20px] border border-dashed border-slate-300 bg-slate-50 px-5 py-7 text-center">
-                                  <div className="text-sm font-semibold text-slate-950">
-                                    لا توجد خصومات مضافة حتى الآن.
-                                  </div>
-                                  <div className="mt-1 text-sm leading-6 text-slate-500">
-                                    أضف خصمًا يدويًا مثل الغياب أو التأخير أو أي
-                                    استقطاع آخر.
-                                  </div>
-                                  <Button
-                                    type="button"
-                                    onClick={handleAddSalaryDeduction}
-                                    disabled={!canManageEmployees || saving}
-                                    className="mt-4 h-11 rounded-[16px] bg-slate-950 px-5 text-white hover:bg-slate-900"
-                                  >
-                                    <Plus className="ml-2 h-4 w-4" />
-                                    إضافة أول خصم
-                                  </Button>
-                                </div>
-                              )}
-
-                              <div className="grid gap-3 sm:grid-cols-2">
-                                <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-4">
-                                  <div className="text-xs font-semibold text-slate-500">
-                                    صافي فرق الساعات
-                                  </div>
-                                  <div
-                                    className={cn(
-                                      "mt-2 text-base font-semibold",
-                                      calculatedHoursDifference > 0 &&
-                                        "text-emerald-600",
-                                      calculatedHoursDifference < 0 &&
-                                        "text-red-600",
-                                      calculatedHoursDifference === 0 &&
-                                        "text-slate-950"
-                                    )}
-                                  >
-                                    {formatPayrollHoursDifferenceLabel(
-                                      calculatedHoursDifference
-                                    )}
-                                  </div>
-                                </div>
-
-                                <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-4">
-                                  <div className="text-xs font-semibold text-slate-500">
-                                    نقص ساعات مالي
-                                  </div>
-                                  <div className="mt-2 text-base font-semibold text-rose-600">
-                                    {formatHoursDuration(calculatedMissingHours)}
-                                  </div>
-                                </div>
-
-                                <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-4">
-                                  <div className="text-xs font-semibold text-slate-500">
-                                    الساعات الزائدة المكتشفة
-                                  </div>
-                                  <div className="mt-2 text-base font-semibold text-emerald-600">
-                                    {formatHoursDuration(calculatedOvertimeHours)}
-                                  </div>
-                                </div>
-
-                                <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-4">
-                                  <div className="text-xs font-semibold text-slate-500">
-                                    الأوفر تايم المحتسب ماليًا
-                                  </div>
-                                  <div className="mt-2 text-base font-semibold text-slate-950">
-                                    {formatHoursDuration(
-                                      calculatedFinancialOvertimeHours
-                                    )}
-                                  </div>
-                                </div>
-
-                                <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-4">
-                                  <div className="text-xs font-semibold text-slate-500">
-                                    راتب اليوم
-                                  </div>
-                                  <div className="mt-2 text-base font-semibold text-slate-950">
-                                    {formatNumberEN(calculatedDailyRate || 0)}{" "}
-                                    ر.س
-                                  </div>
-                                </div>
-
-                                <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-4">
-                                  <div className="text-xs font-semibold text-slate-500">
-                                    راتب الساعة
-                                  </div>
-                                  <div className="mt-2 text-base font-semibold text-slate-950">
-                                    {formatNumberEN(calculatedHourlyRate || 0)}{" "}
-                                    ر.س
-                                  </div>
-                                </div>
-
-                                <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-4">
-                                  <div className="text-xs font-semibold text-slate-500">
-                                    قيمة الأوفر تايم
-                                  </div>
-                                  <div className="mt-1 text-xs leading-5 text-slate-500">
-                                    {formatNumberEN(calculatedOvertimeMultiplier)} × راتب الساعة
-                                  </div>
-                                  <div className="mt-2 text-base font-semibold text-slate-950">
-                                    {formatNumberEN(
-                                      calculatedOvertimeAmount || 0
-                                    )}{" "}
-                                    ر.س
-                                  </div>
-                                </div>
-
-                                <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-4">
-                                  <div className="text-xs font-semibold text-slate-500">
-                                    خصم نقص الساعات
-                                  </div>
-                                  <div className="mt-2 text-base font-semibold text-slate-950">
-                                    {formatNumberEN(
-                                      calculatedMissingDeduction || 0
-                                    )}{" "}
-                                    ر.س
-                                  </div>
-                                </div>
-
-                                <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-4">
-                                  <div className="text-xs font-semibold text-slate-500">
-                                    غياب
-                                  </div>
-                                  <div className="mt-2 text-base font-semibold text-red-600">
-                                    {formatNumberEN(attendanceAbsentDaysNumber)}{" "}
-                                    أيام
-                                  </div>
-                                </div>
-
-                                <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-4">
-                                  <div className="text-xs font-semibold text-slate-500">
-                                    خصم الغياب
-                                  </div>
-                                  <div className="mt-2 text-base font-semibold text-slate-950">
-                                    {formatNumberEN(
-                                      calculatedAttendanceAbsenceDeduction || 0
-                                    )}{" "}
-                                    ر.س
-                                  </div>
-                                </div>
-
-                                <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-4">
-                                  <div className="text-xs font-semibold text-slate-500">
-                                    الراتب قبل الخصومات
-                                  </div>
-                                  <div className="mt-2 text-base font-semibold text-slate-950">
-                                    {formatNumberEN(calculatedGrossSalary || 0)}{" "}
-                                    ر.س
-                                  </div>
-                                </div>
-
-                                <div className="rounded-[18px] border border-emerald-200 bg-emerald-50/70 px-4 py-4 sm:col-span-2">
-                                  <div className="text-xs font-semibold text-emerald-700">
-                                    الراتب الفعلي النهائي
-                                  </div>
-                                  <div className="mt-2 text-lg font-semibold text-emerald-800">
-                                    {formatNumberEN(calculatedNetSalary || 0)}{" "}
-                                    ر.س
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-
-                            <div className="w-full">
-                              <Field
-                                label="إرفاق مستند مدد (اختياري)"
-                                description="الصيغ المدعومة: PDF, PNG, JPG."
-                              >
-                                <Input
-                                  id="payroll-mudad-document-input"
-                                  ref={payrollMudadDocumentInputRef}
-                                  type="file"
-                                  accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
-                                  className="sr-only"
-                                  onChange={handlePayrollMudadDocumentSelected}
-                                  disabled={
-                                    !canManageEmployees ||
-                                    creatingPayrollRecord ||
-                                    !!selectedPayrollRecord
-                                  }
-                                />
-                                <div
-                                  role="button"
-                                  tabIndex={
-                                    canManageEmployees &&
-                                    !creatingPayrollRecord &&
-                                    !selectedPayrollRecord
-                                      ? 0
-                                      : -1
-                                  }
-                                  onClick={() =>
-                                    payrollMudadDocumentInputRef.current?.click()
-                                  }
-                                  onKeyDown={event => {
-                                    if (
-                                      event.key === "Enter" ||
-                                      event.key === " "
-                                    ) {
-                                      event.preventDefault();
-                                      payrollMudadDocumentInputRef.current?.click();
-                                    }
-                                  }}
-                                  onDragOver={event => event.preventDefault()}
-                                  onDrop={handlePayrollMudadDocumentDrop}
-                                  className={cn(
-                                    "flex min-h-40 w-full cursor-pointer flex-col items-center justify-center gap-4 rounded-2xl border-2 border-dashed border-[#F2B705] bg-[#F2B705]/10 px-5 py-8 text-center text-sm text-slate-700 transition hover:bg-[#F2B705]/15 sm:px-10",
-                                    (!canManageEmployees ||
-                                      creatingPayrollRecord ||
-                                      !!selectedPayrollRecord) &&
-                                      "pointer-events-none cursor-not-allowed opacity-60"
-                                  )}
-                                >
-                                  <Upload className="h-6 w-6 text-[#030640]" />
-                                  {payrollMudadDocument ? (
-                                    <div className="max-w-full space-y-1">
-                                      <div className="font-semibold text-slate-950">
-                                        {payrollMudadDocument.name}
-                                      </div>
-                                      <div className="text-xs text-slate-600">
-                                        الحجم:{" "}
-                                        {formatFileSizeEN(
-                                          payrollMudadDocument.size
-                                        )}
-                                      </div>
-                                    </div>
-                                  ) : (
-                                    <div className="max-w-md space-y-2">
-                                      <div className="font-semibold text-slate-950">
-                                        اسحب مستند مدد هنا أو انقر للاختيار
-                                      </div>
-                                      <div className="text-xs leading-6 text-slate-600">
-                                        سيتم حفظ المرفق مع سجل راتب الشهر
-                                        الحالي.
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
-                              </Field>
-                            </div>
-
-                            <div className="flex justify-end pt-1">
-                              <Button
-                                type="button"
-                                className="w-full whitespace-nowrap px-6 sm:w-auto"
-                                onClick={handleCreatePayrollRecord}
-                                disabled={
-                                  !canManageEmployees ||
-                                  creatingPayrollRecord ||
-                                  !selectedPayrollMonthMeta ||
-                                  !!selectedPayrollRecord ||
-                                  isDirty
-                                }
-                              >
-                                {creatingPayrollRecord
-                                  ? "جاري إنشاء السجل..."
-                                  : "إضافة راتب نهاية الشهر"}
-                              </Button>
+                            <div className="flex flex-wrap gap-2 pt-1 text-xs text-slate-600">
+                              <Badge variant="outline" className="rounded-full bg-white">
+                                وقت الدوام: {form.shiftStartTime || "—"} - {form.shiftEndTime || "—"}
+                              </Badge>
+                              <Badge variant="outline" className="rounded-full bg-white">
+                                أيام الراحة: {formatWeeklyOffDaysLabel(normalizeWeeklyOffDays(form.weeklyOffDays)) || "لا يوجد"}
+                              </Badge>
+                              <Badge variant="outline" className="rounded-full bg-white">
+                                الراتب الأساسي: {formatNumberEN(baseSalaryNumber || 0)} ر.س
+                              </Badge>
                             </div>
                           </div>
-                        </div>
 
-                        <div className="rounded-[18px] border border-slate-200 bg-white px-4 py-4 text-sm leading-6 text-slate-600">
-                          {isDirty ? (
-                            <span>
-                              توجد تغييرات غير محفوظة في بيانات الراتب الحالية.
-                              احفظها أولًا ثم أنشئ سجل نهاية الشهر.
-                            </span>
-                          ) : selectedPayrollRecord &&
-                            selectedPayrollMonthMeta ? (
-                            <span>
-                              يوجد بالفعل سجل راتب محفوظ لشهر{" "}
-                              {selectedPayrollMonthMeta.label}.
-                            </span>
-                          ) : selectedPayrollMonthMeta ? (
-                            <span>
-                              سيتم احتساب جميع غيابات شهر{" "}
-                              {selectedPayrollMonthMeta.label} ثم حفظ الراتب
-                              النهائي كسجل مستقل لا يتغير تلقائيًا لاحقًا.
-                            </span>
-                          ) : (
-                            <span>اختر شهرًا صالحًا لإنشاء سجل الراتب.</span>
-                          )}
+                          <Button
+                            type="button"
+                            className="h-11 shrink-0 rounded-[16px] bg-[#9b2457] px-6 text-white hover:bg-[#841e4b]"
+                            asChild
+                          >
+                            <a
+                              href={`/hr/payroll?employeeId=${encodeURIComponent(selectedEmployeeId)}&month=${encodeURIComponent(payrollMonthInput || buildEmployeePayrollMonthInput())}`}
+                            >
+                              فتح الموظف في إدارة الرواتب
+                              <ArrowRight className="mr-2 h-4 w-4" />
+                            </a>
+                          </Button>
                         </div>
+                      </div>
 
                         <div className="space-y-3">
                           <div className="text-sm font-semibold text-slate-950">
@@ -8955,6 +8355,24 @@ export default function EmployeesManagementPage() {
                                         {record.payrollMonth}
                                       </Badge>
 
+                                      <Badge
+                                        className={cn(
+                                          "w-fit rounded-full",
+                                          record.status === "draft"
+                                            ? "bg-amber-100 text-amber-800 hover:bg-amber-100"
+                                            : record.status === "paid"
+                                              ? "bg-sky-100 text-sky-800 hover:bg-sky-100"
+                                              : "bg-emerald-100 text-emerald-800 hover:bg-emerald-100"
+                                        )}
+                                      >
+                                        {record.status === "draft"
+                                          ? "مسودة مفتوحة"
+                                          : record.status === "paid"
+                                            ? "مصروف"
+                                            : "معتمد"}
+                                      </Badge>
+
+                                      {record.status !== "draft" ? (
                                       <Button
                                         type="button"
                                         size="sm"
@@ -8979,20 +8397,21 @@ export default function EmployeesManagementPage() {
                                           ? "جارٍ تجهيز الاعتماد..."
                                           : "تحميل اعتماد الراتب Excel"}
                                       </Button>
+                                      ) : null}
                                     </div>
                                   </div>
 
-                                  <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50/60 px-4 py-3">
+                                  <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
                                     {record.mudadDocument ? (
                                       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                                         <div className="min-w-0 space-y-1">
-                                          <div className="flex items-center gap-2 text-sm font-semibold text-rose-900">
+                                          <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
                                             <FileText className="h-4 w-4 shrink-0" />
-                                            <span>المستند المرفق: مدد</span>
+                                            <span>مرفق الراتب</span>
                                           </div>
-                                          <div className="truncate text-xs text-rose-700">
+                                          <div className="truncate text-xs text-slate-600">
                                             {record.mudadDocument.fileName ||
-                                              "مستند مدد"}
+                                              "مرفق الراتب"}
                                           </div>
                                         </div>
                                         <div className="flex flex-wrap gap-2">
@@ -9001,7 +8420,7 @@ export default function EmployeesManagementPage() {
                                               type="button"
                                               size="sm"
                                               variant="outline"
-                                              className="h-9 gap-2 border-rose-200 bg-white text-rose-800 hover:bg-rose-50"
+                                              className="h-9 gap-2 border-slate-200 bg-white text-slate-800 hover:bg-slate-100"
                                               asChild
                                             >
                                               <a
@@ -9020,7 +8439,7 @@ export default function EmployeesManagementPage() {
                                             <Button
                                               type="button"
                                               size="sm"
-                                              className="h-9 gap-2 bg-rose-700 text-white hover:bg-rose-800"
+                                              className="h-9 gap-2 bg-slate-900 text-white hover:bg-slate-800"
                                               asChild
                                             >
                                               <a
@@ -9038,11 +8457,10 @@ export default function EmployeesManagementPage() {
                                         </div>
                                       </div>
                                     ) : (
-                                      <div className="flex items-center gap-2 text-sm font-semibold text-rose-800">
+                                      <div className="flex items-start gap-2 text-sm text-slate-600">
                                         <FileText className="h-4 w-4" />
                                         <span>
-                                          المستند المرفق: لا يوجد مستند مدد
-                                          محفوظ
+                                          لا يوجد مستند مرفق لهذا السجل. المرفق اختياري ولا يؤثر على احتساب الراتب.
                                         </span>
                                       </div>
                                     )}
@@ -9205,7 +8623,6 @@ export default function EmployeesManagementPage() {
                           )}
                         </div>
                       </div>
-                    </div>
                   </CardContent>
                 </Card>
 

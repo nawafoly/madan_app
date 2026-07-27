@@ -1028,8 +1028,8 @@ export async function generateEmployeeExcelReport(
     ...(payroll.mudadDocument
       ? [
           {
-            kind: "مستند مدد المرتبط بالراتب",
-            fileName: pickText(payroll.mudadDocument.fileName, "مستند مدد"),
+            kind: "مرفق مرتبط بالراتب",
+            fileName: pickText(payroll.mudadDocument.fileName, "مرفق الراتب"),
             contentType: pickText(payroll.mudadDocument.contentType),
             uploadDate: payroll.mudadDocument.uploadedAt
               ? formatDateTimeEN(payroll.mudadDocument.uploadedAt)

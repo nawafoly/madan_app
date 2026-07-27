@@ -41,6 +41,8 @@ export const ALL_PERMISSION_KEYS = [
   "employees.view",
   "employees.manage",
   "attendance.view",
+  "payroll.view",
+  "payroll.manage",
   "weekly_reports.manager_notes",
   "reports.view",
   "financial.view",
@@ -67,6 +69,8 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   "employees.view": "عرض الموظفين",
   "employees.manage": "إدارة الموظفين",
   "attendance.view": "عرض الحضور والانصراف",
+  "payroll.view": "عرض الرواتب",
+  "payroll.manage": "إدارة واعتماد الرواتب",
   "weekly_reports.manager_notes": "كتابة ملاحظات المدير في التقرير الأسبوعي",
   "reports.view": "عرض التقارير",
   "financial.view": "عرض المالية",
@@ -100,6 +104,8 @@ export const ROLE_DEFAULT_PERMS: Record<AppRole, Permission[]> = {
     "employees.view",
     "employees.manage",
     "attendance.view",
+    "payroll.view",
+    "payroll.manage",
     "weekly_reports.manager_notes",
     "reports.view",
     "financial.view",
@@ -119,6 +125,8 @@ export const ROLE_DEFAULT_PERMS: Record<AppRole, Permission[]> = {
     "messages.view",
     "messages.manage",
     "reports.view",
+    "payroll.view",
+    "payroll.manage",
     "settings.manage",
   ],
   accountant: [
@@ -128,6 +136,8 @@ export const ROLE_DEFAULT_PERMS: Record<AppRole, Permission[]> = {
     "financial.view",
     "financial.edit",
     "reports.view",
+    "payroll.view",
+    "payroll.manage",
   ],
   hr: [
     "recruitment.view",
@@ -135,6 +145,8 @@ export const ROLE_DEFAULT_PERMS: Record<AppRole, Permission[]> = {
     "employees.view",
     "employees.manage",
     "attendance.view",
+    "payroll.view",
+    "payroll.manage",
   ],
   staff: [],
   client: ["projects.view"],
@@ -612,6 +624,10 @@ export function getStaffHomePathForUser(
 
   if (hasStaffAdminPermission(user, "weekly_reports.manager_notes")) {
     return "/hr/weekly-reports";
+  }
+
+  if (hasPermission(user, "payroll.view")) {
+    return "/hr/payroll";
   }
 
   if (hasPermission(user, "attendance.view")) {

@@ -672,6 +672,14 @@ export type HrCorePayrollRecord = {
   createdAt: string;
   createdByUid: string | null;
   createdByEmail: string | null;
+  finalizedAt: string | null;
+  finalizedByUid: string | null;
+  reopenedAt: string | null;
+  reopenedByUid: string | null;
+  reopenReason: string | null;
+  revision: number;
+  paidAt: string | null;
+  paidByUid: string | null;
   updatedAt: string;
 };
 
@@ -698,11 +706,16 @@ export async function listHrCorePayrollRecords(
 }
 
 export async function listHrCorePayrollAdvances(
-  input: { employeeId?: string; employeeUid?: string } = {}
+  input: {
+    employeeId?: string;
+    employeeUid?: string;
+    payrollRecordId?: string;
+  } = {}
 ) {
   const params = new URLSearchParams();
   if (input.employeeId) params.set("employeeId", input.employeeId);
   if (input.employeeUid) params.set("employeeUid", input.employeeUid);
+  if (input.payrollRecordId) params.set("payrollRecordId", input.payrollRecordId);
   return requestHrCore<{ ok: true; advances: HrCoreServiceRequest[] }>(
     "/api/hr/payroll-advances",
     {},
@@ -714,6 +727,26 @@ export async function createHrCorePayrollRecord(input: Record<string, unknown>) 
   return requestHrCore<{ ok: true; payrollRecord: HrCorePayrollRecord }>(
     "/api/hr/payroll-records",
     { method: "POST", body: JSON.stringify(input) }
+  );
+}
+
+export async function reopenHrCorePayrollRecord(
+  id: string,
+  input: { reason: string }
+) {
+  return requestHrCore<{ ok: true; payrollRecord: HrCorePayrollRecord }>(
+    `/api/hr/payroll-records/${encodeURIComponent(id)}/reopen`,
+    { method: "PATCH", body: JSON.stringify(input) }
+  );
+}
+
+export async function finalizeHrCorePayrollRecord(
+  id: string,
+  input: Record<string, unknown>
+) {
+  return requestHrCore<{ ok: true; payrollRecord: HrCorePayrollRecord }>(
+    `/api/hr/payroll-records/${encodeURIComponent(id)}/finalize`,
+    { method: "PATCH", body: JSON.stringify(input) }
   );
 }
 

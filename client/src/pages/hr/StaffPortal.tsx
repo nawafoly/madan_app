@@ -15,6 +15,7 @@ import {
   Settings,
   UserRound,
   Users,
+  WalletCards,
 } from "lucide-react";
 import { Link } from "wouter";
 import {
@@ -322,6 +323,21 @@ export default function StaffPortalPage() {
           user.role !== "client" &&
           user.role !== "guest" &&
           hasPermission(user, "attendance.view"),
+      },
+      {
+        title: tr(language, "إدارة الرواتب", "Payroll Management"),
+        description: tr(
+          language,
+          "توليد مسيرات الرواتب ومراجعة الحضور والإضافات والخصومات.",
+          "Generate payroll and review attendance, additions, and deductions."
+        ),
+        href: "/hr/payroll",
+        icon: WalletCards,
+        canEnter:
+          !!user &&
+          user.role !== "client" &&
+          user.role !== "guest" &&
+          hasPermission(user, "payroll.view"),
       },
       {
         title: tr(language, "التقارير الأسبوعية", "Weekly Reports"),

@@ -49,6 +49,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { languageDir, tr } from "@/lib/i18n";
+import { getRiyadhTodayKey } from "@/lib/riyadhDate";
 
 type CameraFacingMode = "user" | "environment";
 
@@ -60,17 +61,6 @@ type EmployeeAttendanceCardProps = {
 };
 
 const RIYADH_TIME_ZONE = "Asia/Riyadh";
-
-function getRiyadhTodayKey() {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: RIYADH_TIME_ZONE,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(new Date());
-  const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
-  return `${values.year}-${values.month}-${values.day}`;
-}
 
 function formatDisplayTime(value?: string | null) {
   if (!value) return "--:--";

@@ -5,6 +5,7 @@ import {
   computeLeaveCancellationState,
   computePayrollFinancialTotals,
   isPayrollImportPath,
+  mapPayrollRecordRow,
   normalizeEmployeePayload,
   normalizeImportedAbsence,
   normalizeImportedLeaveRequest,
@@ -510,5 +511,43 @@ describe("HR files and messages normalization", () => {
       isRead: false,
     });
     expect(result.participantUids).toEqual(["employee-1", "employee-2"]);
+  });
+});
+
+
+it("maps payroll lifecycle fields onto payroll records", () => {
+  const mapped = mapPayrollRecordRow({
+    id: "payroll-1",
+    employee_id: "employee-1",
+    employee_uid: "auth-1",
+    payroll_month: "2026-07",
+    month_start: "2026-07-01",
+    month_end: "2026-07-31",
+    base_salary: 5500,
+    allowances: 0,
+    absence_days: 0,
+    absence_deduction: 0,
+    delay_deduction: 0,
+    overtime_bonus: 0,
+    insurance_deduction: 0,
+    salary_advance_deduction: 0,
+    total_salary_deductions: 0,
+    final_salary: 5500,
+    status: "draft",
+    revision: 2,
+    reopened_at: "2026-07-27T10:00:00.000Z",
+    reopened_by_uid: "owner-1",
+    reopen_reason: "تصحيح الغياب",
+    created_at: "2026-07-26T10:00:00.000Z",
+    updated_at: "2026-07-27T10:00:00.000Z",
+  });
+
+  expect(mapped).toMatchObject({
+    id: "payroll-1",
+    status: "draft",
+    revision: 2,
+    reopenedAt: "2026-07-27T10:00:00.000Z",
+    reopenedByUid: "owner-1",
+    reopenReason: "تصحيح الغياب",
   });
 });

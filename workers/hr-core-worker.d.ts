@@ -64,6 +64,10 @@ export function normalizeImportedPayrollRecord(
   raw: unknown
 ): Record<string, any> | null;
 
+export function mapPayrollRecordRow(
+  row: Record<string, any>
+): Record<string, any>;
+
 export function computePayrollFinancialTotals(input: Record<string, any>): {
   manualAbsenceDeduction: number;
   totalSalaryDeductions: number;

@@ -298,9 +298,19 @@ export type EmployeePayrollRecordDoc = {
     uploadedAt?: unknown;
     uploadedBy?: string | null;
   } | null;
+  status?: "draft" | "finalized" | "paid" | string;
+  finalizedAt?: unknown;
+  finalizedByUid?: string | null;
+  reopenedAt?: unknown;
+  reopenedByUid?: string | null;
+  reopenReason?: string | null;
+  revision?: number | null;
+  paidAt?: unknown;
+  paidByUid?: string | null;
   createdAt?: unknown;
   createdByUid?: string | null;
   createdByEmail?: string | null;
+  updatedAt?: unknown;
 };
 
 export type EmployeeLeaveRequestStatus =

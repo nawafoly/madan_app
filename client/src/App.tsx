@@ -48,6 +48,7 @@ import EmployeeWeeklyReportsPage from "@/pages/employee/WeeklyReports";
 import CreateStaffAccount from "@/pages/admin/CreateStaffAccount";
 import StaffPortalPage from "@/pages/hr/StaffPortal";
 import HrAttendancePage from "@/pages/hr/Attendance";
+import HrPayrollPage from "@/pages/hr/Payroll";
 import HrDailyTasksPage from "@/pages/hr/DailyTasks";
 import HrWeeklyReportsPage from "@/pages/hr/WeeklyReports";
 
@@ -305,6 +306,12 @@ function Router() {
         <Route path="/hr/attendance">
           <RequireAdminPermission permission="attendance.view" area="staff" directPermission>
             <HrAttendancePage />
+          </RequireAdminPermission>
+        </Route>
+
+        <Route path="/hr/payroll">
+          <RequireAdminPermission permission="payroll.view" area="staff" directPermission>
+            <HrPayrollPage />
           </RequireAdminPermission>
         </Route>
 

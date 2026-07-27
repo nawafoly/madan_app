@@ -66,6 +66,7 @@ import {
 import { fetchEmployeeDirectoryFromWorker } from "@/lib/employeeDirectoryWorker";
 import { languageDir, tr } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { getRiyadhDateKey, getRiyadhTodayKey } from "@/lib/riyadhDate";
 import {
   fetchWorkZones,
   normalizeAllowedZoneIds,
@@ -279,19 +280,6 @@ function excelXmlRow(
       ? ` ss:Height="${options.height}"`
       : "";
   return `<Row${height}>${values.map((value) => excelXmlCell(value)).join("")}</Row>`;
-}
-
-function getRiyadhDateKey(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Riyadh",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(date);
-  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  return `${values.year}-${values.month}-${values.day}`;
 }
 
 function formatMonthLabel(month: string, language: "ar" | "en") {
@@ -1837,7 +1825,7 @@ export default function HrAttendancePage() {
           summary: summarizeFilteredRecords(
             filtered,
             toRequestFilters(appliedFilters).toDate ||
-              new Date().toISOString().slice(0, 10),
+              getRiyadhTodayKey(),
           ),
         });
       } else {

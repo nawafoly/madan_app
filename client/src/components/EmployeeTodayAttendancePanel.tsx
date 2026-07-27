@@ -31,6 +31,7 @@ import {
 import { buildActiveApprovedLeaveDateKeySet } from "@/lib/employeeLeave";
 import { formatNumberEN } from "@/lib/formatters";
 import { cn } from "@/lib/utils";
+import { getRiyadhDateKey, getRiyadhTodayKey } from "@/lib/riyadhDate";
 import {
   buildDateKeysInRange,
   formatWeeklyOffDaysLabel,
@@ -94,17 +95,6 @@ const WEEKDAY_LABELS = {
 } satisfies Record<Language, string[]>;
 const RIYADH_TIME_ZONE = "Asia/Riyadh";
 
-function getRiyadhTodayKey() {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: RIYADH_TIME_ZONE,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(new Date());
-  const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
-  return `${values.year}-${values.month}-${values.day}`;
-}
-
 function getRiyadhTodayMonthStart() {
   const todayKey = getRiyadhTodayKey();
   const [year, month] = todayKey.split("-").map(Number);
@@ -154,18 +144,7 @@ function getMonthBounds(monthDate: Date, language: "ar" | "en"): MonthBounds {
 }
 
 function formatRecordDate(value?: string | null) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: RIYADH_TIME_ZONE,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(date);
-  const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
-  return `${values.year}-${values.month}-${values.day}`;
+  return value ? getRiyadhDateKey(value) : "";
 }
 
 function formatDisplayTime(value?: string | null) {
