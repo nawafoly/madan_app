@@ -130,6 +130,7 @@ export default function RequestBottomSheet({
     <div className="fixed inset-0 z-[90]" dir={languageDir(language)} role="presentation">
       <button
         type="button"
+        data-theme-overlay="true"
         className="absolute inset-0 bg-slate-950/60"
         aria-label={tr(language, "إغلاق", "Close")}
         onClick={() => onOpenChange(false)}
