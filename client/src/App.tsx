@@ -16,6 +16,7 @@ import ProjectsPage from "./pages/Projects";
 import About from "./pages/About";
 import Careers from "./pages/Careers";
 import Contact from "./pages/Contact";
+import Privacy from "./pages/Privacy";
 import ProjectDetails from "./pages/ProjectDetails";
 
 import LoginPage from "./pages/Login";
@@ -184,6 +185,12 @@ function Router() {
         <Route path="/contact">
           <SiteLayout>
             <Contact />
+          </SiteLayout>
+        </Route>
+
+        <Route path="/privacy">
+          <SiteLayout>
+            <Privacy />
           </SiteLayout>
         </Route>
 
