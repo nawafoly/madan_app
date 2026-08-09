@@ -685,8 +685,16 @@ export default function StaffPortalPage() {
       className="hr-portal-shell min-h-screen bg-[linear-gradient(135deg,#f8fafc_0%,#ffffff_44%,#101827_44%,#07111f_100%)] text-slate-950"
     >
       <main className="min-h-screen px-4 py-6 sm:px-6 lg:px-10">
-        <div className="mx-auto grid min-h-[calc(100vh-3rem)] max-w-7xl gap-6 lg:grid-cols-[minmax(0,0.95fr)_minmax(420px,1fr)] lg:items-stretch">
-          <section className="flex min-h-[580px] flex-col justify-between overflow-hidden rounded-[32px] border border-white/10 bg-slate-950/72 p-6 text-white shadow-[0_34px_90px_-46px_rgba(2,6,23,0.95)] backdrop-blur-xl sm:p-8 lg:p-10">
+        <div
+          className={cn(
+            "mx-auto grid min-h-[calc(100vh-3rem)]",
+            hasInternalAccess
+              ? "max-w-7xl gap-6 lg:grid-cols-[minmax(0,0.95fr)_minmax(420px,1fr)] lg:items-stretch"
+              : "max-w-[640px] items-center"
+          )}
+        >
+          {hasInternalAccess ? (
+            <section className="flex min-h-[580px] flex-col justify-between overflow-hidden rounded-[32px] border border-white/10 bg-slate-950/72 p-6 text-white shadow-[0_34px_90px_-46px_rgba(2,6,23,0.95)] backdrop-blur-xl sm:p-8 lg:p-10">
             <div className="space-y-9">
               <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
@@ -865,7 +873,8 @@ export default function StaffPortalPage() {
                 </div>
               </div>
             </div>
-          </section>
+            </section>
+          ) : null}
 
           <section className="flex items-center justify-center">
             <div className="w-full max-w-[560px] rounded-[32px] border border-slate-200 bg-white/96 p-6 shadow-[0_32px_90px_-52px_rgba(15,23,42,0.42)] backdrop-blur sm:p-8">
