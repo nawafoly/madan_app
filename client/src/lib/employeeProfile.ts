@@ -116,10 +116,12 @@ function normalizeAvatar(
 ): { avatar: EmployeeAvatarDoc | null; avatarUrl: string } {
   if (typeof value === "string") {
     const avatarUrl = String(value || "").trim();
-    return {
-      avatar: avatarUrl ? { fileUrl: avatarUrl } : null,
-      avatarUrl,
-    };
+    if (avatarUrl) {
+      return {
+        avatar: { fileUrl: avatarUrl },
+        avatarUrl,
+      };
+    }
   }
 
   if (value && typeof value === "object") {

@@ -4,9 +4,7 @@ import {
   CalendarDays,
   ClipboardList,
   FileText,
-  Globe,
   Home,
-  LogOut,
   Menu,
   Mail,
   Send,
@@ -15,14 +13,12 @@ import {
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 
-import { NotificationBell } from "@/components/NotificationBell";
-import { HrBrandMark } from "@/components/HrBrandMark";
+import { StaffWorkspaceHeader } from "@/components/StaffWorkspaceHeader";
 import AppBottomNav from "@/components/employee-portal/AppBottomNav";
 import FloatingNewRequestButton from "@/components/employee-portal/FloatingNewRequestButton";
 import RequestBottomSheet, {
   type EmployeeRequestType,
 } from "@/components/employee-portal/RequestBottomSheet";
-import { Button } from "@/components/ui/button";
 import { getLoginUrl } from "@/const";
 import { hasStaffAdminPermission, useAuth } from "@/_core/hooks/useAuth";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -41,7 +37,7 @@ export default function EmployeeLayout({
   description,
   children,
 }: EmployeeLayoutProps) {
-  const { language, toggleLanguage } = useLanguage();
+  const { language } = useLanguage();
   const { user, logout } = useAuth();
   const [location, setLocation] = useLocation();
   const [currentHash, setCurrentHash] = useState(() =>
@@ -50,7 +46,6 @@ export default function EmployeeLayout({
   const [navSheetOpen, setNavSheetOpen] = useState(false);
   const [requestSheetOpen, setRequestSheetOpen] = useState(false);
   const layoutDir: "rtl" | "ltr" = language === "ar" ? "rtl" : "ltr";
-  const languageToggleLabel = language === "ar" ? "English" : "Arabic";
   const currentPath = location.split("?")[0];
   const canOpenHrPortal = user
     ? hasStaffAdminPermission(user, "recruitment.manage") ||
@@ -59,7 +54,11 @@ export default function EmployeeLayout({
       hasStaffAdminPermission(user, "settings.manage")
     : false;
   const employeeReturnPath = "/hr";
-  const employeeReturnLabel = tr(language, "بوابة HR", "HR Portal");
+  const employeeReturnLabel = tr(
+    language,
+    "منصة الموارد البشرية",
+    "Human Resources"
+  );
   const handleLogout = async () => {
     await logout();
     setLocation(getLoginUrl(currentPath));
@@ -321,84 +320,19 @@ export default function EmployeeLayout({
       dir={layoutDir}
       className="employee-shell min-h-screen bg-[linear-gradient(180deg,#f8f4ea_0%,#ffffff_20%,#f8fafc_100%)] text-slate-950"
     >
-      <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/92 shadow-sm shadow-slate-950/[0.03] backdrop-blur-xl">
-        <div className="mx-auto flex min-h-16 w-full max-w-none items-center justify-between gap-3 px-4 py-2.5 sm:px-6 lg:px-8 2xl:px-10">
-          <div className="flex min-w-0 flex-1 items-center gap-2.5 text-slate-950 sm:gap-3">
-            <HrBrandMark
-              alt={tr(language, "شعار معدن", "MAEDIN logo")}
-              compact
-              className="h-11 w-11 shrink-0 rounded-2xl bg-white shadow-sm ring-1 ring-slate-200/80"
-              imageClassName="h-9 w-9"
-            />
-            <span className="min-w-0">
-              <span className="block truncate text-sm font-semibold">
-                {tr(language, "بوابة الموظف", "Employee Portal")}
-              </span>
-              <span className="hidden truncate text-xs text-slate-500 sm:block">
-                {tr(
-                  language,
-                  "الدوام، الإجازات، الملفات والرسائل",
-                  "Attendance, leave, files, and messages"
-                )}
-              </span>
-            </span>
-          </div>
-
-          <div className="flex shrink-0 items-center justify-end gap-1.5 sm:gap-2">
-            {user ? (
-              <NotificationBell triggerClassName="h-10 w-10 rounded-full border border-slate-200 bg-white p-0 text-slate-700 shadow-sm hover:bg-slate-50" />
-            ) : null}
-
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={toggleLanguage}
-              className="h-10 rounded-full border-slate-200 bg-white px-3 text-sm shadow-sm sm:px-4"
-              aria-label={tr(language, "تبديل اللغة", "Toggle language")}
-            >
-              <Globe className="h-4 w-4 shrink-0" />
-              <span className="hidden sm:inline">{languageToggleLabel}</span>
-            </Button>
-
-            {canOpenHrPortal ? (
-              <Link href={employeeReturnPath}>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-10 rounded-full border-amber-200 bg-amber-50 px-3 text-sm font-semibold text-slate-900 shadow-sm shadow-amber-100/50 hover:border-amber-300 hover:bg-amber-100 sm:px-4"
-                  aria-label={employeeReturnLabel}
-                >
-                  <Home className="h-4 w-4 shrink-0 text-amber-600" />
-                  <span className="hidden sm:inline">{employeeReturnLabel}</span>
-                </Button>
-              </Link>
-            ) : null}
-
-            {user ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => void handleLogout()}
-                className="h-10 rounded-full border-red-200 bg-red-50/80 px-2.5 font-semibold text-red-600 shadow-sm shadow-red-100/40 hover:border-red-300 hover:bg-red-100/80 hover:text-red-700 sm:px-3.5"
-                aria-label={tr(language, "خروج", "Logout")}
-              >
-                <LogOut
-                  className={cn(
-                    "h-4 w-4 shrink-0",
-                    language === "ar" && "rotate-180"
-                  )}
-                />
-                <span className="hidden sm:inline">
-                  {tr(language, "خروج", "Logout")}
-                </span>
-              </Button>
-            ) : null}
-          </div>
-        </div>
-      </header>
+      <StaffWorkspaceHeader
+        title={tr(language, "بوابة الموظف", "Employee Portal")}
+        subtitle={tr(
+          language,
+          "الدوام، الإجازات، الملفات والرسائل",
+          "Attendance, leave, files, and messages"
+        )}
+        switchHref={canOpenHrPortal ? employeeReturnPath : undefined}
+        switchLabel={canOpenHrPortal ? employeeReturnLabel : undefined}
+        switchIcon={canOpenHrPortal ? Home : undefined}
+        showNotifications={Boolean(user)}
+        onLogout={user ? handleLogout : undefined}
+      />
 
       <main className="employee-page-motion pb-36 pt-8">
         <div className="mx-auto w-full max-w-none space-y-8 px-4 sm:px-6 lg:px-8 2xl:px-10">

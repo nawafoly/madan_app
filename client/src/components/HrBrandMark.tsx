@@ -1,5 +1,3 @@
-import { useState } from "react";
-
 import hrLogoUrl from "@/assets/maedin-logo.png";
 import hrLogoInlineUrl from "@/assets/maedin-logo.png?inline";
 import { cn } from "@/lib/utils";
@@ -15,13 +13,7 @@ export function HrBrandMark({
   alt,
   className,
   imageClassName,
-  compact = false,
 }: HrBrandMarkProps) {
-  const logoSources = [hrLogoInlineUrl, "/logo.png", hrLogoUrl];
-  const [sourceIndex, setSourceIndex] = useState(0);
-  const logoSrc = logoSources[sourceIndex];
-  const failed = !logoSrc;
-
   return (
     <span
       aria-label={alt}
@@ -31,18 +23,17 @@ export function HrBrandMark({
         className
       )}
     >
-      {failed ? (
-        <span className="px-1 text-center text-[10px] font-bold leading-none tracking-tight">
-          {compact ? "M" : "MAEDIN"}
-        </span>
-      ) : (
-        <img
-          src={logoSrc}
-          alt=""
-          className={cn("h-[82%] w-[82%] object-contain", imageClassName)}
-          onError={() => setSourceIndex(index => index + 1)}
-        />
-      )}
+      <img
+        src={hrLogoInlineUrl}
+        alt=""
+        className={cn("h-[82%] w-[82%] object-contain", imageClassName)}
+        data-fallback-applied="false"
+        onError={event => {
+          if (event.currentTarget.dataset.fallbackApplied === "true") return;
+          event.currentTarget.dataset.fallbackApplied = "true";
+          event.currentTarget.src = hrLogoUrl;
+        }}
+      />
     </span>
   );
 }

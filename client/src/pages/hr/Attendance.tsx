@@ -1436,14 +1436,21 @@ function MetricCard({
   value,
   icon: Icon,
   tone,
+  className,
 }: {
   label: string;
   value: number | string;
   icon: typeof LogIn;
   tone: MetricTone;
+  className?: string;
 }) {
   return (
-    <div className="group relative min-h-[112px] overflow-hidden rounded-[1.35rem] border border-white/80 bg-white p-4 shadow-sm shadow-slate-200/80 transition duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-slate-200/80">
+    <div
+      className={cn(
+        "group relative min-h-[112px] overflow-hidden rounded-[1.35rem] border border-slate-200 bg-white p-4 shadow-[0_10px_24px_-20px_rgba(15,23,42,0.45)] transition duration-200 hover:-translate-y-0.5 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900/88 dark:shadow-none dark:hover:border-slate-600",
+        className,
+      )}
+    >
       <span
         className={cn("absolute inset-x-0 top-0 h-1", metricAccentClass[tone])}
       />
@@ -2231,14 +2238,19 @@ export default function HrAttendancePage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-px border-t border-slate-100 bg-slate-100 p-px md:grid-cols-5">
-              {summaryCards.map((card) => (
+            <div className="grid grid-cols-2 gap-3 border-t border-slate-100 bg-slate-50/70 p-3 dark:border-slate-800 dark:bg-slate-950/50 md:grid-cols-5">
+              {summaryCards.map((card, index) => (
                 <MetricCard
                   key={card.label}
                   label={card.label}
                   value={card.value}
                   icon={card.icon}
                   tone={card.tone}
+                  className={
+                    index === summaryCards.length - 1
+                      ? "col-span-2 md:col-span-1"
+                      : undefined
+                  }
                 />
               ))}
             </div>

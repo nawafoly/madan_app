@@ -27,7 +27,7 @@ import {
   LayoutDashboard,
   LogOut,
   PanelLeft,
-  User,
+  ContactRound,
   Users,
   Building2,
   DollarSign,
@@ -35,7 +35,6 @@ import {
   Mail,
   MessageSquare,
   FileText,
-  Globe,
   Settings,
   Crown,
   BarChart3,
@@ -55,9 +54,10 @@ import {
   CalendarCheck2,
 } from "lucide-react";
 import { CSSProperties, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useLocation, useSearch } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
 import { HrBrandMark } from "@/components/HrBrandMark";
+import { StaffWorkspaceHeader } from "@/components/StaffWorkspaceHeader";
 import { Button } from "./ui/button";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { languageDir, safeEnglishText, tr } from "@/lib/i18n";
@@ -231,8 +231,6 @@ const MIN_WIDTH = 200;
 const MAX_WIDTH = 480;
 type DashboardArea = "admin" | "hr";
 
-const EMPLOYEE_PROFILE_PATH = "/employee/profile";
-const EMPLOYEE_PROFILE_LABEL = "بروفايل الموظف";
 const HR_MENU_LABELS: Record<string, { ar: string; en: string }> = {
   "/hr/recruitment": { ar: "طلبات التوظيف", en: "Recruitment" },
   "/hr/employees": { ar: "إدارة الموظفين", en: "Employees" },
@@ -572,7 +570,7 @@ function DashboardLayoutContent({
   sidebarSide,
 }: DashboardLayoutContentProps) {
   const { user, logout } = useAuth();
-  const { language, toggleLanguage } = useLanguage();
+  const { language } = useLanguage();
   const [location, setLocation] = useLocation();
   const search = useSearch();
   const { state, setOpen, setOpenMobile } = useSidebar();
@@ -595,6 +593,10 @@ function DashboardLayoutContent({
     }
 
     setOpen(prev => !prev);
+  };
+  const navigateFromSidebar = (path: string) => {
+    setLocation(path);
+    if (isMobile) setOpenMobile(false);
   };
 
   // الدور
@@ -662,32 +664,18 @@ function DashboardLayoutContent({
         );
   };
 
-  const employeeProfileLabel = tr(
-    language,
-    EMPLOYEE_PROFILE_LABEL,
-    "Employee Profile"
-  );
-
   // العنصر النشط
-  const isEmployeeProfileActive =
-    area === "hr" &&
-    (location === EMPLOYEE_PROFILE_PATH ||
-      location === "/employee/files" ||
-      location === "/employee/messages");
   const activeMenuItem = visibleMenuItems.find(item => item.path === location);
-  const activeMenuLabel = isEmployeeProfileActive
-    ? employeeProfileLabel
-    : activeMenuItem
-      ? getMenuLabel(activeMenuItem)
-      : area === "hr"
-        ? tr(language, "منصة الموارد البشرية", "Human Resources")
-        : tr(language, "لوحة التحكم", "Dashboard");
+  const activeMenuLabel = activeMenuItem
+    ? getMenuLabel(activeMenuItem)
+    : area === "hr"
+      ? tr(language, "منصة الموارد البشرية", "Human Resources")
+      : tr(language, "لوحة التحكم", "Dashboard");
   const layoutBrandLabel =
     area === "hr"
       ? tr(language, "منصة الموارد البشرية", "Human Resources")
       : tr(language, "معدن", "MAEDIN");
   const homeTargetPath = area === "hr" ? "/hr" : "/";
-  const languageToggleLabel = language === "ar" ? "English" : "Arabic";
 
   // اسم العرض: يفضل displayName ثم name ثم الإيميل
   const displayName = useMemo(() => {
@@ -956,7 +944,7 @@ function DashboardLayoutContent({
                 </div>
               ) : null}
 
-              {/* زر الرئيسية */}
+              {/* الرجوع إلى واجهة المنصة الرئيسية */}
               {!isCollapsed ? (
                 <div
                   className={cn(
@@ -972,10 +960,22 @@ function DashboardLayoutContent({
                       "h-9 shrink-0 gap-1.5 rounded-full border-white/10 bg-white/[0.04] text-xs text-slate-100 hover:bg-white/[0.08] hover:text-white",
                       area === "hr" ? "w-9 px-0" : "px-3"
                     )}
-                    onClick={() => setLocation(homeTargetPath)}
-                    aria-label={tr(language, "الرئيسية", "Home")}
+                    onClick={() => navigateFromSidebar(homeTargetPath)}
+                    aria-label={
+                      area === "hr"
+                        ? tr(
+                            language,
+                            "واجهة منصة الموارد البشرية",
+                            "Human Resources overview"
+                          )
+                        : tr(language, "الرئيسية", "Home")
+                    }
                   >
-                    <Home className="h-4 w-4 text-[#F2B705]" />
+                    {area === "hr" ? (
+                      <LayoutDashboard className="h-4 w-4 text-[#F2B705]" />
+                    ) : (
+                      <Home className="h-4 w-4 text-[#F2B705]" />
+                    )}
                     {area === "hr" ? null : tr(language, "الرئيسية", "Home")}
                   </Button>
                 </div>
@@ -1005,7 +1005,7 @@ function DashboardLayoutContent({
                         onClick={() => {
                           if (!canAccessItem) return;
                           if (isCollapsed) {
-                            setLocation(
+                            navigateFromSidebar(
                               `${item.path}?tab=${defaultHrSettingsTab}`
                             );
                             return;
@@ -1071,7 +1071,7 @@ function DashboardLayoutContent({
                                 key={subItem.value}
                                 type="button"
                                 onClick={() =>
-                                  setLocation(
+                                  navigateFromSidebar(
                                     `/hr/settings?tab=${subItem.value}`
                                   )
                                 }
@@ -1119,7 +1119,7 @@ function DashboardLayoutContent({
                     <SidebarMenuButton
                       isActive={isActive && canAccessItem}
                       onClick={() => {
-                        if (canAccessItem) setLocation(item.path);
+                        if (canAccessItem) navigateFromSidebar(item.path);
                       }}
                       tooltip={itemLabel}
                       aria-disabled={!canAccessItem}
@@ -1153,44 +1153,6 @@ function DashboardLayoutContent({
                 );
               })}
             </SidebarMenu>
-
-            {area === "hr" ? (
-              <>
-                <div className="mx-4 my-3 h-px bg-white/10" />
-
-                <div className="px-2 pb-3">
-                  <SidebarMenu>
-                    <SidebarMenuItem>
-                      <SidebarMenuButton
-                        asChild
-                        isActive={isEmployeeProfileActive}
-                        tooltip={employeeProfileLabel}
-                        className="h-10 rounded-xl font-normal text-slate-300 transition-all hover:text-white data-[active=true]:bg-white/10 data-[active=true]:text-white [&>svg]:text-[#F2B705]"
-                      >
-                        <Link href={EMPLOYEE_PROFILE_PATH}>
-                          <User
-                            className={cn(
-                              "h-4 w-4 text-[#F2B705]",
-                              isEmployeeProfileActive && "text-[#FFD24A]"
-                            )}
-                          />
-                          <span
-                            className={cn(
-                              "whitespace-nowrap transition-[max-width,opacity] duration-200",
-                              isCollapsed
-                                ? "max-w-0 opacity-0 pointer-events-none"
-                                : "max-w-40 opacity-100"
-                            )}
-                          >
-                            {employeeProfileLabel}
-                          </span>
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  </SidebarMenu>
-                </div>
-              </>
-            ) : null}
           </SidebarContent>
 
           <SidebarFooter
@@ -1283,7 +1245,22 @@ function DashboardLayoutContent({
           area === "hr" ? "hr-dashboard-surface" : "admin-dashboard-surface"
         )}
       >
-        {isMobile && (
+        {area === "hr" ? (
+          <StaffWorkspaceHeader
+            title={layoutBrandLabel}
+            subtitle={activeMenuLabel}
+            switchHref="/employee/profile"
+            switchLabel={tr(language, "بوابة الموظف", "Employee Portal")}
+            switchIcon={ContactRound}
+            menuTrigger={
+              isMobile ? (
+                <SidebarTrigger className="h-10 w-10 rounded-full border border-slate-200 bg-white p-0 shadow-none hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800" />
+              ) : undefined
+            }
+            showNotifications
+            onLogout={logout}
+          />
+        ) : isMobile ? (
           <div className="flex border-b h-14 items-center justify-between bg-transparent px-2 backdrop-blur supports-[backdrop-filter]:backdrop-blur sticky top-0 z-40">
             <div className="flex items-center gap-2">
               <SidebarTrigger className="h-9 w-9 rounded-lg bg-transparent" />
@@ -1297,20 +1274,6 @@ function DashboardLayoutContent({
             </div>
 
             <div className="flex items-center gap-2">
-              {area === "hr" ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={toggleLanguage}
-                  className="h-9 gap-1.5 rounded-full px-2.5 text-xs"
-                  aria-label={tr(language, "تبديل اللغة", "Toggle language")}
-                >
-                  <Globe className="h-4 w-4" />
-                  {languageToggleLabel}
-                </Button>
-              ) : null}
-
               {/* زر الرئيسية في الموبايل */}
               <Button
                 variant="outline"
@@ -1325,27 +1288,14 @@ function DashboardLayoutContent({
               <NotificationBell />
             </div>
           </div>
-        )}
+        ) : null}
 
         <main
           ref={mainRef}
           className="min-h-screen min-w-0 max-w-full flex-1 overflow-x-hidden bg-[#F8F9FA] px-3 py-4 dark:bg-background sm:px-4 md:px-6 md:py-6 lg:px-8"
         >
-          {!isMobile ? (
+          {area !== "hr" && !isMobile ? (
             <div className="mb-5 flex items-center justify-end gap-2">
-              {area === "hr" ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={toggleLanguage}
-                  className="h-10 gap-2 rounded-full border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 hover:text-slate-950"
-                  aria-label={tr(language, "تبديل اللغة", "Toggle language")}
-                >
-                  <Globe className="h-4 w-4" />
-                  {languageToggleLabel}
-                </Button>
-              ) : null}
               <NotificationBell />
             </div>
           ) : null}
