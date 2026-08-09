@@ -1946,11 +1946,11 @@ html[dir="rtl"] .text-left {
 }
 
 .dark :where(.dashboard-content-surface, .employee-shell, .hr-portal-shell) {
-  --maedin-dark-bg: #0b1120;
-  --maedin-dark-surface: rgba(15, 23, 42, 0.94);
-  --maedin-dark-surface-soft: rgba(30, 41, 59, 0.82);
-  --maedin-dark-surface-raised: rgba(17, 24, 39, 0.98);
-  --maedin-dark-border: rgba(148, 163, 184, 0.28);
+  --maedin-dark-bg: #030712;
+  --maedin-dark-surface: rgba(11, 18, 32, 0.98);
+  --maedin-dark-surface-soft: rgba(15, 23, 42, 0.96);
+  --maedin-dark-surface-raised: rgba(17, 28, 46, 0.98);
+  --maedin-dark-border: rgba(100, 116, 139, 0.34);
   --maedin-dark-text: #f8fafc;
   --maedin-dark-muted: #cbd5e1;
   --maedin-dark-faint: #94a3b8;
@@ -1966,14 +1966,14 @@ html[dir="rtl"] .text-left {
 
 .dark .employee-shell {
   background:
-    radial-gradient(circle at 50% -12%, rgba(242, 183, 5, 0.12), transparent 34%),
-    linear-gradient(180deg, #0b1120 0%, #111827 48%, #0b1120 100%) !important;
+    radial-gradient(circle at 50% -12%, rgba(242, 183, 5, 0.07), transparent 32%),
+    #030712 !important;
 }
 
 .dark .hr-portal-shell {
   background:
-    radial-gradient(circle at 20% 0%, rgba(242, 183, 5, 0.13), transparent 34%),
-    linear-gradient(135deg, #0b1120 0%, #111827 52%, #020617 100%) !important;
+    radial-gradient(circle at 20% 0%, rgba(242, 183, 5, 0.08), transparent 32%),
+    #030712 !important;
 }
 
 .dark .employee-shell > header {
@@ -2434,11 +2434,11 @@ html[dir="rtl"] .text-left {
    gets the same contrast treatment without affecting third-party portals.
 ========================= */
 .dark .maedin-app-surface {
-  --maedin-dark-bg: #0b1120;
-  --maedin-dark-surface: rgba(15, 23, 42, 0.96);
-  --maedin-dark-surface-soft: rgba(30, 41, 59, 0.88);
-  --maedin-dark-surface-raised: rgba(17, 24, 39, 0.98);
-  --maedin-dark-border: rgba(148, 163, 184, 0.3);
+  --maedin-dark-bg: #030712;
+  --maedin-dark-surface: rgba(11, 18, 32, 0.98);
+  --maedin-dark-surface-soft: rgba(15, 23, 42, 0.96);
+  --maedin-dark-surface-raised: rgba(17, 28, 46, 0.98);
+  --maedin-dark-border: rgba(100, 116, 139, 0.34);
   --maedin-dark-text: #f8fafc;
   --maedin-dark-muted: #cbd5e1;
   --maedin-dark-faint: #94a3b8;
@@ -2809,4 +2809,101 @@ html[dir="rtl"] .text-left {
   background-color: rgba(30, 41, 59, 0.92) !important;
   border-color: rgba(245, 158, 11, 0.42) !important;
   color: var(--maedin-dark-text) !important;
+}
+
+/* The dark canvas should stay near-black across every application area. */
+html.dark,
+html.dark body,
+html.dark #root,
+.dark .maedin-app-surface,
+.dark .maedin-app-surface :is(.dashboard-content-surface, .employee-shell, .hr-portal-shell),
+.dark .dashboard-content-surface main {
+  background-color: var(--maedin-dark-bg, #030712) !important;
+}
+
+/* Legacy light cards sometimes carry a pale Tailwind shadow or a white inset
+   highlight. Replace both with a quiet black elevation in dark mode. */
+.dark .maedin-app-surface :is(
+  [class*="shadow-slate-100"],
+  [class*="shadow-slate-200"],
+  [class*="shadow-slate-300"],
+  [class*="shadow-gray-100"],
+  [class*="shadow-gray-200"],
+  [class*="shadow-white"]
+) {
+  box-shadow: 0 18px 46px -28px rgba(0, 0, 0, 0.88) !important;
+}
+
+.dark .maedin-app-surface [class*="shadow-"][class*="rgba(255,255,255"] {
+  box-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.08) !important;
+}
+
+/* The old payroll burgundy reads as bright pink on dark screens. Keep the
+   light theme unchanged and use Maedin gold for the dark-theme brand action. */
+.dark .maedin-app-surface :is(
+  [class*="bg-[#9b2457]"],
+  [class*="bg-[#841e4b]"],
+  [class*="bg-[#8f1d4e]"],
+  [class*="bg-[#7b1743]"]
+) {
+  background-color: var(--maedin-dark-gold) !important;
+  border-color: rgba(242, 183, 5, 0.58) !important;
+  color: #101827 !important;
+}
+
+.dark .maedin-app-surface :is(
+  [class*="bg-[#9b2457]"],
+  [class*="bg-[#841e4b]"],
+  [class*="bg-[#8f1d4e]"],
+  [class*="bg-[#7b1743]"]
+) * {
+  color: #101827 !important;
+}
+
+.dark .maedin-app-surface :is(
+  [class*="text-[#9b2457]"],
+  [class*="text-[#841e4b]"],
+  [class*="text-[#8f1d4e]"]
+) {
+  color: #facc15 !important;
+}
+
+/* Green remains available for read-only success states, but interactive
+   controls use the single gold action colour in dark mode. */
+.dark .maedin-app-surface :is(button, a, [role="button"])[class*="bg-emerald-"] {
+  background-color: var(--maedin-dark-gold) !important;
+  border-color: rgba(242, 183, 5, 0.58) !important;
+  color: #101827 !important;
+}
+
+/* Notification preferences are controls, not success banners. */
+.dark .maedin-app-surface [data-notification-toggle] {
+  background-color: var(--maedin-dark-surface) !important;
+  border-color: var(--maedin-dark-border) !important;
+  box-shadow: none !important;
+}
+
+.dark .maedin-app-surface [data-notification-toggle="enabled"] {
+  border-color: rgba(242, 183, 5, 0.42) !important;
+}
+
+.dark .maedin-app-surface [data-notification-toggle="enabled"] [data-slot="switch"] {
+  background-color: var(--maedin-dark-gold) !important;
+  border-color: rgba(242, 183, 5, 0.58) !important;
+}
+
+.dark .maedin-app-surface [data-notification-toggle="disabled"] [data-slot="switch"] {
+  background-color: #334155 !important;
+}
+
+.dark .maedin-app-surface [data-notification-toggle="enabled"] [data-slot="switch-thumb"],
+.dark .maedin-app-surface [data-notification-toggle="disabled"] [data-slot="switch-thumb"] {
+  background-color: #f8fafc !important;
+}
+
+.dark .maedin-app-surface [data-notification-toggle="enabled"] [data-slot="switch"] + *,
+.dark .maedin-app-surface [data-notification-toggle="enabled"] [class*="bg-emerald-100"] {
+  background-color: rgba(242, 183, 5, 0.12) !important;
+  border-color: rgba(242, 183, 5, 0.38) !important;
+  color: #fde68a !important;
 }
