@@ -509,7 +509,7 @@ export default function App() {
               }}
             />
 
-            <div className="relative z-10 min-h-screen">
+            <div className="maedin-app-surface relative z-10 min-h-screen">
               <Router />
             </div>
           </TooltipProvider>

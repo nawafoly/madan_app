@@ -25,6 +25,7 @@ export function HrBrandMark({
   return (
     <span
       aria-label={alt}
+      data-theme-preserve-light="true"
       className={cn(
         "flex shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-[#F2B705]/30 bg-white text-slate-950 shadow-sm",
         className

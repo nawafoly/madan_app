@@ -59,7 +59,10 @@ export default function Footer() {
           <div className="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-4">
             <div>
               <div className="mb-4 flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-md">
+                <div
+                  data-theme-preserve-light="true"
+                  className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-md"
+                >
                   <img
                     src={footerLogoUrl}
                     alt={footerLogoAlt}

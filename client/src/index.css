@@ -2424,3 +2424,371 @@ html[dir="rtl"] .text-left {
   border-color: rgba(52, 211, 153, 0.34) !important;
   color: #d1fae5 !important;
 }
+
+/* =========================
+   Site-wide dark mode hardening
+
+   The application contains a mix of semantic theme tokens and legacy
+   light-only Tailwind utilities. Keep the compatibility rules here scoped to
+   the application root so every public, client, admin, HR, and employee view
+   gets the same contrast treatment without affecting third-party portals.
+========================= */
+.dark .maedin-app-surface {
+  --maedin-dark-bg: #0b1120;
+  --maedin-dark-surface: rgba(15, 23, 42, 0.96);
+  --maedin-dark-surface-soft: rgba(30, 41, 59, 0.88);
+  --maedin-dark-surface-raised: rgba(17, 24, 39, 0.98);
+  --maedin-dark-border: rgba(148, 163, 184, 0.3);
+  --maedin-dark-text: #f8fafc;
+  --maedin-dark-muted: #cbd5e1;
+  --maedin-dark-faint: #94a3b8;
+  --maedin-dark-gold: #f2b705;
+
+  min-height: 100vh;
+  background-color: var(--maedin-dark-bg);
+  color: var(--maedin-dark-text);
+  color-scheme: dark;
+}
+
+/* Direct light surfaces, including non-standard opacity values such as
+   bg-white/78 that are not covered by Tailwind's stock dark variants. */
+.dark .maedin-app-surface :is(
+  [class~="bg-white"],
+  [class^="bg-white/"],
+  [class*=" bg-white/"],
+  [class~="bg-slate-50"],
+  [class^="bg-slate-50/"],
+  [class*=" bg-slate-50/"],
+  [class~="bg-slate-100"],
+  [class^="bg-slate-100/"],
+  [class*=" bg-slate-100/"],
+  [class~="bg-slate-200"],
+  [class^="bg-slate-200/"],
+  [class*=" bg-slate-200/"],
+  [class~="bg-gray-50"],
+  [class~="bg-gray-100"],
+  [class~="bg-gray-200"],
+  [class~="bg-[#F8F9FA]"],
+  [class~="bg-[#f8f9fa]"],
+  [class~="bg-[#F7F3EA]"],
+  [class~="bg-[#f7f3ea]"],
+  [class~="bg-[#F4F7FB]"],
+  [class~="bg-[#f4f7fb]"],
+  [class~="bg-[#FBFBFC]"],
+  [class~="bg-[#fbfbfc]"],
+  [class~="bg-[#F8F8F7]"],
+  [class~="bg-[#f8f8f7]"],
+  [class~="bg-[#F8FAFC]"],
+  [class~="bg-[#f8fafc]"],
+  [class~="bg-[#F7F0DF]"],
+  [class~="bg-[#f7f0df]"],
+  [class~="bg-[#F7EDD7]"],
+  [class~="bg-[#f7edd7]"]
+) {
+  background-color: var(--maedin-dark-surface-soft) !important;
+}
+
+/* Pale brand and status surfaces need their own dark equivalents instead of
+   being flattened into a generic card colour. */
+.dark .maedin-app-surface :is(
+  [class~="bg-[#FFF8DF]"],
+  [class~="bg-[#fff8df]"],
+  [class~="bg-[#FBF7E8]"],
+  [class~="bg-[#fbf7e8]"],
+  [class~="bg-[#F8F2DD]"],
+  [class~="bg-[#fff7d1]"],
+  [class~="bg-amber-50"],
+  [class^="bg-amber-50/"],
+  [class*=" bg-amber-50/"],
+  [class~="bg-amber-100"],
+  [class^="bg-amber-100/"],
+  [class*=" bg-amber-100/"]
+) {
+  background-color: rgba(120, 83, 18, 0.34) !important;
+  color: #fde68a !important;
+}
+
+.dark .maedin-app-surface :is(
+  [class~="bg-emerald-50"],
+  [class^="bg-emerald-50/"],
+  [class*=" bg-emerald-50/"],
+  [class~="bg-emerald-100"],
+  [class^="bg-emerald-100/"],
+  [class*=" bg-emerald-100/"]
+) {
+  background-color: rgba(6, 78, 59, 0.38) !important;
+  color: #a7f3d0 !important;
+}
+
+.dark .maedin-app-surface :is(
+  [class~="bg-red-50"],
+  [class^="bg-red-50/"],
+  [class*=" bg-red-50/"],
+  [class~="bg-red-100"],
+  [class^="bg-red-100/"],
+  [class*=" bg-red-100/"],
+  [class~="bg-rose-50"],
+  [class^="bg-rose-50/"],
+  [class*=" bg-rose-50/"],
+  [class~="bg-rose-100"],
+  [class^="bg-rose-100/"],
+  [class*=" bg-rose-100/"]
+) {
+  background-color: rgba(127, 29, 29, 0.34) !important;
+  color: #fecdd3 !important;
+}
+
+.dark .maedin-app-surface :is(
+  [class~="bg-sky-50"],
+  [class^="bg-sky-50/"],
+  [class*=" bg-sky-50/"],
+  [class~="bg-sky-100"],
+  [class^="bg-sky-100/"],
+  [class*=" bg-sky-100/"],
+  [class~="bg-blue-50"],
+  [class^="bg-blue-50/"],
+  [class*=" bg-blue-50/"],
+  [class~="bg-blue-100"],
+  [class^="bg-blue-100/"],
+  [class*=" bg-blue-100/"]
+) {
+  background-color: rgba(7, 89, 133, 0.34) !important;
+  color: #bae6fd !important;
+}
+
+.dark .maedin-app-surface :is(
+  [class~="bg-violet-50"],
+  [class^="bg-violet-50/"],
+  [class*=" bg-violet-50/"],
+  [class~="bg-violet-100"],
+  [class^="bg-violet-100/"],
+  [class*=" bg-violet-100/"],
+  [class~="bg-purple-50"],
+  [class^="bg-purple-50/"],
+  [class*=" bg-purple-50/"],
+  [class~="bg-purple-100"],
+  [class^="bg-purple-100/"],
+  [class*=" bg-purple-100/"]
+) {
+  background-color: rgba(76, 29, 149, 0.34) !important;
+  color: #ddd6fe !important;
+}
+
+/* Light arbitrary gradients otherwise keep a white image layer even when
+   their background-color is corrected. */
+.dark .maedin-app-surface :is(
+  [class*="linear-gradient"][class*="#ffffff"],
+  [class*="linear-gradient"][class*="#f8fafc"],
+  [class*="linear-gradient"][class*="#f8fbff"],
+  [class*="linear-gradient"][class*="#f8f9fa"],
+  [class*="linear-gradient"][class*="#f8f8f9"],
+  [class*="linear-gradient"][class*="#f7f8fa"],
+  [class*="linear-gradient"][class*="#f7f7f8"],
+  [class*="linear-gradient"][class*="#f6f6f7"],
+  [class*="linear-gradient"][class*="#f5f6f8"],
+  [class*="linear-gradient"][class*="#fbfcfe"],
+  [class*="linear-gradient"][class*="#fbfdff"],
+  [class*="linear-gradient"][class*="#eef2f7"],
+  [class*="linear-gradient"][class*="#eef4f8"],
+  [class*="linear-gradient"][class*="#eef4ff"],
+  [class*="linear-gradient"][class*="#eefdf8"],
+  [class*="linear-gradient"][class*="#fff7df"],
+  [class*="linear-gradient"][class*="#fff8e8"],
+  [class*="linear-gradient"][class*="rgba(255,255,255,0.9"],
+  [class*="linear-gradient"][class*="rgba(255,255,255,1"],
+  [class*="linear-gradient"][class*="rgba(248,250,252"],
+  [class*="linear-gradient"][class*="rgba(241,245,249"],
+  [class*="linear-gradient"][class*="rgba(255,251,235"],
+  [class*="linear-gradient"][class*="rgba(240,249,255"],
+  [class*="linear-gradient"][class*="rgba(239,246,255"],
+  [class*="linear-gradient"][class*="rgba(236,253,245"],
+  [class*="linear-gradient"][class*="rgba(255,241,242"]
+) {
+  background:
+    linear-gradient(135deg, rgba(15, 23, 42, 0.98), rgba(30, 41, 59, 0.9))
+    !important;
+}
+
+/* Standard Tailwind gradients use separate from/via/to classes. Only exact
+   light stop tokens are selected, so translucent highlights on dark heroes
+   keep their intended appearance. */
+.dark .maedin-app-surface [class*="bg-gradient-"]:is(
+  [class~="from-white"],
+  [class~="via-white"],
+  [class~="to-white"],
+  [class~="from-slate-50"],
+  [class~="via-slate-50"],
+  [class~="to-slate-50"],
+  [class~="from-slate-100"],
+  [class~="via-slate-100"],
+  [class~="to-slate-100"]
+) {
+  background-image: linear-gradient(
+    135deg,
+    rgba(15, 23, 42, 0.98),
+    rgba(30, 41, 59, 0.9)
+  ) !important;
+}
+
+.dark .maedin-app-surface :is(
+  [class*="text-slate-950"],
+  [class*="text-slate-900"],
+  [class*="text-slate-800"],
+  [class*="text-slate-700"],
+  [class*="text-gray-950"],
+  [class*="text-gray-900"],
+  [class*="text-gray-800"],
+  [class*="text-gray-700"],
+  [class^="text-black/"],
+  [class*=" text-black/"]
+) {
+  color: var(--maedin-dark-text) !important;
+}
+
+.dark .maedin-app-surface :is(
+  [class~="text-[#030640]"],
+  [class~="text-[#34322d]"]
+) {
+  color: var(--maedin-dark-text) !important;
+}
+
+.dark .maedin-app-surface :is(
+  [class~="text-[#F2B705]"],
+  [class~="text-[#FFD24A]"],
+  [class~="text-[#B98500]"],
+  [class~="text-[#8d6700]"],
+  [class~="text-[#8b6700]"],
+  [class~="text-[#7a5b00]"],
+  [class~="text-[#5e4600]"]
+) {
+  color: #fde68a !important;
+}
+
+.dark .maedin-app-surface :is(
+  [class*="text-slate-600"],
+  [class*="text-slate-500"],
+  [class*="text-gray-600"],
+  [class*="text-gray-500"]
+) {
+  color: var(--maedin-dark-muted) !important;
+}
+
+.dark .maedin-app-surface :is(
+  [class*="text-slate-400"],
+  [class*="text-slate-300"],
+  [class*="text-gray-400"],
+  [class*="text-gray-300"]
+) {
+  color: var(--maedin-dark-faint) !important;
+}
+
+.dark .maedin-app-surface [class~="text-[#858481]"] {
+  color: var(--maedin-dark-muted) !important;
+}
+
+.dark .maedin-app-surface :is(
+  [class*="border-slate-50"],
+  [class*="border-slate-100"],
+  [class*="border-slate-200"],
+  [class*="border-slate-300"],
+  [class*="border-gray-100"],
+  [class*="border-gray-200"],
+  [class*="border-gray-300"],
+  [class~="border-[#E7D8AA]"],
+  [class~="border-[#e8cfda]"],
+  [class~="border-[#ead9e1]"],
+  [class^="border-black/"],
+  [class*=" border-black/"],
+  [class^="ring-white/"],
+  [class*=" ring-white/"]
+) {
+  border-color: var(--maedin-dark-border) !important;
+  --tw-ring-color: var(--maedin-dark-border) !important;
+}
+
+.dark .maedin-app-surface :is(input, textarea, select, [data-slot="select-trigger"]) {
+  background-color: var(--maedin-dark-surface) !important;
+  border-color: var(--maedin-dark-border) !important;
+  color: var(--maedin-dark-text) !important;
+  caret-color: var(--maedin-dark-gold);
+}
+
+.dark .maedin-app-surface :is(input, textarea)::placeholder {
+  color: var(--maedin-dark-faint) !important;
+  opacity: 1;
+}
+
+/* Public-site components are CSS classes rather than Tailwind utilities. */
+.dark .maedin-app-surface :is(
+  .rsg-outlineBtn,
+  .rsg-empty,
+  .rsg-featureCard,
+  .rsg-card,
+  .rsg-soft
+) {
+  background: rgba(30, 41, 59, 0.88) !important;
+  border-color: var(--maedin-dark-border) !important;
+  color: var(--maedin-dark-text) !important;
+}
+
+.dark .maedin-app-surface .rsg-skeletonCard {
+  background: rgba(148, 163, 184, 0.14) !important;
+  border-color: var(--maedin-dark-border) !important;
+}
+
+.dark .maedin-app-surface :is(
+  .rsg-empty__text,
+  .rsg-featureCard__desc,
+  .rsg-text-muted
+) {
+  color: var(--maedin-dark-muted) !important;
+}
+
+.dark .maedin-app-surface .rsg-featureCard__title {
+  color: var(--maedin-dark-text) !important;
+}
+
+.dark .rsg-nav__inner {
+  background: rgba(15, 23, 42, 0.9);
+  border-color: rgba(148, 163, 184, 0.28);
+  box-shadow:
+    0 22px 46px rgba(2, 6, 23, 0.4),
+    0 1px 0 rgba(255, 255, 255, 0.08) inset;
+}
+
+.dark :is(.rsg-nav__links, .rsg-nav__link, .rsg-nav__icon-btn) {
+  color: rgba(248, 250, 252, 0.88) !important;
+}
+
+.dark :is(
+  .rsg-nav__link:hover,
+  .rsg-nav__link.is-active,
+  .rsg-nav__icon-btn:hover,
+  .rsg-nav__action--primary:hover,
+  .rsg-nav__action--secondary:hover
+) {
+  background: rgba(148, 163, 184, 0.16) !important;
+  border-color: rgba(148, 163, 184, 0.22) !important;
+  color: #ffffff !important;
+}
+
+.dark :is(.rsg-nav__action--primary, .rsg-nav__action--secondary) {
+  color: rgba(248, 250, 252, 0.9) !important;
+}
+
+.dark .rsg-burger {
+  background: rgba(30, 41, 59, 0.82);
+  border-color: rgba(148, 163, 184, 0.3);
+}
+
+.dark .rsg-burger span {
+  background: rgba(248, 250, 252, 0.82);
+}
+
+/* Logos intentionally keep a white plate so transparent dark artwork remains
+   legible in both themes. */
+.dark .maedin-app-surface [data-theme-preserve-light="true"] {
+  background: #ffffff !important;
+  border-color: rgba(15, 23, 42, 0.12) !important;
+  color: #0f172a !important;
+}
