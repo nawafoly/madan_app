@@ -1392,7 +1392,109 @@ export default function HrPayrollPage() {
           {loading ? (
             <div className="grid min-h-72 place-items-center"><Loader2 className="h-8 w-8 animate-spin text-[#9b2457]" /></div>
           ) : filteredRows.length ? (
-            <div className="overflow-x-auto">
+            <>
+              <div className="grid gap-3 p-3 lg:hidden">
+                {filteredRows.map(({ employee, record, draft: rowDraft }) => {
+                  const recordIsDraft = isDraftPayroll(record);
+                  const recordIsFinalized = isFinalizedPayroll(record);
+                  const draftPreview = rowDraft ? computeDefaultDraftPayroll(rowDraft, language) : null;
+                  const rowAdditions = record
+                    ? getRecordAdditions(record)
+                    : rowDraft && draftPreview
+                      ? rowDraft.baseAllowances + draftPreview.overtimeBonus
+                      : null;
+                  const rowDeductions = record
+                    ? getRecordDeductions(record)
+                    : draftPreview
+                      ? draftPreview.delayDeduction + draftPreview.absenceDeduction + draftPreview.attendanceAbsenceDeduction + draftPreview.insuranceDeduction + draftPreview.totalSalaryDeductions
+                      : null;
+                  const setupLabel = recordIsFinalized
+                    ? tr(language, "معتمد", "Finalized")
+                    : recordIsDraft
+                      ? tr(language, "مفتوح للتعديل", "Open for editing")
+                      : rowDraft
+                        ? tr(language, "جاهز للمراجعة", "Ready for review")
+                        : tr(language, "ناقص", "Incomplete");
+                  const statusLabel = recordIsFinalized
+                    ? tr(language, "معتمد", "Finalized")
+                    : recordIsDraft
+                      ? tr(language, "مسودة بعد إلغاء الاعتماد", "Reopened draft")
+                      : rowDraft
+                        ? tr(language, "محسوب بانتظار الاعتماد", "Calculated, pending finalization")
+                        : tr(language, "غير محسوب", "Not calculated");
+
+                  return (
+                    <article
+                      key={employee.id}
+                      data-payroll-attention={!recordIsFinalized ? "true" : undefined}
+                      className={cn(
+                        "rounded-2xl border bg-white p-4 shadow-sm dark:bg-card",
+                        !recordIsFinalized && "border-amber-200/80 bg-amber-50/25"
+                      )}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <h3 className="truncate font-black text-slate-950 dark:text-foreground">
+                            {employeeLabel(employee)}
+                          </h3>
+                          <p className="mt-1 truncate text-xs text-slate-500">
+                            {employee.employeeCode || employee.title || employee.department || "—"}
+                          </p>
+                        </div>
+                        <Badge
+                          className={cn(
+                            "max-w-36 shrink-0 whitespace-normal text-center leading-5",
+                            recordIsFinalized
+                              ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-100"
+                              : recordIsDraft || rowDraft
+                                ? "bg-sky-100 text-sky-800 hover:bg-sky-100"
+                                : "bg-amber-100 text-amber-800 hover:bg-amber-100"
+                          )}
+                        >
+                          {setupLabel}
+                        </Badge>
+                      </div>
+
+                      <dl className="mt-4 grid grid-cols-2 gap-2">
+                        {[
+                          [tr(language, "الراتب الأساسي", "Base salary"), money(record?.baseSalary ?? employee.salary.baseSalary, language), "text-slate-950 dark:text-foreground"],
+                          [tr(language, "صافي الراتب", "Net salary"), record ? money(record.finalSalary, language) : draftPreview ? money(draftPreview.finalSalary, language) : "—", "text-slate-950 dark:text-foreground"],
+                          [tr(language, "الإضافات", "Additions"), rowAdditions === null ? "—" : money(rowAdditions, language), "text-emerald-700 dark:text-emerald-300"],
+                          [tr(language, "الخصومات", "Deductions"), rowDeductions === null ? "—" : money(rowDeductions, language), "text-rose-700 dark:text-rose-300"],
+                        ].map(([label, value, valueClass]) => (
+                          <div key={label} className="min-w-0 rounded-xl bg-slate-50 px-3 py-2.5 dark:bg-muted/40">
+                            <dt className="text-[11px] font-semibold text-slate-500 dark:text-muted-foreground">{label}</dt>
+                            <dd className={cn("mt-1 break-words text-sm font-black tabular-nums", valueClass)}>{value}</dd>
+                          </div>
+                        ))}
+                      </dl>
+
+                      {record || rowDraft ? (
+                        <div className="mt-3 grid grid-cols-4 gap-1.5 text-center text-[11px]">
+                          <span className="rounded-lg bg-slate-50 px-1.5 py-2 dark:bg-muted/40">{tr(language, "حضور", "Present")}<strong className="mt-0.5 block">{number(record?.attendanceCompleteDays ?? rowDraft?.attendance.completeDays ?? 0, language)}</strong></span>
+                          <span className="rounded-lg bg-slate-50 px-1.5 py-2 dark:bg-muted/40">{tr(language, "غياب", "Absent")}<strong className="mt-0.5 block">{number(record?.attendanceAbsentDays ?? rowDraft?.attendance.absentDays ?? 0, language)}</strong></span>
+                          <span className="rounded-lg bg-slate-50 px-1.5 py-2 dark:bg-muted/40">{tr(language, "تأخير", "Late")}<strong className="mt-0.5 block">{number(record?.attendanceLateHours ?? rowDraft?.attendance.lateHours ?? 0, language)}h</strong></span>
+                          <span className="rounded-lg bg-slate-50 px-1.5 py-2 dark:bg-muted/40">{tr(language, "إضافي", "OT")}<strong className="mt-0.5 block">{number(record?.attendanceOvertimeHours ?? rowDraft?.attendance.overtimeHours ?? 0, language)}h</strong></span>
+                        </div>
+                      ) : (
+                        <p className="mt-3 rounded-xl bg-slate-50 px-3 py-2.5 text-xs leading-5 text-slate-500 dark:bg-muted/40 dark:text-muted-foreground">
+                          {tr(language, "اضغط جلب الحضور واحتساب الرواتب لإكمال البيانات.", "Use the attendance calculation button to complete this payroll.")}
+                        </p>
+                      )}
+
+                      <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3 dark:border-border">
+                        <Badge variant="secondary" className="max-w-full whitespace-normal text-start leading-5">{statusLabel}</Badge>
+                        <div className="flex gap-2">
+                          <Button size="sm" variant="outline" onClick={() => void openEmployee(employee)}><Eye className="me-1 h-4 w-4" />{tr(language, "عرض", "View")}</Button>
+                          {recordIsFinalized && record ? <Button size="sm" variant="outline" onClick={() => printRecords([{ employee, record, draft: null }], tr(language, `كشف راتب ${employeeLabel(employee)}`, `${employeeLabel(employee)} salary slip`))}><Download className="me-1 h-4 w-4" />PDF</Button> : null}
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+
+              <div className="hidden overflow-x-auto lg:block">
               <Table>
                 <TableHeader className="bg-slate-50 dark:bg-muted/40">
                   <TableRow>
@@ -1415,7 +1517,11 @@ export default function HrPayrollPage() {
                     const rowAdditions = record ? getRecordAdditions(record) : rowDraft && draftPreview ? rowDraft.baseAllowances + draftPreview.overtimeBonus : null;
                     const rowDeductions = record ? getRecordDeductions(record) : draftPreview ? draftPreview.delayDeduction + draftPreview.absenceDeduction + draftPreview.attendanceAbsenceDeduction + draftPreview.insuranceDeduction + draftPreview.totalSalaryDeductions : null;
                     return (
-                    <TableRow key={employee.id} className={!recordIsFinalized ? "bg-amber-50/35 dark:bg-amber-950/10" : undefined}>
+                    <TableRow
+                      key={employee.id}
+                      data-payroll-attention={!recordIsFinalized ? "true" : undefined}
+                      className={!recordIsFinalized ? "bg-amber-50/25" : undefined}
+                    >
                       <TableCell>
                         <div className="font-black text-slate-950 dark:text-foreground">{employeeLabel(employee)}</div>
                         <div className="mt-1 text-xs text-slate-500">{employee.employeeCode || employee.title || employee.department || "—"}</div>
@@ -1453,7 +1559,8 @@ export default function HrPayrollPage() {
                   })}
                 </TableBody>
               </Table>
-            </div>
+              </div>
+            </>
           ) : (
             <div className="grid min-h-72 place-items-center text-center">
               <div><Users className="mx-auto mb-3 h-10 w-10 text-slate-300" /><p className="font-bold">{tr(language, "لا توجد نتائج مطابقة.", "No matching results.")}</p></div>

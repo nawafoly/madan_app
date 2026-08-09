@@ -890,8 +890,8 @@ export function DailyTaskTab({
                 </div>
               </>
             ) : (
-              <div className="flex min-h-[520px] items-center justify-center bg-slate-50/70 p-6">
-                <div className="max-w-md rounded-[28px] border border-dashed border-slate-200 bg-white px-6 py-10 text-center shadow-sm">
+              <div className="grid min-h-[280px] place-items-center bg-slate-50/70 p-4 sm:min-h-[340px] sm:p-6 xl:min-h-[420px]">
+                <div className="w-full max-w-md rounded-[28px] border border-dashed border-slate-200 bg-white px-5 py-8 text-center shadow-sm sm:px-6 sm:py-10">
                   <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-950 text-[#F2B705]">
                     <MessageSquare className="h-6 w-6" />
                   </div>

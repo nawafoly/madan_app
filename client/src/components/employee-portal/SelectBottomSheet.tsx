@@ -39,6 +39,7 @@ export default function SelectBottomSheet({
     <div className="fixed inset-0 z-[90]" dir={dir} role="presentation">
       <button
         type="button"
+        data-theme-overlay="true"
         className="absolute inset-0 bg-slate-950/60"
         aria-label={closeLabel}
         onClick={() => onOpenChange(false)}
@@ -109,4 +110,3 @@ export default function SelectBottomSheet({
     </div>
   );
 }
-

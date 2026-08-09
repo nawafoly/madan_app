@@ -382,10 +382,8 @@ function getStatusIndicatorClass(status: AttendanceStatus) {
   }
 }
 
-function getSelectedDayClass(status: AttendanceStatus) {
-  return status === "future"
-    ? "border-orange-500 bg-transparent"
-    : "border-orange-500 bg-orange-50";
+function getSelectedDayClass() {
+  return "border-transparent bg-orange-50/50 dark:bg-orange-950/20";
 }
 
 function getSelectedNumberClass(_status: AttendanceStatus) {
@@ -1257,9 +1255,9 @@ export default function EmployeeTodayAttendancePanel({
                 type="button"
                 onClick={() => setSelectedDate(day.date)}
                 className={cn(
-                  "relative mx-auto flex h-[54px] w-full max-w-[86px] items-center justify-center rounded-sm text-xl font-medium text-slate-900 transition xl:h-[64px] xl:max-w-none",
+                  "relative mx-auto flex h-[54px] w-full max-w-[86px] items-center justify-center rounded-sm text-xl font-medium text-slate-900 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-900 xl:h-[64px] xl:max-w-none",
                   selected
-                    ? cn("border-2", getSelectedDayClass(attendanceStatus))
+                    ? cn("rounded-xl border-2", getSelectedDayClass())
                     : cn(
                         "border-2 border-transparent hover:bg-slate-100",
                         attendanceStatus === "leave" &&

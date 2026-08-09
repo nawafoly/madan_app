@@ -2792,3 +2792,21 @@ html[dir="rtl"] .text-left {
   border-color: rgba(15, 23, 42, 0.12) !important;
   color: #0f172a !important;
 }
+
+/* Full-screen dismiss layers must stay neutral. The legacy dark action rule
+   intentionally turns dark call-to-action buttons gold, but overlays are also
+   buttons for accessibility and must never inherit that treatment. */
+.dark .maedin-app-surface [data-theme-overlay="true"] {
+  background-color: rgba(2, 6, 23, 0.78) !important;
+  border-color: transparent !important;
+  color: inherit !important;
+}
+
+/* An incomplete payroll is an informational state, not a destructive one.
+   Keep the row/card neutral in dark mode and reserve amber for its status
+   badge so long employee lists remain readable. */
+.dark .maedin-app-surface [data-payroll-attention="true"] {
+  background-color: rgba(30, 41, 59, 0.92) !important;
+  border-color: rgba(245, 158, 11, 0.42) !important;
+  color: var(--maedin-dark-text) !important;
+}
