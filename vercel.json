@@ -5,10 +5,6 @@
   "outputDirectory": "client/dist",
   "rewrites": [
     {
-      "source": "/privacy",
-      "destination": "/privacy/index.html"
-    },
-    {
       "source": "/hr",
       "has": [
         {
