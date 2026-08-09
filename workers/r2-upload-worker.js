@@ -23,6 +23,8 @@ const LIST_LIMIT_MAX = 200;
 const DEFAULT_ALLOWED_ORIGINS = new Set([
   "http://localhost:5173",
   "http://127.0.0.1:5173",
+  "http://localhost:5174",
+  "http://127.0.0.1:5174",
   "https://madan-app.vercel.app",
 ]);
 const EMPLOYEE_DIRECTORY_CALLER_ROLES = new Set([

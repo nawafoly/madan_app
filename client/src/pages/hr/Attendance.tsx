@@ -23,10 +23,8 @@ import {
   Smartphone,
 } from "lucide-react";
 import { toast } from "sonner";
-import { collection, getDocs } from "firebase/firestore";
 
 import DashboardLayout from "@/components/DashboardLayout";
-import { db } from "@/_core/firebase";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -93,11 +91,6 @@ type AttendanceEmployeeOption = {
   name: string;
   employeeCode: string;
   allowedZoneIds: string[];
-};
-
-type FirestoreCollectionRow = {
-  id: string;
-  data: Record<string, any>;
 };
 
 function pickText(...values: unknown[]) {
@@ -452,19 +445,6 @@ function getLookupValue<T>(map: Map<string, T>, value: unknown) {
   const key = normalizeLookupKey(value);
   if (!key) return undefined;
   return map.get(key) || map.get(key.toLowerCase());
-}
-
-async function loadOptionalCollectionRows(collectionName: string) {
-  try {
-    const snapshot = await getDocs(collection(db, collectionName));
-    return snapshot.docs.map((doc) => ({
-      id: doc.id,
-      data: (doc.data() as Record<string, any>) || {},
-    }));
-  } catch (error) {
-    console.debug(`hr_attendance_${collectionName}_fallback_failed`, error);
-    return [] as FirestoreCollectionRow[];
-  }
 }
 
 function exportAttendanceExcel(input: {
@@ -1867,6 +1847,7 @@ export default function HrAttendancePage() {
 
   useEffect(() => {
     let active = true;
+
     Promise.all([
       fetchEmployeeDirectoryFromWorker().catch((directoryError) => {
         console.warn(
@@ -1875,68 +1856,17 @@ export default function HrAttendancePage() {
         );
         return [];
       }),
-      loadOptionalCollectionRows("users"),
-      loadOptionalCollectionRows("employees"),
-      loadOptionalCollectionRows("admin_users"),
-      loadOptionalCollectionRows("staff_public"),
       fetchWorkZones(),
     ])
-      .then(([items, userRows, employeeRows, adminUserRows, staffPublicRows, zones]) => {
+      .then(([items, zones]) => {
         if (!active) return;
 
-        const allowedZonesByUid = new Map<string, Set<string>>();
-        const employeeCodeByUid = new Map<string, string>();
         const nameLookup = new Map<string, string>();
-        const addEmployeeCode = (
-          uid: string,
-          data: Record<string, any> | null | undefined,
-        ) => {
-          if (!uid) return;
-          const employeeCode = readEmployeeCode(data);
-          if (employeeCode && !employeeCodeByUid.has(uid)) {
-            employeeCodeByUid.set(uid, employeeCode);
-          }
-        };
-        const addAllowedZones = (uid: string, value: unknown) => {
-          if (!uid) return;
-          const existing = allowedZonesByUid.get(uid) || new Set<string>();
-          normalizeAllowedZoneIds(value).forEach((zoneId) => existing.add(zoneId));
-          allowedZonesByUid.set(uid, existing);
-        };
-        const addEmployeeCodeForAliases = (
-          aliases: string[],
-          data: Record<string, any> | null | undefined,
-        ) => {
-          aliases.forEach((alias) => addEmployeeCode(alias, data));
-        };
-        const addAllowedZonesForAliases = (aliases: string[], value: unknown) => {
-          aliases.forEach((alias) => addAllowedZones(alias, value));
-        };
-        const addFirestoreIdentity = ({ id, data }: FirestoreCollectionRow) => {
-          const aliases = readIdentityAliases(id, data);
-          const name = readEmployeeDisplayName(data, aliases);
-          addEmployeeNameAliases(nameLookup, aliases, name);
-          addEmployeeCodeForAliases(aliases, data);
-          addAllowedZonesForAliases(aliases, readAllowedZoneIds(data));
-        };
-        const getEmployeeCode = (uid: string) =>
-          getLookupValue(employeeCodeByUid, uid) || "-";
-        const getAllowedZones = (uid: string) =>
-          Array.from(getLookupValue(allowedZonesByUid, uid) || []);
-        const readAllowedZoneIds = (data: Record<string, any>) =>
-          data.allowedZoneIds ||
-          data.employment?.allowedZoneIds ||
-          data.employeeProfile?.employment?.allowedZoneIds ||
-          [];
 
         items.forEach((item) => {
           const aliases = uniqueLookupValues([item.uid, item.email]);
           addEmployeeNameAliases(nameLookup, aliases, item.name);
         });
-        userRows.forEach(addFirestoreIdentity);
-        employeeRows.forEach(addFirestoreIdentity);
-        adminUserRows.forEach(addFirestoreIdentity);
-        staffPublicRows.forEach(addFirestoreIdentity);
 
         setWorkZones(zones);
         setEmployeeNameLookup(nameLookup);
@@ -1944,12 +1874,14 @@ export default function HrAttendancePage() {
           items.map((item) => ({
             uid: item.uid,
             name:
-              getLookupValue(nameLookup, item.uid) ||
-              normalizeEmployeeDisplayName(item.name, [item.uid]) ||
+              normalizeEmployeeDisplayName(item.name, [
+                item.uid,
+                item.email || "",
+              ]) ||
               item.name ||
               item.uid,
-            employeeCode: getEmployeeCode(item.uid),
-            allowedZoneIds: getAllowedZones(item.uid),
+            employeeCode: pickText(item.employeeCode) || "-",
+            allowedZoneIds: normalizeAllowedZoneIds(item.allowedZoneIds),
           })),
         );
       })
@@ -1964,6 +1896,7 @@ export default function HrAttendancePage() {
           setWorkZones([]);
         }
       });
+
     return () => {
       active = false;
     };
@@ -2191,7 +2124,7 @@ export default function HrAttendancePage() {
     <DashboardLayout area="hr">
       <main
         dir={languageDir(language)}
-        className="min-h-screen min-w-0 overflow-x-hidden bg-[linear-gradient(180deg,#f8fafc_0%,#eef4ff_42%,#f8fafc_100%)] px-3 py-4 text-slate-950 sm:px-5 lg:px-7"
+        className="min-h-screen min-w-0 overflow-x-hidden bg-transparent px-3 py-4 text-slate-950 sm:px-5 lg:px-7"
       >
         <div className="mx-auto flex min-w-0 w-full max-w-[1680px] flex-col gap-5">
           <header className="min-w-0 overflow-hidden rounded-[2rem] border border-slate-200/80 bg-white shadow-[0_24px_70px_rgba(15,23,42,0.08)]">

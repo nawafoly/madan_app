@@ -456,8 +456,8 @@ export function MessageBubble({
   senderName,
   senderEmail,
   avatarUrl,
-  viewerName,
-  conversationType,
+  viewerName: _viewerName,
+  conversationType: _conversationType,
   language = "ar",
 }: {
   message: EmployeeMessageRecord;
@@ -469,11 +469,6 @@ export function MessageBubble({
   conversationType: EmployeeConversationType;
   language?: Language;
 }) {
-  const isInternal = conversationType === "employee_to_employee";
-  const incomingAccentClass = isInternal
-    ? "border-sky-200 bg-sky-50/80 text-slate-900"
-    : "border-[#E7D8AA] bg-[#FBF7E8] text-slate-900";
-
   const avatarNode = (
     <Avatar className="h-9 w-9 shrink-0 rounded-full border border-slate-200 bg-slate-100 shadow-sm">
       <AvatarImage
@@ -490,117 +485,65 @@ export function MessageBubble({
   return (
     <div
       className={cn(
-        "flex items-start gap-3",
-        ownMessage ? "justify-start" : "justify-start"
+        "flex items-end gap-2.5",
+        ownMessage ? "justify-end" : "justify-start"
       )}
       dir="ltr"
     >
-      {ownMessage ? (
-        <>
-          <div
-            className="max-w-[72%] ml-auto rounded-2xl border border-slate-200 bg-white px-4 py-3 text-right text-slate-800 shadow-[0_18px_40px_-32px_rgba(15,23,42,0.32)]"
-            dir={languageDir(language)}
-          >
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge
-                variant="outline"
-                className="rounded-full border-slate-200 bg-slate-50 text-slate-700 shadow-none"
-              >
-                {viewerName}
-              </Badge>
-              <Badge
-                variant="outline"
-                className="rounded-full border-slate-200 bg-white text-slate-500 shadow-none"
-              >
-                {isInternal
-                  ? tr(language, "رسالة داخلية", "Internal Message")
-                  : tr(language, "رسالة موظف", "Employee Message")}
-              </Badge>
-              <Badge
-                variant="outline"
-                className="rounded-full border-slate-200 bg-white text-slate-500 shadow-none"
-              >
-                {messageTypeLabel(message.typeLabel, language)}
-              </Badge>
-            </div>
+      {!ownMessage ? avatarNode : null}
 
-            <div className="mt-3 whitespace-pre-wrap break-words text-[0.97rem] leading-8 text-slate-800 [overflow-wrap:anywhere]">
-              {message.body || tr(language, "لا يوجد نص محفوظ لهذه الرسالة.", "No text saved for this message.")}
-            </div>
-
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200/80 pt-3 text-xs text-slate-500">
-              <span>
-                {message.createdAtDate
-                  ? formatMessageDate(message.createdAtDate, language)
-                  : tr(language, "تاريخ غير متوفر", "Date unavailable")}
-              </span>
-              <span>
-                {message.isRead && message.readAtDate
-                  ? `${tr(language, "تمت القراءة في", "Read on")} ${formatMessageDate(message.readAtDate, language)}`
-                  : tr(language, "بانتظار القراءة", "Pending read")}
-              </span>
-            </div>
+      <div
+        className={cn(
+          "max-w-[82%] rounded-[20px] px-4 py-3 shadow-[0_12px_32px_-26px_rgba(15,23,42,0.45)] sm:max-w-[74%]",
+          ownMessage
+            ? "rounded-br-md bg-slate-950 text-white"
+            : "rounded-bl-md border border-slate-200 bg-white text-slate-900"
+        )}
+        dir={languageDir(language)}
+      >
+        {!ownMessage ? (
+          <div className="mb-1.5 truncate text-xs font-bold text-slate-600">
+            {senderName}
           </div>
-          {avatarNode}
-        </>
-      ) : (
-        <>
-          {avatarNode}
-          <div
-            className={cn(
-              "max-w-[72%] rounded-2xl border px-4 py-3 text-right shadow-[0_18px_40px_-32px_rgba(15,23,42,0.32)]",
-              incomingAccentClass
+        ) : null}
+
+        <div
+          className={cn(
+            "whitespace-pre-wrap break-words text-[0.95rem] leading-7 [overflow-wrap:anywhere]",
+            ownMessage ? "text-white" : "text-slate-800"
+          )}
+        >
+          {message.body ||
+            tr(
+              language,
+              "لا يوجد نص محفوظ لهذه الرسالة.",
+              "No text saved for this message."
             )}
-            dir={languageDir(language)}
-          >
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge
-                variant="outline"
-                className={cn(
-                  "rounded-full bg-white shadow-none",
-                  isInternal
-                    ? "border-sky-200 text-sky-700"
-                    : "border-[#E7D8AA] text-[#8b6700]"
-                )}
-              >
-                {senderName}
-              </Badge>
-              <Badge
-                variant="outline"
-                className={cn(
-                  "rounded-full shadow-none",
-                  isInternal
-                    ? "border-sky-200 bg-sky-100/70 text-sky-700"
-                    : "border-[#E7D8AA] bg-[#F8F2DD] text-[#8b6700]"
-                )}
-              >
-                {isInternal
-                  ? tr(language, "محادثة داخلية", "Internal Conversation")
-                  : tr(language, "رسالة HR", "HR Message")}
-              </Badge>
-              <Badge
-                variant="outline"
-                className="rounded-full border-slate-200 bg-white text-slate-500 shadow-none"
-              >
-                {messageTypeLabel(message.typeLabel, language)}
-              </Badge>
-            </div>
+        </div>
 
-            <div className="mt-3 whitespace-pre-wrap break-words text-[0.97rem] leading-8 text-slate-800 [overflow-wrap:anywhere]">
-              {message.body || tr(language, "لا يوجد نص محفوظ لهذه الرسالة.", "No text saved for this message.")}
-            </div>
+        <div
+          className={cn(
+            "mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px]",
+            ownMessage ? "text-white/60" : "text-slate-400"
+          )}
+        >
+          <span>
+            {message.createdAtDate
+              ? formatMessageDate(message.createdAtDate, language)
+              : tr(language, "تاريخ غير متوفر", "Date unavailable")}
+          </span>
 
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200/80 pt-3 text-xs text-slate-500">
-              <span>
-                {message.createdAtDate
-                  ? formatMessageDate(message.createdAtDate, language)
-                  : tr(language, "تاريخ غير متوفر", "Date unavailable")}
-              </span>
-              <span>{isInternal ? tr(language, "واردة من الموظف", "From Employee") : tr(language, "واردة من HR", "From HR")}</span>
-            </div>
-          </div>
-        </>
-      )}
+          {ownMessage ? (
+            <span>
+              {message.isRead
+                ? tr(language, "مقروءة", "Read")
+                : tr(language, "تم الإرسال", "Sent")}
+            </span>
+          ) : null}
+        </div>
+      </div>
+
+      {ownMessage ? avatarNode : null}
     </div>
   );
 }

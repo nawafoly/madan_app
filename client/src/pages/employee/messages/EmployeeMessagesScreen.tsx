@@ -15,6 +15,7 @@ import EmployeeLayout from "@/components/EmployeeLayout";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Card,
   CardContent,
@@ -128,6 +129,8 @@ export default function EmployeeMessagesScreen() {
   const [inboxFilter, setInboxFilter] = useState<InboxFilterKey>("all");
   const [conversationSearch, setConversationSearch] = useState("");
   const handledMessageSearchRef = useRef("");
+  const conversationScrollRef = useRef<HTMLDivElement | null>(null);
+  const shouldStickToBottomRef = useRef(true);
 
   const searchParams = useMemo(() => new URLSearchParams(search), [search]);
   const requestedWorkspaceSection = useMemo(() => {
@@ -412,6 +415,9 @@ export default function EmployeeMessagesScreen() {
     coworkersByUid,
     selectedInternalRecipientUid,
   ]);
+  const conversationPaneOpen = Boolean(
+    activeConversation || selectedInternalRecipient
+  );
 
   const internalEmptyConversationContent = useMemo(() => {
     if (!selectedInternalRecipient) return null;
@@ -530,13 +536,24 @@ export default function EmployeeMessagesScreen() {
           ] as const;
         }
 
+        const peerMessagePhoto =
+          activeConversation?.messages.find(
+            message =>
+              (message.toUserId || message.recipientUid) === senderUid &&
+              Boolean(message.toUserPhoto)
+          )?.toUserPhoto || null;
         const coworker = coworkersByUid.get(senderUid);
+
         if (coworker) {
           return [
             senderUid,
             {
               avatarUrl:
-                coworker.avatarUrl || seededMessage.fromUserPhoto || null,
+                coworker.avatarUrl ||
+                seededMessage.fromUserPhoto ||
+                peerMessagePhoto ||
+                activeConversation?.counterpartyPhoto ||
+                null,
               name: coworker.name,
               email: coworker.email || seededMessage.fromUserEmail || null,
             },
@@ -546,8 +563,12 @@ export default function EmployeeMessagesScreen() {
         return [
           senderUid,
           {
-            avatarUrl: seededMessage.fromUserPhoto || null,
-            name: seededMessage.fromUserName || "HR",
+            avatarUrl:
+              seededMessage.fromUserPhoto ||
+              peerMessagePhoto ||
+              activeConversation?.counterpartyPhoto ||
+              null,
+            name: seededMessage.fromUserName || activeConversation?.counterpartyName || "HR",
             email: seededMessage.fromUserEmail || null,
           },
         ] as const;
@@ -644,6 +665,46 @@ export default function EmployeeMessagesScreen() {
     setHrReplyBody("");
     setInternalMessageBody("");
   };
+
+  const scrollConversationToBottom = (behavior: ScrollBehavior = "auto") => {
+    const container = conversationScrollRef.current;
+    if (!container) return;
+
+    container.scrollTo({
+      top: container.scrollHeight,
+      behavior,
+    });
+  };
+
+  const handleConversationScroll = () => {
+    const container = conversationScrollRef.current;
+    if (!container) return;
+
+    const distanceFromBottom =
+      container.scrollHeight - container.scrollTop - container.clientHeight;
+    shouldStickToBottomRef.current = distanceFromBottom < 120;
+  };
+
+  useEffect(() => {
+    if (!activeConversation) return;
+
+    shouldStickToBottomRef.current = true;
+    const frame = window.requestAnimationFrame(() => {
+      scrollConversationToBottom("auto");
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeConversation?.id]);
+
+  useEffect(() => {
+    if (!activeConversation || !shouldStickToBottomRef.current) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      scrollConversationToBottom("smooth");
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeConversation?.messages.length]);
 
   useEffect(() => {
     if (activeConversation) {
@@ -905,8 +966,13 @@ export default function EmployeeMessagesScreen() {
 
         <Card className="overflow-hidden rounded-[30px] border-slate-200/80 bg-white shadow-[0_28px_80px_-56px_rgba(15,23,42,0.32)]">
           <CardContent className="p-0">
-            <div className="grid min-h-[680px] xl:grid-cols-[390px_minmax(0,1fr)]">
-              <aside className="border-b border-slate-200 bg-slate-50/70 p-4 xl:border-b-0 xl:border-e">
+            <div className="grid h-[calc(100dvh-190px)] min-h-[520px] max-h-[780px] xl:h-[720px] xl:grid-cols-[390px_minmax(0,1fr)]">
+              <aside
+                className={cn(
+                  "min-h-0 border-b border-slate-200 bg-slate-50/70 p-4 xl:block xl:border-b-0 xl:border-e",
+                  conversationPaneOpen ? "hidden" : "block"
+                )}
+              >
                 <div className="mb-4 flex items-start justify-between gap-3">
                   <div>
                     <div className="flex items-center gap-2 text-base font-semibold text-slate-950">
@@ -1000,7 +1066,7 @@ export default function EmployeeMessagesScreen() {
                   </div>
                 ) : null}
 
-                <div className="mt-4 max-h-[500px] space-y-2 overflow-y-auto pe-1">
+                <div className="mt-4 max-h-[calc(100%-170px)] min-h-0 space-y-2 overflow-y-auto pe-1">
                   {loading ? (
                     Array.from({ length: 5 }).map((_, index) => (
                       <div key={index} className="h-24 animate-pulse rounded-2xl bg-white" />
@@ -1013,6 +1079,10 @@ export default function EmployeeMessagesScreen() {
                       const title =
                         conversation.counterpartyName ||
                         (isInternal ? tr(language, "موظف", "Employee") : "HR");
+                      const conversationAvatarUrl =
+                        coworkersByUid.get(conversation.counterpartyUid)?.avatarUrl ||
+                        conversation.counterpartyPhoto ||
+                        null;
 
                       return (
                         <button
@@ -1028,12 +1098,24 @@ export default function EmployeeMessagesScreen() {
                           )}
                         >
                           <div className="flex items-start gap-3">
-                            <div className={cn(
-                              "flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-xs font-bold text-white shadow-sm",
-                              isInternal ? "bg-sky-700" : "bg-slate-950"
-                            )}>
-                              {initialsFromName(title, conversation.counterpartyEmail)}
-                            </div>
+                            <Avatar className="h-11 w-11 shrink-0 rounded-2xl border border-slate-200 bg-slate-100 shadow-sm">
+                              <AvatarImage
+                                src={conversationAvatarUrl || undefined}
+                                alt={title}
+                                className="object-cover"
+                              />
+                              <AvatarFallback
+                                className={cn(
+                                  "text-xs font-bold text-white",
+                                  isInternal ? "bg-sky-700" : "bg-slate-950"
+                                )}
+                              >
+                                {initialsFromName(
+                                  title,
+                                  conversation.counterpartyEmail
+                                )}
+                              </AvatarFallback>
+                            </Avatar>
                             <div className="min-w-0 flex-1">
                               <div className="flex items-start justify-between gap-2">
                                 <div className="min-w-0">
@@ -1075,10 +1157,27 @@ export default function EmployeeMessagesScreen() {
                 </div>
               </aside>
 
-              <div className="flex min-h-[680px] flex-col bg-white">
+              <div
+                className={cn(
+                  "min-h-0 flex-col bg-white xl:flex",
+                  conversationPaneOpen ? "flex" : "hidden"
+                )}
+              >
                 {activeConversation ? (
                   <>
                     <div className="border-b border-slate-200 bg-white px-5 py-4">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="mb-3 h-9 rounded-full px-3 text-slate-600 xl:hidden"
+                        onClick={closeConversation}
+                      >
+                        <span aria-hidden="true" className="text-lg leading-none">
+                          {language === "ar" ? "→" : "←"}
+                        </span>
+                        {tr(language, "الرجوع للمحادثات", "Back to conversations")}
+                      </Button>
                       <div className="flex flex-wrap items-center justify-between gap-3">
                         <div className="min-w-0">
                           <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
@@ -1094,13 +1193,17 @@ export default function EmployeeMessagesScreen() {
                               tr(language, "سجل المحادثة المحددة", "Selected conversation thread")}
                           </p>
                         </div>
-                        <Button type="button" variant="outline" className="rounded-full" onClick={closeConversation}>
+                        <Button type="button" variant="outline" className="hidden rounded-full xl:inline-flex" onClick={closeConversation}>
                           {tr(language, "عرض كل الرسائل", "All Messages")}
                         </Button>
                       </div>
                     </div>
 
-                    <div className="flex-1 space-y-4 overflow-y-auto bg-slate-50/60 px-5 py-5">
+                    <div
+                      ref={conversationScrollRef}
+                      onScroll={handleConversationScroll}
+                      className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain bg-slate-50/60 px-4 py-5 sm:px-5"
+                    >
                       {activeConversation.messages.map(message => {
                         const ownMessage = message.fromUserId === user.uid;
                         const senderId = message.fromUserId || message.senderUid || "";
@@ -1119,7 +1222,17 @@ export default function EmployeeMessagesScreen() {
                             avatarUrl={
                               senderProfile?.avatarUrl ||
                               message.fromUserPhoto ||
-                              (ownMessage ? currentUserAvatarUrl : activeConversation.counterpartyPhoto)
+                              (!ownMessage
+                                ? activeConversation.messages.find(
+                                    candidate =>
+                                      (candidate.toUserId || candidate.recipientUid) ===
+                                        senderId && Boolean(candidate.toUserPhoto)
+                                  )?.toUserPhoto
+                                : null) ||
+                              (ownMessage
+                                ? currentUserAvatarUrl
+                                : coworkersByUid.get(senderId)?.avatarUrl ||
+                                  activeConversation.counterpartyPhoto)
                             }
                             viewerName={currentUserDisplayName}
                             conversationType={activeConversation.conversationType}
@@ -1174,6 +1287,18 @@ export default function EmployeeMessagesScreen() {
                 ) : selectedInternalRecipient ? (
                   <div className="flex flex-1 flex-col">
                     <div className="border-b border-slate-200 px-5 py-4">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="mb-3 h-9 rounded-full px-3 text-slate-600 xl:hidden"
+                        onClick={closeConversation}
+                      >
+                        <span aria-hidden="true" className="text-lg leading-none">
+                          {language === "ar" ? "→" : "←"}
+                        </span>
+                        {tr(language, "الرجوع للمحادثات", "Back to conversations")}
+                      </Button>
                       <h2 className="text-xl font-semibold text-slate-950">
                         {selectedInternalRecipient.name}
                       </h2>

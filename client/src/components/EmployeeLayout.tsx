@@ -53,7 +53,7 @@ export default function EmployeeLayout({
       hasStaffAdminPermission(user, "weekly_reports.manager_notes") ||
       hasStaffAdminPermission(user, "settings.manage")
     : false;
-  const employeeReturnPath = "/hr";
+  const employeeReturnPath = "/hr/recruitment";
   const employeeReturnLabel = tr(
     language,
     "منصة الموارد البشرية",
@@ -194,7 +194,6 @@ export default function EmployeeLayout({
     item => item.href !== "/employee/profile" && item.active
   );
   const isMenuInnerView =
-    currentHash === "employee-profile-info" ||
     currentHash === "hr-info" ||
     currentHash === "employee-employment-info" ||
     currentHash === "employment" ||
@@ -241,34 +240,32 @@ export default function EmployeeLayout({
       key: "profile",
       label: tr(language, "الملف الشخصي", "Profile"),
       icon: UserRound,
-      active: isEmployeeProfilePath && currentHash === "employee-profile-info",
+      active: isEmployeeProfilePath && currentHash === "employee-profile-info" && !navSheetOpen,
       onClick: () => navigateToEmployeeAnchor("employee-profile-info"),
     },
     {
       key: "menu",
       label: tr(language, "المزيد", "More"),
       icon: Menu,
-      active: hasActiveMenuPage || (isEmployeeProfilePath && isMenuInnerView),
+      active: navSheetOpen || hasActiveMenuPage || (isEmployeeProfilePath && isMenuInnerView),
       onClick: () => setNavSheetOpen(true),
     },
   ];
   void title;
   void description;
   const portalNavSheet = navSheetOpen ? (
-    <div className="fixed inset-0 z-[90]" dir={layoutDir} role="presentation">
-      <button
-        type="button"
+    <div className="pointer-events-none fixed inset-0 z-[90]" dir={layoutDir} role="presentation">
+      <div
         data-theme-overlay="true"
-        className="absolute inset-0 bg-slate-950/55"
-        aria-label={tr(language, "إغلاق", "Close")}
-        onClick={() => setNavSheetOpen(false)}
+        className="pointer-events-none absolute inset-0 bg-slate-950/55"
+        aria-hidden="true"
       />
 
       <section
         role="dialog"
-        aria-modal="true"
+        aria-modal="false"
         aria-label={tr(language, "قائمة بوابة الموظف", "Employee portal menu")}
-        className="absolute inset-x-0 bottom-0 overflow-hidden rounded-t-[28px] bg-white shadow-[0_-24px_70px_-28px_rgba(15,23,42,0.55)]"
+        className="pointer-events-auto absolute inset-x-0 bottom-0 overflow-hidden rounded-t-[28px] bg-white shadow-[0_-24px_70px_-28px_rgba(15,23,42,0.55)]"
       >
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
           <button

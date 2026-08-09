@@ -1924,6 +1924,17 @@ html[dir="rtl"] .text-left {
   }
 }
 
+/* HR page canvas normalization:
+   DashboardLayout owns the workspace background.
+   Legacy HR pages may still carry a light page-level bg-[#F8F9FA].
+   Only direct page roots are made transparent; cards/surfaces remain untouched. */
+.hr-dashboard-surface > main > :where(
+  [class~="bg-[#F8F9FA]"],
+  [class~="bg-[#f8f9fa]"]
+) {
+  background-color: transparent !important;
+}
+
 /* =========================
    HR / Employee Dark Mode Compatibility
 ========================= */
@@ -1955,14 +1966,14 @@ html[dir="rtl"] .text-left {
   --maedin-dark-muted: #cbd5e1;
   --maedin-dark-faint: #94a3b8;
   --maedin-dark-gold: #f2b705;
-  background: var(--maedin-dark-bg) !important;
   color: var(--maedin-dark-text);
 }
 
-.dark .dashboard-content-surface main {
-  background: var(--maedin-dark-bg) !important;
-  color: var(--maedin-dark-text);
-}
+/*
+ * Dashboard pages own their page background through DashboardLayout
+ * (dark:bg-background). Do not override dashboard/main backgrounds here.
+ * Employee and HR portal shells keep their dedicated backgrounds below.
+ */
 
 .dark .employee-shell {
   background:
@@ -2434,7 +2445,7 @@ html[dir="rtl"] .text-left {
    gets the same contrast treatment without affecting third-party portals.
 ========================= */
 .dark .maedin-app-surface {
-  --maedin-dark-bg: #030712;
+  --maedin-dark-bg: var(--background);
   --maedin-dark-surface: rgba(11, 18, 32, 0.98);
   --maedin-dark-surface-soft: rgba(15, 23, 42, 0.96);
   --maedin-dark-surface-raised: rgba(17, 28, 46, 0.98);
@@ -2445,7 +2456,7 @@ html[dir="rtl"] .text-left {
   --maedin-dark-gold: #f2b705;
 
   min-height: 100vh;
-  background-color: var(--maedin-dark-bg);
+  background-color: var(--background);
   color: var(--maedin-dark-text);
   color-scheme: dark;
 }
@@ -2468,8 +2479,6 @@ html[dir="rtl"] .text-left {
   [class~="bg-gray-50"],
   [class~="bg-gray-100"],
   [class~="bg-gray-200"],
-  [class~="bg-[#F8F9FA]"],
-  [class~="bg-[#f8f9fa]"],
   [class~="bg-[#F7F3EA]"],
   [class~="bg-[#f7f3ea]"],
   [class~="bg-[#F4F7FB]"],
@@ -2478,8 +2487,6 @@ html[dir="rtl"] .text-left {
   [class~="bg-[#fbfbfc]"],
   [class~="bg-[#F8F8F7]"],
   [class~="bg-[#f8f8f7]"],
-  [class~="bg-[#F8FAFC]"],
-  [class~="bg-[#f8fafc]"],
   [class~="bg-[#F7F0DF]"],
   [class~="bg-[#f7f0df]"],
   [class~="bg-[#F7EDD7]"],
@@ -2906,4 +2913,81 @@ html.dark #root,
   background-color: rgba(242, 183, 5, 0.12) !important;
   border-color: rgba(242, 183, 5, 0.38) !important;
   color: #fde68a !important;
+}
+
+
+/* HR settings layout hardening - final */
+.hr-dashboard-surface :where(
+  [class*="grid-cols-"],
+  [class*="rounded-"][class*="border"]
+) > * {
+  min-width: 0;
+}
+
+.hr-dashboard-surface :where(
+  [class*="rounded-"][class*="border"]
+) {
+  overflow-wrap: anywhere;
+}
+
+.hr-dashboard-surface :where(
+  h1, h2, h3, h4, p, span, strong, dd, dt
+) {
+  max-width: 100%;
+}
+
+.hr-dashboard-surface :where(
+  [class*="text-2xl"],
+  [class*="text-3xl"],
+  [class*="text-4xl"]
+) {
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+@media (max-width: 1279px) {
+  .hr-dashboard-surface :where([class*="grid-cols-5"]) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 639px) {
+  .hr-dashboard-surface :where(
+    [class*="grid-cols-5"],
+    [class*="grid-cols-4"],
+    [class*="grid-cols-3"]
+  ) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+
+/* Technical details grid: preserve whole-word wrapping */
+.hr-dashboard-surface .technical-details-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.hr-dashboard-surface .technical-details-grid > * {
+  min-width: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.hr-dashboard-surface .technical-details-grid :where(
+  div, p, span, strong, dd, dt
+) {
+  overflow-wrap: normal !important;
+  word-break: normal !important;
+}
+
+@media (min-width: 640px) {
+  .hr-dashboard-surface .technical-details-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .hr-dashboard-surface .technical-details-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }

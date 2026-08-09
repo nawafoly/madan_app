@@ -4609,7 +4609,7 @@ export default function Settings({
             title="دعوات الأدوار"
             description="ربط دور ببريد إلكتروني حتى يتم تطبيقه تلقائيًا عند تسجيل الدخول أو إنشاء الحساب."
           >
-            <div className="grid gap-5 md:grid-cols-3">
+            <div className="grid gap-5 md:grid-cols-3 min-w-0">
               <SettingsField
                 label="الإيميل"
                 description="البريد الذي سيحمل الدعوة أو الترقية المؤجلة."
@@ -4631,7 +4631,7 @@ export default function Settings({
                     setInviteRoleKey(normalizeAdminRoleKey(v))
                   }
                 >
-                  <SelectTrigger className="h-12 rounded-xl border-slate-200 bg-white px-4 shadow-none">
+                  <SelectTrigger className="h-12 rounded-xl border-slate-200 bg-white px-4 shadow-none min-w-0">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -4656,7 +4656,7 @@ export default function Settings({
               />
             </div>
 
-            <div className="mt-5 flex flex-wrap gap-3">
+            <div className="mt-5 flex flex-wrap gap-3 min-w-0">
               <Button
                 className="bg-[#F2B705] text-slate-950 hover:bg-[#e0ab00]"
                 onClick={upsertRoleInvite}
@@ -4665,37 +4665,37 @@ export default function Settings({
               </Button>
             </div>
 
-            <div className="mt-8 space-y-4 border-t border-slate-200 pt-6">
-              <div className="flex items-center justify-between gap-3">
+            <div className="mt-8 space-y-4 border-t border-slate-200 pt-6 min-w-0">
+              <div className="flex items-center justify-between gap-3 min-w-0">
                 <div>
-                  <div className="text-base font-semibold text-slate-950">
+                  <div className="text-base font-semibold text-slate-950 break-words">
                     الدعوات الحالية
                   </div>
-                  <div className="text-sm text-slate-500">
+                  <div className="text-sm text-slate-500 break-words">
                     مراجعة الدعوات النشطة أو الموقوفة وإدارتها من هنا.
                   </div>
                 </div>
-                <Badge variant="outline" className="rounded-full">
+                <Badge variant="outline" className="rounded-full min-w-0">
                   {formatNumberEN(roleInvites.length)}
                 </Badge>
               </div>
 
               {roleInvites.length ? (
-                <div className="grid gap-4">
+                <div className="grid gap-4 min-w-0">
                   {roleInvites.map(inv => (
                     <div
                       key={inv.id}
-                      className="rounded-[22px] border border-slate-200 bg-slate-50/70 p-5"
+                      className="rounded-[22px] border border-slate-200 bg-slate-50/70 p-5 min-w-0"
                     >
-                      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between min-w-0">
                         <div className="space-y-3">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <Badge variant="outline" className="rounded-full">
+                          <div className="flex flex-wrap items-center gap-2 min-w-0">
+                            <Badge variant="outline" className="rounded-full min-w-0">
                               {inv.email}
                             </Badge>
                             <Badge
                               variant="secondary"
-                              className="rounded-full"
+                              className="rounded-full min-w-0"
                             >
                               {getRoleDisplayLabel(inv.roleKey) ||
                                 inv.roleKey}
@@ -4713,13 +4713,13 @@ export default function Settings({
                             </Badge>
                           </div>
 
-                          <p className="text-sm leading-7 text-slate-600">
+                          <p className="text-sm leading-7 text-slate-600 break-words">
                             {inv.notes ||
                               "لا توجد ملاحظات مضافة لهذه الدعوة."}
                           </p>
                         </div>
 
-                        <div className="flex flex-wrap gap-2">
+                        <div className="flex flex-wrap gap-2 min-w-0">
                           <Button
                             variant="outline"
                             onClick={() => toggleInviteActive(inv)}
@@ -4738,7 +4738,7 @@ export default function Settings({
                   ))}
                 </div>
               ) : (
-                <div className="rounded-[22px] border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-500">
+                <div className="rounded-[22px] border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-500 min-w-0 break-words">
                   لا توجد دعوات محفوظة حتى الآن.
                 </div>
               )}
@@ -4760,7 +4760,7 @@ export default function Settings({
             }
           >
             <div className="space-y-5">
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4 min-w-0">
                 <SettingsOverviewStat
                   icon={Users}
                   label="الإجمالي"
@@ -4793,15 +4793,15 @@ export default function Settings({
                 />
               </div>
 
-              <div className="flex flex-col gap-3 rounded-[22px] border border-slate-200 bg-slate-50/70 p-4 lg:flex-row lg:items-center lg:justify-between">
-                <div className="grid w-full gap-3 md:grid-cols-[minmax(0,1fr)_220px]">
+              <div className="flex flex-col gap-3 rounded-[22px] border border-slate-200 bg-slate-50/70 p-4 lg:flex-row lg:items-center lg:justify-between min-w-0">
+                <div className="grid w-full gap-3 md:grid-cols-[minmax(0,1fr)_220px] min-w-0">
                   <Input
                     value={adminAccountSearch}
                     onChange={event =>
                       setAdminAccountSearch(event.target.value)
                     }
                     placeholder="ابحث بالاسم، البريد، الدور، أو الصلاحية"
-                    className="h-11 rounded-xl border-slate-200 bg-white shadow-none"
+                    className="h-11 rounded-xl border-slate-200 bg-white shadow-none min-w-0"
                   />
                   <Select
                     value={adminAccountRoleFilter}
@@ -4809,7 +4809,7 @@ export default function Settings({
                       setAdminAccountRoleFilter(value as "all" | AdminRoleKey)
                     }
                   >
-                    <SelectTrigger className="h-11 rounded-xl border-slate-200 bg-white px-4 shadow-none">
+                    <SelectTrigger className="h-11 rounded-xl border-slate-200 bg-white px-4 shadow-none min-w-0">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -4826,7 +4826,7 @@ export default function Settings({
                 <Button
                   type="button"
                   variant="outline"
-                  className="h-11 shrink-0 rounded-xl border-slate-200 bg-white"
+                  className="h-11 shrink-0 rounded-xl border-slate-200 bg-white min-w-0"
                   disabled={
                     !adminAccountSearch && adminAccountRoleFilter === "all"
                   }
@@ -4841,7 +4841,7 @@ export default function Settings({
 
               {adminUsers.length ? (
                 adminAccountRows.length ? (
-                  <div className="grid gap-3">
+                  <div className="grid gap-3 min-w-0">
                     {adminAccountRows.map(
                       ({
                         user: u,
@@ -4869,14 +4869,14 @@ export default function Settings({
                         return (
                           <div
                             key={u.id}
-                            className="grid gap-5 rounded-[24px] border border-slate-200 bg-white p-4 shadow-[0_18px_44px_-40px_rgba(15,23,42,0.35)] lg:grid-cols-[minmax(0,1.35fr)_minmax(280px,0.85fr)_auto] lg:items-center lg:p-5"
+                            className="grid gap-5 rounded-[24px] border border-slate-200 bg-white p-4 shadow-[0_18px_44px_-40px_rgba(15,23,42,0.35)] lg:grid-cols-[minmax(0,1.35fr)_minmax(280px,0.85fr)_auto] lg:items-center lg:p-5 min-w-0"
                           >
                             <div className="flex min-w-0 gap-4">
-                              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-base font-semibold text-slate-900">
+                              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-base font-semibold text-slate-900 min-w-0 break-words">
                                 {avatarText}
                               </div>
                               <div className="min-w-0 flex-1 space-y-3">
-                                <div className="flex flex-wrap items-center gap-2">
+                                <div className="flex flex-wrap items-center gap-2 min-w-0">
                                   <Badge
                                     variant="outline"
                                     className={cn(
@@ -4890,14 +4890,14 @@ export default function Settings({
                                   </Badge>
                                   <Badge
                                     variant="secondary"
-                                    className="rounded-full px-2.5 py-1 text-[11px]"
+                                    className="rounded-full px-2.5 py-1 text-[11px] min-w-0"
                                   >
                                     {roleLabel}
                                   </Badge>
                                   {u.employeeProfileEnabled ? (
                                     <Badge
                                       variant="outline"
-                                      className="rounded-full border-sky-200 bg-sky-50 px-2.5 py-1 text-[11px] text-sky-700"
+                                      className="rounded-full border-sky-200 bg-sky-50 px-2.5 py-1 text-[11px] text-sky-700 min-w-0"
                                     >
                                       بروفايل موظف
                                     </Badge>
@@ -4905,7 +4905,7 @@ export default function Settings({
                                   {u.title ? (
                                     <Badge
                                       variant="outline"
-                                      className="rounded-full px-2.5 py-1 text-[11px]"
+                                      className="rounded-full px-2.5 py-1 text-[11px] min-w-0"
                                     >
                                       {u.title}
                                     </Badge>
@@ -4913,32 +4913,32 @@ export default function Settings({
                                 </div>
 
                                 <div className="min-w-0">
-                                  <h3 className="truncate text-lg font-semibold tracking-tight text-slate-950">
+                                  <h3 className="truncate text-lg font-semibold tracking-tight text-slate-950 break-words">
                                     {u.displayName || "بدون اسم"}
                                   </h3>
                                   <div
                                     dir="ltr"
-                                    className="mt-1 break-all text-right text-sm font-medium text-slate-500"
+                                    className="mt-1 break-all text-right text-sm font-medium text-slate-500 break-words"
                                   >
                                     {u.email}
                                   </div>
                                   {u.username ? (
                                     <div
                                       dir="ltr"
-                                      className="mt-1 break-all text-right text-xs font-medium text-slate-500"
+                                      className="mt-1 break-all text-right text-xs font-medium text-slate-500 break-words"
                                     >
                                       @{u.username}
                                     </div>
                                   ) : null}
                                   <div
                                     dir="ltr"
-                                    className="mt-1 break-all text-right text-xs text-slate-400"
+                                    className="mt-1 break-all text-right text-xs text-slate-400 break-words"
                                   >
                                     ID: {u.id}
                                   </div>
                                 </div>
 
-                                <p className="line-clamp-2 text-sm leading-7 text-slate-600">
+                                <p className="line-clamp-2 text-sm leading-7 text-slate-600 break-words">
                                   {u.notes ||
                                     "لا توجد ملاحظات مرتبطة بهذا الحساب."}
                                 </p>
@@ -4946,57 +4946,57 @@ export default function Settings({
                             </div>
 
                             <div className="space-y-3">
-                              <div className="grid grid-cols-3 gap-2">
-                                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-center">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2 min-w-0">
+                                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-center min-w-0">
                                   <div className="text-[11px] text-slate-500">
                                     الفعلية
                                   </div>
-                                  <div className="mt-1 text-xl font-semibold text-slate-950">
+                                  <div className="mt-1 text-xl font-semibold text-slate-950 break-words">
                                     {formatNumberEN(
                                       effectivePermissions.length
                                     )}
                                   </div>
                                 </div>
-                                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-center">
+                                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-center min-w-0">
                                   <div className="text-[11px] text-slate-500">
                                     الدور
                                   </div>
-                                  <div className="mt-1 text-xl font-semibold text-slate-950">
+                                  <div className="mt-1 text-xl font-semibold text-slate-950 break-words">
                                     {formatNumberEN(
                                       defaultPermissions.length
                                     )}
                                   </div>
                                 </div>
-                                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-center">
+                                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-center min-w-0">
                                   <div className="text-[11px] text-slate-500">
                                     تعديل
                                   </div>
-                                  <div className="mt-1 text-xl font-semibold text-slate-950">
+                                  <div className="mt-1 text-xl font-semibold text-slate-950 break-words">
                                     {formatNumberEN(overridesCount)}
                                   </div>
                                 </div>
                               </div>
 
-                              <div className="flex min-h-8 flex-wrap gap-2">
+                              <div className="flex min-h-8 flex-wrap gap-2 min-w-0">
                                 {visiblePermissions.length ? (
                                   visiblePermissions.map(permissionKey => (
                                     <Badge
                                       key={`effective-${u.id}-${permissionKey}`}
                                       variant="secondary"
-                                      className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] text-slate-700"
+                                      className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] text-slate-700 min-w-0"
                                     >
                                       {getPermissionLabel(permissionKey)}
                                     </Badge>
                                   ))
                                 ) : (
-                                  <span className="text-sm text-slate-500">
+                                  <span className="text-sm text-slate-500 break-words">
                                     لا توجد صلاحيات فعلية.
                                   </span>
                                 )}
                                 {hiddenPermissionsCount > 0 ? (
                                   <Badge
                                     variant="outline"
-                                    className="rounded-full px-2.5 py-1 text-[11px]"
+                                    className="rounded-full px-2.5 py-1 text-[11px] min-w-0"
                                   >
                                     +{formatNumberEN(hiddenPermissionsCount)}
                                   </Badge>
@@ -5004,10 +5004,10 @@ export default function Settings({
                               </div>
                             </div>
 
-                            <div className="flex flex-wrap gap-2 lg:w-[196px] lg:justify-end">
+                            <div className="flex flex-wrap gap-2 lg:w-[196px] lg:justify-end min-w-0">
                               <Button
                                 variant="outline"
-                                className="h-10 rounded-xl"
+                                className="h-10 rounded-xl min-w-0"
                                 onClick={() => openEditAdmin(u)}
                               >
                                 <Pencil className="h-4 w-4 ml-2" />
@@ -5015,14 +5015,14 @@ export default function Settings({
                               </Button>
                               <Button
                                 variant="outline"
-                                className="h-10 rounded-xl"
+                                className="h-10 rounded-xl min-w-0"
                                 onClick={() => handleToggleAdminActive(u)}
                               >
                                 {u.isActive ? "تعطيل" : "تفعيل"}
                               </Button>
                               <Button
                                 variant="destructive"
-                                className="h-10 rounded-xl"
+                                className="h-10 rounded-xl min-w-0"
                                 onClick={() => handleDeleteAdmin(u)}
                               >
                                 <Trash2 className="h-4 w-4 ml-2" />
@@ -5035,21 +5035,21 @@ export default function Settings({
                     )}
                   </div>
                 ) : (
-                  <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50/70 px-4 py-10 text-center">
-                    <div className="text-sm font-semibold text-slate-800">
+                  <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50/70 px-4 py-10 text-center min-w-0">
+                    <div className="text-sm font-semibold text-slate-800 break-words">
                       لا توجد نتائج مطابقة.
                     </div>
-                    <p className="mt-2 text-sm text-slate-500">
+                    <p className="mt-2 text-sm text-slate-500 break-words">
                       غيّر عبارة البحث أو فلتر الدور لعرض الحسابات.
                     </p>
                   </div>
                 )
             ) : (
-                <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50/70 px-4 py-10 text-center">
-                  <div className="text-sm font-semibold text-slate-800">
+                <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50/70 px-4 py-10 text-center min-w-0">
+                  <div className="text-sm font-semibold text-slate-800 break-words">
                     لا توجد حسابات إدارة محفوظة حتى الآن.
                   </div>
-                  <p className="mt-2 text-sm text-slate-500">
+                  <p className="mt-2 text-sm text-slate-500 break-words">
                     أضف أول حساب إداري وحدد دوره وصلاحياته من الزر العلوي.
                   </p>
                 </div>
@@ -5190,7 +5190,7 @@ export default function Settings({
                   title="حالة النموذج"
                   description="تحكم سريع في إتاحة صفحة التوظيف العامة، مع ملخص فوري عن جودة الإعدادات وعدد الملاحظات التي تحتاج مراجعة."
                 >
-                  <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+                  <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px] min-w-0">
                     <div className="space-y-4">
                       <Toggle
                         label="استقبال طلبات التوظيف"
@@ -5205,7 +5205,7 @@ export default function Settings({
                       />
 
                       {recruitmentValidation.formErrors.length > 0 ? (
-                        <Alert className="border-amber-200 bg-amber-50 text-amber-900">
+                        <Alert className="border-amber-200 bg-amber-50 text-amber-900 min-w-0">
                           <CircleAlert className="h-4 w-4" />
                           <AlertTitle>ملاحظات عامة على النموذج</AlertTitle>
                           <AlertDescription className="space-y-1 pt-2 leading-7">
@@ -5216,7 +5216,7 @@ export default function Settings({
                         </Alert>
                       ) : null}
 
-                      <Alert className="border-slate-200 bg-slate-50">
+                      <Alert className="border-slate-200 bg-slate-50 min-w-0">
                         <Globe className="h-4 w-4" />
                         <AlertTitle>آلية الانعكاس المباشر</AlertTitle>
                         <AlertDescription className="leading-7">
@@ -5227,29 +5227,29 @@ export default function Settings({
                       </Alert>
                     </div>
 
-                    <div className="rounded-[26px] border border-slate-200/80 bg-slate-50/70 p-5">
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                    <div className="rounded-[26px] border border-slate-200/80 bg-slate-50/70 p-5 min-w-0">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 break-words">
                         ملخص الإعدادات
                       </div>
 
                       <div className="mt-5 space-y-3">
-                        <div className="rounded-2xl border border-white/90 bg-white px-4 py-3 shadow-sm">
-                          <div className="text-xs text-slate-500">الحقول الحالية</div>
-                          <div className="mt-2 text-xl font-semibold text-slate-950">
+                        <div className="rounded-2xl border border-white/90 bg-white px-4 py-3 shadow-sm min-w-0">
+                          <div className="text-xs text-slate-500 break-words">الحقول الحالية</div>
+                          <div className="mt-2 text-xl font-semibold text-slate-950 break-words">
                             {formatNumberEN(recruitment.fields.length)}
                           </div>
                         </div>
 
-                        <div className="rounded-2xl border border-white/90 bg-white px-4 py-3 shadow-sm">
-                          <div className="text-xs text-slate-500">حقول Select</div>
-                          <div className="mt-2 text-xl font-semibold text-slate-950">
+                        <div className="rounded-2xl border border-white/90 bg-white px-4 py-3 shadow-sm min-w-0">
+                          <div className="text-xs text-slate-500 break-words">حقول Select</div>
+                          <div className="mt-2 text-xl font-semibold text-slate-950 break-words">
                             {formatNumberEN(selectRecruitmentFieldsCount)}
                           </div>
                         </div>
 
-                        <div className="rounded-2xl border border-white/90 bg-white px-4 py-3 shadow-sm">
-                          <div className="text-xs text-slate-500">ملاحظات تحتاج مراجعة</div>
-                          <div className="mt-2 text-xl font-semibold text-slate-950">
+                        <div className="rounded-2xl border border-white/90 bg-white px-4 py-3 shadow-sm min-w-0">
+                          <div className="text-xs text-slate-500 break-words">ملاحظات تحتاج مراجعة</div>
+                          <div className="mt-2 text-xl font-semibold text-slate-950 break-words">
                             {formatNumberEN(recruitmentIssuesCount)}
                           </div>
                         </div>
@@ -5265,7 +5265,7 @@ export default function Settings({
                   description="أضف الحقول الأساسية من هنا، ثم عدّل عنوان الحقل ونوعه وخصائصه. الترتيب الحالي هو نفسه الذي سيظهر للزائر في الصفحة العامة."
                 >
                   <div className="space-y-5">
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2 min-w-0">
                       <Button
                         type="button"
                         variant="outline"
@@ -5309,24 +5309,24 @@ export default function Settings({
                           return (
                             <div
                               key={field.id}
-                              className="rounded-[26px] border border-slate-200/80 bg-slate-50/70 p-5 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.24)]"
+                              className="rounded-[26px] border border-slate-200/80 bg-slate-50/70 p-5 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.24)] min-w-0"
                             >
-                              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between min-w-0">
                                 <div className="space-y-3">
-                                  <div className="flex flex-wrap items-center gap-2">
-                                    <Badge variant="outline" className="rounded-full">
+                                  <div className="flex flex-wrap items-center gap-2 min-w-0">
+                                    <Badge variant="outline" className="rounded-full min-w-0">
                                       الحقل {formatNumberEN(index + 1)}
                                     </Badge>
                                     <Badge
                                       variant="outline"
-                                      className="rounded-full border-sky-200 bg-sky-50 text-sky-700"
+                                      className="rounded-full border-sky-200 bg-sky-50 text-sky-700 min-w-0"
                                     >
                                       {getRecruitmentFieldTypeLabel(field.type)}
                                     </Badge>
                                     {field.type === "number" ? (
                                       <Badge
                                         variant="outline"
-                                        className="rounded-full border-amber-200 bg-amber-50 text-amber-700"
+                                        className="rounded-full border-amber-200 bg-amber-50 text-amber-700 min-w-0"
                                       >
                                         {getRecruitmentNumberModeLabel(
                                           field.numberMode || "default"
@@ -5347,16 +5347,16 @@ export default function Settings({
                                   </div>
 
                                   <div>
-                                    <div className="text-lg font-semibold text-slate-950">
+                                    <div className="text-lg font-semibold text-slate-950 break-words">
                                       {field.label || "حقل بدون عنوان"}
                                     </div>
-                                    <div className="mt-1 text-sm leading-7 text-slate-500">
+                                    <div className="mt-1 text-sm leading-7 text-slate-500 break-words">
                                       {getRecruitmentFieldHint(field)}
                                     </div>
                                   </div>
                                 </div>
 
-                                <div className="flex flex-wrap items-center gap-2">
+                                <div className="flex flex-wrap items-center gap-2 min-w-0">
                                   <Button
                                     type="button"
                                     variant="outline"
@@ -5393,7 +5393,7 @@ export default function Settings({
                                 </div>
                               </div>
 
-                              <div className="mt-5 grid gap-5 md:grid-cols-2">
+                              <div className="mt-5 grid gap-5 md:grid-cols-2 min-w-0">
                                 <SettingsField
                                   label="عنوان الحقل"
                                   description="الاسم الظاهر للمتقدّم في الصفحة العامة."
@@ -5418,7 +5418,7 @@ export default function Settings({
                                       })
                                     }
                                   >
-                                    <SelectTrigger className="h-12 rounded-xl border-slate-200 bg-white shadow-none">
+                                    <SelectTrigger className="h-12 rounded-xl border-slate-200 bg-white shadow-none min-w-0">
                                       <SelectValue placeholder="اختر النوع" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -5450,10 +5450,10 @@ export default function Settings({
                                   />
                                 ) : (
                                   <div className="space-y-3">
-                                    <Label className="text-[13px] font-semibold text-slate-900">
+                                    <Label className="text-[13px] font-semibold text-slate-900 break-words">
                                       النص التوضيحي داخل الحقل
                                     </Label>
-                                    <div className="rounded-[20px] border border-slate-200 bg-slate-50/70 px-4 py-4 text-sm leading-7 text-slate-500">
+                                    <div className="rounded-[20px] border border-slate-200 bg-slate-50/70 px-4 py-4 text-sm leading-7 text-slate-500 min-w-0 break-words">
                                       حقول التاريخ تستخدم أداة اختيار التاريخ، لذلك
                                       لا يظهر النص التوضيحي عادة داخل الواجهة.
                                     </div>
@@ -5461,17 +5461,17 @@ export default function Settings({
                                 )}
 
                                 <div className="space-y-3">
-                                  <Label className="text-[13px] font-semibold text-slate-900">
+                                  <Label className="text-[13px] font-semibold text-slate-900 break-words">
                                     خصائص الحقل
                                   </Label>
 
-                                  <div className="rounded-[20px] border border-slate-200 bg-white px-4 py-4">
-                                    <div className="flex items-center justify-between gap-4">
+                                  <div className="rounded-[20px] border border-slate-200 bg-white px-4 py-4 min-w-0">
+                                    <div className="flex items-center justify-between gap-4 min-w-0">
                                       <div className="space-y-1">
-                                        <div className="font-semibold text-slate-900">
+                                        <div className="font-semibold text-slate-900 break-words">
                                           هل الحقل مطلوب؟
                                         </div>
-                                        <p className="text-sm leading-6 text-slate-500">
+                                        <p className="text-sm leading-6 text-slate-500 break-words">
                                           إذا كان مطلوبًا فلن يتم إرسال الطلب قبل
                                           تعبئته.
                                         </p>
@@ -5506,7 +5506,7 @@ export default function Settings({
                                         })
                                       }
                                     >
-                                      <SelectTrigger className="h-12 rounded-xl border-slate-200 bg-white shadow-none">
+                                      <SelectTrigger className="h-12 rounded-xl border-slate-200 bg-white shadow-none min-w-0">
                                         <SelectValue />
                                       </SelectTrigger>
                                       <SelectContent>
@@ -5524,12 +5524,12 @@ export default function Settings({
 
                               {field.type === "select" ? (
                                 <div className="mt-5 space-y-4">
-                                  <div className="flex items-center justify-between gap-3">
+                                  <div className="flex items-center justify-between gap-3 min-w-0">
                                     <div>
-                                      <div className="text-sm font-semibold text-slate-950">
+                                      <div className="text-sm font-semibold text-slate-950 break-words">
                                         خيارات القائمة
                                       </div>
-                                      <div className="text-sm text-slate-500">
+                                      <div className="text-sm text-slate-500 break-words">
                                         هذه الخيارات ستظهر كما هي داخل القائمة
                                         المنسدلة في الصفحة العامة.
                                       </div>
@@ -5549,9 +5549,9 @@ export default function Settings({
                                     {(field.options || []).map((option, optionIndex) => (
                                       <div
                                         key={option.id}
-                                        className="flex items-center gap-3 rounded-[20px] border border-slate-200 bg-white px-4 py-3"
+                                        className="flex items-center gap-3 rounded-[20px] border border-slate-200 bg-white px-4 py-3 min-w-0"
                                       >
-                                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-600">
+                                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-600 min-w-0 break-words">
                                           {formatNumberEN(optionIndex + 1)}
                                         </div>
 
@@ -5565,7 +5565,7 @@ export default function Settings({
                                             )
                                           }
                                           placeholder="اكتب اسم الخيار"
-                                          className="h-11 rounded-xl border-slate-200 bg-white shadow-none"
+                                          className="h-11 rounded-xl border-slate-200 bg-white shadow-none min-w-0"
                                         />
 
                                         <Button
@@ -5588,7 +5588,7 @@ export default function Settings({
                               ) : null}
 
                               {fieldIssues.length ? (
-                                <Alert className="mt-5 border-amber-200 bg-amber-50 text-amber-900">
+                                <Alert className="mt-5 border-amber-200 bg-amber-50 text-amber-900 min-w-0">
                                   <CircleAlert className="h-4 w-4" />
                                   <AlertTitle>هذا الحقل يحتاج مراجعة</AlertTitle>
                                   <AlertDescription className="space-y-1 pt-2 leading-7">
@@ -5603,7 +5603,7 @@ export default function Settings({
                         })}
                       </div>
                     ) : (
-                      <div className="rounded-[26px] border border-dashed border-slate-300 bg-slate-50/80 px-6 py-14 text-center text-slate-500">
+                      <div className="rounded-[26px] border border-dashed border-slate-300 bg-slate-50/80 px-6 py-14 text-center text-slate-500 min-w-0">
                         أضف أول حقل ليبدأ تكوين نموذج التوظيف العام.
                       </div>
                     )}
@@ -5617,15 +5617,15 @@ export default function Settings({
                   description="معاينة سريعة لنفس الحقول التي ستظهر للزائر في صفحة التوظيف العامة، مع الحفاظ على الترتيب الحالي للنموذج."
                 >
                   {recruitment.fields.length ? (
-                    <div className="rounded-[30px] border border-slate-200/80 bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] p-6 shadow-[0_20px_52px_-40px_rgba(15,23,42,0.25)] sm:p-8">
-                      <div className="flex flex-col gap-2 border-b border-slate-100 pb-6 text-right">
-                        <div className="text-sm font-semibold text-[#8d6700]">
+                    <div className="rounded-[30px] border border-slate-200/80 bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] p-6 shadow-[0_20px_52px_-40px_rgba(15,23,42,0.25)] sm:p-8 min-w-0">
+                      <div className="flex flex-col gap-2 border-b border-slate-100 pb-6 text-right min-w-0">
+                        <div className="text-sm font-semibold text-[#8d6700] break-words">
                           صفحة التوظيف العامة
                         </div>
-                        <div className="text-2xl font-semibold tracking-tight text-slate-950">
+                        <div className="text-2xl font-semibold tracking-tight text-slate-950 break-words leading-tight">
                           نموذج التقديم كما سيظهر للزائر
                         </div>
-                        <div className="text-sm leading-7 text-slate-500">
+                        <div className="text-sm leading-7 text-slate-500 break-words">
                           يمكن اختبار ترتيب الحقول والسلوك العام مباشرة من هنا قبل
                           الحفظ النهائي.
                         </div>
@@ -5644,10 +5644,10 @@ export default function Settings({
                           }
                         />
 
-                        <div className="flex justify-end">
+                        <div className="flex justify-end min-w-0">
                           <Button
                             type="button"
-                            className="h-12 rounded-full bg-[#0f172a] px-8 text-sm font-semibold text-white hover:bg-[#111f38]"
+                            className="h-12 rounded-full bg-[#0f172a] px-8 text-sm font-semibold text-white hover:bg-[#111f38] min-w-0 break-words"
                             disabled
                           >
                             إرسال الطلب
@@ -5656,7 +5656,7 @@ export default function Settings({
                       </div>
                     </div>
                   ) : (
-                    <div className="rounded-[26px] border border-dashed border-slate-300 bg-slate-50/80 px-6 py-14 text-center text-slate-500">
+                    <div className="rounded-[26px] border border-dashed border-slate-300 bg-slate-50/80 px-6 py-14 text-center text-slate-500 min-w-0">
                       ستظهر المعاينة هنا بعد إضافة الحقول إلى النموذج.
                     </div>
                   )}
@@ -5838,8 +5838,8 @@ export default function Settings({
             </DialogTitle>
           </DialogHeader>
 
-          <div className="flex-1 overflow-y-auto p-6 space-y-4">
-            <div className="grid md:grid-cols-2 gap-4">
+          <div className="flex-1 overflow-y-auto p-6 space-y-4 min-w-0">
+            <div className="grid md:grid-cols-2 gap-4 min-w-0">
               <div className="space-y-1">
                 <Label>مفتاح الدور (فريد)</Label>
                 <Input
@@ -5853,7 +5853,7 @@ export default function Settings({
                     SYSTEM_ROLE_KEYS.includes(editingRoleKey)
                   }
                 />
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-muted-foreground break-words">
                   حروف/أرقام/_ فقط — ويُستخدم لاحقًا في الـ Rules
                 </p>
               </div>
@@ -5869,7 +5869,7 @@ export default function Settings({
               </div>
             </div>
 
-            <div className="grid md:grid-cols-2 gap-4">
+            <div className="grid md:grid-cols-2 gap-4 min-w-0">
               <div className="space-y-1">
                 <Label>اسم الدور (إنجليزي)</Label>
                 <Input
@@ -5882,8 +5882,8 @@ export default function Settings({
 
               <div className="space-y-1">
                 <Label>الحالة</Label>
-                <div className="flex items-center justify-between border rounded-md px-3 py-2">
-                  <span className="text-sm">
+                <div className="flex items-center justify-between border rounded-md px-3 py-2 min-w-0">
+                  <span className="text-sm break-words">
                     {roleForm.isActive ? "مفعّل" : "موقوف"}
                   </span>
                   <Switch
@@ -5909,17 +5909,17 @@ export default function Settings({
 
             <div className="space-y-2">
               <Label>الصلاحيات</Label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 min-w-0">
                 {visiblePermissionDefinitions.map(perm => {
                   const checked = roleForm.permissions.includes(perm.key);
                   return (
                     <div
                       key={perm.key}
-                      className="flex items-center justify-between rounded-lg border px-3 py-2 bg-background/60 hover:bg-background transition"
+                      className="flex items-center justify-between rounded-lg border px-3 py-2 bg-background/60 hover:bg-background transition min-w-0"
                     >
                       <div className="space-y-0.5">
-                        <div className="text-sm font-medium">{perm.label}</div>
-                        <div className="text-xs text-muted-foreground">
+                        <div className="text-sm font-medium break-words">{perm.label}</div>
+                        <div className="text-xs text-muted-foreground break-words">
                           {perm.key}
                         </div>
                       </div>
@@ -5953,22 +5953,22 @@ export default function Settings({
         Admin User Dialog
     ========================= */}
       <Dialog open={isAdminDialogOpen} onOpenChange={setIsAdminDialogOpen}>
-        <DialogContent className="flex h-[92vh] !w-[96vw] !max-w-6xl flex-col overflow-hidden rounded-[28px] border-slate-200 bg-slate-50 p-0 sm:!w-[94vw]">
-          <DialogHeader className="border-b border-slate-200 bg-white px-5 py-4 text-right sm:px-6">
-            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <DialogContent className="flex h-[92vh] !w-[96vw] !max-w-6xl flex-col overflow-hidden rounded-[28px] border-slate-200 bg-slate-50 p-0 sm:!w-[94vw] min-w-0">
+          <DialogHeader className="border-b border-slate-200 bg-white px-5 py-4 text-right sm:px-6 min-w-0">
+            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between min-w-0">
               <div className="space-y-1">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 break-words">
                   {editingAdminId ? "تعديل الوصول" : "حساب جديد"}
                 </p>
-                <DialogTitle className="text-xl font-semibold tracking-tight text-slate-950">
+                <DialogTitle className="text-xl font-semibold tracking-tight text-slate-950 break-words">
                   {editingAdminId ? "تعديل حساب إداري" : "إنشاء حساب إداري"}
                 </DialogTitle>
-                <p className="max-w-2xl text-sm leading-6 text-slate-500">
+                <p className="max-w-2xl text-sm leading-6 text-slate-500 break-words">
                   رتّب بيانات الحساب، ربط الموظف، والصلاحيات الفعلية من شاشة واحدة واضحة.
                 </p>
               </div>
 
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2 min-w-0">
                 <Badge
                   variant="outline"
                   className={cn(
@@ -5982,7 +5982,7 @@ export default function Settings({
                 </Badge>
                 <Badge
                   variant="secondary"
-                  className="rounded-full px-3 py-1"
+                  className="rounded-full px-3 py-1 min-w-0"
                 >
                   {getRoleDisplayLabel(adminForm.roleKey) ||
                     ADMIN_ROLE_LABELS[normalizeAdminRoleKey(adminForm.roleKey)]}
@@ -5991,27 +5991,27 @@ export default function Settings({
             </div>
           </DialogHeader>
 
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6">
-            <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px] xl:items-start">
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6 min-w-0">
+            <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px] xl:items-start min-w-0">
               <div className="space-y-5">
-                <section className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-[0_18px_46px_-42px_rgba(15,23,42,0.45)]">
-                  <div className="flex items-start gap-3">
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-2.5 text-slate-700">
+                <section className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-[0_18px_46px_-42px_rgba(15,23,42,0.45)] min-w-0">
+                  <div className="flex items-start gap-3 min-w-0">
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-2.5 text-slate-700 min-w-0">
                       <Users className="h-5 w-5" />
                     </div>
                     <div>
-                      <h3 className="text-base font-semibold text-slate-950">
+                      <h3 className="text-base font-semibold text-slate-950 break-words">
                         بيانات الحساب
                       </h3>
-                      <p className="mt-1 text-sm leading-6 text-slate-500">
+                      <p className="mt-1 text-sm leading-6 text-slate-500 break-words">
                         الاسم واسم المستخدم والبريد والدور هي البيانات الأساسية التي تظهر في الدليل وتحدد الوصول.
                       </p>
                     </div>
                   </div>
 
-                  <div className="mt-5 grid gap-4 md:grid-cols-2">
+                  <div className="mt-5 grid gap-4 md:grid-cols-2 min-w-0">
                     <div className="space-y-2">
-                      <Label className="text-[13px] font-semibold text-slate-900">
+                      <Label className="text-[13px] font-semibold text-slate-900 break-words">
                         الاسم
                       </Label>
                       <Input
@@ -6023,12 +6023,12 @@ export default function Settings({
                           }))
                         }
                         placeholder="اسم الحساب"
-                        className="h-12 rounded-xl border-slate-200 bg-white shadow-none"
+                        className="h-12 rounded-xl border-slate-200 bg-white shadow-none min-w-0"
                       />
                     </div>
 
                     <div className="space-y-2">
-                      <Label className="text-[13px] font-semibold text-slate-900">
+                      <Label className="text-[13px] font-semibold text-slate-900 break-words">
                         البريد
                       </Label>
                       <Input
@@ -6038,12 +6038,12 @@ export default function Settings({
                           setAdminForm(p => ({ ...p, email: e.target.value }))
                         }
                         placeholder="name@example.com"
-                        className="h-12 rounded-xl border-slate-200 bg-white text-left shadow-none"
+                        className="h-12 rounded-xl border-slate-200 bg-white text-left shadow-none min-w-0"
                       />
                     </div>
 
                     <div className="space-y-2">
-                      <Label className="text-[13px] font-semibold text-slate-900">
+                      <Label className="text-[13px] font-semibold text-slate-900 break-words">
                         اسم المستخدم
                       </Label>
                       <Input
@@ -6057,12 +6057,12 @@ export default function Settings({
                         }
                         placeholder="username"
                         autoComplete="username"
-                        className="h-12 rounded-xl border-slate-200 bg-white text-left shadow-none"
+                        className="h-12 rounded-xl border-slate-200 bg-white text-left shadow-none min-w-0"
                       />
                     </div>
 
                     <div className="space-y-2">
-                      <Label className="text-[13px] font-semibold text-slate-900">
+                      <Label className="text-[13px] font-semibold text-slate-900 break-words">
                         الدور
                       </Label>
                       <Select
@@ -6074,7 +6074,7 @@ export default function Settings({
                           }))
                         }
                       >
-                        <SelectTrigger className="h-12 rounded-xl border-slate-200 bg-white px-4 shadow-none">
+                        <SelectTrigger className="h-12 rounded-xl border-slate-200 bg-white px-4 shadow-none min-w-0">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -6088,7 +6088,7 @@ export default function Settings({
                     </div>
 
                     <div className="space-y-2">
-                      <Label className="text-[13px] font-semibold text-slate-900">
+                      <Label className="text-[13px] font-semibold text-slate-900 break-words">
                         المنصب/العنوان (اختياري)
                       </Label>
                       <Input
@@ -6097,22 +6097,22 @@ export default function Settings({
                           setAdminForm(p => ({ ...p, title: e.target.value }))
                         }
                         placeholder="مثال: مدير مالي"
-                        className="h-12 rounded-xl border-slate-200 bg-white shadow-none"
+                        className="h-12 rounded-xl border-slate-200 bg-white shadow-none min-w-0"
                       />
                     </div>
                   </div>
 
-                  <div className="mt-4 flex items-center justify-between gap-4 rounded-[20px] border border-slate-200 bg-slate-50/70 px-4 py-3">
+                  <div className="mt-4 flex items-center justify-between gap-4 rounded-[20px] border border-slate-200 bg-slate-50/70 px-4 py-3 min-w-0">
                     <div>
-                      <div className="text-sm font-semibold text-slate-900">
+                      <div className="text-sm font-semibold text-slate-900 break-words">
                         الحالة التشغيلية
                       </div>
-                      <p className="mt-1 text-xs leading-5 text-slate-500">
+                      <p className="mt-1 text-xs leading-5 text-slate-500 break-words">
                         تعطيل الحساب يوقف صلاحياته دون حذف بياناته أو ملاحظاته.
                       </p>
                     </div>
-                    <div className="flex shrink-0 items-center gap-3">
-                      <span className="text-sm font-semibold text-slate-700">
+                    <div className="flex shrink-0 items-center gap-3 min-w-0">
+                      <span className="text-sm font-semibold text-slate-700 break-words">
                         {adminForm.isActive ? "مفعّل" : "معطّل"}
                       </span>
                       <Switch
@@ -6126,28 +6126,28 @@ export default function Settings({
                 </section>
 
                 {area === "staff" ? (
-                  <section className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-[0_18px_46px_-42px_rgba(15,23,42,0.45)]">
-                    <div className="flex items-start gap-3">
-                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-2.5 text-slate-700">
+                  <section className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-[0_18px_46px_-42px_rgba(15,23,42,0.45)] min-w-0">
+                    <div className="flex items-start gap-3 min-w-0">
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-2.5 text-slate-700 min-w-0">
                         <Building2 className="h-5 w-5" />
                       </div>
                       <div>
-                        <h3 className="text-base font-semibold text-slate-950">
+                        <h3 className="text-base font-semibold text-slate-950 break-words">
                           ارتباط الموظف
                         </h3>
-                        <p className="mt-1 text-sm leading-6 text-slate-500">
+                        <p className="mt-1 text-sm leading-6 text-slate-500 break-words">
                           هذه الإعدادات تنظّم ظهور الحساب في إدارة الموظفين وربطه بسجل وظيفي.
                         </p>
                       </div>
                     </div>
 
-                    <div className="mt-5 grid gap-3 md:grid-cols-2">
-                      <div className="flex items-start justify-between gap-4 rounded-[20px] border border-slate-200 bg-slate-50/70 px-4 py-3">
+                    <div className="mt-5 grid gap-3 md:grid-cols-2 min-w-0">
+                      <div className="flex items-start justify-between gap-4 rounded-[20px] border border-slate-200 bg-slate-50/70 px-4 py-3 min-w-0">
                         <div>
-                          <Label className="font-semibold text-slate-900">
+                          <Label className="font-semibold text-slate-900 break-words">
                             لديه بروفايل موظف
                           </Label>
-                          <p className="mt-1 text-xs leading-5 text-slate-500">
+                          <p className="mt-1 text-xs leading-5 text-slate-500 break-words">
                             يستخدم لبيانات الموظف التشغيلية والظهور في واجهات الموظفين.
                           </p>
                         </div>
@@ -6165,12 +6165,12 @@ export default function Settings({
                         />
                       </div>
 
-                      <div className="flex items-start justify-between gap-4 rounded-[20px] border border-slate-200 bg-slate-50/70 px-4 py-3">
+                      <div className="flex items-start justify-between gap-4 rounded-[20px] border border-slate-200 bg-slate-50/70 px-4 py-3 min-w-0">
                         <div>
-                          <Label className="font-semibold text-slate-900">
+                          <Label className="font-semibold text-slate-900 break-words">
                             يعامل كموظف
                           </Label>
-                          <p className="mt-1 text-xs leading-5 text-slate-500">
+                          <p className="mt-1 text-xs leading-5 text-slate-500 break-words">
                             عند الإيقاف لن يظهر في قائمة الموظفين حتى لو كان Owner أو Admin.
                           </p>
                         </div>
@@ -6187,9 +6187,9 @@ export default function Settings({
                     </div>
 
                     {adminForm.employeeProfileEnabled ? (
-                      <div className="mt-5 grid gap-4 md:grid-cols-2">
+                      <div className="mt-5 grid gap-4 md:grid-cols-2 min-w-0">
                         <div className="space-y-2">
-                          <Label className="text-[13px] font-semibold text-slate-900">
+                          <Label className="text-[13px] font-semibold text-slate-900 break-words">
                             طريقة الربط
                           </Label>
                           <Select
@@ -6204,7 +6204,7 @@ export default function Settings({
                               }
                             }}
                           >
-                            <SelectTrigger className="h-12 rounded-xl border-slate-200 bg-white px-4 shadow-none">
+                            <SelectTrigger className="h-12 rounded-xl border-slate-200 bg-white px-4 shadow-none min-w-0">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -6220,7 +6220,7 @@ export default function Settings({
 
                         {adminEmployeeLinkMode === "existing" ? (
                           <div className="space-y-2">
-                            <Label className="text-[13px] font-semibold text-slate-900">
+                            <Label className="text-[13px] font-semibold text-slate-900 break-words">
                               سجل الموظف المرتبط
                             </Label>
                             <Select
@@ -6232,7 +6232,7 @@ export default function Settings({
                                 }))
                               }
                             >
-                              <SelectTrigger className="h-12 rounded-xl border-slate-200 bg-white px-4 shadow-none">
+                              <SelectTrigger className="h-12 rounded-xl border-slate-200 bg-white px-4 shadow-none min-w-0">
                                 <SelectValue placeholder="اختر سجل موظف" />
                               </SelectTrigger>
                               <SelectContent>
@@ -6257,11 +6257,11 @@ export default function Settings({
                             </Select>
                           </div>
                         ) : (
-                          <div className="rounded-[18px] border border-dashed border-slate-200 bg-slate-50/70 px-4 py-3">
-                            <div className="text-sm font-semibold text-slate-900">
+                          <div className="rounded-[18px] border border-dashed border-slate-200 bg-slate-50/70 px-4 py-3 min-w-0">
+                            <div className="text-sm font-semibold text-slate-900 break-words">
                               طريقة الإنشاء
                             </div>
-                            <p className="mt-1 text-sm leading-6 text-slate-500">
+                            <p className="mt-1 text-sm leading-6 text-slate-500 break-words">
                               سيتم إنشاء سجل موظف وربطه بحساب المستخدم عند الحفظ إذا وُجد حساب مطابق لهذا البريد.
                             </p>
                           </div>
@@ -6271,16 +6271,16 @@ export default function Settings({
                   </section>
                 ) : null}
 
-                <section className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-[0_18px_46px_-42px_rgba(15,23,42,0.45)]">
-                  <div className="flex items-start gap-3">
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-2.5 text-slate-700">
+                <section className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-[0_18px_46px_-42px_rgba(15,23,42,0.45)] min-w-0">
+                  <div className="flex items-start gap-3 min-w-0">
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-2.5 text-slate-700 min-w-0">
                       <Pencil className="h-5 w-5" />
                     </div>
                     <div>
-                      <h3 className="text-base font-semibold text-slate-950">
+                      <h3 className="text-base font-semibold text-slate-950 break-words">
                         ملاحظات داخلية
                       </h3>
-                      <p className="mt-1 text-sm leading-6 text-slate-500">
+                      <p className="mt-1 text-sm leading-6 text-slate-500 break-words">
                         تظهر في دليل الحسابات لتوضيح سبب الحساب أو أي قيود تشغيلية.
                       </p>
                     </div>
@@ -6292,40 +6292,40 @@ export default function Settings({
                       setAdminForm(p => ({ ...p, notes: e.target.value }))
                     }
                     placeholder="ملاحظات اختيارية عن الحساب"
-                    className="mt-5 min-h-[112px] rounded-xl border-slate-200 bg-white leading-7 shadow-none"
+                    className="mt-5 min-h-[112px] rounded-xl border-slate-200 bg-white leading-7 shadow-none min-w-0"
                   />
                 </section>
 
-                <section className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-[0_18px_46px_-42px_rgba(15,23,42,0.45)]">
-                  <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                    <div className="flex items-start gap-3">
-                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-2.5 text-slate-700">
+                <section className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-[0_18px_46px_-42px_rgba(15,23,42,0.45)] min-w-0">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between min-w-0">
+                    <div className="flex items-start gap-3 min-w-0">
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-2.5 text-slate-700 min-w-0">
                         <Shield className="h-5 w-5" />
                       </div>
                       <div>
-                        <h3 className="text-base font-semibold text-slate-950">
+                        <h3 className="text-base font-semibold text-slate-950 break-words">
                           الصلاحيات الفعلية
                         </h3>
-                        <p className="mt-1 text-sm leading-6 text-slate-500">
+                        <p className="mt-1 text-sm leading-6 text-slate-500 break-words">
                           اضغط على أي صلاحية لإضافتها أو إيقافها كاستثناء على الدور الأساسي.
                         </p>
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap gap-2">
-                      <Badge variant="secondary" className="rounded-full">
+                    <div className="flex flex-wrap gap-2 min-w-0">
+                      <Badge variant="secondary" className="rounded-full min-w-0">
                         الدور: {formatNumberEN(adminFormDefaultPermissions.length)}
                       </Badge>
-                      <Badge variant="secondary" className="rounded-full">
+                      <Badge variant="secondary" className="rounded-full min-w-0">
                         الفعلية: {formatNumberEN(adminFormEffectivePermissions.length)}
                       </Badge>
-                      <Badge variant="outline" className="rounded-full">
+                      <Badge variant="outline" className="rounded-full min-w-0">
                         الاستثناءات: {formatNumberEN(adminFormOverridesCount)}
                       </Badge>
                     </div>
                   </div>
 
-                  <div className="mt-5 grid gap-2 md:grid-cols-2 2xl:grid-cols-3">
+                  <div className="mt-5 grid gap-2 md:grid-cols-2 2xl:grid-cols-3 min-w-0">
                     {visiblePermissionDefinitions.map(perm => {
                       const checked = adminFormEffectivePermissions.includes(
                         perm.key as Permission
@@ -6349,7 +6349,7 @@ export default function Settings({
                           }
                         >
                           <div className="min-w-0">
-                            <div className="truncate text-sm font-semibold">
+                            <div className="truncate text-sm font-semibold break-words">
                               {perm.label}
                             </div>
                             <div
@@ -6375,44 +6375,44 @@ export default function Settings({
               </div>
 
               <aside className="space-y-4 xl:sticky xl:top-5">
-                <div className="rounded-[24px] border border-slate-900 bg-slate-950 p-5 text-white shadow-[0_24px_56px_-40px_rgba(2,6,23,0.8)]">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/45">
+                <div className="rounded-[24px] border border-slate-900 bg-slate-950 p-5 text-white shadow-[0_24px_56px_-40px_rgba(2,6,23,0.8)] min-w-0">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/45 break-words">
                     ملخص الحساب
                   </div>
                   <div className="mt-4">
-                    <div className="text-lg font-semibold tracking-tight">
+                    <div className="text-lg font-semibold tracking-tight break-words">
                       {adminForm.displayName || "حساب إداري جديد"}
                     </div>
-                    <div dir="ltr" className="mt-1 break-all text-right text-sm text-white/55">
+                    <div dir="ltr" className="mt-1 break-all text-right text-sm text-white/55 break-words">
                       {adminForm.email || "email@example.com"}
                     </div>
                   </div>
 
-                  <div className="mt-5 grid grid-cols-3 gap-2">
-                    <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-3 text-center">
+                  <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2 min-w-0">
+                    <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-3 text-center min-w-0">
                       <div className="text-[11px] text-white/45">الفعلية</div>
-                      <div className="mt-1 text-xl font-semibold">
+                      <div className="mt-1 text-xl font-semibold break-words">
                         {formatNumberEN(adminFormEffectivePermissions.length)}
                       </div>
                     </div>
-                    <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-3 text-center">
+                    <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-3 text-center min-w-0">
                       <div className="text-[11px] text-white/45">الدور</div>
-                      <div className="mt-1 text-xl font-semibold">
+                      <div className="mt-1 text-xl font-semibold break-words">
                         {formatNumberEN(adminFormDefaultPermissions.length)}
                       </div>
                     </div>
-                    <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-3 text-center">
+                    <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-3 text-center min-w-0">
                       <div className="text-[11px] text-white/45">تعديل</div>
-                      <div className="mt-1 text-xl font-semibold">
+                      <div className="mt-1 text-xl font-semibold break-words">
                         {formatNumberEN(adminFormOverridesCount)}
                       </div>
                     </div>
                   </div>
 
                   {area === "staff" && adminForm.employeeProfileEnabled ? (
-                    <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-                      <div className="text-xs text-white/45">سجل الموظف</div>
-                      <div className="mt-1 break-all text-sm font-semibold text-white/85">
+                    <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 min-w-0">
+                      <div className="text-xs text-white/45 break-words">سجل الموظف</div>
+                      <div className="mt-1 break-all text-sm font-semibold text-white/85 break-words">
                         {adminEmployeeLinkMode === "existing"
                           ? selectedEmployeeDirectoryEntry
                             ? `${selectedEmployeeDirectoryEntry.displayName} - ${selectedEmployeeDirectoryEntry.email || selectedEmployeeDirectoryEntry.id}`
@@ -6423,20 +6423,20 @@ export default function Settings({
                   ) : null}
                 </div>
 
-                <div className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-[0_18px_46px_-42px_rgba(15,23,42,0.45)]">
-                  <div className="flex items-center justify-between gap-3">
+                <div className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-[0_18px_46px_-42px_rgba(15,23,42,0.45)] min-w-0">
+                  <div className="flex items-center justify-between gap-3 min-w-0">
                     <div>
-                      <h3 className="text-sm font-semibold text-slate-950">
+                      <h3 className="text-sm font-semibold text-slate-950 break-words">
                         ملخص الاستثناءات
                       </h3>
-                      <p className="mt-1 text-xs text-slate-500">
+                      <p className="mt-1 text-xs text-slate-500 break-words">
                         الإضافات والحجب اليدوي على الدور.
                       </p>
                     </div>
                     <Button
                       type="button"
                       variant="outline"
-                      className="h-9 rounded-xl"
+                      className="h-9 rounded-xl min-w-0"
                       onClick={resetAdminPermissionOverrides}
                       disabled={adminFormOverridesCount === 0}
                     >
@@ -6444,13 +6444,13 @@ export default function Settings({
                     </Button>
                   </div>
 
-                  <div className="mt-4 flex min-h-[88px] flex-wrap content-start gap-2 rounded-[18px] border border-dashed border-slate-200 bg-slate-50/70 p-3">
+                  <div className="mt-4 flex min-h-[88px] flex-wrap content-start gap-2 rounded-[18px] border border-dashed border-slate-200 bg-slate-50/70 p-3 min-w-0">
                     {adminFormPermissionOverrides.permissionsAllow.map(
                       permissionKey => (
                         <Badge
                           key={`override-allow-${permissionKey}`}
                           variant="secondary"
-                          className="rounded-full bg-emerald-50 text-emerald-700"
+                          className="rounded-full bg-emerald-50 text-emerald-700 min-w-0"
                         >
                           + {getPermissionLabel(permissionKey)}
                         </Badge>
@@ -6461,14 +6461,14 @@ export default function Settings({
                         <Badge
                           key={`override-deny-${permissionKey}`}
                           variant="outline"
-                          className="rounded-full border-rose-200 bg-rose-50 text-rose-700"
+                          className="rounded-full border-rose-200 bg-rose-50 text-rose-700 min-w-0"
                         >
                           - {getPermissionLabel(permissionKey)}
                         </Badge>
                       )
                     )}
                     {adminFormOverridesCount === 0 ? (
-                      <span className="text-sm leading-7 text-slate-500">
+                      <span className="text-sm leading-7 text-slate-500 break-words">
                         لا توجد تعديلات يدوية حالياً. الحساب يستخدم صلاحيات الدور الافتراضية فقط.
                       </span>
                     ) : null}
@@ -6478,16 +6478,16 @@ export default function Settings({
             </div>
           </div>
 
-          <DialogFooter className="border-t border-slate-200 bg-white px-5 py-4 sm:px-6">
+          <DialogFooter className="border-t border-slate-200 bg-white px-5 py-4 sm:px-6 min-w-0">
             <Button
               variant="outline"
-              className="rounded-xl"
+              className="rounded-xl min-w-0"
               onClick={() => setIsAdminDialogOpen(false)}
             >
               إلغاء
             </Button>
             <Button
-              className="rounded-xl bg-[#F2B705] text-slate-950 hover:bg-[#e0ab00]"
+              className="rounded-xl bg-[#F2B705] text-slate-950 hover:bg-[#e0ab00] min-w-0"
               onClick={handleSaveAdminUser}
             >
               {editingAdminId ? "حفظ التعديل" : "إنشاء الحساب"}
@@ -6522,27 +6522,27 @@ function SettingsTabHero({
   panel: ReactNode;
 }) {
   return (
-    <Card className="overflow-hidden border-slate-200/80 bg-[radial-gradient(circle_at_top_right,rgba(242,183,5,0.14),transparent_25%),linear-gradient(135deg,#ffffff_0%,#f8fafc_48%,#eef4ff_100%)] shadow-[0_28px_75px_-44px_rgba(15,23,42,0.35)]">
+    <Card className="overflow-hidden border-slate-200/80 bg-[radial-gradient(circle_at_top_right,rgba(242,183,5,0.14),transparent_25%),linear-gradient(135deg,#ffffff_0%,#f8fafc_48%,#eef4ff_100%)] shadow-[0_28px_75px_-44px_rgba(15,23,42,0.35)] min-w-0">
       <CardContent className="px-6 py-6 sm:px-8 sm:py-8">
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(280px,0.85fr)] xl:items-end">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(280px,0.85fr)] xl:items-end min-w-0">
           <div className="space-y-5">
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge className="rounded-full border border-[#F2B705]/30 bg-[#F2B705]/12 px-3 py-1 text-xs font-semibold text-[#8d6700] shadow-none">
+            <div className="flex flex-wrap items-center gap-2 min-w-0">
+              <Badge className="rounded-full border border-[#F2B705]/30 bg-[#F2B705]/12 px-3 py-1 text-xs font-semibold text-[#8d6700] shadow-none min-w-0 break-words">
                 <Sparkles className="h-3.5 w-3.5" />
                 {eyebrow}
               </Badge>
             </div>
 
             <div className="space-y-3">
-              <h2 className="text-2xl font-semibold tracking-tight text-slate-950 sm:text-[2rem]">
+              <h2 className="text-2xl font-semibold tracking-tight text-slate-950 sm:text-[2rem] break-words leading-tight">
                 {title}
               </h2>
-              <p className="max-w-2xl text-sm leading-7 text-slate-600">
+              <p className="max-w-2xl text-sm leading-7 text-slate-600 break-words">
                 {description}
               </p>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-3 min-w-0">
               {stats.map(stat => (
                 <SettingsOverviewStat
                   key={stat.label}
@@ -6578,25 +6578,25 @@ function SettingsHeroPanel({
   }>;
 }) {
   return (
-    <div className="rounded-[28px] border border-[#1e3358] bg-[linear-gradient(180deg,rgba(8,18,47,0.98),rgba(2,6,23,0.96))] p-6 text-white shadow-[0_28px_60px_-42px_rgba(2,6,23,0.85)]">
-      <div className="flex items-start justify-between gap-4">
+    <div className="rounded-[28px] border border-[#1e3358] bg-[linear-gradient(180deg,rgba(8,18,47,0.98),rgba(2,6,23,0.96))] p-6 text-white shadow-[0_28px_60px_-42px_rgba(2,6,23,0.85)] min-w-0">
+      <div className="flex items-start justify-between gap-4 min-w-0">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/45">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/45 break-words">
             الجاهزية
           </p>
-          <h3 className="mt-3 text-xl font-semibold tracking-tight">{title}</h3>
+          <h3 className="mt-3 text-xl font-semibold tracking-tight break-words">{title}</h3>
         </div>
         <Badge
           variant="outline"
-          className="rounded-full border border-white/15 bg-white/5 px-3 py-1 text-[11px] font-semibold text-white/80 shadow-none"
+          className="rounded-full border border-white/15 bg-white/5 px-3 py-1 text-[11px] font-semibold text-white/80 shadow-none min-w-0 break-words"
         >
           {status}
         </Badge>
       </div>
 
-      <p className="mt-4 text-sm leading-7 text-white/60">{description}</p>
+      <p className="mt-4 text-sm leading-7 text-white/60 break-words">{description}</p>
 
-      <div className="mt-6 grid gap-3">
+      <div className="mt-6 grid gap-3 min-w-0">
         {metrics.map(metric => (
           <SettingsSidebarMetric
             key={metric.label}
@@ -6622,19 +6622,19 @@ function SettingsOverviewStat({
   helper: string;
 }) {
   return (
-    <div className="rounded-[22px] border border-slate-200/80 bg-white/90 p-4 shadow-[0_16px_34px_-30px_rgba(15,23,42,0.3)]">
-      <div className="flex items-center justify-between gap-3">
-        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+    <div className="rounded-[22px] border border-slate-200/80 bg-white/90 p-4 shadow-[0_16px_34px_-30px_rgba(15,23,42,0.3)] min-w-0">
+      <div className="flex items-center justify-between gap-3 min-w-0">
+        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 break-words">
           {label}
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-2 text-slate-700">
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-2 text-slate-700 min-w-0">
           <Icon className="h-4 w-4" />
         </div>
       </div>
-      <div className="mt-4 text-base font-semibold tracking-tight text-slate-950">
+      <div className="mt-4 text-base font-semibold tracking-tight text-slate-950 break-words">
         {value}
       </div>
-      <div className="mt-2 text-xs leading-6 text-slate-500">{helper}</div>
+      <div className="mt-2 text-xs leading-6 text-slate-500 break-words">{helper}</div>
     </div>
   );
 }
@@ -6649,10 +6649,10 @@ function SettingsSidebarMetric({
   helper: string;
 }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-      <div className="text-xs text-white/55">{label}</div>
-      <div className="mt-2 text-sm font-semibold text-white/92">{value}</div>
-      <div className="mt-1 text-xs text-white/50">{helper}</div>
+    <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 min-w-0">
+      <div className="text-xs text-white/55 break-words">{label}</div>
+      <div className="mt-2 text-sm font-semibold text-white/92 break-words">{value}</div>
+      <div className="mt-1 text-xs text-white/50 break-words">{helper}</div>
     </div>
   );
 }
@@ -6688,19 +6688,19 @@ function SettingsSectionCard({
       <CardHeader
         className={cn("border-b border-slate-100/80 pb-6", headerClassName)}
       >
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex items-start gap-4">
-            <div className="rounded-[22px] border border-slate-200 bg-slate-50 p-3 text-slate-700">
+        <div className="flex items-start justify-between gap-4 min-w-0">
+          <div className="flex items-start gap-4 min-w-0">
+            <div className="rounded-[22px] border border-slate-200 bg-slate-50 p-3 text-slate-700 min-w-0">
               <Icon className="h-5 w-5" />
             </div>
             <div className="space-y-2">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500 break-words">
                 {eyebrow}
               </div>
-              <CardTitle className="text-[1.1rem] font-semibold tracking-tight text-slate-950">
+              <CardTitle className="text-[1.1rem] font-semibold tracking-tight text-slate-950 break-words">
                 {title}
               </CardTitle>
-              <CardDescription className="max-w-2xl text-sm leading-7 text-slate-600">
+              <CardDescription className="max-w-2xl text-sm leading-7 text-slate-600 break-words">
                 {description}
               </CardDescription>
             </div>
@@ -6767,12 +6767,12 @@ function SettingsField({
 
   return (
     <div className={cn("space-y-3", containerClassName)}>
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex items-start justify-between gap-3 min-w-0">
         <div className="space-y-1">
-          <Label className="text-[13px] font-semibold text-slate-900">
+          <Label className="text-[13px] font-semibold text-slate-900 break-words">
             {label}
           </Label>
-          <p className="text-xs leading-6 text-slate-500">{description}</p>
+          <p className="text-xs leading-6 text-slate-500 break-words">{description}</p>
         </div>
         <div
           className={cn(
@@ -6795,7 +6795,7 @@ function SettingsField({
           className={cn("min-h-[108px] py-3 leading-7", sharedControlClassName)}
         />
       ) : suffix ? (
-        <InputGroup className="h-12 rounded-xl border-slate-200 bg-white/90 shadow-none">
+        <InputGroup className="h-12 rounded-xl border-slate-200 bg-white/90 shadow-none min-w-0">
           <InputGroupInput
             type={type}
             dir={dir}
@@ -6807,7 +6807,7 @@ function SettingsField({
             className={cn("h-full px-4", sharedControlClassName)}
           />
           <InputGroupAddon align="inline-end">
-            <InputGroupText className="text-xs font-semibold text-slate-500">
+            <InputGroupText className="text-xs font-semibold text-slate-500 break-words">
               {suffix}
             </InputGroupText>
           </InputGroupAddon>
@@ -6851,10 +6851,10 @@ function SettingsSelectField({
   return (
     <div className={cn("space-y-3", containerClassName)}>
       <div className="space-y-1">
-        <Label className="text-[13px] font-semibold text-slate-900">
+        <Label className="text-[13px] font-semibold text-slate-900 break-words">
           {label}
         </Label>
-        <p className="text-xs leading-6 text-slate-500">{description}</p>
+        <p className="text-xs leading-6 text-slate-500 break-words">{description}</p>
       </div>
       {children}
     </div>
@@ -6883,8 +6883,8 @@ function Toggle({
       )}
     >
       <div className="min-w-0 flex-1 space-y-1.5">
-        <div className="flex flex-wrap items-center justify-start gap-2">
-          <span className="font-semibold text-slate-900">{label}</span>
+        <div className="flex flex-wrap items-center justify-start gap-2 min-w-0">
+          <span className="font-semibold text-slate-900 break-words">{label}</span>
           <Badge
             variant="outline"
             className={cn(
@@ -6898,7 +6898,7 @@ function Toggle({
           </Badge>
         </div>
         {description ? (
-          <p className="text-sm leading-6 text-slate-600">
+          <p className="text-sm leading-6 text-slate-600 break-words">
             {description}
           </p>
         ) : null}
@@ -6953,8 +6953,8 @@ function LabelsEditor({
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h3 className="text-base font-semibold tracking-tight text-slate-950">
+      <div className="flex items-center justify-between min-w-0">
+        <h3 className="text-base font-semibold tracking-tight text-slate-950 break-words">
           {title}
         </h3>
         <Button variant="outline" onClick={addRow}>
@@ -6962,44 +6962,44 @@ function LabelsEditor({
         </Button>
       </div>
 
-      <div className="grid gap-3">
+      <div className="grid gap-3 min-w-0">
         {rows.map(([k, val]) => (
           <div
             key={k}
-            className="rounded-[22px] border border-slate-200 bg-slate-50/60 p-4 shadow-[0_16px_32px_-30px_rgba(15,23,42,0.2)]"
+            className="rounded-[22px] border border-slate-200 bg-slate-50/60 p-4 shadow-[0_16px_32px_-30px_rgba(15,23,42,0.2)] min-w-0"
           >
-            <div className="grid gap-4 lg:grid-cols-[180px_minmax(0,1fr)_auto] lg:items-end">
+            <div className="grid gap-4 lg:grid-cols-[180px_minmax(0,1fr)_auto] lg:items-end min-w-0">
               <div className="space-y-2">
-                <Label className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                <Label className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 break-words">
                   المفتاح
                 </Label>
                 <Input
                   value={k}
                   readOnly
-                  className="h-11 rounded-xl border-slate-200 bg-white text-slate-600 shadow-none"
+                  className="h-11 rounded-xl border-slate-200 bg-white text-slate-600 shadow-none min-w-0"
                 />
               </div>
 
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid gap-4 md:grid-cols-2 min-w-0">
                 <div className="space-y-2">
-                  <Label className="text-[13px] font-semibold text-slate-900">
+                  <Label className="text-[13px] font-semibold text-slate-900 break-words">
                     عربي
                   </Label>
                   <Input
                     value={val.ar || ""}
                     onChange={e => updateRow(k, "ar", e.target.value)}
-                    className="h-11 rounded-xl border-slate-200 bg-white shadow-none"
+                    className="h-11 rounded-xl border-slate-200 bg-white shadow-none min-w-0"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-[13px] font-semibold text-slate-900">
+                  <Label className="text-[13px] font-semibold text-slate-900 break-words">
                     إنجليزي
                   </Label>
                   <Input
                     value={val.en || ""}
                     onChange={e => updateRow(k, "en", e.target.value)}
                     dir="ltr"
-                    className="h-11 rounded-xl border-slate-200 bg-white text-left shadow-none"
+                    className="h-11 rounded-xl border-slate-200 bg-white text-left shadow-none min-w-0"
                   />
                 </div>
               </div>

@@ -101,7 +101,7 @@ export default function SettingsFlagsTab({
             title="إتاحة المنصة"
             description="مفاتيح تؤثر على إتاحة أجزاء النظام للعامة أو للإدارة."
           >
-            <div className="grid gap-4">
+            <div className="grid gap-4 min-w-0">
               <Toggle
                 label="وضع الصيانة"
                 description="إيقاف واجهة الموقع مؤقتًا أو إظهار وضع الصيانة."
@@ -135,7 +135,7 @@ export default function SettingsFlagsTab({
             title="ضوابط الجمهور"
             description="مفاتيح التحكم في ظهور المحتوى الخاص بالمستخدمين العامين أو جمهور VIP."
           >
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-4 md:grid-cols-2 min-w-0">
               <Toggle
                 label="وضع VIP فقط"
                 description="عرض محتوى VIP فقط داخل الواجهة العامة."
@@ -179,27 +179,27 @@ function SettingsTabHero({
   panel: ReactNode;
 }) {
   return (
-    <Card className="overflow-hidden border-slate-200/80 bg-[radial-gradient(circle_at_top_right,rgba(242,183,5,0.14),transparent_25%),linear-gradient(135deg,#ffffff_0%,#f8fafc_48%,#eef4ff_100%)] shadow-[0_28px_75px_-44px_rgba(15,23,42,0.35)]">
+    <Card className="overflow-hidden border-slate-200/80 bg-[radial-gradient(circle_at_top_right,rgba(242,183,5,0.14),transparent_25%),linear-gradient(135deg,#ffffff_0%,#f8fafc_48%,#eef4ff_100%)] shadow-[0_28px_75px_-44px_rgba(15,23,42,0.35)] min-w-0">
       <CardContent className="px-6 py-6 sm:px-8 sm:py-8">
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(280px,0.85fr)] xl:items-end">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(280px,0.85fr)] xl:items-end min-w-0">
           <div className="space-y-5">
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge className="rounded-full border border-[#F2B705]/30 bg-[#F2B705]/12 px-3 py-1 text-xs font-semibold text-[#8d6700] shadow-none">
+            <div className="flex flex-wrap items-center gap-2 min-w-0">
+              <Badge className="rounded-full border border-[#F2B705]/30 bg-[#F2B705]/12 px-3 py-1 text-xs font-semibold text-[#8d6700] shadow-none min-w-0 break-words">
                 <Sparkles className="h-3.5 w-3.5" />
                 {eyebrow}
               </Badge>
             </div>
 
             <div className="space-y-3">
-              <h2 className="text-2xl font-semibold tracking-tight text-slate-950 sm:text-[2rem]">
+              <h2 className="text-2xl font-semibold tracking-tight text-slate-950 sm:text-[2rem] break-words leading-tight">
                 {title}
               </h2>
-              <p className="max-w-2xl text-sm leading-7 text-slate-600">
+              <p className="max-w-2xl text-sm leading-7 text-slate-600 break-words">
                 {description}
               </p>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-3 min-w-0">
               {stats.map(stat => (
                 <SettingsOverviewStat
                   key={stat.label}
@@ -235,25 +235,25 @@ function SettingsHeroPanel({
   }>;
 }) {
   return (
-    <div className="rounded-[28px] border border-[#1e3358] bg-[linear-gradient(180deg,rgba(8,18,47,0.98),rgba(2,6,23,0.96))] p-6 text-white shadow-[0_28px_60px_-42px_rgba(2,6,23,0.85)]">
-      <div className="flex items-start justify-between gap-4">
+    <div className="rounded-[28px] border border-[#1e3358] bg-[linear-gradient(180deg,rgba(8,18,47,0.98),rgba(2,6,23,0.96))] p-6 text-white shadow-[0_28px_60px_-42px_rgba(2,6,23,0.85)] min-w-0">
+      <div className="flex items-start justify-between gap-4 min-w-0">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/45">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/45 break-words">
             الجاهزية
           </p>
-          <h3 className="mt-3 text-xl font-semibold tracking-tight">{title}</h3>
+          <h3 className="mt-3 text-xl font-semibold tracking-tight break-words">{title}</h3>
         </div>
         <Badge
           variant="outline"
-          className="rounded-full border border-white/15 bg-white/5 px-3 py-1 text-[11px] font-semibold text-white/80 shadow-none"
+          className="rounded-full border border-white/15 bg-white/5 px-3 py-1 text-[11px] font-semibold text-white/80 shadow-none min-w-0 break-words"
         >
           {status}
         </Badge>
       </div>
 
-      <p className="mt-4 text-sm leading-7 text-white/60">{description}</p>
+      <p className="mt-4 text-sm leading-7 text-white/60 break-words">{description}</p>
 
-      <div className="mt-6 grid gap-3">
+      <div className="mt-6 grid gap-3 min-w-0">
         {metrics.map(metric => (
           <SettingsSidebarMetric
             key={metric.label}
@@ -279,19 +279,19 @@ function SettingsOverviewStat({
   helper: string;
 }) {
   return (
-    <div className="rounded-[22px] border border-slate-200/80 bg-white/90 p-4 shadow-[0_16px_34px_-30px_rgba(15,23,42,0.3)]">
-      <div className="flex items-center justify-between gap-3">
-        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+    <div className="rounded-[22px] border border-slate-200/80 bg-white/90 p-4 shadow-[0_16px_34px_-30px_rgba(15,23,42,0.3)] min-w-0">
+      <div className="flex items-center justify-between gap-3 min-w-0">
+        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 break-words">
           {label}
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-2 text-slate-700">
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-2 text-slate-700 min-w-0">
           <Icon className="h-4 w-4" />
         </div>
       </div>
-      <div className="mt-4 text-base font-semibold tracking-tight text-slate-950">
+      <div className="mt-4 text-base font-semibold tracking-tight text-slate-950 break-words">
         {value}
       </div>
-      <div className="mt-2 text-xs leading-6 text-slate-500">{helper}</div>
+      <div className="mt-2 text-xs leading-6 text-slate-500 break-words">{helper}</div>
     </div>
   );
 }
@@ -306,10 +306,10 @@ function SettingsSidebarMetric({
   helper: string;
 }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-      <div className="text-xs text-white/55">{label}</div>
-      <div className="mt-2 text-sm font-semibold text-white/92">{value}</div>
-      <div className="mt-1 text-xs text-white/50">{helper}</div>
+    <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 min-w-0">
+      <div className="text-xs text-white/55 break-words">{label}</div>
+      <div className="mt-2 text-sm font-semibold text-white/92 break-words">{value}</div>
+      <div className="mt-1 text-xs text-white/50 break-words">{helper}</div>
     </div>
   );
 }
@@ -345,19 +345,19 @@ function SettingsSectionCard({
       <CardHeader
         className={cn("border-b border-slate-100/80 pb-6", headerClassName)}
       >
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex items-start gap-4">
-            <div className="rounded-[22px] border border-slate-200 bg-slate-50 p-3 text-slate-700">
+        <div className="flex items-start justify-between gap-4 min-w-0">
+          <div className="flex items-start gap-4 min-w-0">
+            <div className="rounded-[22px] border border-slate-200 bg-slate-50 p-3 text-slate-700 min-w-0">
               <Icon className="h-5 w-5" />
             </div>
             <div className="space-y-2">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500 break-words">
                 {eyebrow}
               </div>
-              <CardTitle className="text-[1.1rem] font-semibold tracking-tight text-slate-950">
+              <CardTitle className="text-[1.1rem] font-semibold tracking-tight text-slate-950 break-words">
                 {title}
               </CardTitle>
-              <CardDescription className="max-w-2xl text-sm leading-7 text-slate-600">
+              <CardDescription className="max-w-2xl text-sm leading-7 text-slate-600 break-words">
                 {description}
               </CardDescription>
             </div>
@@ -394,8 +394,8 @@ function Toggle({
       )}
     >
       <div className="min-w-0 flex-1 space-y-1.5">
-        <div className="flex flex-wrap items-center justify-start gap-2">
-          <span className="font-semibold text-slate-900">{label}</span>
+        <div className="flex flex-wrap items-center justify-start gap-2 min-w-0">
+          <span className="font-semibold text-slate-900 break-words">{label}</span>
           <Badge
             variant="outline"
             className={cn(
@@ -409,7 +409,7 @@ function Toggle({
           </Badge>
         </div>
         {description ? (
-          <p className="text-sm leading-6 text-slate-600">{description}</p>
+          <p className="text-sm leading-6 text-slate-600 break-words">{description}</p>
         ) : null}
       </div>
 

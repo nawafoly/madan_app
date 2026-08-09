@@ -127,21 +127,19 @@ export default function RequestBottomSheet({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[90]" dir={languageDir(language)} role="presentation">
-      <button
-        type="button"
+    <div className="pointer-events-none fixed inset-0 z-[90]" dir={languageDir(language)} role="presentation">
+      <div
         data-theme-overlay="true"
-        className="absolute inset-0 bg-slate-950/60"
-        aria-label={tr(language, "إغلاق", "Close")}
-        onClick={() => onOpenChange(false)}
+        className="pointer-events-none absolute inset-0 bg-slate-950/60"
+        aria-hidden="true"
       />
 
       <section
         role="dialog"
-        aria-modal="true"
+        aria-modal="false"
         aria-label={tr(language, "طلب جديد", "New Request")}
         className={cn(
-          "absolute inset-x-0 bottom-0 max-h-[88vh] overflow-hidden rounded-t-[28px] bg-white shadow-[0_-24px_70px_-28px_rgba(15,23,42,0.55)]",
+          "pointer-events-auto absolute inset-x-0 bottom-0 max-h-[88vh] overflow-hidden rounded-t-[28px] bg-white shadow-[0_-24px_70px_-28px_rgba(15,23,42,0.55)]",
           className
         )}
       >

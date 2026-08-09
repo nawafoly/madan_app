@@ -1,0 +1,41 @@
+import java.util.Properties
+
+def keystoreProperties = new Properties()
+def keystorePropertiesFile = rootProject.file("keystore.properties")
+
+if (keystorePropertiesFile.exists()) {
+    keystorePropertiesFile.withInputStream { stream ->
+        keystoreProperties.load(stream)
+    }
+}
+
+def signingStorePassword =
+    System.getenv("MAEDIN_UPLOAD_STORE_PASSWORD") ?:
+    keystoreProperties.getProperty("storePassword")
+
+def signingKeyPassword =
+    System.getenv("MAEDIN_UPLOAD_KEY_PASSWORD") ?:
+    keystoreProperties.getProperty("keyPassword")
+
+def signingKeyAlias =
+    keystoreProperties.getProperty("keyAlias", "maedin-upload")
+
+def signingStoreFile =
+    keystoreProperties.getProperty("storeFile", "../maedin-upload-key.jks")
+
+android {
+    signingConfigs {
+        release {
+            storeFile file(signingStoreFile)
+            storePassword signingStorePassword
+            keyAlias signingKeyAlias
+            keyPassword signingKeyPassword
+        }
+    }
+
+    buildTypes {
+        release {
+            signingConfig signingConfigs.release
+        }
+    }
+}

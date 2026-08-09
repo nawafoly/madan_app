@@ -53,7 +53,7 @@ import {
   MapPin,
   CalendarCheck2,
 } from "lucide-react";
-import { CSSProperties, useEffect, useMemo, useRef, useState } from "react";
+import { CSSProperties, createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useSearch } from "wouter";
 import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
 import { HrBrandMark } from "@/components/HrBrandMark";
@@ -477,7 +477,26 @@ type DashboardLayoutProps = {
   area?: DashboardArea;
 };
 
+const DashboardLayoutAreaContext = createContext<DashboardArea | null>(null);
+
 export default function DashboardLayout({
+  children,
+  area = "admin",
+}: DashboardLayoutProps) {
+  const parentArea = useContext(DashboardLayoutAreaContext);
+
+  if (parentArea === area) {
+    return <>{children}</>;
+  }
+
+  return (
+    <DashboardLayoutShell area={area}>
+      {children}
+    </DashboardLayoutShell>
+  );
+}
+
+function DashboardLayoutShell({
   children,
   area = "admin",
 }: DashboardLayoutProps) {
@@ -505,13 +524,13 @@ export default function DashboardLayout({
 
   if (!user) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="flex flex-col items-center gap-8 p-8 max-w-md w-full">
-          <div className="flex flex-col items-center gap-6">
-            <h1 className="text-2xl font-semibold tracking-tight text-center">
+      <div className="flex items-center justify-center min-h-screen min-w-0">
+        <div className="flex flex-col items-center gap-8 p-8 max-w-md w-full min-w-0">
+          <div className="flex flex-col items-center gap-6 min-w-0">
+            <h1 className="text-2xl font-semibold tracking-tight text-center break-words leading-tight">
               تسجيل الدخول للمتابعة
             </h1>
-            <p className="text-sm text-muted-foreground text-center max-w-sm">
+            <p className="text-sm text-muted-foreground text-center max-w-sm break-words">
               يتطلب الوصول إلى لوحة التحكم تسجيل الدخول. تابع لبدء عملية تسجيل
               الدخول.
             </p>
@@ -531,7 +550,8 @@ export default function DashboardLayout({
   }
 
   return (
-    <SidebarProvider
+    <DashboardLayoutAreaContext.Provider value={area}>
+      <SidebarProvider
       open={isSidebarOpen}
       onOpenChange={setIsSidebarOpen}
       dir={layoutDir}
@@ -552,7 +572,8 @@ export default function DashboardLayout({
       >
         {children}
       </DashboardLayoutContent>
-    </SidebarProvider>
+      </SidebarProvider>
+    </DashboardLayoutAreaContext.Provider>
   );
 }
 
@@ -595,8 +616,8 @@ function DashboardLayoutContent({
     setOpen(prev => !prev);
   };
   const navigateFromSidebar = (path: string) => {
-    setLocation(path);
     if (isMobile) setOpenMobile(false);
+    setLocation(path);
   };
 
   // الدور
@@ -903,18 +924,20 @@ function DashboardLayoutContent({
                 isCollapsed ? "justify-center gap-0" : "gap-2"
               )}
             >
-              <button
-                onClick={handleSidebarToggle}
-                className={cn(
-                  "shrink-0 text-[#F2B705] transition-colors hover:bg-white/8 hover:text-[#FFD24A] focus:outline-none focus-visible:ring-2 focus-visible:ring-white/20",
-                  isCollapsed
-                    ? "flex h-9 w-9 items-center justify-center rounded-2xl bg-white/[0.04]"
-                    : "h-8 w-8 rounded-lg"
-                )}
-                aria-label="Toggle navigation"
-              >
-                <PanelLeft className="h-4 w-4 rtl:rotate-180" />
-              </button>
+              {!isMobile ? (
+                <button
+                  onClick={handleSidebarToggle}
+                  className={cn(
+                    "shrink-0 text-[#F2B705] transition-colors hover:bg-white/8 hover:text-[#FFD24A] focus:outline-none focus-visible:ring-2 focus-visible:ring-white/20",
+                    isCollapsed
+                      ? "flex h-9 w-9 items-center justify-center rounded-2xl bg-white/[0.04]"
+                      : "h-8 w-8 rounded-lg"
+                  )}
+                  aria-label="Toggle navigation"
+                >
+                  <PanelLeft className="h-4 w-4 rtl:rotate-180" />
+                </button>
+              ) : null}
 
               {!isCollapsed ? (
                 <div
@@ -929,7 +952,7 @@ function DashboardLayoutContent({
                     <HrBrandMark
                       alt={tr(language, "شعار معدن", "MAEDIN logo")}
                       compact
-                      className="h-9 w-9 rounded-xl"
+                      className="h-9 w-9 rounded-xl min-w-0"
                       imageClassName="h-8 w-8"
                     />
                   ) : null}
@@ -1091,7 +1114,7 @@ function DashboardLayoutContent({
                                   )}
                                 />
                                 <span className="min-w-0 flex-1">
-                                  <span className="block truncate text-xs font-semibold leading-5">
+                                  <span className="block truncate text-xs font-semibold leading-5 break-words">
                                     {subItem.label[language]}
                                   </span>
                                   <span
@@ -1180,9 +1203,9 @@ function DashboardLayoutContent({
                 <AvatarImage
                   src={sidebarAvatarUrl || undefined}
                   alt={displayName}
-                  className="h-full w-full rounded-full object-cover"
+                  className="h-full w-full rounded-full object-cover min-w-0"
                 />
-                <AvatarFallback className="rounded-full bg-gradient-to-br from-slate-700 via-slate-800 to-slate-950 text-sm font-semibold text-slate-50">
+                <AvatarFallback className="rounded-full bg-gradient-to-br from-slate-700 via-slate-800 to-slate-950 text-sm font-semibold text-slate-50 min-w-0 break-words">
                   {String(displayName ?? "م")
                     .trim()
                     .charAt(0)}
@@ -1196,10 +1219,10 @@ function DashboardLayoutContent({
                     : "max-w-52 opacity-100"
                 )}
               >
-                <p className="truncate text-sm font-semibold leading-5 tracking-tight text-slate-50">
+                <p className="truncate text-sm font-semibold leading-5 tracking-tight text-slate-50 break-words">
                   {displayName}
                 </p>
-                <p className="mt-0.5 truncate text-[11px] font-medium leading-5 text-slate-400/90">
+                <p className="mt-0.5 truncate text-[11px] font-medium leading-5 text-slate-400/90 break-words">
                   {sidebarJobTitle}
                 </p>
               </div>
@@ -1210,7 +1233,7 @@ function DashboardLayoutContent({
                   size="icon"
                   onClick={logout}
                   aria-label={tr(language, "تسجيل الخروج", "Logout")}
-                  className="h-9 w-9 shrink-0 rounded-xl border-red-300/25 bg-red-500/10 text-red-200 shadow-none hover:border-red-300/40 hover:bg-red-500/16 hover:text-red-100"
+                  className="h-9 w-9 shrink-0 rounded-xl border-red-300/25 bg-red-500/10 text-red-200 shadow-none hover:border-red-300/40 hover:bg-red-500/16 hover:text-red-100 min-w-0"
                 >
                   <LogOut
                     className={cn("h-4 w-4", language === "ar" && "rotate-180")}
@@ -1254,18 +1277,19 @@ function DashboardLayoutContent({
             switchIcon={ContactRound}
             menuTrigger={
               isMobile ? (
-                <SidebarTrigger className="h-10 w-10 rounded-full border border-slate-200 bg-white p-0 shadow-none hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800" />
+                <SidebarTrigger className="h-10 w-10 rounded-none border-0 bg-transparent p-0 text-slate-700 shadow-none hover:bg-transparent hover:text-[#F2B705] dark:bg-transparent dark:text-slate-100 dark:hover:bg-transparent dark:hover:text-[#FFD24A] min-w-0" />
               ) : undefined
             }
+            showBrand={false}
             showNotifications
             onLogout={logout}
           />
         ) : isMobile ? (
-          <div className="flex border-b h-14 items-center justify-between bg-transparent px-2 backdrop-blur supports-[backdrop-filter]:backdrop-blur sticky top-0 z-40">
-            <div className="flex items-center gap-2">
-              <SidebarTrigger className="h-9 w-9 rounded-lg bg-transparent" />
-              <div className="flex items-center gap-3">
-                <div className="flex flex-col gap-1">
+          <div className="flex border-b h-14 items-center justify-between bg-transparent px-2 backdrop-blur supports-[backdrop-filter]:backdrop-blur sticky top-0 z-40 min-w-0">
+            <div className="flex items-center gap-2 min-w-0">
+              <SidebarTrigger className="h-9 w-9 rounded-lg bg-transparent min-w-0" />
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="flex flex-col gap-1 min-w-0">
                   <span className="tracking-tight text-foreground">
                     {activeMenuLabel}
                   </span>
@@ -1273,7 +1297,7 @@ function DashboardLayoutContent({
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 min-w-0">
               {/* زر الرئيسية في الموبايل */}
               <Button
                 variant="outline"
@@ -1295,7 +1319,7 @@ function DashboardLayoutContent({
           className="min-h-screen min-w-0 max-w-full flex-1 overflow-x-hidden bg-[#F8F9FA] px-3 py-4 dark:bg-background sm:px-4 md:px-6 md:py-6 lg:px-8"
         >
           {area !== "hr" && !isMobile ? (
-            <div className="mb-5 flex items-center justify-end gap-2">
+            <div className="mb-5 flex items-center justify-end gap-2 min-w-0">
               <NotificationBell />
             </div>
           ) : null}

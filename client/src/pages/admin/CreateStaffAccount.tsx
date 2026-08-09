@@ -935,16 +935,11 @@ export default function CreateStaffAccount() {
     <DashboardLayout area="hr">
       <div
         dir={pageDir}
-        className={`bg-[linear-gradient(180deg,#f6f6f7_0%,#ffffff_32%,#f7f7f8_100%)] text-foreground ${pageTextAlignClass}`}
+        className={`min-h-full bg-[#F8F9FA] text-foreground dark:bg-background ${pageTextAlignClass}`}
       >
         <main className="relative overflow-hidden">
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-x-0 top-0 h-64 bg-[radial-gradient(circle_at_top,rgba(242,174,48,0.12),transparent_62%)]"
-          />
-
           <section className="px-4 py-10 sm:px-6 sm:py-14 lg:py-16">
-            <div className="mx-auto max-w-[36rem]">
+            <div className="mx-auto w-full max-w-[64rem]">
               <div
                 className={`w-full rounded-[32px] border border-slate-200/80 bg-white/96 p-6 shadow-[0_30px_90px_-48px_rgba(11,23,38,0.24)] backdrop-blur-sm sm:p-8 md:p-10 ${pageTextAlignClass}`}
               >

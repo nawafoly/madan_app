@@ -694,64 +694,64 @@ export default function StaffPortalPage() {
           )}
         >
           {hasInternalAccess ? (
-            <section className="hidden min-h-[580px] flex-col justify-between overflow-hidden rounded-[32px] border border-white/10 bg-slate-950/72 p-6 text-white shadow-[0_34px_90px_-46px_rgba(2,6,23,0.95)] backdrop-blur-xl sm:p-8 lg:flex lg:p-10">
+            <section className="hidden min-h-[580px] flex-col justify-between overflow-hidden rounded-[32px] border border-white/10 bg-slate-950/72 p-6 text-white shadow-[0_34px_90px_-46px_rgba(2,6,23,0.95)] backdrop-blur-xl sm:p-8 lg:flex lg:p-10 min-w-0">
             <div className="space-y-9">
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
+              <div className="flex items-center justify-between gap-4 min-w-0">
+                <div className="flex items-center gap-3 min-w-0">
                   <HrBrandMark
                     alt={tr(language, "شعار معدن", "MAEDIN logo")}
                     className="h-12 w-12"
                     imageClassName="h-10 w-10"
                   />
                   <div>
-                    <div className="text-lg font-semibold tracking-tight">
+                    <div className="text-lg font-semibold tracking-tight break-words">
                       {tr(
                         language,
                         "منصة الموارد البشرية",
                         "Human Resources Platform"
                       )}
                     </div>
-                    <div className="text-sm text-white/50">
+                    <div className="text-sm text-white/50 break-words">
                       MAEDIN Staff Portal
                     </div>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 min-w-0">
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
                     onClick={toggleLanguage}
-                    className="h-10 rounded-full border-white/10 bg-white/[0.04] px-3 text-white/80 hover:bg-white/[0.08] hover:text-white"
+                    className="h-10 rounded-full border-white/10 bg-white/[0.04] px-3 text-white/80 hover:bg-white/[0.08] hover:text-white min-w-0"
                     aria-label={tr(language, "تبديل اللغة", "Toggle language")}
                   >
                     <Globe className="h-4 w-4" />
                     {language === "ar" ? "English" : "Arabic"}
                   </Button>
 
-                  <Badge className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-white/70 shadow-none hover:bg-white/[0.04]">
+                  <Badge className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-white/70 shadow-none hover:bg-white/[0.04] min-w-0">
                     {tr(language, "بوابة داخلية", "Internal Portal")}
                   </Badge>
                 </div>
               </div>
 
               <div className="max-w-2xl space-y-5">
-                <Badge className="rounded-full border border-[#F2B705]/30 bg-[#F2B705]/10 px-4 py-1.5 text-[#F2B705] shadow-none hover:bg-[#F2B705]/10">
+                <Badge className="rounded-full border border-[#F2B705]/30 bg-[#F2B705]/10 px-4 py-1.5 text-[#F2B705] shadow-none hover:bg-[#F2B705]/10 min-w-0">
                   {tr(
                     language,
                     "نظام داخلي مستقل",
                     "Independent Internal System"
                   )}
                 </Badge>
-                <h1 className="text-3xl font-semibold leading-tight tracking-tight sm:text-4xl">
+                <h1 className="text-3xl font-semibold leading-tight tracking-tight sm:text-4xl break-words">
                   {tr(
                     language,
                     "بوابة الموارد البشرية للموظفين.",
                     "Human Resources Staff Portal."
                   )}
                 </h1>
-                <p className="max-w-lg text-sm leading-7 text-white/62">
+                <p className="max-w-lg text-sm leading-7 text-white/62 break-words">
                   {tr(
                     language,
                     "مساحة داخلية لمتابعة العمل اليومي والتنبيهات المهمة.",
@@ -760,7 +760,7 @@ export default function StaffPortalPage() {
                 </p>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-3 sm:grid-cols-2 min-w-0">
                 {portalFeatureCards.map(item => {
                   const Icon = item.icon;
                   const count = Number(item.count || 0);
@@ -774,20 +774,20 @@ export default function StaffPortalPage() {
                           : "border-white/10 bg-white/[0.04]"
                       )}
                     >
-                      <div className="flex items-start gap-3">
-                        <span className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white/[0.06] text-[#F2B705]">
+                      <div className="flex items-start gap-3 min-w-0">
+                        <span className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white/[0.06] text-[#F2B705] min-w-0">
                           <Icon className="h-5 w-5" />
                           {count > 0 ? (
-                            <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-[11px] font-bold leading-none text-white shadow-lg shadow-red-600/25 ring-2 ring-slate-950/80">
+                            <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-[11px] font-bold leading-none text-white shadow-lg shadow-red-600/25 ring-2 ring-slate-950/80 min-w-0 break-words">
                               {formatPortalBadgeCount(count)}
                             </span>
                           ) : null}
                         </span>
                         <span>
-                          <span className="block text-sm font-semibold">
+                          <span className="block text-sm font-semibold break-words">
                             {item.label}
                           </span>
-                          <span className="mt-1 block text-xs leading-6 text-white/48">
+                          <span className="mt-1 block text-xs leading-6 text-white/48 break-words">
                             {item.helper}
                           </span>
                         </span>
@@ -798,12 +798,12 @@ export default function StaffPortalPage() {
               </div>
             </div>
 
-            <div className="mt-12 rounded-[32px] border border-white/10 bg-[linear-gradient(135deg,rgba(255,255,255,0.075),rgba(255,255,255,0.035))] px-5 pb-5 pt-6 shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_24px_55px_-42px_rgba(0,0,0,0.75)]">
-              <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="mt-12 rounded-[32px] border border-white/10 bg-[linear-gradient(135deg,rgba(255,255,255,0.075),rgba(255,255,255,0.035))] px-5 pb-5 pt-6 shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_24px_55px_-42px_rgba(0,0,0,0.75)] min-w-0">
+              <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between min-w-0">
                 <div className="flex min-w-0 items-center gap-4">
-                  <div className="relative -mt-10 flex h-24 w-24 shrink-0 items-center justify-center">
-                    <span className="motion-safe:animate-[spin_18s_linear_infinite] absolute inset-0 rounded-full border border-[#F2B705]/35 border-t-white/75" />
-                    <span className="relative flex h-20 w-20 items-center justify-center overflow-hidden rounded-full bg-slate-900 text-lg font-bold text-[#F2B705] shadow-[0_18px_40px_-24px_rgba(0,0,0,0.95)] ring-2 ring-white/15">
+                  <div className="relative -mt-10 flex h-24 w-24 shrink-0 items-center justify-center min-w-0">
+                    <span className="motion-safe:animate-[spin_18s_linear_infinite] absolute inset-0 rounded-full border border-[#F2B705]/35 border-t-white/75 min-w-0" />
+                    <span className="relative flex h-20 w-20 items-center justify-center overflow-hidden rounded-full bg-slate-900 text-lg font-bold text-[#F2B705] shadow-[0_18px_40px_-24px_rgba(0,0,0,0.95)] ring-2 ring-white/15 min-w-0 break-words">
                       {accountPhotoUrl ? (
                         <img
                           src={accountPhotoUrl}
@@ -816,19 +816,19 @@ export default function StaffPortalPage() {
                     </span>
                   </div>
                   <div className="min-w-0 pt-1">
-                    <div className="mb-2 flex flex-wrap items-center gap-2">
-                      <span className="rounded-full border border-[#F2B705]/25 bg-[#F2B705]/10 px-3 py-1 text-[11px] font-semibold text-[#F2B705]">
+                    <div className="mb-2 flex flex-wrap items-center gap-2 min-w-0">
+                      <span className="rounded-full border border-[#F2B705]/25 bg-[#F2B705]/10 px-3 py-1 text-[11px] font-semibold text-[#F2B705] min-w-0 break-words">
                         {accountRoleLabel}
                       </span>
                       <span className="text-[11px] text-white/40">
                         {tr(language, "الحساب الحالي", "Current Account")}
                       </span>
                     </div>
-                    <div className="truncate text-lg font-semibold text-white">
+                    <div className="truncate text-lg font-semibold text-white break-words">
                       {accountDisplayName}
                     </div>
                     <div
-                      className="mt-1 truncate text-xs text-white/48"
+                      className="mt-1 truncate text-xs text-white/48 break-words"
                       dir="ltr"
                     >
                       {accountEmail || "MAEDIN Staff Portal"}
@@ -836,20 +836,20 @@ export default function StaffPortalPage() {
                   </div>
                 </div>
 
-                <div className="flex w-full flex-col gap-2 sm:w-[190px] sm:shrink-0">
+                <div className="flex w-full flex-col gap-2 sm:w-[190px] sm:shrink-0 min-w-0">
                   {hasInternalAccess ? (
                     <Link href="/hr/profile">
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
-                        className="h-14 w-full justify-between rounded-[22px] border-[#F2B705]/30 bg-[linear-gradient(135deg,rgba(242,183,5,0.18),rgba(242,183,5,0.07))] px-4 text-[#F2B705] shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_16px_34px_-28px_rgba(242,183,5,0.9)] hover:border-[#F2B705]/45 hover:bg-[#F2B705]/16 hover:text-[#FFD24A]"
+                        className="h-14 w-full justify-between rounded-[22px] border-[#F2B705]/30 bg-[linear-gradient(135deg,rgba(242,183,5,0.18),rgba(242,183,5,0.07))] px-4 text-[#F2B705] shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_16px_34px_-28px_rgba(242,183,5,0.9)] hover:border-[#F2B705]/45 hover:bg-[#F2B705]/16 hover:text-[#FFD24A] min-w-0"
                       >
                         <span className="flex min-w-0 items-center gap-2">
-                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#F2B705]/14 ring-1 ring-[#F2B705]/25">
+                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#F2B705]/14 ring-1 ring-[#F2B705]/25 min-w-0">
                             <UserRound className="h-4 w-4" />
                           </span>
-                          <span className="truncate text-sm font-semibold">
+                          <span className="truncate text-sm font-semibold break-words">
                             {tr(language, "فتح البروفايل", "Open Profile")}
                           </span>
                         </span>
@@ -863,7 +863,7 @@ export default function StaffPortalPage() {
                     size="sm"
                     onClick={() => void handleSignOut()}
                     disabled={busy}
-                    className="h-10 w-full shrink-0 rounded-full border-white/10 bg-white/[0.06] px-4 text-white/78 shadow-none hover:bg-white/[0.1] hover:text-white disabled:opacity-60"
+                    className="h-10 w-full shrink-0 rounded-full border-white/10 bg-white/[0.06] px-4 text-white/78 shadow-none hover:bg-white/[0.1] hover:text-white disabled:opacity-60 min-w-0"
                   >
                     <LogOut className="h-4 w-4" />
                     {busy
@@ -876,10 +876,10 @@ export default function StaffPortalPage() {
             </section>
           ) : null}
 
-          <section className="flex items-center justify-center">
-            <div className="w-full max-w-[560px] rounded-[32px] border border-slate-200 bg-white/96 p-6 shadow-[0_32px_90px_-52px_rgba(15,23,42,0.42)] backdrop-blur sm:p-8">
+          <section className="flex items-center justify-center min-w-0">
+            <div className="w-full max-w-[560px] rounded-[32px] border border-slate-200 bg-white/96 p-6 shadow-[0_32px_90px_-52px_rgba(15,23,42,0.42)] backdrop-blur sm:p-8 min-w-0">
               {loading ? (
-                <div className="py-16 text-center text-sm text-slate-500">
+                <div className="py-16 text-center text-sm text-slate-500 break-words">
                   {tr(
                     language,
                     "جارٍ التحقق من الجلسة...",
@@ -888,10 +888,10 @@ export default function StaffPortalPage() {
                 </div>
               ) : hasInternalAccess ? (
                 <div className="space-y-6">
-                  <div className="rounded-[26px] bg-slate-950 p-4 text-white shadow-[0_20px_50px_-36px_rgba(2,6,23,0.9)] lg:hidden">
-                    <div className="flex items-center justify-between gap-3">
+                  <div className="rounded-[26px] bg-slate-950 p-4 text-white shadow-[0_20px_50px_-36px_rgba(2,6,23,0.9)] lg:hidden min-w-0">
+                    <div className="flex items-center justify-between gap-3 min-w-0">
                       <div className="flex min-w-0 items-center gap-3">
-                        <span className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white/10 text-sm font-bold text-[#F2B705] ring-1 ring-white/15">
+                        <span className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white/10 text-sm font-bold text-[#F2B705] ring-1 ring-white/15 min-w-0 break-words">
                           {accountPhotoUrl ? (
                             <img
                               src={accountPhotoUrl}
@@ -903,11 +903,11 @@ export default function StaffPortalPage() {
                           )}
                         </span>
                         <div className="min-w-0">
-                          <div className="truncate text-sm font-semibold">
+                          <div className="truncate text-sm font-semibold break-words">
                             {accountDisplayName}
                           </div>
                           <div
-                            className="mt-1 truncate text-xs text-white/50"
+                            className="mt-1 truncate text-xs text-white/50 break-words"
                             dir="ltr"
                           >
                             {accountEmail || "MAEDIN Staff Portal"}
@@ -919,7 +919,7 @@ export default function StaffPortalPage() {
                         variant="outline"
                         size="sm"
                         onClick={toggleLanguage}
-                        className="h-9 shrink-0 rounded-full border-white/10 bg-white/[0.06] px-3 text-white/75 hover:bg-white/[0.1] hover:text-white"
+                        className="h-9 shrink-0 rounded-full border-white/10 bg-white/[0.06] px-3 text-white/75 hover:bg-white/[0.1] hover:text-white min-w-0"
                         aria-label={tr(language, "تبديل اللغة", "Toggle language")}
                       >
                         <Globe className="h-4 w-4" />
@@ -927,13 +927,13 @@ export default function StaffPortalPage() {
                       </Button>
                     </div>
 
-                    <div className="mt-4 grid grid-cols-2 gap-2">
+                    <div className="mt-4 grid grid-cols-2 gap-2 min-w-0">
                       <Link href="/hr/profile">
                         <Button
                           type="button"
                           variant="outline"
                           size="sm"
-                          className="h-10 w-full rounded-2xl border-[#F2B705]/25 bg-[#F2B705]/10 text-[#F2B705] hover:bg-[#F2B705]/15 hover:text-[#FFD24A]"
+                          className="h-10 w-full rounded-2xl border-[#F2B705]/25 bg-[#F2B705]/10 text-[#F2B705] hover:bg-[#F2B705]/15 hover:text-[#FFD24A] min-w-0"
                         >
                           <UserRound className="h-4 w-4" />
                           {tr(language, "البروفايل", "Profile")}
@@ -945,7 +945,7 @@ export default function StaffPortalPage() {
                         size="sm"
                         onClick={() => void handleSignOut()}
                         disabled={busy}
-                        className="h-10 w-full rounded-2xl border-white/10 bg-white/[0.06] text-white/75 hover:bg-white/[0.1] hover:text-white disabled:opacity-60"
+                        className="h-10 w-full rounded-2xl border-white/10 bg-white/[0.06] text-white/75 hover:bg-white/[0.1] hover:text-white disabled:opacity-60 min-w-0"
                       >
                         <LogOut className="h-4 w-4" />
                         {busy
@@ -956,14 +956,14 @@ export default function StaffPortalPage() {
                   </div>
 
                   <div className="space-y-3">
-                    <h2 className="text-2xl font-semibold tracking-tight text-slate-950 sm:text-3xl">
+                    <h2 className="text-2xl font-semibold tracking-tight text-slate-950 sm:text-3xl break-words leading-tight">
                       {tr(
                         language,
                         "اختر وجهتك داخل المنصة",
                         "Choose Your Destination"
                       )}
                     </h2>
-                    <p className="text-sm leading-7 text-slate-500">
+                    <p className="text-sm leading-7 text-slate-500 break-words">
                       {tr(
                         language,
                         "تظهر الاختصارات حسب صلاحيات حسابك الحالية.",
@@ -976,7 +976,7 @@ export default function StaffPortalPage() {
                     <PortalAlert tone="error">{error}</PortalAlert>
                   ) : null}
 
-                  <div className="grid gap-3">
+                  <div className="grid gap-3 min-w-0">
                     {portalLinks.map(item => {
                       const Icon = item.icon;
                       const isAllowed = item.canEnter;
@@ -990,7 +990,7 @@ export default function StaffPortalPage() {
                           )}
                           aria-disabled={!isAllowed}
                         >
-                          <div className="flex items-start gap-3">
+                          <div className="flex items-start gap-3 min-w-0">
                             <span
                               className={cn(
                                 "flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl",
@@ -1027,7 +1027,7 @@ export default function StaffPortalPage() {
                           {isAllowed ? (
                             <ArrowLeft className="h-4 w-4 text-slate-400 transition group-hover:-translate-x-1 group-hover:text-slate-700" />
                           ) : (
-                            <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-slate-200 bg-white/80 px-2.5 py-1 text-xs font-semibold text-slate-500">
+                            <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-slate-200 bg-white/80 px-2.5 py-1 text-xs font-semibold text-slate-500 min-w-0 break-words">
                               <LockKeyhole className="h-3.5 w-3.5" />
                               {tr(language, "غير متاح", "Locked")}
                             </span>
@@ -1078,7 +1078,7 @@ export default function StaffPortalPage() {
                     )}
                   </PortalAlert>
                   <Link href="/">
-                    <Button className="h-12 w-full rounded-2xl">
+                    <Button className="h-12 w-full rounded-2xl min-w-0">
                       {tr(
                         language,
                         "العودة إلى الموقع الرئيسي",
@@ -1092,18 +1092,18 @@ export default function StaffPortalPage() {
                   <div className="space-y-3">
                     <Badge
                       variant="outline"
-                      className="rounded-full border-slate-200 bg-slate-50 px-4 py-1.5 text-slate-600"
+                      className="rounded-full border-slate-200 bg-slate-50 px-4 py-1.5 text-slate-600 min-w-0"
                     >
                       {tr(language, "دخول الموظفين", "Staff Sign In")}
                     </Badge>
-                    <h2 className="text-3xl font-semibold tracking-tight text-slate-950">
+                    <h2 className="text-3xl font-semibold tracking-tight text-slate-950 break-words leading-tight">
                       {tr(
                         language,
                         "تسجيل الدخول للمنصة الداخلية",
                         "Sign In To The Internal Platform"
                       )}
                     </h2>
-                    <p className="text-sm leading-7 text-slate-500">
+                    <p className="text-sm leading-7 text-slate-500 break-words">
                       {tr(
                         language,
                         "استخدم بريدك الوظيفي أو حساب الإدارة المخصص لك.",
@@ -1135,7 +1135,7 @@ export default function StaffPortalPage() {
                     }}
                   >
                     <div className="space-y-2">
-                      <label className="text-sm font-semibold text-slate-700">
+                      <label className="text-sm font-semibold text-slate-700 break-words">
                         {tr(language, "اسم المستخدم أو البريد الإلكتروني", "Username or Email")}
                       </label>
                       <Input
@@ -1146,12 +1146,12 @@ export default function StaffPortalPage() {
                         autoComplete="username"
                         dir="ltr"
                         disabled={busy}
-                        className="h-12 rounded-2xl border-slate-200 bg-slate-50 px-4 text-base shadow-none"
+                        className="h-12 rounded-2xl border-slate-200 bg-slate-50 px-4 text-base shadow-none min-w-0 break-words"
                       />
                     </div>
 
                     <div className="space-y-2">
-                      <label className="text-sm font-semibold text-slate-700">
+                      <label className="text-sm font-semibold text-slate-700 break-words">
                         {tr(language, "كلمة المرور", "Password")}
                       </label>
                       <div className="relative">
@@ -1162,7 +1162,7 @@ export default function StaffPortalPage() {
                           type={showPassword ? "text" : "password"}
                           autoComplete="current-password"
                           disabled={busy}
-                          className="h-12 rounded-2xl border-slate-200 bg-slate-50 px-4 pl-12 text-base shadow-none"
+                          className="h-12 rounded-2xl border-slate-200 bg-slate-50 px-4 pl-12 text-base shadow-none min-w-0 break-words"
                         />
                         <button
                           type="button"
@@ -1194,7 +1194,7 @@ export default function StaffPortalPage() {
                     <Button
                       type="submit"
                       disabled={!firebaseConfigured || busy}
-                      className="h-12 w-full rounded-2xl bg-slate-950 text-white hover:bg-slate-900"
+                      className="h-12 w-full rounded-2xl bg-slate-950 text-white hover:bg-slate-900 min-w-0"
                     >
                       <LockKeyhole className="h-4 w-4" />
                       {busy
@@ -1203,16 +1203,16 @@ export default function StaffPortalPage() {
                     </Button>
                   </form>
 
-                  <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-5">
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-5 min-w-0">
                     <button
                       type="button"
                       onClick={() => void handleForgotPassword()}
                       disabled={!firebaseConfigured || busy}
-                      className="text-sm font-semibold text-slate-600 transition hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="text-sm font-semibold text-slate-600 transition hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-50 break-words"
                     >
                       {tr(language, "نسيت كلمة المرور؟", "Forgot password?")}
                     </button>
-                    <span className="text-sm text-slate-400">
+                    <span className="text-sm text-slate-400 break-words">
                       {tr(
                         language,
                         "الدخول مخصص لحسابات الموظفين والإدارة فقط.",

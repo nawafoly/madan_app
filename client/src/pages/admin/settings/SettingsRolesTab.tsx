@@ -130,7 +130,7 @@ export default function SettingsRolesTab({
         }
       >
         {roles.length ? (
-          <div className="grid gap-4 xl:grid-cols-2">
+          <div className="grid gap-4 xl:grid-cols-2 min-w-0">
             {roles
               .slice()
               .sort((a, b) => a.key.localeCompare(b.key))
@@ -140,12 +140,12 @@ export default function SettingsRolesTab({
                 return (
                   <div
                     key={role.key}
-                    className="rounded-[24px] border border-slate-200/80 bg-slate-50/60 p-5 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.24)]"
+                    className="rounded-[24px] border border-slate-200/80 bg-slate-50/60 p-5 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.24)] min-w-0"
                   >
-                    <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div className="flex flex-wrap items-start justify-between gap-4 min-w-0">
                       <div className="space-y-3">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Badge variant="outline" className="rounded-full">
+                        <div className="flex flex-wrap items-center gap-2 min-w-0">
+                          <Badge variant="outline" className="rounded-full min-w-0">
                             {getRoleDisplayLabel(role.key) || role.key}
                           </Badge>
                           <Badge
@@ -160,59 +160,59 @@ export default function SettingsRolesTab({
                             {role.isActive ? "نشط" : "موقوف"}
                           </Badge>
                           {isSystemRole ? (
-                            <Badge className="rounded-full">أساسي</Badge>
+                            <Badge className="rounded-full min-w-0">أساسي</Badge>
                           ) : null}
                         </div>
 
                         <div>
-                          <div className="text-lg font-semibold tracking-tight text-slate-950">
+                          <div className="text-lg font-semibold tracking-tight text-slate-950 break-words">
                             {role.nameAr}
                           </div>
-                          <div className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-500">
+                          <div className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-500 break-words">
                             {role.nameEn || role.key}
                           </div>
                         </div>
 
-                        <p className="min-h-[48px] text-sm leading-7 text-slate-600">
+                        <p className="min-h-[48px] text-sm leading-7 text-slate-600 break-words">
                           {role.description ||
                             "لا يوجد وصف مخصص لهذا الدور بعد."}
                         </p>
                       </div>
 
-                      <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-center">
+                      <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-center min-w-0">
                         <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
                           الصلاحيات
                         </div>
-                        <div className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">
+                        <div className="mt-2 text-2xl font-semibold tracking-tight text-slate-950 break-words leading-tight">
                           {formatNumberEN(role.permissions?.length || 0)}
                         </div>
                       </div>
                     </div>
 
-                    <div className="mt-5 flex flex-wrap gap-2">
+                    <div className="mt-5 flex flex-wrap gap-2 min-w-0">
                       {role.permissions?.length ? (
                         role.permissions.slice(0, 8).map(permission => (
                           <Badge
                             key={permission}
                             variant="secondary"
-                            className="rounded-full"
+                            className="rounded-full min-w-0"
                           >
                             {permission}
                           </Badge>
                         ))
                       ) : (
-                        <span className="text-sm text-slate-500">
+                        <span className="text-sm text-slate-500 break-words">
                           لا توجد صلاحيات مرتبطة بهذا الدور.
                         </span>
                       )}
                       {(role.permissions?.length || 0) > 8 ? (
-                        <Badge variant="outline" className="rounded-full">
+                        <Badge variant="outline" className="rounded-full min-w-0">
                           +{(role.permissions?.length || 0) - 8}
                         </Badge>
                       ) : null}
                     </div>
 
-                    <div className="mt-5 flex flex-wrap gap-2">
+                    <div className="mt-5 flex flex-wrap gap-2 min-w-0">
                       <Button variant="outline" onClick={() => onEditRole(role)}>
                         <Pencil className="ml-2 h-4 w-4" /> تعديل
                       </Button>
@@ -235,7 +235,7 @@ export default function SettingsRolesTab({
               })}
           </div>
         ) : (
-          <div className="rounded-[22px] border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-500">
+          <div className="rounded-[22px] border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-500 min-w-0 break-words">
             لا توجد أدوار محفوظة بعد. ابدأ بإنشاء دور جديد لإكمال الهيكل.
           </div>
         )}
@@ -247,16 +247,16 @@ export default function SettingsRolesTab({
         title="دليل الصلاحيات"
         description="مرجع سريع للصلاحيات المتاحة داخل النظام كما يتم استخدامها حاليًا."
       >
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 min-w-0">
           {permissionDefinitions.map(permission => (
             <div
               key={permission.key}
-              className="rounded-[20px] border border-slate-200 bg-white p-4"
+              className="rounded-[20px] border border-slate-200 bg-white p-4 min-w-0"
             >
-              <div className="text-sm font-semibold text-slate-950">
+              <div className="text-sm font-semibold text-slate-950 break-words">
                 {permission.label}
               </div>
-              <div className="mt-2 text-xs leading-6 text-slate-500">
+              <div className="mt-2 text-xs leading-6 text-slate-500 break-words">
                 {permission.key}
               </div>
             </div>
@@ -286,27 +286,27 @@ function SettingsTabHero({
   panel: ReactNode;
 }) {
   return (
-    <Card className="overflow-hidden border-slate-200/80 bg-[radial-gradient(circle_at_top_right,rgba(242,183,5,0.14),transparent_25%),linear-gradient(135deg,#ffffff_0%,#f8fafc_48%,#eef4ff_100%)] shadow-[0_28px_75px_-44px_rgba(15,23,42,0.35)]">
+    <Card className="overflow-hidden border-slate-200/80 bg-[radial-gradient(circle_at_top_right,rgba(242,183,5,0.14),transparent_25%),linear-gradient(135deg,#ffffff_0%,#f8fafc_48%,#eef4ff_100%)] shadow-[0_28px_75px_-44px_rgba(15,23,42,0.35)] min-w-0">
       <CardContent className="px-6 py-6 sm:px-8 sm:py-8">
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(280px,0.85fr)] xl:items-end">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(280px,0.85fr)] xl:items-end min-w-0">
           <div className="space-y-5">
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge className="rounded-full border border-[#F2B705]/30 bg-[#F2B705]/12 px-3 py-1 text-xs font-semibold text-[#8d6700] shadow-none">
+            <div className="flex flex-wrap items-center gap-2 min-w-0">
+              <Badge className="rounded-full border border-[#F2B705]/30 bg-[#F2B705]/12 px-3 py-1 text-xs font-semibold text-[#8d6700] shadow-none min-w-0 break-words">
                 <Sparkles className="h-3.5 w-3.5" />
                 {eyebrow}
               </Badge>
             </div>
 
             <div className="space-y-3">
-              <h2 className="text-2xl font-semibold tracking-tight text-slate-950 sm:text-[2rem]">
+              <h2 className="text-2xl font-semibold tracking-tight text-slate-950 sm:text-[2rem] break-words leading-tight">
                 {title}
               </h2>
-              <p className="max-w-2xl text-sm leading-7 text-slate-600">
+              <p className="max-w-2xl text-sm leading-7 text-slate-600 break-words">
                 {description}
               </p>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-3 min-w-0">
               {stats.map(stat => (
                 <SettingsOverviewStat
                   key={stat.label}
@@ -342,25 +342,25 @@ function SettingsHeroPanel({
   }>;
 }) {
   return (
-    <div className="rounded-[28px] border border-[#1e3358] bg-[linear-gradient(180deg,rgba(8,18,47,0.98),rgba(2,6,23,0.96))] p-6 text-white shadow-[0_28px_60px_-42px_rgba(2,6,23,0.85)]">
-      <div className="flex items-start justify-between gap-4">
+    <div className="rounded-[28px] border border-[#1e3358] bg-[linear-gradient(180deg,rgba(8,18,47,0.98),rgba(2,6,23,0.96))] p-6 text-white shadow-[0_28px_60px_-42px_rgba(2,6,23,0.85)] min-w-0">
+      <div className="flex items-start justify-between gap-4 min-w-0">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/45">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/45 break-words">
             الجاهزية
           </p>
-          <h3 className="mt-3 text-xl font-semibold tracking-tight">{title}</h3>
+          <h3 className="mt-3 text-xl font-semibold tracking-tight break-words">{title}</h3>
         </div>
         <Badge
           variant="outline"
-          className="rounded-full border border-white/15 bg-white/5 px-3 py-1 text-[11px] font-semibold text-white/80 shadow-none"
+          className="rounded-full border border-white/15 bg-white/5 px-3 py-1 text-[11px] font-semibold text-white/80 shadow-none min-w-0 break-words"
         >
           {status}
         </Badge>
       </div>
 
-      <p className="mt-4 text-sm leading-7 text-white/60">{description}</p>
+      <p className="mt-4 text-sm leading-7 text-white/60 break-words">{description}</p>
 
-      <div className="mt-6 grid gap-3">
+      <div className="mt-6 grid gap-3 min-w-0">
         {metrics.map(metric => (
           <SettingsSidebarMetric
             key={metric.label}
@@ -386,19 +386,19 @@ function SettingsOverviewStat({
   helper: string;
 }) {
   return (
-    <div className="rounded-[22px] border border-slate-200/80 bg-white/90 p-4 shadow-[0_16px_34px_-30px_rgba(15,23,42,0.3)]">
-      <div className="flex items-center justify-between gap-3">
-        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+    <div className="rounded-[22px] border border-slate-200/80 bg-white/90 p-4 shadow-[0_16px_34px_-30px_rgba(15,23,42,0.3)] min-w-0">
+      <div className="flex items-center justify-between gap-3 min-w-0">
+        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 break-words">
           {label}
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-2 text-slate-700">
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-2 text-slate-700 min-w-0">
           <Icon className="h-4 w-4" />
         </div>
       </div>
-      <div className="mt-4 text-base font-semibold tracking-tight text-slate-950">
+      <div className="mt-4 text-base font-semibold tracking-tight text-slate-950 break-words">
         {value}
       </div>
-      <div className="mt-2 text-xs leading-6 text-slate-500">{helper}</div>
+      <div className="mt-2 text-xs leading-6 text-slate-500 break-words">{helper}</div>
     </div>
   );
 }
@@ -413,10 +413,10 @@ function SettingsSidebarMetric({
   helper: string;
 }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-      <div className="text-xs text-white/55">{label}</div>
-      <div className="mt-2 text-sm font-semibold text-white/92">{value}</div>
-      <div className="mt-1 text-xs text-white/50">{helper}</div>
+    <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 min-w-0">
+      <div className="text-xs text-white/55 break-words">{label}</div>
+      <div className="mt-2 text-sm font-semibold text-white/92 break-words">{value}</div>
+      <div className="mt-1 text-xs text-white/50 break-words">{helper}</div>
     </div>
   );
 }
@@ -452,19 +452,19 @@ function SettingsSectionCard({
       <CardHeader
         className={cn("border-b border-slate-100/80 pb-6", headerClassName)}
       >
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex items-start gap-4">
-            <div className="rounded-[22px] border border-slate-200 bg-slate-50 p-3 text-slate-700">
+        <div className="flex items-start justify-between gap-4 min-w-0">
+          <div className="flex items-start gap-4 min-w-0">
+            <div className="rounded-[22px] border border-slate-200 bg-slate-50 p-3 text-slate-700 min-w-0">
               <Icon className="h-5 w-5" />
             </div>
             <div className="space-y-2">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500 break-words">
                 {eyebrow}
               </div>
-              <CardTitle className="text-[1.1rem] font-semibold tracking-tight text-slate-950">
+              <CardTitle className="text-[1.1rem] font-semibold tracking-tight text-slate-950 break-words">
                 {title}
               </CardTitle>
-              <CardDescription className="max-w-2xl text-sm leading-7 text-slate-600">
+              <CardDescription className="max-w-2xl text-sm leading-7 text-slate-600 break-words">
                 {description}
               </CardDescription>
             </div>

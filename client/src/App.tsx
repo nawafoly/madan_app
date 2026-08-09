@@ -10,6 +10,7 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 
 import ScrollToTop from "@/components/ScrollToTop";
 import SiteLayout from "@/components/SiteLayout";
+import DashboardLayout from "./components/DashboardLayout";
 
 import Home from "./pages/Home";
 import ProjectsPage from "./pages/Projects";
@@ -142,15 +143,100 @@ function LoginRoute() {
   );
 }
 
+function HrWorkspaceRoutes() {
+  return (
+    <DashboardLayout area="hr">
+      <Switch>
+        <Route path="/hr/recruitment">
+          <RequireAdminPermission permission="recruitment.view" area="staff">
+            <RecruitmentApplicationsPage />
+          </RequireAdminPermission>
+        </Route>
+
+        <Route path="/hr/employees">
+          <RequireAdminPermission permission="employees.view" area="staff">
+            <EmployeesManagementPage />
+          </RequireAdminPermission>
+        </Route>
+
+        <Route path="/hr/create-staff">
+          <RequireAdminPermission permission="employees.manage" area="staff">
+            <CreateStaffAccount />
+          </RequireAdminPermission>
+        </Route>
+
+        <Route path="/hr/settings">
+          <RequireAdminPermission permission="settings.manage" area="staff">
+            <Settings area="staff" />
+          </RequireAdminPermission>
+        </Route>
+
+        <Route path="/hr/attendance">
+          <RequireAdminPermission
+            permission="attendance.view"
+            area="staff"
+            directPermission
+          >
+            <HrAttendancePage />
+          </RequireAdminPermission>
+        </Route>
+
+        <Route path="/hr/payroll">
+          <RequireAdminPermission
+            permission="payroll.view"
+            area="staff"
+            directPermission
+          >
+            <HrPayrollPage />
+          </RequireAdminPermission>
+        </Route>
+
+        <Route path="/hr/weekly-reports">
+          <RequireAdminPermission
+            permission="weekly_reports.manager_notes"
+            area="staff"
+          >
+            <HrWeeklyReportsPage />
+          </RequireAdminPermission>
+        </Route>
+
+        <Route path="/hr/daily-tasks">
+          <RequireAdminPermission
+            permission="weekly_reports.manager_notes"
+            area="staff"
+          >
+            <HrDailyTasksPage />
+          </RequireAdminPermission>
+        </Route>
+
+        <Route path="/hr">
+          <StaffPortalPage />
+        </Route>
+
+        <Route>
+          <Redirect to="/hr" />
+        </Route>
+      </Switch>
+    </DashboardLayout>
+  );
+}
+
 function Router() {
   useAndroidBackButton();
+  const [location] = useLocation();
+  const currentPath = normalizePathname(location);
+  const isHrWorkspacePath =
+    currentPath === "/hr" || currentPath.startsWith("/hr/");
 
   return (
     <PlatformBoundary>
       {/* ✅ Global scroll to top on route change */}
       <ScrollToTop />
 
-      <Switch>
+      {isHrWorkspacePath ? (
+        <HrWorkspaceRoutes />
+      ) : (
+        <Switch>
         {/* ================= Public (ثابت في كل صفحة) ================= */}
         <Route path="/">
           <SiteLayout>
@@ -283,59 +369,6 @@ function Router() {
           <RequireAdminPermission permission="messages.view">
             <MessagesManagement />
           </RequireAdminPermission>
-        </Route>
-
-        {/* ================= HR Workspace ================= */}
-        <Route path="/hr/recruitment">
-          <RequireAdminPermission permission="recruitment.view" area="staff">
-            <RecruitmentApplicationsPage />
-          </RequireAdminPermission>
-        </Route>
-
-        <Route path="/hr/employees">
-          <RequireAdminPermission permission="employees.view" area="staff">
-            <EmployeesManagementPage />
-          </RequireAdminPermission>
-        </Route>
-
-        <Route path="/hr/create-staff">
-          <RequireAdminPermission permission="employees.manage" area="staff">
-            <CreateStaffAccount />
-          </RequireAdminPermission>
-        </Route>
-
-        <Route path="/hr/settings">
-          <RequireAdminPermission permission="settings.manage" area="staff">
-            <Settings area="staff" />
-          </RequireAdminPermission>
-        </Route>
-
-        <Route path="/hr/attendance">
-          <RequireAdminPermission permission="attendance.view" area="staff" directPermission>
-            <HrAttendancePage />
-          </RequireAdminPermission>
-        </Route>
-
-        <Route path="/hr/payroll">
-          <RequireAdminPermission permission="payroll.view" area="staff" directPermission>
-            <HrPayrollPage />
-          </RequireAdminPermission>
-        </Route>
-
-        <Route path="/hr/weekly-reports">
-          <RequireAdminPermission permission="weekly_reports.manager_notes" area="staff">
-            <HrWeeklyReportsPage />
-          </RequireAdminPermission>
-        </Route>
-
-        <Route path="/hr/daily-tasks">
-          <RequireAdminPermission permission="weekly_reports.manager_notes" area="staff">
-            <HrDailyTasksPage />
-          </RequireAdminPermission>
-        </Route>
-
-        <Route path="/hr">
-          <StaffPortalPage />
         </Route>
 
         {/* ===== Legacy HR links ===== */}
@@ -487,7 +520,8 @@ function Router() {
             <NotFound />
           </SiteLayout>
         </Route>
-      </Switch>
+        </Switch>
+      )}
     </PlatformBoundary>
   );
 }

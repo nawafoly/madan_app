@@ -92,3 +92,7 @@ reports/account-audit/
 workers/.dev.vars
 workers/.dev.vars.*
 reports/hr-core-migration/
+
+# Maedin Android upload signing credentials
+android/maedin-upload-key.jks
+android/keystore.properties

@@ -1212,7 +1212,7 @@ export default function HrPayrollPage() {
 
   return (
     <DashboardLayout area="hr">
-      <main dir={languageDir(language)} className="mx-auto w-full max-w-[1700px] space-y-5 p-4 sm:p-6">
+      <main dir={languageDir(language)} className="mx-auto min-h-full w-full max-w-[1700px] space-y-5 bg-[#F8F9FA] p-4 dark:bg-background sm:p-6">
         <section className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="mb-1 text-sm font-bold text-[#9b2457]">{tr(language, "نظام الرواتب", "Payroll System")}</p>
