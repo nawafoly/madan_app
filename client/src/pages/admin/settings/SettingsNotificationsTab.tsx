@@ -370,6 +370,7 @@ function Toggle({
   return (
     <div
       dir="rtl"
+      data-notification-toggle={value ? "enabled" : "disabled"}
       className={cn(
         "flex items-start justify-between gap-3 rounded-[20px] border px-4 py-3.5 text-right transition-colors",
         value
