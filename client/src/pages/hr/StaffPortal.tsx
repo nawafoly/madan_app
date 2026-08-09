@@ -694,7 +694,7 @@ export default function StaffPortalPage() {
           )}
         >
           {hasInternalAccess ? (
-            <section className="flex min-h-[580px] flex-col justify-between overflow-hidden rounded-[32px] border border-white/10 bg-slate-950/72 p-6 text-white shadow-[0_34px_90px_-46px_rgba(2,6,23,0.95)] backdrop-blur-xl sm:p-8 lg:p-10">
+            <section className="hidden min-h-[580px] flex-col justify-between overflow-hidden rounded-[32px] border border-white/10 bg-slate-950/72 p-6 text-white shadow-[0_34px_90px_-46px_rgba(2,6,23,0.95)] backdrop-blur-xl sm:p-8 lg:flex lg:p-10">
             <div className="space-y-9">
               <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
@@ -888,11 +888,75 @@ export default function StaffPortalPage() {
                 </div>
               ) : hasInternalAccess ? (
                 <div className="space-y-6">
+                  <div className="rounded-[26px] bg-slate-950 p-4 text-white shadow-[0_20px_50px_-36px_rgba(2,6,23,0.9)] lg:hidden">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <span className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white/10 text-sm font-bold text-[#F2B705] ring-1 ring-white/15">
+                          {accountPhotoUrl ? (
+                            <img
+                              src={accountPhotoUrl}
+                              alt={tr(language, "صورة الحساب", "Account photo")}
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            accountInitials
+                          )}
+                        </span>
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-semibold">
+                            {accountDisplayName}
+                          </div>
+                          <div
+                            className="mt-1 truncate text-xs text-white/50"
+                            dir="ltr"
+                          >
+                            {accountEmail || "MAEDIN Staff Portal"}
+                          </div>
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={toggleLanguage}
+                        className="h-9 shrink-0 rounded-full border-white/10 bg-white/[0.06] px-3 text-white/75 hover:bg-white/[0.1] hover:text-white"
+                        aria-label={tr(language, "تبديل اللغة", "Toggle language")}
+                      >
+                        <Globe className="h-4 w-4" />
+                        {language === "ar" ? "EN" : "ع"}
+                      </Button>
+                    </div>
+
+                    <div className="mt-4 grid grid-cols-2 gap-2">
+                      <Link href="/hr/profile">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-10 w-full rounded-2xl border-[#F2B705]/25 bg-[#F2B705]/10 text-[#F2B705] hover:bg-[#F2B705]/15 hover:text-[#FFD24A]"
+                        >
+                          <UserRound className="h-4 w-4" />
+                          {tr(language, "البروفايل", "Profile")}
+                        </Button>
+                      </Link>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => void handleSignOut()}
+                        disabled={busy}
+                        className="h-10 w-full rounded-2xl border-white/10 bg-white/[0.06] text-white/75 hover:bg-white/[0.1] hover:text-white disabled:opacity-60"
+                      >
+                        <LogOut className="h-4 w-4" />
+                        {busy
+                          ? tr(language, "جاري الخروج", "Signing Out")
+                          : tr(language, "خروج", "Sign Out")}
+                      </Button>
+                    </div>
+                  </div>
+
                   <div className="space-y-3">
-                    <Badge className="rounded-full bg-emerald-50 px-4 py-1.5 text-emerald-700 shadow-none hover:bg-emerald-50">
-                      {tr(language, "تم تسجيل الدخول", "Signed In")}
-                    </Badge>
-                    <h2 className="text-3xl font-semibold tracking-tight text-slate-950">
+                    <h2 className="text-2xl font-semibold tracking-tight text-slate-950 sm:text-3xl">
                       {tr(
                         language,
                         "اختر وجهتك داخل المنصة",
