@@ -136,3 +136,23 @@ test("multiple distinct attendance questions are deduplicated without dropping i
   ].sort());
   assert.equal(new Set(calls.map(call => `${call.name}:${JSON.stringify(call.arguments)}`)).size, calls.length);
 });
+test("salary wording strips generic employee prefix", () => {
+  for (const [question, employeeName] of [
+    ["كم راتب موظف شهد", "شهد"],
+    ["كم راتب موظف نواف", "نواف"],
+    ["كم راتب موظف مصطفى عرفات", "مصطفى عرفات"],
+  ]) {
+    assert.deepEqual(resolveDeterministicToolCalls(question, {}), [
+      {
+        name: "getEmployeeCompensationByName",
+        arguments: { employeeName },
+      },
+    ]);
+  }
+});
+
+test("answer rules preserve requested attendance filters", async () => {
+  const source = await readFile(new URL("./service.js", import.meta.url), "utf8");
+  assert.match(source, /attendanceDays لديه يساوي 0/);
+  assert.match(source, /عدم إظهار القيم التي تساوي 0/);
+});
