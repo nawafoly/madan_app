@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 
 import { executeExtraHrAiTool } from "./extra-tools.js";
 import { getDefaultAiDate } from "./tools.js";
-import { getHelpReply, getSmallTalkReply, handleHrAiChat, resolveDeterministicToolCalls } from "./service.js";
+import { getHelpReply, getSmallTalkReply, handleHrAiChat, prepareToolResultsForAnswer, resolveDeterministicToolCalls } from "./service.js";
 
 const allReadPerms = [
   "hr_ai.view",
@@ -136,11 +136,15 @@ test("multiple distinct attendance questions are deduplicated without dropping i
   ].sort());
   assert.equal(new Set(calls.map(call => `${call.name}:${JSON.stringify(call.arguments)}`)).size, calls.length);
 });
-test("salary wording strips generic employee prefix", () => {
+
+test("salary wording strips generic employee prefix and common taa-marbuta spelling variants", () => {
   for (const [question, employeeName] of [
     ["كم راتب موظف شهد", "شهد"],
     ["كم راتب موظف نواف", "نواف"],
     ["كم راتب موظف مصطفى عرفات", "مصطفى عرفات"],
+    ["كم راتب الموظفة شهد", "شهد"],
+    ["كم راتب الموظفه شهد", "شهد"],
+    ["كم راتب موظفه نواف", "نواف"],
   ]) {
     assert.deepEqual(resolveDeterministicToolCalls(question, {}), [
       {
@@ -151,8 +155,50 @@ test("salary wording strips generic employee prefix", () => {
   }
 });
 
-test("answer rules preserve requested attendance filters", async () => {
-  const source = await readFile(new URL("./service.js", import.meta.url), "utf8");
-  assert.match(source, /attendanceDays لديه يساوي 0/);
-  assert.match(source, /عدم إظهار القيم التي تساوي 0/);
+test("attendance summary filters are applied to trusted tool JSON before model answer", () => {
+  const toolResults = [
+    {
+      tool: "getAttendanceSummary",
+      ok: true,
+      data: {
+        employeeCount: 2,
+        summaries: [
+          {
+            employeeId: "emp-1",
+            name: "أحمد",
+            attendanceDays: 9,
+            completeDays: 9,
+            incompleteDays: 0,
+            lateOccurrences: 0,
+            lateMinutes: 0,
+            absentDays: 1,
+          },
+          {
+            employeeId: "emp-2",
+            name: "سالم",
+            attendanceDays: 0,
+            completeDays: 0,
+            incompleteDays: 0,
+            lateOccurrences: 0,
+            lateMinutes: 0,
+            absentDays: 8,
+          },
+        ],
+      },
+    },
+  ];
+
+  const prepared = prepareToolResultsForAnswer(
+    "ملخص الحضور لهذا الشهر اللي لهم حضور فقط واي قيمة 0 لا تجيبها",
+    toolResults
+  );
+
+  assert.equal(prepared[0].data.employeeCount, 1);
+  assert.equal(prepared[0].data.summaries[0].name, "أحمد");
+  assert.equal(prepared[0].data.summaries[0].attendanceDays, 9);
+  assert.equal(prepared[0].data.summaries[0].completeDays, 9);
+  assert.equal(prepared[0].data.summaries[0].absentDays, 1);
+  assert.equal(Object.hasOwn(prepared[0].data.summaries[0], "incompleteDays"), false);
+  assert.equal(Object.hasOwn(prepared[0].data.summaries[0], "lateOccurrences"), false);
+  assert.equal(Object.hasOwn(prepared[0].data.summaries[0], "lateMinutes"), false);
 });
