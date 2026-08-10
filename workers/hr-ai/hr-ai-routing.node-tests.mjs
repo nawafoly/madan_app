@@ -1,0 +1,204 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+
+import { executeExtraHrAiTool } from "./extra-tools.js";
+import { getDefaultAiDate } from "./tools.js";
+import { getHelpReply, getSmallTalkReply, handleHrAiChat, prepareToolResultsForAnswer, resolveDeterministicToolCalls } from "./service.js";
+
+const allReadPerms = [
+  "hr_ai.view",
+  "employees.view",
+  "attendance.view",
+  "leave_requests.view",
+  "absences.view",
+  "payroll.view",
+];
+
+test("greeting never routes to attendance diagnostics", async () => {
+  assert.match(getSmallTalkReply("السلام علكيم", "ar"), /وعليكم السلام/);
+  assert.deepEqual(resolveDeterministicToolCalls("السلام عليكم", {}), []);
+
+  let aiCalls = 0;
+  const result = await handleHrAiChat(
+    { messages: [{ role: "user", content: "السلام علكيم" }], language: "ar" },
+    {
+      env: {
+        AI: { run: async () => { aiCalls += 1; throw new Error("unexpected_ai_call"); } },
+        HR_DB: null,
+        ATTENDANCE_DB: null,
+      },
+      requester: { uid: "admin-1", permissions: allReadPerms },
+    }
+  );
+
+  assert.equal(result.ok, true);
+  assert.equal(aiCalls, 0);
+  assert.deepEqual(result.toolResults, []);
+  assert.doesNotMatch(result.answer, /pending|لا توجد بيانات/);
+});
+
+test("who checked in today routes to today's attendance records", () => {
+  const calls = resolveDeterministicToolCalls("مين بصم اليوم؟", {});
+  assert.deepEqual(calls, [
+    { name: "getAttendanceForDate", arguments: { date: getDefaultAiDate() } },
+  ]);
+});
+
+test("today actions wording routes to attendance records", () => {
+  const calls = resolveDeterministicToolCalls("ايش الاجرائات اللي صارت اليوم", {});
+  assert.deepEqual(calls, [
+    { name: "getAttendanceForDate", arguments: { date: getDefaultAiDate() } },
+  ]);
+});
+
+test("attendance issues today still routes to diagnostics", () => {
+  const calls = resolveDeterministicToolCalls("مشاكل الحضور اليوم", {});
+  assert.deepEqual(calls, [
+    { name: "getHrSystemDiagnostics", arguments: { date: getDefaultAiDate() } },
+  ]);
+});
+
+test("unknown chat no longer silently falls back to diagnostics", () => {
+  assert.deepEqual(resolveDeterministicToolCalls("وش الأخبار؟", {}), []);
+});
+
+test("present employees wording routes to today's attendance records", () => {
+  assert.deepEqual(resolveDeterministicToolCalls("الموظفين الحاضرين", {}), [
+    { name: "getAttendanceForDate", arguments: { date: getDefaultAiDate() } },
+  ]);
+});
+
+test("salary by employee name routes to configured compensation tool", () => {
+  assert.deepEqual(resolveDeterministicToolCalls("كم راتب نواف؟", {}), [
+    { name: "getEmployeeCompensationByName", arguments: { employeeName: "نواف" } },
+  ]);
+});
+
+test("salary tool requires payroll.view", async () => {
+  await assert.rejects(
+    executeExtraHrAiTool(
+      "getEmployeeCompensationByName",
+      { employeeName: "نواف" },
+      { hrDb: {}, attendanceDb: {}, permissions: ["employees.view"] }
+    ),
+    /payroll_view_forbidden/
+  );
+});
+
+test("attendance branch/location question routes to configured locations tool", () => {
+  assert.deepEqual(resolveDeterministicToolCalls("كم فرع بصمه عندنا و كل فرع اذكر الاشخاص اللي فيهم", {}), [
+    { name: "getAttendanceLocationsForDate", arguments: { date: getDefaultAiDate() } },
+  ]);
+});
+
+test("capabilities/help question is answered without database access", async () => {
+  assert.match(getHelpReply("اعطيني كلمات البحث اللي تعرفها", "ar"), /مين بصم اليوم/);
+
+  let aiCalls = 0;
+  const result = await handleHrAiChat(
+    { messages: [{ role: "user", content: "اعطيني كلمات البحث اللي تعرفها" }], language: "ar" },
+    {
+      env: {
+        AI: { run: async () => { aiCalls += 1; throw new Error("unexpected_ai_call"); } },
+        HR_DB: null,
+        ATTENDANCE_DB: null,
+      },
+      requester: { uid: "admin-1", permissions: allReadPerms },
+    }
+  );
+
+  assert.equal(result.ok, true);
+  assert.equal(aiCalls, 0);
+  assert.deepEqual(result.toolResults, []);
+  assert.match(result.answer, /الرواتب/);
+});
+
+test("extra HR AI tools remain SELECT-only", async () => {
+  const source = await readFile(new URL("./extra-tools.js", import.meta.url), "utf8");
+  assert.equal(/\b(?:INSERT|UPDATE|DELETE|REPLACE|DROP|ALTER|CREATE)\b/i.test(source), false);
+  assert.equal(/executeSQL|runArbitraryQuery/i.test(source), false);
+});
+
+test("multiple attendance intents in one message route to all required tools", () => {
+  assert.deepEqual(resolveDeterministicToolCalls("مين بدون انصراف؟ مين متأخر؟", {}), [
+    { name: "getMissingCheckouts", arguments: { date: getDefaultAiDate() } },
+    { name: "getLateEmployees", arguments: { date: getDefaultAiDate() } },
+  ]);
+});
+
+test("multiple distinct attendance questions are deduplicated without dropping intents", () => {
+  const calls = resolveDeterministicToolCalls("مين بصم اليوم؟ مين متأخر؟ مين بدون انصراف؟", {});
+  assert.deepEqual(calls.map(call => call.name).sort(), [
+    "getAttendanceForDate",
+    "getLateEmployees",
+    "getMissingCheckouts",
+  ].sort());
+  assert.equal(new Set(calls.map(call => `${call.name}:${JSON.stringify(call.arguments)}`)).size, calls.length);
+});
+
+test("salary wording strips generic employee prefix and common taa-marbuta spelling variants", () => {
+  for (const [question, employeeName] of [
+    ["كم راتب موظف شهد", "شهد"],
+    ["كم راتب موظف نواف", "نواف"],
+    ["كم راتب موظف مصطفى عرفات", "مصطفى عرفات"],
+    ["كم راتب الموظفة شهد", "شهد"],
+    ["كم راتب الموظفه شهد", "شهد"],
+    ["كم راتب موظفه نواف", "نواف"],
+  ]) {
+    assert.deepEqual(resolveDeterministicToolCalls(question, {}), [
+      {
+        name: "getEmployeeCompensationByName",
+        arguments: { employeeName },
+      },
+    ]);
+  }
+});
+
+test("attendance summary filters are applied to trusted tool JSON before model answer", () => {
+  const toolResults = [
+    {
+      tool: "getAttendanceSummary",
+      ok: true,
+      data: {
+        employeeCount: 2,
+        summaries: [
+          {
+            employeeId: "emp-1",
+            name: "أحمد",
+            attendanceDays: 9,
+            completeDays: 9,
+            incompleteDays: 0,
+            lateOccurrences: 0,
+            lateMinutes: 0,
+            absentDays: 1,
+          },
+          {
+            employeeId: "emp-2",
+            name: "سالم",
+            attendanceDays: 0,
+            completeDays: 0,
+            incompleteDays: 0,
+            lateOccurrences: 0,
+            lateMinutes: 0,
+            absentDays: 8,
+          },
+        ],
+      },
+    },
+  ];
+
+  const prepared = prepareToolResultsForAnswer(
+    "ملخص الحضور لهذا الشهر اللي لهم حضور فقط واي قيمة 0 لا تجيبها",
+    toolResults
+  );
+
+  assert.equal(prepared[0].data.employeeCount, 1);
+  assert.equal(prepared[0].data.summaries[0].name, "أحمد");
+  assert.equal(prepared[0].data.summaries[0].attendanceDays, 9);
+  assert.equal(prepared[0].data.summaries[0].completeDays, 9);
+  assert.equal(prepared[0].data.summaries[0].absentDays, 1);
+  assert.equal(Object.hasOwn(prepared[0].data.summaries[0], "incompleteDays"), false);
+  assert.equal(Object.hasOwn(prepared[0].data.summaries[0], "lateOccurrences"), false);
+  assert.equal(Object.hasOwn(prepared[0].data.summaries[0], "lateMinutes"), false);
+});

@@ -20,6 +20,7 @@ type StaffWorkspaceHeaderProps = {
   showBrand?: boolean;
   showNotifications?: boolean;
   onLogout?: () => void | Promise<void>;
+  extraActions?: ReactNode;
 };
 
 export function StaffWorkspaceHeader({
@@ -32,6 +33,7 @@ export function StaffWorkspaceHeader({
   showBrand = true,
   showNotifications = true,
   onLogout,
+  extraActions,
 }: StaffWorkspaceHeaderProps) {
   const { language, toggleLanguage } = useLanguage();
   const languageToggleLabel = language === "ar" ? "English" : "العربية";
@@ -39,6 +41,8 @@ export function StaffWorkspaceHeader({
 
   const actionButtons = (
     <div className="flex shrink-0 items-center justify-end gap-1.5 sm:gap-2">
+      {extraActions}
+
       {showNotifications ? (
         <NotificationBell triggerClassName="h-10 w-10 rounded-full border border-slate-200 bg-white p-0 text-slate-700 shadow-none hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800 [&_svg]:text-current" />
       ) : null}
