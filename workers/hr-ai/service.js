@@ -34,10 +34,39 @@ export function getSmallTalkReply(question, language = "ar") {
   return "";
 }
 
+export function getHelpReply(question, language = "ar") {
+  const q = normalizeQuestion(question);
+  const asksForHelp = /(?:كلمات.*(?:البحث|تعرفها)|وش.*(?:تعرف|تقدر).*تسوي|ايش.*(?:تعرف|تقدر).*تسوي|ماذا.*تستطيع|كيف.*استخدمك|وش اسالك|ايش اسالك|help|what can you do)/i.test(q);
+  if (!asksForHelp) return "";
+  if (language === "en") {
+    return "You can ask me about: who checked in today, today's attendance actions, missing checkouts, late employees, attendance issues, leave conflicts, employee details, work schedules, monthly attendance summaries, and payroll by employee name if you have payroll permission. I am read-only and cannot change records.";
+  }
+  return "تقدر تسألني مثلًا: مين بصم اليوم؟ ايش الإجراءات اللي صارت اليوم؟ مين بدون انصراف؟ مين متأخر؟ مشاكل الحضور اليوم، تعارضات الإجازات والحضور، بيانات موظف، جدول دوام موظف، ملخص الحضور لهذا الشهر، أو كم راتب موظف بالاسم إذا عندك صلاحية الرواتب. أنا للقراءة والتحليل فقط ولا أعدّل السجلات.";
+}
+
+function extractPayrollEmployeeName(question) {
+  const q = normalizeQuestion(question).replace(/[؟?!.،,]+$/g, "").trim();
+  const match = q.match(/(?:كم\s+)?(?:راتب|الراتب)\s+(?:حق\s+)?(.+)$/i);
+  if (!match) return "";
+  return String(match[1] || "")
+    .replace(/^(?:الموظف|الموظفة)\s+/i, "")
+    .trim()
+    .slice(0, 120);
+}
+
+function isAttendanceLocationQuestion(question) {
+  const q = normalizeQuestion(question);
+  return /(?:فرع|فروع|موقع|مواقع).*(?:بصم|بصمة|الحضور|الدوام)|(?:بصم|بصمة).*(?:فرع|فروع|موقع|مواقع)/i.test(q);
+}
+
 export function resolveDeterministicToolCalls(question, context) {
   const q = normalizeQuestion(question);
   const date = getDefaultAiDate();
 
+  const payrollEmployeeName = extractPayrollEmployeeName(question);
+  if (payrollEmployeeName) {
+    return [{ name: "searchEmployees", arguments: { query: payrollEmployeeName, limit: 5 } }];
+  }
   if (/(ملخص.*الشهر|هذا الشهر|الشهر الحالي|monthly summary)/i.test(q)) {
     return [{ name: "getAttendanceSummary", arguments: { dateFrom: `${date.slice(0, 7)}-01`, dateTo: date } }];
   }
@@ -59,8 +88,10 @@ export function resolveDeterministicToolCalls(question, context) {
 
   const asksTodayAttendance =
     /(?:مين|من)\s+.*(?:بصم|حضر|داوم|سجل.*(?:دخول|حضور|انصراف))/i.test(q) ||
+    /(?:الموظفين|الموظفون)\s+(?:الحاضرين|الحاضرون|اللي\s+(?:حضروا|بصموا))/i.test(q) ||
     /(?:بصمات?|الحضور|الدوام|الحركات|الاجراءات|الإجراءات|الاجرائات|اجراءات).*اليوم/i.test(q) ||
-    /اليوم.*(?:بصم|حضر|داوم|حضور|انصراف|حركات|اجراءات|إجراءات|الاجرائات)/i.test(q);
+    /اليوم.*(?:بصم|حضر|داوم|حضور|انصراف|حركات|اجراءات|إجراءات|الاجرائات)/i.test(q) ||
+    isAttendanceLocationQuestion(q);
   if (asksTodayAttendance) {
     return [{ name: "getAttendanceForDate", arguments: { date } }];
   }
@@ -73,8 +104,8 @@ export function resolveDeterministicToolCalls(question, context) {
 
 function clarificationMessage(language) {
   return language === "en"
-    ? "I couldn't determine which HR data you want. Try: who checked in today, late employees today, missing checkouts, or attendance issues today."
-    : "ما قدرت أحدد بيانات الموارد البشرية المطلوبة بدقة. جرّب مثلًا: مين بصم اليوم؟ المتأخرون اليوم، الموظفون بدون انصراف، أو مشاكل الحضور اليوم.";
+    ? "I couldn't determine which HR data you want. Ask what I can do, or try: who checked in today, late employees today, missing checkouts, attendance issues today, or an employee's payroll."
+    : "ما قدرت أحدد بيانات الموارد البشرية المطلوبة بدقة. اسألني: وش تقدر تسوي؟ أو جرّب: مين بصم اليوم؟ المتأخرون اليوم، الموظفون بدون انصراف، مشاكل الحضور اليوم، أو كم راتب موظف بالاسم.";
 }
 
 function buildPlannerPrompt(context) {
@@ -82,9 +113,12 @@ function buildPlannerPrompt(context) {
   return `أنت مخطط أدوات لمساعد موارد بشرية Read-Only داخل نظام معدن.\n\nقواعد إلزامية:\n- تاريخ اليوم الحالي في Asia/Riyadh هو ${today}. أي عبارة \"اليوم\" تعني هذا التاريخ تحديدًا.\n- لا تجب من معلوماتك العامة عن بيانات الموظفين. يجب استخدام Tool للحصول على أي حقيقة تشغيلية.\n- لا توجد أي أدوات كتابة. لا تطلب SQL ولا تحاول تعديل أي قاعدة بيانات.\n- استخدم أقل عدد من الأدوات والبيانات اللازمة للسؤال.\n- التواريخ بصيغة YYYY-MM-DD وتوقيت العمل Asia/Riyadh.\n- \"مين بصم اليوم؟\" أو \"مين حضر اليوم؟\" = getAttendanceForDate.\n- \"مشاكل الحضور اليوم\" = getHrSystemDiagnostics.\n- إذا السؤال عن موظف بالاسم ولا تعرف ID، استخدم searchEmployees أولاً.\n- إذا احتجت بيانات رواتب استخدم getEmployeePayrollSummary فقط، وسيُطبق السيرفر صلاحية payroll.view.\n- لا تخمن قواعد تأخير أو غياب غير موجودة.\n${context?.employeeId ? `سياق الصفحة الحالي employeeId=${context.employeeId}.` : ""}`;
 }
 
-function buildAnswerPrompt(language) {
+function buildAnswerPrompt(language, question) {
   const responseLanguage = language === "en" ? "Answer in clear English." : "أجب بالعربية الواضحة.";
-  return `أنت "مساعد معدن AI" داخل منصة الموارد البشرية. ${responseLanguage}\nالقواعد:\n- اعتمد حصريًا على JSON المرفق من أدوات النظام. لا تخترع أسماء أو أرقام أو حالات.\n- إذا النتيجة فارغة قل بوضوح أنه لا توجد بيانات/حالات مطابقة.\n- اذكر أن حالة اليوم بدون بصمة هي pending إذا كانت الأداة تنص على ذلك، ولا تسمها غيابًا.\n- لا تطلب أو تعرض secrets أو tokens أو credentials.\n- لا تقترح أنك نفذت أي تعديل؛ V1 قراءة وتحليل فقط.\n- اجعل الإجابة مختصرة ومنظمة، وعدّد الحالات عند وجودها.`;
+  const locationInstruction = isAttendanceLocationQuestion(question)
+    ? "\n- السؤال عن فروع/مواقع البصمة: استخدم zoneName في سجلات اليوم، اجمع المواقع الفريدة الظاهرة في البصمات، واذكر الأشخاص الفريدين في كل موقع. لا تدّع أنها كل المواقع المهيأة إذا لم توفر الأداة قائمة الإعدادات؛ قل بوضوح إنها المواقع الظاهرة في بصمات التاريخ المعروض."
+    : "";
+  return `أنت \"مساعد معدن AI\" داخل منصة الموارد البشرية. ${responseLanguage}\nالقواعد:\n- اعتمد حصريًا على JSON المرفق من أدوات النظام. لا تخترع أسماء أو أرقام أو حالات.\n- إذا النتيجة فارغة قل بوضوح أنه لا توجد بيانات/حالات مطابقة.\n- اذكر أن حالة اليوم بدون بصمة هي pending فقط إذا كانت الأداة المعروضة تتعلق بالغياب وتنص على ذلك؛ لا تضف هذه العبارة لأسئلة أخرى.\n- إذا كانت نتيجة البحث عن اسم موظف فيها أكثر من تطابق، اعرض الأسماء واطلب تحديد الموظف بدل التخمين.\n- لا تطلب أو تعرض secrets أو tokens أو credentials.\n- لا تقترح أنك نفذت أي تعديل؛ V1 قراءة وتحليل فقط.\n- اجعل الإجابة مختصرة ومنظمة، وعدّد الحالات عند وجودها.${locationInstruction}`;
 }
 
 async function executeCalls(calls, ctx, allowedNames, toolResults, executedSignatures) {
@@ -120,9 +154,14 @@ export async function handleHrAiChat(body, ctx) {
   const context = safeContext(body?.context);
   if (!question) return { ok: false, status: 400, message: "missing_ai_question" };
   if (isWriteIntent(question)) return { ok: true, status: 200, answer: readOnlyBlockedMessage(language), toolResults: [], blockedAction: true };
+
   const smallTalkAnswer = getSmallTalkReply(question, language);
   if (smallTalkAnswer) {
     return { ok: true, status: 200, answer: smallTalkAnswer, toolResults: [], blockedAction: false };
+  }
+  const helpAnswer = getHelpReply(question, language);
+  if (helpAnswer) {
+    return { ok: true, status: 200, answer: helpAnswer, toolResults: [], blockedAction: false };
   }
 
   const provider = createAiProvider(ctx.env);
@@ -144,9 +183,26 @@ export async function handleHrAiChat(body, ctx) {
   }
   await executeCalls(calls, ctx, allowedNames, toolResults, executedSignatures);
 
+  const payrollEmployeeName = extractPayrollEmployeeName(question);
+  let handledPayrollFollowUp = false;
+  if (payrollEmployeeName && toolResults.length < MAX_TOOL_CALLS) {
+    const searchResult = toolResults.find(item => item.tool === "searchEmployees" && item.ok)?.data;
+    const employees = Array.isArray(searchResult?.employees) ? searchResult.employees : [];
+    if (employees.length === 1) {
+      handledPayrollFollowUp = true;
+      await executeCalls(
+        [{ name: "getEmployeePayrollSummary", arguments: { employeeId: employees[0].id, payrollMonth: getDefaultAiDate().slice(0, 7) } }],
+        ctx,
+        allowedNames,
+        toolResults,
+        executedSignatures
+      );
+    }
+  }
+
   // A second bounded planning round enables safe name -> employeeId -> detail queries
   // without exposing SQL or database handles to the model.
-  if (toolResults.length < MAX_TOOL_CALLS && toolResults.some(item => item.tool === "searchEmployees" && item.ok)) {
+  if (!handledPayrollFollowUp && toolResults.length < MAX_TOOL_CALLS && toolResults.some(item => item.tool === "searchEmployees" && item.ok)) {
     try {
       const followUpMessages = [
         ...messages,
@@ -161,7 +217,7 @@ export async function handleHrAiChat(body, ctx) {
 
   if (!toolResults.length) return { ok: false, status: 502, message: "ai_no_safe_tool_result" };
   try {
-    const answer = await provider.answer(messages, toolResults, buildAnswerPrompt(language));
+    const answer = await provider.answer(messages, toolResults, buildAnswerPrompt(language, question));
     return { ok: true, status: 200, answer, toolResults: toolResults.map(item => ({ tool: item.tool, ok: item.ok })), blockedAction: false };
   } catch {
     return { ok: false, status: 502, message: "ai_provider_failed" };
