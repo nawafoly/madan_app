@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { getDefaultAiDate } from "./tools.js";
-import { getSmallTalkReply, handleHrAiChat, resolveDeterministicToolCalls } from "./service.js";
+import { getHelpReply, getSmallTalkReply, handleHrAiChat, resolveDeterministicToolCalls } from "./service.js";
 
 const allReadPerms = [
   "hr_ai.view",
@@ -59,4 +59,44 @@ test("attendance issues today still routes to diagnostics", () => {
 
 test("unknown chat no longer silently falls back to diagnostics", () => {
   assert.deepEqual(resolveDeterministicToolCalls("وش الأخبار؟", {}), []);
+});
+
+test("present employees wording routes to today's attendance records", () => {
+  assert.deepEqual(resolveDeterministicToolCalls("الموظفين الحاضرين", {}), [
+    { name: "getAttendanceForDate", arguments: { date: getDefaultAiDate() } },
+  ]);
+});
+
+test("payroll by employee name starts with safe employee search", () => {
+  assert.deepEqual(resolveDeterministicToolCalls("كم راتب نواف؟", {}), [
+    { name: "searchEmployees", arguments: { query: "نواف", limit: 5 } },
+  ]);
+});
+
+test("attendance branch/location question routes to today's attendance records", () => {
+  assert.deepEqual(resolveDeterministicToolCalls("كم فرع بصمه عندنا و كل فرع اذكر الاشخاص اللي فيهم", {}), [
+    { name: "getAttendanceForDate", arguments: { date: getDefaultAiDate() } },
+  ]);
+});
+
+test("capabilities/help question is answered without database access", async () => {
+  assert.match(getHelpReply("اعطيني كلمات البحث اللي تعرفها", "ar"), /مين بصم اليوم/);
+
+  let aiCalls = 0;
+  const result = await handleHrAiChat(
+    { messages: [{ role: "user", content: "اعطيني كلمات البحث اللي تعرفها" }], language: "ar" },
+    {
+      env: {
+        AI: { run: async () => { aiCalls += 1; throw new Error("unexpected_ai_call"); } },
+        HR_DB: null,
+        ATTENDANCE_DB: null,
+      },
+      requester: { uid: "admin-1", permissions: allReadPerms },
+    }
+  );
+
+  assert.equal(result.ok, true);
+  assert.equal(aiCalls, 0);
+  assert.deepEqual(result.toolResults, []);
+  assert.match(result.answer, /الرواتب/);
 });
