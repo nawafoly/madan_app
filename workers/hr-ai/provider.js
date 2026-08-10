@@ -7,6 +7,25 @@ function extractResponseText(result) {
   return "";
 }
 
+export function humanizeMinuteDurationsForModel(value) {
+  if (Array.isArray(value)) return value.map(humanizeMinuteDurationsForModel);
+  if (!value || typeof value !== "object") return value;
+
+  const output = {};
+  for (const [key, entryValue] of Object.entries(value)) {
+    if (key === "lateMinutes" && typeof entryValue === "number" && Number.isFinite(entryValue)) {
+      const totalMinutes = Math.max(0, Math.round(entryValue));
+      output.lateDuration = {
+        hours: Math.floor(totalMinutes / 60),
+        minutes: totalMinutes % 60,
+      };
+      continue;
+    }
+    output[key] = humanizeMinuteDurationsForModel(entryValue);
+  }
+  return output;
+}
+
 export class WorkersAiProvider {
   constructor(aiBinding, model) {
     if (!aiBinding?.run) throw new Error("workers_ai_binding_missing");
@@ -26,11 +45,12 @@ export class WorkersAiProvider {
   }
 
   async answer(messages, toolResults, systemPrompt) {
+    const modelSafeToolResults = humanizeMinuteDurationsForModel(toolResults);
     const result = await this.ai.run(this.model, {
       messages: [
         { role: "system", content: systemPrompt },
         ...messages,
-        { role: "user", content: `نتائج أدوات النظام الموثوقة بصيغة JSON:\n${JSON.stringify(toolResults)}` },
+        { role: "user", content: `نتائج أدوات النظام الموثوقة بصيغة JSON:\n${JSON.stringify(modelSafeToolResults)}` },
       ],
       max_tokens: 1400,
       temperature: 0.2,
