@@ -144,6 +144,18 @@ function LoginRoute() {
 }
 
 function HrWorkspaceRoutes() {
+  const { loading, user } = useAuth();
+  const [location] = useLocation();
+  const currentPath = normalizePathname(location);
+
+  if (!loading && !user) {
+    if (currentPath !== "/hr") {
+      return <Redirect to="/hr" />;
+    }
+
+    return <StaffPortalPage />;
+  }
+
   return (
     <DashboardLayout area="hr">
       <Switch>
