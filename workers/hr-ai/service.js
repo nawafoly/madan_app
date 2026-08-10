@@ -51,7 +51,7 @@ function extractPayrollEmployeeName(question) {
   const match = q.match(/(?:كم\s+)?(?:راتب|الراتب)\s+(?:حق\s+)?([^؟?!.,،]+?)(?=(?:\s+(?:و|ومين|وايش|وكم)\s+)|$)/i);
   if (!match) return "";
   return String(match[1] || "")
-    .replace(/^(?:الموظف|الموظفة|موظف|موظفة)\s+/i, "")
+    .replace(/^(?:الموظف|الموظفة|الموظفه|موظف|موظفة|موظفه)\s+/i, "")
     .trim()
     .slice(0, 120);
 }
@@ -65,6 +65,53 @@ function pushUniqueCall(calls, name, args) {
   const signature = `${name}:${JSON.stringify(args)}`;
   if (calls.some(call => `${call.name}:${JSON.stringify(call.arguments)}` === signature)) return;
   calls.push({ name, arguments: args });
+}
+
+function wantsAttendanceOnly(question) {
+  const q = normalizeQuestion(question);
+  return /(?:اللي\s+لهم|لهم|عندهم)\s+حضور\s+فقط|حضور\s+فقط|with\s+attendance\s+only/i.test(q);
+}
+
+function wantsZeroValuesHidden(question) {
+  const q = normalizeQuestion(question);
+  return /(?:اي|أي).*قيمة.*(?:0|صفر).*(?:لا|ما).*تجيب|(?:لا|ما).*تجيب.*(?:قيمة|قيم|القيم).*(?:0|صفر)|بدون.*(?:قيمة|قيم|القيم).*(?:0|صفر)|omit\s+zero|hide\s+zero/i.test(q);
+}
+
+function omitNumericZeros(value) {
+  if (Array.isArray(value)) return value.map(omitNumericZeros);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([, entryValue]) => !(typeof entryValue === "number" && entryValue === 0))
+      .map(([key, entryValue]) => [key, omitNumericZeros(entryValue)])
+  );
+}
+
+export function prepareToolResultsForAnswer(question, toolResults) {
+  const attendanceOnly = wantsAttendanceOnly(question);
+  const hideZeros = wantsZeroValuesHidden(question);
+  if (!attendanceOnly && !hideZeros) return toolResults;
+
+  return toolResults.map(item => {
+    if (item?.tool !== "getAttendanceSummary" || !item.ok || !Array.isArray(item.data?.summaries)) {
+      return item;
+    }
+    let summaries = item.data.summaries;
+    if (attendanceOnly) {
+      summaries = summaries.filter(summary => Number(summary?.attendanceDays || 0) > 0);
+    }
+    if (hideZeros) {
+      summaries = summaries.map(summary => omitNumericZeros(summary));
+    }
+    return {
+      ...item,
+      data: {
+        ...item.data,
+        employeeCount: summaries.length,
+        summaries,
+      },
+    };
+  });
 }
 
 export function resolveDeterministicToolCalls(question, context) {
@@ -133,7 +180,7 @@ function buildAnswerPrompt(language, question) {
   const payrollInstruction = extractPayrollEmployeeName(question)
     ? "\n- السؤال عن الراتب: إذا ظهر تطابق واحد فاذكر الراتب الأساسي والبدلات المتوفرة كل حقل باسمه، ولا تحسب صافيًا أو إجماليًا غير موجود في الأداة. إذا ظهر أكثر من تطابق فاطلب تحديد الموظف."
     : "";
-  return `أنت \"مساعد معدن AI\" داخل منصة الموارد البشرية. ${responseLanguage}\nالقواعد:\n- اعتمد حصريًا على JSON المرفق من أدوات النظام. لا تخترع أسماء أو أرقام أو حالات.\n- إذا رسالة المستخدم تحتوي أكثر من سؤال أو طلب، أجب عن كل جزء بشكل مستقل وواضح ولا تسقط أي جزء لديه نتيجة أداة.\n- إذا طلب المستخدم في ملخص الحضور "اللي لهم حضور فقط" أو معنى مماثل، استبعد أي موظف attendanceDays لديه يساوي 0.\n- إذا طلب المستخدم عدم إظهار القيم التي تساوي 0، فلا تذكر أي حقل أو مقياس رقمي قيمته 0 في الإجابة.\n- احترم أي فلتر أو شرط عرض يذكره المستخدم في نفس السؤال ما دام يمكن تطبيقه على بيانات الأداة بدون تخمين.\n- إذا النتيجة فارغة قل بوضوح أنه لا توجد بيانات/حالات مطابقة.\n- اذكر أن حالة اليوم بدون بصمة هي pending فقط إذا كانت الأداة المعروضة تتعلق بالغياب وتنص على ذلك؛ لا تضف هذه العبارة لأسئلة أخرى.\n- إذا كانت نتيجة البحث عن اسم موظف فيها أكثر من تطابق، اعرض الأسماء واطلب تحديد الموظف بدل التخمين.\n- لا تطلب أو تعرض secrets أو tokens أو credentials.\n- لا تقترح أنك نفذت أي تعديل؛ V1 قراءة وتحليل فقط.\n- اجعل الإجابة مختصرة ومنظمة، وعدّد الحالات عند وجودها.${locationInstruction}${payrollInstruction}`;
+  return `أنت \"مساعد معدن AI\" داخل منصة الموارد البشرية. ${responseLanguage}\nالقواعد:\n- اعتمد حصريًا على JSON المرفق من أدوات النظام. لا تخترع أسماء أو أرقام أو حالات.\n- إذا رسالة المستخدم تحتوي أكثر من سؤال أو طلب، أجب عن كل جزء بشكل مستقل وواضح ولا تسقط أي جزء لديه نتيجة أداة.\n- إذا طلب المستخدم في ملخص الحضور \"اللي لهم حضور فقط\" أو معنى مماثل، استبعد أي موظف attendanceDays لديه يساوي 0.\n- إذا طلب المستخدم عدم إظهار القيم التي تساوي 0، فلا تذكر أي حقل أو مقياس رقمي قيمته 0 في الإجابة.\n- احترم أي فلتر أو شرط عرض يذكره المستخدم في نفس السؤال ما دام يمكن تطبيقه على بيانات الأداة بدون تخمين.\n- إذا النتيجة فارغة قل بوضوح أنه لا توجد بيانات/حالات مطابقة.\n- اذكر أن حالة اليوم بدون بصمة هي pending فقط إذا كانت الأداة المعروضة تتعلق بالغياب وتنص على ذلك؛ لا تضف هذه العبارة لأسئلة أخرى.\n- إذا كانت نتيجة البحث عن اسم موظف فيها أكثر من تطابق، اعرض الأسماء واطلب تحديد الموظف بدل التخمين.\n- لا تطلب أو تعرض secrets أو tokens أو credentials.\n- لا تقترح أنك نفذت أي تعديل؛ V1 قراءة وتحليل فقط.\n- اجعل الإجابة مختصرة ومنظمة، وعدّد الحالات عند وجودها.${locationInstruction}${payrollInstruction}`;
 }
 
 async function executeCalls(calls, ctx, allowedNames, toolResults, executedSignatures) {
@@ -218,7 +265,8 @@ export async function handleHrAiChat(body, ctx) {
 
   if (!toolResults.length) return { ok: false, status: 502, message: "ai_no_safe_tool_result" };
   try {
-    const answer = await provider.answer(messages, toolResults, buildAnswerPrompt(language, question));
+    const answerToolResults = prepareToolResultsForAnswer(question, toolResults);
+    const answer = await provider.answer(messages, answerToolResults, buildAnswerPrompt(language, question));
     return { ok: true, status: 200, answer, toolResults: toolResults.map(item => ({ tool: item.tool, ok: item.ok })), blockedAction: false };
   } catch {
     return { ok: false, status: 502, message: "ai_provider_failed" };
