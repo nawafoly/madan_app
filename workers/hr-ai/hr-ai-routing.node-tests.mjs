@@ -119,3 +119,20 @@ test("extra HR AI tools remain SELECT-only", async () => {
   assert.equal(/\b(?:INSERT|UPDATE|DELETE|REPLACE|DROP|ALTER|CREATE)\b/i.test(source), false);
   assert.equal(/executeSQL|runArbitraryQuery/i.test(source), false);
 });
+
+test("multiple attendance intents in one message route to all required tools", () => {
+  assert.deepEqual(resolveDeterministicToolCalls("مين بدون انصراف؟ مين متأخر؟", {}), [
+    { name: "getMissingCheckouts", arguments: { date: getDefaultAiDate() } },
+    { name: "getLateEmployees", arguments: { date: getDefaultAiDate() } },
+  ]);
+});
+
+test("multiple distinct attendance questions are deduplicated without dropping intents", () => {
+  const calls = resolveDeterministicToolCalls("مين بصم اليوم؟ مين متأخر؟ مين بدون انصراف؟", {});
+  assert.deepEqual(calls.map(call => call.name).sort(), [
+    "getAttendanceForDate",
+    "getLateEmployees",
+    "getMissingCheckouts",
+  ].sort());
+  assert.equal(new Set(calls.map(call => `${call.name}:${JSON.stringify(call.arguments)}`)).size, calls.length);
+});
