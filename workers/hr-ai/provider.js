@@ -15,10 +15,12 @@ export function humanizeMinuteDurationsForModel(value) {
   for (const [key, entryValue] of Object.entries(value)) {
     if (key === "lateMinutes" && typeof entryValue === "number" && Number.isFinite(entryValue)) {
       const totalMinutes = Math.max(0, Math.round(entryValue));
-      output.lateDuration = {
-        hours: Math.floor(totalMinutes / 60),
-        minutes: totalMinutes % 60,
-      };
+      const hours = Math.floor(totalMinutes / 60);
+      const minutes = totalMinutes % 60;
+      const lateDuration = {};
+      if (hours > 0) lateDuration.hours = hours;
+      if (minutes > 0 || hours === 0) lateDuration.minutes = minutes;
+      output.lateDuration = lateDuration;
       continue;
     }
     output[key] = humanizeMinuteDurationsForModel(entryValue);
