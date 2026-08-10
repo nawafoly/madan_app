@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 
+import { executeExtraHrAiTool } from "./extra-tools.js";
 import { getDefaultAiDate } from "./tools.js";
 import { getHelpReply, getSmallTalkReply, handleHrAiChat, resolveDeterministicToolCalls } from "./service.js";
 
@@ -67,15 +69,26 @@ test("present employees wording routes to today's attendance records", () => {
   ]);
 });
 
-test("payroll by employee name starts with safe employee search", () => {
+test("salary by employee name routes to configured compensation tool", () => {
   assert.deepEqual(resolveDeterministicToolCalls("كم راتب نواف؟", {}), [
-    { name: "searchEmployees", arguments: { query: "نواف", limit: 5 } },
+    { name: "getEmployeeCompensationByName", arguments: { employeeName: "نواف" } },
   ]);
 });
 
-test("attendance branch/location question routes to today's attendance records", () => {
+test("salary tool requires payroll.view", async () => {
+  await assert.rejects(
+    executeExtraHrAiTool(
+      "getEmployeeCompensationByName",
+      { employeeName: "نواف" },
+      { hrDb: {}, attendanceDb: {}, permissions: ["employees.view"] }
+    ),
+    /payroll_view_forbidden/
+  );
+});
+
+test("attendance branch/location question routes to configured locations tool", () => {
   assert.deepEqual(resolveDeterministicToolCalls("كم فرع بصمه عندنا و كل فرع اذكر الاشخاص اللي فيهم", {}), [
-    { name: "getAttendanceForDate", arguments: { date: getDefaultAiDate() } },
+    { name: "getAttendanceLocationsForDate", arguments: { date: getDefaultAiDate() } },
   ]);
 });
 
@@ -99,4 +112,10 @@ test("capabilities/help question is answered without database access", async () 
   assert.equal(aiCalls, 0);
   assert.deepEqual(result.toolResults, []);
   assert.match(result.answer, /الرواتب/);
+});
+
+test("extra HR AI tools remain SELECT-only", async () => {
+  const source = await readFile(new URL("./extra-tools.js", import.meta.url), "utf8");
+  assert.equal(/\b(?:INSERT|UPDATE|DELETE|REPLACE|DROP|ALTER|CREATE)\b/i.test(source), false);
+  assert.equal(/executeSQL|runArbitraryQuery/i.test(source), false);
 });
