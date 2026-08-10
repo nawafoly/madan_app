@@ -52,6 +52,7 @@ import {
   ClipboardList,
   MapPin,
   CalendarCheck2,
+  Bot,
 } from "lucide-react";
 import { CSSProperties, createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useSearch } from "wouter";
@@ -68,6 +69,7 @@ import {
 import { NotificationBell } from "@/components/NotificationBell";
 import { cn } from "@/lib/utils";
 import { getHrCoreEmployee, isHrCoreConfigured } from "@/lib/hrCoreApi";
+import { HrAiAssistantPanel } from "@/components/hr-ai/HrAiAssistantPanel";
 
 type RoleKey = "owner" | "admin" | "accountant" | "hr" | "staff";
 
@@ -599,6 +601,7 @@ function DashboardLayoutContent({
   const isCollapsed = state === "collapsed";
   const [isResizing, setIsResizing] = useState(false);
   const [isSettingsMenuOpen, setIsSettingsMenuOpen] = useState(false);
+  const [isHrAiOpen, setIsHrAiOpen] = useState(false);
   const [sidebarProfileDoc, setSidebarProfileDoc] =
     useState<EmployeeProfileUserDoc | null>(null);
 
@@ -651,6 +654,12 @@ function DashboardLayoutContent({
     () => new URLSearchParams(search),
     [search]
   );
+  const hrAiEmployeeId = useMemo(() => {
+    if (area !== "hr" || !location.startsWith("/hr/employees")) return null;
+    return new URLSearchParams(search).get("employeeId");
+  }, [area, location, search]);
+  const canUseHrAi =
+    area === "hr" && isHrCoreConfigured() && hasPermission(user, "hr_ai.view");
   const visibleHrSettingsSubItems = useMemo(
     () =>
       HR_SETTINGS_SUB_ITEMS.filter(subItem => {
@@ -1282,6 +1291,23 @@ function DashboardLayoutContent({
             }
             showBrand={false}
             showNotifications
+            extraActions={
+              canUseHrAi ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsHrAiOpen(true)}
+                  className="h-10 min-w-10 gap-1.5 rounded-full border-amber-300/80 bg-amber-50 px-2.5 font-bold text-slate-900 shadow-none hover:border-amber-400 hover:bg-amber-100 dark:border-amber-400/45 dark:bg-amber-400/10 dark:text-amber-100 dark:hover:bg-amber-400/16 sm:px-4"
+                  aria-label={tr(language, "مساعد معدن AI", "Maedin AI Assistant")}
+                >
+                  <Bot className="h-4 w-4 shrink-0 text-amber-700 dark:text-amber-300" />
+                  <span className="hidden sm:inline">
+                    {tr(language, "مساعد معدن AI", "Maedin AI")}
+                  </span>
+                </Button>
+              ) : null
+            }
             onLogout={logout}
           />
         ) : isMobile ? (
@@ -1326,6 +1352,15 @@ function DashboardLayoutContent({
           {children}
         </main>
       </SidebarInset>
+
+      {canUseHrAi ? (
+        <HrAiAssistantPanel
+          open={isHrAiOpen}
+          onOpenChange={setIsHrAiOpen}
+          employeeId={hrAiEmployeeId}
+          route={`${location}${search ? `?${search}` : ""}`}
+        />
+      ) : null}
     </>
   );
 }

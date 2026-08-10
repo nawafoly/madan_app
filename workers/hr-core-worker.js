@@ -1,3 +1,6 @@
+﻿import { handleHrAiChat } from "./hr-ai/service.js";
+import { canUseHrAi } from "./hr-ai/policy.js";
+
 const KNOWN_ROLES = new Set([
   "owner",
   "admin",
@@ -118,6 +121,22 @@ async function routeRequest(request, env) {
       account: mapAccountRow(requester.account),
       permissions: requester.permissions,
     });
+  }
+
+  if (pathname === "/api/hr/ai/chat" && request.method === "POST") {
+    if (!canUseHrAi(requester)) {
+      return forbidden("hr_ai_view_forbidden");
+    }
+    if (!env?.ATTENDANCE_DB) {
+      return json(503, { ok: false, message: "missing_attendance_d1_binding" });
+    }
+    if (!env?.AI) {
+      return json(503, { ok: false, message: "missing_workers_ai_binding" });
+    }
+    const body = await readJsonBody(request, 32768);
+    if (!body.ok) return body.response;
+    const result = await handleHrAiChat(body.value, { env, requester });
+    return json(result.status || (result.ok ? 200 : 500), result);
   }
 
   if (pathname === "/api/hr/employee-directory" && request.method === "GET") {
@@ -869,7 +888,7 @@ async function adjustEmployeeLeaveBalance(request, db, requester, id) {
   const now = new Date().toISOString();
   const adjustmentId = crypto.randomUUID();
   const operationLabel =
-    payload.value.operationType === "deduct" ? "خصم" : "إضافة";
+    payload.value.operationType === "deduct" ? "ط®طµظ…" : "ط¥ط¶ط§ظپط©";
 
   let employment = {};
   try {
@@ -2241,7 +2260,7 @@ function normalizeEmployeeFilePayload(input, requester, existing = null) {
     receiverUid,
     employeeUid,
   ]);
-  const title = normalizeText(input?.title || current.title) || "ملف داخلي";
+  const title = normalizeText(input?.title || current.title) || "ظ…ظ„ظپ ط¯ط§ط®ظ„ظٹ";
   const fileName = normalizeText(input?.fileName || current.fileName) || "attachment";
   const fileType = normalizeText(input?.fileType || current.fileType || "general").toLowerCase();
   const status = normalizeText(input?.status || current.status || "active").toLowerCase();
@@ -2595,7 +2614,7 @@ async function createNotification(request, db, requester) {
   }
   targetUids = Array.from(new Set(targetUids.filter(uid => uid && uid !== normalizeText(body.excludeUid))));
   if (!targetUids.length) return json(400, { ok: false, message: "notification_target_required" });
-  const title = normalizeText(body.title) || "إشعار داخلي";
+  const title = normalizeText(body.title) || "ط¥ط´ط¹ط§ط± ط¯ط§ط®ظ„ظٹ";
   const messageBody = normalizeText(body.body || body.message);
   const type = normalizeNotificationType(body.type);
   const now = new Date().toISOString();
@@ -2778,7 +2797,7 @@ async function importNotificationsAuditSnapshot(request, env) {
          source_updated_at=excluded.source_updated_at, migrated_at=excluded.migrated_at,
          updated_at=excluded.updated_at`
     ).bind(
-      id, targetUid, normalizeText(raw.title) || "إشعار داخلي",
+      id, targetUid, normalizeText(raw.title) || "ط¥ط´ط¹ط§ط± ط¯ط§ط®ظ„ظٹ",
       nullableText(raw.body || raw.message), normalizeNotificationType(raw.type),
       nullableText(raw.relatedTo), nullableText(raw.relatedId), nullableText(raw.relatedPath),
       parseBoolean(raw.isRead, false) ? 1 : 0, normalizeDateToIso(raw.readAt),
@@ -5240,3 +5259,4 @@ function decodeBase64UrlBytes(value) {
   const binary = atob(padded);
   return Uint8Array.from(binary, character => character.charCodeAt(0));
 }
+

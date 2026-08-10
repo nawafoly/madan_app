@@ -12,6 +12,7 @@
     "audit:backfill:dry": "node scripts/backfill-audit-logs.mjs --dry-run",
     "format": "prettier --write .",
     "test": "vitest run",
+    "test:hr-ai": "node --test workers/hr-ai/hr-ai.node-tests.mjs",
     "hr:worker:dev": "npx wrangler dev --config workers/wrangler.hr.toml",
     "hr:worker:deploy": "npx wrangler deploy --config workers/wrangler.hr.toml",
     "hr:d1:migrate:local": "npx wrangler d1 migrations apply maedin-hr --local --config workers/wrangler.hr.toml",
