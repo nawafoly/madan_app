@@ -19,6 +19,7 @@
     "hr:d1:migrate:remote": "npx wrangler d1 migrations apply maedin-hr --remote --config workers/wrangler.hr.toml",
     "hr:migrate:dry": "node scripts/migrate-hr-core-to-cloudflare.mjs --dry-run",
     "hr:migrate": "node scripts/migrate-hr-core-to-cloudflare.mjs",
+    "hr:identity:reconcile:dry": "node scripts/reconcile-hr-identity-snapshots.mjs",
     "hr:operations:migrate:dry": "node scripts/migrate-hr-operations-to-cloudflare.mjs --dry-run",
     "hr:operations:migrate": "node scripts/migrate-hr-operations-to-cloudflare.mjs",
     "hr:payroll:migrate:dry": "node scripts/migrate-hr-payroll-to-cloudflare.mjs --dry-run",
