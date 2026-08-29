@@ -368,10 +368,10 @@ No secret contents are reproduced in this audit.
 - [x] System Constitution created
 - [x] Current HR/attendance/payroll schema audited
 - [x] Initial gap register created
-- [ ] Source-of-Truth Matrix committed
-- [ ] Invariant Catalog committed
-- [ ] Policy Catalog skeleton committed
-- [ ] Employee Golden Journey committed
+- [x] Source-of-Truth Matrix committed
+- [x] Invariant Catalog committed
+- [x] Policy Catalog skeleton committed
+- [x] Employee Golden Journey committed
 
 ### Gate 1 — No behavior change
 
@@ -379,4 +379,4 @@ Foundation documentation only. No D1 migration, deploy, or production behavior c
 
 ### Gate 2 — First implementation slice
 
-First implementation slice may start only after Gate 0 artifacts are committed and reviewed. Recommended first slice: identity/employee integrity + reconciliation, because this is a prerequisite for every downstream domain and directly closes the incident class observed during the legacy employee backfill.
+Gate 0 is complete. First implementation slice is identity/employee integrity + reconciliation, because this is a prerequisite for every downstream domain and directly closes the incident class observed during the legacy employee backfill.
