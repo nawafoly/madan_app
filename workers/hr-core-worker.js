@@ -1,5 +1,6 @@
 ﻿import { handleHrAiChat } from "./hr-ai/service.js";
 import { canUseHrAi } from "./hr-ai/policy.js";
+import { validateAccountIdentityMutation } from "./hr-account-identity-validation.js";
 
 const KNOWN_ROLES = new Set([
   "owner",
@@ -3692,6 +3693,51 @@ async function updateAccount(request, db, requester, uid) {
     bindings.push(patch.linkedEmployeeId);
   }
 
+  const identityPatchRequested = [
+    "role",
+    "employeeProfileEnabled",
+    "linkedEmployeeId",
+  ].some(key => Object.prototype.hasOwnProperty.call(patch, key));
+
+  if (identityPatchRequested) {
+    try {
+      const nextLinkedEmployeeId = Object.prototype.hasOwnProperty.call(
+        patch,
+        "linkedEmployeeId"
+      )
+        ? patch.linkedEmployeeId
+        : nullableText(before.linked_employee_id);
+
+      const linkedEmployee = nextLinkedEmployeeId
+        ? await db
+            .prepare("SELECT id, auth_uid FROM employees WHERE id = ? LIMIT 1")
+            .bind(nextLinkedEmployeeId)
+            .first()
+        : null;
+
+      const employeeByAuthUid = await db
+        .prepare("SELECT id, auth_uid FROM employees WHERE auth_uid = ? LIMIT 1")
+        .bind(uid)
+        .first();
+
+      const identityValidation = validateAccountIdentityMutation({
+        uid,
+        before,
+        patch,
+        linkedEmployee,
+        employeeByAuthUid,
+      });
+
+      if (!identityValidation.ok) {
+        return json(identityValidation.status, {
+          ok: false,
+          message: identityValidation.message,
+        });
+      }
+    } catch (error) {
+      return serverError("account_identity_validation_failed", error);
+    }
+  }
   if (!columns.length) {
     return json(400, { ok: false, message: "no_account_fields_to_update" });
   }
