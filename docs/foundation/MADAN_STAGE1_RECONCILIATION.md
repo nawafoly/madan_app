@@ -54,7 +54,7 @@ If any conflict exists, `blocked=true` and `actions=[]` even when some candidate
 ## Dry-run CLI
 
 ```bash
-npm run hr:identity:reconcile:dry -- --source <source.json> --canonical <canonical.json> --output <plan.json>
+node scripts/reconcile-hr-identity-snapshots.mjs --source <source.json> --canonical <canonical.json> --output <plan.json>
 ```
 
 Snapshot shape:
