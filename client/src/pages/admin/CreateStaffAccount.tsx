@@ -69,6 +69,15 @@ import {
 } from "@/_core/hooks/useAuth";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { languageDir, textAlignClass, tr } from "@/lib/i18n";
+import {
+  HR_CORE_D1_ENABLED,
+  createHrCoreEmployee,
+  getHrCoreEmployee,
+  isHrCoreConfigured,
+  updateHrCoreAccount,
+  updateHrCoreEmployee,
+  type HrCoreEmployeeInput,
+} from "@/lib/hrCoreApi";
 
 function FieldLabel({ children }: { children: ReactNode }) {
   return (
@@ -349,6 +358,62 @@ export default function CreateStaffAccount() {
     };
   };
 
+  // HR_CORE_STAFF_ACCOUNT_SYNC_V1
+  const ensureHrCoreEmployee = async ({
+    uid,
+    email,
+    displayName,
+    phone = "",
+    title = "",
+    isActive = true,
+    avatarUrl = "",
+  }: {
+    uid: string;
+    email: string;
+    displayName: string;
+    phone?: string;
+    title?: string;
+    isActive?: boolean;
+    avatarUrl?: string;
+  }) => {
+    if (!HR_CORE_D1_ENABLED) return null;
+    if (!isHrCoreConfigured()) {
+      throw new Error("hr_core_not_configured");
+    }
+
+    const employeePayload: HrCoreEmployeeInput = {
+      authUid: uid,
+      name: displayName,
+      email,
+      phone: phone || null,
+      avatarUrl: avatarUrl || null,
+      title: title || null,
+      employmentStatus: isActive ? "active" : "inactive",
+      isActive,
+      personal: {},
+      employment: {
+        employmentStatus: isActive ? "active" : "inactive",
+        status: isActive ? "active" : "inactive",
+        title: title || null,
+        jobTitle: title || null,
+      },
+    };
+
+    try {
+      const current = await getHrCoreEmployee(uid);
+      return await updateHrCoreEmployee(current.employee.id, employeePayload);
+    } catch (error: any) {
+      const isMissing =
+        error?.status === 404 || error?.code === "employee_not_found";
+      if (!isMissing) throw error;
+    }
+
+    return createHrCoreEmployee({
+      id: uid,
+      ...employeePayload,
+    });
+  };
+
   const isKnownPermission = (
     permissionKey: unknown
   ): permissionKey is Permission => {
@@ -626,6 +691,28 @@ export default function CreateStaffAccount() {
         { merge: true }
       );
 
+      await ensureHrCoreEmployee({
+        uid: createdUid,
+        email: normalizedEmail,
+        displayName: name,
+        phone: phoneValue,
+        isActive: true,
+        avatarUrl: createdAvatarUrl,
+      });
+
+      if (HR_CORE_D1_ENABLED) {
+        await updateHrCoreAccount(createdUid, {
+          email: normalizedEmail,
+          username: normalizedUsername,
+          displayName: name,
+          title: null,
+          role: "staff",
+          isActive: true,
+          employeeProfileEnabled: true,
+          linkedEmployeeId: createdUid,
+        });
+      }
+
       setFullName("");
       setPhone("");
       setEmail("");
@@ -642,10 +729,10 @@ export default function CreateStaffAccount() {
 
       if (authCreatedSuccessfully) {
         setLocalError(
-          "تم إنشاء الحساب في Authentication، لكن فشلت تهيئة بياناته داخل Firestore بسبب الصلاحيات."
+          "تم إنشاء حساب الدخول، لكن فشل إكمال تهيئة ملف الموظف وربطه بنظام الموارد البشرية."
         );
         setLocalInfo(
-          "الحساب أُنشئ فعليًا، لكن يلزم إصلاح صلاحيات Firestore أو إكمال التهيئة يدويًا."
+          "الحساب موجود فعليًا، لكن العملية لم تعتبر مكتملة. أعد المحاولة بنفس البريد لإصلاح الربط تلقائيًا."
         );
       } else if (submitError?.code === "auth/email-already-in-use") {
         setCreatedEmailForPromote(normalizedEmail);
@@ -825,6 +912,28 @@ export default function CreateStaffAccount() {
         }),
         { merge: true }
       );
+
+      await ensureHrCoreEmployee({
+        uid: userDoc.id,
+        email: normalizedTargetEmail,
+        displayName,
+        phone: String(userData?.phone || "").trim(),
+        title,
+        isActive,
+      });
+
+      if (HR_CORE_D1_ENABLED) {
+        await updateHrCoreAccount(userDoc.id, {
+          email: normalizedTargetEmail,
+          username: normalizedUsername,
+          displayName,
+          title: title || null,
+          role: roleKey,
+          isActive,
+          employeeProfileEnabled: true,
+          linkedEmployeeId: userDoc.id,
+        });
+      }
 
       const refreshedUserSnap = await getDoc(doc(db, "users", userDoc.id));
       const refreshedAdminSnap = await getDoc(
