@@ -34,28 +34,33 @@ function parseWranglerJson(stdout) {
 }
 
 function runD1Query(sql) {
-  const command = process.platform === "win32" ? "npx.cmd" : "npx";
-  const result = spawnSync(
-    command,
-    [
-      "wrangler",
-      "d1",
-      "execute",
-      DATABASE_NAME,
-      "--remote",
-      "--config",
-      WRANGLER_CONFIG,
-      "--json",
-      "--command",
-      sql,
-    ],
-    {
-      cwd: process.cwd(),
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-      env: process.env,
-    }
-  );
+  const args = [
+    "wrangler",
+    "d1",
+    "execute",
+    DATABASE_NAME,
+    "--remote",
+    "--config",
+    WRANGLER_CONFIG,
+    "--json",
+    "--command",
+    sql,
+  ];
+
+  const command = process.platform === "win32"
+    ? (process.env.ComSpec || "cmd.exe")
+    : "npx";
+  const commandArgs = process.platform === "win32"
+    ? ["/d", "/s", "/c", "npx", ...args]
+    : args;
+
+  const result = spawnSync(command, commandArgs, {
+    cwd: process.cwd(),
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+    env: process.env,
+    windowsHide: true,
+  });
 
   if (result.error) throw result.error;
   if (result.status !== 0) {
