@@ -3,6 +3,10 @@ PRAGMA foreign_keys = ON;
 -- MADAN IDENTITY INTEGRITY V1
 -- Enforces the steady-state account <-> employee identity contract without
 -- breaking the existing atomic account-first / employee-second HR Core batch.
+--
+-- Cloudflare D1 remote migrations use a trigger-aware SQL splitter. Keep
+-- trigger BEGIN tokens uppercase and parenthesize CASE expressions so CASE
+-- END tokens are not mistaken for the end of the trigger body.
 
 DROP VIEW IF EXISTS hr_identity_integrity_summary;
 CREATE VIEW hr_identity_integrity_summary AS
@@ -102,7 +106,7 @@ CREATE TRIGGER trg_employees_require_reverse_link_insert
 AFTER INSERT ON employees
 WHEN NEW.auth_uid IS NOT NULL AND TRIM(NEW.auth_uid) <> ''
 BEGIN
-  SELECT CASE
+  SELECT (CASE
     WHEN NOT EXISTS (
       SELECT 1
         FROM accounts a
@@ -111,7 +115,7 @@ BEGIN
          AND a.employee_profile_enabled = 1
     )
     THEN RAISE(ABORT, 'identity_employee_reverse_link_missing')
-  END;
+  END);
 END;
 
 DROP TRIGGER IF EXISTS trg_employees_require_reverse_link_update;
@@ -119,7 +123,7 @@ CREATE TRIGGER trg_employees_require_reverse_link_update
 AFTER UPDATE OF id, auth_uid ON employees
 WHEN NEW.auth_uid IS NOT NULL AND TRIM(NEW.auth_uid) <> ''
 BEGIN
-  SELECT CASE
+  SELECT (CASE
     WHEN NOT EXISTS (
       SELECT 1
         FROM accounts a
@@ -128,7 +132,7 @@ BEGIN
          AND a.employee_profile_enabled = 1
     )
     THEN RAISE(ABORT, 'identity_employee_reverse_link_missing')
-  END;
+  END);
 END;
 
 DROP TRIGGER IF EXISTS trg_employees_block_referenced_delete;
