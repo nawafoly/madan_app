@@ -1,6 +1,7 @@
 ﻿import { handleHrAiChat } from "./hr-ai/service.js";
 import { canUseHrAi } from "./hr-ai/policy.js";
 import { validateAccountIdentityMutation } from "./hr-account-identity-validation.js";
+import { mapIdentityIntegrityHealth } from "./hr-identity-health.js";
 
 const KNOWN_ROLES = new Set([
   "owner",
@@ -469,15 +470,25 @@ async function healthCheck(db) {
            (SELECT COUNT(*) FROM hr_weekly_reports) AS weekly_report_count,
            (SELECT COUNT(*) FROM hr_employee_files) AS employee_file_count,
            (SELECT COUNT(*) FROM hr_employee_messages) AS employee_message_count,
-           (SELECT COUNT(*) FROM employee_leave_balance_adjustments) AS leave_balance_adjustment_count`
+           (SELECT COUNT(*) FROM employee_leave_balance_adjustments) AS leave_balance_adjustment_count,
+           (SELECT staff_profile_without_employee FROM hr_identity_integrity_summary LIMIT 1) AS staff_profile_without_employee,
+           (SELECT broken_linked_employee_id FROM hr_identity_integrity_summary LIMIT 1) AS broken_linked_employee_id,
+           (SELECT link_auth_mismatch FROM hr_identity_integrity_summary LIMIT 1) AS link_auth_mismatch,
+           (SELECT employee_without_auth_uid FROM hr_identity_integrity_summary LIMIT 1) AS employee_without_auth_uid,
+           (SELECT employee_without_account FROM hr_identity_integrity_summary LIMIT 1) AS employee_without_account,
+           (SELECT reverse_link_mismatch FROM hr_identity_integrity_summary LIMIT 1) AS reverse_link_mismatch`
       )
       .first();
+
+    const identityIntegrity = mapIdentityIntegrityHealth(row);
 
     return json(200, {
       ok: true,
       service: "maedin-hr-api",
       release: HR_WORKER_RELEASE,
       database: "ready",
+      identityIntegrityStatus: identityIntegrity.ok ? "clean" : "drift_detected",
+      identityIntegrity,
       accountCount: Number(row?.account_count || 0),
       employeeCount: Number(row?.employee_count || 0),
       leaveRequestCount: Number(row?.leave_request_count || 0),
