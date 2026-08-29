@@ -1,3 +1,7 @@
+# SQL files
+# Cloudflare D1 remote migration parsing can fail on Windows CRLF trigger bodies.
+*.sql text eol=lf
+
 # Audio files
 *.wav filter=lfs diff=lfs merge=lfs -text
 *.mp3 filter=lfs diff=lfs merge=lfs -text
