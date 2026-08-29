@@ -59,7 +59,7 @@ function usage() {
 
 async function readSnapshot(filePath, label) {
   const absolute = path.resolve(filePath);
-  const raw = await fs.readFile(absolute, "utf8");
+  const raw = (await fs.readFile(absolute, "utf8")).replace(/^\uFEFF/, "");
   const parsed = JSON.parse(raw);
   if (!parsed || typeof parsed !== "object") {
     throw new Error(`${label}_snapshot_invalid`);
