@@ -124,28 +124,37 @@ function runContract() {
       "gosi_profile_history_immutable"
     );
 
+    db.exec(\`
+      INSERT INTO employees (
+        id, name, employment_status, is_active, source, created_at, updated_at
+      ) VALUES (
+        'emp-policy-inputs', 'Policy Input Test', 'active', 1, 'test',
+        '2026-08-31T00:00:00.000Z', '2026-08-31T00:00:00.000Z'
+      );
+    \`);
+
     expectSqliteFailure(
       () => db.prepare(\`
         INSERT INTO employee_gosi_profiles (
           id,
           employee_id,
           effective_from,
-          effective_to,
           applicability_status,
           policy_inputs_json,
           source
         ) VALUES (
           'invalid-policy-inputs',
-          'emp-1',
-          date(?, '+10 day'),
-          date(?, '+11 day'),
+          'emp-policy-inputs',
+          ?,
           'applicable',
           '[]',
           'test'
         )
-      \`).run(bootstrap.effective_from, bootstrap.effective_from),
+      \`).run(bootstrap.effective_from),
       "gosi_policy_inputs_invalid"
     );
+
+    db.prepare("DELETE FROM employees WHERE id = 'emp-policy-inputs'").run();
 
     const nextDate = db.prepare(
       "SELECT date(?, '+1 day') AS next_date"
