@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 // @ts-expect-error Production Worker modules are plain JavaScript by design.
-import {
+import * as attendanceWorker from "../workers/attendance-worker.js";
+
+const {
   resolveCanonicalAttendanceEmployee,
   resolveSingleActiveZoneId,
-} from "../workers/attendance-worker.js";
+} = attendanceWorker;
 
 type HrRow = {
   id: string;
