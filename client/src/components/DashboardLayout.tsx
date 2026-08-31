@@ -54,7 +54,15 @@ import {
   CalendarCheck2,
   Bot,
 } from "lucide-react";
-import { CSSProperties, createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import {
+  CSSProperties,
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useLocation, useSearch } from "wouter";
 import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
 import { HrBrandMark } from "@/components/HrBrandMark";
@@ -70,6 +78,7 @@ import { NotificationBell } from "@/components/NotificationBell";
 import { cn } from "@/lib/utils";
 import { getHrCoreEmployee, isHrCoreConfigured } from "@/lib/hrCoreApi";
 import { HrAiAssistantPanel } from "@/components/hr-ai/HrAiAssistantPanel";
+import { getWorkspaceAccess } from "@/lib/workspaceAccess";
 
 type RoleKey = "owner" | "admin" | "accountant" | "hr" | "staff";
 
@@ -492,9 +501,7 @@ export default function DashboardLayout({
   }
 
   return (
-    <DashboardLayoutShell area={area}>
-      {children}
-    </DashboardLayoutShell>
+    <DashboardLayoutShell area={area}>{children}</DashboardLayoutShell>
   );
 }
 
@@ -554,26 +561,26 @@ function DashboardLayoutShell({
   return (
     <DashboardLayoutAreaContext.Provider value={area}>
       <SidebarProvider
-      open={isSidebarOpen}
-      onOpenChange={setIsSidebarOpen}
-      dir={layoutDir}
-      className={cn(
-        "dashboard-shell min-h-screen max-w-full flex-row items-stretch overflow-x-hidden bg-[#F8F9FA] dark:bg-background",
-        area === "hr" ? "hr-dashboard-shell" : "admin-dashboard-shell"
-      )}
-      style={
-        {
-          "--sidebar-width": `${sidebarWidth}px`,
-        } as CSSProperties
-      }
-    >
-      <DashboardLayoutContent
-        area={area}
-        setSidebarWidth={setSidebarWidth}
-        sidebarSide={sidebarSide}
+        open={isSidebarOpen}
+        onOpenChange={setIsSidebarOpen}
+        dir={layoutDir}
+        className={cn(
+          "dashboard-shell min-h-screen max-w-full flex-row items-stretch overflow-x-hidden bg-[#F8F9FA] dark:bg-background",
+          area === "hr" ? "hr-dashboard-shell" : "admin-dashboard-shell"
+        )}
+        style={
+          {
+            "--sidebar-width": `${sidebarWidth}px`,
+          } as CSSProperties
+        }
       >
-        {children}
-      </DashboardLayoutContent>
+        <DashboardLayoutContent
+          area={area}
+          setSidebarWidth={setSidebarWidth}
+          sidebarSide={sidebarSide}
+        >
+          {children}
+        </DashboardLayoutContent>
       </SidebarProvider>
     </DashboardLayoutAreaContext.Provider>
   );
@@ -625,6 +632,7 @@ function DashboardLayoutContent({
 
   // الدور
   const role = user?.role;
+  const workspaceAccess = useMemo(() => getWorkspaceAccess(user), [user]);
 
   // عناصر القائمة المسموحة
   const visibleMenuItems = useMemo(() => {
@@ -976,40 +984,71 @@ function DashboardLayoutContent({
                 </div>
               ) : null}
 
-              {/* الرجوع إلى واجهة المنصة الرئيسية */}
+              {/* اختصارات الانتقال بين واجهات المنصة */}
               {!isCollapsed ? (
                 <div
                   className={cn(
                     isRight ? "mr-auto" : "ml-auto",
                     "flex shrink-0 translate-x-0 items-center gap-2 overflow-hidden whitespace-nowrap opacity-100 transition-[max-width,opacity,transform] duration-200",
-                    area === "hr" ? "max-w-10" : "max-w-32"
+                    area === "hr" ? "max-w-10" : "max-w-20"
                   )}
                 >
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className={cn(
-                      "h-9 shrink-0 gap-1.5 rounded-full border-white/10 bg-white/[0.04] text-xs text-slate-100 hover:bg-white/[0.08] hover:text-white",
-                      area === "hr" ? "w-9 px-0" : "px-3"
-                    )}
-                    onClick={() => navigateFromSidebar(homeTargetPath)}
-                    aria-label={
-                      area === "hr"
-                        ? tr(
-                            language,
-                            "واجهة منصة الموارد البشرية",
-                            "Human Resources overview"
-                          )
-                        : tr(language, "الرئيسية", "Home")
-                    }
-                  >
-                    {area === "hr" ? (
+                  {area === "hr" ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-9 w-9 shrink-0 rounded-full border-white/10 bg-white/[0.04] px-0 text-xs text-slate-100 hover:bg-white/[0.08] hover:text-white"
+                      onClick={() => navigateFromSidebar(homeTargetPath)}
+                      aria-label={tr(
+                        language,
+                        "واجهة منصة الموارد البشرية",
+                        "Human Resources overview"
+                      )}
+                      title={tr(
+                        language,
+                        "واجهة منصة الموارد البشرية",
+                        "Human Resources overview"
+                      )}
+                    >
                       <LayoutDashboard className="h-4 w-4 text-[#F2B705]" />
-                    ) : (
-                      <Home className="h-4 w-4 text-[#F2B705]" />
-                    )}
-                    {area === "hr" ? null : tr(language, "الرئيسية", "Home")}
-                  </Button>
+                    </Button>
+                  ) : (
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-9 w-9 shrink-0 rounded-full border-white/10 bg-white/[0.04] px-0 text-xs text-slate-100 hover:bg-white/[0.08] hover:text-white"
+                        onClick={() => navigateFromSidebar(homeTargetPath)}
+                        aria-label={tr(language, "الرئيسية", "Home")}
+                        title={tr(language, "الرئيسية", "Home")}
+                      >
+                        <Home className="h-4 w-4 text-[#F2B705]" />
+                      </Button>
+
+                      {workspaceAccess.hr ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-9 w-9 shrink-0 rounded-full border-white/10 bg-white/[0.04] px-0 text-xs text-slate-100 hover:bg-white/[0.08] hover:text-white"
+                          onClick={() =>
+                            navigateFromSidebar(workspaceAccess.hrPath)
+                          }
+                          aria-label={tr(
+                            language,
+                            "الموارد البشرية",
+                            "Human Resources"
+                          )}
+                          title={tr(
+                            language,
+                            "الموارد البشرية",
+                            "Human Resources"
+                          )}
+                        >
+                          <BriefcaseBusiness className="h-4 w-4 text-[#F2B705]" />
+                        </Button>
+                      ) : null}
+                    </>
+                  )}
                 </div>
               ) : null}
             </div>
@@ -1245,7 +1284,10 @@ function DashboardLayoutContent({
                   className="h-9 w-9 shrink-0 rounded-xl border-red-300/25 bg-red-500/10 text-red-200 shadow-none hover:border-red-300/40 hover:bg-red-500/16 hover:text-red-100 min-w-0"
                 >
                   <LogOut
-                    className={cn("h-4 w-4", language === "ar" && "rotate-180")}
+                    className={cn(
+                      "h-4 w-4",
+                      language === "ar" && "rotate-180"
+                    )}
                   />
                 </Button>
               ) : null}
@@ -1324,16 +1366,37 @@ function DashboardLayoutContent({
             </div>
 
             <div className="flex items-center gap-2 min-w-0">
-              {/* زر الرئيسية في الموبايل */}
               <Button
                 variant="outline"
-                size="sm"
-                className="gap-2"
+                size="icon"
+                className="h-9 w-9 rounded-full"
                 onClick={() => setLocation(homeTargetPath)}
+                aria-label={tr(language, "الرئيسية", "Home")}
+                title={tr(language, "الرئيسية", "Home")}
               >
                 <Home className="h-4 w-4" />
-                {tr(language, "الرئيسية", "Home")}
               </Button>
+
+              {workspaceAccess.hr ? (
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-9 w-9 rounded-full"
+                  onClick={() => setLocation(workspaceAccess.hrPath)}
+                  aria-label={tr(
+                    language,
+                    "الموارد البشرية",
+                    "Human Resources"
+                  )}
+                  title={tr(
+                    language,
+                    "الموارد البشرية",
+                    "Human Resources"
+                  )}
+                >
+                  <BriefcaseBusiness className="h-4 w-4" />
+                </Button>
+              ) : null}
 
               <NotificationBell />
             </div>
