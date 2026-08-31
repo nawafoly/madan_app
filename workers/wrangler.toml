@@ -1,5 +1,5 @@
 name = "upload"
-main = "r2-upload-worker.js"
+main = "r2-upload-bootstrap.js"
 compatibility_date = "2026-03-12"
 
 # ARCHITECTURE NOTE (2026-03-12):
@@ -22,3 +22,10 @@ binding = "ATTENDANCE_DB"
 database_name = "maedin-attendance"
 database_id = "b765c430-0bf1-4128-8c34-b1f57489aa3f"
 migrations_dir = "attendance-migrations"
+
+# Attendance employee-zone resolution reads the canonical HR Core assignment.
+# Firestore remains compatibility-only for employees that have not reached HR Core.
+[[d1_databases]]
+binding = "HR_DB"
+database_name = "maedin-hr"
+database_id = "a9435ad2-4430-47b2-a5e6-ad2448ed9b0b"
