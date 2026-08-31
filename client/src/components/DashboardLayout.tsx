@@ -47,7 +47,6 @@ import {
   Tags,
   SlidersHorizontal,
   Database,
-  ChevronDown,
   LockKeyhole,
   ClipboardList,
   MapPin,
@@ -607,7 +606,6 @@ function DashboardLayoutContent({
 
   const isCollapsed = state === "collapsed";
   const [isResizing, setIsResizing] = useState(false);
-  const [isSettingsMenuOpen, setIsSettingsMenuOpen] = useState(false);
   const [isHrAiOpen, setIsHrAiOpen] = useState(false);
   const [sidebarProfileDoc, setSidebarProfileDoc] =
     useState<EmployeeProfileUserDoc | null>(null);
@@ -865,12 +863,6 @@ function DashboardLayoutContent({
   }, [isResizing, isRight, setSidebarWidth]);
 
   useEffect(() => {
-    if (isHrSettingsRoute) {
-      setIsSettingsMenuOpen(true);
-    }
-  }, [isHrSettingsRoute]);
-
-  useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
     mainRef.current?.scrollTo({ top: 0, left: 0, behavior: "auto" });
   }, [location]);
@@ -990,28 +982,45 @@ function DashboardLayoutContent({
                   className={cn(
                     isRight ? "mr-auto" : "ml-auto",
                     "flex shrink-0 translate-x-0 items-center gap-2 overflow-hidden whitespace-nowrap opacity-100 transition-[max-width,opacity,transform] duration-200",
-                    area === "hr" ? "max-w-10" : "max-w-20"
+                    area === "hr" ? "max-w-20" : "max-w-20"
                   )}
                 >
                   {area === "hr" ? (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-9 w-9 shrink-0 rounded-full border-white/10 bg-white/[0.04] px-0 text-xs text-slate-100 hover:bg-white/[0.08] hover:text-white"
-                      onClick={() => navigateFromSidebar(homeTargetPath)}
-                      aria-label={tr(
-                        language,
-                        "واجهة منصة الموارد البشرية",
-                        "Human Resources overview"
-                      )}
-                      title={tr(
-                        language,
-                        "واجهة منصة الموارد البشرية",
-                        "Human Resources overview"
-                      )}
-                    >
-                      <LayoutDashboard className="h-4 w-4 text-[#F2B705]" />
-                    </Button>
+                    <>
+                      {workspaceAccess.dashboard ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-9 w-9 shrink-0 rounded-full border-white/10 bg-white/[0.04] px-0 text-xs text-slate-100 hover:bg-white/[0.08] hover:text-white"
+                          onClick={() =>
+                            navigateFromSidebar(workspaceAccess.dashboardPath)
+                          }
+                          aria-label={tr(
+                            language,
+                            "لوحة التحكم",
+                            "Dashboard"
+                          )}
+                          title={tr(
+                            language,
+                            "لوحة التحكم",
+                            "Dashboard"
+                          )}
+                        >
+                          <LayoutDashboard className="h-4 w-4 text-[#F2B705]" />
+                        </Button>
+                      ) : null}
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-9 w-9 shrink-0 rounded-full border-white/10 bg-white/[0.04] px-0 text-xs text-slate-100 hover:bg-white/[0.08] hover:text-white"
+                        onClick={() => navigateFromSidebar("/")}
+                        aria-label={tr(language, "الرئيسية", "Home")}
+                        title={tr(language, "الرئيسية", "Home")}
+                      >
+                        <Home className="h-4 w-4 text-[#F2B705]" />
+                      </Button>
+                    </>
                   ) : (
                     <>
                       <Button
@@ -1075,20 +1084,12 @@ function DashboardLayoutContent({
                         isActive={isActive && canAccessItem}
                         onClick={() => {
                           if (!canAccessItem) return;
-                          if (isCollapsed) {
-                            navigateFromSidebar(
-                              `${item.path}?tab=${defaultHrSettingsTab}`
-                            );
-                            return;
-                          }
-
-                          setIsSettingsMenuOpen(open => !open);
+                          navigateFromSidebar(
+                            `${item.path}?tab=${defaultHrSettingsTab}`
+                          );
                         }}
                         tooltip={itemLabel}
                         aria-disabled={!canAccessItem}
-                        aria-expanded={
-                          canAccessItem ? isSettingsMenuOpen : false
-                        }
                         className={cn(
                           "h-10 rounded-xl font-normal text-slate-300 transition-all hover:text-white data-[active=true]:bg-white/10 data-[active=true]:text-white [&>svg]:text-[#F2B705]",
                           !canAccessItem &&
@@ -1111,25 +1112,12 @@ function DashboardLayoutContent({
                         >
                           {itemLabel}
                         </span>
-                        {canAccessItem ? (
-                          <ChevronDown
-                            className={cn(
-                              "h-3.5 w-3.5 shrink-0 text-slate-500 transition-transform duration-200",
-                              isSettingsMenuOpen && "rotate-180",
-                              isCollapsed && "hidden"
-                            )}
-                          />
-                        ) : (
-                          <LockKeyhole
-                            className={cn(
-                              "h-3.5 w-3.5 shrink-0 text-slate-500",
-                              isCollapsed && "hidden"
-                            )}
-                          />
-                        )}
+                        {!canAccessItem && !isCollapsed ? (
+                          <LockKeyhole className="h-3.5 w-3.5 shrink-0 text-slate-500" />
+                        ) : null}
                       </SidebarMenuButton>
 
-                      {!isCollapsed && canAccessItem && isSettingsMenuOpen ? (
+                      {!isCollapsed && canAccessItem && isHrSettingsRoute ? (
                         <div className="space-y-1 py-1 ltr:pl-7 rtl:pr-7">
                           {visibleHrSettingsSubItems.map(subItem => {
                             const SubIcon = subItem.icon;
