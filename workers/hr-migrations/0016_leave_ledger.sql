@@ -14,7 +14,8 @@ CREATE TABLE IF NOT EXISTS employee_leave_ledger_entries (
   id TEXT PRIMARY KEY,
   employee_id TEXT NOT NULL,
   effective_date TEXT NOT NULL CHECK (
-    effective_date = date(effective_date)
+    date(effective_date) IS NOT NULL
+    AND effective_date = date(effective_date)
   ),
   entry_type TEXT NOT NULL CHECK (
     entry_type IN (
