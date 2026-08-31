@@ -161,10 +161,10 @@ function runContract() {
           schedule_assignment_id, work_schedule_policy_version_id,
           idempotency_key, source
         ) VALUES (
-          'obligation:bad-friday', 'employee:1', '2026-09-04', 2, 'work',
+          'obligation:bad-revision-chain', 'employee:1', '2026-09-03', 2, 'work',
           '08:00', '17:00', 540,
           'schedule:1', 'policy:work:v1',
-          'bad-friday', 'test'
+          'bad-revision-chain', 'test'
         )
       \`).run(),
       'work_obligation_revision_chain_invalid'
