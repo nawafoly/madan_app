@@ -1,6 +1,6 @@
 # MADAN Stage 3B — Canonical Work Obligation Kernel
 
-Status: Foundation contract  
+Status: Foundation contract
 Scope: additive schema foundation; no Production migration or API/UI cutover in this stage
 
 ## Objective
