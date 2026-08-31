@@ -9,7 +9,7 @@ export type WorkspaceAccess = {
   dashboard: boolean;
   hr: boolean;
   dashboardPath: "/dashboard";
-  hrPath: string;
+  hrPath: "/hr";
   fallbackPath: string;
 };
 
@@ -42,7 +42,7 @@ export function getWorkspaceAccess(
     dashboard,
     hr,
     dashboardPath: "/dashboard",
-    hrPath: hr ? resolvedHrPath : "/hr",
+    hrPath: "/hr",
     fallbackPath: getHomePathForUser(user),
   };
 }
