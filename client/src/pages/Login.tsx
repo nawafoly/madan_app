@@ -7,12 +7,21 @@ import {
   updateProfile,
 } from "firebase/auth";
 import { doc, serverTimestamp } from "firebase/firestore";
-import { Eye, EyeOff } from "lucide-react";
+import {
+  BriefcaseBusiness,
+  Eye,
+  EyeOff,
+  LayoutDashboard,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { auth, db } from "@/_core/firebase";
-import { getHomePathForUser, useAuth } from "@/_core/hooks/useAuth";
+import { useAuth } from "@/_core/hooks/useAuth";
+import {
+  getAutomaticPostLoginPath,
+  getWorkspaceAccess,
+} from "@/lib/workspaceAccess";
 import {
   AUDIT_ACTIONS,
   auditedSetDoc,
@@ -26,6 +35,7 @@ import {
   isLoginIdentityError,
   resolveLoginEmailForAuth,
 } from "@/lib/loginIdentity";
+
 type AuthMode = "login" | "register";
 
 function FieldLabel({ children }: { children: ReactNode }) {
@@ -60,7 +70,7 @@ function SurfaceAlert({
 }
 
 export default function LoginPage() {
-  const { user, loading, error } = useAuth();
+  const { user, loading, error, logout } = useAuth();
   const { language } = useLanguage();
   const [location, setLocation] = useLocation();
 
@@ -83,18 +93,22 @@ export default function LoginPage() {
     return Boolean(projectId && apiKey);
   }, []);
 
+  const workspaceAccess = useMemo(() => getWorkspaceAccess(user), [user]);
+  const needsWorkspaceChoice =
+    !!user && workspaceAccess.dashboard && workspaceAccess.hr;
+
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
   }, []);
 
   useEffect(() => {
-    if (loading || !user) return;
+    if (loading || !user || needsWorkspaceChoice) return;
 
-    const target = getHomePathForUser(user);
+    const target = getAutomaticPostLoginPath(user);
 
     if (location === target) return;
     setLocation(target);
-  }, [loading, location, setLocation, user]);
+  }, [loading, location, needsWorkspaceChoice, setLocation, user]);
 
   const normalizeEmail = (value: string) => value.trim().toLowerCase();
   const resolveLoginEmail = (value: string) => resolveLoginEmailForAuth(value);
@@ -160,16 +174,14 @@ export default function LoginPage() {
         ? {
             badge: tr(language, "دخول المنصة", "Platform Access"),
             title: tr(language, "تسجيل الدخول", "Sign In"),
-            description:
-              "",
+            description: "",
             submitLabel: tr(language, "تسجيل الدخول", "Sign In"),
             toggleLabel: tr(language, "إنشاء حساب جديد", "Create Account"),
           }
         : {
             badge: tr(language, "إنشاء حساب", "Create Account"),
             title: tr(language, "إنشاء حساب جديد", "Create A New Account"),
-            description:
-              "",
+            description: "",
             submitLabel: tr(language, "إنشاء الحساب", "Create Account"),
             toggleLabel: tr(language, "لدي حساب بالفعل", "I Already Have An Account"),
           },
@@ -215,7 +227,7 @@ export default function LoginPage() {
 
     try {
       const isEmail = isEmailLoginInput(email);
-      let normalizedEmail =
+      const normalizedEmail =
         mode === "login" ? await resolveLoginEmail(email) : normalizeEmail(email);
 
       if (mode === "login") {
@@ -223,17 +235,17 @@ export default function LoginPage() {
         console.log("[HR Login] resolved email:", normalizedEmail ? "found" : "missing");
       }
 
-    if (!normalizedEmail) {
-      setBusy(false);
-      setLocalError(tr(language, "فضلًا اكتب البريد الإلكتروني.", "Enter your email."));
-      return;
-    }
+      if (!normalizedEmail) {
+        setBusy(false);
+        setLocalError(tr(language, "فضلًا اكتب البريد الإلكتروني.", "Enter your email."));
+        return;
+      }
 
-    if (!trimmedPassword) {
-      setBusy(false);
-      setLocalError(tr(language, "فضلًا اكتب كلمة المرور.", "Enter your password."));
-      return;
-    }
+      if (!trimmedPassword) {
+        setBusy(false);
+        setLocalError(tr(language, "فضلًا اكتب كلمة المرور.", "Enter your password."));
+        return;
+      }
 
       if (mode === "login") {
         const cred = await signInWithEmailAndPassword(
@@ -368,22 +380,21 @@ export default function LoginPage() {
     if (!firebaseConfigured || busy) return;
 
     resetTransientState();
-
     setBusy(true);
 
     try {
       const normalizedEmail = await resolveLoginEmail(email);
 
-    if (!normalizedEmail) {
-      setLocalError(
-        tr(
-          language,
-          "اكتب بريدك الإلكتروني أولًا ثم اضغط على خيار استعادة كلمة المرور.",
-          "Enter your email first, then choose password recovery."
-        )
-      );
-      return;
-    }
+      if (!normalizedEmail) {
+        setLocalError(
+          tr(
+            language,
+            "اكتب بريدك الإلكتروني أولًا ثم اضغط على خيار استعادة كلمة المرور.",
+            "Enter your email first, then choose password recovery."
+          )
+        );
+        return;
+      }
 
       await sendPasswordResetEmail(auth, normalizedEmail);
       setLocalInfo(
@@ -405,6 +416,104 @@ export default function LoginPage() {
     }
   };
 
+  if (!loading && user && needsWorkspaceChoice) {
+    return (
+      <div
+        dir={languageDir(language)}
+        className="min-h-[calc(100svh-var(--site-header-offset))] bg-[linear-gradient(180deg,#f6f6f7_0%,#ffffff_32%,#f7f7f8_100%)] text-foreground"
+      >
+        <main className="relative overflow-hidden">
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-x-0 top-0 h-72 bg-[radial-gradient(circle_at_top,rgba(242,174,48,0.14),transparent_62%)]"
+          />
+          <section className="px-4 py-10 sm:px-6 sm:py-14 lg:py-16">
+            <div className="container">
+              <div className="mx-auto flex min-h-[calc(100svh-var(--site-header-offset)-11rem)] max-w-[46rem] items-center justify-center">
+                <div
+                  className={`w-full rounded-[32px] border border-slate-200/80 bg-white/96 p-6 shadow-[0_30px_90px_-48px_rgba(11,23,38,0.24)] backdrop-blur-sm sm:p-8 md:p-10 ${textAlignClass(language)}`}
+                >
+                  <div className="space-y-3">
+                    <span className="inline-flex items-center rounded-full bg-[#f7f3ea] px-4 py-1.5 text-xs font-semibold tracking-[0.18em] text-primary/75 ring-1 ring-[#eadfbe]">
+                      {tr(language, "اختيار الوجهة", "Choose Workspace")}
+                    </span>
+                    <h1 className="text-3xl font-semibold tracking-tight text-slate-950 sm:text-[2rem]">
+                      {tr(
+                        language,
+                        "أين تريد الدخول؟",
+                        "Where would you like to go?"
+                      )}
+                    </h1>
+                    <p className="text-sm leading-7 text-slate-600 sm:text-[15px]">
+                      {tr(
+                        language,
+                        "حسابك يملك صلاحية الدخول إلى الوجهتين. اختر الوجهة التي تريد فتحها الآن.",
+                        "Your account can access both workspaces. Choose where to continue."
+                      )}
+                    </p>
+                  </div>
+
+                  <div className="mt-7 grid gap-4 sm:grid-cols-2">
+                    <button
+                      type="button"
+                      onClick={() => setLocation(workspaceAccess.dashboardPath)}
+                      className="group rounded-[24px] border border-slate-200 bg-white p-5 text-start shadow-[0_18px_45px_-38px_rgba(15,23,42,0.5)] transition hover:-translate-y-0.5 hover:border-[#F2B705]/60 hover:shadow-[0_24px_55px_-38px_rgba(15,23,42,0.55)]"
+                    >
+                      <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-950 text-[#F2B705]">
+                        <LayoutDashboard className="h-5 w-5" />
+                      </span>
+                      <span className="mt-5 block text-lg font-semibold text-slate-950">
+                        {tr(language, "لوحة التحكم", "Dashboard")}
+                      </span>
+                      <span className="mt-2 block text-sm leading-6 text-slate-500">
+                        {tr(
+                          language,
+                          "الدخول إلى الإدارة الرئيسية لمعدن.",
+                          "Open the main MAEDIN administration workspace."
+                        )}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setLocation(workspaceAccess.hrPath)}
+                      className="group rounded-[24px] border border-slate-200 bg-white p-5 text-start shadow-[0_18px_45px_-38px_rgba(15,23,42,0.5)] transition hover:-translate-y-0.5 hover:border-[#F2B705]/60 hover:shadow-[0_24px_55px_-38px_rgba(15,23,42,0.55)]"
+                    >
+                      <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-950 text-[#F2B705]">
+                        <BriefcaseBusiness className="h-5 w-5" />
+                      </span>
+                      <span className="mt-5 block text-lg font-semibold text-slate-950">
+                        {tr(language, "الموارد البشرية", "Human Resources")}
+                      </span>
+                      <span className="mt-2 block text-sm leading-6 text-slate-500">
+                        {tr(
+                          language,
+                          "الدخول إلى مساحة الموارد البشرية المسموحة لحسابك.",
+                          "Open the Human Resources workspace available to your account."
+                        )}
+                      </span>
+                    </button>
+                  </div>
+
+                  <div className="mt-6 border-t border-slate-200/80 pt-5">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => void logout()}
+                      className="rounded-full text-slate-600"
+                    >
+                      {tr(language, "تسجيل الخروج", "Sign Out")}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div
       dir={languageDir(language)}
@@ -423,7 +532,6 @@ export default function LoginPage() {
                 <div className="space-y-3">
                   <span className="inline-flex items-center rounded-full bg-[#f7f3ea] px-4 py-1.5 text-xs font-semibold tracking-[0.18em] text-primary/75 ring-1 ring-[#eadfbe]">
                     {modeCopy.badge}
-                    
                   </span>
 
                   <h1 className="text-3xl font-semibold tracking-tight text-slate-950 sm:text-[2rem]">
