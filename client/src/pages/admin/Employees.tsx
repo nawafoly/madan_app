@@ -5684,9 +5684,6 @@ export default function EmployeesManagementPage() {
       const currentEmployment = (selectedEmployee.employeeProfile?.employment ||
         selectedEmployee.employment ||
         {}) as EmployeeEmploymentDoc;
-      const linkedUserUid =
-        String(selectedEmployee.uid || selectedEmployee.id || "").trim() ||
-        selectedEmployee.id;
       const linkedEmployeeId =
         String(selectedEmployee.linkedEmployeeId || "").trim() ||
         selectedEmployee.id;
@@ -5745,7 +5742,7 @@ export default function EmployeesManagementPage() {
 
 
         const hrCoreResult = await updateHrCoreEmployee(linkedEmployeeId, {
-          authUid: linkedUserUid,
+          // Identity binding is governed separately; routine HR profile edits must not mutate authUid.
           name: normalizedFullName,
           email: normalizedEmail,
           phone: normalizedPhone || null,
@@ -5790,7 +5787,8 @@ export default function EmployeesManagementPage() {
 
 
       toast.success("تم حفظ بيانات الموظف الوظيفية.");
-    } catch {
+    } catch (error) {
+      console.error("employee_profile_update_failed", error);
       toast.error("تعذر حفظ بيانات الموظف الوظيفية.");
     } finally {
       setSaving(false);
