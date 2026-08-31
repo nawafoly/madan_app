@@ -144,9 +144,9 @@ export default function EmployeeAttendanceCard({
   const [cameraStarting, setCameraStarting] = useState(false);
   const [cameraError, setCameraError] = useState("");
   const [cameraFacingMode, setCameraFacingMode] =
-    useState<CameraFacingMode>("user");
+    useState<CameraFacingMode>("environment");
   const [activeCameraFacingMode, setActiveCameraFacingMode] =
-    useState<CameraFacingMode>("user");
+    useState<CameraFacingMode>("environment");
   const [hasMultipleCameras, setHasMultipleCameras] = useState(false);
   const [preparedAttendance, setPreparedAttendance] = useState<{
     type: AttendanceType;
@@ -416,8 +416,8 @@ export default function EmployeeAttendanceCard({
       if (prepared.requirements.photoRequired) {
         waitingForPhoto = true;
         setPreparedAttendance({ type, location: prepared.location });
-        setCameraFacingMode("user");
-        setActiveCameraFacingMode("user");
+        setCameraFacingMode("environment");
+        setActiveCameraFacingMode("environment");
         setCameraOpen(true);
         return;
       }
