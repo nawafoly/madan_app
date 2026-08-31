@@ -5,14 +5,15 @@ import { Globe, LayoutGrid, LogOut } from "lucide-react";
 import { NotificationBell } from "@/components/NotificationBell";
 import { Button } from "@/components/ui/button";
 import {
+  canAccessEmployeeProfile,
   getHomePathForUser,
-  isOpsRole,
   useAuth,
 } from "@/_core/hooks/useAuth";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useSiteContent } from "@/contexts/SiteContentContext";
 import { getSiteLogoAlt, getSiteLogoUrl } from "@/lib/siteContent";
 import { safeEnglishText } from "@/lib/i18n";
+import { getWorkspaceAccess } from "@/lib/workspaceAccess";
 
 export default function Header() {
   const [isScrolled, setIsScrolled] = useState(false);
@@ -67,20 +68,26 @@ export default function Header() {
     return [navLinks.slice(0, mid), navLinks.slice(mid)];
   }, [navLinks]);
 
-  const homeHref = getHomePathForUser(user);
-  const isOpsUser = isOpsRole(user?.role);
-  const isStaffUser = user?.role === "staff";
-  const accountCtaLabel = isOpsUser
-    ? language === "ar"
-      ? "لوحة التحكم"
-      : "Dashboard"
-    : isStaffUser
-      ? language === "ar"
-        ? "بوابة الموظفين"
-        : "Staff Portal"
-      : language === "ar"
-        ? "حسابي"
-        : "My Account";
+  const fallbackHomeHref = getHomePathForUser(user);
+  const workspaceAccess = getWorkspaceAccess(user);
+  const canUseEmployeePortal = canAccessEmployeeProfile(user);
+
+  let accountCtaHref = fallbackHomeHref;
+  let accountCtaLabel = language === "ar" ? "حسابي" : "My Account";
+
+  if (workspaceAccess.dashboard && workspaceAccess.hr) {
+    accountCtaHref = "/login";
+    accountCtaLabel = language === "ar" ? "اختيار الوجهة" : "Choose Workspace";
+  } else if (workspaceAccess.dashboard) {
+    accountCtaHref = workspaceAccess.dashboardPath;
+    accountCtaLabel = language === "ar" ? "لوحة التحكم" : "Dashboard";
+  } else if (workspaceAccess.hr) {
+    accountCtaHref = workspaceAccess.hrPath;
+    accountCtaLabel = language === "ar" ? "الموارد البشرية" : "Human Resources";
+  } else if (canUseEmployeePortal) {
+    accountCtaHref = "/employee/profile";
+    accountCtaLabel = language === "ar" ? "بوابة الموظفين" : "Staff Portal";
+  }
 
   const closeMobile = () => setIsMobileMenuOpen(false);
 
@@ -249,7 +256,7 @@ export default function Header() {
                 ) : null
               ) : (
                 <div className="hidden items-center gap-2 md:flex">
-                  <Link href={homeHref}>
+                  <Link href={accountCtaHref}>
                     <Button className={`rsg-cta ${navBtnClass} rsg-nav__action--primary`}>
                       <LayoutGrid className="h-4 w-4" />
                       {accountCtaLabel}
@@ -312,7 +319,7 @@ export default function Header() {
                     ) : null
                   ) : (
                     <>
-                      <Link href={homeHref}>
+                      <Link href={accountCtaHref}>
                         <Button
                           className={`w-full rsg-cta ${navBtnClass}`}
                           onClick={closeMobile}
