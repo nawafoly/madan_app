@@ -1,6 +1,6 @@
 # MADAN Stage 2E — Canonical Leave Ledger
 
-Status: Foundation contract  
+Status: Foundation contract
 Scope: additive schema foundation; no Production migration or API/UI cutover in this stage
 
 ## Objective
