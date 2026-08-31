@@ -15,8 +15,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -38,7 +36,8 @@ jobs:
           npm run check > /tmp/head-check.log 2>&1
           grep "error TS" /tmp/head-check.log | sort > /tmp/head-errors.txt || true
 
-          git checkout --detach origin/main
+          git fetch origin main --depth=1
+          git checkout --detach FETCH_HEAD
           npm run check > /tmp/base-check.log 2>&1
           grep "error TS" /tmp/base-check.log | sort > /tmp/base-errors.txt || true
 
