@@ -232,7 +232,7 @@ export default function SettingsDatabaseTab({
                       Cloudflare Worker
                     </div>
                     <div className="font-semibold break-words" dir="ltr">
-                      {workerUrl || "upload.maedin.workers.dev"}
+                      {workerUrl || "upload.maedin2026.workers.dev"}
                     </div>
                     <div className="pt-2">
                       <Badge

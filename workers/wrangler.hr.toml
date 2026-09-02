@@ -1,4 +1,4 @@
-﻿name = "maedin-hr-api"
+name = "maedin-hr-api"
 main = "hr-core-worker.js"
 compatibility_date = "2026-07-21"
 workers_dev = true
@@ -11,13 +11,13 @@ AI_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
 [[d1_databases]]
 binding = "HR_DB"
 database_name = "maedin-hr"
-database_id = "a9435ad2-4430-47b2-a5e6-ad2448ed9b0b"
+database_id = "6b2d4040-669f-434c-a74c-de2118ae9942"
 migrations_dir = "hr-migrations"
 
 [[d1_databases]]
 binding = "ATTENDANCE_DB"
 database_name = "maedin-attendance"
-database_id = "b765c430-0bf1-4128-8c34-b1f57489aa3f"
+database_id = "fd4dc78e-44b9-463f-aa21-d607355cfe93"
 
 [ai]
 binding = "AI"
