@@ -2072,8 +2072,14 @@ function normalizeObjectPath(value) {
   const raw = String(value || "")
     .trim()
     .replace(/^\/+/, "");
-  if (!raw) return "";
-  if (raw.includes("..") || raw.includes("\\")) return "";
+
+  if (!raw || raw.includes("\\")) return "";
+
+  const segments = raw.split("/");
+  if (segments.some(segment => segment === "." || segment === "..")) {
+    return "";
+  }
+
   return raw;
 }
 
