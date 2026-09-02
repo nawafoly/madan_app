@@ -14,13 +14,13 @@ bucket_name = "maedin-storage"
 [[d1_databases]]
 binding = "DOCUMENTS_DB"
 database_name = "maedin-documents"
-database_id = "ddc201f4-f49b-4634-a4fa-0c0f3fc4732f"
+database_id = "06b05199-d41e-4757-a1a3-9d64ca559332"
 migrations_dir = "migrations"
 
 [[d1_databases]]
 binding = "ATTENDANCE_DB"
 database_name = "maedin-attendance"
-database_id = "b765c430-0bf1-4128-8c34-b1f57489aa3f"
+database_id = "fd4dc78e-44b9-463f-aa21-d607355cfe93"
 migrations_dir = "attendance-migrations"
 
 # Attendance employee-zone resolution reads the canonical HR Core assignment.
@@ -28,4 +28,4 @@ migrations_dir = "attendance-migrations"
 [[d1_databases]]
 binding = "HR_DB"
 database_name = "maedin-hr"
-database_id = "a9435ad2-4430-47b2-a5e6-ad2448ed9b0b"
+database_id = "6b2d4040-669f-434c-a74c-de2118ae9942"
