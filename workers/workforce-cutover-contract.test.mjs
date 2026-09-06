@@ -10,6 +10,7 @@ const preflight = read("workers/workforce-migrations/tenant-cutover/0000_habat_p
 const fixture = read("workers/workforce-migrations/tenant-cutover/fixtures/0001_habat_local_fixture.sql");
 const verification = read("workers/workforce-migrations/tenant-cutover/fixtures/0002_verify_habat_local_cutover.sql");
 const localHarness = read("scripts/test-workforce-cutover-local.mjs");
+const productionReporter = read("scripts/report-workforce-cutover-production.mjs");
 
 test("Workforce Core stays free of Habbat table knowledge", () => {
   assert.doesNotMatch(core, /habat_attendance_/i);
@@ -74,6 +75,15 @@ test("production preflight is SELECT-only", () => {
   ]) {
     assert.match(preflight, new RegExp(diagnostic));
   }
+});
+
+test("production value reporter is remote but hard-blocked to SELECT-only checks", () => {
+  assert.match(productionReporter, /READ ONLY/);
+  assert.match(productionReporter, /"--remote"/);
+  assert.match(productionReporter, /forbidden\s*=\s*\/\\b\(\?:INSERT\|UPDATE\|DELETE/);
+  assert.match(productionReporter, /!\/\^\\s\*SELECT\\b\/i\.test\(sql\)/);
+  assert.doesNotMatch(productionReporter, /0001_habat_workforce_seed\.sql/);
+  assert.doesNotMatch(productionReporter, /"--file"/);
 });
 
 test("local cutover fixture and harness can never target remote D1", () => {
