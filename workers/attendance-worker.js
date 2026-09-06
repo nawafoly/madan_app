@@ -4,6 +4,7 @@ import { handleHabatAttendanceV2Request } from "./habat-attendance-v2.js";
 import { handleHabatAttendanceV3Request } from "./habat-attendance-v3.js";
 import { handleHabatAttendanceReportingRequest } from "./habat-attendance-reporting.js";
 import { handleHabatPortalRequest } from "./habat-portal.js";
+import { handleHabatWorkforceRequest } from "./habat-workforce-adapter.js";
 import { resolveHabatRequesterContext } from "./habat-auth.js";
 
 export * from "./attendance-worker-core.js";
@@ -135,6 +136,9 @@ export async function handleAttendanceRequest(args) {
         resolveHabatRequesterContext(request, legacyRequesterResolver),
     };
 
+    if (pathname.startsWith("/attendance/habat/workforce/")) {
+      return handleHabatWorkforceRequest(habatArgs);
+    }
     if (pathname.startsWith("/attendance/habat/portal/")) {
       return handleHabatPortalRequest(habatArgs);
     }
