@@ -131,6 +131,45 @@ SET name = (SELECT s.name FROM habat_attendance_shifts s WHERE 'wf_sched_' || s.
 WHERE tenant_id = 'restaurant_tenant_habat_alwaraq'
   AND id LIKE 'wf_sched_%';
 
+-- Legacy Habbat resolves an employee with no explicit assignment to the active
+-- default shift (habat_shift_default, otherwise the first active shift). Preserve
+-- that implicit behavior by materializing a baseline generic assignment for every
+-- cut-over employee. Explicit dated assignments below remain more specific because
+-- they carry later effective_from values; when they expire, the baseline is again
+-- available as the fallback instead of leaving the employee unscheduled.
+INSERT INTO workforce_schedule_assignments (
+  id, tenant_id, employee_id, template_id, effective_from, effective_to,
+  created_by_uid, created_by_email, created_at
+)
+SELECT
+  'wf_asg_legacy_default_' || p.source_id,
+  'restaurant_tenant_habat_alwaraq',
+  p.id,
+  'wf_sched_' || d.id,
+  '1970-01-01',
+  NULL,
+  NULL,
+  NULL,
+  COALESCE(p.created_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+FROM workforce_employee_profiles p
+JOIN (
+  SELECT id
+  FROM habat_attendance_shifts
+  WHERE is_active = 1
+  ORDER BY CASE WHEN id = 'habat_shift_default' THEN 0 ELSE 1 END, created_at ASC
+  LIMIT 1
+) d
+JOIN workforce_schedule_templates t
+  ON t.tenant_id = 'restaurant_tenant_habat_alwaraq'
+ AND t.id = 'wf_sched_' || d.id
+WHERE p.tenant_id = 'restaurant_tenant_habat_alwaraq'
+  AND p.source_type = 'legacy_attendance_access'
+  AND NOT EXISTS (
+    SELECT 1 FROM workforce_schedule_assignments x
+    WHERE x.id = 'wf_asg_legacy_default_' || p.source_id
+  );
+
+-- Preserve explicit legacy assignments as dated overrides of the baseline.
 INSERT INTO workforce_schedule_assignments (
   id, tenant_id, employee_id, template_id, effective_from, effective_to,
   created_by_uid, created_by_email, created_at
