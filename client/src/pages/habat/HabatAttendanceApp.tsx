@@ -2,12 +2,14 @@ import {
   BarChart3,
   CalendarClock,
   Clock3,
+  FileClock,
   LogIn,
   LogOut,
   RefreshCw,
   Settings2,
   ShieldCheck,
   UserCog,
+  UserRound,
   Users,
 } from "lucide-react";
 import {
@@ -35,6 +37,10 @@ import {
   ShiftsPage,
 } from "./HabatAttendanceAdmin";
 import {
+  AuditLogPage,
+  EmployeePortalPage,
+} from "./HabatAttendancePortal";
+import {
   formatDate,
   formatMinutes,
   formatTime,
@@ -56,6 +62,7 @@ type AccessState =
 
 type PageKey =
   | "dashboard"
+  | "profile"
   | "clock"
   | "history"
   | "employees"
@@ -63,6 +70,7 @@ type PageKey =
   | "shifts"
   | "records"
   | "reports"
+  | "audit"
   | "settings";
 
 function Brand({ compact = false }: { compact?: boolean }) {
@@ -426,7 +434,7 @@ function AttendanceShell({
   onContextRefresh: () => Promise<void>;
 }) {
   const principal = context.principal;
-  const [page, setPage] = useState<PageKey>(principal.canManage ? "dashboard" : "clock");
+  const [page, setPage] = useState<PageKey>(principal.canManage ? "dashboard" : "profile");
 
   const managerItems: Array<{
     key: PageKey;
@@ -440,10 +448,12 @@ function AttendanceShell({
     { key: "shifts", label: "الدوام والشفتات", icon: CalendarClock },
     { key: "records", label: "سجل الحضور", icon: RefreshCw },
     { key: "reports", label: "التقارير", icon: BarChart3 },
+    { key: "audit", label: "سجل التدقيق", icon: FileClock },
     { key: "settings", label: "الإعدادات", icon: Settings2 },
   ];
 
   const employeeItems: typeof managerItems = [
+    { key: "profile", label: "صفحتي", icon: UserRound },
     { key: "clock", label: "الحضور والانصراف", icon: Clock3 },
     { key: "history", label: "سجلي", icon: CalendarClock },
   ];
@@ -454,6 +464,8 @@ function AttendanceShell({
     switch (page) {
       case "dashboard":
         return <DashboardPage />;
+      case "profile":
+        return <EmployeePortalPage />;
       case "clock":
         return <ClockPage context={context} onRefresh={onContextRefresh} />;
       case "history":
@@ -468,12 +480,16 @@ function AttendanceShell({
         return <RecordsPage />;
       case "reports":
         return <ReportsPage />;
+      case "audit":
+        return <AuditLogPage />;
       case "settings":
         return <SettingsPage onDataChanged={onContextRefresh} />;
       default:
-        return <ClockPage context={context} onRefresh={onContextRefresh} />;
+        return principal.canManage
+          ? <DashboardPage />
+          : <EmployeePortalPage />;
     }
-  }, [context, onContextRefresh, page]);
+  }, [context, onContextRefresh, page, principal.canManage]);
 
   return (
     <main dir="rtl" className="min-h-screen bg-[#f5f5f3] text-slate-950">
