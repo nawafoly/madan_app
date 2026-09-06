@@ -72,7 +72,8 @@ async function resolvePrincipal(db, requester) {
   if (uid || email) {
     try {
       const row = await db.prepare(
-        `SELECT id, uid, email, display_name, access_level, clock_enabled, is_active
+        `SELECT id, uid, email, display_name, access_level, clock_enabled, is_active,
+                created_at, updated_at
          FROM habat_attendance_access
          WHERE is_active = 1
            AND ((uid IS NOT NULL AND uid = ?) OR lower(email) = ?)
@@ -91,6 +92,7 @@ async function resolvePrincipal(db, requester) {
           accessLevel,
           canManage: accessLevel === "manager",
           canClock: Number(row.clock_enabled) === 1,
+          createdAt: normalizeText(row.created_at) || null,
         };
       }
     } catch (error) {
@@ -109,6 +111,7 @@ async function resolvePrincipal(db, requester) {
       accessLevel: "manager",
       canManage: true,
       canClock: false,
+      createdAt: null,
     };
   }
 
@@ -129,7 +132,8 @@ async function resolveScopedAccess(db, principal, requestedAccessId) {
 
 async function getAccessById(db, id) {
   const row = await db.prepare(
-    `SELECT id, uid, email, display_name, access_level, clock_enabled, is_active
+    `SELECT id, uid, email, display_name, access_level, clock_enabled, is_active,
+            created_at, updated_at
      FROM habat_attendance_access WHERE id = ? LIMIT 1`
   ).bind(id).first();
   if (!row) return { ok: false, response: json(404, { ok: false, message: "habat_access_not_found" }) };
@@ -165,7 +169,7 @@ async function buildMonthWorkspace(db, access, month) {
        WHERE access_id = ? AND attendance_date >= ? AND attendance_date <= ?
        ORDER BY attendance_date ASC`
     ).bind(access.id, range.from, range.to).all(),
-    db.prepare(`SELECT * FROM habat_attendance_shifts WHERE is_active = 1 OR id = ?`).bind(DEFAULT_SHIFT_ID).all(),
+    db.prepare(`SELECT * FROM habat_attendance_shifts ORDER BY created_at ASC`).all(),
     db.prepare(
       `SELECT * FROM habat_attendance_shift_assignments
        WHERE access_id = ? AND effective_from <= ?
@@ -186,13 +190,37 @@ async function buildMonthWorkspace(db, access, month) {
   const recordByDate = new Map(records.map(row => [normalizeText(row.attendance_date), row]));
   const overrideByDate = new Map(overrides.map(row => [normalizeText(row.attendance_date), row]));
   const today = getRiyadhDateKey();
+  const now = new Date();
+  const enrollmentDate = getRiyadhDateKeyFromIso(access.created_at);
+  const clockEnabled = Number(access.clock_enabled) === 1;
 
   const days = enumerateDateKeys(range.from, range.to).map(date => {
-    const shift = resolveShiftForDate(date, assignments, shifts);
     const record = recordByDate.get(date) || null;
     const override = overrideByDate.get(date) || null;
+    const hasActualData = Boolean(record || override);
+    const beforeEnrollment = Boolean(enrollmentDate && date < enrollmentDate && !hasActualData);
+    const clockDisabled = !clockEnabled && !hasActualData;
+
+    if (beforeEnrollment || clockDisabled) {
+      return {
+        date,
+        weekday: weekdayIndex(date),
+        workingDay: false,
+        state: "future",
+        shift: null,
+        record: mapRecord(record),
+        override: mapOverride(override),
+        eligible: false,
+        eligibilityReason: beforeEnrollment ? "before_enrollment" : "clock_disabled",
+        attendanceWindowStarted: false,
+      };
+    }
+
+    const shift = resolveShiftForDate(date, assignments, shifts);
     const workingDay = shift ? parseWorkingDays(shift.working_days).includes(weekdayIndex(date)) : true;
     const future = date > today;
+    const schedule = shift ? buildScheduleWindow(date, shift) : null;
+    const attendanceWindowStarted = date < today || (date === today && Boolean(schedule) && now.getTime() >= schedule.start.getTime());
     let state = "pending";
     if (future) state = "future";
     else if (!workingDay) state = "off";
@@ -204,6 +232,7 @@ async function buildMonthWorkspace(db, access, month) {
         : "complete";
     } else if (record?.check_in_at) state = "incomplete";
     else if (date < today) state = "absence";
+    else if (!attendanceWindowStarted) state = "pending";
     else state = "today_pending";
 
     return {
@@ -214,6 +243,9 @@ async function buildMonthWorkspace(db, access, month) {
       shift: mapShift(shift),
       record: mapRecord(record),
       override: mapOverride(override),
+      eligible: true,
+      eligibilityReason: null,
+      attendanceWindowStarted,
     };
   });
 
@@ -244,10 +276,22 @@ async function createManualRecord(db, request, requester) {
   if (checkOutAt && Date.parse(checkOutAt) < Date.parse(checkInAt)) {
     return json(400, { ok: false, message: "habat_invalid_attendance_order" });
   }
+  if (date > getRiyadhDateKey() || Date.parse(checkInAt) > Date.now()) {
+    return json(400, { ok: false, message: "habat_future_attendance_not_allowed" });
+  }
+  if (getRiyadhDateKeyFromIso(checkInAt) !== date) {
+    return json(400, { ok: false, message: "habat_attendance_date_mismatch" });
+  }
 
   const accessResult = await getAccessById(db, accessId);
   if (!accessResult.ok) return accessResult.response;
   const access = accessResult.row;
+  if (Number(access.is_active) !== 1) return json(409, { ok: false, message: "habat_inactive_access" });
+  if (Number(access.clock_enabled) !== 1) return json(409, { ok: false, message: "habat_clock_disabled_for_date" });
+  const enrollmentDate = getRiyadhDateKeyFromIso(access.created_at);
+  if (enrollmentDate && date < enrollmentDate) {
+    return json(409, { ok: false, message: "habat_date_before_enrollment" });
+  }
   const uid = normalizeText(access.uid);
   if (!uid) return json(409, { ok: false, message: "habat_employee_login_required_before_manual_record" });
 
@@ -317,13 +361,24 @@ async function upsertDayOverride(db, request, requester) {
   if (!accessId || !date || !OVERRIDE_TYPES.has(type)) {
     return json(400, { ok: false, message: "habat_day_override_fields_required" });
   }
+  if (date > getRiyadhDateKey()) {
+    return json(400, { ok: false, message: "habat_future_override_not_allowed" });
+  }
 
   const accessResult = await getAccessById(db, accessId);
   if (!accessResult.ok) return accessResult.response;
+  const access = accessResult.row;
+  if (Number(access.is_active) !== 1) return json(409, { ok: false, message: "habat_inactive_access" });
+  if (Number(access.clock_enabled) !== 1) return json(409, { ok: false, message: "habat_clock_disabled_for_date" });
+  const enrollmentDate = getRiyadhDateKeyFromIso(access.created_at);
+  if (enrollmentDate && date < enrollmentDate) {
+    return json(409, { ok: false, message: "habat_date_before_enrollment" });
+  }
+
   const attendance = await db.prepare(
     `SELECT id FROM habat_attendance_records
      WHERE attendance_date = ? AND (access_id = ? OR lower(account_email) = lower(?)) LIMIT 1`
-  ).bind(date, accessId, accessResult.row.email).first();
+  ).bind(date, accessId, access.email).first();
   if (attendance) return json(409, { ok: false, message: "habat_day_has_attendance_record" });
 
   const current = await db.prepare(
@@ -398,7 +453,11 @@ async function generateMonthlySummary(db, request, requester) {
   try {
     const workspace = await buildMonthWorkspace(db, accessResult.row, month);
     const today = getRiyadhDateKey();
-    const elapsed = workspace.days.filter(day => day.date <= today && day.workingDay);
+    const elapsed = workspace.days.filter(day =>
+      day.eligible !== false &&
+      day.workingDay &&
+      (day.date < today || (day.date === today && day.attendanceWindowStarted))
+    );
     const summary = {
       month,
       scheduledDays: elapsed.filter(day => day.state !== "leave").length,
@@ -441,7 +500,6 @@ async function resolveShiftForAccessDate(db, accessId, date) {
      JOIN habat_attendance_shifts s ON s.id = a.shift_id
      WHERE a.access_id = ? AND a.effective_from <= ?
        AND (a.effective_to IS NULL OR a.effective_to >= ?)
-       AND s.is_active = 1
      ORDER BY a.effective_from DESC LIMIT 1`
   ).bind(accessId, date, date).first();
   if (assignment) return assignment;
@@ -484,6 +542,7 @@ function mapAccess(row) {
     email: normalizeText(row.email).toLowerCase(), displayName: normalizeText(row.display_name) || null,
     accessLevel: normalizeText(row.access_level) === "manager" ? "manager" : "employee",
     clockEnabled: Number(row.clock_enabled) === 1, isActive: Number(row.is_active) === 1,
+    createdAt: normalizeText(row.created_at) || null,
   };
 }
 
@@ -586,15 +645,23 @@ function enumerateDateKeys(from, to) {
   let cursor = new Date(`${from}T12:00:00+03:00`);
   const end = new Date(`${to}T12:00:00+03:00`);
   while (cursor.getTime() <= end.getTime()) {
-    const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Riyadh", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(cursor);
-    const map = Object.fromEntries(parts.map(part => [part.type, part.value]));
-    result.push(`${map.year}-${map.month}-${map.day}`);
+    result.push(formatRiyadhDateKey(cursor));
     cursor = new Date(cursor.getTime() + 24 * 60 * 60 * 1000);
   }
   return result;
 }
 function getRiyadhDateKey() {
-  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Riyadh", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
+  return formatRiyadhDateKey(new Date());
+}
+function getRiyadhDateKeyFromIso(value) {
+  const text = normalizeText(value);
+  if (!text) return "";
+  const timestamp = Date.parse(text);
+  if (!Number.isFinite(timestamp)) return "";
+  return formatRiyadhDateKey(new Date(timestamp));
+}
+function formatRiyadhDateKey(date) {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Riyadh", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date);
   const map = Object.fromEntries(parts.map(part => [part.type, part.value]));
   return `${map.year}-${map.month}-${map.day}`;
 }
