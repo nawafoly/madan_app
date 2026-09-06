@@ -6,6 +6,7 @@ const read = path => fs.readFileSync(path, "utf8");
 const core = read("workers/workforce-core.js");
 const adapter = read("workers/habat-workforce-adapter.js");
 const cutover = read("workers/workforce-migrations/tenant-cutover/0001_habat_workforce_seed.sql");
+const preflight = read("workers/workforce-migrations/tenant-cutover/0000_habat_production_preflight.sql");
 const fixture = read("workers/workforce-migrations/tenant-cutover/fixtures/0001_habat_local_fixture.sql");
 const verification = read("workers/workforce-migrations/tenant-cutover/fixtures/0002_verify_habat_local_cutover.sql");
 const localHarness = read("scripts/test-workforce-cutover-local.mjs");
@@ -46,6 +47,33 @@ test("cutover is additive and never deletes legacy data", () => {
   assert.doesNotMatch(cutover, /\bDROP\b/i);
   assert.doesNotMatch(cutover, /\bDELETE\s+FROM\s+habat_/i);
   assert.doesNotMatch(cutover, /\bUPDATE\s+habat_/i);
+});
+
+test("production preflight is SELECT-only", () => {
+  assert.match(preflight, /PRODUCTION READ-ONLY PREFLIGHT/);
+  assert.match(preflight, /\bSELECT\b/i);
+  assert.doesNotMatch(preflight, /\b(?:INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|REPLACE|PRAGMA)\b/i);
+  for (const diagnostic of [
+    "source_employees",
+    "source_shifts",
+    "source_assignments",
+    "source_day_overrides",
+    "source_monthly_summaries",
+    "orphan_assignments_missing_employee",
+    "orphan_assignments_missing_shift",
+    "orphan_day_overrides",
+    "orphan_monthly_summaries",
+    "conflicting_employee_identity_rows",
+    "conflicting_employee_source_rows",
+    "expected_employee_rows_after_cutover",
+    "expected_schedule_rows_after_cutover",
+    "expected_assignment_rows_after_cutover",
+    "expected_leave_rows_after_cutover",
+    "expected_absence_rows_after_cutover",
+    "expected_attendance_snapshot_rows_after_cutover",
+  ]) {
+    assert.match(preflight, new RegExp(diagnostic));
+  }
 });
 
 test("local cutover fixture and harness can never target remote D1", () => {
