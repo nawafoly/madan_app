@@ -7,6 +7,7 @@ import {
   RefreshCw,
   Settings2,
   ShieldCheck,
+  UserCog,
   Users,
 } from "lucide-react";
 import {
@@ -24,6 +25,7 @@ import {
 
 import { auth } from "@/_core/firebase";
 import { resolveLoginEmailForAuth } from "@/lib/loginIdentity";
+import HabatAccountManagement from "./HabatAccountManagement";
 import {
   DashboardPage,
   EmployeesPage,
@@ -57,6 +59,7 @@ type PageKey =
   | "clock"
   | "history"
   | "employees"
+  | "accounts"
   | "shifts"
   | "records"
   | "reports"
@@ -433,6 +436,7 @@ function AttendanceShell({
     { key: "dashboard", label: "الرئيسية", icon: ShieldCheck },
     { key: "clock", label: "الحضور والانصراف", icon: Clock3 },
     { key: "employees", label: "الموظفون", icon: Users },
+    { key: "accounts", label: "إدارة الحسابات", icon: UserCog },
     { key: "shifts", label: "الدوام والشفتات", icon: CalendarClock },
     { key: "records", label: "سجل الحضور", icon: RefreshCw },
     { key: "reports", label: "التقارير", icon: BarChart3 },
@@ -456,6 +460,8 @@ function AttendanceShell({
         return <MyHistoryPage />;
       case "employees":
         return <EmployeesPage onDataChanged={onContextRefresh} />;
+      case "accounts":
+        return <HabatAccountManagement onDataChanged={onContextRefresh} />;
       case "shifts":
         return <ShiftsPage onDataChanged={onContextRefresh} />;
       case "records":
