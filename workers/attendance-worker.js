@@ -1,5 +1,6 @@
 import * as core from "./attendance-worker-core.js";
 import { handleHabatAttendanceRequest } from "./habat-attendance-core.js";
+import { handleHabatAttendanceV2Request } from "./habat-attendance-v2.js";
 
 export * from "./attendance-worker-core.js";
 
@@ -130,7 +131,11 @@ export async function handleAttendanceRequest(args) {
   const pathname = normalizeText(args?.url?.pathname);
 
   // Habbat Al Waraq has a completely isolated access list and record tables.
-  // It shares only the authenticated worker runtime and ATTENDANCE_DB binding.
+  // V2 adds schedules, geofencing, reporting and administrative corrections
+  // while preserving the original Habbat endpoints during rollout.
+  if (pathname.startsWith("/attendance/habat/v2/")) {
+    return handleHabatAttendanceV2Request(args);
+  }
   if (pathname.startsWith("/attendance/habat/")) {
     return handleHabatAttendanceRequest(args);
   }
