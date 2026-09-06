@@ -50,6 +50,16 @@ test("cutover is additive and never deletes legacy data", () => {
   assert.doesNotMatch(cutover, /\bUPDATE\s+habat_/i);
 });
 
+test("cutover materializes the legacy default-shift fallback without putting tenant logic in Core", () => {
+  assert.match(cutover, /wf_asg_legacy_default_/);
+  assert.match(cutover, /'1970-01-01'/);
+  assert.match(cutover, /ORDER BY CASE WHEN id = 'habat_shift_default' THEN 0 ELSE 1 END, created_at ASC/);
+  assert.match(verification, /default_assignment_mapping/);
+  assert.match(verification, /explicit_assignment_mapping/);
+  assert.match(preflight, /expected_default_fallback_assignment_rows_after_cutover/);
+  assert.match(productionReporter, /expected_default_fallback_assignments/);
+});
+
 test("production preflight is SELECT-only", () => {
   assert.match(preflight, /PRODUCTION READ-ONLY PREFLIGHT/);
   assert.match(preflight, /\bSELECT\b/i);
@@ -68,6 +78,7 @@ test("production preflight is SELECT-only", () => {
     "conflicting_employee_source_rows",
     "expected_employee_rows_after_cutover",
     "expected_schedule_rows_after_cutover",
+    "expected_default_fallback_assignment_rows_after_cutover",
     "expected_assignment_rows_after_cutover",
     "expected_leave_rows_after_cutover",
     "expected_absence_rows_after_cutover",
@@ -125,6 +136,8 @@ test("local verification is file-based so Windows cmd cannot truncate SQL", () =
     "absence_count",
     "attendance_snapshot_count",
     "employee_mapping",
+    "default_assignment_mapping",
+    "explicit_assignment_mapping",
     "leave_mapping",
     "absence_mapping",
     "snapshot_mapping",
