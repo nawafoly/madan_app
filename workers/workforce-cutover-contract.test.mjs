@@ -6,6 +6,8 @@ const read = path => fs.readFileSync(path, "utf8");
 const core = read("workers/workforce-core.js");
 const adapter = read("workers/habat-workforce-adapter.js");
 const cutover = read("workers/workforce-migrations/tenant-cutover/0001_habat_workforce_seed.sql");
+const fixture = read("workers/workforce-migrations/tenant-cutover/fixtures/0001_habat_local_fixture.sql");
+const localHarness = read("scripts/test-workforce-cutover-local.mjs");
 
 test("Workforce Core stays free of Habbat table knowledge", () => {
   assert.doesNotMatch(core, /habat_attendance_/i);
@@ -43,4 +45,17 @@ test("cutover is additive and never deletes legacy data", () => {
   assert.doesNotMatch(cutover, /\bDROP\b/i);
   assert.doesNotMatch(cutover, /\bDELETE\s+FROM\s+habat_/i);
   assert.doesNotMatch(cutover, /\bUPDATE\s+habat_/i);
+});
+
+test("local cutover fixture and harness can never target remote D1", () => {
+  assert.match(fixture, /LOCAL TEST FIXTURE ONLY/);
+  assert.match(fixture, /Never run it with --remote/i);
+  assert.match(localHarness, /"--local"/);
+  assert.match(localHarness, /--persist-to/);
+  assert.doesNotMatch(localHarness, /"--remote"/);
+});
+
+test("local harness validates idempotency by applying tenant cutover twice", () => {
+  const occurrences = localHarness.match(/0001_habat_workforce_seed\.sql/g) || [];
+  assert.ok(occurrences.length >= 2, "cutover seed must be applied at least twice in the isolated harness");
 });
