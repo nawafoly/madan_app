@@ -128,7 +128,7 @@ run(
     "--project-name",
     "habat-alwaraq",
     "--branch",
-    "main",
+    "habat-production",
     "--commit-dirty=true",
   ],
   { env: buildEnv }
