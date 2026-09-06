@@ -33,9 +33,9 @@ import {
   EmployeesPage,
   RecordsPage,
   ReportsPage,
-  SettingsPage,
   ShiftsPage,
 } from "./HabatAttendanceAdmin";
+import HabatAttendanceSettings from "./HabatAttendanceSettings";
 import {
   AuditLogPage,
   EmployeePortalPage,
@@ -483,7 +483,7 @@ function AttendanceShell({
       case "audit":
         return <AuditLogPage />;
       case "settings":
-        return <SettingsPage onDataChanged={onContextRefresh} />;
+        return <HabatAttendanceSettings onDataChanged={onContextRefresh} />;
       default:
         return principal.canManage
           ? <DashboardPage />
@@ -492,11 +492,11 @@ function AttendanceShell({
   }, [context, onContextRefresh, page, principal.canManage]);
 
   return (
-    <main dir="rtl" className="min-h-screen bg-[#f5f5f3] text-slate-950">
-      <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4">
+    <main dir="rtl" className="habat-attendance-shell min-h-screen bg-[#f5f5f3] text-slate-950">
+      <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 px-3 py-3 backdrop-blur sm:px-4">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 sm:gap-4">
           <Brand compact />
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
             <div className="hidden text-left sm:block">
               <p className="text-sm font-black">{principal.displayName || principal.email}</p>
               <p className="text-xs text-slate-500">
@@ -513,9 +513,26 @@ function AttendanceShell({
         </div>
       </header>
 
-      <div className="mx-auto grid max-w-7xl gap-6 px-4 py-6 lg:grid-cols-[230px_minmax(0,1fr)]">
-        <aside className="h-fit rounded-[24px] border border-slate-200 bg-white p-2 shadow-sm lg:sticky lg:top-24">
-          <nav className="flex gap-2 overflow-x-auto lg:flex-col">
+      <div className="mx-auto grid max-w-7xl gap-4 px-3 py-4 sm:px-4 sm:py-6 lg:grid-cols-[230px_minmax(0,1fr)] lg:gap-6">
+        <div className="lg:hidden">
+          <label className="block rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+            <span className="mb-2 block text-xs font-bold text-slate-500">القسم</span>
+            <select
+              value={page}
+              onChange={event => setPage(event.target.value as PageKey)}
+              className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-black outline-none"
+            >
+              {items.map(item => (
+                <option key={item.key} value={item.key}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <aside className="hidden h-fit rounded-[24px] border border-slate-200 bg-white p-2 shadow-sm lg:sticky lg:top-24 lg:block">
+          <nav className="flex flex-col gap-2">
             {items.map(item => {
               const Icon = item.icon;
               const active = page === item.key;
@@ -525,12 +542,12 @@ function AttendanceShell({
                   onClick={() => setPage(item.key)}
                   className={
                     active
-                      ? "flex min-w-max items-center gap-2 rounded-2xl bg-black px-4 py-3 text-sm font-bold text-white"
-                      : "flex min-w-max items-center gap-2 rounded-2xl px-4 py-3 text-sm font-bold text-slate-600 hover:bg-slate-50"
+                      ? "flex min-w-0 items-center gap-2 rounded-2xl bg-black px-4 py-3 text-sm font-bold text-white"
+                      : "flex min-w-0 items-center gap-2 rounded-2xl px-4 py-3 text-sm font-bold text-slate-600 hover:bg-slate-50"
                   }
                 >
-                  <Icon size={18} />
-                  {item.label}
+                  <Icon size={18} className="shrink-0" />
+                  <span className="min-w-0">{item.label}</span>
                 </button>
               );
             })}

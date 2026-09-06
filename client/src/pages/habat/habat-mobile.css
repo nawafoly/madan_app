@@ -1,0 +1,18 @@
+@media (max-width: 639px) {
+  .habat-settings-savebar {
+    position: sticky;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 0.75rem);
+    z-index: 20;
+  }
+}
+
+.habat-attendance-shell input,
+.habat-attendance-shell select,
+.habat-attendance-shell textarea,
+.habat-attendance-shell button {
+  max-width: 100%;
+}
+
+.habat-attendance-shell {
+  overflow-x: clip;
+}
