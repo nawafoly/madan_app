@@ -60,9 +60,11 @@ test("local harness validates idempotency by applying tenant cutover twice", () 
   assert.ok(occurrences.length >= 2, "cutover seed must be applied at least twice in the isolated harness");
 });
 
-test("local harness runs Wrangler through Node and never spawns a Windows .cmd shim", () => {
-  assert.match(localHarness, /process\.execPath/);
-  assert.match(localHarness, /node_modules.*wrangler.*bin.*wrangler\.js/s);
+test("local harness uses the existing npx Wrangler workflow without direct .cmd spawning", () => {
+  assert.match(localHarness, /process\.env\.ComSpec\s*\|\|\s*"cmd\.exe"/);
+  assert.match(localHarness, /\["\/d",\s*"\/s",\s*"\/c",\s*"npx"/);
+  assert.match(localHarness, /return \{ command: "npx", args: wranglerArgs \}/);
   assert.doesNotMatch(localHarness, /spawnSync\([^\n]*npx\.cmd/i);
   assert.doesNotMatch(localHarness, /shell:\s*true/);
+  assert.doesNotMatch(localHarness, /node_modules.*wrangler.*bin.*wrangler\.js/s);
 });
