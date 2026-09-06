@@ -44,6 +44,54 @@ function run(command, args, options = {}) {
   }
 }
 
+function cloudflareDeployEnv() {
+  // Keep Cloudflare authentication completely separate from the client build
+  // environment copied from Vercel. A stale CLOUDFLARE_* value in that file
+  // must never override Wrangler's authenticated OAuth session.
+  const authLookupEnv = { ...process.env };
+  delete authLookupEnv.CLOUDFLARE_API_TOKEN;
+  delete authLookupEnv.CLOUDFLARE_API_KEY;
+  delete authLookupEnv.CLOUDFLARE_EMAIL;
+
+  const command = process.platform === "win32" ? "npx.cmd" : "npx";
+  const result = spawnSync(command, ["wrangler", "auth", "token", "--json"], {
+    cwd: repoRoot,
+    env: authLookupEnv,
+    encoding: "utf8",
+    shell: process.platform === "win32",
+  });
+
+  if (result.status !== 0) {
+    if (result.stdout) process.stdout.write(result.stdout);
+    if (result.stderr) process.stderr.write(result.stderr);
+    console.error("[habat-pages] unable to refresh Wrangler authentication.");
+    process.exit(result.status ?? 1);
+  }
+
+  let auth;
+  try {
+    auth = JSON.parse(String(result.stdout || "").trim());
+  } catch {
+    console.error("[habat-pages] Wrangler returned invalid authentication metadata.");
+    process.exit(1);
+  }
+
+  const deployEnv = { ...authLookupEnv };
+  if ((auth.type === "oauth" || auth.type === "api_token") && auth.token) {
+    deployEnv.CLOUDFLARE_API_TOKEN = auth.token;
+    return deployEnv;
+  }
+
+  if (auth.type === "api_key" && auth.key && auth.email) {
+    deployEnv.CLOUDFLARE_API_KEY = auth.key;
+    deployEnv.CLOUDFLARE_EMAIL = auth.email;
+    return deployEnv;
+  }
+
+  console.error("[habat-pages] no usable Cloudflare authentication was found.");
+  process.exit(1);
+}
+
 function copyTreeFiltered(source, target) {
   fs.mkdirSync(target, { recursive: true });
 
@@ -75,10 +123,13 @@ function copyTreeFiltered(source, target) {
   }
 }
 
-const localEnv = parseEnvFile(envFile);
+const parsedLocalEnv = parseEnvFile(envFile);
+const localClientEnv = Object.fromEntries(
+  Object.entries(parsedLocalEnv).filter(([key]) => key.startsWith("VITE_"))
+);
 const buildEnv = {
   ...process.env,
-  ...localEnv,
+  ...localClientEnv,
   VITE_APP_MODE: "habat-attendance",
   VITE_USE_HR_D1: "true",
   VITE_HR_CORE_API_URL: "https://maedin-hr-api.maedin2026.workers.dev",
@@ -117,6 +168,9 @@ fs.writeFileSync(
   "utf8"
 );
 
+console.log("[habat-pages] refreshing Cloudflare authentication...");
+const deployEnv = cloudflareDeployEnv();
+
 console.log("[habat-pages] deploying to Cloudflare Pages project habat-alwaraq...");
 run(
   process.platform === "win32" ? "npx.cmd" : "npx",
@@ -131,7 +185,7 @@ run(
     "habat-production",
     "--commit-dirty=true",
   ],
-  { env: buildEnv }
+  { env: deployEnv }
 );
 
 console.log("[habat-pages] production alias: https://habat-alwaraq.pages.dev");
