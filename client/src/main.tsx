@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import App from "./App";
+import HabatAttendanceApp from "./pages/habat/HabatAttendanceApp";
 import { initializeDocumentLanguage } from "./contexts/LanguageContext";
 import "./index.css";
 
@@ -26,8 +27,11 @@ queryClient.getMutationCache().subscribe((event) => {
 
 initializeDocumentLanguage("ar");
 
+const appMode = String(import.meta.env.VITE_APP_MODE ?? "").trim().toLowerCase();
+const RootApplication = appMode === "habat-attendance" ? HabatAttendanceApp : App;
+
 createRoot(document.getElementById("root")!).render(
   <QueryClientProvider client={queryClient}>
-    <App />
+    <RootApplication />
   </QueryClientProvider>
 );
