@@ -4,13 +4,18 @@ PRAGMA foreign_keys = ON;
 -- This file asserts the isolated Habbat fixture was cut over exactly once into
 -- generic Workforce Core domains even when the cutover migration runs twice.
 -- Never run it with --remote.
+--
+-- D1 does not authorize TEMP schema operations in this execution path, so this
+-- uses a normal table inside the isolated --persist-to database. The harness
+-- deletes the entire isolated state before every run, therefore no cleanup or
+-- DROP statement is needed and this table can never reach production.
 
-CREATE TEMP TABLE workforce_cutover_assertions (
+CREATE TABLE workforce_cutover_local_assertions (
   name TEXT PRIMARY KEY,
   ok INTEGER NOT NULL CHECK (ok = 1)
 );
 
-INSERT INTO workforce_cutover_assertions (name, ok)
+INSERT INTO workforce_cutover_local_assertions (name, ok)
 VALUES (
   'tenant_count',
   CASE WHEN (
@@ -20,7 +25,7 @@ VALUES (
   ) = 1 THEN 1 ELSE 0 END
 );
 
-INSERT INTO workforce_cutover_assertions (name, ok)
+INSERT INTO workforce_cutover_local_assertions (name, ok)
 VALUES (
   'employee_count',
   CASE WHEN (
@@ -30,7 +35,7 @@ VALUES (
   ) = 1 THEN 1 ELSE 0 END
 );
 
-INSERT INTO workforce_cutover_assertions (name, ok)
+INSERT INTO workforce_cutover_local_assertions (name, ok)
 VALUES (
   'employment_count',
   CASE WHEN (
@@ -40,7 +45,7 @@ VALUES (
   ) = 1 THEN 1 ELSE 0 END
 );
 
-INSERT INTO workforce_cutover_assertions (name, ok)
+INSERT INTO workforce_cutover_local_assertions (name, ok)
 VALUES (
   'schedule_count',
   CASE WHEN (
@@ -50,7 +55,7 @@ VALUES (
   ) = 1 THEN 1 ELSE 0 END
 );
 
-INSERT INTO workforce_cutover_assertions (name, ok)
+INSERT INTO workforce_cutover_local_assertions (name, ok)
 VALUES (
   'assignment_count',
   CASE WHEN (
@@ -60,7 +65,7 @@ VALUES (
   ) = 1 THEN 1 ELSE 0 END
 );
 
-INSERT INTO workforce_cutover_assertions (name, ok)
+INSERT INTO workforce_cutover_local_assertions (name, ok)
 VALUES (
   'attendance_link_count',
   CASE WHEN (
@@ -70,7 +75,7 @@ VALUES (
   ) = 1 THEN 1 ELSE 0 END
 );
 
-INSERT INTO workforce_cutover_assertions (name, ok)
+INSERT INTO workforce_cutover_local_assertions (name, ok)
 VALUES (
   'leave_count',
   CASE WHEN (
@@ -80,7 +85,7 @@ VALUES (
   ) = 1 THEN 1 ELSE 0 END
 );
 
-INSERT INTO workforce_cutover_assertions (name, ok)
+INSERT INTO workforce_cutover_local_assertions (name, ok)
 VALUES (
   'absence_count',
   CASE WHEN (
@@ -90,7 +95,7 @@ VALUES (
   ) = 1 THEN 1 ELSE 0 END
 );
 
-INSERT INTO workforce_cutover_assertions (name, ok)
+INSERT INTO workforce_cutover_local_assertions (name, ok)
 VALUES (
   'attendance_snapshot_count',
   CASE WHEN (
@@ -100,7 +105,7 @@ VALUES (
   ) = 1 THEN 1 ELSE 0 END
 );
 
-INSERT INTO workforce_cutover_assertions (name, ok)
+INSERT INTO workforce_cutover_local_assertions (name, ok)
 VALUES (
   'employee_mapping',
   CASE WHEN EXISTS (
@@ -117,7 +122,7 @@ VALUES (
   ) THEN 1 ELSE 0 END
 );
 
-INSERT INTO workforce_cutover_assertions (name, ok)
+INSERT INTO workforce_cutover_local_assertions (name, ok)
 VALUES (
   'leave_mapping',
   CASE WHEN EXISTS (
@@ -135,7 +140,7 @@ VALUES (
   ) THEN 1 ELSE 0 END
 );
 
-INSERT INTO workforce_cutover_assertions (name, ok)
+INSERT INTO workforce_cutover_local_assertions (name, ok)
 VALUES (
   'absence_mapping',
   CASE WHEN EXISTS (
@@ -152,7 +157,7 @@ VALUES (
   ) THEN 1 ELSE 0 END
 );
 
-INSERT INTO workforce_cutover_assertions (name, ok)
+INSERT INTO workforce_cutover_local_assertions (name, ok)
 VALUES (
   'snapshot_mapping',
   CASE WHEN EXISTS (
@@ -169,7 +174,5 @@ VALUES (
 );
 
 SELECT name, ok
-FROM workforce_cutover_assertions
+FROM workforce_cutover_local_assertions
 ORDER BY name;
-
-DROP TABLE workforce_cutover_assertions;
