@@ -7,6 +7,7 @@ const core = read("workers/workforce-core.js");
 const adapter = read("workers/habat-workforce-adapter.js");
 const cutover = read("workers/workforce-migrations/tenant-cutover/0001_habat_workforce_seed.sql");
 const fixture = read("workers/workforce-migrations/tenant-cutover/fixtures/0001_habat_local_fixture.sql");
+const verification = read("workers/workforce-migrations/tenant-cutover/fixtures/0002_verify_habat_local_cutover.sql");
 const localHarness = read("scripts/test-workforce-cutover-local.mjs");
 
 test("Workforce Core stays free of Habbat table knowledge", () => {
@@ -50,6 +51,8 @@ test("cutover is additive and never deletes legacy data", () => {
 test("local cutover fixture and harness can never target remote D1", () => {
   assert.match(fixture, /LOCAL TEST FIXTURE ONLY/);
   assert.match(fixture, /Never run it with --remote/i);
+  assert.match(verification, /LOCAL TEST VERIFICATION ONLY/);
+  assert.match(verification, /Never run it with --remote/i);
   assert.match(localHarness, /"--local"/);
   assert.match(localHarness, /--persist-to/);
   assert.doesNotMatch(localHarness, /"--remote"/);
@@ -67,4 +70,27 @@ test("local harness uses the existing npx Wrangler workflow without direct .cmd 
   assert.doesNotMatch(localHarness, /spawnSync\([^\n]*npx\.cmd/i);
   assert.doesNotMatch(localHarness, /shell:\s*true/);
   assert.doesNotMatch(localHarness, /node_modules.*wrangler.*bin.*wrangler\.js/s);
+});
+
+test("local verification is file-based so Windows cmd cannot truncate SQL", () => {
+  assert.match(localHarness, /0002_verify_habat_local_cutover\.sql/);
+  assert.doesNotMatch(localHarness, /"--command"/);
+  assert.match(verification, /CHECK \(ok = 1\)/);
+  for (const invariant of [
+    "tenant_count",
+    "employee_count",
+    "employment_count",
+    "schedule_count",
+    "assignment_count",
+    "attendance_link_count",
+    "leave_count",
+    "absence_count",
+    "attendance_snapshot_count",
+    "employee_mapping",
+    "leave_mapping",
+    "absence_mapping",
+    "snapshot_mapping",
+  ]) {
+    assert.match(verification, new RegExp(invariant));
+  }
 });
