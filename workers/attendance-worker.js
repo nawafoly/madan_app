@@ -1,4 +1,5 @@
 import * as core from "./attendance-worker-core.js";
+import { handleHabatAttendanceRequest } from "./habat-attendance-core.js";
 
 export * from "./attendance-worker-core.js";
 
@@ -126,6 +127,14 @@ export async function resolveSingleActiveZoneId(attendanceDb) {
 }
 
 export async function handleAttendanceRequest(args) {
+  const pathname = normalizeText(args?.url?.pathname);
+
+  // Habbat Al Waraq has a completely isolated access list and record tables.
+  // It shares only the authenticated worker runtime and ATTENDANCE_DB binding.
+  if (pathname.startsWith("/attendance/habat/")) {
+    return handleHabatAttendanceRequest(args);
+  }
+
   const legacyFetchFirestoreDocument = args?.fetchFirestoreDocument;
   const requesterUid = normalizeText(args?.requester?.uid);
 
