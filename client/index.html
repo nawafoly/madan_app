@@ -16,10 +16,60 @@
 
   <link rel="apple-touch-icon" sizes="180x180" href="/apple-icon-180x180.png" />
   <script type="module">
+    const appMode = String(import.meta.env.VITE_APP_MODE ?? "").trim().toLowerCase();
+    const isHabatAttendance = appMode === "habat-attendance";
+
+    if (isHabatAttendance) {
+      const habatIcon = "/habat-alwaraq-logo.svg?v=20260906";
+
+      document.title = "حبات الورق - نظام الحضور والانصراف";
+
+      const description = document.querySelector('meta[name="description"]');
+      if (description) {
+        description.setAttribute(
+          "content",
+          "نظام حبات الورق لإدارة الحضور والانصراف والدوام والشفتات."
+        );
+      }
+
+      document.querySelectorAll('link[rel="icon"]').forEach(link => {
+        link.setAttribute("href", habatIcon);
+        link.setAttribute("type", "image/svg+xml");
+        link.removeAttribute("sizes");
+      });
+
+      const appleIcon = document.querySelector('link[rel="apple-touch-icon"]');
+      if (appleIcon) {
+        appleIcon.setAttribute("href", habatIcon);
+        appleIcon.removeAttribute("sizes");
+      }
+
+      const themeColor = document.querySelector('meta[name="theme-color"]');
+      if (themeColor) themeColor.setAttribute("content", "#000000");
+
+      const setMetaContent = (selector, value) => {
+        const element = document.querySelector(selector);
+        if (element) element.setAttribute("content", value);
+      };
+
+      setMetaContent('meta[property="og:site_name"]', "حبات الورق");
+      setMetaContent('meta[property="og:title"]', "حبات الورق - نظام الحضور والانصراف");
+      setMetaContent(
+        'meta[property="og:description"]',
+        "نظام حبات الورق لإدارة الحضور والانصراف والدوام والشفتات."
+      );
+      setMetaContent('meta[property="og:url"]', "https://habat-alwaraq.vercel.app/");
+      setMetaContent('meta[name="twitter:title"]', "حبات الورق - نظام الحضور والانصراف");
+      setMetaContent(
+        'meta[name="twitter:description"]',
+        "نظام حبات الورق لإدارة الحضور والانصراف والدوام والشفتات."
+      );
+    }
+
     if (import.meta.env.PROD) {
       const link = document.createElement("link");
       link.rel = "manifest";
-      link.href = "/manifest.json";
+      link.href = isHabatAttendance ? "/habat-manifest.json" : "/manifest.json";
       document.head.appendChild(link);
     }
   </script>
