@@ -30,6 +30,24 @@ initializeDocumentLanguage("ar");
 const appMode = String(import.meta.env.VITE_APP_MODE ?? "").trim().toLowerCase();
 const RootApplication = appMode === "habat-attendance" ? HabatAttendanceApp : App;
 
+if (appMode === "habat-attendance") {
+  const toWesternDigits = (value: string) =>
+    value
+      .replace(/[٠-٩]/g, digit => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit)))
+      .replace(/[۰-۹]/g, digit => String("۰۱۲۳۴۵۶۷۸۹".indexOf(digit)));
+
+  document.addEventListener(
+    "input",
+    event => {
+      const target = event.target;
+      if (!(target instanceof HTMLInputElement) && !(target instanceof HTMLTextAreaElement)) return;
+      const normalized = toWesternDigits(target.value);
+      if (normalized !== target.value) target.value = normalized;
+    },
+    true
+  );
+}
+
 createRoot(document.getElementById("root")!).render(
   <QueryClientProvider client={queryClient}>
     <RootApplication />
