@@ -5,6 +5,10 @@
   "outputDirectory": "client/dist",
   "rewrites": [
     {
+      "source": "/habat-api/:path*",
+      "destination": "https://upload.maedin2026.workers.dev/attendance/habat/:path*"
+    },
+    {
       "source": "/hr",
       "has": [
         {
