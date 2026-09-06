@@ -94,3 +94,9 @@ test("local verification is file-based so Windows cmd cannot truncate SQL", () =
     assert.match(verification, new RegExp(invariant));
   }
 });
+
+test("local verification avoids D1-blocked TEMP and cleanup operations", () => {
+  assert.match(verification, /CREATE TABLE workforce_cutover_local_assertions/);
+  assert.doesNotMatch(verification, /CREATE\s+TEMP(?:ORARY)?\s+TABLE/i);
+  assert.doesNotMatch(verification, /\bDROP\s+TABLE\b/i);
+});
