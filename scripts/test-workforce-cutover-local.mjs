@@ -1,4 +1,4 @@
-import { rmSync } from "node:fs";
+import { existsSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
@@ -7,14 +7,39 @@ const repoRoot = process.cwd();
 const stateDir = path.join(os.tmpdir(), "madan-workforce-cutover-test");
 const wranglerConfig = path.join("workers", "wrangler.toml");
 const database = "maedin-attendance";
-const npx = process.platform === "win32" ? "npx.cmd" : "npx";
+
+// Do not spawn npx.cmd directly on Windows: Node 24 can return EINVAL for .cmd
+// files with shell:false. Execute Wrangler's JavaScript entrypoint through the
+// current Node process instead. This keeps the harness shell-free and avoids
+// command interpolation while remaining cross-platform under pnpm/npm.
+const wranglerEntrypoint = path.join(repoRoot, "node_modules", "wrangler", "bin", "wrangler.js");
+if (!existsSync(wranglerEntrypoint)) {
+  throw new Error(
+    `[workforce-cutover-local] Wrangler entrypoint not found at ${wranglerEntrypoint}. Run pnpm install first.`
+  );
+}
 
 function run(args) {
-  const result = spawnSync(npx, ["wrangler", "d1", "execute", database, "--local", "--persist-to", stateDir, "--config", wranglerConfig, ...args], {
-    cwd: repoRoot,
-    stdio: "inherit",
-    shell: false,
-  });
+  const result = spawnSync(
+    process.execPath,
+    [
+      wranglerEntrypoint,
+      "d1",
+      "execute",
+      database,
+      "--local",
+      "--persist-to",
+      stateDir,
+      "--config",
+      wranglerConfig,
+      ...args,
+    ],
+    {
+      cwd: repoRoot,
+      stdio: "inherit",
+      shell: false,
+    }
+  );
   if (result.error) throw result.error;
   if (result.status !== 0) process.exit(result.status ?? 1);
 }
