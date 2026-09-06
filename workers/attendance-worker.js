@@ -1,6 +1,7 @@
 import * as core from "./attendance-worker-core.js";
 import { handleHabatAttendanceRequest } from "./habat-attendance-core.js";
 import { handleHabatAttendanceV2Request } from "./habat-attendance-v2.js";
+import { handleHabatPortalRequest } from "./habat-portal.js";
 import { resolveHabatRequesterContext } from "./habat-auth.js";
 
 export * from "./attendance-worker-core.js";
@@ -143,6 +144,9 @@ export async function handleAttendanceRequest(args) {
         resolveHabatRequesterContext(request, legacyRequesterResolver),
     };
 
+    if (pathname.startsWith("/attendance/habat/portal/")) {
+      return handleHabatPortalRequest(habatArgs);
+    }
     if (pathname.startsWith("/attendance/habat/v2/")) {
       return handleHabatAttendanceV2Request(habatArgs);
     }
