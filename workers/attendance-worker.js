@@ -1,6 +1,7 @@
 import * as core from "./attendance-worker-core.js";
 import { handleHabatAttendanceRequest } from "./habat-attendance-core.js";
 import { handleHabatAttendanceV2Request } from "./habat-attendance-v2.js";
+import { resolveHabatRequesterContext } from "./habat-auth.js";
 
 export * from "./attendance-worker-core.js";
 
@@ -130,14 +131,22 @@ export async function resolveSingleActiveZoneId(attendanceDb) {
 export async function handleAttendanceRequest(args) {
   const pathname = normalizeText(args?.url?.pathname);
 
-  // Habbat Al Waraq has a completely isolated access list and record tables.
-  // V2 adds schedules, geofencing, reporting and administrative corrections
-  // while preserving the original Habbat endpoints during rollout.
-  if (pathname.startsWith("/attendance/habat/v2/")) {
-    return handleHabatAttendanceV2Request(args);
-  }
+  // Habbat Al Waraq authenticates Firebase tokens independently from Maedin's
+  // Firestore account runtime. Authorization remains in habat_attendance_access.
+  // Existing Maedin owners are still recognized by the isolated resolver as a
+  // compatibility bootstrap path.
   if (pathname.startsWith("/attendance/habat/")) {
-    return handleHabatAttendanceRequest(args);
+    const legacyRequesterResolver = args?.resolveRequesterContext;
+    const habatArgs = {
+      ...args,
+      resolveRequesterContext: request =>
+        resolveHabatRequesterContext(request, legacyRequesterResolver),
+    };
+
+    if (pathname.startsWith("/attendance/habat/v2/")) {
+      return handleHabatAttendanceV2Request(habatArgs);
+    }
+    return handleHabatAttendanceRequest(habatArgs);
   }
 
   const legacyFetchFirestoreDocument = args?.fetchFirestoreDocument;
