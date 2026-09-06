@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type Dispatch,
+  type FormEvent,
+  type SetStateAction,
+} from "react";
 import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
@@ -62,7 +70,12 @@ type AccessState =
   | { status: "loading" }
   | { status: "signed-out" }
   | { status: "forbidden"; message: string }
-  | { status: "ready"; principal: HabatPrincipal; today: HabatRecord | null; date: string };
+  | {
+      status: "ready";
+      principal: HabatPrincipal;
+      today: HabatRecord | null;
+      date: string;
+    };
 
 class HabatApiError extends Error {
   status: number;
@@ -77,7 +90,9 @@ class HabatApiError extends Error {
 
 async function habatApi<T>(path: string, init?: RequestInit): Promise<T> {
   const currentUser = auth.currentUser;
-  if (!currentUser) throw new HabatApiError(401, "authentication_required");
+  if (!currentUser) {
+    throw new HabatApiError(401, "authentication_required");
+  }
 
   const token = await currentUser.getIdToken();
   const headers = new Headers(init?.headers || {});
@@ -99,11 +114,16 @@ async function habatApi<T>(path: string, init?: RequestInit): Promise<T> {
       String(payload?.message || `habat_http_${response.status}`)
     );
   }
+
   return payload as T;
 }
 
 function friendlyApiError(error: unknown) {
-  const code = error instanceof HabatApiError ? error.code : String((error as any)?.message || "");
+  const code =
+    error instanceof HabatApiError
+      ? error.code
+      : String((error as { message?: unknown })?.message || "");
+
   switch (code) {
     case "habat_access_forbidden":
       return "هذا الحساب غير مصرح له بالدخول إلى نظام حبات الورق.";
@@ -156,7 +176,13 @@ function Brand({ compact = false }: { compact?: boolean }) {
         />
       </div>
       <div className={compact ? "text-right" : "mt-4"}>
-        <h1 className={compact ? "text-lg font-black" : "text-3xl font-black tracking-tight"}>
+        <h1
+          className={
+            compact
+              ? "text-lg font-black"
+              : "text-3xl font-black tracking-tight"
+          }
+        >
           حبات الورق
         </h1>
         <p className="mt-1 text-xs font-semibold tracking-[0.18em] text-slate-500">
@@ -173,9 +199,10 @@ function LoginScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
-  async function submit(event: React.FormEvent) {
+  async function submit(event: FormEvent) {
     event.preventDefault();
     if (busy) return;
+
     setBusy(true);
     setError("");
 
@@ -189,37 +216,48 @@ function LoginScreen() {
   }
 
   return (
-    <main dir="rtl" className="min-h-screen bg-[#f5f5f3] px-4 py-10 text-slate-950">
+    <main
+      dir="rtl"
+      className="min-h-screen bg-[#f5f5f3] px-4 py-10 text-slate-950"
+    >
       <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-md items-center">
         <section className="w-full rounded-[32px] border border-slate-200 bg-white p-7 shadow-xl shadow-slate-200/40 sm:p-9">
           <Brand />
           <div className="my-7 h-px bg-slate-100" />
           <div className="mb-5">
             <h2 className="text-xl font-black">تسجيل الدخول</h2>
-            <p className="mt-1 text-sm text-slate-500">الدخول مخصص للحسابات المصرح لها فقط</p>
+            <p className="mt-1 text-sm text-slate-500">
+              الدخول مخصص للحسابات المصرح لها فقط
+            </p>
           </div>
           <form className="space-y-4" onSubmit={submit}>
             <div>
-              <label className="mb-2 block text-sm font-semibold">البريد أو اسم المستخدم</label>
+              <label className="mb-2 block text-sm font-semibold">
+                البريد أو اسم المستخدم
+              </label>
               <input
                 value={identity}
-                onChange={e => setIdentity(e.target.value)}
+                onChange={event => setIdentity(event.target.value)}
                 autoComplete="username"
                 className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 outline-none transition focus:border-slate-900 focus:bg-white"
               />
             </div>
             <div>
-              <label className="mb-2 block text-sm font-semibold">كلمة المرور</label>
+              <label className="mb-2 block text-sm font-semibold">
+                كلمة المرور
+              </label>
               <input
                 type="password"
                 value={password}
-                onChange={e => setPassword(e.target.value)}
+                onChange={event => setPassword(event.target.value)}
                 autoComplete="current-password"
                 className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 outline-none transition focus:border-slate-900 focus:bg-white"
               />
             </div>
             {error ? (
-              <p className="rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{error}</p>
+              <p className="rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+                {error}
+              </p>
             ) : null}
             <button
               type="submit"
@@ -240,6 +278,7 @@ function formatTime(value: string | null | undefined) {
   if (!value) return "—";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "—";
+
   return date.toLocaleTimeString("ar-SA", {
     timeZone: "Asia/Riyadh",
     hour: "2-digit",
@@ -250,12 +289,36 @@ function formatTime(value: string | null | undefined) {
 function formatDate(value: string) {
   const date = new Date(`${value}T12:00:00+03:00`);
   if (Number.isNaN(date.getTime())) return value;
+
   return date.toLocaleDateString("ar-SA", {
     timeZone: "Asia/Riyadh",
     year: "numeric",
     month: "short",
     day: "numeric",
   });
+}
+
+function LiveRiyadhClock() {
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 15_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  return (
+    <div className="rounded-2xl bg-slate-100 px-5 py-4">
+      <div className="flex items-center gap-2 font-black">
+        <Clock3 size={18} />
+        {now.toLocaleTimeString("ar-SA", {
+          timeZone: "Asia/Riyadh",
+          hour: "2-digit",
+          minute: "2-digit",
+        })}
+      </div>
+      <p className="mt-1 text-xs text-slate-500">بتوقيت الرياض</p>
+    </div>
+  );
 }
 
 function AttendanceCard({
@@ -276,16 +339,25 @@ function AttendanceCard({
 
   async function clock(type: "check-in" | "check-out") {
     if (busy) return;
+
     setBusy(type);
     setMessage("");
     setError("");
+
     try {
-      const payload = await habatApi<{ ok: true; record: HabatRecord }>(type, {
-        method: "POST",
-        body: "{}",
-      });
+      const payload = await habatApi<{ ok: true; record: HabatRecord }>(
+        type,
+        {
+          method: "POST",
+          body: "{}",
+        }
+      );
       await onRefresh(payload.record);
-      setMessage(type === "check-in" ? "تم تسجيل الحضور بنجاح." : "تم تسجيل الانصراف بنجاح.");
+      setMessage(
+        type === "check-in"
+          ? "تم تسجيل الحضور بنجاح."
+          : "تم تسجيل الانصراف بنجاح."
+      );
     } catch (caught) {
       setError(friendlyApiError(caught));
     } finally {
@@ -298,20 +370,12 @@ function AttendanceCard({
       <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="text-sm text-slate-500">مرحبًا</p>
-          <h2 className="mt-1 text-2xl font-black">{principal.displayName || principal.email || "المستخدم"}</h2>
+          <h2 className="mt-1 text-2xl font-black">
+            {principal.displayName || principal.email || "المستخدم"}
+          </h2>
           <p className="mt-2 text-sm text-slate-500">{principal.email}</p>
         </div>
-        <div className="rounded-2xl bg-slate-100 px-5 py-4">
-          <div className="flex items-center gap-2 font-black">
-            <Clock3 size={18} />
-            {new Date().toLocaleTimeString("ar-SA", {
-              timeZone: "Asia/Riyadh",
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
-          </div>
-          <p className="mt-1 text-xs text-slate-500">بتوقيت الرياض</p>
-        </div>
+        <LiveRiyadhClock />
       </div>
 
       {principal.canClock ? (
@@ -323,7 +387,9 @@ function AttendanceCard({
               className="flex min-h-36 flex-col items-center justify-center gap-3 rounded-[24px] bg-black px-5 text-white shadow-lg shadow-black/10 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
             >
               <LogIn size={30} />
-              <span className="text-xl font-black">{busy === "check-in" ? "جاري التسجيل..." : "تسجيل حضور"}</span>
+              <span className="text-xl font-black">
+                {busy === "check-in" ? "جاري التسجيل..." : "تسجيل حضور"}
+              </span>
             </button>
             <button
               onClick={() => clock("check-out")}
@@ -331,18 +397,30 @@ function AttendanceCard({
               className="flex min-h-36 flex-col items-center justify-center gap-3 rounded-[24px] border-2 border-slate-900 bg-white px-5 text-slate-950 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-35"
             >
               <LogOut size={30} />
-              <span className="text-xl font-black">{busy === "check-out" ? "جاري التسجيل..." : "تسجيل انصراف"}</span>
+              <span className="text-xl font-black">
+                {busy === "check-out"
+                  ? "جاري التسجيل..."
+                  : "تسجيل انصراف"}
+              </span>
             </button>
           </div>
 
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
             <div className="rounded-2xl bg-emerald-50 px-4 py-4">
-              <p className="text-xs font-semibold text-emerald-700">وقت الحضور</p>
-              <p className="mt-1 text-xl font-black text-emerald-950">{formatTime(today?.checkInAt)}</p>
+              <p className="text-xs font-semibold text-emerald-700">
+                وقت الحضور
+              </p>
+              <p className="mt-1 text-xl font-black text-emerald-950">
+                {formatTime(today?.checkInAt)}
+              </p>
             </div>
             <div className="rounded-2xl bg-slate-100 px-4 py-4">
-              <p className="text-xs font-semibold text-slate-500">وقت الانصراف</p>
-              <p className="mt-1 text-xl font-black">{formatTime(today?.checkOutAt)}</p>
+              <p className="text-xs font-semibold text-slate-500">
+                وقت الانصراف
+              </p>
+              <p className="mt-1 text-xl font-black">
+                {formatTime(today?.checkOutAt)}
+              </p>
             </div>
           </div>
         </>
@@ -357,7 +435,11 @@ function AttendanceCard({
           <CheckCircle2 size={18} /> {message}
         </p>
       ) : null}
-      {error ? <p className="mt-5 rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{error}</p> : null}
+      {error ? (
+        <p className="mt-5 rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+          {error}
+        </p>
+      ) : null}
     </section>
   );
 }
@@ -369,13 +451,16 @@ function ManagerPanel() {
   const [error, setError] = useState("");
   const [email, setEmail] = useState("");
   const [displayName, setDisplayName] = useState("");
-  const [accessLevel, setAccessLevel] = useState<"employee" | "manager">("employee");
+  const [accessLevel, setAccessLevel] = useState<"employee" | "manager">(
+    "employee"
+  );
   const [clockEnabled, setClockEnabled] = useState(true);
   const [saving, setSaving] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
     setError("");
+
     try {
       const [recordsPayload, accountsPayload] = await Promise.all([
         habatApi<{ ok: true; records: HabatRecord[] }>("records?limit=150"),
@@ -394,11 +479,13 @@ function ManagerPanel() {
     void refresh();
   }, [refresh]);
 
-  async function addAccount(event: React.FormEvent) {
+  async function addAccount(event: FormEvent) {
     event.preventDefault();
     if (!email.trim() || saving) return;
+
     setSaving(true);
     setError("");
+
     try {
       await habatApi("access", {
         method: "POST",
@@ -422,10 +509,17 @@ function ManagerPanel() {
   }
 
   async function removeAccount(account: HabatAccessAccount) {
-    if (!window.confirm(`إلغاء صلاحية ${account.displayName || account.email}؟`)) return;
+    if (
+      !window.confirm(`إلغاء صلاحية ${account.displayName || account.email}؟`)
+    ) {
+      return;
+    }
+
     setError("");
     try {
-      await habatApi(`access/${encodeURIComponent(account.id)}`, { method: "DELETE" });
+      await habatApi(`access/${encodeURIComponent(account.id)}`, {
+        method: "DELETE",
+      });
       await refresh();
     } catch (caught) {
       setError(friendlyApiError(caught));
@@ -437,10 +531,14 @@ function ManagerPanel() {
       <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="rounded-2xl bg-black p-3 text-white"><ShieldCheck size={22} /></div>
+            <div className="rounded-2xl bg-black p-3 text-white">
+              <ShieldCheck size={22} />
+            </div>
             <div>
               <h2 className="font-black">إدارة حبات الورق</h2>
-              <p className="text-sm text-slate-500">الحسابات المصرح لها وسجل الحضور المستقل</p>
+              <p className="text-sm text-slate-500">
+                الحسابات المصرح لها وسجل الحضور المستقل
+              </p>
             </div>
           </div>
           <button
@@ -451,24 +549,29 @@ function ManagerPanel() {
           </button>
         </div>
 
-        <form onSubmit={addAccount} className="mt-6 grid gap-3 rounded-2xl bg-slate-50 p-4 md:grid-cols-2 lg:grid-cols-5">
+        <form
+          onSubmit={addAccount}
+          className="mt-6 grid gap-3 rounded-2xl bg-slate-50 p-4 md:grid-cols-2 lg:grid-cols-5"
+        >
           <input
             type="email"
             placeholder="البريد الإلكتروني"
             value={email}
-            onChange={e => setEmail(e.target.value)}
+            onChange={event => setEmail(event.target.value)}
             className="h-11 rounded-xl border border-slate-200 bg-white px-3 outline-none focus:border-slate-900 lg:col-span-2"
             required
           />
           <input
             placeholder="الاسم"
             value={displayName}
-            onChange={e => setDisplayName(e.target.value)}
+            onChange={event => setDisplayName(event.target.value)}
             className="h-11 rounded-xl border border-slate-200 bg-white px-3 outline-none focus:border-slate-900"
           />
           <select
             value={accessLevel}
-            onChange={e => setAccessLevel(e.target.value as "employee" | "manager")}
+            onChange={event =>
+              setAccessLevel(event.target.value as "employee" | "manager")
+            }
             className="h-11 rounded-xl border border-slate-200 bg-white px-3 outline-none"
           >
             <option value="employee">موظف</option>
@@ -484,31 +587,49 @@ function ManagerPanel() {
             <input
               type="checkbox"
               checked={clockEnabled}
-              onChange={e => setClockEnabled(e.target.checked)}
+              onChange={event => setClockEnabled(event.target.checked)}
               className="h-4 w-4"
             />
             يسمح لهذا الحساب بتسجيل الحضور والانصراف
           </label>
         </form>
 
-        {error ? <p className="mt-4 rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{error}</p> : null}
+        {error ? (
+          <p className="mt-4 rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+            {error}
+          </p>
+        ) : null}
       </div>
 
       <div className="grid gap-6 xl:grid-cols-2">
         <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="mb-4 flex items-center gap-2"><Users size={20} /><h3 className="font-black">الحسابات المصرح لها</h3></div>
+          <div className="mb-4 flex items-center gap-2">
+            <Users size={20} />
+            <h3 className="font-black">الحسابات المصرح لها</h3>
+          </div>
           {loading ? (
-            <p className="py-8 text-center text-sm text-slate-500">جاري التحميل...</p>
+            <p className="py-8 text-center text-sm text-slate-500">
+              جاري التحميل...
+            </p>
           ) : accounts.length ? (
             <div className="space-y-2">
               {accounts.map(account => (
-                <div key={account.id} className="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 px-4 py-3">
+                <div
+                  key={account.id}
+                  className="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 px-4 py-3"
+                >
                   <div className="min-w-0">
-                    <p className="truncate font-bold">{account.displayName || account.email}</p>
-                    <p className="truncate text-xs text-slate-500">{account.email}</p>
+                    <p className="truncate font-bold">
+                      {account.displayName || account.email}
+                    </p>
+                    <p className="truncate text-xs text-slate-500">
+                      {account.email}
+                    </p>
                     <p className="mt-1 text-xs font-semibold text-slate-600">
                       {account.accessLevel === "manager" ? "إدارة" : "موظف"}
-                      {account.clockEnabled ? " · حضور وانصراف" : " · بدون بصمة"}
+                      {account.clockEnabled
+                        ? " · حضور وانصراف"
+                        : " · بدون بصمة"}
                     </p>
                   </div>
                   <button
@@ -522,34 +643,62 @@ function ManagerPanel() {
               ))}
             </div>
           ) : (
-            <p className="py-8 text-center text-sm text-slate-500">لم تتم إضافة حسابات بعد.</p>
+            <p className="py-8 text-center text-sm text-slate-500">
+              لم تتم إضافة حسابات بعد.
+            </p>
           )}
         </div>
 
         <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="mb-4 flex items-center gap-2"><Clock3 size={20} /><h3 className="font-black">آخر سجلات الحضور</h3></div>
+          <div className="mb-4 flex items-center gap-2">
+            <Clock3 size={20} />
+            <h3 className="font-black">آخر سجلات الحضور</h3>
+          </div>
           {loading ? (
-            <p className="py-8 text-center text-sm text-slate-500">جاري التحميل...</p>
+            <p className="py-8 text-center text-sm text-slate-500">
+              جاري التحميل...
+            </p>
           ) : records.length ? (
             <div className="max-h-[520px] space-y-2 overflow-auto pr-1">
               {records.map(record => (
-                <div key={record.id} className="rounded-2xl border border-slate-100 px-4 py-3">
+                <div
+                  key={record.id}
+                  className="rounded-2xl border border-slate-100 px-4 py-3"
+                >
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="font-bold">{record.displayName || record.accountEmail || "موظف"}</p>
-                      <p className="text-xs text-slate-500">{record.accountEmail}</p>
+                      <p className="font-bold">
+                        {record.displayName || record.accountEmail || "موظف"}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        {record.accountEmail}
+                      </p>
                     </div>
-                    <span className="text-xs font-semibold text-slate-500">{formatDate(record.attendanceDate)}</span>
+                    <span className="text-xs font-semibold text-slate-500">
+                      {formatDate(record.attendanceDate)}
+                    </span>
                   </div>
                   <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
-                    <div className="rounded-xl bg-emerald-50 px-3 py-2"><span className="text-xs text-emerald-700">حضور</span><p className="font-black">{formatTime(record.checkInAt)}</p></div>
-                    <div className="rounded-xl bg-slate-100 px-3 py-2"><span className="text-xs text-slate-500">انصراف</span><p className="font-black">{formatTime(record.checkOutAt)}</p></div>
+                    <div className="rounded-xl bg-emerald-50 px-3 py-2">
+                      <span className="text-xs text-emerald-700">حضور</span>
+                      <p className="font-black">
+                        {formatTime(record.checkInAt)}
+                      </p>
+                    </div>
+                    <div className="rounded-xl bg-slate-100 px-3 py-2">
+                      <span className="text-xs text-slate-500">انصراف</span>
+                      <p className="font-black">
+                        {formatTime(record.checkOutAt)}
+                      </p>
+                    </div>
                   </div>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="py-8 text-center text-sm text-slate-500">لا توجد سجلات حتى الآن.</p>
+            <p className="py-8 text-center text-sm text-slate-500">
+              لا توجد سجلات حتى الآن.
+            </p>
           )}
         </div>
       </div>
@@ -562,17 +711,21 @@ function AttendanceHome({
   setAccess,
 }: {
   access: Extract<AccessState, { status: "ready" }>;
-  setAccess: React.Dispatch<React.SetStateAction<AccessState>>;
+  setAccess: Dispatch<SetStateAction<AccessState>>;
 }) {
   const refreshMe = useCallback(
     async (optimisticRecord?: HabatRecord | null) => {
       if (optimisticRecord !== undefined) {
         setAccess(current =>
-          current.status === "ready" ? { ...current, today: optimisticRecord } : current
+          current.status === "ready"
+            ? { ...current, today: optimisticRecord }
+            : current
         );
       }
+
       const currentUser = auth.currentUser;
       if (!currentUser) return;
+
       const next = await loadMe(currentUser);
       setAccess(next);
     },
@@ -614,16 +767,23 @@ export default function HabatAttendanceApp() {
         setAccess({ status: "signed-out" });
         return;
       }
+
       setAccess({ status: "loading" });
       setAccess(await loadMe(user));
     });
   }, []);
 
-  const loadingCopy = useMemo(() => "جاري التحقق من صلاحية الحساب...", []);
+  const loadingCopy = useMemo(
+    () => "جاري التحقق من صلاحية الحساب...",
+    []
+  );
 
   if (access.status === "loading") {
     return (
-      <main dir="rtl" className="flex min-h-screen items-center justify-center bg-[#f5f5f3] px-4 font-bold text-slate-600">
+      <main
+        dir="rtl"
+        className="flex min-h-screen items-center justify-center bg-[#f5f5f3] px-4 font-bold text-slate-600"
+      >
         <div className="text-center">
           <RefreshCw className="mx-auto mb-3 animate-spin" size={24} />
           {loadingCopy}
@@ -636,10 +796,15 @@ export default function HabatAttendanceApp() {
 
   if (access.status === "forbidden") {
     return (
-      <main dir="rtl" className="flex min-h-screen items-center justify-center bg-[#f5f5f3] px-4">
+      <main
+        dir="rtl"
+        className="flex min-h-screen items-center justify-center bg-[#f5f5f3] px-4"
+      >
         <section className="w-full max-w-md rounded-[28px] border border-red-100 bg-white p-8 text-center shadow-sm">
           <Brand />
-          <p className="mt-7 rounded-2xl bg-red-50 px-4 py-4 text-sm font-semibold text-red-700">{access.message}</p>
+          <p className="mt-7 rounded-2xl bg-red-50 px-4 py-4 text-sm font-semibold text-red-700">
+            {access.message}
+          </p>
           <button
             onClick={() => signOut(auth)}
             className="mt-5 rounded-2xl bg-black px-5 py-3 font-bold text-white"
