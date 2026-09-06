@@ -59,3 +59,10 @@ test("local harness validates idempotency by applying tenant cutover twice", () 
   const occurrences = localHarness.match(/0001_habat_workforce_seed\.sql/g) || [];
   assert.ok(occurrences.length >= 2, "cutover seed must be applied at least twice in the isolated harness");
 });
+
+test("local harness runs Wrangler through Node and never spawns a Windows .cmd shim", () => {
+  assert.match(localHarness, /process\.execPath/);
+  assert.match(localHarness, /node_modules.*wrangler.*bin.*wrangler\.js/s);
+  assert.doesNotMatch(localHarness, /spawnSync\([^\n]*npx\.cmd/i);
+  assert.doesNotMatch(localHarness, /shell:\s*true/);
+});
