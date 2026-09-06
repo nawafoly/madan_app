@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import App from "./App";
-import HabatAttendanceApp from "./pages/habat/HabatAttendanceApp";
+import HabatAttendanceApp from "./pages/habat/HabatAttendanceAppV3";
 import { initializeDocumentLanguage } from "./contexts/LanguageContext";
 import "./index.css";
 
