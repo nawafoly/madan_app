@@ -17,6 +17,11 @@ SELECT
 FROM habat_attendance_shifts;
 
 SELECT
+  CASE WHEN EXISTS (
+    SELECT 1 FROM habat_attendance_shifts WHERE is_active = 1
+  ) THEN 1 ELSE 0 END AS legacy_default_shift_available;
+
+SELECT
   COUNT(*) AS source_assignments,
   SUM(CASE WHEN effective_to IS NULL THEN 1 ELSE 0 END) AS source_open_assignments
 FROM habat_attendance_shift_assignments;
@@ -144,11 +149,27 @@ SELECT
   COUNT(*) AS expected_schedule_rows_after_cutover
 FROM habat_attendance_shifts;
 
+-- Habbat's runtime falls back to the active default shift whenever an employee
+-- has no matching dated assignment. The cutover materializes one baseline
+-- assignment per employee, then adds every valid explicit legacy assignment.
 SELECT
-  COUNT(*) AS expected_assignment_rows_after_cutover
-FROM habat_attendance_shift_assignments a
-JOIN habat_attendance_access e ON e.id = a.access_id
-JOIN habat_attendance_shifts s ON s.id = a.shift_id;
+  CASE WHEN EXISTS (
+    SELECT 1 FROM habat_attendance_shifts WHERE is_active = 1
+  ) THEN (SELECT COUNT(*) FROM habat_attendance_access) ELSE 0 END
+  AS expected_default_fallback_assignment_rows_after_cutover;
+
+SELECT
+  (
+    SELECT COUNT(*)
+    FROM habat_attendance_shift_assignments a
+    JOIN habat_attendance_access e ON e.id = a.access_id
+    JOIN habat_attendance_shifts s ON s.id = a.shift_id
+  )
+  +
+  CASE WHEN EXISTS (
+    SELECT 1 FROM habat_attendance_shifts WHERE is_active = 1
+  ) THEN (SELECT COUNT(*) FROM habat_attendance_access) ELSE 0 END
+  AS expected_assignment_rows_after_cutover;
 
 SELECT
   COUNT(*) AS expected_leave_rows_after_cutover
