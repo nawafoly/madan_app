@@ -70,26 +70,11 @@ for (const file of [
 // Run the cutover twice intentionally: the migration must be idempotent.
 applyFile("workers/workforce-migrations/tenant-cutover/0001_habat_workforce_seed.sql");
 
-console.log("\n[workforce-cutover-local] cutover counts after second run");
-run([
-  "--command",
-  `SELECT json_object(
-    'tenants', (SELECT COUNT(*) FROM workforce_tenants WHERE id='restaurant_tenant_habat_alwaraq'),
-    'employees', (SELECT COUNT(*) FROM workforce_employee_profiles WHERE tenant_id='restaurant_tenant_habat_alwaraq'),
-    'employment', (SELECT COUNT(*) FROM workforce_employment WHERE tenant_id='restaurant_tenant_habat_alwaraq'),
-    'schedules', (SELECT COUNT(*) FROM workforce_schedule_templates WHERE tenant_id='restaurant_tenant_habat_alwaraq'),
-    'assignments', (SELECT COUNT(*) FROM workforce_schedule_assignments WHERE tenant_id='restaurant_tenant_habat_alwaraq'),
-    'attendance_links', (SELECT COUNT(*) FROM workforce_attendance_links WHERE tenant_id='restaurant_tenant_habat_alwaraq'),
-    'leaves', (SELECT COUNT(*) FROM workforce_leaves WHERE tenant_id='restaurant_tenant_habat_alwaraq'),
-    'absences', (SELECT COUNT(*) FROM workforce_absences WHERE tenant_id='restaurant_tenant_habat_alwaraq'),
-    'attendance_snapshots', (SELECT COUNT(*) FROM workforce_attendance_month_snapshots WHERE tenant_id='restaurant_tenant_habat_alwaraq')
-  ) AS cutover_counts;`,
-]);
-
-console.log("\n[workforce-cutover-local] employee mapping");
-run([
-  "--command",
-  "SELECT tenant_id, id, display_name, account_email, status, source_type, source_id FROM workforce_employee_profiles WHERE tenant_id='restaurant_tenant_habat_alwaraq' ORDER BY display_name;",
-]);
+// Do not pass verification SQL through --command on Windows. cmd.exe treats
+// parentheses and other SQL characters as shell metacharacters and can truncate
+// the argument before Wrangler receives it. A read-only/assertion SQL file keeps
+// the verification cross-platform and makes any mismatch fail through CHECK.
+console.log("\n[workforce-cutover-local] verify counts, mapping, and idempotency");
+applyFile("workers/workforce-migrations/tenant-cutover/fixtures/0002_verify_habat_local_cutover.sql");
 
 console.log("\n[workforce-cutover-local] PASS — isolated schema, fixture mapping, and idempotent rerun completed.");
