@@ -55,6 +55,7 @@ VALUES (
   ) = 1 THEN 1 ELSE 0 END
 );
 
+-- One baseline fallback assignment + one explicit fixture assignment.
 INSERT INTO workforce_cutover_local_assertions (name, ok)
 VALUES (
   'assignment_count',
@@ -62,7 +63,7 @@ VALUES (
     SELECT COUNT(*)
     FROM workforce_schedule_assignments
     WHERE tenant_id = 'restaurant_tenant_habat_alwaraq'
-  ) = 1 THEN 1 ELSE 0 END
+  ) = 2 THEN 1 ELSE 0 END
 );
 
 INSERT INTO workforce_cutover_local_assertions (name, ok)
@@ -119,6 +120,36 @@ VALUES (
       AND status = 'active'
       AND source_type = 'legacy_attendance_access'
       AND source_id = 'habat_fixture_employee_1'
+  ) THEN 1 ELSE 0 END
+);
+
+INSERT INTO workforce_cutover_local_assertions (name, ok)
+VALUES (
+  'default_assignment_mapping',
+  CASE WHEN EXISTS (
+    SELECT 1
+    FROM workforce_schedule_assignments a
+    WHERE a.tenant_id = 'restaurant_tenant_habat_alwaraq'
+      AND a.id = 'wf_asg_legacy_default_habat_fixture_employee_1'
+      AND a.employee_id = 'wf_emp_habat_fixture_employee_1'
+      AND a.template_id = 'wf_sched_habat_shift_default'
+      AND a.effective_from = '1970-01-01'
+      AND a.effective_to IS NULL
+  ) THEN 1 ELSE 0 END
+);
+
+INSERT INTO workforce_cutover_local_assertions (name, ok)
+VALUES (
+  'explicit_assignment_mapping',
+  CASE WHEN EXISTS (
+    SELECT 1
+    FROM workforce_schedule_assignments a
+    WHERE a.tenant_id = 'restaurant_tenant_habat_alwaraq'
+      AND a.id = 'wf_asg_habat_fixture_assignment_1'
+      AND a.employee_id = 'wf_emp_habat_fixture_employee_1'
+      AND a.template_id = 'wf_sched_habat_shift_default'
+      AND a.effective_from = '2026-09-01'
+      AND a.effective_to IS NULL
   ) THEN 1 ELSE 0 END
 );
 
