@@ -1,6 +1,8 @@
 import * as core from "./attendance-worker-core.js";
 import { handleHabatAttendanceRequest } from "./habat-attendance-core.js";
 import { handleHabatAttendanceV2Request } from "./habat-attendance-v2.js";
+import { handleHabatAttendanceV3Request } from "./habat-attendance-v3.js";
+import { handleHabatAttendanceReportingRequest } from "./habat-attendance-reporting.js";
 import { handleHabatPortalRequest } from "./habat-portal.js";
 import { resolveHabatRequesterContext } from "./habat-auth.js";
 
@@ -39,9 +41,6 @@ export async function resolveCanonicalAttendanceEmployee({
       .bind(canonicalEmployeeId)
       .first();
 
-    // Identity-safe fallback: only resolve by auth UID when the attendance
-    // document key itself is the requester's UID. If a linked employee ID was
-    // supplied, an exact canonical employee match is required.
     if (
       !row &&
       canonicalRequesterUid &&
@@ -72,10 +71,6 @@ export async function resolveCanonicalAttendanceEmployee({
   let allowedZoneIds = normalizeStringArray(row.allowed_zone_ids_json);
   let source = "hr_core";
 
-  // New staff accounts historically started with an empty allowed-zone list.
-  // A single active work zone is unambiguous, so it is safe to use it as a
-  // compatibility default. With two or more active zones we fail closed and
-  // require an explicit HR assignment instead of guessing a branch.
   if (!allowedZoneIds.length) {
     const singleActiveZoneId = await resolveSingleActiveZoneId(attendanceDb);
     if (singleActiveZoneId) {
@@ -132,10 +127,6 @@ export async function resolveSingleActiveZoneId(attendanceDb) {
 export async function handleAttendanceRequest(args) {
   const pathname = normalizeText(args?.url?.pathname);
 
-  // Habbat Al Waraq authenticates Firebase tokens independently from Maedin's
-  // Firestore account runtime. Authorization remains in habat_attendance_access.
-  // Existing Maedin owners are still recognized by the isolated resolver as a
-  // compatibility bootstrap path.
   if (pathname.startsWith("/attendance/habat/")) {
     const legacyRequesterResolver = args?.resolveRequesterContext;
     const habatArgs = {
@@ -146,6 +137,16 @@ export async function handleAttendanceRequest(args) {
 
     if (pathname.startsWith("/attendance/habat/portal/")) {
       return handleHabatPortalRequest(habatArgs);
+    }
+    if (
+      pathname === "/attendance/habat/v2/reports/summary" ||
+      pathname === "/attendance/habat/v3/reports/summary" ||
+      pathname === "/attendance/habat/v3/monthly-summary/generate"
+    ) {
+      return handleHabatAttendanceReportingRequest(habatArgs);
+    }
+    if (pathname.startsWith("/attendance/habat/v3/")) {
+      return handleHabatAttendanceV3Request(habatArgs);
     }
     if (pathname.startsWith("/attendance/habat/v2/")) {
       return handleHabatAttendanceV2Request(habatArgs);

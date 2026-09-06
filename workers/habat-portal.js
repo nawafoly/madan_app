@@ -144,7 +144,6 @@ async function getMyPortal(db, requester, principal) {
           `SELECT id, name, start_time, end_time, grace_minutes,
                   early_leave_tolerance_minutes, working_days, is_active
            FROM habat_attendance_shifts
-           WHERE is_active = 1
            ORDER BY CASE WHEN id = ? THEN 0 ELSE 1 END, name COLLATE NOCASE ASC`
         )
         .bind(HABAT_DEFAULT_SHIFT_ID)
@@ -182,6 +181,7 @@ async function getMyPortal(db, requester, principal) {
     const recordsByDate = new Map(records.map(record => [record.attendanceDate, record]));
     const dates = enumerateDateKeys(monthStart, today);
     const now = new Date();
+    const enrollmentDate = principal.createdAt ? formatRiyadhDateKey(new Date(principal.createdAt)) : "";
 
     const totals = {
       scheduledDays: 0,
@@ -197,13 +197,16 @@ async function getMyPortal(db, requester, principal) {
 
     const calendar = [];
     for (const date of dates) {
-      const shift = resolveShiftForDate(date, assignments, shiftsById, defaultShift);
       const record = recordsByDate.get(date) || null;
-      const workDay = shift ? isWorkingDay(date, shift) : false;
-      const schedule = shift ? buildScheduleWindow(date, shift) : null;
+      const beforeEnrollment = Boolean(enrollmentDate && date < enrollmentDate && !record);
+      const eligible = principal.canClock && !beforeEnrollment;
+      const shift = resolveShiftForDate(date, assignments, shiftsById, defaultShift);
+      const workDay = eligible && shift ? isWorkingDay(date, shift) : false;
+      const schedule = workDay && shift ? buildScheduleWindow(date, shift) : null;
+      const attendanceWindowStarted = date < today || (date === today && schedule && now.getTime() >= schedule.start.getTime());
 
-      let dayStatus = workDay ? "not_started" : "off_day";
-      if (workDay) {
+      let dayStatus = !eligible ? "not_applicable" : workDay ? "not_started" : "off_day";
+      if (workDay && attendanceWindowStarted) {
         totals.scheduledDays += 1;
       }
 
@@ -239,12 +242,12 @@ async function getMyPortal(db, requester, principal) {
       calendar.push({
         date,
         status: dayStatus,
-        shift,
+        shift: eligible ? shift : null,
         record,
       });
     }
 
-    const currentShift = resolveShiftForDate(today, assignments, shiftsById, defaultShift);
+    const currentShift = principal.canClock ? resolveShiftForDate(today, assignments, shiftsById, defaultShift) : null;
     const currentAssignment = findAssignmentForDate(today, assignments);
     const attendanceRate = totals.scheduledDays
       ? Math.round((totals.attendedDays / totals.scheduledDays) * 1000) / 10
@@ -295,7 +298,7 @@ async function listAudit(db, url) {
   const requestedLimit = Number(url.searchParams.get("limit") || 150);
   const limit = Math.max(1, Math.min(MAX_AUDIT_LIMIT, Number.isFinite(requestedLimit) ? requestedLimit : 150));
 
-  const filters = ["date(created_at) BETWEEN date(?) AND date(?)"];
+  const filters = ["date(datetime(created_at, '+3 hours')) BETWEEN date(?) AND date(?)"];
   const bindings = [from, to];
   if (action) {
     filters.push("action = ?");
