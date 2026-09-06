@@ -104,6 +104,7 @@ async function listLegacyEmployees(db) {
       `SELECT id, uid, email, display_name, access_level, clock_enabled, is_active,
               created_at, updated_at
          FROM habat_attendance_access
+        WHERE access_level = 'employee' OR clock_enabled = 1
         ORDER BY is_active DESC, display_name ASC, email ASC`
     )
     .all();
