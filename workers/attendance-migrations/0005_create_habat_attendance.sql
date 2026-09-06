@@ -6,7 +6,7 @@ PRAGMA foreign_keys = ON;
 CREATE TABLE IF NOT EXISTS habat_attendance_access (
   id TEXT PRIMARY KEY,
   uid TEXT,
-  email TEXT NOT NULL COLLATE NOCASE UNIQUE,
+  email TEXT NOT NULL,
   display_name TEXT,
   access_level TEXT NOT NULL DEFAULT 'employee'
     CHECK (access_level IN ('employee', 'manager')),
@@ -20,6 +20,8 @@ CREATE TABLE IF NOT EXISTS habat_attendance_access (
   updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS idx_habat_attendance_access_email_unique
+  ON habat_attendance_access (lower(email));
 CREATE UNIQUE INDEX IF NOT EXISTS idx_habat_attendance_access_uid_unique
   ON habat_attendance_access (uid)
   WHERE uid IS NOT NULL AND trim(uid) <> '';
