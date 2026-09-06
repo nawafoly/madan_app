@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 240" role="img" aria-labelledby="title desc">
+  <title id="title">حبات الورق - HABBAT ALWARAQ</title>
+  <desc id="desc">شعار حبات الورق باللون الأخضر</desc>
+  <rect width="720" height="240" fill="white"/>
+  <g fill="none" stroke="#41a13f" stroke-linecap="round">
+    <path d="M292 33 C258 26 234 27 206 37" stroke-width="11"/>
+    <path d="M294 45 C246 44 202 57 174 78" stroke-width="10"/>
+    <path d="M302 57 C244 70 201 92 165 119" stroke-width="9"/>
+  </g>
+  <text x="360" y="130" text-anchor="middle" direction="rtl" unicode-bidi="bidi-override" fill="#41a13f" font-family="Arial, Tahoma, sans-serif" font-size="82" font-weight="700">حبات الورق</text>
+  <text x="360" y="189" text-anchor="middle" fill="#111111" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="700" letter-spacing="2">HABBAT ALWARAQ</text>
+</svg>
