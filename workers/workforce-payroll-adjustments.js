@@ -213,7 +213,6 @@ async function cancelManualAdjustment(db, tenantId, employeeId, adjustmentId, pr
   const entry = await requireEntry(db, tenantId, employeeId, adjustment.payroll_entry_id);
   const period = await db.prepare(`SELECT * FROM workforce_payroll_periods WHERE tenant_id = ? AND id = ? LIMIT 1`)
     .bind(tenantId, entry.period_id).first();
-  assertDraft(period, entry);
 
   if (clean(adjustment.status || "active") === "cancelled") {
     return {
@@ -222,6 +221,8 @@ async function cancelManualAdjustment(db, tenantId, employeeId, adjustmentId, pr
       workspace: await getPayrollAdjustmentWorkspace(db, tenantId, employeeId, entry.month_key),
     };
   }
+
+  assertDraft(period, entry);
 
   const now = nowIso();
   const cancel = db.prepare(`UPDATE workforce_payroll_adjustments
