@@ -45,6 +45,7 @@ try {
   node("syntax: schedule service", ["--check", "workers/workforce-schedule-control.js"]);
   node("schedule contracts", ["--test", "workers/workforce-schedule-control-contract.test.mjs"]);
   node("schedule production reporter contracts", ["--test", "workers/workforce-schedule-production-reporter-contract.test.mjs"]);
+  node("schedule rollout safety contracts", ["--test", "workers/workforce-schedule-rollout-contract.test.mjs"]);
   node("annual leave contracts", ["--test", "workers/workforce-annual-leave-contract.test.mjs"]);
   node("UI contracts", ["--test", "workers/workforce-ui-contract.test.mjs"]);
   node("cutover contracts", ["--test", "workers/workforce-cutover-contract.test.mjs"]);
