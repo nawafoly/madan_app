@@ -1,4 +1,7 @@
+import { resolveWorkforceScheduleDay } from "./workforce-schedule-control.js";
+
 const HABAT_ACCESS_LEVELS = new Set(["employee", "manager"]);
+const WORKFORCE_TENANT_ID = "restaurant_tenant_habat_alwaraq";
 const HABAT_DEFAULT_SHIFT_ID = "habat_shift_default";
 const HABAT_MAX_REPORT_DAYS = 93;
 const HABAT_DEFAULT_RECORD_LIMIT = 200;
@@ -1109,6 +1112,8 @@ async function getSummaryReport(db, url) {
 }
 
 async function resolveShiftForAccess(db, accessId, dateKey) {
+  const workforceShift = await resolveWorkforceShiftForAccess(db, accessId, dateKey);
+  if (workforceShift) return workforceShift;
   if (!accessId) return getDefaultShift(db);
   const assignment = await db.prepare(
     `SELECT a.shift_id
@@ -1141,6 +1146,120 @@ function resolveAssignmentFromList(assignments, dateKey) {
     }
   }
   return selected;
+}
+
+async function resolveWorkforceShiftForAccess(db, accessId, dateKey) {
+  const link = await db.prepare(
+    `SELECT a.employee_id
+       FROM workforce_attendance_links a
+      WHERE a.tenant_id = ? AND a.source_employee_id = ?
+        AND COALESCE(a.status, 'confirmed') = 'confirmed'
+      LIMIT 1`
+  ).bind(WORKFORCE_TENANT_ID, accessId).first();
+  if (!link?.employee_id) return null;
+
+  const schedule = await resolveWorkforceScheduleDay(
+    db,
+    WORKFORCE_TENANT_ID,
+    link.employee_id,
+    dateKey
+  );
+
+  // No generic schedule yet: keep the legacy Habbat assignment as compatibility
+  // fallback. Once an employee schedule exists, Workforce is authoritative.
+  if (!schedule || schedule.kind === "unassigned" || !schedule.ready) return null;
+
+  return makeWorkforceShiftFromResolved(schedule, dateKey);
+}
+
+function makeWorkforceShiftFromResolved(schedule, dateKey) {
+  const weekday = weekdayFromDateKey(dateKey);
+  return {
+    id: normalizeText(schedule?.templateId) || "workforce:" + normalizeText(schedule?.assignmentId),
+    name: normalizeText(schedule?.templateName) || "جدول الموظف",
+    start_time: normalizeTime(schedule?.startTime) || "09:00",
+    end_time: normalizeTime(schedule?.endTime) || "17:00",
+    grace_minutes: Number(schedule?.graceMinutes || 0),
+    early_leave_tolerance_minutes: Number(schedule?.earlyLeaveToleranceMinutes || 0),
+    working_days: JSON.stringify(schedule?.isWorkingDay ? [weekday] : []),
+    is_active: 1,
+    schedule_source: normalizeText(schedule?.source) || "workforce_schedule",
+  };
+}
+
+function weekdayFromDateKey(dateKey) {
+  const [year, month, day] = String(dateKey).split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day, 12)).getUTCDay();
+}
+
+async function resolveWorkforceShiftForAccess(db, accessId, dateKey) {
+  const link = await db.prepare(
+    `SELECT a.employee_id
+       FROM workforce_attendance_links a
+      WHERE a.tenant_id = ? AND a.source_employee_id = ?
+        AND COALESCE(a.status, 'confirmed') = 'confirmed'
+      LIMIT 1`
+  ).bind(WORKFORCE_TENANT_ID, accessId).first();
+  if (!link?.employee_id) return null;
+
+  const exception = await db.prepare(
+    `SELECT e.*, t.start_time AS template_start_time, t.end_time AS template_end_time,
+            t.grace_minutes AS template_grace_minutes,
+            t.early_leave_tolerance_minutes AS template_early_leave_tolerance_minutes
+       FROM workforce_schedule_exceptions e
+       LEFT JOIN workforce_schedule_templates t
+         ON t.tenant_id = e.tenant_id AND t.id = e.template_id
+      WHERE e.tenant_id = ? AND e.employee_id = ? AND e.work_date = ?
+        AND COALESCE(e.status, 'active') = 'active'
+      LIMIT 1`
+  ).bind(WORKFORCE_TENANT_ID, link.employee_id, dateKey).first();
+
+  const assignment = await db.prepare(
+    `SELECT a.*, t.start_time, t.end_time, t.grace_minutes,
+            t.early_leave_tolerance_minutes, t.working_days_json
+       FROM workforce_schedule_assignments a
+       JOIN workforce_schedule_templates t
+         ON t.tenant_id = a.tenant_id AND t.id = a.template_id
+      WHERE a.tenant_id = ? AND a.employee_id = ? AND a.effective_from <= ?
+        AND (a.effective_to IS NULL OR a.effective_to >= ?)
+        AND t.is_active = 1
+      ORDER BY a.effective_from DESC, a.created_at DESC
+      LIMIT 1`
+  ).bind(WORKFORCE_TENANT_ID, link.employee_id, dateKey, dateKey).first();
+
+  if (!assignment && !exception) return null;
+  if (exception && normalizeText(exception.kind) === "day_off") return null;
+
+  const weekday = new Date(dateKey + "T12:00:00+03:00").getDay();
+  const explicitRest = Number(assignment?.weekly_rest_weekday);
+  let workingDays = [];
+  if (Number.isInteger(explicitRest) && explicitRest >= 0 && explicitRest <= 6) {
+    try {
+      const parsed = JSON.parse(assignment?.week_pattern_json || "{}");
+      workingDays = Array.isArray(parsed?.workingDays) ? parsed.workingDays.map(Number) : [];
+    } catch {}
+    if (!workingDays.length) workingDays = [0, 1, 2, 3, 4, 5, 6].filter(day => day !== explicitRest);
+  } else {
+    try {
+      const parsed = JSON.parse(assignment?.working_days_json || "[]");
+      workingDays = Array.isArray(parsed) ? parsed.map(Number) : [];
+    } catch {}
+  }
+  if (assignment && !workingDays.includes(weekday)) return null;
+
+  const startTime = normalizeText(exception?.start_time || exception?.template_start_time || assignment?.start_time);
+  const endTime = normalizeText(exception?.end_time || exception?.template_end_time || assignment?.end_time);
+  if (!startTime || !endTime) return null;
+
+  return {
+    id: normalizeText(assignment?.template_id) || "workforce:" + normalizeText(assignment?.id),
+    name: "Workforce schedule",
+    startTime,
+    endTime,
+    graceMinutes: Number(exception?.template_grace_minutes ?? assignment?.grace_minutes ?? 0),
+    earlyLeaveToleranceMinutes: Number(exception?.template_early_leave_tolerance_minutes ?? assignment?.early_leave_tolerance_minutes ?? 0),
+    source: "workforce",
+  };
 }
 
 async function getDefaultShift(db) {

@@ -76,6 +76,10 @@ type AssignmentRow = {
   end_time?: string;
   effective_from?: string;
   effective_to?: string | null;
+  reason?: string | null;
+  weekly_rest_weekday?: number | null;
+  week_pattern_json?: string | null;
+  createdAt?: string | null;
 };
 
 type BasicForm = {
@@ -248,6 +252,8 @@ export default function WorkforceEmployeeFile({ identity, onBack, legacyAttendan
   const [assignmentTemplate, setAssignmentTemplate] = useState("");
   const [assignmentFrom, setAssignmentFrom] = useState("");
   const [assignmentTo, setAssignmentTo] = useState("");
+  const [weeklyRestWeekday, setWeeklyRestWeekday] = useState("5");
+  const [assignmentReason, setAssignmentReason] = useState("");
 
   const resolveEmployeeId = useCallback(async () => {
     const payload = await WorkforceService.listEmployees();
@@ -428,8 +434,11 @@ export default function WorkforceEmployeeFile({ identity, onBack, legacyAttendan
         templateId: assignmentTemplate,
         effectiveFrom: assignmentFrom,
         effectiveTo: assignmentTo || null,
+        weeklyRestWeekday: Number(weeklyRestWeekday),
+        reason: assignmentReason || null,
+        operationId: crypto.randomUUID(),
       });
-      setAssignmentFrom(""); setAssignmentTo("");
+      setAssignmentFrom(""); setAssignmentTo(""); setAssignmentReason("");
       setMessage("تم إضافة تكليف الدوام.");
       await load();
     } catch (caught) { setError(friendlyError(caught)); }
@@ -499,10 +508,6 @@ export default function WorkforceEmployeeFile({ identity, onBack, legacyAttendan
         </TabsContent>
 
         <TabsContent value="payroll" className="space-y-5">
-          {employeeId ? <WorkforceMonthlyEmployeeReportPanel employeeId={employeeId} /> : null}
-          {employeeId ? <WorkforcePayrollLifecyclePanel employeeId={employeeId} /> : null}
-          {employeeId ? <WorkforcePayrollReadinessPanel employeeId={employeeId} /> : null}
-          {employeeId ? <WorkforcePayrollAdjustmentsPanel employeeId={employeeId} /> : null}
           <form onSubmit={savePayroll} className="space-y-5 rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><SectionTitle title="إعدادات الراتب" description="الراتب والبدلات وطريقة خصم الحضور. لا يتم إنشاء خصم حضور تلقائي من هذه الشاشة." icon={<WalletCards className="h-5 w-5" />} /><div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm"><span className="text-slate-500">الإجمالي التعاقدي الحالي</span><p className="mt-1 text-xl font-black">{totalMonthly.toLocaleString("en-US")} ر.س</p></div></div>
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -521,6 +526,10 @@ export default function WorkforceEmployeeFile({ identity, onBack, legacyAttendan
             {payroll.attendancePayrollMode === "exempt" ? <Field label="سبب الاستثناء"><Textarea value={payroll.attendancePayrollExemptionReason} onChange={e => setPayroll(v => ({ ...v, attendancePayrollExemptionReason: e.target.value }))} className="min-h-20 rounded-2xl" required /></Field> : null}
             <Button type="submit" disabled={saving} className="rounded-xl bg-black"><Save className="h-4 w-4" /> حفظ إعدادات الراتب</Button>
           </form>
+          {employeeId ? <WorkforcePayrollReadinessPanel employeeId={employeeId} /> : null}
+          {employeeId ? <WorkforcePayrollAdjustmentsPanel employeeId={employeeId} /> : null}
+          {employeeId ? <WorkforcePayrollLifecyclePanel employeeId={employeeId} /> : null}
+          {employeeId ? <WorkforceMonthlyEmployeeReportPanel employeeId={employeeId} /> : null}
         </TabsContent>
 
         <TabsContent value="schedule" className="space-y-5">
@@ -528,7 +537,7 @@ export default function WorkforceEmployeeFile({ identity, onBack, legacyAttendan
           <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6"><SectionTitle title="الدوام والشفتات" description="يعرض الـbaseline المنقول من النظام القديم وأي تغييرات مؤرخة بعده." icon={<Clock3 className="h-5 w-5" />} />
             <div className="mt-5 overflow-x-auto"><Table className="min-w-[700px]"><TableHeader><TableRow><TableHead className="text-right">الشفت</TableHead><TableHead className="text-right">الوقت</TableHead><TableHead className="text-right">من</TableHead><TableHead className="text-right">إلى</TableHead></TableRow></TableHeader><TableBody>{assignments.map((item, index) => <TableRow key={item.id || index}><TableCell className="font-bold">{item.template_name || templates.find(t => t.id === item.template_id)?.name || "شفت"}</TableCell><TableCell dir="ltr" className="text-right">{item.start_time || templates.find(t => t.id === item.template_id)?.startTime || "--"} — {item.end_time || templates.find(t => t.id === item.template_id)?.endTime || "--"}</TableCell><TableCell>{dateText(item.effective_from)}</TableCell><TableCell>{dateText(item.effective_to)}</TableCell></TableRow>)}</TableBody></Table>{!assignments.length ? <p className="py-8 text-center text-sm text-slate-500">لا يوجد تكليف دوام.</p> : null}</div>
           </section>
-          <form onSubmit={createAssignment} className="space-y-4 rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6"><h3 className="font-black">إضافة تغيير دوام مؤرخ</h3><div className="grid gap-4 md:grid-cols-3"><Field label="الشفت"><Select value={assignmentTemplate} onValueChange={setAssignmentTemplate}><SelectTrigger className="h-11 w-full rounded-2xl"><SelectValue placeholder="اختر الشفت" /></SelectTrigger><SelectContent>{templates.filter(t => t.isActive).map(t => <SelectItem key={t.id} value={t.id}>{t.name} · {t.startTime} — {t.endTime}</SelectItem>)}</SelectContent></Select></Field><Field label="ساري من"><Input dir="ltr" type="date" value={assignmentFrom} onChange={e => setAssignmentFrom(e.target.value)} className="h-11 rounded-2xl" required /></Field><Field label="ساري إلى (اختياري)"><Input dir="ltr" type="date" value={assignmentTo} onChange={e => setAssignmentTo(e.target.value)} className="h-11 rounded-2xl" /></Field></div><Button type="submit" disabled={saving || !assignmentTemplate || !assignmentFrom} className="rounded-xl bg-black"><Plus className="h-4 w-4" /> إضافة التكليف</Button></form>
+          <form onSubmit={createAssignment} className="space-y-4 rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6"><h3 className="font-black">جدول الموظف الأسبوعي</h3><p className="text-sm text-slate-500">اختر قالب وقت الدوام وحدد يوم الراحة الأسبوعية الخاص بهذا الموظف. أي تغيير لاحق يسجل كتعيين مؤرخ ولا يغير قالب الشفت لباقي الموظفين.</p><div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4"><Field label="قالب الشفت"><Select value={assignmentTemplate} onValueChange={setAssignmentTemplate}><SelectTrigger className="h-11 w-full rounded-2xl"><SelectValue placeholder="اختر الشفت" /></SelectTrigger><SelectContent>{templates.filter(t => t.isActive).map(t => <SelectItem key={t.id} value={t.id}>{t.name} · {t.startTime} — {t.endTime}</SelectItem>)}</SelectContent></Select></Field><Field label="الإجازة الأسبوعية الأساسية"><Select value={weeklyRestWeekday} onValueChange={setWeeklyRestWeekday}><SelectTrigger className="h-11 w-full rounded-2xl"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="0">الأحد</SelectItem><SelectItem value="1">الاثنين</SelectItem><SelectItem value="2">الثلاثاء</SelectItem><SelectItem value="3">الأربعاء</SelectItem><SelectItem value="4">الخميس</SelectItem><SelectItem value="5">الجمعة</SelectItem><SelectItem value="6">السبت</SelectItem></SelectContent></Select></Field><Field label="ساري من"><Input dir="ltr" type="date" value={assignmentFrom} onChange={e => setAssignmentFrom(e.target.value)} className="h-11 rounded-2xl" required /></Field><Field label="ساري إلى (اختياري)"><Input dir="ltr" type="date" value={assignmentTo} onChange={e => setAssignmentTo(e.target.value)} className="h-11 rounded-2xl" /></Field></div><Field label="سبب التغيير (اختياري)"><Textarea value={assignmentReason} onChange={e => setAssignmentReason(e.target.value)} className="min-h-20 rounded-2xl" /></Field><Button type="submit" disabled={saving || !assignmentTemplate || !assignmentFrom} className="rounded-xl bg-black"><Plus className="h-4 w-4" /> حفظ جدول الموظف</Button></form>
         </TabsContent>
 
         <TabsContent value="leaves" className="space-y-5">

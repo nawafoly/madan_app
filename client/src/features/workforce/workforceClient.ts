@@ -272,9 +272,16 @@ export const WorkforceService = {
 
   createScheduleAssignment(
     employeeId: string,
-    input: { templateId: string; effectiveFrom: string; effectiveTo?: string | null }
+    input: {
+      templateId: string;
+      effectiveFrom: string;
+      effectiveTo?: string | null;
+      weeklyRestWeekday: number;
+      reason?: string | null;
+      operationId?: string;
+    }
   ) {
-    return workforceApi<{ ok: true; assignment: Record<string, unknown> }>(
+    return workforceApi<{ ok: true; idempotent?: boolean; assignment: Record<string, unknown> }>(
       `employees/${encodeURIComponent(employeeId)}/schedule-assignments`,
       { method: "POST", body: JSON.stringify(input) }
     );
