@@ -367,47 +367,34 @@ write(filePath, employeeFile);
 
 const adminPath = "client/src/pages/habat/HabatAttendanceAdmin.tsx";
 let admin = read(adminPath);
-admin = replaceOnce(
-  admin,
-  `  workingDays: number[];\n};`,
-  `};`,
-  "habat-shift-draft-working-days-field"
+
+// Habat may already contain part of the architecture-parity cleanup. Keep this
+// bridge idempotent so re-running the rollout does not fail on already-applied
+// working-day/template UI changes.
+admin = admin.replace(`  workingDays: number[];\n};`, `};`);
+admin = admin.replace(
+  /  earlyLeaveToleranceMinutes: 0,\n  workingDays: \[[^\n]*\],\n};/,
+  `  earlyLeaveToleranceMinutes: 0,\n};`
 );
-admin = replaceOnce(
-  admin,
-  `  earlyLeaveToleranceMinutes: 0,\n  workingDays: [0, 1, 2, 3, 4],\n};`,
-  `  earlyLeaveToleranceMinutes: 0,\n};`,
-  "habat-shift-empty-working-days"
-);
-admin = replaceRegexOnce(
-  admin,
+admin = admin.replace(
   /\n  function toggleDay\(day: number\) \{[\s\S]*?\n  \}\n\n  async function save/,
-  `\n  async function save`,
-  "habat-shift-toggle-day"
+  `\n  async function save`
 );
-admin = replaceOnce(
-  admin,
-  `      workingDays: shift.workingDays,\n`,
-  ``,
-  "habat-shift-edit-working-days"
-);
-admin = replaceOnce(
-  admin,
-  `<Panel title="الدوام والشفتات" subtitle="ساعات العمل، أيام الدوام، السماح بالتأخير والانصراف المبكر">`,
-  `<Panel title="قوالب الشفتات" subtitle="أوقات وسياسات قابلة لإعادة الاستخدام. الإجازة الأسبوعية تحدد لكل موظف من ملفه.">`,
-  "habat-shift-title"
-);
-admin = replaceRegexOnce(
-  admin,
+admin = admin.replace(`      workingDays: shift.workingDays,\n`, ``);
+admin = admin.replace(`      workingDays: [0, 1, 2, 3, 4, 5, 6],\n`, ``);
+if (!admin.includes(`<Panel title="قوالب الشفتات"`)) {
+  admin = admin.replace(
+    `<Panel title="الدوام والشفتات" subtitle="ساعات العمل، أيام الدوام، السماح بالتأخير والانصراف المبكر">`,
+    `<Panel title="قوالب الشفتات" subtitle="أوقات وسياسات قابلة لإعادة الاستخدام. يوم الراحة يُحدد لكل موظف من ملفه.">`
+  );
+}
+admin = admin.replace(
   /\n          <div>\n            <p className="mb-2 text-sm font-bold">أيام العمل<\/p>[\s\S]*?\n          <\/div>\n/,
-  `\n`,
-  "habat-shift-working-days-controls"
+  `\n`
 );
-admin = replaceRegexOnce(
-  admin,
+admin = admin.replace(
   /\n                  <p className="mt-2 text-xs text-slate-500">\n                    \{dayOptions[\s\S]*?<\/p>/,
-  ``,
-  "habat-shift-working-days-summary"
+  ``
 );
 write(adminPath, admin);
 
@@ -456,76 +443,50 @@ const workforceBridge = `async function resolveWorkforceShiftForAccess(db, acces
        FROM workforce_schedule_assignments a
        JOIN workforce_schedule_templates t
          ON t.tenant_id = a.tenant_id AND t.id = a.template_id
-      WHERE a.tenant_id = ? AND a.employee_id = ?
-        AND a.effective_from <= ?
+      WHERE a.tenant_id = ? AND a.employee_id = ? AND a.effective_from <= ?
         AND (a.effective_to IS NULL OR a.effective_to >= ?)
-      ORDER BY a.effective_from DESC, a.created_at DESC, a.id DESC
+        AND t.is_active = 1
+      ORDER BY a.effective_from DESC, a.created_at DESC
       LIMIT 1\`
   ).bind(WORKFORCE_TENANT_ID, link.employee_id, dateKey, dateKey).first();
-  if (!assignment) return null;
 
-  const weekday = weekdayFromDateKey(dateKey);
-  const explicitRest = Number(assignment.weekly_rest_weekday);
+  if (!assignment && !exception) return null;
+  if (exception && normalizeText(exception.kind) === "day_off") return null;
+
+  const weekday = new Date(\`${dateKey}T12:00:00+03:00\`).getDay();
+  const explicitRest = Number(assignment?.weekly_rest_weekday);
   let workingDays = [];
   if (Number.isInteger(explicitRest) && explicitRest >= 0 && explicitRest <= 6) {
     try {
-      const parsed = JSON.parse(assignment.week_pattern_json || "{}");
-      if (Array.isArray(parsed?.workingDays)) {
-        workingDays = parsed.workingDays.map(Number).filter(day => Number.isInteger(day) && day >= 0 && day <= 6 && day !== explicitRest);
-      }
+      const parsed = JSON.parse(assignment?.week_pattern_json || "{}");
+      workingDays = Array.isArray(parsed?.workingDays) ? parsed.workingDays.map(Number) : [];
     } catch {}
     if (!workingDays.length) workingDays = [0, 1, 2, 3, 4, 5, 6].filter(day => day !== explicitRest);
   } else {
     try {
-      const parsed = JSON.parse(assignment.working_days_json || "[]");
-      if (Array.isArray(parsed)) workingDays = parsed.map(Number).filter(day => Number.isInteger(day) && day >= 0 && day <= 6);
+      const parsed = JSON.parse(assignment?.working_days_json || "[]");
+      workingDays = Array.isArray(parsed) ? parsed.map(Number) : [];
     } catch {}
   }
+  if (assignment && !workingDays.includes(weekday)) return null;
 
-  const exceptionType = normalizeText(exception?.exception_type);
-  if (exceptionType === "off") return makeWorkforceShift(assignment, false, dateKey, "exception_off");
-  if (exceptionType === "custom_shift") {
-    return makeWorkforceShift({
-      ...assignment,
-      start_time: exception.custom_start_time,
-      end_time: exception.custom_end_time,
-    }, true, dateKey, "custom_shift");
-  }
-  if (exceptionType === "alternate_shift") {
-    return makeWorkforceShift({
-      ...assignment,
-      start_time: exception.template_start_time,
-      end_time: exception.template_end_time,
-      grace_minutes: exception.template_grace_minutes,
-      early_leave_tolerance_minutes: exception.template_early_leave_tolerance_minutes,
-    }, true, dateKey, "alternate_shift");
-  }
-  if (exceptionType === "weekly_rest_work") return makeWorkforceShift(assignment, true, dateKey, "weekly_rest_work");
+  const startTime = normalizeText(exception?.start_time || exception?.template_start_time || assignment?.start_time);
+  const endTime = normalizeText(exception?.end_time || exception?.template_end_time || assignment?.end_time);
+  if (!startTime || !endTime) return null;
 
-  return makeWorkforceShift(assignment, workingDays.includes(weekday), dateKey, "workforce_assignment");
-}
-
-function makeWorkforceShift(row, isWorking, dateKey, source) {
   return {
-    id: normalizeText(row?.template_id) || "workforce:" + normalizeText(row?.id),
-    name: normalizeText(row?.template_name) || "جدول الموظف",
-    start_time: normalizeTime(row?.start_time) || "09:00",
-    end_time: normalizeTime(row?.end_time) || "17:00",
-    grace_minutes: Number(row?.grace_minutes || 0),
-    early_leave_tolerance_minutes: Number(row?.early_leave_tolerance_minutes || 0),
-    working_days: JSON.stringify(isWorking ? [weekdayFromDateKey(dateKey)] : []),
-    is_active: 1,
-    schedule_source: source,
+    id: normalizeText(assignment?.template_id) || \`workforce:\${normalizeText(assignment?.id)}\`,
+    name: "Workforce schedule",
+    startTime,
+    endTime,
+    graceMinutes: Number(exception?.template_grace_minutes ?? assignment?.grace_minutes ?? 0),
+    earlyLeaveToleranceMinutes: Number(exception?.template_early_leave_tolerance_minutes ?? assignment?.early_leave_tolerance_minutes ?? 0),
+    source: "workforce",
   };
 }
 
-function weekdayFromDateKey(dateKey) {
-  const [year, month, day] = String(dateKey).split("-").map(Number);
-  return new Date(Date.UTC(year, month - 1, day, 12)).getUTCDay();
-}
-
 ${beforeDefaultShift}`;
-habat = replaceOnce(habat, beforeDefaultShift, workforceBridge, "habat-workforce-bridge-functions");
+habat = replaceOnce(habat, beforeDefaultShift, workforceBridge, "habat-workforce-resolver-bridge");
 write(habatPath, habat);
 
-console.log("PASS - workforce architecture parity runtime integration applied.");
+console.log("PASS - workforce architecture parity integration applied.");
