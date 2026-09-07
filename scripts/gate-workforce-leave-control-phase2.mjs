@@ -25,6 +25,7 @@ node("integrate leave control", ["scripts/integrate-workforce-leave-control.mjs"
 node("syntax: leave control", ["--check", "workers/workforce-leave-control.js"]);
 node("syntax: workforce core", ["--check", "workers/workforce-core.js"]);
 node("leave-control contracts", ["--test", "workers/workforce-leave-control-contract.test.mjs"]);
+node("leave-control rollout safety", ["--test", "workers/workforce-leave-control-rollout-contract.test.mjs"]);
 node("annual-leave contracts", ["--test", "workers/workforce-annual-leave-contract.test.mjs"]);
 node("schedule contracts", ["--test", "workers/workforce-schedule-control-contract.test.mjs"]);
 node("UI contracts", ["--test", "workers/workforce-ui-contract.test.mjs"]);
