@@ -39,12 +39,13 @@ test("resolver prefers employee schedule and keeps legacy fallback", () => {
   assert.match(schedule, /weeklyRestWeekday: weekPattern\.weeklyRestWeekday/);
 });
 
-test("Habbat clock and dashboard resolve Workforce schedule before legacy fallback", () => {
-  assert.match(habatV2, /resolveWorkforceScheduleDay/);
-  const workforceIndex = habatV2.indexOf("workforce_employee_profiles");
-  const legacyIndex = habatV2.indexOf("habat_attendance_shift_assignments", workforceIndex);
-  assert.ok(workforceIndex >= 0);
-  assert.ok(legacyIndex > workforceIndex);
+test("Habbat edge reuses generic Workforce resolver before legacy fallback", () => {
+  assert.match(habatV2, /import \{ resolveWorkforceScheduleDay \} from "\.\/workforce-schedule-control\.js"/);
+  assert.match(habatV2, /await resolveWorkforceScheduleDay\(/);
+  const workforceResolverIndex = habatV2.indexOf("await resolveWorkforceScheduleDay(");
+  const legacyIndex = habatV2.indexOf("habat_attendance_shift_assignments", workforceResolverIndex);
+  assert.ok(workforceResolverIndex >= 0);
+  assert.ok(legacyIndex > workforceResolverIndex);
 });
 
 test("employee UI owns weekly rest and payroll starts with setup", () => {
@@ -63,8 +64,9 @@ test("employee UI owns weekly rest and payroll starts with setup", () => {
 
 test("global Habbat shift page is template-only", () => {
   assert.match(admin, /قوالب الشفتات/);
-  assert.match(admin, /يوم الراحة يُحدد لكل موظف|الإجازة الأسبوعية لا تُحدد من قالب الشفت/);
+  assert.match(admin, /يوم الراحة يُحدد لكل موظف/);
   assert.doesNotMatch(admin, /<p className="mb-2 text-sm font-bold">أيام العمل<\/p>/);
+  assert.doesNotMatch(admin, /workingDays:\s*\[0, 1, 2, 3, 4\]/);
 });
 
 test("generic Workforce runtime remains tenant-agnostic", () => {
