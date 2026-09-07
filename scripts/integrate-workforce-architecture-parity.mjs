@@ -1,6 +1,9 @@
 import fs from "node:fs";
 
-const read = path => fs.readFileSync(path, "utf8");
+// Normalize Windows CRLF checkouts in-memory so deterministic source anchors
+// remain stable across developer machines. Files are written back as LF and Git
+// can re-checkout using the user's configured line-ending policy afterwards.
+const read = path => fs.readFileSync(path, "utf8").replace(/\r\n/g, "\n");
 const write = (path, value) => fs.writeFileSync(path, value);
 
 function replaceOnce(text, before, after, label) {
@@ -342,162 +345,187 @@ if (!employeeFile.includes(`const [weeklyRestWeekday, setWeeklyRestWeekday]`)) {
 employeeFile = replaceOnce(
   employeeFile,
   `        effectiveTo: assignmentTo || null,\n      });\n      setAssignmentFrom(""); setAssignmentTo("");`,
-  `        effectiveTo: assignmentTo || null,\n        weeklyRestWeekday: Number(weeklyRestWeekday),\n        reason: assignmentReason || null,\n      });\n      setAssignmentFrom(""); setAssignmentTo(""); setAssignmentReason("");`,
-  "employee-file-assignment-submit"
+  `        effectiveTo: assignmentTo || null,\n        weeklyRestWeekday: Number(weeklyRestWeekday),\n        reason: assignmentReason || null,\n        operationId: crypto.randomUUID(),\n      });\n      setAssignmentFrom(""); setAssignmentTo(""); setAssignmentReason("");`,
+  "employee-file-save-weekly-rest"
 );
-
-const oldTabs = `<TabsList className="h-auto w-full flex-wrap justify-start gap-1 rounded-2xl bg-white p-1 shadow-sm">
-          <TabsTrigger value="basic" className="rounded-xl px-5 py-2.5">الملف</TabsTrigger>
-          <TabsTrigger value="payroll" className="rounded-xl px-5 py-2.5">الراتب</TabsTrigger>
-          <TabsTrigger value="schedule" className="rounded-xl px-5 py-2.5">الدوام</TabsTrigger>
-          <TabsTrigger value="leaves" className="rounded-xl px-5 py-2.5">الإجازات</TabsTrigger>
-          <TabsTrigger value="absences" className="rounded-xl px-5 py-2.5">الغياب</TabsTrigger>
-          {legacyAttendance ? <TabsTrigger value="attendance" className="rounded-xl px-5 py-2.5">الحضور</TabsTrigger> : null}
-        </TabsList>`;
-const newTabs = `<TabsList className="h-auto w-full flex-wrap justify-start gap-1 rounded-2xl bg-white p-1 shadow-sm">
-          <TabsTrigger value="basic" className="rounded-xl px-5 py-2.5">الملف</TabsTrigger>
-          <TabsTrigger value="schedule" className="rounded-xl px-5 py-2.5">جدول الدوام</TabsTrigger>
-          {legacyAttendance ? <TabsTrigger value="attendance" className="rounded-xl px-5 py-2.5">الحضور</TabsTrigger> : null}
-          <TabsTrigger value="payroll" className="rounded-xl px-5 py-2.5">الراتب</TabsTrigger>
-          <TabsTrigger value="leaves" className="rounded-xl px-5 py-2.5">الإجازات</TabsTrigger>
-          <TabsTrigger value="absences" className="rounded-xl px-5 py-2.5">الغياب</TabsTrigger>
-        </TabsList>`;
-employeeFile = replaceOnce(employeeFile, oldTabs, newTabs, "employee-file-tab-order");
-
-const payrollPattern = /<TabsContent value="payroll" className="space-y-5">\s*\{employeeId \? <WorkforceMonthlyEmployeeReportPanel employeeId=\{employeeId\} \/> : null\}\s*\{employeeId \? <WorkforcePayrollLifecyclePanel employeeId=\{employeeId\} \/> : null\}\s*\{employeeId \? <WorkforcePayrollReadinessPanel employeeId=\{employeeId\} \/> : null\}\s*\{employeeId \? <WorkforcePayrollAdjustmentsPanel employeeId=\{employeeId\} \/> : null\}\s*(<form onSubmit=\{savePayroll\}[\s\S]*?<\/form>)\s*<\/TabsContent>/;
-if (payrollPattern.test(employeeFile)) {
-  employeeFile = employeeFile.replace(
-    payrollPattern,
-    `<TabsContent value="payroll" className="space-y-5">\n          $1\n          {employeeId ? <WorkforcePayrollReadinessPanel employeeId={employeeId} /> : null}\n          {employeeId ? <WorkforcePayrollAdjustmentsPanel employeeId={employeeId} /> : null}\n          {employeeId ? <WorkforcePayrollLifecyclePanel employeeId={employeeId} /> : null}\n          {employeeId ? <WorkforceMonthlyEmployeeReportPanel employeeId={employeeId} /> : null}\n        </TabsContent>`
-  );
-} else if (!employeeFile.includes(`{employeeId ? <WorkforcePayrollReadinessPanel employeeId={employeeId} /> : null}\n          {employeeId ? <WorkforcePayrollAdjustmentsPanel`)) {
-  throw new Error("integration_anchor_missing:employee-file-payroll-order");
-}
-
-const scheduleFormPattern = /<form onSubmit=\{createAssignment\}[\s\S]*?<\/form>/;
-const scheduleForm = `<form onSubmit={createAssignment} className="space-y-4 rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-            <div>
-              <h3 className="font-black">جدول الموظف الأسبوعي</h3>
-              <p className="mt-1 text-sm text-slate-500">الشفت يحدد الوقت والسياسة فقط. يوم الإجازة الأسبوعية ملك لهذا الموظف ويُحفظ بنسخة مؤرخة.</p>
-            </div>
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <Field label="قالب الشفت"><Select value={assignmentTemplate} onValueChange={setAssignmentTemplate}><SelectTrigger className="h-11 w-full rounded-2xl"><SelectValue placeholder="اختر الشفت" /></SelectTrigger><SelectContent>{templates.filter(t => t.isActive).map(t => <SelectItem key={t.id} value={t.id}>{t.name} · {t.startTime} — {t.endTime}</SelectItem>)}</SelectContent></Select></Field>
-              <Field label="الإجازة الأسبوعية الأساسية"><Select value={weeklyRestWeekday} onValueChange={setWeeklyRestWeekday}><SelectTrigger className="h-11 w-full rounded-2xl"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="0">الأحد</SelectItem><SelectItem value="1">الاثنين</SelectItem><SelectItem value="2">الثلاثاء</SelectItem><SelectItem value="3">الأربعاء</SelectItem><SelectItem value="4">الخميس</SelectItem><SelectItem value="5">الجمعة</SelectItem><SelectItem value="6">السبت</SelectItem></SelectContent></Select></Field>
-              <Field label="ساري من"><Input dir="ltr" type="date" value={assignmentFrom} onChange={e => setAssignmentFrom(e.target.value)} className="h-11 rounded-2xl" required /></Field>
-              <Field label="ساري إلى (اختياري)"><Input dir="ltr" type="date" value={assignmentTo} onChange={e => setAssignmentTo(e.target.value)} className="h-11 rounded-2xl" /></Field>
-            </div>
-            <Field label="سبب التغيير"><Input value={assignmentReason} onChange={e => setAssignmentReason(e.target.value)} placeholder="مثال: جدول التشغيل الأساسي" className="h-11 rounded-2xl" /></Field>
-            <Button type="submit" disabled={saving || !assignmentTemplate || !assignmentFrom} className="rounded-xl bg-black"><Plus className="h-4 w-4" /> حفظ جدول الموظف</Button>
-          </form>`;
-if (scheduleFormPattern.test(employeeFile)) {
-  employeeFile = employeeFile.replace(scheduleFormPattern, scheduleForm);
-} else if (!employeeFile.includes("الإجازة الأسبوعية الأساسية")) {
-  throw new Error("integration_anchor_missing:employee-file-schedule-form");
-}
+employeeFile = replaceOnce(
+  employeeFile,
+  `          {employeeId ? <WorkforceMonthlyEmployeeReportPanel employeeId={employeeId} /> : null}\n          {employeeId ? <WorkforcePayrollLifecyclePanel employeeId={employeeId} /> : null}\n          {employeeId ? <WorkforcePayrollReadinessPanel employeeId={employeeId} /> : null}\n          {employeeId ? <WorkforcePayrollAdjustmentsPanel employeeId={employeeId} /> : null}\n          <form onSubmit={savePayroll}`,
+  `          <form onSubmit={savePayroll}`,
+  "employee-file-payroll-order-remove-prefix"
+);
+employeeFile = replaceOnce(
+  employeeFile,
+  `            <Button type="submit" disabled={saving} className="rounded-xl bg-black"><Save className="h-4 w-4" /> حفظ إعدادات الراتب</Button>\n          </form>\n        </TabsContent>`,
+  `            <Button type="submit" disabled={saving} className="rounded-xl bg-black"><Save className="h-4 w-4" /> حفظ إعدادات الراتب</Button>\n          </form>\n          {employeeId ? <WorkforcePayrollReadinessPanel employeeId={employeeId} /> : null}\n          {employeeId ? <WorkforcePayrollAdjustmentsPanel employeeId={employeeId} /> : null}\n          {employeeId ? <WorkforcePayrollLifecyclePanel employeeId={employeeId} /> : null}\n          {employeeId ? <WorkforceMonthlyEmployeeReportPanel employeeId={employeeId} /> : null}\n        </TabsContent>`,
+  "employee-file-payroll-order-append"
+);
+const assignmentFormPattern = /<form onSubmit=\{createAssignment\}[\s\S]*?<\/form>/;
+const assignmentFormReplacement = `<form onSubmit={createAssignment} className="space-y-4 rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6"><h3 className="font-black">جدول الموظف الأسبوعي</h3><p className="text-sm text-slate-500">اختر قالب وقت الدوام وحدد يوم الراحة الأسبوعية الخاص بهذا الموظف. أي تغيير لاحق يسجل كتعيين مؤرخ ولا يغير قالب الشفت لباقي الموظفين.</p><div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4"><Field label="قالب الشفت"><Select value={assignmentTemplate} onValueChange={setAssignmentTemplate}><SelectTrigger className="h-11 w-full rounded-2xl"><SelectValue placeholder="اختر الشفت" /></SelectTrigger><SelectContent>{templates.filter(t => t.isActive).map(t => <SelectItem key={t.id} value={t.id}>{t.name} · {t.startTime} — {t.endTime}</SelectItem>)}</SelectContent></Select></Field><Field label="الإجازة الأسبوعية"><Select value={weeklyRestWeekday} onValueChange={setWeeklyRestWeekday}><SelectTrigger className="h-11 w-full rounded-2xl"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="0">الأحد</SelectItem><SelectItem value="1">الاثنين</SelectItem><SelectItem value="2">الثلاثاء</SelectItem><SelectItem value="3">الأربعاء</SelectItem><SelectItem value="4">الخميس</SelectItem><SelectItem value="5">الجمعة</SelectItem><SelectItem value="6">السبت</SelectItem></SelectContent></Select></Field><Field label="ساري من"><Input dir="ltr" type="date" value={assignmentFrom} onChange={e => setAssignmentFrom(e.target.value)} className="h-11 rounded-2xl" required /></Field><Field label="ساري إلى (اختياري)"><Input dir="ltr" type="date" value={assignmentTo} onChange={e => setAssignmentTo(e.target.value)} className="h-11 rounded-2xl" /></Field></div><Field label="سبب التغيير (اختياري)"><Textarea value={assignmentReason} onChange={e => setAssignmentReason(e.target.value)} className="min-h-20 rounded-2xl" /></Field><Button type="submit" disabled={saving || !assignmentTemplate || !assignmentFrom} className="rounded-xl bg-black"><Plus className="h-4 w-4" /> حفظ جدول الموظف</Button></form>`;
+employeeFile = replaceRegexOnce(employeeFile, assignmentFormPattern, assignmentFormReplacement, "employee-file-schedule-form");
 write(filePath, employeeFile);
 
 const adminPath = "client/src/pages/habat/HabatAttendanceAdmin.tsx";
 let admin = read(adminPath);
-admin = admin.replace(`workingDays: [0, 1, 2, 3, 4],`, `workingDays: [0, 1, 2, 3, 4, 5, 6],`);
-admin = admin.replace(/\n  function toggleDay\(day: number\) \{[\s\S]*?\n  \}\n\n  async function save/, `\n  async function save`);
-admin = admin.replace(`body: JSON.stringify(draft),`, `body: JSON.stringify({ ...draft, workingDays: [0, 1, 2, 3, 4, 5, 6] }),`);
-admin = admin.replace(
-  `<Panel title="الدوام والشفتات" subtitle="ساعات العمل، أيام الدوام، السماح بالتأخير والانصراف المبكر">`,
-  `<Panel title="قوالب الشفتات" subtitle="قالب الشفت يحدد الوقت وسياسة السماح فقط؛ جدول الموظف وإجازته الأسبوعية من ملف الموظف">`
+admin = replaceOnce(
+  admin,
+  `  workingDays: number[];\n};`,
+  `};`,
+  "habat-shift-draft-working-days-field"
 );
-admin = admin.replace(/\n          <div>\n            <p className="mb-2 text-sm font-bold">أيام العمل<\/p>[\s\S]*?\n          <\/div>\n/, `\n          <p className="rounded-2xl bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-600">أيام العمل والإجازة الأسبوعية لا تُحدد من قالب الشفت. افتح ملف الموظف وحدد جدوله الأسبوعي هناك.</p>\n`);
-admin = admin.replace(/\n                  <p className="mt-2 text-xs text-slate-500">\n                    \{dayOptions[\s\S]*?\n                  <\/p>/, `\n                  <p className="mt-2 text-xs text-slate-500">الوقت والسياسة فقط · يوم الراحة يُحدد لكل موظف</p>`);
+admin = replaceOnce(
+  admin,
+  `  earlyLeaveToleranceMinutes: 0,\n  workingDays: [0, 1, 2, 3, 4],\n};`,
+  `  earlyLeaveToleranceMinutes: 0,\n};`,
+  "habat-shift-empty-working-days"
+);
+admin = replaceRegexOnce(
+  admin,
+  /\n  function toggleDay\(day: number\) \{[\s\S]*?\n  \}\n\n  async function save/,
+  `\n  async function save`,
+  "habat-shift-toggle-day"
+);
+admin = replaceOnce(
+  admin,
+  `      workingDays: shift.workingDays,\n`,
+  ``,
+  "habat-shift-edit-working-days"
+);
+admin = replaceOnce(
+  admin,
+  `<Panel title="الدوام والشفتات" subtitle="ساعات العمل، أيام الدوام، السماح بالتأخير والانصراف المبكر">`,
+  `<Panel title="قوالب الشفتات" subtitle="أوقات وسياسات قابلة لإعادة الاستخدام. الإجازة الأسبوعية تحدد لكل موظف من ملفه.">`,
+  "habat-shift-title"
+);
+admin = replaceRegexOnce(
+  admin,
+  /\n          <div>\n            <p className="mb-2 text-sm font-bold">أيام العمل<\/p>[\s\S]*?\n          <\/div>\n/,
+  `\n`,
+  "habat-shift-working-days-controls"
+);
+admin = replaceRegexOnce(
+  admin,
+  /\n                  <p className="mt-2 text-xs text-slate-500">\n                    \{dayOptions[\s\S]*?<\/p>/,
+  ``,
+  "habat-shift-working-days-summary"
+);
 write(adminPath, admin);
 
-const habatV2Path = "workers/habat-attendance-v2.js";
-let habatV2 = read(habatV2Path);
-if (!habatV2.startsWith(`import { resolveWorkforceScheduleDay }`)) {
-  habatV2 = `import { resolveWorkforceScheduleDay } from "./workforce-schedule-control.js";\n\n${habatV2}`;
+const habatPath = "workers/habat-attendance-v2.js";
+let habat = read(habatPath);
+if (!habat.includes(`const WORKFORCE_TENANT_ID = "restaurant_tenant_habat_alwaraq";`)) {
+  habat = replaceOnce(
+    habat,
+    `const HABAT_ACCESS_LEVELS = new Set(["employee", "manager"]);`,
+    `const HABAT_ACCESS_LEVELS = new Set(["employee", "manager"]);\nconst WORKFORCE_TENANT_ID = "restaurant_tenant_habat_alwaraq";`,
+    "habat-workforce-tenant-constant"
+  );
 }
-const oldResolveShift = `async function resolveShiftForAccess(db, accessId, dateKey) {
-  if (!accessId) return getDefaultShift(db);
+habat = replaceOnce(
+  habat,
+  `async function resolveShiftForAccess(db, accessId, dateKey) {`,
+  `async function resolveShiftForAccess(db, accessId, dateKey) {\n  const workforceShift = await resolveWorkforceShiftForAccess(db, accessId, dateKey);\n  if (workforceShift) return workforceShift;`,
+  "habat-workforce-first-resolver"
+);
+const beforeDefaultShift = `async function getDefaultShift(db) {`;
+const workforceBridge = `async function resolveWorkforceShiftForAccess(db, accessId, dateKey) {
+  const link = await db.prepare(
+    \`SELECT a.employee_id
+       FROM workforce_attendance_links a
+      WHERE a.tenant_id = ? AND a.source_employee_id = ?
+        AND COALESCE(a.status, 'confirmed') = 'confirmed'
+      LIMIT 1\`
+  ).bind(WORKFORCE_TENANT_ID, accessId).first();
+  if (!link?.employee_id) return null;
+
+  const exception = await db.prepare(
+    \`SELECT e.*, t.start_time AS template_start_time, t.end_time AS template_end_time,
+            t.grace_minutes AS template_grace_minutes,
+            t.early_leave_tolerance_minutes AS template_early_leave_tolerance_minutes
+       FROM workforce_schedule_exceptions e
+       LEFT JOIN workforce_schedule_templates t
+         ON t.tenant_id = e.tenant_id AND t.id = e.template_id
+      WHERE e.tenant_id = ? AND e.employee_id = ? AND e.work_date = ?
+        AND COALESCE(e.status, 'active') = 'active'
+      LIMIT 1\`
+  ).bind(WORKFORCE_TENANT_ID, link.employee_id, dateKey).first();
+
   const assignment = await db.prepare(
-    \`SELECT a.shift_id
-     FROM habat_attendance_shift_assignments a
-     JOIN habat_attendance_shifts s ON s.id = a.shift_id
-     WHERE a.access_id = ?
-       AND a.effective_from <= ?
-       AND (a.effective_to IS NULL OR a.effective_to >= ?)
-       AND s.is_active = 1
-     ORDER BY a.effective_from DESC, a.created_at DESC
-     LIMIT 1\`
-  ).bind(accessId, dateKey, dateKey).first();
+    \`SELECT a.*, t.start_time, t.end_time, t.grace_minutes,
+            t.early_leave_tolerance_minutes, t.working_days_json
+       FROM workforce_schedule_assignments a
+       JOIN workforce_schedule_templates t
+         ON t.tenant_id = a.tenant_id AND t.id = a.template_id
+      WHERE a.tenant_id = ? AND a.employee_id = ?
+        AND a.effective_from <= ?
+        AND (a.effective_to IS NULL OR a.effective_to >= ?)
+      ORDER BY a.effective_from DESC, a.created_at DESC, a.id DESC
+      LIMIT 1\`
+  ).bind(WORKFORCE_TENANT_ID, link.employee_id, dateKey, dateKey).first();
+  if (!assignment) return null;
 
-  if (assignment?.shift_id) {
-    const shift = await getShiftById(db, assignment.shift_id);
-    if (shift && Number(shift.is_active) === 1) return shift;
-  }
-  return getDefaultShift(db);
-}`;
-const newResolveShift = `async function resolveShiftForAccess(db, accessId, dateKey) {
-  if (!accessId) return getDefaultShift(db);
-
-  // Workforce is canonical once an employee-specific schedule exists. Legacy
-  // Habbat assignments remain a safe fallback during the additive cutover.
-  try {
-    const employee = await db.prepare(
-      \`SELECT id FROM workforce_employee_profiles
-        WHERE tenant_id = 'restaurant_tenant_habat_alwaraq'
-          AND source_type = 'legacy_attendance_access'
-          AND source_id = ?
-        LIMIT 1\`
-    ).bind(accessId).first();
-
-    if (employee?.id) {
-      const resolved = await resolveWorkforceScheduleDay(
-        db,
-        "restaurant_tenant_habat_alwaraq",
-        employee.id,
-        dateKey
-      );
-      if (resolved?.ready && resolved?.kind !== "unassigned") {
-        const weekday = new Date(\`${dateKey}T12:00:00.000Z\`).getUTCDay();
-        return {
-          id: resolved.templateId || \`workforce_schedule_\${employee.id}\`,
-          name: resolved.templateName || "جدول الموظف",
-          start_time: resolved.startTime || "09:00",
-          end_time: resolved.endTime || "17:00",
-          grace_minutes: Number(resolved.graceMinutes || 0),
-          early_leave_tolerance_minutes: Number(resolved.earlyLeaveToleranceMinutes || 0),
-          working_days: JSON.stringify(resolved.isWorkingDay ? [weekday] : []),
-          is_active: 1,
-          workforce_schedule_kind: resolved.kind,
-          workforce_employee_id: employee.id,
-        };
+  const weekday = weekdayFromDateKey(dateKey);
+  const explicitRest = Number(assignment.weekly_rest_weekday);
+  let workingDays = [];
+  if (Number.isInteger(explicitRest) && explicitRest >= 0 && explicitRest <= 6) {
+    try {
+      const parsed = JSON.parse(assignment.week_pattern_json || "{}");
+      if (Array.isArray(parsed?.workingDays)) {
+        workingDays = parsed.workingDays.map(Number).filter(day => Number.isInteger(day) && day >= 0 && day <= 6 && day !== explicitRest);
       }
-    }
-  } catch (error) {
-    console.warn("[habat-v2] workforce schedule fallback", error);
+    } catch {}
+    if (!workingDays.length) workingDays = [0, 1, 2, 3, 4, 5, 6].filter(day => day !== explicitRest);
+  } else {
+    try {
+      const parsed = JSON.parse(assignment.working_days_json || "[]");
+      if (Array.isArray(parsed)) workingDays = parsed.map(Number).filter(day => Number.isInteger(day) && day >= 0 && day <= 6);
+    } catch {}
   }
 
-  const assignment = await db.prepare(
-    \`SELECT a.shift_id
-     FROM habat_attendance_shift_assignments a
-     JOIN habat_attendance_shifts s ON s.id = a.shift_id
-     WHERE a.access_id = ?
-       AND a.effective_from <= ?
-       AND (a.effective_to IS NULL OR a.effective_to >= ?)
-       AND s.is_active = 1
-     ORDER BY a.effective_from DESC, a.created_at DESC
-     LIMIT 1\`
-  ).bind(accessId, dateKey, dateKey).first();
-
-  if (assignment?.shift_id) {
-    const shift = await getShiftById(db, assignment.shift_id);
-    if (shift && Number(shift.is_active) === 1) return shift;
+  const exceptionType = normalizeText(exception?.exception_type);
+  if (exceptionType === "off") return makeWorkforceShift(assignment, false, dateKey, "exception_off");
+  if (exceptionType === "custom_shift") {
+    return makeWorkforceShift({
+      ...assignment,
+      start_time: exception.custom_start_time,
+      end_time: exception.custom_end_time,
+    }, true, dateKey, "custom_shift");
   }
-  return getDefaultShift(db);
-}`;
-habatV2 = replaceOnce(habatV2, oldResolveShift, newResolveShift, "habat-v2-workforce-schedule-bridge");
-write(habatV2Path, habatV2);
+  if (exceptionType === "alternate_shift") {
+    return makeWorkforceShift({
+      ...assignment,
+      start_time: exception.template_start_time,
+      end_time: exception.template_end_time,
+      grace_minutes: exception.template_grace_minutes,
+      early_leave_tolerance_minutes: exception.template_early_leave_tolerance_minutes,
+    }, true, dateKey, "alternate_shift");
+  }
+  if (exceptionType === "weekly_rest_work") return makeWorkforceShift(assignment, true, dateKey, "weekly_rest_work");
 
-console.log("PASS - Workforce architecture parity integration applied.");
-console.log("Changed runtime targets:");
-for (const file of [corePath, schedulePath, clientPath, filePath, adminPath, habatV2Path]) {
-  console.log(` - ${file}`);
+  return makeWorkforceShift(assignment, workingDays.includes(weekday), dateKey, "workforce_assignment");
 }
+
+function makeWorkforceShift(row, isWorking, dateKey, source) {
+  return {
+    id: normalizeText(row?.template_id) || `workforce:\${normalizeText(row?.id)}`,
+    name: normalizeText(row?.template_name) || "جدول الموظف",
+    start_time: normalizeTime(row?.start_time) || "09:00",
+    end_time: normalizeTime(row?.end_time) || "17:00",
+    grace_minutes: Number(row?.grace_minutes || 0),
+    early_leave_tolerance_minutes: Number(row?.early_leave_tolerance_minutes || 0),
+    working_days: JSON.stringify(isWorking ? [weekdayFromDateKey(dateKey)] : []),
+    is_active: 1,
+    schedule_source: source,
+  };
+}
+
+function weekdayFromDateKey(dateKey) {
+  const [year, month, day] = String(dateKey).split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day, 12)).getUTCDay();
+}
+
+${beforeDefaultShift}`;
+habat = replaceOnce(habat, beforeDefaultShift, workforceBridge, "habat-workforce-bridge-functions");
+write(habatPath, habat);
+
+console.log("PASS - workforce architecture parity runtime integration applied.");
