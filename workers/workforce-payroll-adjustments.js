@@ -571,6 +571,12 @@ function stripRoutePrefix(pathname, routePrefix) {
   return pathname.slice(prefix.length) || "/";
 }
 
+function clean(value) {
+  const text = String(value ?? "").trim();
+  if (!text || text === "undefined" || text === "null") return "";
+  return text;
+}
+
 function id(prefix) {
   return `${prefix}_${crypto.randomUUID()}`;
 }

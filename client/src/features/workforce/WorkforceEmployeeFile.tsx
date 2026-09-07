@@ -52,6 +52,7 @@ import WorkforceScheduleControlPanel from "./WorkforceScheduleControlPanel";
 import WorkforceAttendanceOperationsPanel from "./WorkforceAttendanceOperationsPanel";
 import WorkforceLeaveLifecyclePanel from "./WorkforceLeaveLifecyclePanel";
 import WorkforcePayrollAdjustmentsPanel from "./WorkforcePayrollAdjustmentsPanel";
+import WorkforcePayrollReadinessPanel from "./WorkforcePayrollReadinessPanel";
 
 export type WorkforceEmployeeIdentity = {
   accountUid?: string | null;
@@ -496,6 +497,7 @@ export default function WorkforceEmployeeFile({ identity, onBack, legacyAttendan
         </TabsContent>
 
         <TabsContent value="payroll" className="space-y-5">
+          {employeeId ? <WorkforcePayrollReadinessPanel employeeId={employeeId} /> : null}
           {employeeId ? <WorkforcePayrollAdjustmentsPanel employeeId={employeeId} /> : null}
           <form onSubmit={savePayroll} className="space-y-5 rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><SectionTitle title="إعدادات الراتب" description="الراتب والبدلات وطريقة خصم الحضور. لا يتم إنشاء خصم حضور تلقائي من هذه الشاشة." icon={<WalletCards className="h-5 w-5" />} /><div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm"><span className="text-slate-500">الإجمالي التعاقدي الحالي</span><p className="mt-1 text-xl font-black">{totalMonthly.toLocaleString("en-US")} ر.س</p></div></div>

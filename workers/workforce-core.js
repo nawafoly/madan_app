@@ -3,6 +3,7 @@ import { handleWorkforceScheduleControlRequest } from "./workforce-schedule-cont
 import { handleWorkforceAttendanceOperationsRequest } from "./workforce-attendance-operations.js";
 import { handleWorkforceLeaveControlRequest } from "./workforce-leave-control.js";
 import { handleWorkforcePayrollAdjustmentsRequest } from "./workforce-payroll-adjustments.js";
+import { handleWorkforcePayrollReadinessRequest } from "./workforce-payroll-readiness.js";
 
 const PAYROLL_DEDUCTION_METHODS = new Set(["hourly", "daily"]);
 const ATTENDANCE_PAYROLL_MODES = new Set(["required", "exempt"]);
@@ -93,6 +94,17 @@ export async function handleWorkforceCoreRequest({
     routePrefix,
   });
   if (payrollAdjustmentsResponse) return payrollAdjustmentsResponse;
+
+  const payrollReadinessResponse = await handleWorkforcePayrollReadinessRequest({
+    request,
+    url,
+    db,
+    tenant,
+    principal,
+    sourceAdapter,
+    routePrefix,
+  });
+  if (payrollReadinessResponse) return payrollReadinessResponse;
 
   const pathname = stripRoutePrefix(url?.pathname || "", routePrefix);
   const employeeMatch = pathname.match(/^\/v1\/employees\/([^/]+)$/);
