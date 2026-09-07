@@ -1,5 +1,7 @@
 import { handleWorkforceAnnualLeaveRequest } from "./workforce-annual-leave.js";
 import { handleWorkforceScheduleControlRequest } from "./workforce-schedule-control.js";
+import { handleWorkforceAttendanceOperationsRequest } from "./workforce-attendance-operations.js";
+import { handleWorkforceLeaveControlRequest } from "./workforce-leave-control.js";
 
 const PAYROLL_DEDUCTION_METHODS = new Set(["hourly", "daily"]);
 const ATTENDANCE_PAYROLL_MODES = new Set(["required", "exempt"]);
@@ -59,6 +61,27 @@ export async function handleWorkforceCoreRequest({
     routePrefix,
   });
   if (scheduleControlResponse) return scheduleControlResponse;
+
+  const attendanceOperationsResponse = await handleWorkforceAttendanceOperationsRequest({
+    request,
+    url,
+    db,
+    tenant,
+    principal,
+    sourceAdapter,
+    routePrefix,
+  });
+  if (attendanceOperationsResponse) return attendanceOperationsResponse;
+
+  const leaveControlResponse = await handleWorkforceLeaveControlRequest({
+    request,
+    url,
+    db,
+    tenant,
+    principal,
+    routePrefix,
+  });
+  if (leaveControlResponse) return leaveControlResponse;
 
   const pathname = stripRoutePrefix(url?.pathname || "", routePrefix);
   const employeeMatch = pathname.match(/^\/v1\/employees\/([^/]+)$/);

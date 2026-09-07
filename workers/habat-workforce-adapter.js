@@ -50,6 +50,7 @@ export async function handleHabatWorkforceRequest({
       sourceAdapter: {
         sourceType: "legacy_attendance_access",
         listEmployees: () => listLegacyEmployees(db),
+        listAttendanceMonth: (sourceEmployeeId, monthKey) => listLegacyAttendanceMonth(db, sourceEmployeeId, monthKey),
       },
       routePrefix: "/attendance/habat/workforce",
     });
@@ -117,6 +118,50 @@ async function listLegacyEmployees(db) {
     isActive: Number(row.is_active) === 1,
     accessLevel: clean(row.access_level) || "employee",
     clockEnabled: Number(row.clock_enabled) === 1,
+  }));
+}
+
+async function listLegacyAttendanceMonth(db, sourceEmployeeId, monthKey) {
+  const accessId = clean(sourceEmployeeId);
+  const access = await db
+    .prepare(`SELECT id, uid, email FROM habat_attendance_access WHERE id = ? LIMIT 1`)
+    .bind(accessId)
+    .first();
+  if (!access) return [];
+
+  const uid = clean(access.uid);
+  const email = clean(access.email).toLowerCase();
+  const fromDate = `${monthKey}-01`;
+  const [year, month] = monthKey.split('-').map(Number);
+  const nextMonth = new Date(Date.UTC(year, month, 1)).toISOString().slice(0, 7) + '-01';
+  let statement;
+  if (uid) {
+    statement = db
+      .prepare(`SELECT attendance_date, check_in_at, check_out_at, attendance_status,
+                       late_minutes, early_leave_minutes, worked_minutes
+                  FROM habat_attendance_records
+                 WHERE account_uid = ? AND attendance_date >= ? AND attendance_date < ?
+                 ORDER BY attendance_date ASC`)
+      .bind(uid, fromDate, nextMonth);
+  } else {
+    statement = db
+      .prepare(`SELECT attendance_date, check_in_at, check_out_at, attendance_status,
+                       late_minutes, early_leave_minutes, worked_minutes
+                  FROM habat_attendance_records
+                 WHERE lower(account_email) = ? AND attendance_date >= ? AND attendance_date < ?
+                 ORDER BY attendance_date ASC`)
+      .bind(email, fromDate, nextMonth);
+  }
+  const result = await statement.all();
+
+  return (result?.results || []).map(row => ({
+    date: clean(row.attendance_date),
+    checkInAt: clean(row.check_in_at) || null,
+    checkOutAt: clean(row.check_out_at) || null,
+    status: clean(row.attendance_status) || null,
+    lateMinutes: Number(row.late_minutes || 0),
+    earlyLeaveMinutes: Number(row.early_leave_minutes || 0),
+    workedMinutes: row.worked_minutes == null ? null : Number(row.worked_minutes),
   }));
 }
 
