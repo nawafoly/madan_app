@@ -45,7 +45,8 @@ Run-Step 'payroll readiness local gate' { node scripts/gate-workforce-payroll-re
 
 $expectedPaths = @(
   'client/src/features/workforce/WorkforceEmployeeFile.tsx',
-  'workers/workforce-core.js'
+  'workers/workforce-core.js',
+  'workers/workforce-payroll-adjustments.js'
 )
 $changedPaths = @(git status --porcelain=v1 --untracked-files=all | ForEach-Object {
   if ($_.Length -ge 4) { $_.Substring(3).Trim() }
@@ -59,7 +60,7 @@ if ($unexpected.Count -gt 0) {
 
 if ($changedPaths.Count -gt 0) {
   Run-Step 'stage readiness integration only' {
-    git add -- client/src/features/workforce/WorkforceEmployeeFile.tsx workers/workforce-core.js
+    git add -- client/src/features/workforce/WorkforceEmployeeFile.tsx workers/workforce-core.js workers/workforce-payroll-adjustments.js
   }
   Run-Step 'commit readiness integration' {
     git commit -m 'feat(workforce): integrate payroll readiness and attendance deductions'
