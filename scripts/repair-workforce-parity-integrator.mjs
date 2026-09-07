@@ -28,35 +28,20 @@ if (text.includes(oldWeeklyRestLabel)) {
   console.log("PASS - employee weekly-rest label contract repaired.");
 }
 
-// Contract repair: Habat shift templates remain template-only in the UI, but the
-// legacy transport shape must keep workingDays with all seven days until that
-// transport contract is retired separately.
-const typeRemoval = 'admin = admin.replace(`  workingDays: number[];\\n};`, `};`);\n';
-if (text.includes(typeRemoval)) {
-  text = text.replace(typeRemoval, "");
-  changed = true;
-}
+// Habat shift templates are template-only in the UI, but the legacy transport
+// shape must continue carrying all seven workingDays until that transport is
+// retired separately. Enforce the final generated source instead of depending
+// on brittle removal-anchor rewrites.
+const adminWriteAnchor = 'write(adminPath, admin);';
+const compatibilityMarker = '// HABAT_LEGACY_WORKING_DAYS_TRANSPORT_COMPAT';
+if (!text.includes(compatibilityMarker)) {
+  const compatibilityBlock = `${compatibilityMarker}\nif (!admin.includes(\`  workingDays: number[];\`)) {\n  admin = admin.replace(\n    \`  earlyLeaveToleranceMinutes: number;\\n};\`,\n    \`  earlyLeaveToleranceMinutes: number;\\n  workingDays: number[];\\n};\`\n  );\n}\nif (!/earlyLeaveToleranceMinutes: 0,\\n  workingDays: \\[0, 1, 2, 3, 4, 5, 6\\],/.test(admin)) {\n  admin = admin.replace(\n    \`  earlyLeaveToleranceMinutes: 0,\\n};\`,\n    \`  earlyLeaveToleranceMinutes: 0,\\n  workingDays: [0, 1, 2, 3, 4, 5, 6],\\n};\`\n  );\n}\n`;
 
-const defaultRemovalStart = 'admin = admin.replace(\n  /  earlyLeaveToleranceMinutes: 0,';
-const toggleRemovalStart = 'admin = admin.replace(\n  /\\n  function toggleDay';
-const defaultStartIndex = text.indexOf(defaultRemovalStart);
-const toggleStartIndex = text.indexOf(toggleRemovalStart, defaultStartIndex >= 0 ? defaultStartIndex : 0);
-if (defaultStartIndex >= 0 && toggleStartIndex > defaultStartIndex) {
-  text = text.slice(0, defaultStartIndex) + text.slice(toggleStartIndex);
+  const adminWriteIndex = text.indexOf(adminWriteAnchor);
+  if (adminWriteIndex < 0) throw new Error("repair_anchor_missing:habat-admin-write");
+  text = text.slice(0, adminWriteIndex) + compatibilityBlock + text.slice(adminWriteIndex);
   changed = true;
-}
-
-const dynamicWorkingDaysRemoval = 'admin = admin.replace(`      workingDays: shift.workingDays,\\n`, ``);';
-const dynamicWorkingDaysCompatibility = 'admin = admin.replace(`      workingDays: shift.workingDays,\\n`, `      workingDays: [0, 1, 2, 3, 4, 5, 6],\\n`);';
-if (text.includes(dynamicWorkingDaysRemoval)) {
-  text = text.replace(dynamicWorkingDaysRemoval, dynamicWorkingDaysCompatibility);
-  changed = true;
-}
-
-const staticWorkingDaysRemoval = 'admin = admin.replace(`      workingDays: [0, 1, 2, 3, 4, 5, 6],\\n`, ``);\n';
-if (text.includes(staticWorkingDaysRemoval)) {
-  text = text.replace(staticWorkingDaysRemoval, "");
-  changed = true;
+  console.log("PASS - Habat legacy workingDays transport enforcement installed.");
 }
 
 if (changed) {
