@@ -62,11 +62,14 @@ test("employee UI owns weekly rest and payroll starts with setup", () => {
   assert.ok(lifecycle < report);
 });
 
-test("global Habbat shift page is template-only", () => {
+test("global Habbat shift page is template-only while legacy transport stays valid", () => {
   assert.match(admin, /قوالب الشفتات/);
   assert.match(admin, /يوم الراحة يُحدد لكل موظف/);
   assert.doesNotMatch(admin, /<p className="mb-2 text-sm font-bold">أيام العمل<\/p>/);
-  assert.doesNotMatch(admin, /workingDays:\s*\[0, 1, 2, 3, 4\]/);
+  assert.doesNotMatch(admin, /function toggleDay\(/);
+  assert.doesNotMatch(admin, /shift\.workingDays/);
+  assert.match(admin, /workingDays:\s*number\[\]/);
+  assert.match(admin, /workingDays:\s*\[0, 1, 2, 3, 4, 5, 6\]/);
 });
 
 test("generic Workforce runtime remains tenant-agnostic", () => {
