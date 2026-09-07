@@ -39,7 +39,12 @@ test("payroll rollout has auth-bound smoke plus regressions", () => {
 });
 
 test("payroll rollout stages only integration targets and is ASCII-safe for Windows PowerShell 5.1", () => {
-  assert.ok(rollout.includes("client/src/features/workforce/WorkforceEmployeeFile.tsx"));
-  assert.ok(rollout.includes("workers/workforce-core.js"));
+  for (const required of [
+    "client/src/features/workforce/WorkforceEmployeeFile.tsx",
+    "workers/workforce-core.js",
+    "workers/workforce-payroll-adjustments.js",
+  ]) {
+    assert.ok(rollout.includes(required), required);
+  }
   assert.equal(/[^\x00-\x7F]/.test(rollout), false);
 });
