@@ -118,13 +118,54 @@ export async function resolveWorkforceScheduleRange(db, tenantId, employeeId, fr
   if (to < from) throw httpError(400, "workforce_schedule_range_invalid");
   const count = daysBetweenInclusive(from, to);
   if (count > MAX_RESOLVE_RANGE_DAYS) throw httpError(400, "workforce_schedule_range_too_large");
-  const rows = [];
+
+  // Range resolution is deliberately two reads, not N reads per day. Payroll,
+  // attendance and leave calculations can reuse this path without recreating the
+  // D1 read-amplification problem that the platform is eliminating.
+  const [exceptionResult, assignmentResult] = await Promise.all([
+    db.prepare(`SELECT e.*,
+                       t.id AS exception_template_id,
+                       t.name AS exception_template_name,
+                       t.start_time AS exception_template_start_time,
+                       t.end_time AS exception_template_end_time,
+                       t.grace_minutes AS exception_template_grace_minutes,
+                       t.early_leave_tolerance_minutes AS exception_template_early_leave_tolerance_minutes
+                  FROM workforce_schedule_exceptions e
+                  LEFT JOIN workforce_schedule_templates t
+                    ON t.tenant_id = e.tenant_id AND t.id = e.template_id
+                 WHERE e.tenant_id = ? AND e.employee_id = ?
+                   AND e.work_date BETWEEN ? AND ?
+                   AND COALESCE(e.status, 'active') = 'active'
+                 ORDER BY e.work_date ASC, e.created_at DESC`)
+      .bind(tenantId, employeeId, from, to).all(),
+    db.prepare(`SELECT a.*, t.name AS template_name, t.start_time, t.end_time,
+                       t.grace_minutes, t.early_leave_tolerance_minutes,
+                       t.working_days_json, t.is_active
+                  FROM workforce_schedule_assignments a
+                  JOIN workforce_schedule_templates t
+                    ON t.id = a.template_id AND t.tenant_id = a.tenant_id
+                 WHERE a.tenant_id = ? AND a.employee_id = ?
+                   AND a.effective_from <= ?
+                   AND (a.effective_to IS NULL OR a.effective_to >= ?)
+                 ORDER BY a.effective_from DESC, a.created_at DESC, a.id DESC`)
+      .bind(tenantId, employeeId, to, from).all(),
+  ]);
+
+  const exceptionByDate = new Map();
+  for (const row of exceptionResult?.results || []) {
+    if (!exceptionByDate.has(row.work_date)) exceptionByDate.set(row.work_date, row);
+  }
+  const assignments = assignmentResult?.results || [];
+  const schedules = [];
   let cursor = from;
   while (cursor <= to) {
-    rows.push(await resolveWorkforceScheduleDay(db, tenantId, employeeId, cursor));
+    const assignment = assignments.find(row => row.effective_from <= cursor && (!row.effective_to || row.effective_to >= cursor)) || null;
+    const exception = exceptionByDate.get(cursor) || null;
+    const exceptionTemplate = exception ? exceptionTemplateFromJoinedRow(exception) : null;
+    schedules.push(classifyWorkforceScheduleDay({ date: cursor, assignment, exception, exceptionTemplate }));
     cursor = addDays(cursor, 1);
   }
-  return rows;
+  return schedules;
 }
 
 export function classifyWorkforceScheduleDay({ date, assignment, exception, exceptionTemplate }) {
@@ -477,6 +518,19 @@ async function audit(db, tenantId, principal, action, entityType, entityId, befo
     .run();
 }
 
+function exceptionTemplateFromJoinedRow(row) {
+  const templateId = nullable(row?.exception_template_id);
+  if (!templateId) return null;
+  return {
+    id: templateId,
+    name: nullable(row.exception_template_name),
+    start_time: nullable(row.exception_template_start_time),
+    end_time: nullable(row.exception_template_end_time),
+    grace_minutes: Number(row.exception_template_grace_minutes || 0),
+    early_leave_tolerance_minutes: Number(row.exception_template_early_leave_tolerance_minutes || 0),
+  };
+}
+
 function mapAssignmentTemplate(row) {
   if (!row) return null;
   return {
@@ -543,7 +597,14 @@ function validDate(value, field) {
 }
 
 function todayRiyadh() {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Riyadh", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Riyadh",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const map = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  return `${map.year}-${map.month}-${map.day}`;
 }
 
 function isDateKey(value) {
