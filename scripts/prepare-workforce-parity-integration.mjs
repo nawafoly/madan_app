@@ -1,7 +1,9 @@
 import fs from "node:fs";
 
 const path = "client/src/features/workforce/WorkforceEmployeeFile.tsx";
-let text = fs.readFileSync(path, "utf8");
+// Git on Windows may check this file out with CRLF. Normalize in-memory so the
+// deterministic anchors are independent of the workstation's core.autocrlf.
+let text = fs.readFileSync(path, "utf8").replace(/\r\n/g, "\n");
 
 const finalAnchor = `  reason?: string | null;\n  weekly_rest_weekday?: number | null;\n  week_pattern_json?: string | null;\n  createdAt?: string | null;`;
 const integratorAnchor = `  reason?: string | null;\n  createdAt?: string | null;`;
