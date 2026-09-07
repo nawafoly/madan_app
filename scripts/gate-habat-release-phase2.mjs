@@ -47,6 +47,10 @@ run("Habbat local proxy/runtime isolation contract", process.execPath, [
   "workers/habat-local-proxy-contract.test.mjs",
 ]);
 
+run("live local proxy boundary check", process.execPath, [
+  "scripts/verify-habat-local-proxy.mjs",
+]);
+
 run("full Workforce Phase 2 completion gate", process.execPath, [
   "scripts/gate-workforce-payroll-reports-phase2.mjs",
 ]);
