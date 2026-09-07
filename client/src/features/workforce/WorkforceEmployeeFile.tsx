@@ -54,6 +54,7 @@ import WorkforceLeaveLifecyclePanel from "./WorkforceLeaveLifecyclePanel";
 import WorkforcePayrollAdjustmentsPanel from "./WorkforcePayrollAdjustmentsPanel";
 import WorkforcePayrollReadinessPanel from "./WorkforcePayrollReadinessPanel";
 import WorkforcePayrollLifecyclePanel from "./WorkforcePayrollLifecyclePanel";
+import WorkforceMonthlyEmployeeReportPanel from "./WorkforceMonthlyEmployeeReportPanel";
 
 export type WorkforceEmployeeIdentity = {
   accountUid?: string | null;
@@ -498,6 +499,7 @@ export default function WorkforceEmployeeFile({ identity, onBack, legacyAttendan
         </TabsContent>
 
         <TabsContent value="payroll" className="space-y-5">
+          {employeeId ? <WorkforceMonthlyEmployeeReportPanel employeeId={employeeId} /> : null}
           {employeeId ? <WorkforcePayrollLifecyclePanel employeeId={employeeId} /> : null}
           {employeeId ? <WorkforcePayrollReadinessPanel employeeId={employeeId} /> : null}
           {employeeId ? <WorkforcePayrollAdjustmentsPanel employeeId={employeeId} /> : null}
