@@ -6,6 +6,8 @@ PRAGMA foreign_keys = ON;
 -- pattern belong to the employee's effective-dated schedule assignment.
 -- Existing working_days_json on workforce_schedule_templates remains only as a
 -- backward-compatibility fallback for assignments created before this migration.
+--
+-- IMPORTANT: additive only. No habat_* table is renamed or dropped.
 
 ALTER TABLE workforce_schedule_assignments
   ADD COLUMN weekly_rest_weekday INTEGER
@@ -35,3 +37,7 @@ CREATE INDEX IF NOT EXISTS idx_workforce_schedule_assignments_effective_weekly_r
     effective_to,
     weekly_rest_weekday
   );
+
+-- Existing assignments intentionally stay NULL here. Runtime resolution keeps a
+-- legacy-template fallback until HR explicitly saves that employee's schedule.
+-- This avoids guessing a rest day for historical data and preserves audit truth.
