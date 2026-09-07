@@ -361,7 +361,7 @@ employeeFile = replaceOnce(
   "employee-file-payroll-order-append"
 );
 const assignmentFormPattern = /<form onSubmit=\{createAssignment\}[\s\S]*?<\/form>/;
-const assignmentFormReplacement = `<form onSubmit={createAssignment} className="space-y-4 rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6"><h3 className="font-black">جدول الموظف الأسبوعي</h3><p className="text-sm text-slate-500">اختر قالب وقت الدوام وحدد يوم الراحة الأسبوعية الخاص بهذا الموظف. أي تغيير لاحق يسجل كتعيين مؤرخ ولا يغير قالب الشفت لباقي الموظفين.</p><div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4"><Field label="قالب الشفت"><Select value={assignmentTemplate} onValueChange={setAssignmentTemplate}><SelectTrigger className="h-11 w-full rounded-2xl"><SelectValue placeholder="اختر الشفت" /></SelectTrigger><SelectContent>{templates.filter(t => t.isActive).map(t => <SelectItem key={t.id} value={t.id}>{t.name} · {t.startTime} — {t.endTime}</SelectItem>)}</SelectContent></Select></Field><Field label="الإجازة الأسبوعية"><Select value={weeklyRestWeekday} onValueChange={setWeeklyRestWeekday}><SelectTrigger className="h-11 w-full rounded-2xl"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="0">الأحد</SelectItem><SelectItem value="1">الاثنين</SelectItem><SelectItem value="2">الثلاثاء</SelectItem><SelectItem value="3">الأربعاء</SelectItem><SelectItem value="4">الخميس</SelectItem><SelectItem value="5">الجمعة</SelectItem><SelectItem value="6">السبت</SelectItem></SelectContent></Select></Field><Field label="ساري من"><Input dir="ltr" type="date" value={assignmentFrom} onChange={e => setAssignmentFrom(e.target.value)} className="h-11 rounded-2xl" required /></Field><Field label="ساري إلى (اختياري)"><Input dir="ltr" type="date" value={assignmentTo} onChange={e => setAssignmentTo(e.target.value)} className="h-11 rounded-2xl" /></Field></div><Field label="سبب التغيير (اختياري)"><Textarea value={assignmentReason} onChange={e => setAssignmentReason(e.target.value)} className="min-h-20 rounded-2xl" /></Field><Button type="submit" disabled={saving || !assignmentTemplate || !assignmentFrom} className="rounded-xl bg-black"><Plus className="h-4 w-4" /> حفظ جدول الموظف</Button></form>`;
+const assignmentFormReplacement = `<form onSubmit={createAssignment} className="space-y-4 rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6"><h3 className="font-black">جدول الموظف الأسبوعي</h3><p className="text-sm text-slate-500">اختر قالب وقت الدوام وحدد يوم الراحة الأسبوعية الخاص بهذا الموظف. أي تغيير لاحق يسجل كتعيين مؤرخ ولا يغير قالب الشفت لباقي الموظفين.</p><div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4"><Field label="قالب الشفت"><Select value={assignmentTemplate} onValueChange={setAssignmentTemplate}><SelectTrigger className="h-11 w-full rounded-2xl"><SelectValue placeholder="اختر الشفت" /></SelectTrigger><SelectContent>{templates.filter(t => t.isActive).map(t => <SelectItem key={t.id} value={t.id}>{t.name} · {t.startTime} — {t.endTime}</SelectItem>)}</SelectContent></Select></Field><Field label="الإجازة الأسبوعية الأساسية"><Select value={weeklyRestWeekday} onValueChange={setWeeklyRestWeekday}><SelectTrigger className="h-11 w-full rounded-2xl"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="0">الأحد</SelectItem><SelectItem value="1">الاثنين</SelectItem><SelectItem value="2">الثلاثاء</SelectItem><SelectItem value="3">الأربعاء</SelectItem><SelectItem value="4">الخميس</SelectItem><SelectItem value="5">الجمعة</SelectItem><SelectItem value="6">السبت</SelectItem></SelectContent></Select></Field><Field label="ساري من"><Input dir="ltr" type="date" value={assignmentFrom} onChange={e => setAssignmentFrom(e.target.value)} className="h-11 rounded-2xl" required /></Field><Field label="ساري إلى (اختياري)"><Input dir="ltr" type="date" value={assignmentTo} onChange={e => setAssignmentTo(e.target.value)} className="h-11 rounded-2xl" /></Field></div><Field label="سبب التغيير (اختياري)"><Textarea value={assignmentReason} onChange={e => setAssignmentReason(e.target.value)} className="min-h-20 rounded-2xl" /></Field><Button type="submit" disabled={saving || !assignmentTemplate || !assignmentFrom} className="rounded-xl bg-black"><Plus className="h-4 w-4" /> حفظ جدول الموظف</Button></form>`;
 employeeFile = replaceRegexOnce(employeeFile, assignmentFormPattern, assignmentFormReplacement, "employee-file-schedule-form");
 write(filePath, employeeFile);
 
@@ -395,6 +395,25 @@ admin = admin.replace(
 admin = admin.replace(
   /\n                  <p className="mt-2 text-xs text-slate-500">\n                    \{dayOptions[\s\S]*?<\/p>/,
   ``
+);
+// HABAT_LEGACY_WORKING_DAYS_TRANSPORT_COMPAT
+if (!admin.includes(`  workingDays: number[];`)) {
+  admin = admin.replace(
+    `  earlyLeaveToleranceMinutes: number;\n};`,
+    `  earlyLeaveToleranceMinutes: number;\n  workingDays: number[];\n};`
+  );
+}
+if (!/earlyLeaveToleranceMinutes: 0,\n  workingDays: \[0, 1, 2, 3, 4, 5, 6\],/.test(admin)) {
+  admin = admin.replace(
+    `  earlyLeaveToleranceMinutes: 0,\n};`,
+    `  earlyLeaveToleranceMinutes: 0,\n  workingDays: [0, 1, 2, 3, 4, 5, 6],\n};`
+  );
+}
+// Editing a legacy shift must also satisfy ShiftDraft's transport-only field.
+// The employee rest day still belongs to the employee assignment, not the template UI.
+admin = admin.replace(
+  `      earlyLeaveToleranceMinutes: shift.earlyLeaveToleranceMinutes,\n    });`,
+  `      earlyLeaveToleranceMinutes: shift.earlyLeaveToleranceMinutes,\n      workingDays: [0, 1, 2, 3, 4, 5, 6],\n    });`
 );
 write(adminPath, admin);
 
