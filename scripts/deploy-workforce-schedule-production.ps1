@@ -66,6 +66,7 @@ if (-not $preflightZero) {
   Run-Step 'Production migration 0003' {
     npx wrangler d1 execute maedin-attendance `
       --remote `
+      --yes `
       --config workers/wrangler.toml `
       --file workers/workforce-migrations/0003_workforce_schedule_control.sql
   }
