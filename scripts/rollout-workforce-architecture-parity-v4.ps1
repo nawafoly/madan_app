@@ -5,6 +5,8 @@ $repo = "C:\Users\nawaf\Downloads\madan"
 $branch = "fix/restaurant-workforce-architecture-parity"
 $base = "habat-production"
 $expectedBase = "1a5c36b254c82843d2a6c88fa77cbd8defdd3fba"
+$wranglerConfig = ".\workers\wrangler.toml"
+$attendanceBinding = "ATTENDANCE_DB"
 
 $runtimeFiles = @(
   "workers/workforce-core.js",
@@ -51,7 +53,7 @@ if ($baseHead -ne $expectedBase) {
   throw "STOP: habat-production moved. Re-review required before continuing."
 }
 
-# Recover only files that our failed V2/V3 rollout is known to have touched.
+# Recover only files that our failed V2/V3/V4 rollout is known to have touched.
 $dirtyBefore = @(git status --porcelain=v1 --untracked-files=all)
 if ($dirtyBefore.Count -gt 0) {
   $dirtyTracked = @(git diff --name-only)
@@ -66,7 +68,7 @@ if ($dirtyBefore.Count -gt 0) {
 
   if ($dirtyTracked.Count -gt 0) {
     Write-Host "Recovering files left dirty by failed parity rollout..." -ForegroundColor Yellow
-    Save-FailurePatch "v3-recovery"
+    Save-FailurePatch "v4-recovery"
     git restore -- $rolloutTouched
   }
 }
@@ -80,6 +82,15 @@ if ($exists) {
   git switch -c $branch --track "origin/$branch"
 }
 if ($LASTEXITCODE -ne 0) { throw "branch sync failed" }
+
+if (!(Test-Path -LiteralPath $wranglerConfig)) {
+  throw "STOP: missing Wrangler config at $wranglerConfig"
+}
+$wranglerText = Get-Content -LiteralPath $wranglerConfig -Raw
+if ($wranglerText -notmatch 'binding\s*=\s*"ATTENDANCE_DB"' -or $wranglerText -notmatch 'database_name\s*=\s*"maedin-attendance"') {
+  throw "STOP: workers/wrangler.toml does not declare the expected ATTENDANCE_DB binding."
+}
+Write-Host "Wrangler D1 binding preflight: PASS ($attendanceBinding via $wranglerConfig)" -ForegroundColor Green
 
 Write-Host "`n=== REPAIR TOOLING + SYNTAX ===" -ForegroundColor Cyan
 node .\scripts\repair-workforce-parity-integrator.mjs
@@ -158,7 +169,7 @@ try {
     "workers/workforce-migrations/0005_workforce_employee_weekly_schedule.sql"
   )) {
     Write-Host "Applying local-only: $migration"
-    npx wrangler d1 execute maedin-attendance --local --persist-to $tempPersist --file $migration --yes
+    npx wrangler d1 execute $attendanceBinding --config $wranglerConfig --local --persist-to $tempPersist --file $migration --yes
     if ($LASTEXITCODE -ne 0) { throw "Local migration proof failed at $migration" }
   }
 } catch {
