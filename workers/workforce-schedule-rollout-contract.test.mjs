@@ -33,3 +33,8 @@ test("schedule rollout requires expected unauthenticated smoke semantics", () =>
   assert.ok(rollout.includes("missing_firebase_id_token"));
   assert.ok(rollout.includes("schedule/resolve?date=2026-09-07"));
 });
+
+test("schedule rollout stays ASCII-safe for Windows PowerShell 5.1 parsing", () => {
+  assert.equal(/[^\x00-\x7F]/.test(rollout), false);
+  assert.equal(/[\u2018\u2019\u201C\u201D\u2013\u2014]/.test(rollout), false);
+});
