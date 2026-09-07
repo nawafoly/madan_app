@@ -39,27 +39,42 @@ test("resolver prefers employee schedule and keeps legacy fallback", () => {
   assert.match(schedule, /weeklyRestWeekday: weekPattern\.weeklyRestWeekday/);
 });
 
-test("Habbat edge reuses generic Workforce resolver before legacy fallback", () => {
+test("Habbat edge calls Workforce first and only then uses legacy assignment fallback", () => {
   assert.match(habatV2, /import \{ resolveWorkforceScheduleDay \} from "\.\/workforce-schedule-control\.js"/);
   assert.match(habatV2, /await resolveWorkforceScheduleDay\(/);
-  const workforceResolverIndex = habatV2.indexOf("await resolveWorkforceScheduleDay(");
-  const legacyIndex = habatV2.indexOf("habat_attendance_shift_assignments", workforceResolverIndex);
-  assert.ok(workforceResolverIndex >= 0);
-  assert.ok(legacyIndex > workforceResolverIndex);
+
+  const functionStart = habatV2.indexOf("async function resolveShiftForAccess(db, accessId, dateKey) {");
+  const functionEnd = habatV2.indexOf("\n}\n\nfunction resolveAssignmentFromList", functionStart);
+  assert.ok(functionStart >= 0 && functionEnd > functionStart);
+
+  const resolverBody = habatV2.slice(functionStart, functionEnd);
+  const workforceFirst = resolverBody.indexOf("await resolveWorkforceShiftForAccess(db, accessId, dateKey)");
+  const legacyQuery = resolverBody.indexOf("habat_attendance_shift_assignments");
+  assert.ok(workforceFirst >= 0);
+  assert.ok(legacyQuery > workforceFirst);
+  assert.match(resolverBody, /if \(workforceShift\) return workforceShift/);
 });
 
-test("employee UI owns weekly rest and payroll starts with setup", () => {
+test("employee UI owns weekly rest and payroll renders setup before execution panels", () => {
   assert.match(employeeFile, /الإجازة الأسبوعية الأساسية/);
   assert.match(employeeFile, /جدول الموظف الأسبوعي/);
+
   const payrollStart = employeeFile.indexOf('<TabsContent value="payroll"');
-  const setup = employeeFile.indexOf('onSubmit={savePayroll}', payrollStart);
-  const readiness = employeeFile.indexOf("WorkforcePayrollReadinessPanel", payrollStart);
-  const lifecycle = employeeFile.indexOf("WorkforcePayrollLifecyclePanel", payrollStart);
-  const report = employeeFile.indexOf("WorkforceMonthlyEmployeeReportPanel", payrollStart);
-  assert.ok(payrollStart >= 0 && setup > payrollStart);
-  assert.ok(setup < readiness);
-  assert.ok(readiness < lifecycle);
-  assert.ok(lifecycle < report);
+  const payrollEnd = employeeFile.indexOf("</TabsContent>", payrollStart);
+  assert.ok(payrollStart >= 0 && payrollEnd > payrollStart);
+  const payroll = employeeFile.slice(payrollStart, payrollEnd);
+
+  const setup = payroll.indexOf('onSubmit={savePayroll}');
+  const readiness = payroll.indexOf("<WorkforcePayrollReadinessPanel");
+  const adjustments = payroll.indexOf("<WorkforcePayrollAdjustmentsPanel");
+  const lifecycle = payroll.indexOf("<WorkforcePayrollLifecyclePanel");
+  const report = payroll.indexOf("<WorkforceMonthlyEmployeeReportPanel");
+
+  assert.ok(setup >= 0);
+  assert.ok(readiness > setup);
+  assert.ok(adjustments > readiness);
+  assert.ok(lifecycle > adjustments);
+  assert.ok(report > lifecycle);
 });
 
 test("global Habbat shift page is template-only while legacy transport stays valid", () => {
