@@ -368,9 +368,9 @@ write(filePath, employeeFile);
 const adminPath = "client/src/pages/habat/HabatAttendanceAdmin.tsx";
 let admin = read(adminPath);
 
-// Habat may already contain part of the architecture-parity cleanup. Keep this
-// bridge idempotent so re-running the rollout does not fail on already-applied
-// working-day/template UI changes.
+// This bridge can be re-run against Habat sources that already contain part of
+// the architecture-parity cleanup. Remove legacy template-owned working-day UI
+// only when each fragment is still present instead of failing on applied work.
 admin = admin.replace(`  workingDays: number[];\n};`, `};`);
 admin = admin.replace(
   /  earlyLeaveToleranceMinutes: 0,\n  workingDays: \[[^\n]*\],\n};/,
@@ -453,7 +453,7 @@ const workforceBridge = `async function resolveWorkforceShiftForAccess(db, acces
   if (!assignment && !exception) return null;
   if (exception && normalizeText(exception.kind) === "day_off") return null;
 
-  const weekday = new Date(\`${dateKey}T12:00:00+03:00\`).getDay();
+  const weekday = new Date(dateKey + "T12:00:00+03:00").getDay();
   const explicitRest = Number(assignment?.weekly_rest_weekday);
   let workingDays = [];
   if (Number.isInteger(explicitRest) && explicitRest >= 0 && explicitRest <= 6) {
@@ -475,7 +475,7 @@ const workforceBridge = `async function resolveWorkforceShiftForAccess(db, acces
   if (!startTime || !endTime) return null;
 
   return {
-    id: normalizeText(assignment?.template_id) || \`workforce:\${normalizeText(assignment?.id)}\`,
+    id: normalizeText(assignment?.template_id) || "workforce:" + normalizeText(assignment?.id),
     name: "Workforce schedule",
     startTime,
     endTime,
