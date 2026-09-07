@@ -45,3 +45,9 @@ test("schedule rollout stays ASCII-safe for Windows PowerShell 5.1 parsing", () 
   assert.equal(/[^\x00-\x7F]/.test(rollout), false);
   assert.equal(/[\u2018\u2019\u201C\u201D\u2013\u2014]/.test(rollout), false);
 });
+
+test("schedule rollout auto-confirms remote D1 migration", () => {
+  const migrationBlock = rollout.match(/npx wrangler d1 execute maedin-attendance[\s\S]*?0003_workforce_schedule_control\.sql/);
+  assert.ok(migrationBlock, "Production migration command must exist");
+  assert.ok(migrationBlock[0].includes("--yes"), "Production migration must use Wrangler --yes to avoid interactive prompts");
+});
