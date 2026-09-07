@@ -15,6 +15,7 @@ export async function handleWorkforceAttendanceOperationsRequest({
   const employeeId = decodeURIComponent(match[1]);
   await requireEmployeeAccess(db, tenant.id, employeeId, principal);
   const monthKey = validMonth(url.searchParams.get("month") || currentMonthRiyadh());
+  const { fromDate, nextMonth } = monthBounds(monthKey);
 
   const link = await db
     .prepare(`SELECT * FROM workforce_attendance_links
@@ -61,9 +62,9 @@ export async function handleWorkforceAttendanceOperationsRequest({
     sourceAdapter.listAttendanceMonth(clean(link.source_employee_id), monthKey),
     db.prepare(`SELECT * FROM workforce_absences
                  WHERE tenant_id = ? AND employee_id = ?
-                   AND absence_date LIKE ?
+                   AND absence_date >= ? AND absence_date < ?
                  ORDER BY absence_date ASC`)
-      .bind(tenant.id, employeeId, `${monthKey}-%`)
+      .bind(tenant.id, employeeId, fromDate, nextMonth)
       .all(),
   ]);
 
@@ -73,7 +74,7 @@ export async function handleWorkforceAttendanceOperationsRequest({
 
   for (const raw of Array.isArray(sourceRows) ? sourceRows : []) {
     const date = clean(raw.date || raw.attendanceDate || raw.attendance_date);
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !date.startsWith(`${monthKey}-`)) continue;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date < fromDate || date >= nextMonth) continue;
     seen.add(date);
     const checkInAt = nullable(raw.checkInAt ?? raw.check_in_at);
     const checkOutAt = nullable(raw.checkOutAt ?? raw.check_out_at);
@@ -184,6 +185,14 @@ function validMonth(value) {
   const text = clean(value);
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(text)) throw httpError(400, "workforce_attendance_month_invalid");
   return text;
+}
+
+function monthBounds(monthKey) {
+  const [year, month] = monthKey.split("-").map(Number);
+  return {
+    fromDate: `${monthKey}-01`,
+    nextMonth: new Date(Date.UTC(year, month, 1)).toISOString().slice(0, 7) + "-01",
+  };
 }
 
 function currentMonthRiyadh() {
