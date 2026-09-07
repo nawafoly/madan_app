@@ -34,6 +34,14 @@ test("attendance operations expose lateness, early leave, missing punch, and exp
   ]) assert.ok(service.includes(required), required);
 });
 
+test("attendance operations use bounded month ranges instead of wildcard month scans", () => {
+  assert.ok(service.includes("absence_date >= ? AND absence_date < ?"));
+  assert.ok(service.includes("monthBounds"));
+  assert.equal(service.includes("absence_date LIKE ?"), false);
+  assert.ok(integration.includes("account_uid = ? AND attendance_date >= ? AND attendance_date < ?"));
+  assert.ok(integration.includes("lower(account_email) = ? AND attendance_date >= ? AND attendance_date < ?"));
+});
+
 test("attendance operations never create automatic payroll deductions", () => {
   assert.equal(/INSERT\s+INTO\s+workforce_payroll/i.test(service), false);
   assert.equal(/UPDATE\s+workforce_payroll/i.test(service), false);
@@ -45,8 +53,6 @@ test("Habbat legacy table knowledge is isolated to integration edge adapter code
   assert.ok(integration.includes("habat_attendance_access"));
   assert.ok(integration.includes("habat_attendance_records"));
   assert.ok(integration.includes("listAttendanceMonth"));
-  assert.ok(integration.includes("account_uid = ? AND attendance_date >= ? AND attendance_date < ?"));
-  assert.ok(integration.includes("lower(account_email) = ? AND attendance_date >= ? AND attendance_date < ?"));
 });
 
 test("attendance operations UI explicitly communicates payroll safety", () => {
