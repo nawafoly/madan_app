@@ -79,6 +79,7 @@ import { Textarea } from "@/components/ui/textarea";
 import HabatAccountManagement from "./HabatAccountManagement";
 import { DashboardPage, ShiftsPage } from "./HabatAttendanceAdmin";
 import HabatAttendanceSettings from "./HabatAttendanceSettings";
+import WorkforceEmployeeFile from "@/features/workforce/WorkforceEmployeeFile";
 import { AuditLogPage, EmployeePortalPage } from "./HabatAttendancePortal";
 import {
   friendlyHabatError,
@@ -959,7 +960,17 @@ function AttendanceShell({ context, onContextRefresh }: { context: HabatContext;
       case "profile": return <EmployeePortalPage />;
       case "history": return <AttendanceMonthWorkspace manager={false} />;
       case "employees": return <EmployeesPage onOpenEmployee={account => { setSelectedEmployee(account); setPage("employee-file"); }} />;
-      case "employee-file": return selectedEmployee ? <AttendanceMonthWorkspace access={selectedEmployee} manager onBack={() => setPage("employees")} /> : <EmployeesPage onOpenEmployee={account => { setSelectedEmployee(account); setPage("employee-file"); }} />;
+      case "employee-file": return selectedEmployee ? (
+        <WorkforceEmployeeFile
+          identity={{
+            accountUid: selectedEmployee.uid,
+            accountEmail: selectedEmployee.email,
+            fallbackName: selectedEmployee.displayName,
+          }}
+          onBack={() => setPage("employees")}
+          legacyAttendance={<AttendanceMonthWorkspace access={selectedEmployee} manager />}
+        />
+      ) : <EmployeesPage onOpenEmployee={account => { setSelectedEmployee(account); setPage("employee-file"); }} />;
       case "accounts": return <HabatAccountManagement onDataChanged={onContextRefresh} />;
       case "shifts": return <ShiftsPage onDataChanged={onContextRefresh} />;
       case "records": return <ManagerRecordsPage />;
