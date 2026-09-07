@@ -120,7 +120,7 @@ try {
     "workers/workforce-migrations/0005_workforce_employee_weekly_schedule.sql"
   )) {
     Write-Host "Applying local-only: $migration"
-    npx wrangler d1 execute maedin-attendance --local --persist-to $tempPersist --file $migration --yes
+    npx wrangler d1 execute maedin-attendance --local --config workers/wrangler.hr.toml --persist-to $tempPersist --file $migration --yes
     if ($LASTEXITCODE -ne 0) { throw "Local migration proof failed at $migration" }
   }
 } finally {
