@@ -4,6 +4,7 @@ import path from "node:path";
 const root = process.cwd();
 const corePath = path.join(root, "workers", "workforce-core.js");
 const employeeFilePath = path.join(root, "client", "src", "features", "workforce", "WorkforceEmployeeFile.tsx");
+const servicePath = path.join(root, "workers", "workforce-payroll-adjustments.js");
 
 function preferredEol(text) {
   return text.includes("\r\n") ? "\r\n" : "\n";
@@ -55,5 +56,14 @@ if (!ui.includes("<WorkforcePayrollAdjustmentsPanel")) {
   ui = replaceOnce(ui, marker, withEol(replacement, uiEol), "employee-file payroll panel mount");
 }
 fs.writeFileSync(employeeFilePath, ui, "utf8");
+
+let service = fs.readFileSync(servicePath, "utf8");
+const serviceEol = preferredEol(service);
+const oldCancelOrder = `  const period = await db.prepare(\`SELECT * FROM workforce_payroll_periods WHERE tenant_id = ? AND id = ? LIMIT 1\`)\n    .bind(tenantId, entry.period_id).first();\n  assertDraft(period, entry);\n\n  if (clean(adjustment.status || "active") === "cancelled") {\n    return {\n      idempotent: true,\n      adjustment: mapAdjustment(adjustment),\n      workspace: await getPayrollAdjustmentWorkspace(db, tenantId, employeeId, entry.month_key),\n    };\n  }\n\n`;
+const fixedCancelOrder = `  const period = await db.prepare(\`SELECT * FROM workforce_payroll_periods WHERE tenant_id = ? AND id = ? LIMIT 1\`)\n    .bind(tenantId, entry.period_id).first();\n\n  if (clean(adjustment.status || "active") === "cancelled") {\n    return {\n      idempotent: true,\n      adjustment: mapAdjustment(adjustment),\n      workspace: await getPayrollAdjustmentWorkspace(db, tenantId, employeeId, entry.month_key),\n    };\n  }\n\n  assertDraft(period, entry);\n\n`;
+if (service.includes(withEol(oldCancelOrder, serviceEol))) {
+  service = service.replace(withEol(oldCancelOrder, serviceEol), withEol(fixedCancelOrder, serviceEol));
+}
+fs.writeFileSync(servicePath, service, "utf8");
 
 console.log("[workforce-payroll-adjustments-integration] PASS - manual payroll adjustments integrated idempotently.");
