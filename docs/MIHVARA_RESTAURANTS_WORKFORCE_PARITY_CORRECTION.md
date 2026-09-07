@@ -40,6 +40,7 @@ This correction exists because Phase 2 reached backend functional coverage but s
 - New assignments require `weekly_rest_weekday` and store a deterministic weekly pattern.
 - Existing assignments with no explicit weekly-rest metadata retain legacy-template fallback; there is no guessed historical backfill.
 - Habbat context/clock flows resolve Workforce schedule first when an attendance link exists, then fall back to legacy Habbat assignments only when no generic employee schedule exists.
+- The Habbat edge reuses the generic `resolveWorkforceScheduleDay` resolver rather than duplicating schedule-classification business logic.
 - The global Habbat shift page is a template catalog only; weekly rest is edited in the employee schedule.
 - Employee payroll UI is reordered to setup -> readiness -> adjustments -> lifecycle -> report.
 
@@ -54,5 +55,7 @@ This correction exists because Phase 2 reached backend functional coverage but s
 - it proves migrations 0001..0005 against a temporary local D1 persistence directory;
 - it builds production assets;
 - any pre-commit failure saves a diagnostic patch and restores rollout-touched tracked files.
+
+The V3 failure was a gate failure, not a production incident: its contract exposed three issues before any production migration/deploy was allowed — duplicated Habbat schedule resolution instead of generic resolver reuse, non-canonical weekly-rest UI wording, and non-canonical template-only shift wording. V4 corrects these before TypeScript/contracts can pass.
 
 No production D1 migration, Worker deployment, Pages deployment, or `main` synchronization is allowed until this gate is green and authenticated parity is re-validated.
