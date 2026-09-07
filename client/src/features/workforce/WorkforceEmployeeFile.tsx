@@ -53,6 +53,7 @@ import WorkforceAttendanceOperationsPanel from "./WorkforceAttendanceOperationsP
 import WorkforceLeaveLifecyclePanel from "./WorkforceLeaveLifecyclePanel";
 import WorkforcePayrollAdjustmentsPanel from "./WorkforcePayrollAdjustmentsPanel";
 import WorkforcePayrollReadinessPanel from "./WorkforcePayrollReadinessPanel";
+import WorkforcePayrollLifecyclePanel from "./WorkforcePayrollLifecyclePanel";
 
 export type WorkforceEmployeeIdentity = {
   accountUid?: string | null;
@@ -497,6 +498,7 @@ export default function WorkforceEmployeeFile({ identity, onBack, legacyAttendan
         </TabsContent>
 
         <TabsContent value="payroll" className="space-y-5">
+          {employeeId ? <WorkforcePayrollLifecyclePanel employeeId={employeeId} /> : null}
           {employeeId ? <WorkforcePayrollReadinessPanel employeeId={employeeId} /> : null}
           {employeeId ? <WorkforcePayrollAdjustmentsPanel employeeId={employeeId} /> : null}
           <form onSubmit={savePayroll} className="space-y-5 rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
