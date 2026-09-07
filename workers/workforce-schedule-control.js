@@ -257,15 +257,17 @@ export function classifyWorkforceScheduleDay({ date, assignment, exception, exce
     };
   }
 
-  const workingDays = parseWorkingDays(assignment.working_days_json);
-  const isWorkingDay = workingDays.includes(weekday);
+  const weekPattern = resolveAssignmentWeekPattern(assignment);
+  const isWorkingDay = weekPattern.workingDays.includes(weekday);
   return {
     date,
     kind: isWorkingDay ? "assignment" : "weekly_rest",
     source: "schedule_assignment",
+    scheduleOwnership: weekPattern.source,
     ready: true,
     isWorkingDay,
     isWeeklyRest: !isWorkingDay,
+    weeklyRestWeekday: weekPattern.weeklyRestWeekday,
     assignmentId: nullable(assignment.id),
     exceptionId: null,
     ...(base || emptyShift()),
@@ -557,6 +559,39 @@ function mapTemplate(row) {
 
 function emptyShift() {
   return { templateId: null, templateName: null, startTime: null, endTime: null, graceMinutes: 0, earlyLeaveToleranceMinutes: 0 };
+}
+
+function resolveAssignmentWeekPattern(row) {
+  const explicitRest = Number(row?.weekly_rest_weekday);
+  if (Number.isInteger(explicitRest) && explicitRest >= 0 && explicitRest <= 6) {
+    let workingDays = [];
+    try {
+      const parsed = JSON.parse(row?.week_pattern_json || "{}");
+      workingDays = Array.isArray(parsed?.workingDays)
+        ? Array.from(new Set(parsed.workingDays.map(Number).filter(day => Number.isInteger(day) && day >= 0 && day <= 6)))
+        : [];
+    } catch {}
+    if (!workingDays.length) {
+      workingDays = [0, 1, 2, 3, 4, 5, 6].filter(day => day !== explicitRest);
+    }
+    workingDays = workingDays.filter(day => day !== explicitRest).sort((a, b) => a - b);
+    return {
+      workingDays,
+      weeklyRestWeekday: explicitRest,
+      source: "employee_schedule",
+    };
+  }
+
+  // Existing assignments created before 0005 remain readable without a
+  // destructive backfill. Once HR saves the employee schedule, ownership moves
+  // to the assignment and this fallback is no longer used.
+  const workingDays = parseWorkingDays(row?.working_days_json);
+  const restDays = [0, 1, 2, 3, 4, 5, 6].filter(day => !workingDays.includes(day));
+  return {
+    workingDays,
+    weeklyRestWeekday: restDays.length === 1 ? restDays[0] : null,
+    source: "legacy_template_fallback",
+  };
 }
 
 function parseWorkingDays(value) {

@@ -507,7 +507,7 @@ const workforceBridge = `async function resolveWorkforceShiftForAccess(db, acces
 
 function makeWorkforceShift(row, isWorking, dateKey, source) {
   return {
-    id: normalizeText(row?.template_id) || `workforce:\${normalizeText(row?.id)}`,
+    id: normalizeText(row?.template_id) || "workforce:" + normalizeText(row?.id),
     name: normalizeText(row?.template_name) || "جدول الموظف",
     start_time: normalizeTime(row?.start_time) || "09:00",
     end_time: normalizeTime(row?.end_time) || "17:00",

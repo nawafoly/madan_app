@@ -751,11 +751,12 @@ async function createScheduleTemplate(db, tenantId, request, principal) {
   const name = clean(body.name);
   const startTime = clean(body.startTime);
   const endTime = clean(body.endTime);
-  const workingDays = normalizeWorkingDays(body.workingDays);
   if (!name) return json(400, { ok: false, message: "workforce_schedule_name_required" });
   if (!isTime(startTime) || !isTime(endTime)) return json(400, { ok: false, message: "workforce_schedule_time_invalid" });
-  if (!workingDays.length) return json(400, { ok: false, message: "workforce_schedule_working_days_required" });
 
+  // Shift templates own reusable time/policy only. The legacy NOT NULL column is
+  // populated with all weekdays so a template never silently owns employee rest.
+  const templateCompatibilityDays = [0, 1, 2, 3, 4, 5, 6];
   const templateId = id("wf_shift");
   const now = nowIso();
   await db
@@ -774,13 +775,15 @@ async function createScheduleTemplate(db, tenantId, request, principal) {
       endTime,
       nonNegativeInt(body.graceMinutes ?? 0),
       nonNegativeInt(body.earlyLeaveToleranceMinutes ?? 0),
-      JSON.stringify(workingDays),
+      JSON.stringify(templateCompatibilityDays),
       now,
       now
     )
     .run();
   const row = await db.prepare(`SELECT * FROM workforce_schedule_templates WHERE tenant_id = ? AND id = ?`).bind(tenantId, templateId).first();
-  await audit(db, tenantId, principal, "workforce.schedule_template.create", "schedule_template", templateId, null, row);
+  await audit(db, tenantId, principal, "workforce.schedule_template.create", "schedule_template", templateId, null, row, {
+    scheduleOwnership: "template_time_policy_only",
+  });
   return json(201, { ok: true, template: mapScheduleTemplate(row) });
 }
 
@@ -804,23 +807,50 @@ async function createScheduleAssignment(db, tenantId, employeeId, request, princ
   const templateId = clean(body.templateId);
   const effectiveFrom = clean(body.effectiveFrom);
   const effectiveTo = nullable(body.effectiveTo);
+  const weeklyRestWeekday = Number(body.weeklyRestWeekday ?? body.weekly_rest_weekday);
+  const reason = nullable(body.reason);
+  const operationId = clean(body.operationId || body.operation_id) || id("wf_shift_assignment_op");
+
   if (!templateId) return json(400, { ok: false, message: "workforce_schedule_template_required" });
   if (!isDateKey(effectiveFrom) || (effectiveTo && (!isDateKey(effectiveTo) || effectiveTo < effectiveFrom))) {
     return json(400, { ok: false, message: "workforce_schedule_assignment_dates_invalid" });
   }
+  if (!Number.isInteger(weeklyRestWeekday) || weeklyRestWeekday < 0 || weeklyRestWeekday > 6) {
+    return json(400, { ok: false, message: "workforce_weekly_rest_weekday_required" });
+  }
+
+  const prior = await db.prepare(
+    `SELECT * FROM workforce_schedule_assignments WHERE tenant_id = ? AND operation_id = ? LIMIT 1`
+  ).bind(tenantId, operationId).first();
+  if (prior) {
+    if (clean(prior.employee_id) !== employeeId) {
+      return json(409, { ok: false, message: "workforce_schedule_operation_employee_mismatch" });
+    }
+    return json(200, { ok: true, idempotent: true, assignment: prior });
+  }
+
   const template = await db
     .prepare(`SELECT id FROM workforce_schedule_templates WHERE tenant_id = ? AND id = ? AND is_active = 1 LIMIT 1`)
     .bind(tenantId, templateId)
     .first();
   if (!template) return json(404, { ok: false, message: "workforce_schedule_template_not_found" });
 
+  const workingDays = [0, 1, 2, 3, 4, 5, 6].filter(day => day !== weeklyRestWeekday);
+  const weekPattern = JSON.stringify({
+    version: 1,
+    weeklyRestWeekday,
+    workingDays,
+  });
   const assignmentId = id("wf_shift_assignment");
+  const now = nowIso();
+
   await db
     .prepare(
       `INSERT INTO workforce_schedule_assignments (
          id, tenant_id, employee_id, template_id, effective_from, effective_to,
-         created_by_uid, created_by_email, created_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         weekly_rest_weekday, week_pattern_json, reason, operation_id,
+         created_by_uid, created_by_email, created_at, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
       assignmentId,
@@ -829,14 +859,22 @@ async function createScheduleAssignment(db, tenantId, employeeId, request, princ
       templateId,
       effectiveFrom,
       effectiveTo,
+      weeklyRestWeekday,
+      weekPattern,
+      reason,
+      operationId,
       principal.uid || null,
       principal.email || null,
-      nowIso()
+      now,
+      now
     )
     .run();
   const row = await db.prepare(`SELECT * FROM workforce_schedule_assignments WHERE tenant_id = ? AND id = ?`).bind(tenantId, assignmentId).first();
-  await audit(db, tenantId, principal, "workforce.schedule_assignment.create", "schedule_assignment", assignmentId, null, row);
-  return json(201, { ok: true, assignment: row });
+  await audit(db, tenantId, principal, "workforce.schedule_assignment.create", "schedule_assignment", assignmentId, null, row, {
+    scheduleOwnership: "employee_effective_dated",
+    weeklyRestWeekday,
+  });
+  return json(201, { ok: true, idempotent: false, assignment: row });
 }
 
 async function requireEmployeeAccess(db, tenantId, employeeId, principal) {
