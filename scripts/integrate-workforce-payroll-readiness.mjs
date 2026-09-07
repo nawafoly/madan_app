@@ -4,6 +4,7 @@ import path from "node:path";
 const root = process.cwd();
 const corePath = path.join(root, "workers", "workforce-core.js");
 const employeeFilePath = path.join(root, "client", "src", "features", "workforce", "WorkforceEmployeeFile.tsx");
+const payrollAdjustmentsPath = path.join(root, "workers", "workforce-payroll-adjustments.js");
 
 function preferredEol(text) {
   return text.includes("\r\n") ? "\r\n" : "\n";
@@ -56,4 +57,18 @@ if (!ui.includes("<WorkforcePayrollReadinessPanel")) {
 }
 fs.writeFileSync(employeeFilePath, ui, "utf8");
 
-console.log("[workforce-payroll-readiness-integration] PASS - payroll readiness and attendance deduction engine integrated idempotently.");
+let payrollAdjustments = fs.readFileSync(payrollAdjustmentsPath, "utf8");
+const payrollAdjustmentsEol = preferredEol(payrollAdjustments);
+if (!/function\s+clean\s*\(/.test(payrollAdjustments)) {
+  const marker = `function id(prefix) {\n`;
+  const helper = `function clean(value) {\n  const text = String(value ?? "").trim();\n  if (!text || text === "undefined" || text === "null") return "";\n  return text;\n}\n\n${marker}`;
+  payrollAdjustments = replaceOnce(
+    payrollAdjustments,
+    marker,
+    withEol(helper, payrollAdjustmentsEol),
+    "payroll adjustments clean helper"
+  );
+}
+fs.writeFileSync(payrollAdjustmentsPath, payrollAdjustments, "utf8");
+
+console.log("[workforce-payroll-readiness-integration] PASS - payroll readiness, attendance deductions, and payroll-adjustment helper compatibility integrated idempotently.");
