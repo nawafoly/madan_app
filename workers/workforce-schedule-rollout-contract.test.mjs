@@ -9,9 +9,16 @@ test("schedule rollout is gated before Production writes", () => {
   const gate = rollout.indexOf("gate-workforce-schedule-phase2.mjs");
   const preflight = rollout.indexOf("--expect=0");
   const migration = rollout.indexOf("0003_workforce_schedule_control.sql");
-  const postflight = rollout.indexOf("--expect=1");
-  const deploy = rollout.indexOf("wrangler deploy");
-  assert.ok(gate >= 0 && preflight > gate && migration > preflight && postflight > migration && deploy > postflight);
+  const postflightLabel = rollout.indexOf("Production schema postflight: all 11 values must be 1");
+  const postflight = rollout.indexOf("--expect=1", postflightLabel);
+  const deploy = rollout.indexOf("wrangler deploy", postflight);
+
+  assert.ok(gate >= 0, "local gate must exist");
+  assert.ok(preflight > gate, "Production preflight must run after local gate");
+  assert.ok(migration > preflight, "migration must appear after Production preflight");
+  assert.ok(postflightLabel > migration, "postflight step must appear after migration block");
+  assert.ok(postflight > postflightLabel, "postflight must assert all schema values are 1");
+  assert.ok(deploy > postflight, "Worker deploy must happen after successful postflight");
 });
 
 test("schedule rollout blocks mixed schema and supports safe resume after applied migration", () => {
