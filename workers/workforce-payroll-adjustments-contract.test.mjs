@@ -64,6 +64,13 @@ test("adjustments are retry-safe, soft-cancellable, batched, and audit logged", 
   assert.equal(/DELETE\s+FROM\s+workforce_payroll_adjustments/i.test(service), false);
 });
 
+test("cancellation retries remain idempotent even if payroll becomes locked later", () => {
+  const start = service.indexOf("async function cancelManualAdjustment");
+  const cancelledCheck = service.indexOf('if (clean(adjustment.status || "active") === "cancelled")', start);
+  const lockCheck = service.indexOf("assertDraft(period, entry);", start);
+  assert.ok(start >= 0 && cancelledCheck > start && lockCheck > cancelledCheck);
+});
+
 test("manual adjustment workspace cannot mutate non-draft payroll", () => {
   assert.ok(service.includes('const MUTABLE_ENTRY_STATUSES = new Set(["draft"])'));
   assert.ok(service.includes("workforce_payroll_adjustment_entry_locked"));
