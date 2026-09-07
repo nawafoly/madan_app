@@ -40,6 +40,7 @@ if ($branch -ne $expectedBranch) {
 }
 
 Run-Step 'pull latest branch' { git pull --ff-only origin $expectedBranch }
+Run-Step 'combined rollout safety contract' { node --test workers/workforce-operations-rollout-contract.test.mjs }
 Run-Step 'combined leave and attendance gate' { node scripts/gate-workforce-operations-phase2.mjs }
 
 $expectedPaths = @(
