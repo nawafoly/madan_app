@@ -26,7 +26,10 @@ employee = replaceOnce(
 );
 write(employeePath, employee);
 
-// 2) Global shift catalog: explicitly state that weekly rest belongs to employees.
+// 2) Global Habbat shift catalog: weekly rest is NOT editable here.
+// The legacy Habbat v2 shift endpoint still requires workingDays, so the UI keeps
+// an internal compatibility field fixed to all seven weekdays. This satisfies
+// the old transport contract without letting a shared template own employee rest.
 const adminPath = "client/src/pages/habat/HabatAttendanceAdmin.tsx";
 let admin = read(adminPath);
 admin = replaceOnce(
@@ -36,15 +39,54 @@ admin = replaceOnce(
   "habat-template-only-copy"
 );
 
-// Remove the now-unused weekday catalog if the shift page was its last consumer.
+// Keep the internal compatibility field type-safe even if a previous rollout
+// removed one side of the ShiftDraft contract before TypeScript ran.
+const shiftDraftMatch = admin.match(/type ShiftDraft = \{[\s\S]*?\n\};/);
+if (!shiftDraftMatch) throw new Error("finalize_anchor_missing:ShiftDraft");
+let shiftDraftBlock = shiftDraftMatch[0];
+if (!/\n\s*workingDays:\s*number\[\];/.test(shiftDraftBlock)) {
+  shiftDraftBlock = shiftDraftBlock.replace(/\n\};$/, "\n  workingDays: number[];\n};");
+  admin = admin.replace(shiftDraftMatch[0], shiftDraftBlock);
+}
+
+const emptyShiftMatch = admin.match(/const emptyShift: ShiftDraft = \{[\s\S]*?\n\};/);
+if (!emptyShiftMatch) throw new Error("finalize_anchor_missing:emptyShift");
+let emptyShiftBlock = emptyShiftMatch[0];
+if (/workingDays:\s*\[[^\]]*\]/.test(emptyShiftBlock)) {
+  emptyShiftBlock = emptyShiftBlock.replace(/workingDays:\s*\[[^\]]*\]/, "workingDays: [0, 1, 2, 3, 4, 5, 6]");
+} else {
+  emptyShiftBlock = emptyShiftBlock.replace(/\n\};$/, "\n  workingDays: [0, 1, 2, 3, 4, 5, 6],\n};");
+}
+admin = admin.replace(emptyShiftMatch[0], emptyShiftBlock);
+
+const editMatch = admin.match(/function edit\(shift: HabatShift\) \{[\s\S]*?\n  \}/);
+if (!editMatch) throw new Error("finalize_anchor_missing:editShift");
+let editBlock = editMatch[0];
+if (/workingDays:\s*[^,\n]+,/.test(editBlock)) {
+  editBlock = editBlock.replace(/workingDays:\s*[^,\n]+,/, "workingDays: [0, 1, 2, 3, 4, 5, 6],");
+} else {
+  editBlock = editBlock.replace(
+    /(earlyLeaveToleranceMinutes:\s*shift\.earlyLeaveToleranceMinutes,)/,
+    "$1\n      workingDays: [0, 1, 2, 3, 4, 5, 6],"
+  );
+}
+admin = admin.replace(editMatch[0], editBlock);
+
+// Ensure no employee-specific weekday controls remain on the global template page.
+admin = admin.replace(/\n  function toggleDay\(day: number\) \{[\s\S]*?\n  \}\n\n(?=  async function save)/, "\n");
+admin = admin.replace(
+  /\n          <div>\n            <p className="mb-2 text-sm font-bold">أيام العمل<\/p>[\s\S]*?\n          <\/div>\n/,
+  "\n"
+);
+admin = admin.replace(
+  /\n                  <p className="mt-2 text-xs text-slate-500">\n                    \{dayOptions[\s\S]*?<\/p>/,
+  ""
+);
+
+// Remove weekday display catalog only when no runtime/UI consumer remains.
 const dayOptionsMatches = admin.match(/dayOptions/g) || [];
 if (dayOptionsMatches.length === 1) {
-  admin = replaceRegexOnce(
-    admin,
-    /const dayOptions = \[[\s\S]*?\];\n\n/,
-    "",
-    "habat-unused-day-options"
-  );
+  admin = admin.replace(/const dayOptions = \[[\s\S]*?\];\n\n/, "");
 }
 write(adminPath, admin);
 
@@ -105,4 +147,4 @@ function weekdayFromDateKey(dateKey) {
 habat = replaceRegexOnce(habat, bridgePattern, bridgeReplacement, "habat-generic-resolver-bridge");
 write(habatPath, habat);
 
-console.log("PASS - parity finalization applied: employee weekly rest copy, template-only UI, generic schedule resolver bridge.");
+console.log("PASS - parity finalization applied: employee weekly rest, template-only UI with legacy transport compatibility, generic schedule resolver bridge.");
