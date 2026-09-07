@@ -87,7 +87,7 @@ try {
   Write-Host "HTTP $status"
   Write-Host $body
   if ($status -ne '401' -or $body -notmatch 'missing_firebase_id_token') {
-    throw "Unexpected smoke response. Expected 401 missing_firebase_id_token."
+    throw 'Unexpected smoke response. Expected 401 missing_firebase_id_token.'
   }
 } finally {
   Remove-Item -Force -ErrorAction SilentlyContinue $smokeBody
@@ -99,4 +99,4 @@ if ($finalDirty.Count -ne 0) {
   throw 'Rollout completed but working tree is not clean.'
 }
 
-Write-Host "`n[workforce-schedule-rollout] PASS — Schedule Exceptions + Weekly Rest integrated, committed, migrated, deployed, and smoke-verified." -ForegroundColor Green
+Write-Host "`n[workforce-schedule-rollout] PASS - Schedule Exceptions + Weekly Rest integrated, committed, migrated, deployed, and smoke-verified." -ForegroundColor Green
