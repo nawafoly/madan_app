@@ -24,6 +24,37 @@ employee = replaceOnce(
   '<Field label="الإجازة الأسبوعية الأساسية"><Select value={weeklyRestWeekday}',
   "employee-weekly-rest-label"
 );
+
+// Payroll execution order is an invariant, not a cosmetic preference.
+// Normalize the payroll tab deterministically even if an earlier rollout left
+// one or more panels in their old position.
+const payrollStartMarker = '<TabsContent value="payroll" className="space-y-5">';
+const payrollStart = employee.indexOf(payrollStartMarker);
+if (payrollStart < 0) throw new Error("finalize_anchor_missing:payroll-tab");
+const payrollEnd = employee.indexOf("</TabsContent>", payrollStart);
+if (payrollEnd < 0) throw new Error("finalize_anchor_missing:payroll-tab-end");
+
+let payrollBlock = employee.slice(payrollStart, payrollEnd + "</TabsContent>".length);
+const payrollPanelPatterns = [
+  /\n\s*\{employeeId \? <WorkforcePayrollReadinessPanel employeeId=\{employeeId\} \/> : null\}/g,
+  /\n\s*\{employeeId \? <WorkforcePayrollAdjustmentsPanel employeeId=\{employeeId\} \/> : null\}/g,
+  /\n\s*\{employeeId \? <WorkforcePayrollLifecyclePanel employeeId=\{employeeId\} \/> : null\}/g,
+  /\n\s*\{employeeId \? <WorkforceMonthlyEmployeeReportPanel employeeId=\{employeeId\} \/> : null\}/g,
+];
+for (const pattern of payrollPanelPatterns) payrollBlock = payrollBlock.replace(pattern, "");
+
+const payrollFormStart = payrollBlock.indexOf("<form onSubmit={savePayroll}");
+if (payrollFormStart < 0) throw new Error("finalize_anchor_missing:payroll-setup-form");
+const payrollFormEnd = payrollBlock.indexOf("</form>", payrollFormStart);
+if (payrollFormEnd < 0) throw new Error("finalize_anchor_missing:payroll-setup-form-end");
+const insertAt = payrollFormEnd + "</form>".length;
+const orderedPanels = `
+          {employeeId ? <WorkforcePayrollReadinessPanel employeeId={employeeId} /> : null}
+          {employeeId ? <WorkforcePayrollAdjustmentsPanel employeeId={employeeId} /> : null}
+          {employeeId ? <WorkforcePayrollLifecyclePanel employeeId={employeeId} /> : null}
+          {employeeId ? <WorkforceMonthlyEmployeeReportPanel employeeId={employeeId} /> : null}`;
+payrollBlock = payrollBlock.slice(0, insertAt) + orderedPanels + payrollBlock.slice(insertAt);
+employee = employee.slice(0, payrollStart) + payrollBlock + employee.slice(payrollEnd + "</TabsContent>".length);
 write(employeePath, employee);
 
 // 2) Global Habbat shift catalog: weekly rest is NOT editable here.
@@ -147,4 +178,4 @@ function weekdayFromDateKey(dateKey) {
 habat = replaceRegexOnce(habat, bridgePattern, bridgeReplacement, "habat-generic-resolver-bridge");
 write(habatPath, habat);
 
-console.log("PASS - parity finalization applied: employee weekly rest, template-only UI with legacy transport compatibility, generic schedule resolver bridge.");
+console.log("PASS - parity finalization applied: employee weekly rest, payroll setup-first ordering, template-only UI with legacy transport compatibility, generic schedule resolver bridge.");
