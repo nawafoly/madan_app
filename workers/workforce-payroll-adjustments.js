@@ -250,7 +250,7 @@ async function cancelManualAdjustment(db, tenantId, employeeId, adjustmentId, pr
   };
 }
 
-async function ensureDraftPayrollEntry(db, tenantId, employeeId, monthKey, principal) {
+export async function ensureDraftPayrollEntry(db, tenantId, employeeId, monthKey, principal) {
   const settings = await db
     .prepare(`SELECT * FROM workforce_payroll_settings WHERE tenant_id = ? AND employee_id = ? LIMIT 1`)
     .bind(tenantId, employeeId)
@@ -520,24 +520,18 @@ function monthBounds(monthKey) {
   };
 }
 
+function validMonth(value) {
+  const text = clean(value);
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(text)) throw httpError(400, "workforce_payroll_month_invalid");
+  return text;
+}
+
 function currentMonthRiyadh() {
-  const parts = new Intl.DateTimeFormat("en-CA", {
+  return new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Riyadh",
     year: "numeric",
     month: "2-digit",
-  }).formatToParts(new Date());
-  const year = parts.find(part => part.type === "year")?.value;
-  const month = parts.find(part => part.type === "month")?.value;
-  return `${year}-${month}`;
-}
-
-function validMonth(value) {
-  const text = clean(value);
-  const match = /^(\d{4})-(\d{2})$/.exec(text);
-  if (!match || Number(match[2]) < 1 || Number(match[2]) > 12) {
-    throw httpError(400, "workforce_payroll_month_invalid");
-  }
-  return text;
+  }).format(new Date());
 }
 
 async function readJson(request) {
@@ -548,42 +542,33 @@ async function readJson(request) {
   }
 }
 
-function positiveInt(value, errorCode) {
+function positiveInt(value, message) {
   const number = Number(value);
-  if (!Number.isFinite(number) || number <= 0 || !Number.isInteger(number)) throw httpError(400, errorCode);
-  return number;
+  if (!Number.isFinite(number) || number <= 0) throw httpError(400, message);
+  return Math.round(number);
 }
 
 function nonNegativeInt(value) {
   const number = Number(value || 0);
-  return Number.isFinite(number) && number >= 0 ? Math.round(number) : 0;
+  return Number.isFinite(number) ? Math.max(0, Math.round(number)) : 0;
 }
 
-function requiredText(value, errorCode, maxLength) {
+function requiredText(value, message, maxLength) {
   const text = clean(value);
-  if (!text || text.length > maxLength) throw httpError(400, errorCode);
-  return text;
+  if (!text) throw httpError(400, message);
+  return text.slice(0, maxLength);
 }
 
 function nullableText(value, maxLength) {
   const text = clean(value);
-  if (!text) return null;
-  if (text.length > maxLength) throw httpError(400, "workforce_payroll_adjustment_note_too_long");
-  return text;
+  return text ? text.slice(0, maxLength) : null;
 }
 
-function stripRoutePrefix(pathname, prefix) {
-  const normalizedPrefix = clean(prefix).replace(/\/$/, "");
-  if (!normalizedPrefix) return pathname || "/";
-  return pathname.startsWith(normalizedPrefix)
-    ? pathname.slice(normalizedPrefix.length) || "/"
-    : pathname || "/";
-}
-
-function clean(value) {
-  const text = String(value ?? "").trim();
-  if (!text || text === "undefined" || text === "null") return "";
-  return text;
+function stripRoutePrefix(pathname, routePrefix) {
+  const prefix = clean(routePrefix).replace(/\/$/, "");
+  if (!prefix) return pathname || "/";
+  if (!pathname.startsWith(prefix)) return pathname;
+  return pathname.slice(prefix.length) || "/";
 }
 
 function id(prefix) {
@@ -594,11 +579,8 @@ function nowIso() {
   return new Date().toISOString();
 }
 
-function methodNotAllowed(allowed) {
-  return new Response(JSON.stringify({ ok: false, message: "method_not_allowed" }), {
-    status: 405,
-    headers: { "Content-Type": "application/json; charset=utf-8", Allow: allowed.join(", ") },
-  });
+function methodNotAllowed(methods) {
+  return json(405, { ok: false, message: "method_not_allowed", allowed: methods });
 }
 
 function json(status, payload) {
@@ -611,5 +593,6 @@ function json(status, payload) {
 function httpError(status, message) {
   const error = new Error(message);
   error.status = status;
+  error.code = message;
   return error;
 }
