@@ -121,3 +121,9 @@ test("annual leave integration patch is idempotent and cannot deploy or target r
   assert.equal(integration.includes("--remote"), false);
   assert.equal(/wrangler|deploy|d1 execute/i.test(integration), false);
 });
+
+test("annual leave integration patch supports Windows CRLF working trees", () => {
+  assert.ok(integration.includes("preferredEol"));
+  assert.ok(integration.includes("Windows CRLF"));
+  assert.ok(integration.includes('marker.replace(/\\n/g, "\\r\\n")'));
+});
