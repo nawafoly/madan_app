@@ -48,6 +48,7 @@ import {
   type WorkforceScheduleTemplate,
 } from "./workforceClient";
 import WorkforceAnnualLeavePanel from "./WorkforceAnnualLeavePanel";
+import WorkforceScheduleControlPanel from "./WorkforceScheduleControlPanel";
 
 export type WorkforceEmployeeIdentity = {
   accountUid?: string | null;
@@ -510,6 +511,7 @@ export default function WorkforceEmployeeFile({ identity, onBack, legacyAttendan
         </TabsContent>
 
         <TabsContent value="schedule" className="space-y-5">
+          {employeeId ? <WorkforceScheduleControlPanel employeeId={employeeId} templates={templates} /> : null}
           <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6"><SectionTitle title="الدوام والشفتات" description="يعرض الـbaseline المنقول من النظام القديم وأي تغييرات مؤرخة بعده." icon={<Clock3 className="h-5 w-5" />} />
             <div className="mt-5 overflow-x-auto"><Table className="min-w-[700px]"><TableHeader><TableRow><TableHead className="text-right">الشفت</TableHead><TableHead className="text-right">الوقت</TableHead><TableHead className="text-right">من</TableHead><TableHead className="text-right">إلى</TableHead></TableRow></TableHeader><TableBody>{assignments.map((item, index) => <TableRow key={item.id || index}><TableCell className="font-bold">{item.template_name || templates.find(t => t.id === item.template_id)?.name || "شفت"}</TableCell><TableCell dir="ltr" className="text-right">{item.start_time || templates.find(t => t.id === item.template_id)?.startTime || "--"} — {item.end_time || templates.find(t => t.id === item.template_id)?.endTime || "--"}</TableCell><TableCell>{dateText(item.effective_from)}</TableCell><TableCell>{dateText(item.effective_to)}</TableCell></TableRow>)}</TableBody></Table>{!assignments.length ? <p className="py-8 text-center text-sm text-slate-500">لا يوجد تكليف دوام.</p> : null}</div>
           </section>
