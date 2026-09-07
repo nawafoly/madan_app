@@ -29,6 +29,7 @@ node("syntax: workforce core", ["--check", "workers/workforce-core.js"]);
 node("syntax: Habbat edge adapter", ["--check", "workers/habat-workforce-adapter.js"]);
 node("leave-control contracts", ["--test", "workers/workforce-leave-control-contract.test.mjs"]);
 node("attendance-operations contracts", ["--test", "workers/workforce-attendance-operations-contract.test.mjs"]);
+node("combined rollout safety", ["--test", "workers/workforce-operations-rollout-contract.test.mjs"]);
 node("annual-leave contracts", ["--test", "workers/workforce-annual-leave-contract.test.mjs"]);
 node("schedule contracts", ["--test", "workers/workforce-schedule-control-contract.test.mjs"]);
 node("UI contracts", ["--test", "workers/workforce-ui-contract.test.mjs"]);
