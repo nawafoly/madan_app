@@ -1,3 +1,5 @@
+import { handleWorkforceAnnualLeaveRequest } from "./workforce-annual-leave.js";
+
 const PAYROLL_DEDUCTION_METHODS = new Set(["hourly", "daily"]);
 const ATTENDANCE_PAYROLL_MODES = new Set(["required", "exempt"]);
 const LEAVE_TYPES = new Set([
@@ -36,6 +38,16 @@ export async function handleWorkforceCoreRequest({
   }
 
   await ensureTenant(db, tenant);
+
+  const annualLeaveResponse = await handleWorkforceAnnualLeaveRequest({
+    request,
+    url,
+    db,
+    tenant,
+    principal,
+    routePrefix,
+  });
+  if (annualLeaveResponse) return annualLeaveResponse;
 
   const pathname = stripRoutePrefix(url?.pathname || "", routePrefix);
   const employeeMatch = pathname.match(/^\/v1\/employees\/([^/]+)$/);
