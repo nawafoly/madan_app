@@ -79,6 +79,8 @@ import { Textarea } from "@/components/ui/textarea";
 import HabatAccountManagement from "./HabatAccountManagement";
 import { DashboardPage, ShiftsPage } from "./HabatAttendanceAdmin";
 import HabatAttendanceSettings from "./HabatAttendanceSettings";
+import WorkforceEmployeeFile from "@/features/workforce/WorkforceEmployeeFile";
+import WorkforceMonthlyPayrollReportPanel from "@/features/workforce/WorkforceMonthlyPayrollReportPanel";
 import { AuditLogPage, EmployeePortalPage } from "./HabatAttendancePortal";
 import {
   friendlyHabatError,
@@ -915,7 +917,7 @@ function ReportsPage() {
   }, [month, today]);
   useEffect(() => { void refresh(); }, [refresh]);
   const totals = report?.totals;
-  return <div className="space-y-5"><section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm"><div className="w-full max-w-xs space-y-2"><Label>الشهر</Label><Input lang="en" dir="ltr" type="month" value={month} onChange={event => setMonth(event.target.value)} className="h-11 rounded-2xl" /></div>{error ? <p className="mt-4 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}</section>{totals ? <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">{[["أيام الدوام", totals.scheduledDays], ["حضور", totals.attendedDays], ["غياب", totals.absentDays], ["تأخير", totals.lateDays], ["خروج مبكر", totals.earlyLeaveDays], ["ناقص انصراف", totals.incompleteDays], ["ساعات العمل", formatMinutes(totals.workedMinutes)]].map(([label, value]) => <Metric key={String(label)} label={String(label)} value={value} />)}</div> : null}<section className="overflow-hidden rounded-[24px] border border-slate-200 bg-white"><div className="overflow-x-auto"><Table className="min-w-[850px]"><TableHeader><TableRow><TableHead className="text-right">الموظف</TableHead><TableHead className="text-right">أيام الدوام</TableHead><TableHead className="text-right">حضور</TableHead><TableHead className="text-right">غياب</TableHead><TableHead className="text-right">تأخير</TableHead><TableHead className="text-right">خروج مبكر</TableHead><TableHead className="text-right">العمل</TableHead></TableRow></TableHeader><TableBody>{report?.employees.map(employee => <TableRow key={employee.accessId}><TableCell>{employee.displayName}</TableCell><TableCell>{employee.scheduledDays}</TableCell><TableCell>{employee.attendedDays}</TableCell><TableCell>{employee.absentDays}</TableCell><TableCell>{employee.lateDays}</TableCell><TableCell>{employee.earlyLeaveDays}</TableCell><TableCell>{formatMinutes(employee.workedMinutes)}</TableCell></TableRow>)}</TableBody></Table></div></section></div>;
+  return <div className="space-y-5"><WorkforceMonthlyPayrollReportPanel /><section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm"><div className="w-full max-w-xs space-y-2"><Label>الشهر</Label><Input lang="en" dir="ltr" type="month" value={month} onChange={event => setMonth(event.target.value)} className="h-11 rounded-2xl" /></div>{error ? <p className="mt-4 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}</section>{totals ? <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">{[["أيام الدوام", totals.scheduledDays], ["حضور", totals.attendedDays], ["غياب", totals.absentDays], ["تأخير", totals.lateDays], ["خروج مبكر", totals.earlyLeaveDays], ["ناقص انصراف", totals.incompleteDays], ["ساعات العمل", formatMinutes(totals.workedMinutes)]].map(([label, value]) => <Metric key={String(label)} label={String(label)} value={value} />)}</div> : null}<section className="overflow-hidden rounded-[24px] border border-slate-200 bg-white"><div className="overflow-x-auto"><Table className="min-w-[850px]"><TableHeader><TableRow><TableHead className="text-right">الموظف</TableHead><TableHead className="text-right">أيام الدوام</TableHead><TableHead className="text-right">حضور</TableHead><TableHead className="text-right">غياب</TableHead><TableHead className="text-right">تأخير</TableHead><TableHead className="text-right">خروج مبكر</TableHead><TableHead className="text-right">العمل</TableHead></TableRow></TableHeader><TableBody>{report?.employees.map(employee => <TableRow key={employee.accessId}><TableCell>{employee.displayName}</TableCell><TableCell>{employee.scheduledDays}</TableCell><TableCell>{employee.attendedDays}</TableCell><TableCell>{employee.absentDays}</TableCell><TableCell>{employee.lateDays}</TableCell><TableCell>{employee.earlyLeaveDays}</TableCell><TableCell>{formatMinutes(employee.workedMinutes)}</TableCell></TableRow>)}</TableBody></Table></div></section></div>;
 }
 
 type NavItem = { key: PageKey; label: string; icon: typeof Clock3 };
@@ -959,7 +961,17 @@ function AttendanceShell({ context, onContextRefresh }: { context: HabatContext;
       case "profile": return <EmployeePortalPage />;
       case "history": return <AttendanceMonthWorkspace manager={false} />;
       case "employees": return <EmployeesPage onOpenEmployee={account => { setSelectedEmployee(account); setPage("employee-file"); }} />;
-      case "employee-file": return selectedEmployee ? <AttendanceMonthWorkspace access={selectedEmployee} manager onBack={() => setPage("employees")} /> : <EmployeesPage onOpenEmployee={account => { setSelectedEmployee(account); setPage("employee-file"); }} />;
+      case "employee-file": return selectedEmployee ? (
+        <WorkforceEmployeeFile
+          identity={{
+            accountUid: selectedEmployee.uid,
+            accountEmail: selectedEmployee.email,
+            fallbackName: selectedEmployee.displayName,
+          }}
+          onBack={() => setPage("employees")}
+          legacyAttendance={<AttendanceMonthWorkspace access={selectedEmployee} manager />}
+        />
+      ) : <EmployeesPage onOpenEmployee={account => { setSelectedEmployee(account); setPage("employee-file"); }} />;
       case "accounts": return <HabatAccountManagement onDataChanged={onContextRefresh} />;
       case "shifts": return <ShiftsPage onDataChanged={onContextRefresh} />;
       case "records": return <ManagerRecordsPage />;

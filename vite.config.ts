@@ -1,4 +1,4 @@
-﻿import tailwindcss from "@tailwindcss/vite";
+import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import fs from "node:fs";
 import path from "node:path";
@@ -68,6 +68,17 @@ export default defineConfig({
       "localhost",
       "127.0.0.1",
     ],
+    proxy: {
+      // Cloudflare Pages handles /habat-api/* in production. Vite does not run
+      // Pages Functions, so mirror the same proxy locally to the Habbat Worker.
+      "/habat-api": {
+        target: "https://upload.maedin2026.workers.dev",
+        changeOrigin: true,
+        secure: true,
+        rewrite: requestPath =>
+          requestPath.replace(/^\/habat-api/, "/attendance/habat"),
+      },
+    },
     fs: {
       strict: true,
       deny: ["**/.*"],
