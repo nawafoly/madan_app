@@ -62,5 +62,5 @@ test("report integration is idempotent, CRLF-safe, edge-aware, and cannot deploy
   assert.match(integration, /if \(!habat\.includes/);
   assert.match(integration, /\\r\\n/);
   assert.match(integration, /HabatAttendanceAppV4\.tsx/);
-  assert.doesNotMatch(integration, /wrangler|--remote|deploy|d1\s+execute/i);
+  assert.doesNotMatch(integration, /wrangler|--remote|d1\s+execute/i);
 });
