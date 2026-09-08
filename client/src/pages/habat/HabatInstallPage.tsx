@@ -114,7 +114,7 @@ export default function HabatInstallPage() {
             <div className="mt-5 rounded-[24px] bg-white p-5 shadow-[0_12px_36px_rgba(0,0,0,0.06)] ring-1 ring-black/5">
               {ios && safari ? (
                 <>
-                  <h2 className="text-lg font-extrabold">باقي خطوتان على iPhone</h2>
+                  <h2 className="text-lg font-extrabold">باقي 3 خطوات على iPhone</h2>
                   <div className="mt-4 space-y-3">
                     <div className="flex items-center gap-3 rounded-2xl bg-[#f7f7f5] p-4">
                       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black text-sm font-extrabold text-white">1</span>
@@ -122,6 +122,10 @@ export default function HabatInstallPage() {
                     </div>
                     <div className="flex items-center gap-3 rounded-2xl bg-[#f7f7f5] p-4">
                       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black text-sm font-extrabold text-white">2</span>
+                      <p className="text-sm font-bold leading-6">من القائمة اضغط «مشاركة» <span dir="ltr">↑</span>.</p>
+                    </div>
+                    <div className="flex items-center gap-3 rounded-2xl bg-[#f7f7f5] p-4">
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black text-sm font-extrabold text-white">3</span>
                       <p className="text-sm font-bold leading-6">اختر «إضافة إلى الشاشة الرئيسية» أو «إضافة إلى الصفحة الرئيسية»، ثم اضغط «إضافة».</p>
                     </div>
                   </div>
