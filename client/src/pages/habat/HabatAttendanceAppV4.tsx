@@ -887,14 +887,14 @@ function AttendanceMonthWorkspace({ access, manager, onBack }: {
 
               <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
                 <h3 className="font-black">{tr(language, "سجل الغياب", "Absence Log")}</h3>
-                {absences.length ? <div className="mt-4 overflow-x-auto"><Table className="min-w-[620px]"><TableHeader><TableRow><TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "التاريخ", "Date")}</TableHead><TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "المدة", "Duration")}</TableHead><TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "الملاحظة", "Note")}</TableHead>{manager ? <TableHead /> : null}</TableRow></TableHeader><TableBody>{absences.map(item => <TableRow key={item.id}><TableCell>{formatDate(item.date)}</TableCell><TableCell>{item.dayPortion === "half_day" ? tr(language, "نصف يوم", "Half Day") : tr(language, "يوم كامل", "Full Day")}</TableCell><TableCell>{item.reason || "—"}</TableCell>{manager ? <TableCell><Button type="button" variant="ghost" size="icon" className="text-red-600" onClick={() => void deleteOverride(item)}><Trash2 className="h-4 w-4" /></Button></TableCell> : null}</TableRow>)}</TableBody></Table></div> : <p className="mt-4 text-sm text-slate-500">{tr(language, "لا توجد غيابات مسجلة لهذا الموظف حتى الآن.", "No absences recorded for this employee yet.")}</p>}
+                {absences.length ? <><div className="mt-4 hidden md:block md:overflow-x-auto"><Table className="min-w-[620px]"><TableHeader><TableRow><TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "التاريخ", "Date")}</TableHead><TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "المدة", "Duration")}</TableHead><TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "الملاحظة", "Note")}</TableHead>{manager ? <TableHead /> : null}</TableRow></TableHeader><TableBody>{absences.map(item => <TableRow key={item.id}><TableCell>{formatDate(item.date)}</TableCell><TableCell>{item.dayPortion === "half_day" ? tr(language, "نصف يوم", "Half Day") : tr(language, "يوم كامل", "Full Day")}</TableCell><TableCell>{item.reason || "—"}</TableCell>{manager ? <TableCell><Button type="button" variant="ghost" size="icon" className="text-red-600" onClick={() => void deleteOverride(item)}><Trash2 className="h-4 w-4" /></Button></TableCell> : null}</TableRow>)}</TableBody></Table></div><div className="mt-4 divide-y divide-slate-100 overflow-hidden rounded-2xl border border-slate-100 md:hidden">{absences.map(item => <article key={item.id} className="p-4"><div className="flex items-start justify-between gap-3"><div><p className="font-black">{formatDate(item.date)}</p><p className="mt-1 text-xs text-slate-500">{item.dayPortion === "half_day" ? tr(language, "نصف يوم", "Half Day") : tr(language, "يوم كامل", "Full Day")}</p></div>{manager ? <Button type="button" variant="ghost" size="icon" className="shrink-0 text-red-600" onClick={() => void deleteOverride(item)}><Trash2 className="h-4 w-4" /></Button> : null}</div><p className="mt-3 break-words text-sm text-slate-600">{item.reason || "—"}</p></article>)}</div></> : <p className="mt-4 text-sm text-slate-500">{tr(language, "لا توجد غيابات مسجلة لهذا الموظف حتى الآن.", "No absences recorded for this employee yet.")}</p>}
               </section>
             </TabsContent>
 
             <TabsContent value="leaves">
               <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
                 <h3 className="font-black">{tr(language, "الإجازات المسجلة", "Recorded Leave")}</h3>
-                {leaves.length ? <div className="mt-4 overflow-x-auto"><Table className="min-w-[620px]"><TableHeader><TableRow><TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "التاريخ", "Date")}</TableHead><TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "المدة", "Duration")}</TableHead><TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "الملاحظة", "Note")}</TableHead>{manager ? <TableHead /> : null}</TableRow></TableHeader><TableBody>{leaves.map(item => <TableRow key={item.id}><TableCell>{formatDate(item.date)}</TableCell><TableCell>{item.dayPortion === "half_day" ? tr(language, "نصف يوم", "Half Day") : tr(language, "يوم كامل", "Full Day")}</TableCell><TableCell>{item.reason || tr(language, "إجازة مفاجئة معتمدة", "Approved Emergency Leave")}</TableCell>{manager ? <TableCell><Button type="button" variant="ghost" size="icon" className="text-red-600" onClick={() => void deleteOverride(item)}><Trash2 className="h-4 w-4" /></Button></TableCell> : null}</TableRow>)}</TableBody></Table></div> : <p className="mt-4 text-sm text-slate-500">{tr(language, "لا توجد إجازات مسجلة لهذا الشهر.", "No leave recorded for this month.")}</p>}
+                {leaves.length ? <><div className="mt-4 hidden md:block md:overflow-x-auto"><Table className="min-w-[620px]"><TableHeader><TableRow><TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "التاريخ", "Date")}</TableHead><TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "المدة", "Duration")}</TableHead><TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "الملاحظة", "Note")}</TableHead>{manager ? <TableHead /> : null}</TableRow></TableHeader><TableBody>{leaves.map(item => <TableRow key={item.id}><TableCell>{formatDate(item.date)}</TableCell><TableCell>{item.dayPortion === "half_day" ? tr(language, "نصف يوم", "Half Day") : tr(language, "يوم كامل", "Full Day")}</TableCell><TableCell>{item.reason || tr(language, "إجازة مفاجئة معتمدة", "Approved Emergency Leave")}</TableCell>{manager ? <TableCell><Button type="button" variant="ghost" size="icon" className="text-red-600" onClick={() => void deleteOverride(item)}><Trash2 className="h-4 w-4" /></Button></TableCell> : null}</TableRow>)}</TableBody></Table></div><div className="mt-4 divide-y divide-slate-100 overflow-hidden rounded-2xl border border-slate-100 md:hidden">{leaves.map(item => <article key={item.id} className="p-4"><div className="flex items-start justify-between gap-3"><div><p className="font-black">{formatDate(item.date)}</p><p className="mt-1 text-xs text-slate-500">{item.dayPortion === "half_day" ? tr(language, "نصف يوم", "Half Day") : tr(language, "يوم كامل", "Full Day")}</p></div>{manager ? <Button type="button" variant="ghost" size="icon" className="shrink-0 text-red-600" onClick={() => void deleteOverride(item)}><Trash2 className="h-4 w-4" /></Button> : null}</div><p className="mt-3 break-words text-sm text-slate-600">{item.reason || tr(language, "إجازة مفاجئة معتمدة", "Approved Emergency Leave")}</p></article>)}</div></> : <p className="mt-4 text-sm text-slate-500">{tr(language, "لا توجد إجازات مسجلة لهذا الشهر.", "No leave recorded for this month.")}</p>}
               </section>
             </TabsContent>
           </Tabs>
@@ -1053,7 +1053,108 @@ function ManagerRecordsPage() {
 function RecordsTable({ records, onEdit, onDelete }: {
   records: HabatRecord[]; onEdit?: (record: HabatRecord) => void; onDelete?: (record: HabatRecord) => void }) {
   const { language } = useLanguage();
-  return <section className="overflow-hidden rounded-[24px] border border-slate-200 bg-white"><div className="overflow-x-auto"><Table className="min-w-[980px]"><TableHeader className="bg-slate-50"><TableRow><TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "الموظف", "Employee")}</TableHead><TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "التاريخ", "Date")}</TableHead><TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "الحالة", "Status")}</TableHead><TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "الحضور", "Clock In")}</TableHead><TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "الانصراف", "Clock Out")}</TableHead><TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "التأخير", "Late")}</TableHead><TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "الخروج المبكر", "Early Leave")}</TableHead><TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "العمل", "Worked")}</TableHead>{onEdit || onDelete ? <TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "الإجراءات", "Actions")}</TableHead> : null}</TableRow></TableHeader><TableBody>{records.map(record => <TableRow key={record.id}><TableCell><p className="font-black">{record.displayName || record.accountEmail}</p><p className="mt-1 text-xs text-slate-500">{record.accountEmail}</p></TableCell><TableCell>{formatDate(record.attendanceDate)}</TableCell><TableCell><Badge variant="outline" className="rounded-full">{statusLabel(record.attendanceStatus)}</Badge></TableCell><TableCell>{formatTime(record.checkInAt)}</TableCell><TableCell>{formatTime(record.checkOutAt)}</TableCell><TableCell>{formatMinutes(record.lateMinutes, language)}</TableCell><TableCell>{formatMinutes(record.earlyLeaveMinutes, language)}</TableCell><TableCell>{formatMinutes(record.workedMinutes, language)}</TableCell>{onEdit || onDelete ? <TableCell><div className="flex gap-1">{onEdit ? <Button type="button" variant="outline" size="icon" className="rounded-xl" onClick={() => onEdit(record)}><Edit3 className="h-4 w-4" /></Button> : null}{onDelete ? <Button type="button" variant="outline" size="icon" className="rounded-xl border-red-200 text-red-600" onClick={() => onDelete(record)}><Trash2 className="h-4 w-4" /></Button> : null}</div></TableCell> : null}</TableRow>)}</TableBody></Table></div>{!records.length ? <p className="py-10 text-center text-sm text-slate-500">{tr(language, "لا توجد سجلات لهذا الاختيار.", "No records for this selection.")}</p> : null}</section>;
+
+  return (
+    <section className="overflow-hidden rounded-[24px] border border-slate-200 bg-white">
+      <div className="hidden md:block md:overflow-x-auto">
+        <Table className="min-w-[980px]">
+          <TableHeader className="bg-slate-50">
+            <TableRow>
+              <TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "الموظف", "Employee")}</TableHead>
+              <TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "التاريخ", "Date")}</TableHead>
+              <TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "الحالة", "Status")}</TableHead>
+              <TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "الحضور", "Clock In")}</TableHead>
+              <TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "الانصراف", "Clock Out")}</TableHead>
+              <TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "التأخير", "Late")}</TableHead>
+              <TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "الخروج المبكر", "Early Leave")}</TableHead>
+              <TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "العمل", "Worked")}</TableHead>
+              {onEdit || onDelete ? <TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "الإجراءات", "Actions")}</TableHead> : null}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {records.map(record => (
+              <TableRow key={record.id}>
+                <TableCell>
+                  <p className="font-black">{record.displayName || record.accountEmail}</p>
+                  <p className="mt-1 text-xs text-slate-500">{record.accountEmail}</p>
+                </TableCell>
+                <TableCell>{formatDate(record.attendanceDate)}</TableCell>
+                <TableCell><Badge variant="outline" className="rounded-full">{statusLabel(record.attendanceStatus)}</Badge></TableCell>
+                <TableCell>{formatTime(record.checkInAt)}</TableCell>
+                <TableCell>{formatTime(record.checkOutAt)}</TableCell>
+                <TableCell>{formatMinutes(record.lateMinutes, language)}</TableCell>
+                <TableCell>{formatMinutes(record.earlyLeaveMinutes, language)}</TableCell>
+                <TableCell>{formatMinutes(record.workedMinutes, language)}</TableCell>
+                {onEdit || onDelete ? (
+                  <TableCell>
+                    <div className="flex gap-1">
+                      {onEdit ? <Button type="button" variant="outline" size="icon" className="rounded-xl" onClick={() => onEdit(record)}><Edit3 className="h-4 w-4" /></Button> : null}
+                      {onDelete ? <Button type="button" variant="outline" size="icon" className="rounded-xl border-red-200 text-red-600" onClick={() => onDelete(record)}><Trash2 className="h-4 w-4" /></Button> : null}
+                    </div>
+                  </TableCell>
+                ) : null}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+
+      <div className="divide-y divide-slate-100 md:hidden">
+        {records.map(record => (
+          <article key={record.id} className="p-4">
+            <div className="flex min-w-0 items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="truncate font-black text-slate-950">{record.displayName || record.accountEmail}</p>
+                <p className="mt-1 truncate text-xs text-slate-500">{record.accountEmail}</p>
+              </div>
+              <Badge variant="outline" className="shrink-0 rounded-full">
+                {statusLabel(record.attendanceStatus)}
+              </Badge>
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-4">
+              {[
+                [tr(language, "التاريخ", "Date"), formatDate(record.attendanceDate)],
+                [tr(language, "الحضور", "Clock In"), formatTime(record.checkInAt)],
+                [tr(language, "الانصراف", "Clock Out"), formatTime(record.checkOutAt)],
+                [tr(language, "ساعات العمل", "Worked"), formatMinutes(record.workedMinutes, language)],
+                [tr(language, "التأخير", "Late"), formatMinutes(record.lateMinutes, language)],
+                [tr(language, "الخروج المبكر", "Early Leave"), formatMinutes(record.earlyLeaveMinutes, language)],
+              ].map(([label, value]) => (
+                <div key={String(label)} className="min-w-0">
+                  <p className="text-[11px] font-semibold text-slate-400">{label}</p>
+                  <p className="mt-1 break-words text-sm font-bold text-slate-800">{value}</p>
+                </div>
+              ))}
+            </div>
+
+            {onEdit || onDelete ? (
+              <div className="mt-4 flex gap-2 border-t border-slate-100 pt-3">
+                {onEdit ? (
+                  <Button type="button" variant="outline" className="h-10 flex-1 rounded-xl" onClick={() => onEdit(record)}>
+                    <Edit3 className="h-4 w-4" />
+                    {tr(language, "تعديل", "Edit")}
+                  </Button>
+                ) : null}
+                {onDelete ? (
+                  <Button type="button" variant="outline" className="h-10 flex-1 rounded-xl border-red-200 text-red-600" onClick={() => onDelete(record)}>
+                    <Trash2 className="h-4 w-4" />
+                    {tr(language, "حذف", "Delete")}
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
+          </article>
+        ))}
+      </div>
+
+      {!records.length ? (
+        <p className="py-10 text-center text-sm text-slate-500">
+          {tr(language, "لا توجد سجلات لهذا الاختيار.", "No records for this selection.")}
+        </p>
+      ) : null}
+    </section>
+  );
 }
 
 function ReportsPage() {
@@ -1069,7 +1170,63 @@ function ReportsPage() {
   }, [month, today]);
   useEffect(() => { void refresh(); }, [refresh]);
   const totals = report?.totals;
-  return <div className="space-y-5"><section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm"><div className="w-full max-w-xs space-y-2"><Label>{tr(language, "الشهر", "Month")}</Label><HabatDatePicker mode="month" value={month} onChange={setMonth} /></div>{error ? <p className="mt-4 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}</section>{totals ? <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">{[[tr(language, "أيام الدوام", "Scheduled Days"), totals.scheduledDays], [tr(language, "حضور", "Attendance"), totals.attendedDays], [tr(language, "غياب", "Absence"), totals.absentDays], [tr(language, "تأخير", "Late"), totals.lateDays], [tr(language, "خروج مبكر", "Early Leave"), totals.earlyLeaveDays], [tr(language, "ناقص انصراف", "Incomplete Clock-out"), totals.incompleteDays], [tr(language, "ساعات العمل", "Worked Hours"), formatMinutes(totals.workedMinutes)]].map(([label, value]) => <Metric key={String(label)} label={String(label)} value={value} />)}</div> : null}<section className="overflow-hidden rounded-[24px] border border-slate-200 bg-white"><div className="overflow-x-auto"><Table className="min-w-[850px]"><TableHeader><TableRow><TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "الموظف", "Employee")}</TableHead><TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "أيام الدوام", "Scheduled Days")}</TableHead><TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "حضور", "Attendance")}</TableHead><TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "غياب", "Absence")}</TableHead><TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "تأخير", "Late")}</TableHead><TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "خروج مبكر", "Early Leave")}</TableHead><TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "العمل", "Worked")}</TableHead></TableRow></TableHeader><TableBody>{report?.employees.map(employee => <TableRow key={employee.accessId}><TableCell>{employee.displayName}</TableCell><TableCell>{employee.scheduledDays}</TableCell><TableCell>{employee.attendedDays}</TableCell><TableCell>{employee.absentDays}</TableCell><TableCell>{employee.lateDays}</TableCell><TableCell>{employee.earlyLeaveDays}</TableCell><TableCell>{formatMinutes(employee.workedMinutes)}</TableCell></TableRow>)}</TableBody></Table></div></section></div>;
+  return <div className="space-y-5"><section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm"><div className="w-full max-w-xs space-y-2"><Label>{tr(language, "الشهر", "Month")}</Label><HabatDatePicker mode="month" value={month} onChange={setMonth} /></div>{error ? <p className="mt-4 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}</section>{totals ? <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">{[[tr(language, "أيام الدوام", "Scheduled Days"), totals.scheduledDays], [tr(language, "حضور", "Attendance"), totals.attendedDays], [tr(language, "غياب", "Absence"), totals.absentDays], [tr(language, "تأخير", "Late"), totals.lateDays], [tr(language, "خروج مبكر", "Early Leave"), totals.earlyLeaveDays], [tr(language, "ناقص انصراف", "Incomplete Clock-out"), totals.incompleteDays], [tr(language, "ساعات العمل", "Worked Hours"), formatMinutes(totals.workedMinutes)]].map(([label, value]) => <Metric key={String(label)} label={String(label)} value={value} />)}</div> : null}<section className="overflow-hidden rounded-[24px] border border-slate-200 bg-white">
+  <div className="hidden md:block md:overflow-x-auto">
+    <Table className="min-w-[850px]">
+      <TableHeader>
+        <TableRow>
+          <TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "الموظف", "Employee")}</TableHead>
+          <TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "أيام الدوام", "Scheduled Days")}</TableHead>
+          <TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "حضور", "Attendance")}</TableHead>
+          <TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "غياب", "Absence")}</TableHead>
+          <TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "تأخير", "Late")}</TableHead>
+          <TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "خروج مبكر", "Early Leave")}</TableHead>
+          <TableHead className={language === "ar" ? "text-right" : "text-left"}>{tr(language, "العمل", "Worked")}</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {report?.employees.map(employee => (
+          <TableRow key={employee.accessId}>
+            <TableCell>{employee.displayName}</TableCell>
+            <TableCell>{employee.scheduledDays}</TableCell>
+            <TableCell>{employee.attendedDays}</TableCell>
+            <TableCell>{employee.absentDays}</TableCell>
+            <TableCell>{employee.lateDays}</TableCell>
+            <TableCell>{employee.earlyLeaveDays}</TableCell>
+            <TableCell>{formatMinutes(employee.workedMinutes)}</TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  </div>
+
+  <div className="divide-y divide-slate-100 md:hidden">
+    {report?.employees.map(employee => (
+      <article key={employee.accessId} className="p-4">
+        <div className="min-w-0">
+          <p className="truncate font-black text-slate-950">{employee.displayName || employee.email}</p>
+          <p className="mt-1 truncate text-xs text-slate-500">{employee.email}</p>
+        </div>
+
+        <div className="mt-4 grid grid-cols-2 gap-3">
+          {[
+            [tr(language, "أيام الدوام", "Scheduled Days"), employee.scheduledDays],
+            [tr(language, "حضور", "Attendance"), employee.attendedDays],
+            [tr(language, "غياب", "Absence"), employee.absentDays],
+            [tr(language, "تأخير", "Late"), employee.lateDays],
+            [tr(language, "خروج مبكر", "Early Leave"), employee.earlyLeaveDays],
+            [tr(language, "العمل", "Worked"), formatMinutes(employee.workedMinutes)],
+          ].map(([label, value]) => (
+            <div key={String(label)} className="rounded-xl bg-slate-50 p-3">
+              <p className="text-[11px] font-semibold text-slate-400">{label}</p>
+              <p className="mt-1 text-base font-black text-slate-900">{value}</p>
+            </div>
+          ))}
+        </div>
+      </article>
+    ))}
+  </div>
+</section></div>;
 }
 
 type NavItem = { key: PageKey; label: string; icon: typeof Clock3 };
@@ -1168,7 +1325,7 @@ function AttendanceShell({ context, onContextRefresh }: { context: HabatContext;
 
   return (
     <main dir={dir} className="habat-attendance-shell min-h-screen bg-[#f5f5f3] text-slate-950">
-      <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 px-3 py-3 backdrop-blur sm:px-4">
+      <header className="fixed inset-x-0 top-0 z-50 border-b border-slate-200 bg-white/95 px-3 py-3 backdrop-blur sm:px-4">
         <div className="mx-auto flex max-w-[1500px] items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
@@ -1216,7 +1373,7 @@ function AttendanceShell({ context, onContextRefresh }: { context: HabatContext;
         </div>
       </header>
 
-      <div className="mx-auto grid max-w-[1500px] gap-6 px-3 py-4 sm:px-4 sm:py-6 lg:grid-cols-[250px_minmax(0,1fr)]">
+      <div className="mx-auto grid max-w-[1500px] gap-6 px-3 pb-4 pt-[88px] sm:px-4 sm:pb-6 sm:pt-[92px] lg:grid-cols-[250px_minmax(0,1fr)]">
         <aside className="hidden h-fit rounded-[26px] border border-slate-200 bg-white p-3 shadow-sm lg:sticky lg:top-24 lg:block"><SidebarNav items={items} page={page} onChange={navigate} /></aside>
         <div className="min-w-0">{content}</div>
       </div>
