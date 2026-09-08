@@ -1,4 +1,7 @@
+import { resolveWorkforceScheduleDay } from "./workforce-schedule-control.js";
+
 const HABAT_ACCESS_LEVELS = new Set(["employee", "manager"]);
+const WORKFORCE_TENANT_ID = "restaurant_tenant_habat_alwaraq";
 const HABAT_DEFAULT_SHIFT_ID = "habat_shift_default";
 const HABAT_MAX_REPORT_DAYS = 93;
 const HABAT_DEFAULT_RECORD_LIMIT = 200;
@@ -1109,6 +1112,8 @@ async function getSummaryReport(db, url) {
 }
 
 async function resolveShiftForAccess(db, accessId, dateKey) {
+  const workforceShift = await resolveWorkforceShiftForAccess(db, accessId, dateKey);
+  if (workforceShift) return workforceShift;
   if (!accessId) return getDefaultShift(db);
   const assignment = await db.prepare(
     `SELECT a.shift_id
@@ -1141,6 +1146,54 @@ function resolveAssignmentFromList(assignments, dateKey) {
     }
   }
   return selected;
+}
+
+async function resolveWorkforceShiftForAccess(db, accessId, dateKey) {
+  if (!accessId) return null;
+
+  const link = await db.prepare(
+    `SELECT a.employee_id
+       FROM workforce_attendance_links a
+      WHERE a.tenant_id = ? AND a.source_employee_id = ?
+        AND COALESCE(a.status, 'confirmed') = 'confirmed'
+      LIMIT 1`
+  ).bind(WORKFORCE_TENANT_ID, accessId).first();
+
+  if (!link?.employee_id) return null;
+
+  const schedule = await resolveWorkforceScheduleDay(
+    db,
+    WORKFORCE_TENANT_ID,
+    link.employee_id,
+    dateKey
+  );
+
+  if (!schedule || schedule.kind === "unassigned" || !schedule.ready) {
+    return null;
+  }
+
+  return makeWorkforceShiftFromResolved(schedule, dateKey);
+}
+
+function makeWorkforceShiftFromResolved(schedule, dateKey) {
+  const weekday = weekdayFromDateKey(dateKey);
+
+  return {
+    id: normalizeText(schedule?.templateId) || "workforce:" + normalizeText(schedule?.assignmentId),
+    name: normalizeText(schedule?.templateName) || "Workforce schedule",
+    start_time: normalizeTime(schedule?.startTime) || "09:00",
+    end_time: normalizeTime(schedule?.endTime) || "17:00",
+    grace_minutes: Number(schedule?.graceMinutes || 0),
+    early_leave_tolerance_minutes: Number(schedule?.earlyLeaveToleranceMinutes || 0),
+    working_days: JSON.stringify(schedule?.isWorkingDay ? [weekday] : []),
+    is_active: 1,
+    schedule_source: normalizeText(schedule?.source) || "workforce_schedule",
+  };
+}
+
+function weekdayFromDateKey(dateKey) {
+  const [year, month, day] = String(dateKey).split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day, 12)).getUTCDay();
 }
 
 async function getDefaultShift(db) {

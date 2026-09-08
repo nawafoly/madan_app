@@ -467,15 +467,6 @@ export function ShiftsPage({ onDataChanged }: PageProps) {
     void refresh();
   }, [refresh]);
 
-  function toggleDay(day: number) {
-    setDraft(current => ({
-      ...current,
-      workingDays: current.workingDays.includes(day)
-        ? current.workingDays.filter(item => item !== day)
-        : [...current.workingDays, day].sort(),
-    }));
-  }
-
   async function save(event: FormEvent) {
     event.preventDefault();
     setSaving(true);
@@ -504,7 +495,7 @@ export function ShiftsPage({ onDataChanged }: PageProps) {
       endTime: shift.endTime,
       graceMinutes: shift.graceMinutes,
       earlyLeaveToleranceMinutes: shift.earlyLeaveToleranceMinutes,
-      workingDays: shift.workingDays,
+      workingDays: [0, 1, 2, 3, 4, 5, 6],
     });
   }
 
@@ -521,7 +512,7 @@ export function ShiftsPage({ onDataChanged }: PageProps) {
 
   return (
     <div className="space-y-6">
-      <Panel title="الدوام والشفتات" subtitle="ساعات العمل، أيام الدوام، السماح بالتأخير والانصراف المبكر">
+      <Panel title="قوالب الشفتات" subtitle="أوقات وسياسات قابلة لإعادة الاستخدام. يوم الراحة يُحدد لكل موظف من ملفه.">
         <form onSubmit={save} className="space-y-4">
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
             <input
@@ -581,25 +572,6 @@ export function ShiftsPage({ onDataChanged }: PageProps) {
             </label>
           </div>
 
-          <div>
-            <p className="mb-2 text-sm font-bold">أيام العمل</p>
-            <div className="flex flex-wrap gap-2">
-              {dayOptions.map(day => (
-                <button
-                  type="button"
-                  key={day.value}
-                  onClick={() => toggleDay(day.value)}
-                  className={
-                    draft.workingDays.includes(day.value)
-                      ? "rounded-xl bg-black px-3 py-2 text-sm font-bold text-white"
-                      : "rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold"
-                  }
-                >
-                  {day.label}
-                </button>
-              ))}
-            </div>
-          </div>
 
           {draft.id ? (
             <button
@@ -623,12 +595,6 @@ export function ShiftsPage({ onDataChanged }: PageProps) {
                   <p className="font-black">{shift.name}</p>
                   <p className="mt-1 text-sm text-slate-500">
                     {shift.startTime} → {shift.endTime} · سماح {shift.graceMinutes} د
-                  </p>
-                  <p className="mt-2 text-xs text-slate-500">
-                    {dayOptions
-                      .filter(day => shift.workingDays.includes(day.value))
-                      .map(day => day.label)
-                      .join(" · ")}
                   </p>
                 </div>
                 <div className="flex gap-1">
