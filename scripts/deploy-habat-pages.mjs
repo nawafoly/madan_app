@@ -133,6 +133,10 @@ const buildEnv = {
   VITE_APP_MODE: "habat-attendance",
   VITE_USE_HR_D1: "true",
   VITE_HR_CORE_API_URL: "https://maedin-hr-api.maedin2026.workers.dev",
+  // Production calls the Habat Worker directly. The legacy Pages proxy remains
+  // deployed as a rollback path while the direct cutover is stabilized.
+  VITE_HABAT_API_BASE_URL:
+    "https://upload.maedin2026.workers.dev/attendance/habat",
 };
 
 const required = [
@@ -152,7 +156,7 @@ if (missing.length) {
 }
 
 console.log("[habat-pages] building Habbat production frontend...");
-run(process.platform === "win32" ? "pnpm.cmd" : "pnpm", ["run", "build"], { env: buildEnv});
+run(process.platform === "win32" ? "pnpm.cmd" : "pnpm", ["run", "build"], { env: buildEnv });
 
 if (!fs.existsSync(path.join(buildDir, "index.html"))) {
   console.error(`[habat-pages] build output not found at ${buildDir}`);
