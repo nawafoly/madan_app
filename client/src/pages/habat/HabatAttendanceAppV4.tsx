@@ -478,8 +478,8 @@ function CorrectionDialog({ record, onClose, onSaved }: { record: HabatRecord | 
 
   useEffect(() => {
     if (!record) return;
-    setCheckInAt(toDateTimeLocal(record.checkInAt));
-    setCheckOutAt(toDateTimeLocal(record.checkOutAt));
+    setCheckInAt(toDateTimeLocal(record.checkInAt).slice(11, 16));
+    setCheckOutAt(record.checkOutAt ? toDateTimeLocal(record.checkOutAt).slice(11, 16) : "");
     setReason("");
     setError("");
   }, [record]);
@@ -493,8 +493,8 @@ function CorrectionDialog({ record, onClose, onSaved }: { record: HabatRecord | 
       await habatApi(`v2/records/${encodeURIComponent(record.id)}/correct`, {
         method: "POST",
         body: JSON.stringify({
-          checkInAt: fromRiyadhDateTimeLocal(checkInAt),
-          checkOutAt: checkOutAt ? fromRiyadhDateTimeLocal(checkOutAt) : null,
+          checkInAt: fromRiyadhDateTimeLocal(record.attendanceDate + "T" + checkInAt),
+          checkOutAt: checkOutAt ? fromRiyadhDateTimeLocal(record.attendanceDate + "T" + checkOutAt) : null,
           reason,
         }),
       });
@@ -515,8 +515,8 @@ function CorrectionDialog({ record, onClose, onSaved }: { record: HabatRecord | 
           <DialogDescription>{record ? `${record.displayName || record.accountEmail} · ${formatDate(record.attendanceDate)}` : ""}</DialogDescription>
         </DialogHeader>
         <form onSubmit={save} className="space-y-4">
-          <div className="space-y-2"><Label>{tr(language, "وقت الحضور", "Clock-in Time")}</Label><HabatDatePicker mode="datetime" value={checkInAt} onChange={setCheckInAt} /></div>
-          <div className="space-y-2"><Label>{tr(language, "وقت الانصراف", "Clock-out Time")}</Label><HabatDatePicker mode="datetime" value={checkOutAt} onChange={setCheckOutAt} /></div>
+          <div className="space-y-2"><Label>{tr(language, "وقت الحضور", "Clock-in Time")}</Label><Input type="time" step={60} value={checkInAt} onChange={event => setCheckInAt(event.target.value)} className="h-12 rounded-2xl" dir="ltr" required /></div>
+          <div className="space-y-2"><Label>{tr(language, "وقت الانصراف", "Clock-out Time")}</Label><Input type="time" step={60} value={checkOutAt} onChange={event => setCheckOutAt(event.target.value)} className="h-12 rounded-2xl" dir="ltr" /></div>
           <div className="space-y-2"><Label>{tr(language, "سبب التعديل", "Reason for Edit")}</Label><Textarea value={reason} onChange={event => setReason(event.target.value)} className="min-h-24 rounded-2xl" placeholder="سبب واضح للتعديل" required /></div>
           {error ? <p className="rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{error}</p> : null}
           <DialogFooter className="gap-2 sm:justify-start">
@@ -544,8 +544,8 @@ function ManualRecordDialog({ access, day, onClose, onSaved }: { access: HabatAc
 
   useEffect(() => {
     if (!day) return;
-    setCheckInAt(`${day.date}T${day.shift?.startTime || "09:00"}`);
-    setCheckOutAt(`${day.date}T${day.shift?.endTime || "17:00"}`);
+    setCheckInAt(day.shift?.startTime || "09:00");
+    setCheckOutAt(day.shift?.endTime || "17:00");
     setReason("");
     setError("");
   }, [day]);
@@ -561,8 +561,8 @@ function ManualRecordDialog({ access, day, onClose, onSaved }: { access: HabatAc
         body: JSON.stringify({
           accessId: access.id,
           date: day.date,
-          checkInAt: fromRiyadhDateTimeLocal(checkInAt),
-          checkOutAt: checkOutAt ? fromRiyadhDateTimeLocal(checkOutAt) : null,
+          checkInAt: fromRiyadhDateTimeLocal(day.date + "T" + checkInAt),
+          checkOutAt: checkOutAt ? fromRiyadhDateTimeLocal(day.date + "T" + checkOutAt) : null,
           reason,
         }),
       });
@@ -580,8 +580,8 @@ function ManualRecordDialog({ access, day, onClose, onSaved }: { access: HabatAc
       <DialogContent className={cn("rounded-[28px] pl-14 sm:max-w-lg", language === "ar" ? "text-right" : "text-left")}>
         <DialogHeader className={language === "ar" ? "pr-0 text-right" : "pr-0 text-left"}><DialogTitle>{tr(language, "إضافة بصمة يدوية", "Add Manual Attendance")}</DialogTitle><DialogDescription>{day ? formatDate(day.date) : ""}</DialogDescription></DialogHeader>
         <form onSubmit={save} className="space-y-4">
-          <div className="space-y-2"><Label>{tr(language, "وقت الحضور", "Clock-in Time")}</Label><HabatDatePicker mode="datetime" value={checkInAt} onChange={setCheckInAt} /></div>
-          <div className="space-y-2"><Label>{tr(language, "وقت الانصراف", "Clock-out Time")}</Label><HabatDatePicker mode="datetime" value={checkOutAt} onChange={setCheckOutAt} /></div>
+          <div className="space-y-2"><Label>{tr(language, "وقت الحضور", "Clock-in Time")}</Label><Input type="time" step={60} value={checkInAt} onChange={event => setCheckInAt(event.target.value)} className="h-12 rounded-2xl" dir="ltr" required /></div>
+          <div className="space-y-2"><Label>{tr(language, "وقت الانصراف", "Clock-out Time")}</Label><Input type="time" step={60} value={checkOutAt} onChange={event => setCheckOutAt(event.target.value)} className="h-12 rounded-2xl" dir="ltr" /></div>
           <div className="space-y-2"><Label>{tr(language, "سبب الإضافة", "Reason for Addition")}</Label><Textarea value={reason} onChange={event => setReason(event.target.value)} className="min-h-24 rounded-2xl" required /></div>
           {error ? <p className="rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{error}</p> : null}
           <DialogFooter className="gap-2 sm:justify-start">
