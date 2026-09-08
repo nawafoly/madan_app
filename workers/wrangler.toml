@@ -7,6 +7,11 @@ compatibility_date = "2026-03-12"
 # File metadata is stored in Cloudflare D1.
 # Do not reintroduce Firestore metadata writes into this upload flow.
 
+# Habat production is allowed to call the Worker directly. Keep this origin
+# explicit because authenticated browser requests use the Authorization header.
+[vars]
+CORS_ALLOWED_ORIGINS = "https://habat-alwaraq.pages.dev"
+
 [[r2_buckets]]
 binding = "R2_BUCKET"
 bucket_name = "maedin-storage"
