@@ -101,6 +101,8 @@ export default function HabatAccountManagement({ onDataChanged }: Props) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [busyAccountId, setBusyAccountId] = useState("");
+  const [editingAccountId, setEditingAccountId] = useState("");
+  const [editingDisplayName, setEditingDisplayName] = useState("");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
@@ -276,7 +278,7 @@ export default function HabatAccountManagement({ onDataChanged }: Props) {
   async function patchAccount(
     account: HabatAccessAccount,
     patch: Partial<
-      Pick<HabatAccessAccount, "accessLevel" | "clockEnabled" | "isActive">
+      Pick<HabatAccessAccount, "displayName" | "accessLevel" | "clockEnabled" | "isActive">
     >
   ) {
     setBusyAccountId(account.id);
@@ -289,11 +291,39 @@ export default function HabatAccountManagement({ onDataChanged }: Props) {
       });
       await refresh();
       await onDataChanged?.();
+      return true;
     } catch (caught) {
       setError(friendlyHabatError(caught));
+      return false;
     } finally {
       setBusyAccountId("");
     }
+  }
+
+  function beginEditAccount(account: HabatAccessAccount) {
+    setEditingAccountId(account.id);
+    setEditingDisplayName(account.displayName || "");
+    setError("");
+    setMessage("");
+  }
+
+  function cancelEditAccount() {
+    setEditingAccountId("");
+    setEditingDisplayName("");
+  }
+
+  async function saveAccountName(account: HabatAccessAccount) {
+    const normalizedName = editingDisplayName.trim();
+    if (!normalizedName) {
+      setError(tr(language, "اسم الحساب مطلوب.", "Account name is required."));
+      return;
+    }
+
+    const saved = await patchAccount(account, { displayName: normalizedName });
+    if (!saved) return;
+
+    setMessage(tr(language, "تم تحديث اسم الحساب.", "Account name updated."));
+    cancelEditAccount();
   }
 
   async function sendReset(account: HabatAccessAccount) {
@@ -502,12 +532,56 @@ export default function HabatAccountManagement({ onDataChanged }: Props) {
                   className="grid gap-4 rounded-2xl border border-slate-100 p-4 xl:grid-cols-[1.4fr_1fr_1fr_auto] xl:items-center"
                 >
                   <div className="min-w-0">
-                    <p className="truncate font-black">
-                      {account.displayName || account.email}
-                    </p>
-                    <p className="mt-1 flex items-center gap-1 truncate text-xs text-slate-500">
-                      <Mail size={13} /> {account.email}
-                    </p>
+                    {editingAccountId === account.id ? (
+                      <div className="space-y-2">
+                        <label className="block text-xs font-bold text-slate-500">
+                          {tr(language, "اسم الحساب", "Account Name")}
+                        </label>
+                        <input
+                          value={editingDisplayName}
+                          onChange={event => setEditingDisplayName(event.target.value)}
+                          className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold outline-none focus:border-slate-900"
+                          autoFocus
+                        />
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => void saveAccountName(account)}
+                            className="rounded-xl bg-black px-3 py-2 text-xs font-black text-white disabled:opacity-50"
+                          >
+                            {tr(language, "حفظ الاسم", "Save Name")}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={cancelEditAccount}
+                            className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-black disabled:opacity-50"
+                          >
+                            {tr(language, "إلغاء", "Cancel")}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex min-w-0 items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate font-black">
+                            {account.displayName || account.email}
+                          </p>
+                          <p className="mt-1 flex items-center gap-1 truncate text-xs text-slate-500">
+                            <Mail size={13} /> {account.email}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => beginEditAccount(account)}
+                          className="shrink-0 rounded-xl border border-slate-200 px-3 py-2 text-xs font-black hover:bg-slate-50 disabled:opacity-50"
+                        >
+                          {tr(language, "تعديل الاسم", "Edit Name")}
+                        </button>
+                      </div>
+                    )}
                     <p className="mt-2 text-xs font-bold">
                       <span
                         className={

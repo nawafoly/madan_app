@@ -580,14 +580,48 @@ export default function WorkforceEmployeeFile({ identity, onBack, legacyAttendan
       {message ? <p className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">{message}</p> : null}
 
       <Tabs defaultValue="basic" dir={languageDir(language)} className="gap-4">
-        <TabsList className="h-auto w-full flex-wrap justify-start gap-1 rounded-2xl bg-white p-1 shadow-sm">
-          <TabsTrigger value="basic" className="rounded-xl px-5 py-2.5">{tr(language, "الملف", "Profile")}</TabsTrigger>
-          <TabsTrigger value="payroll" className="rounded-xl px-5 py-2.5">{tr(language, "الراتب", "Payroll")}</TabsTrigger>
-          <TabsTrigger value="schedule" className="rounded-xl px-5 py-2.5">{tr(language, "الدوام", "Schedule")}</TabsTrigger>
-          <TabsTrigger value="leaves" className="rounded-xl px-5 py-2.5">{tr(language, "الإجازات", "Leaves")}</TabsTrigger>
-          <TabsTrigger value="absences" className="rounded-xl px-5 py-2.5">{tr(language, "الغياب", "Absences")}</TabsTrigger>
-          {legacyAttendance ? <TabsTrigger value="attendance" className="rounded-xl px-5 py-2.5">{tr(language, "الحضور", "Attendance")}</TabsTrigger> : null}
-        </TabsList>
+        <div className="w-full overflow-x-auto pb-1">
+          <TabsList className="inline-flex h-auto min-w-max items-center justify-start gap-2 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-sm">
+            <TabsTrigger
+              value="basic"
+              className="min-w-28 shrink-0 rounded-xl border border-transparent px-5 py-2.5 font-bold data-[state=active]:border-slate-300 data-[state=active]:bg-slate-950 data-[state=active]:text-white data-[state=active]:shadow-sm"
+            >
+              {tr(language, "الملف", "Profile")}
+            </TabsTrigger>
+            <TabsTrigger
+              value="payroll"
+              className="min-w-28 shrink-0 rounded-xl border border-transparent px-5 py-2.5 font-bold data-[state=active]:border-slate-300 data-[state=active]:bg-slate-950 data-[state=active]:text-white data-[state=active]:shadow-sm"
+            >
+              {tr(language, "الراتب", "Payroll")}
+            </TabsTrigger>
+            <TabsTrigger
+              value="schedule"
+              className="min-w-28 shrink-0 rounded-xl border border-transparent px-5 py-2.5 font-bold data-[state=active]:border-slate-300 data-[state=active]:bg-slate-950 data-[state=active]:text-white data-[state=active]:shadow-sm"
+            >
+              {tr(language, "الدوام", "Schedule")}
+            </TabsTrigger>
+            <TabsTrigger
+              value="leaves"
+              className="min-w-28 shrink-0 rounded-xl border border-transparent px-5 py-2.5 font-bold data-[state=active]:border-slate-300 data-[state=active]:bg-slate-950 data-[state=active]:text-white data-[state=active]:shadow-sm"
+            >
+              {tr(language, "الإجازات", "Leaves")}
+            </TabsTrigger>
+            <TabsTrigger
+              value="absences"
+              className="min-w-28 shrink-0 rounded-xl border border-transparent px-5 py-2.5 font-bold data-[state=active]:border-slate-300 data-[state=active]:bg-slate-950 data-[state=active]:text-white data-[state=active]:shadow-sm"
+            >
+              {tr(language, "الغياب", "Absences")}
+            </TabsTrigger>
+            {legacyAttendance ? (
+              <TabsTrigger
+                value="attendance"
+                className="min-w-28 shrink-0 rounded-xl border border-transparent px-5 py-2.5 font-bold data-[state=active]:border-slate-300 data-[state=active]:bg-slate-950 data-[state=active]:text-white data-[state=active]:shadow-sm"
+              >
+                {tr(language, "الحضور", "Attendance")}
+              </TabsTrigger>
+            ) : null}
+          </TabsList>
+        </div>
 
         <TabsContent value="basic">
           <form onSubmit={saveBasic} className="space-y-5 rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
