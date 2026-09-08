@@ -380,21 +380,62 @@ export async function readBrowserLocation(
   }
 
   return new Promise((resolve, reject) => {
-    navigator.geolocation.getCurrentPosition(
-      position =>
+    let bestPosition: GeolocationPosition | null = null;
+    let watchId: number | null = null;
+    let finished = false;
+
+    const finish = (error?: GeolocationPositionError) => {
+      if (finished) return;
+      finished = true;
+
+      if (watchId !== null) {
+        navigator.geolocation.clearWatch(watchId);
+      }
+      window.clearTimeout(timeoutId);
+
+      if (bestPosition) {
         resolve({
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-          accuracyM: position.coords.accuracy,
-        }),
+          latitude: bestPosition.coords.latitude,
+          longitude: bestPosition.coords.longitude,
+          accuracyM: bestPosition.coords.accuracy,
+        });
+        return;
+      }
+
+      if (required) {
+        reject(error ?? new Error("geolocation_unavailable"));
+      } else {
+        resolve({});
+      }
+    };
+
+    const timeoutId = window.setTimeout(() => finish(), 10000);
+
+    watchId = navigator.geolocation.watchPosition(
+      position => {
+        if (
+          !bestPosition ||
+          position.coords.accuracy < bestPosition.coords.accuracy
+        ) {
+          bestPosition = position;
+        }
+
+        if (position.coords.accuracy <= 20) {
+          finish();
+        }
+      },
       error => {
-        if (required) reject(error);
-        else resolve({});
+        if (bestPosition) {
+          finish();
+          return;
+        }
+
+        finish(error);
       },
       {
         enableHighAccuracy: true,
-        timeout: 12000,
-        maximumAge: 15000,
+        timeout: 10000,
+        maximumAge: 0,
       }
     );
   });
