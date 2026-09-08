@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import App from "./App";
 import HabatAttendanceApp from "./pages/habat/HabatAttendanceAppV4";
+import HabatInstallPage from "./pages/habat/HabatInstallPage";
 import { LanguageProvider, initializeDocumentLanguage } from "./contexts/LanguageContext";
 import "./index.css";
 
@@ -32,6 +33,7 @@ const appMode = String(import.meta.env.VITE_APP_MODE ?? "").trim().toLowerCase()
 
 function HabatAttendanceRuntime() {
   const [, setClockTick] = useState(0);
+  const pathname = window.location.pathname.replace(/\/+$/, "") || "/";
 
   useEffect(() => {
     const timer = window.setInterval(() => setClockTick(value => value + 1), 15_000);
@@ -40,7 +42,7 @@ function HabatAttendanceRuntime() {
 
   return (
     <LanguageProvider defaultLanguage="ar">
-      <HabatAttendanceApp />
+      {pathname === "/install" ? <HabatInstallPage /> : <HabatAttendanceApp />}
     </LanguageProvider>
   );
 }
@@ -63,6 +65,14 @@ if (appMode === "habat-attendance") {
     },
     true
   );
+
+  if (import.meta.env.PROD && "serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("/habat-sw.js").catch(error => {
+        console.error("[Habat PWA] service worker registration failed", error);
+      });
+    });
+  }
 }
 
 createRoot(document.getElementById("root")!).render(
