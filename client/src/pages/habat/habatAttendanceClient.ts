@@ -250,8 +250,18 @@ export function friendlyHabatError(error: unknown): string {
       return "موقع الفرع لم يتم ضبطه من الإدارة بعد.";
     case "habat_location_accuracy_too_low":
       return "دقة الموقع غير كافية. انتظر تحسن إشارة GPS وحاول مجددًا.";
-    case "habat_outside_location_range":
+    case "habat_outside_location_range": {
+      const payload =
+        error instanceof HabatApiError ? error.payload : null;
+      const distanceM = Number(payload?.distanceM);
+      const radiusM = Number(payload?.radiusM);
+
+      if (Number.isFinite(distanceM) && Number.isFinite(radiusM)) {
+        return `الموقع المقروء يبعد ${Math.round(distanceM)}م عن مركز الفرع، والنطاق المسموح ${Math.round(radiusM)}م.`;
+      }
+
       return "أنت خارج نطاق الحضور المسموح.";
+    }
     case "habat_location_coordinates_required":
       return "حدد إحداثيات الفرع قبل تفعيل إلزام الموقع.";
     case "habat_correction_reason_required":
