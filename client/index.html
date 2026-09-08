@@ -15,6 +15,9 @@
   <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
 
   <link rel="apple-touch-icon" sizes="180x180" href="/apple-icon-180x180.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="حبات الورق" />
   <script type="module">
     const appMode = String(import.meta.env.VITE_APP_MODE ?? "").trim().toLowerCase();
     const isHabatAttendance = appMode === "habat-attendance";
@@ -58,7 +61,7 @@
         'meta[property="og:description"]',
         "نظام حبات الورق لإدارة الحضور والانصراف والدوام والشفتات."
       );
-      setMetaContent('meta[property="og:url"]', "https://habat-alwaraq.vercel.app/");
+      setMetaContent('meta[property="og:url"]', "https://habat-alwaraq.pages.dev/");
       setMetaContent('meta[name="twitter:title"]', "حبات الورق - نظام الحضور والانصراف");
       setMetaContent(
         'meta[name="twitter:description"]',
